@@ -12,6 +12,11 @@ on:
         required: false
         default: ""
         type: string
+      qualify_gemma:
+        description: Include pinned EmbeddingGemma 2 originals in a private qualification run
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -52,6 +57,12 @@ jobs:
           test -z "$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Fetch verified Gemma originals
+        if: inputs.qualify_gemma == true
+        shell: bash
+        run: |
+          printf 'GEMMA_ORIGINAL_FILES=' >> "$GITHUB_ENV"
+          node scripts/fetch-embeddinggemma-probe.mjs "$RUNNER_TEMP/embeddinggemma-verified" >> "$GITHUB_ENV"
       - name: Configure the MSVC tool environment
         if: matrix.target == 'windows-x86_64'
         uses: ilammy/msvc-dev-cmd@v1
@@ -121,12 +132,17 @@ jobs:
           PROCYON_REQUIRE_CLEAN_SOURCE: "1"
           PROCYON_REQUIRE_PLATFORM_SIGNING: "1"
           RELEASE_TAG: ${{ inputs.release_tag }}
-        run: >
-          pnpm semantic:bundle:production --
-          --output "target/semantic-production-release/${{ matrix.target }}"
-          --release-base-url
-          "https://github.com/${{ github.repository }}/releases/download/$RELEASE_TAG"
-          --source-revision "${{ github.sha }}"
+        run: |
+          gemma_args=()
+          if [[ -n "${GEMMA_ORIGINAL_FILES:-}" ]]; then
+            gemma_args=(--gemma-original-files "$GEMMA_ORIGINAL_FILES")
+          fi
+          pnpm semantic:bundle:production -- \
+            --output "target/semantic-production-release/${{ matrix.target }}" \
+            --release-base-url \
+            "https://github.com/${{ github.repository }}/releases/download/$RELEASE_TAG" \
+            --source-revision "${{ github.sha }}" \
+            "${gemma_args[@]}"
       - name: Notarize and verify macOS semantic executables
         if: matrix.target == 'macos-aarch64'
         shell: bash

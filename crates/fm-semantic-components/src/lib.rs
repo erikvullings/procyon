@@ -71,7 +71,9 @@ pub use qualification::{
     QualificationProfileError, install_macos_qualification,
 };
 pub use release_bundle::{
-    ProductionBundleError, ProductionBundleSpec, build_production_release_bundle,
+    ProductionBundleError, ProductionBundleSpec, VerifiedGemmaOriginalFile,
+    build_production_release_bundle, build_production_release_bundle_with_optional_gemma,
+    verify_gemma_original_files,
 };
 pub use report::{
     CategoryDiskUse, ComponentLifecycleStatus, ComponentStatusEntry, SemanticDiskUse,
@@ -95,6 +97,8 @@ pub enum SemanticProfile {
     CompactEnglish,
     /// Larger multilingual profile prioritising retrieval quality.
     MultilingualQuality,
+    /// Optional multimodal EmbeddingGemma 2 library, installed separately.
+    EmbeddingGemma2,
 }
 
 impl SemanticProfile {
@@ -106,11 +110,12 @@ impl SemanticProfile {
 
     /// Returns every supported abstract profile in setup order.
     #[must_use]
-    pub const fn all() -> &'static [Self; 3] {
+    pub const fn all() -> &'static [Self; 4] {
         &[
             Self::CompactMultilingual,
             Self::CompactEnglish,
             Self::MultilingualQuality,
+            Self::EmbeddingGemma2,
         ]
     }
 
@@ -126,6 +131,9 @@ impl SemanticProfile {
             }
             Self::MultilingualQuality => {
                 "Higher multilingual retrieval quality with greater disk and memory use."
+            }
+            Self::EmbeddingGemma2 => {
+                "Optional multilingual text, code, and consented media; requires a new library."
             }
         }
     }

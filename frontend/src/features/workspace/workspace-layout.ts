@@ -34,6 +34,7 @@ import type { NativeIconLoader } from '../directory-table/native-icon-loader';
 import type { ThumbnailLoader } from '../directory-table/thumbnail-loader';
 import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
+import type { ActiveSourceState } from '../operations/operation-state';
 import type {
   DirectorySummaryAttrs,
   FavouritesAttrs,
@@ -56,6 +57,7 @@ export interface WorkspacePaneContent {
   readonly entries: readonly EntrySummary[];
   readonly selectedEntryIds: ReadonlySet<EntryId>;
   readonly cutEntryIds: ReadonlySet<EntryId>;
+  readonly activeSourceStates?: ReadonlyMap<string, ActiveSourceState>;
   readonly sortLabel: string;
   readonly sort: readonly SortDescriptor[];
   readonly hasMore?: boolean;
@@ -683,6 +685,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           entries: content.entries,
           selectedEntryIds: content.selectedEntryIds,
           cutEntryIds: content.cutEntryIds,
+          ...(content.activeSourceStates === undefined
+            ? {}
+            : { activeSourceStates: content.activeSourceStates }),
           active,
           platform: content.platform,
           ...(content.keybindingRuntime === undefined

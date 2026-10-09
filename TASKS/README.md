@@ -143,9 +143,11 @@ semantic components are not installed.
   measurements complete with an honest NO-GO; release publication remains disabled)*
 - [x] 0221 Case-fold semantic embeddings *(needs 0181, 0203; versioned Unicode case folding
   for document/query embeddings with a mandatory clean index rebuild)*
-- [x] 0227 Multiformat summary visual evidence *(needs 0180, 0184, 0185, 0192)*
 - [ ] 0225 Semantic production qualification follow-up *(needs 0198; Windows/Linux native manual
   accessibility, semantic-to-semantic upgrade/rollback, and full stable-release evidence)*
+- [x] 0227 Multiformat summary visual evidence *(needs 0180, 0184, 0185, 0192)*
+- [ ] 0239 Optional EmbeddingGemma 2 semantic package *(needs 0195, 0196;
+  separately installed alongside default E5, with measured qualification)*
 
 ## Structured knowledge search
 
@@ -197,6 +199,7 @@ engine, conflict handling, clipboard, drag-and-drop, comparison and checksums th
 - [x] 0045 Conflict detection, policies and resolution dialog
 - [x] 0046 Operation cancellation, pause and resume
 - [x] 0047 Operation queue and history
+- [x] 0240 Background activity and quit safety *(needs 0036, 0047, 0182)*
 - [x] 0048 In-application clipboard copy / cut / paste
 - [ ] 0062 Drag and drop within the app and with the OS *(in_progress — Finder drag-in/out works,
   but drag-out shows a false no-operation cursor; Explorer manual checks remain)*

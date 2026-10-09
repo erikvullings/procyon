@@ -10,6 +10,9 @@ use fm_application::semantic_components::{
     DesktopSemanticDistribution, ManagedSemanticComponentAdapters,
     ManagedSemanticComponentCapability, ManagedSemanticComponentConfiguration,
 };
+use fm_application::semantic_ocr::{
+    DoclingOcrExecutableProbe, OcrExecutableProbe, OcrPolicyStore, SemanticOcrService,
+};
 use fm_semantic_components::{
     ActivationError, ActivationProbe, ArtifactChunk, ArtifactKind, ArtifactRequest, ArtifactSource,
     ArtifactSourceError, CatalogArtifact, CatalogManifest, ComponentManager, ComponentQuiescer,
@@ -17,6 +20,8 @@ use fm_semantic_components::{
     InstallEnvironment, ModelPack, PauseError, QuiesceError, SemanticDataRoot, SemanticState,
     SemanticStateStore, SignedCatalogManifest, TargetTriple, TrustedCatalog,
 };
+#[cfg(feature = "semantic-gemma")]
+use fm_semantic_worker::gemma_native::GemmaNativeFiles;
 
 const DEVELOPMENT_SIGNING_KEY: [u8; 32] = [0x19; 32];
 /// Largest model pack member re-hashed during activation.
@@ -34,6 +39,9 @@ pub(crate) struct DeveloperSemanticBundle {
     pub(crate) native_library_directory: PathBuf,
     /// Resolves the currently activated model pack when the worker is launched.
     pub(crate) active_model_pack: fm_semantic_worker::DeveloperModelPackResolver,
+    pub(crate) original_model: Option<fm_semantic_worker::DeveloperManagedWorkerResolver>,
+    pub(crate) ocr: SemanticOcrService,
+    pub(crate) ocr_executable: fm_semantic_worker::DeveloperOcrExecutableResolver,
 }
 
 impl DeveloperSemanticBundle {
@@ -117,6 +125,34 @@ impl DeveloperSemanticBundle {
         let installed_worker = active_component_payload(&state, worker, catalog_worker_path);
         let installed_runtime = active_component_payload(&state, runtime, catalog_runtime_path);
         let active_model_pack = active_model_pack_resolver(manager.clone());
+        let ocr_directory = configuration_directory.join("semantic-ocr");
+        let ocr_policy = Arc::new(OcrPolicyStore::load(&ocr_directory));
+        let ocr_probe: Arc<dyn OcrExecutableProbe> = Arc::new(DoclingOcrExecutableProbe);
+        let ocr_executable = {
+            let policy = Arc::clone(&ocr_policy);
+            let probe = Arc::clone(&ocr_probe);
+            Arc::new(move || {
+                super::semantic_production::configured_ocrmypdf_executable(
+                    policy.as_ref(),
+                    probe.as_ref(),
+                )
+            }) as fm_semantic_worker::DeveloperOcrExecutableResolver
+        };
+        #[cfg(feature = "semantic-gemma")]
+        let original_model = Some(original_model_resolver(
+            manager.clone(),
+            Arc::clone(&catalog),
+            configuration_directory.to_path_buf(),
+            installed_worker.clone(),
+            data_root.category_path(DataCategory::Zvec),
+            installed_runtime
+                .parent()
+                .expect("an installed artifact payload always has a parent")
+                .to_path_buf(),
+            Arc::clone(&ocr_executable),
+        ));
+        #[cfg(not(feature = "semantic-gemma"))]
+        let original_model = None;
         let components = Arc::new(ManagedSemanticComponentCapability::new(
             manager,
             catalog,
@@ -130,6 +166,7 @@ impl DeveloperSemanticBundle {
                 ),
                 distribution: DesktopSemanticDistribution::Direct,
                 minimum_free_space_reserve_bytes: 64 * 1024 * 1024,
+                gemma_library_configuration_directory: configuration_directory.to_path_buf(),
             },
             ManagedSemanticComponentAdapters {
                 artifact_source: Arc::new(BundleArtifactSource {
@@ -159,6 +196,9 @@ impl DeveloperSemanticBundle {
                 .expect("an installed artifact payload always has a parent")
                 .to_path_buf(),
             active_model_pack,
+            original_model,
+            ocr: SemanticOcrService::load(ocr_directory, ocr_policy, ocr_probe),
+            ocr_executable,
         })
     }
 }
@@ -212,6 +252,51 @@ fn active_model_pack_resolver(
             ));
         }
         Ok(Some(path.to_owned()))
+    })
+}
+
+#[cfg(feature = "semantic-gemma")]
+fn original_model_resolver(
+    manager: ComponentManager,
+    catalog: Arc<TrustedCatalog>,
+    configuration_directory: PathBuf,
+    installed_worker: PathBuf,
+    data_directory: PathBuf,
+    native_library_directory: PathBuf,
+    ocr_executable: fm_semantic_worker::DeveloperOcrExecutableResolver,
+) -> fm_semantic_worker::DeveloperManagedWorkerResolver {
+    Arc::new(move || {
+        let state = manager.state().map_err(|error| error.to_string())?;
+        let Some(identity) = state.active_model().map(|model| model.identity()) else {
+            return Ok(None);
+        };
+        if identity.model_id().as_str() != "google-embeddinggemma-2" {
+            return Ok(None);
+        }
+        if !catalog.artifacts().iter().any(|artifact| {
+            matches!(artifact.kind(), ArtifactKind::OriginalModel(model) if model == identity)
+        }) {
+            return Err("active Gemma model is absent from the development catalog".into());
+        }
+        let (dimensions, media) =
+            super::semantic_production::gemma_library_settings(&configuration_directory, identity)?;
+        let original = manager
+            .verified_original_model_files(&catalog, identity)
+            .map_err(|error| format!("Gemma original files are invalid: {error}"))?
+            .ok_or_else(|| "Gemma original files are incomplete".to_owned())?;
+        let files =
+            GemmaNativeFiles::from_original_files(&original).map_err(|error| error.to_string())?;
+        Ok(Some(
+            fm_semantic_worker::ManagedWorkerLaunch::new_gemma(
+                installed_worker.clone(),
+                data_directory.clone(),
+                native_library_directory.clone(),
+                files,
+                dimensions,
+                media,
+            )
+            .with_ocrmypdf_executable(ocr_executable()),
+        ))
     })
 }
 
@@ -334,6 +419,16 @@ impl ActivationProbe for DeveloperActivation {
                         .map_err(|error| ActivationError::new(error.to_string()))?;
                 }
             }
+            ArtifactKind::OriginalModel(identity) => {
+                if !cfg!(feature = "semantic-gemma")
+                    || identity.model_id().as_str() != "google-embeddinggemma-2"
+                {
+                    return Err(ActivationError::new(
+                        "original-file model runtime is not configured for the developer worker",
+                    ));
+                }
+            }
+            ArtifactKind::ModelFile(_) => {}
         }
         Ok(())
     }
@@ -413,12 +508,180 @@ pub(crate) enum DeveloperBundleError {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "semantic-gemma")]
+    use fm_application::semantic_components::SemanticComponentCapability;
+    #[cfg(feature = "semantic-gemma")]
+    use fm_semantic_components::SemanticProfile;
     use fm_semantic_components::{
         ArtifactCompatibility, ArtifactId, ComponentResources, LicenseInfo, ModelId, ModelIdentity,
         ModelPackKind, ModelPackSpec, ModelRevision, Sha256Digest, write_model_pack,
     };
 
     use super::*;
+
+    #[cfg(feature = "semantic-gemma")]
+    #[tokio::test]
+    #[ignore = "requires PROCYON_GEMMA_DEVELOPER_BUNDLE from the local Gemma builder"]
+    async fn installed_development_gemma_resolves_verified_original_files() {
+        use fm_application::semantic::{
+            IpcSemanticCapability, LibraryId as WorkerLibraryId, SemanticCapability,
+            SemanticOperationId, SemanticQuery, SemanticScope, TenantId,
+        };
+        use fm_semantic_library::{
+            DeviceLibraryIdentity, GemmaMediaSelection, LibraryId,
+            ModelIdentity as LibraryModelIdentity, ResourceBudgets, ResourceProfile,
+            ResourceProfileKind, SemanticLibraryCoordinator, SemanticLibraryPolicy,
+        };
+        use fm_semantic_worker::ManagedModel;
+
+        let bundle_path = std::env::var_os("PROCYON_GEMMA_DEVELOPER_BUNDLE")
+            .map(PathBuf::from)
+            .expect("set PROCYON_GEMMA_DEVELOPER_BUNDLE to the built catalog");
+        let parent =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../target/semantic-developer-tests");
+        fs::create_dir_all(&parent).expect("test parent");
+        let data = tempfile::tempdir_in(parent.canonicalize().expect("canonical test parent"))
+            .expect("isolated development data");
+        let media = GemmaMediaSelection {
+            images: true,
+            audio: true,
+            video: true,
+        };
+        let model = LibraryModelIdentity::embeddinggemma_2(128, media).expect("Gemma model");
+        let policy = SemanticLibraryPolicy::new(
+            DeviceLibraryIdentity::new(LibraryId::new(), model),
+            ResourceProfile {
+                kind: ResourceProfileKind::Balanced,
+                budgets: ResourceBudgets::default(),
+            },
+        )
+        .expect("library policy");
+        SemanticLibraryCoordinator::new(
+            data.path().join("semantic-library-gemma"),
+            data.path().join("semantic/library-gemma"),
+        )
+        .lock()
+        .expect("lock Gemma library")
+        .initialize(&policy)
+        .expect("initialize fresh Gemma library");
+        let bundle =
+            DeveloperSemanticBundle::load(&bundle_path, data.path(), data.path()).expect("bundle");
+        let profiles = bundle
+            .components
+            .catalog_profiles()
+            .await
+            .expect("profiles");
+        assert!(
+            profiles
+                .iter()
+                .any(|profile| profile.profile == SemanticProfile::EmbeddingGemma2)
+        );
+        let e5 = bundle
+            .components
+            .installation_offer(SemanticProfile::CompactMultilingual)
+            .await
+            .expect("signed E5 offer");
+        bundle
+            .components
+            .install_or_enable(e5.consent())
+            .await
+            .expect("install E5 first");
+        let offer = bundle
+            .components
+            .installation_offer(SemanticProfile::EmbeddingGemma2)
+            .await
+            .expect("signed development offer");
+        bundle
+            .components
+            .install_or_enable(offer.consent())
+            .await
+            .expect("install original files");
+        let status = bundle.components.status().await.expect("installed status");
+        assert!(
+            status.active_model().is_some(),
+            "installed original Gemma files must resolve to the active embedding space",
+        );
+        let ocr_executable = Arc::clone(&bundle.ocr_executable);
+        let service = fm_application::FileManagerService::new(
+            fm_transport_dto::RuntimeKindDto::Tauri,
+            data.path().join("workspaces"),
+            data.path(),
+        )
+        .with_semantic_component_capability(bundle.components.clone())
+        .with_semantic_ocr_service(bundle.ocr);
+        let library = service
+            .semantic_library_status(&fm_application::semantic_library::SemanticAccessContext::Host)
+            .await
+            .expect("semantic library status");
+        assert!(
+            library.available,
+            "Gemma library must be available for enrolment"
+        );
+        assert_eq!(
+            library
+                .library
+                .expect("initialized library")
+                .model
+                .dimensions,
+            128
+        );
+        assert!(
+            matches!(
+                service.semantic_ocr_status().availability,
+                fm_application::semantic_ocr::OcrAvailability::Available { .. }
+            ),
+            "installed OCRmyPDF must be discoverable in the Gemma development desktop",
+        );
+        assert!(ocr_executable().is_none(), "OCR requires explicit consent");
+        service
+            .set_semantic_ocr_consent(true)
+            .await
+            .expect("enable installed OCRmyPDF");
+        assert!(ocr_executable().is_some(), "worker launch sees consent");
+        service
+            .set_semantic_ocr_consent(false)
+            .await
+            .expect("disable OCRmyPDF");
+        assert!(ocr_executable().is_none(), "worker launch sees revocation");
+        let original_model = bundle.original_model.expect("Gemma resolver");
+        let launch = original_model()
+            .expect("verified development model")
+            .expect("active Gemma launch");
+        assert!(matches!(
+            launch.model(),
+            ManagedModel::Gemma {
+                dimensions: 128,
+                ..
+            }
+        ));
+        let semantic = IpcSemanticCapability::desktop_developer_bundle(
+            &bundle.runtime_directory,
+            &bundle.installed_worker,
+            &bundle.worker_data_directory,
+            &bundle.native_library_directory,
+            Some(bundle.active_model_pack),
+            Some(original_model),
+            bundle.ocr_executable,
+        );
+        let results = semantic
+            .query(SemanticQuery {
+                scope: SemanticScope::new(
+                    TenantId::new("development-test"),
+                    WorkerLibraryId::new("development-test"),
+                ),
+                request_id: SemanticOperationId::new("gemma-developer-query"),
+                text: "A native Gemma worker starts from installed original files".into(),
+                concept: None,
+                maximum_results: 10,
+            })
+            .await
+            .expect("installed Gemma worker query");
+        assert!(results.is_empty());
+        semantic
+            .shutdown(std::time::Duration::from_secs(10))
+            .await
+            .expect("stop development worker");
+    }
 
     fn model_artifact(model_id: &str, revision: &str) -> CatalogArtifact {
         CatalogArtifact::new(
@@ -472,6 +735,25 @@ mod tests {
         DeveloperActivation
             .validate(&model_artifact("example.model", "revision-one"), &pack)
             .expect("activation");
+    }
+
+    #[test]
+    fn original_file_model_is_not_activated_without_a_native_worker() {
+        let directory = tempfile::tempdir().expect("directory");
+        let weights = directory.path().join("model.safetensors");
+        fs::write(&weights, b"verified original weights").expect("weights");
+        let mut artifact = serde_json::to_value(model_artifact("example.model", "revision-one"))
+            .expect("catalog artifact");
+        artifact["kind"]["kind"] = "originalModel".into();
+        let artifact: CatalogArtifact = serde_json::from_value(artifact).expect("original model");
+
+        assert!(
+            DeveloperActivation
+                .validate(&artifact, &weights)
+                .unwrap_err()
+                .to_string()
+                .contains("not configured")
+        );
     }
 
     #[test]

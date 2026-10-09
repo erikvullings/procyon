@@ -24,6 +24,8 @@ use fm_semantic_components::{
     SignedProductionCatalogManifest, TargetTriple, TrustedCatalog,
     embedded_production_verifying_key, production_pipeline_identity,
 };
+#[cfg(feature = "semantic-gemma")]
+use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeFiles};
 
 const ARTIFACT_CHUNK_BYTES: u64 = 8 * 1024 * 1024;
 const SMALL_MEMBER_VERIFICATION_BYTES: u64 = 32 * 1024 * 1024;
@@ -100,6 +102,7 @@ impl ProductionSemanticBundle {
         let resolver = managed_worker_resolver(
             manager.clone(),
             Arc::clone(&catalog),
+            configuration_directory.to_path_buf(),
             data_root.category_path(DataCategory::Zvec),
             native_library_directory,
             Arc::clone(&ocr_policy),
@@ -114,6 +117,7 @@ impl ProductionSemanticBundle {
                 environment: InstallEnvironment::new(target, 1, BTreeMap::new()),
                 distribution: DesktopSemanticDistribution::Direct,
                 minimum_free_space_reserve_bytes: 64 * 1024 * 1024,
+                gemma_library_configuration_directory: configuration_directory.to_path_buf(),
             },
             ManagedSemanticComponentAdapters {
                 artifact_source: Arc::new(source),
@@ -223,6 +227,7 @@ fn target_artifacts<'a>(
 fn managed_worker_resolver(
     manager: ComponentManager,
     catalog: Arc<TrustedCatalog>,
+    configuration_directory: PathBuf,
     data_directory: PathBuf,
     native_library_directory: PathBuf,
     ocr_policy: Arc<OcrPolicyStore>,
@@ -244,7 +249,8 @@ fn managed_worker_resolver(
             .find(|artifact| {
                 matches!(
                     artifact.kind(),
-                    ArtifactKind::Model(identity) if identity == active_model.identity()
+                    ArtifactKind::Model(identity) | ArtifactKind::OriginalModel(identity)
+                        if identity == active_model.identity()
                 )
             })
             .ok_or_else(|| "the active model is not present in the trusted catalog".to_owned())?;
@@ -256,7 +262,6 @@ fn managed_worker_resolver(
             .onnx_runtime
             .map(|artifact| required_verified_payload(&manager, artifact, "ONNX Runtime"))
             .transpose()?;
-        let model_pack = required_verified_payload(&manager, model, "model")?;
         let mut native_payloads = vec![(zvec_runtime.as_path(), zvec_library_file_name())];
         if let Some(onnx_runtime) = onnx_runtime.as_deref() {
             native_payloads.push((onnx_runtime, onnx_runtime_file_name()));
@@ -268,17 +273,83 @@ fn managed_worker_resolver(
         )?;
         let ocrmypdf_executable =
             configured_ocrmypdf_executable(ocr_policy.as_ref(), ocr_probe.as_ref());
-        Ok(fm_semantic_worker::ManagedWorkerLaunch::new(
-            launch_executable,
-            data_directory.clone(),
-            native_library_directory.clone(),
-            model_pack,
-        )
-        .with_ocrmypdf_executable(ocrmypdf_executable))
+        let launch = match model.kind() {
+            ArtifactKind::Model(_) => {
+                let model_pack = required_verified_payload(&manager, model, "model")?;
+                fm_semantic_worker::ManagedWorkerLaunch::new(
+                    launch_executable,
+                    data_directory.clone(),
+                    native_library_directory.clone(),
+                    model_pack,
+                )
+            }
+            ArtifactKind::OriginalModel(identity) => {
+                #[cfg(feature = "semantic-gemma")]
+                {
+                    if identity.model_id().as_str() != "google-embeddinggemma-2" {
+                        return Err("unrecognized original-file model".to_owned());
+                    }
+                    let (dimensions, media) =
+                        gemma_library_settings(&configuration_directory, identity)?;
+                    let files = manager
+                        .verified_original_model_files(&catalog, identity)
+                        .map_err(|error| format!("Gemma original files are invalid: {error}"))?
+                        .ok_or_else(|| "Gemma original files are incomplete".to_owned())?;
+                    let files = GemmaNativeFiles::from_original_files(&files)
+                        .map_err(|error| error.to_string())?;
+                    fm_semantic_worker::ManagedWorkerLaunch::new_gemma(
+                        launch_executable,
+                        data_directory.clone(),
+                        native_library_directory.clone(),
+                        files,
+                        dimensions,
+                        media,
+                    )
+                }
+                #[cfg(not(feature = "semantic-gemma"))]
+                {
+                    let _ = (identity, &configuration_directory);
+                    return Err("native Gemma support is not compiled into this desktop".to_owned());
+                }
+            }
+            _ => return Err("active model has an invalid catalog kind".to_owned()),
+        };
+        Ok(launch.with_ocrmypdf_executable(ocrmypdf_executable))
     })
 }
 
-fn configured_ocrmypdf_executable(
+#[cfg(feature = "semantic-gemma")]
+pub(crate) fn gemma_library_settings(
+    configuration_directory: &Path,
+    identity: &fm_semantic_components::ModelIdentity,
+) -> Result<(usize, GemmaMedia), String> {
+    let policy = fm_semantic_library::SemanticLibraryPolicyStore::new(
+        configuration_directory.join("semantic-library-gemma"),
+    )
+    .load()
+    .map_err(|error| format!("fresh Gemma library policy is required: {error}"))?;
+    let model = policy.library().model();
+    if model.model_id() != identity.model_id().as_str()
+        || model.revision() != identity.revision().as_str()
+    {
+        return Err("Gemma library identity does not match the signed active model".to_owned());
+    }
+    let media = model
+        .gemma_media()
+        .ok_or_else(|| "Gemma library is missing immutable media choices".to_owned())?;
+    let dimensions = usize::try_from(model.dimensions())
+        .map_err(|_| "Gemma dimensions exceed the worker's address space".to_owned())?;
+    Ok((
+        dimensions,
+        GemmaMedia {
+            images: media.images,
+            audio: media.audio,
+            video: media.video,
+        },
+    ))
+}
+
+pub(crate) fn configured_ocrmypdf_executable(
     policy: &OcrPolicyStore,
     probe: &dyn OcrExecutableProbe,
 ) -> Option<PathBuf> {
@@ -494,6 +565,16 @@ impl ActivationProbe for ProductionActivation {
                         .map_err(|error| ActivationError::new(error.to_string()))?;
                 }
             }
+            ArtifactKind::OriginalModel(identity) => {
+                if !cfg!(feature = "semantic-gemma")
+                    || identity.model_id().as_str() != "google-embeddinggemma-2"
+                {
+                    return Err(ActivationError::new(
+                        "original-file model runtime is not configured for this desktop",
+                    ));
+                }
+            }
+            ArtifactKind::ModelFile(_) => {}
         }
         Ok(())
     }
@@ -591,6 +672,61 @@ mod tests {
     use ed25519_dalek::SigningKey;
 
     use super::*;
+
+    #[cfg(feature = "semantic-gemma")]
+    #[test]
+    fn managed_gemma_launch_reads_only_a_matching_persisted_library_selection() {
+        use fm_semantic_components::{
+            ModelId, ModelIdentity as CatalogModelIdentity, ModelRevision,
+        };
+        use fm_semantic_library::{
+            DeviceLibraryIdentity, GemmaMediaSelection, LibraryId,
+            ModelIdentity as LibraryModelIdentity, ResourceBudgets, ResourceProfile,
+            ResourceProfileKind, SemanticLibraryPolicy, SemanticLibraryPolicyStore,
+        };
+
+        let directory = tempfile::tempdir().unwrap();
+        let media = GemmaMediaSelection {
+            images: false,
+            audio: true,
+            video: true,
+        };
+        let library = LibraryModelIdentity::embeddinggemma_2(512, media).unwrap();
+        let signed = CatalogModelIdentity::new(
+            ModelId::new(library.model_id()).unwrap(),
+            ModelRevision::new(library.revision()).unwrap(),
+        );
+        assert!(gemma_library_settings(directory.path(), &signed).is_err());
+        let store =
+            SemanticLibraryPolicyStore::new(directory.path().join("semantic-library-gemma"));
+        store
+            .save(
+                &SemanticLibraryPolicy::new(
+                    DeviceLibraryIdentity::new(LibraryId::new(), library),
+                    ResourceProfile {
+                        kind: ResourceProfileKind::Balanced,
+                        budgets: ResourceBudgets::default(),
+                    },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let (dimensions, selected) = gemma_library_settings(directory.path(), &signed).unwrap();
+        assert_eq!(dimensions, 512);
+        assert_eq!(
+            selected,
+            GemmaMedia {
+                images: false,
+                audio: true,
+                video: true
+            }
+        );
+        let wrong_revision = CatalogModelIdentity::new(
+            ModelId::new("google-embeddinggemma-2").unwrap(),
+            ModelRevision::new("wrong-revision").unwrap(),
+        );
+        assert!(gemma_library_settings(directory.path(), &wrong_revision).is_err());
+    }
 
     struct FixedOcrProbe(PathBuf);
 

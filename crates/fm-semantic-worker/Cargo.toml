@@ -20,6 +20,10 @@ semantic-runtime = [
 ]
 # Explicitly non-production local bundle used only for end-to-end development.
 developer-bundle = ["semantic-runtime"]
+# Native CPU dependencies stay out of the E5-only runtime. Optional Gemma
+# worker binaries must be built with gemma-native.
+gemma-native = ["semantic-runtime", "gemma-probe"]
+gemma-probe = ["dep:fm-metadata", "dep:image", "dep:lattice-inference", "dep:symphonia", "dep:tokenizers"]
 
 [dependencies]
 caseless.workspace = true
@@ -27,7 +31,10 @@ fm-semantic-components = {workspace = true, optional = true}
 fm-semantic-conversion.workspace = true
 fm-semantic-docling.workspace = true
 fm-semantic-protocol.workspace = true
+fm-metadata = {workspace = true, optional = true}
 fs2.workspace = true
+image = {workspace = true, optional = true}
+lattice-inference = { git = "https://github.com/ohdearquant/lattice.git", rev = "17915f3748a4047c0af61bd8bc7066d1dccf24b4", default-features = false, features = ["std"], optional = true }
 ort = {workspace = true, optional = true, features = ["std", "ndarray", "tracing", "api-27"]}
 prost.workspace = true
 rand.workspace = true
@@ -35,6 +42,7 @@ rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+symphonia = { version = "0.5.5", default-features = false, features = ["aac", "flac", "isomp4", "mp3", "pcm", "wav"], optional = true }
 thiserror.workspace = true
 tokenizers = {workspace = true, optional = true}
 tokio.workspace = true
@@ -62,3 +70,7 @@ windows-permissions.workspace = true
 
 [lints]
 workspace = true
+
+[[example]]
+name = "embeddinggemma_text_probe"
+required-features = ["gemma-probe"]

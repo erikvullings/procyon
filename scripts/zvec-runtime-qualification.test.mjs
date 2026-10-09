@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { load as loadYaml } from 'js-yaml';
 
 import {
   assertQualificationDispatchEnvironment,
@@ -190,6 +191,20 @@ test('semantic qualification and desktop publication have separate workflows', (
   const desktop = fs.readFileSync(path.resolve('.github/workflows/release-desktop.yml'), 'utf8');
   assert.doesNotMatch(desktop, /semantic:bundle:production|sign-semantic-catalog/u);
   assert.match(desktop, /fetch-approved-semantic-catalog\.mjs/u);
+});
+
+test('Gemma qualification is explicit and uses verified originals on every target', () => {
+  const workflow = loadYaml(
+    fs.readFileSync(path.resolve('.github/workflows/release-semantic-components.yml'), 'utf8'),
+  );
+  assert.equal(workflow.on.workflow_dispatch.inputs.qualify_gemma.default, false);
+  const steps = workflow.jobs['semantic-payloads'].steps;
+  const fetch = steps.find((step) => step.name === 'Fetch verified Gemma originals');
+  assert.match(String(fetch?.if), /inputs\.qualify_gemma/u);
+  assert.match(fetch.run, /fetch-embeddinggemma-probe\.mjs/u);
+  const build = steps.find((step) => step.name === 'Build verified semantic release payloads');
+  assert.match(build.run, /--gemma-original-files/u);
+  assert.match(build.run, /GEMMA_ORIGINAL_FILES/u);
 });
 
 test('private qualification rejects release events and enabled release gates', () => {

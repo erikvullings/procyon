@@ -29,14 +29,17 @@ use fm_semantic_library::{
     CatalogObservation, CommitStep, ContentFingerprint, ConversationEvidencePin, ConversationPinId,
     DeletionPlanId, DerivedArtifactId, DeviceLibraryIdentity, DocumentArtifacts,
     DocumentMeasurement, EligibilityCandidate, EligibilityDecision, EligibilityEntryKind,
-    EligibilityReason, EligibilityReasonCounts, EnrolledRoot, FilesystemIdentity, HardQuotas,
-    LibraryId, LibraryOperation, ModelIdentity, ObservedRootIdentity, OccurrenceScope,
-    ResourceBudgets, ResourceProfile, ResourceProfileKind, RootId, RootMoveResolution,
-    RootUnavailabilityReason, SemanticCatalog, SemanticLibraryCoordinator, SemanticLibraryPolicy,
-    SemanticLibraryState, ServerEnrolmentPolicy,
+    EligibilityReason, EligibilityReasonCounts, EnrolledRoot, FilesystemIdentity,
+    GemmaMediaSelection, HardQuotas, LibraryId, LibraryOperation, ModelIdentity,
+    ObservedRootIdentity, OccurrenceScope, ResourceBudgets, ResourceProfile, ResourceProfileKind,
+    RootId, RootMoveResolution, RootUnavailabilityReason, SemanticCatalog,
+    SemanticLibraryCoordinator, SemanticLibraryPolicy, SemanticLibraryState, ServerEnrolmentPolicy,
 };
 use fm_transport_dto::RuntimeKindDto;
-use fm_transport_dto::{ConfirmSemanticEnrolmentRequestDto, PreviewSemanticEnrolmentRequestDto};
+use fm_transport_dto::{
+    ConfirmSemanticEnrolmentRequestDto, NavigationModeDto, PreviewSemanticEnrolmentRequestDto,
+    WorkspaceCommandDto,
+};
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -1108,6 +1111,57 @@ fn the_worker_feed_applies_the_curated_eligibility_policy_and_stops_while_paused
     );
 }
 
+#[test]
+fn a_gemma_library_feeds_only_media_selected_at_creation() {
+    let directory = project_temp_dir("gemma-media-feed-");
+    let config = SemanticLibraryConfiguration::embeddinggemma_2(
+        directory.path().join("config"),
+        directory.path().join("semantic-data"),
+        Uuid::new_v4(),
+        256,
+        GemmaMediaSelection {
+            images: true,
+            audio: false,
+            video: true,
+        },
+    )
+    .unwrap();
+    let service = SemanticLibraryService::desktop_managed(
+        config,
+        Arc::new(FixedSemanticEnrolmentEstimator::new(estimate())),
+    )
+    .unwrap();
+    let context = SemanticFolderContext::new(workspace(10), location("file:///docs"));
+    enrol(&service, &context);
+    let root_id: RootId = service.status(&HOST).unwrap().roots[0].id.parse().unwrap();
+    let plan = service
+        .worker_feed_plan(
+            &HOST,
+            &[
+                SemanticFeedCandidate {
+                    root_id,
+                    candidate: candidate("file:///docs/photo.png", Some("image/png"), false),
+                },
+                SemanticFeedCandidate {
+                    root_id,
+                    candidate: candidate("file:///docs/song.wav", Some("audio/wav"), false),
+                },
+                SemanticFeedCandidate {
+                    root_id,
+                    candidate: candidate("file:///docs/clip.mp4", Some("video/mp4"), false),
+                },
+            ],
+        )
+        .unwrap();
+    assert_eq!(
+        plan.eligible_locations,
+        [
+            location("file:///docs/photo.png"),
+            location("file:///docs/clip.mp4")
+        ]
+    );
+}
+
 fn candidate(uri: &str, mime: Option<&str>, hidden: bool) -> EligibilityCandidate {
     EligibilityCandidate {
         location: location(uri),
@@ -1477,6 +1531,139 @@ async fn facade_requires_the_active_folder_and_workspace_deletion_only_detaches_
 }
 
 #[tokio::test]
+async fn facade_removes_an_enrolled_root_even_when_another_folder_is_active() {
+    let directory = project_temp_dir("facade-remove-root-");
+    let service = FileManagerService::new(
+        RuntimeKindDto::Mock,
+        directory.path().join("workspaces"),
+        directory.path().join("settings"),
+    );
+    let workspace = service.start_workspace(None).await.unwrap();
+    let pane = workspace
+        .panes
+        .iter()
+        .find(|pane| pane.id == workspace.active_pane_id)
+        .unwrap();
+    let root = pane
+        .tabs
+        .iter()
+        .find(|tab| tab.id == pane.active_tab_id)
+        .unwrap()
+        .location
+        .clone();
+    let preview = service
+        .preview_semantic_enrolment(
+            &HOST,
+            PreviewSemanticEnrolmentRequestDto {
+                workspace_id: workspace.id,
+                location: root.clone(),
+                recursive: true,
+            },
+        )
+        .await
+        .unwrap();
+    service
+        .confirm_semantic_enrolment(
+            &HOST,
+            ConfirmSemanticEnrolmentRequestDto {
+                confirmation_id: preview.confirmation_id,
+                policy_revision: preview.policy_revision,
+                workspace_id: workspace.id,
+                location: root.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    let elsewhere = fm_transport_dto::LocationDto {
+        provider_id: root.provider_id.clone(),
+        uri: format!("file://{}", directory.path().display()),
+    };
+    service
+        .apply_workspace_command(WorkspaceCommandDto::NavigateTab {
+            workspace_id: workspace.id,
+            pane_id: pane.id,
+            tab_id: pane.active_tab_id,
+            location: Some(elsewhere.clone()),
+            navigation_mode: NavigationModeDto::Push,
+            expected_revision: workspace.revision,
+        })
+        .await
+        .unwrap();
+    service
+        .semantic_library_quarantine_unreachable_root(&Location::from(root.clone()))
+        .await;
+    assert!(matches!(
+        service.semantic_library_status(&HOST).await.unwrap().roots[0].availability,
+        fm_application::semantic_library::SemanticRootAvailability::TemporarilyUnavailable { .. }
+    ));
+    let revision = service
+        .semantic_library_status(&HOST)
+        .await
+        .unwrap()
+        .revision;
+    let unrelated = service
+        .semantic_library_plan_exclusion(
+            &HOST,
+            SemanticFolderContext::new(
+                workspace.id.into(),
+                location("file:///not-an-enrolled-root"),
+            ),
+            revision,
+        )
+        .await;
+    assert!(matches!(
+        unrelated,
+        Err(SemanticLibraryError::WorkspaceRequired)
+    ));
+    let descendant = service
+        .semantic_library_plan_exclusion(
+            &HOST,
+            SemanticFolderContext::new(
+                workspace.id.into(),
+                location(&format!("{}/child", root.uri.trim_end_matches('/'))),
+            ),
+            revision,
+        )
+        .await;
+    assert!(matches!(
+        descendant,
+        Err(SemanticLibraryError::WorkspaceRequired)
+    ));
+    let missing_workspace = service
+        .semantic_library_plan_exclusion(
+            &HOST,
+            SemanticFolderContext::new(Uuid::from_u128(0x404).into(), root.clone().into()),
+            revision,
+        )
+        .await;
+    assert!(matches!(
+        missing_workspace,
+        Err(SemanticLibraryError::WorkspaceRequired)
+    ));
+    let context = SemanticFolderContext::new(workspace.id.into(), root.into());
+    let plan = service
+        .semantic_library_plan_exclusion(&HOST, context.clone(), revision)
+        .await
+        .unwrap();
+    assert!(matches!(
+        service
+            .semantic_library_confirm_exclusion(
+                &HOST,
+                &plan.confirmation_id,
+                revision,
+                SemanticFolderContext::new(workspace.id.into(), elsewhere.into()),
+            )
+            .await,
+        Err(SemanticLibraryError::StaleConfirmation)
+    ));
+    let excluded = service
+        .semantic_library_confirm_exclusion(&HOST, &plan.confirmation_id, revision, context)
+        .await
+        .unwrap();
+    assert_eq!(excluded.roots[0].exclusions.len(), 1);
+}
+
+#[tokio::test]
 async fn workspace_deletion_succeeds_when_no_semantic_capability_is_configured() {
     let directory = project_temp_dir("delete-unavailable-");
     let service = FileManagerService::new(
@@ -1537,6 +1724,108 @@ fn installed_profiles() -> Vec<SemanticModelProfile> {
             estimated_ram_bytes: 2_048,
         },
     }]
+}
+
+#[tokio::test]
+async fn fresh_gemma_setup_switches_libraries_without_overwriting_e5() {
+    let directory = project_temp_dir("gemma-composition-");
+    let settings = directory.path().join("settings");
+    let data_root = directory.path().join("semantic");
+    let mut profiles = installed_profiles();
+    let mut gemma = profiles[0].clone();
+    gemma.profile = SemanticProfile::EmbeddingGemma2;
+    gemma.recommended = false;
+    gemma.resolved_model = SemanticModelIdentity::new(
+        "google-embeddinggemma-2",
+        "914f7f89142e33e77833254d9c9b90c3cef7303b",
+    );
+    gemma.metadata.identity = gemma.resolved_model.clone();
+    profiles.push(gemma.clone());
+    let components =
+        MutableComponentCapability::new(installed_component_status(&data_root), profiles);
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        directory.path().join("workspaces"),
+        &settings,
+    )
+    .with_semantic_component_capability(components.clone());
+    let initial = service
+        .semantic_library_status(&HOST)
+        .await
+        .unwrap()
+        .library
+        .unwrap();
+    let media = GemmaMediaSelection {
+        images: true,
+        audio: false,
+        video: true,
+    };
+    assert!(
+        service
+            .initialize_semantic_gemma_library(256, media, false)
+            .await
+            .is_err()
+    );
+    assert!(
+        service
+            .semantic_gemma_library_setup()
+            .await
+            .unwrap()
+            .is_none()
+    );
+    service
+        .initialize_semantic_gemma_library(256, media, true)
+        .await
+        .unwrap();
+    service
+        .initialize_semantic_gemma_library(256, media, true)
+        .await
+        .unwrap();
+    assert_eq!(
+        service
+            .semantic_gemma_library_setup()
+            .await
+            .unwrap()
+            .unwrap()
+            .dimensions,
+        256
+    );
+    assert!(
+        service
+            .initialize_semantic_gemma_library(512, media, true)
+            .await
+            .is_err()
+    );
+
+    components.set_status(SemanticComponentStatus::new(
+        SemanticComponentLifecycle::InstalledEnabled,
+        Some(data_root),
+        Some(SemanticModelSelection::new(
+            SemanticProfile::EmbeddingGemma2,
+            gemma.resolved_model,
+        )),
+        None,
+        Vec::new(),
+        SemanticDiskUse::empty(),
+    ));
+    let active = service
+        .semantic_library_status(&HOST)
+        .await
+        .unwrap()
+        .library
+        .unwrap();
+    assert_eq!(active.model.dimensions, 256);
+    assert_ne!(active.library_id, initial.library_id);
+    components.set_status(installed_component_status(
+        &directory.path().join("semantic"),
+    ));
+    let restored = service
+        .semantic_library_status(&HOST)
+        .await
+        .unwrap()
+        .library
+        .unwrap();
+    assert_eq!(restored, initial);
 }
 
 #[tokio::test]

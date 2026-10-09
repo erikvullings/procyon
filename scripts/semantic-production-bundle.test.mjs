@@ -74,6 +74,34 @@ test('production bundle CLI accepts the package-manager argument separator', () 
   assert.equal(values.get('--source-revision'), 'a'.repeat(40));
 });
 
+test('Gemma original files require an explicit release builder input', () => {
+  const values = parseProductionBundleArguments([
+    '--output',
+    'bundle',
+    '--release-base-url',
+    'https://qualification.invalid/revision',
+    '--source-revision',
+    'a'.repeat(40),
+    '--gemma-original-files',
+    'model-cache',
+  ]);
+  assert.equal(values.get('--gemma-original-files'), 'model-cache');
+  assert.throws(
+    () =>
+      parseProductionBundleArguments([
+        '--output',
+        'bundle',
+        '--release-base-url',
+        'https://qualification.invalid/revision',
+        '--source-revision',
+        'a'.repeat(40),
+        '--gemma-orignal-files',
+        'model-cache',
+      ]),
+    /unknown semantic bundle argument/u,
+  );
+});
+
 test('Zvec native library names are platform-specific', () => {
   assert.deepEqual(nativeLibraryNames('darwin'), ['libzvec_c_api.dylib']);
   assert.deepEqual(nativeLibraryNames('win32'), ['zvec_c_api.dll']);

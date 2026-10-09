@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import { setLocale } from '../../i18n';
 import type { Location, WorkspaceProjection } from '../../models';
-import { SemanticLibraryManagement } from './semantic-library-management';
+import {
+  SemanticFolderEnrolmentPrompt,
+  SemanticLibraryManagement,
+} from './semantic-library-management';
 
 let root: HTMLElement;
 const location: Location = { providerId: 'file', uri: 'mock:///' };
@@ -61,11 +64,14 @@ describe('SemanticLibraryManagement', () => {
     expect(root.textContent).toContain('Every 30 minutes');
     expect(root.textContent).toContain('normalized excerpts');
     expect(root.textContent).toContain(location.uri);
-    expect(root.textContent).toContain('folder open in the active pane');
+    expect(root.textContent).toContain('open it in a pane');
+    expect(
+      root.querySelector<HTMLDetailsElement>('details.fm-semantic-library-details')?.open,
+    ).toBe(false);
     expect(root.textContent).not.toContain('mock-volume');
   });
 
-  it('requires disclosure confirmation and submits no estimate counts', async () => {
+  it('includes a folder with one confirmation and submits no estimate counts', async () => {
     const preview = vi.spyOn(client, 'previewSemanticEnrolment');
     const confirm = vi.spyOn(client, 'confirmSemanticEnrolment');
     mountComponent(client);
@@ -77,24 +83,33 @@ describe('SemanticLibraryManagement', () => {
     expect(root.textContent).toContain('42');
     expect(root.textContent).toContain('Missing model download');
     expect(root.textContent).toContain('Unsupported MIME type');
-    expect(root.textContent).toContain('Normalized excerpts will be retained locally');
-    expect(button('Include and index folder').disabled).toBe(true);
+    expect(root.textContent).toContain('stores extracted text and embeddings locally');
+    expect(root.querySelector('#fm-semantic-library-consent')).toBeNull();
+    expect(button('Include and index folder').disabled).toBe(false);
     expect(preview).toHaveBeenCalledWith({
       workspaceId: workspace.id,
       location,
       recursive: true,
     });
 
-    root.querySelector<HTMLInputElement>('#fm-semantic-library-consent')?.click();
-    m.redraw.sync();
+    button('Cancel').click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-library-plan')).toBeNull());
+    expect(confirm).not.toHaveBeenCalled();
+    button('Review indexing').click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-library-plan')).not.toBeNull());
     button('Include and index folder').click();
-    await vi.waitFor(() => expect(root.textContent).toContain('Included here'));
-    expect(confirm).toHaveBeenCalledWith({
-      confirmationId: 'mock-enrol-confirmation-1',
-      policyRevision: 1,
-      workspaceId: workspace.id,
-      location,
-    });
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-semantic-library-root-heading')?.textContent).toContain(
+        location.uri,
+      ),
+    );
+    expect(confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        policyRevision: 1,
+        workspaceId: workspace.id,
+        location,
+      }),
+    );
     expect(confirm.mock.calls[0]?.[0]).not.toHaveProperty('estimatedFiles');
   });
 
@@ -114,7 +129,7 @@ describe('SemanticLibraryManagement', () => {
     mountComponent(client);
     await waitForLoaded();
 
-    button('Review exclusion').click();
+    button('Remove').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Saved conversation evidence pins'));
     for (const label of [
       'Occurrences',
@@ -126,25 +141,60 @@ describe('SemanticLibraryManagement', () => {
     ]) {
       expect(root.textContent).toContain(label);
     }
-    expect(button('Exclude and delete data').disabled).toBe(true);
-    root.querySelector<HTMLInputElement>('#fm-semantic-library-exclusion-confirm')?.click();
-    m.redraw.sync();
+    expect(root.querySelector('#fm-semantic-library-exclusion-confirm')).toBeNull();
+    expect(button('Exclude and delete data').disabled).toBe(false);
+    button('Cancel').click();
+    expect(confirm).not.toHaveBeenCalled();
+    button('Remove').click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Saved conversation evidence pins'));
     button('Exclude and delete data').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Excluded'));
     expect(root.textContent).toContain('Cleanup complete');
     expect(confirm.mock.calls[0]?.[0]).not.toHaveProperty('categories');
   });
 
+  it('removes a listed folder without navigating to it, while retaining the source files', async () => {
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    await client.confirmSemanticEnrolment({
+      confirmationId: preview.confirmationId,
+      policyRevision: preview.policyRevision,
+      workspaceId: workspace.id,
+      location,
+    });
+    const plan = vi.spyOn(client, 'planSemanticExclusion');
+    const confirm = vi.spyOn(client, 'confirmSemanticExclusion');
+    m.mount(root, {
+      view: () => m(SemanticLibraryManagement, { client, workspaceId: workspace.id }),
+    });
+    m.redraw.sync();
+    await waitForLoaded();
+
+    button('Remove').click();
+    await vi.waitFor(() => expect(plan).toHaveBeenCalled());
+    expect(plan.mock.calls[0]?.[0]).toMatchObject({ workspaceId: workspace.id, location });
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain('Your original files are not deleted'),
+    );
+    button('Exclude and delete data').click();
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalled());
+    expect(confirm.mock.calls[0]?.[0]).toMatchObject({ workspaceId: workspace.id, location });
+    expect(root.textContent).toContain('Moving or deleting an included folder');
+  });
+
   it('explains pause retention and queries while toggling pause separately', async () => {
     mountComponent(client);
     await waitForLoaded();
 
+    button('Pause indexing').click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Indexing paused'));
     expect(root.textContent).toContain('Existing indexed data and consent are preserved');
     expect(root.textContent).toContain('Queries can use the last complete generations');
-    button('Pause ingestion').click();
-    await vi.waitFor(() => expect(root.textContent).toContain('Ingestion paused'));
-    button('Resume ingestion').click();
-    await vi.waitFor(() => expect(root.textContent).toContain('Ingestion active'));
+    button('Resume indexing').click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Indexing on'));
   });
 
   it('shows unavailable sources and only fixed safe eligibility overrides', async () => {
@@ -189,10 +239,13 @@ describe('SemanticLibraryManagement', () => {
 
     expect(root.textContent).toContain('Source unavailable');
     expect(root.textContent).toContain('removable volume is offline');
+    const details = root.querySelector<HTMLDetailsElement>('.fm-semantic-library-root details');
+    expect(details?.open).toBe(false);
+    details?.setAttribute('open', '');
     expect(root.textContent).toContain('vocabulary-1');
-    expect(root.textContent).toContain('Files requiring OCR');
+    expect(root.textContent).toContain('Scanned PDFs without searchable text');
     expect(root.textContent).toContain('/docs/Scanned reference.pdf');
-    expect(root.textContent).toContain('OCR remediation controls below');
+    expect(root.textContent).toContain('which scanned PDFs to make searchable');
     expect(root.querySelectorAll('.fm-semantic-library-override')).toHaveLength(7);
     expect(
       [...root.querySelectorAll<HTMLSelectElement>('.fm-semantic-library-override select')].every(
@@ -388,5 +441,49 @@ describe('SemanticLibraryManagement', () => {
         'Het beleid is gewijzigd',
       ),
     );
+  });
+});
+
+describe('SemanticFolderEnrolmentPrompt', () => {
+  it('shows impact without a second checkbox and keeps failures visible', async () => {
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    vi.spyOn(client, 'previewSemanticEnrolment').mockResolvedValue({
+      ...preview,
+      estimate: {
+        ...preview.estimate,
+        completeness: 'unavailable',
+        unavailableReason:
+          'A provider-neutral recursive estimate is not available for this source.',
+      },
+    });
+    vi.spyOn(client, 'confirmSemanticEnrolment').mockRejectedValue(
+      new Error('Indexing unavailable'),
+    );
+    const onEnrolled = vi.fn();
+    const onCancel = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(SemanticFolderEnrolmentPrompt, {
+          client,
+          workspaceId: workspace.id,
+          location,
+          onEnrolled,
+          onCancel,
+        }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('Size could not be estimated'));
+    expect(root.textContent).toContain('stores extracted text and embeddings locally');
+    expect(root.querySelector('details')?.open).toBe(false);
+    expect(root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).toHaveLength(0);
+
+    button('OK, index folder').click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Indexing unavailable'));
+    expect(onEnrolled).not.toHaveBeenCalled();
+    button('Cancel').click();
+    expect(onCancel).toHaveBeenCalledOnce();
   });
 });

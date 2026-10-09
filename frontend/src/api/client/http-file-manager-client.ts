@@ -462,6 +462,19 @@ export class HttpFileManagerClient implements FileManagerClient {
     return response.data;
   }
 
+  async getGemmaLibrarySetup(
+    _signal?: AbortSignal,
+  ): Promise<import('../../models/semantic-components').GemmaLibrarySetup | null> {
+    return null;
+  }
+
+  async initializeGemmaLibrary(
+    _request: import('../../models/semantic-components').InitializeGemmaLibraryRequest,
+    _signal?: AbortSignal,
+  ): Promise<void> {
+    throw new Error('A Gemma library can only be initialized on the desktop host.');
+  }
+
   async createSemanticComponentInstallationOffer(
     request: CreateSemanticInstallationOfferRequest,
     signal?: AbortSignal,

@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use fm_semantic_conversion::{
     Cancellation, CancellationSignal, Chunker, ConversionBudgets, ConversionContext,
-    ConversionOutcome, DocumentConverter, DocumentMetadata, SourceContent,
+    ConversionOutcome, DocumentConverter, DocumentMetadata, FormatKind, SourceContent,
 };
 use fm_semantic_docling::converter_with_baseline_fallback;
 use sha2::{Digest, Sha256};
@@ -21,6 +21,24 @@ use crate::semantic_storage::{
 use crate::{IngestionState, WorkerIngestionBackend, WorkerIngestionInput, WorkerIngestionJob};
 
 const EMBEDDING_CHECKPOINT_INPUTS: usize = 8;
+
+/// Rejects only long PDF text with overwhelming evidence of character-spaced extraction.
+/// Short headings and non-Latin writing do not supply enough evidence to exclude a chunk.
+pub(crate) fn is_corrupted_pdf_text(text: &str) -> bool {
+    let mut words = 0_usize;
+    let mut single_letters = 0_usize;
+    let mut word_length = 0_usize;
+    for character in text.chars().chain(std::iter::once(' ')) {
+        if character.is_ascii_alphabetic() {
+            word_length += 1;
+        } else if word_length > 0 {
+            words += 1;
+            single_letters += usize::from(word_length == 1);
+            word_length = 0;
+        }
+    }
+    words >= 100 && single_letters * 10 >= words * 9
+}
 
 /// Persisted ingestion/reconciliation state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,6 +119,8 @@ pub struct IngestionDocument {
     pub occurrence_id: String,
     /// Opaque source locator retained by the host.
     pub source_id: String,
+    /// Host-supplied display title for model-owned document prompts.
+    pub title: Option<String>,
     /// Enrolled root.
     pub root_id: String,
     /// Optional workspace.
@@ -149,9 +169,75 @@ pub trait DerivedIndex: Send + Sync {
 }
 
 /// Embedding surface consumed by the pipeline.
+#[derive(Debug, Clone)]
+pub struct DocumentEmbeddingInput {
+    /// Structural chunk text, unchanged from the converter.
+    pub text: String,
+    /// Host-supplied display title, never a filesystem path.
+    pub title: Option<String>,
+}
+
+/// Embedding and truthful temporal coverage for an opted-in media source.
+#[derive(Debug, Clone)]
+pub struct MediaEmbedding {
+    /// Normalized source vector.
+    pub vector: Vec<f32>,
+    /// Presentation timestamps of sampled video frames, empty for still images/audio.
+    pub sampled_timestamps_ms: Vec<u64>,
+}
+
+/// Embedding surface consumed by the pipeline.
 pub trait EmbeddingProvider: Send + Sync {
     /// Exact immutable model identity.
     fn identity(&self) -> &EmbeddingModelIdentity;
+    /// Versioned input transformation used by this model's cache and index.
+    fn preprocessing_version(&self) -> &'static str {
+        EMBEDDING_PREPROCESSING_VERSION
+    }
+    /// Returns the exact input representation bound into a cached vector key.
+    fn cache_input(&self, input: &str) -> String {
+        case_fold_embedding_input(input)
+    }
+    /// Exact cache input for a document whose title may affect its vector.
+    fn cache_document_input(&self, _title: Option<&str>, input: &str) -> String {
+        self.cache_input(input)
+    }
+    /// Embeds document chunks, allowing models with title-aware prompts.
+    fn embed_documents(
+        &self,
+        inputs: &[DocumentEmbeddingInput],
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+        self.embed(
+            &inputs
+                .iter()
+                .map(|input| input.text.clone())
+                .collect::<Vec<_>>(),
+            cancellation,
+        )
+    }
+    /// Embeds a consented media source, without substituting a text converter.
+    fn embed_media(
+        &self,
+        _media_type: &str,
+        _bytes: &[u8],
+        _cancellation: &CancellationToken,
+    ) -> Result<MediaEmbedding, EmbeddingError> {
+        Err(EmbeddingError::Backend(
+            "active model cannot embed this media type".to_owned(),
+        ))
+    }
+    /// Recovers temporal evidence on a cache hit without rerunning model inference.
+    fn media_coverage(
+        &self,
+        _media_type: &str,
+        _bytes: &[u8],
+        _cancellation: &CancellationToken,
+    ) -> Result<Vec<u64>, EmbeddingError> {
+        Err(EmbeddingError::Backend(
+            "active model cannot recover media coverage".to_owned(),
+        ))
+    }
     /// Embeds bounded inputs.
     fn embed(
         &self,
@@ -332,6 +418,11 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
             document_id: input.document_id,
             occurrence_id,
             source_id,
+            title: input
+                .metadata
+                .get("title")
+                .filter(|value| !value.is_empty())
+                .cloned(),
             root_id,
             workspace_id: input
                 .metadata
@@ -594,6 +685,10 @@ impl IngestionCoordinator {
         let content_hash = sha256_hex(&document.bytes);
         self.check_cancelled(document, attempts, cancellation)?;
 
+        if is_media_type(&document.media_type) {
+            return self.ingest_media(document, attempts, content_hash, cancellation);
+        }
+
         self.transition(document, IngestionStage::Converting, attempts, None, 0, 1)?;
         let metadata = DocumentMetadata::unknown()
             .with_media_type(&document.media_type)
@@ -643,6 +738,38 @@ impl IngestionCoordinator {
 
         self.transition(document, IngestionStage::Chunking, attempts, None, 0, 1)?;
         let chunks = Chunker::default().chunk(&converted);
+        let total_chunks = chunks.len();
+        let chunks = chunks
+            .into_iter()
+            .filter(|chunk| {
+                chunk.format != FormatKind::Pdf || !is_corrupted_pdf_text(&chunk.embedding_input)
+            })
+            .collect::<Vec<_>>();
+        let excluded_chunks = total_chunks - chunks.len();
+        let quality_detail = (excluded_chunks > 0)
+            .then(|| format!("excluded {excluded_chunks} unreadable PDF chunks"));
+        if excluded_chunks > 0 {
+            eprintln!(
+                "Procyon semantic ingestion: excluded {excluded_chunks} unreadable PDF chunks from document {}",
+                document.document_id
+            );
+        }
+        if total_chunks > 0 && chunks.is_empty() {
+            let detail = "unreadable PDF text extraction; run OCR on the source PDF and re-index";
+            let deleted = self.catalog.delete_occurrence(&document.occurrence_id)?;
+            self.index
+                .delete(&deleted.record_ids)
+                .map_err(IngestionError::DerivedCleanup)?;
+            self.transition(
+                document,
+                IngestionStage::Skipped,
+                attempts,
+                Some(detail),
+                0,
+                1,
+            )?;
+            return Err(IngestionError::Excluded(detail.to_owned()));
+        }
         self.check_cancelled(document, attempts, cancellation)?;
 
         self.transition(
@@ -657,11 +784,13 @@ impl IngestionCoordinator {
         let keys = chunks
             .iter()
             .map(|chunk| {
-                let normalized = case_fold_embedding_input(&chunk.embedding_input);
+                let normalized = self
+                    .embedder
+                    .cache_document_input(document.title.as_deref(), &chunk.embedding_input);
                 EmbeddingCacheKey::calculate(
                     &normalized,
                     identity,
-                    EMBEDDING_PREPROCESSING_VERSION,
+                    self.embedder.preprocessing_version(),
                     &fm_semantic_conversion::STRUCTURAL_CHUNKER_VERSION.to_string(),
                 )
             })
@@ -680,12 +809,15 @@ impl IngestionCoordinator {
         for positions in missing_positions.chunks(EMBEDDING_CHECKPOINT_INPUTS) {
             let inputs = positions
                 .iter()
-                .map(|position| chunks[*position].embedding_input.clone())
+                .map(|position| DocumentEmbeddingInput {
+                    text: chunks[*position].embedding_input.clone(),
+                    title: document.title.clone(),
+                })
                 .collect::<Vec<_>>();
             let embedded = self
                 .embedder
-                .embed(&inputs, cancellation)
-                .map_err(|error| self.fail(document, attempts, error.to_string()))?;
+                .embed_documents(&inputs, cancellation)
+                .map_err(|error| self.embedding_error(document, attempts, error))?;
             let checkpoint = positions
                 .iter()
                 .copied()
@@ -810,7 +942,7 @@ impl IngestionCoordinator {
             document,
             IngestionStage::Complete,
             attempts,
-            None,
+            quality_detail.as_deref(),
             chunks.len() as u64,
             chunks.len() as u64,
         )?;
@@ -819,6 +951,146 @@ impl IngestionCoordinator {
             chunks: chunks.len(),
             embedded: embedded_count,
             reused: chunks.len().saturating_sub(embedded_count),
+        })
+    }
+
+    fn ingest_media(
+        &self,
+        document: &IngestionDocument,
+        attempts: u32,
+        content_hash: String,
+        cancellation: &CancellationToken,
+    ) -> Result<IngestionReceipt, IngestionError> {
+        self.transition(document, IngestionStage::Embedding, attempts, None, 0, 1)?;
+        let identity = self.embedder.identity();
+        let cache_key = EmbeddingCacheKey::calculate(
+            &format!("{}:{content_hash}", document.media_type),
+            identity,
+            self.embedder.preprocessing_version(),
+            "original-media/1",
+        );
+        let cached = self.catalog.cached_vector(cache_key)?;
+        let (embedding, embedded) = if let Some(vector) = cached {
+            let sampled_timestamps_ms = self
+                .embedder
+                .media_coverage(&document.media_type, &document.bytes, cancellation)
+                .map_err(|error| self.embedding_error(document, attempts, error))?;
+            (
+                MediaEmbedding {
+                    vector,
+                    sampled_timestamps_ms,
+                },
+                0,
+            )
+        } else {
+            let media = self
+                .embedder
+                .embed_media(&document.media_type, &document.bytes, cancellation)
+                .map_err(|error| self.embedding_error(document, attempts, error))?;
+            self.catalog
+                .cache_vectors(&[(cache_key, media.vector.clone())], identity.dimensions)?;
+            (media, 1)
+        };
+        self.check_cancelled(document, attempts, cancellation)?;
+        let generation = self.catalog.resume_or_next_generation(
+            &document.tenant_id,
+            &document.library_id,
+            &document.document_id,
+        )?;
+        let kind = document.media_type.split('/').next().unwrap_or("media");
+        let title = document
+            .title
+            .as_deref()
+            .unwrap_or(kind)
+            .chars()
+            .take(256)
+            .collect::<String>();
+        let excerpt = if embedding.sampled_timestamps_ms.is_empty() {
+            format!("{kind}: {title} (file-level evidence)")
+        } else {
+            format!(
+                "{kind}: {title} ({} sampled frames; partial temporal coverage)",
+                embedding.sampled_timestamps_ms.len()
+            )
+        };
+        let provenance = serde_json::to_string(&fm_semantic_conversion::ChunkProvenance::Exact(
+            fm_semantic_conversion::Provenance::Media {
+                sampled_timestamps_ms: embedding.sampled_timestamps_ms,
+            },
+        ))
+        .map_err(|error| self.fail(document, attempts, error.to_string()))?;
+        let record_id = record_id(document, generation, 0);
+        let occurrence = Occurrence {
+            occurrence_id: document.occurrence_id.clone(),
+            source_id: document.source_id.clone(),
+            root_id: document.root_id.clone(),
+            workspace_id: document.workspace_id.clone(),
+            media_type: document.media_type.clone(),
+            modified_at_ms: document.modified_at_ms,
+            available: true,
+            provenance: "worker-media".into(),
+        };
+        self.transition(document, IngestionStage::Staging, attempts, None, 0, 1)?;
+        self.catalog.stage_generation(&StagedGeneration {
+            tenant_id: document.tenant_id.clone(),
+            library_id: document.library_id.clone(),
+            document_id: document.document_id.clone(),
+            content_hash,
+            generation,
+            occurrences: vec![occurrence],
+            records: vec![StagedRecord {
+                record_id: record_id.clone(),
+                occurrence_id: document.occurrence_id.clone(),
+                cache_key,
+                vector: embedding.vector.clone(),
+                record_kind: kind.into(),
+                excerpt: excerpt.clone(),
+                content: title.clone(),
+                token_count: 0,
+                section_path: vec![],
+                structural_role: "media".into(),
+                provenance,
+                source_position: 0,
+                generated: false,
+                concept_id: None,
+            }],
+        })?;
+        self.transition(document, IngestionStage::Publishing, attempts, None, 0, 1)?;
+        self.index
+            .upsert(&[DerivedRecord {
+                record_id,
+                tenant_id: document.tenant_id.clone(),
+                library_id: document.library_id.clone(),
+                root_id: document.root_id.clone(),
+                workspace_id: document.workspace_id.clone(),
+                media_type: document.media_type.clone(),
+                modified_at_ms: document.modified_at_ms,
+                generation,
+                embedding: embedding.vector,
+                content: title,
+                excerpt,
+            }])
+            .map_err(|error| self.fail(document, attempts, error))?;
+        self.catalog.publish_generation(
+            &document.tenant_id,
+            &document.library_id,
+            &document.document_id,
+            generation,
+        )?;
+        match self.catalog.reclaim_superseded() {
+            Ok(reclaimed) => self
+                .index
+                .delete(&reclaimed.record_ids)
+                .map_err(IngestionError::DerivedCleanup)?,
+            Err(StorageError::ReadersActive) => {}
+            Err(error) => return Err(error.into()),
+        }
+        self.transition(document, IngestionStage::Complete, attempts, None, 1, 1)?;
+        Ok(IngestionReceipt {
+            generation,
+            chunks: 1,
+            embedded,
+            reused: 1 - embedded,
         })
     }
 
@@ -881,6 +1153,29 @@ impl IngestionCoordinator {
             return Err(IngestionError::Cancelled);
         }
         Ok(())
+    }
+
+    fn embedding_error(
+        &self,
+        document: &IngestionDocument,
+        attempts: u32,
+        error: EmbeddingError,
+    ) -> IngestionError {
+        if matches!(error, EmbeddingError::Cancelled) {
+            match self.transition(
+                document,
+                IngestionStage::Cancelled,
+                attempts,
+                Some("cancelled"),
+                0,
+                1,
+            ) {
+                Ok(()) => IngestionError::Cancelled,
+                Err(storage) => storage,
+            }
+        } else {
+            self.fail(document, attempts, error.to_string())
+        }
     }
 
     fn fail(&self, document: &IngestionDocument, attempts: u32, detail: String) -> IngestionError {
@@ -991,6 +1286,22 @@ fn sha256_hex(bytes: &[u8]) -> String {
         let _ = write!(encoded, "{byte:02x}");
     }
     encoded
+}
+
+fn is_media_type(media_type: &str) -> bool {
+    matches!(
+        media_type,
+        "image/jpeg"
+            | "image/png"
+            | "image/webp"
+            | "audio/wav"
+            | "audio/mpeg"
+            | "audio/flac"
+            | "audio/aac"
+            | "audio/mp4"
+            | "video/mp4"
+            | "video/quicktime"
+    )
 }
 
 fn record_id(document: &IngestionDocument, generation: u64, position: usize) -> String {
@@ -1196,6 +1507,7 @@ mod tests {
                 document_id: "document-a".into(),
                 occurrence_id: "occurrence-a".into(),
                 source_id: "source-a".into(),
+                title: None,
                 root_id: "root-a".into(),
                 workspace_id: Some("workspace-a".into()),
                 media_type: "text/plain".into(),
@@ -1233,7 +1545,144 @@ mod tests {
         }
     }
 
+    struct MediaEmbedder {
+        identity: EmbeddingModelIdentity,
+        embed_calls: Arc<std::sync::atomic::AtomicUsize>,
+        cancel_during_embed: bool,
+    }
+
+    impl EmbeddingProvider for MediaEmbedder {
+        fn identity(&self) -> &EmbeddingModelIdentity {
+            &self.identity
+        }
+
+        fn embed(
+            &self,
+            _inputs: &[String],
+            _cancellation: &CancellationToken,
+        ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+            panic!("media must not be processed as text");
+        }
+
+        fn embed_media(
+            &self,
+            media_type: &str,
+            _bytes: &[u8],
+            _cancellation: &CancellationToken,
+        ) -> Result<MediaEmbedding, EmbeddingError> {
+            assert_eq!(media_type, "video/mp4");
+            self.embed_calls
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if self.cancel_during_embed {
+                return Err(EmbeddingError::Cancelled);
+            }
+            Ok(MediaEmbedding {
+                vector: vec![0.0, 1.0, 0.0],
+                sampled_timestamps_ms: vec![0, 1_000],
+            })
+        }
+
+        fn media_coverage(
+            &self,
+            media_type: &str,
+            _bytes: &[u8],
+            _cancellation: &CancellationToken,
+        ) -> Result<Vec<u64>, EmbeddingError> {
+            assert_eq!(media_type, "video/mp4");
+            Ok(vec![0, 1_000])
+        }
+    }
+
+    #[test]
+    fn media_ingestion_publishes_a_vector_with_honest_sampled_video_evidence() {
+        let mut fixture = Fixture::new(healthy_resources());
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        fixture.coordinator = Arc::new(IngestionCoordinator::new(
+            fixture.catalog.clone(),
+            Arc::new(MediaEmbedder {
+                identity: fixture.embedder.identity.clone(),
+                embed_calls: Arc::clone(&calls),
+                cancel_during_embed: false,
+            }),
+            fixture.index.clone(),
+            Arc::new(FixedResources(healthy_resources())),
+            Arc::new(Events::default()),
+            InteractivePriority::default(),
+        ));
+        let mut document = fixture.document("video bytes");
+        document.media_type = "video/mp4".to_owned();
+        document.title = Some("Vacation clip".to_owned());
+        let receipt = fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .unwrap();
+
+        assert_eq!(receipt.chunks, 1);
+        assert_eq!(receipt.embedded, 1);
+        let records = fixture.index.records.lock().unwrap();
+        let record = records.values().next().unwrap();
+        assert_eq!(record.embedding, vec![0.0, 1.0, 0.0]);
+        let evidence = fixture
+            .catalog
+            .begin_read()
+            .unwrap()
+            .filter_visible_candidates(
+                std::slice::from_ref(&record.record_id),
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .unwrap();
+        assert!(evidence[0].provenance.contains("sampledTimestampsMs"));
+        assert!(evidence[0].provenance.contains("1000"));
+        drop(records);
+
+        document.job_id = "job-b".to_owned();
+        let repeated = fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .unwrap();
+        assert_eq!(repeated.reused, 1);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn media_inference_cancellation_persists_cancelled_job() {
+        let mut fixture = Fixture::new(healthy_resources());
+        fixture.coordinator = Arc::new(IngestionCoordinator::new(
+            fixture.catalog.clone(),
+            Arc::new(MediaEmbedder {
+                identity: fixture.embedder.identity.clone(),
+                embed_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                cancel_during_embed: true,
+            }),
+            fixture.index.clone(),
+            Arc::new(FixedResources(healthy_resources())),
+            Arc::new(Events::default()),
+            InteractivePriority::default(),
+        ));
+        let mut document = fixture.document("video bytes");
+        document.media_type = "video/mp4".into();
+
+        assert!(matches!(
+            fixture
+                .coordinator
+                .ingest(&document, &CancellationToken::new()),
+            Err(IngestionError::Cancelled)
+        ));
+        assert_eq!(
+            fixture.catalog.job("job-a").unwrap().unwrap().stage,
+            "cancelled"
+        );
+        assert!(fixture.index.records.lock().unwrap().is_empty());
+    }
+
     fn positioned_pdf(content: &str) -> Vec<u8> {
+        positioned_pdf_pages(&[content])
+    }
+
+    fn positioned_pdf_pages(contents: &[&str]) -> Vec<u8> {
         let mut document = Document::with_version("1.5");
         let pages_id = document.new_object_id();
         let font_id = document.add_object(dictionary! {
@@ -1244,20 +1693,25 @@ mod tests {
         let resources_id = document.add_object(dictionary! {
             "Font" => dictionary! { "F1" => font_id },
         });
-        let content_id =
-            document.add_object(Stream::new(dictionary! {}, content.as_bytes().to_vec()));
-        let page_id = document.add_object(dictionary! {
-            "Type" => "Page",
-            "Parent" => pages_id,
-            "Contents" => content_id,
-            "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
-        });
+        let page_ids = contents
+            .iter()
+            .map(|content| {
+                let content_id =
+                    document.add_object(Stream::new(dictionary! {}, content.as_bytes().to_vec()));
+                document.add_object(dictionary! {
+                    "Type" => "Page",
+                    "Parent" => pages_id,
+                    "Contents" => content_id,
+                    "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+                })
+            })
+            .collect::<Vec<_>>();
         document.objects.insert(
             pages_id,
             Object::Dictionary(dictionary! {
                 "Type" => "Pages",
-                "Kids" => vec![Object::Reference(page_id)],
-                "Count" => 1,
+                "Kids" => page_ids.into_iter().map(Object::Reference).collect::<Vec<_>>(),
+                "Count" => contents.len() as i64,
                 "Resources" => resources_id,
             }),
         );
@@ -1294,6 +1748,87 @@ mod tests {
         assert!(
             excerpt.find("Left column starts").expect("left column")
                 < excerpt.find("Right column starts").expect("right column")
+        );
+    }
+
+    #[test]
+    fn pdf_quality_gate_rejects_character_spaced_extraction_without_hiding_ordinary_text() {
+        let damaged = "T A R G E T W e n e e d t o i n c r e a s e s a l e s ".repeat(8);
+        assert!(is_corrupted_pdf_text(&damaged));
+        assert!(!is_corrupted_pdf_text(
+            &"The target is to increase sales by designing a better product. ".repeat(20)
+        ));
+        assert!(!is_corrupted_pdf_text("T A R G E T is a short heading."));
+        assert!(!is_corrupted_pdf_text(
+            &"技術革新の原理と手法を説明します。".repeat(20)
+        ));
+    }
+
+    #[test]
+    fn unreadable_pdf_does_not_publish_vectors() {
+        let fixture = Fixture::new(healthy_resources());
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        document.bytes = positioned_pdf(
+            "BT /F1 12 Tf 72 720 Td (Readable methods for inventive problem solving.) Tj ET\n",
+        );
+        fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("initial readable PDF");
+        assert!(!fixture.index.records.lock().unwrap().is_empty());
+
+        let damaged = "T A R G E T W e n e e d t o i n c r e a s e s a l e s ".repeat(8);
+        document.bytes = positioned_pdf(&format!("BT /F1 12 Tf 72 720 Td ({damaged}) Tj ET\n"));
+
+        let outcome = fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new());
+
+        assert!(matches!(
+            outcome,
+            Err(IngestionError::Excluded(ref detail)) if detail.contains("unreadable PDF")
+        ));
+        assert!(fixture.index.records.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn readable_pdf_page_survives_omission_of_a_corrupted_page() {
+        let fixture = Fixture::new(healthy_resources());
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        let damaged = "T A R G E T W e n e e d t o i n c r e a s e s a l e s ".repeat(8);
+        let damaged_page = format!("BT /F1 12 Tf 72 720 Td ({damaged}) Tj ET\n");
+        let readable_page =
+            "BT /F1 12 Tf 72 720 Td (Inventive patterns solve technical contradictions.) Tj ET\n";
+        document.bytes = positioned_pdf_pages(&[&damaged_page, readable_page]);
+
+        let receipt = fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("partially readable PDF");
+
+        let records = fixture.index.records.lock().unwrap();
+        assert_eq!(receipt.chunks, 1);
+        assert!(
+            records
+                .values()
+                .all(|record| !record.content.contains("T A R G E T"))
+        );
+        assert!(
+            records
+                .values()
+                .any(|record| record.content.contains("Inventive patterns"))
+        );
+        assert!(
+            fixture
+                .catalog
+                .job(&document.job_id)
+                .unwrap()
+                .unwrap()
+                .detail
+                .unwrap()
+                .contains("excluded 1 unreadable PDF chunks")
         );
     }
 

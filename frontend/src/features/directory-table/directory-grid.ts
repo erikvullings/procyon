@@ -7,7 +7,12 @@ import {
   consumePointerFileDragClick,
   registerPointerFileDropTarget,
 } from '../drag-drop/pointer-file-drag';
-import type { CursorClickModifiers, DirectoryEntrySource } from './directory-table';
+import type { ActiveSourceState } from '../operations/operation-state';
+import {
+  activeSourceLabel,
+  type CursorClickModifiers,
+  type DirectoryEntrySource,
+} from './directory-table';
 import { entryIcon } from './entry-icons';
 import type { NativeIconLoader } from './native-icon-loader';
 import { type GridLine, layoutPhotoLines } from './photo-grouping';
@@ -38,6 +43,7 @@ export interface DirectoryGridAttrs {
   readonly cursorIndex?: number;
   readonly selectedEntryIds?: ReadonlySet<EntryId>;
   readonly cutEntryIds?: ReadonlySet<EntryId>;
+  readonly activeSourceStates?: ReadonlyMap<string, ActiveSourceState>;
   readonly viewportHeight?: number;
   readonly overscan?: number;
   readonly label?: string;
@@ -129,6 +135,10 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
   ): m.Children {
     const cursor = index === attrs.cursorIndex;
     const selected = attrs.selectedEntryIds?.has(entry.id) ?? false;
+    const activeSource =
+      entry.kind === 'directory'
+        ? attrs.activeSourceStates?.get(`${entry.location.providerId}:${entry.location.uri}`)
+        : undefined;
     const thumbnailDataUri = thumbnailViewport?.thumbnailDataUri(entry, size);
     const nativeIconDataUri = attrs.nativeIconLoader?.iconDataUri(entry);
     return m(
@@ -138,6 +148,7 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
         role: 'gridcell',
         'aria-selected': selected ? 'true' : 'false',
         'data-entry-index': index,
+        'data-active-source': activeSource,
         draggable:
           attrs.onPointerDragStart !== undefined
             ? false
@@ -183,6 +194,7 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
           cursor ? 'fm-cursor-tile' : '',
           selected ? 'fm-selected-tile' : '',
           attrs.cutEntryIds?.has(entry.id) === true ? 'fm-cut-entry' : '',
+          activeSource !== undefined ? 'fm-active-source' : '',
         ].join(' '),
         style: {
           transform: `translate(${x}px, ${y}px)`,
@@ -204,7 +216,12 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
                 alt: '',
                 'aria-hidden': 'true',
               }),
-        m('span.fm-grid-tile-name', entry.name),
+        m('span.fm-grid-tile-name', [
+          entry.name,
+          activeSource === undefined
+            ? undefined
+            : m('span.fm-source-state', ` · ${activeSourceLabel(activeSource)}`),
+        ]),
       ],
     );
   }

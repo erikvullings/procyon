@@ -10334,6 +10334,10 @@
             "$ref": "#/components/schemas/KnowledgeQueryDraftDto",
             "description": "Typed composer state."
           },
+          "intent": {
+            "$ref": "#/components/schemas/KnowledgeQueryIntentDto",
+            "description": "Model prompt for dense queries; independent of the retrieval method."
+          },
           "mode": {
             "$ref": "#/components/schemas/KnowledgeRetrievalModeDto",
             "description": "Requested retrieval mode."
@@ -11891,6 +11895,15 @@
             "description": "DSL-expressible scope selectors."
           }
         }
+      },
+      "KnowledgeQueryIntentDto": {
+        "type": "string",
+        "description": "Text prompt used to embed dense queries against indexed documents.",
+        "enum": [
+          "search",
+          "questionAnswering",
+          "codeRetrieval"
+        ]
       },
       "KnowledgeQueryInterpretationDto": {
         "type": "object",
@@ -14399,6 +14412,10 @@
           "draft": {
             "$ref": "#/components/schemas/KnowledgeQueryDraftDto",
             "description": "Typed composer state."
+          },
+          "intent": {
+            "$ref": "#/components/schemas/KnowledgeQueryIntentDto",
+            "description": "Model prompt for dense queries; independent of the retrieval method."
           },
           "mode": {
             "$ref": "#/components/schemas/KnowledgeRetrievalModeDto",
@@ -18963,7 +18980,8 @@
         "enum": [
           "compactMultilingual",
           "compactEnglish",
-          "multilingualQuality"
+          "multilingualQuality",
+          "embeddingGemma2"
         ]
       },
       "SemanticReindexEstimateDto": {

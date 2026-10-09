@@ -632,6 +632,8 @@ impl IpcSemanticCapability {
         data_directory: &Path,
         native_library_directory: &Path,
         model_pack: Option<fm_semantic_worker::DeveloperModelPackResolver>,
+        original_model: Option<fm_semantic_worker::DeveloperManagedWorkerResolver>,
+        ocr_executable: fm_semantic_worker::DeveloperOcrExecutableResolver,
     ) -> Self {
         let connector = WorkerConnector::desktop_developer(
             runtime_directory,
@@ -639,9 +641,14 @@ impl IpcSemanticCapability {
             data_directory,
             Some(native_library_directory),
         );
+        let connector = connector.with_developer_ocr_executable_resolver(ocr_executable);
+        let connector = match model_pack {
+            Some(resolver) => connector.with_developer_model_pack_resolver(resolver),
+            None => connector,
+        };
         Self {
-            connector: match model_pack {
-                Some(resolver) => connector.with_developer_model_pack_resolver(resolver),
+            connector: match original_model {
+                Some(resolver) => connector.with_developer_managed_worker_resolver(resolver),
                 None => connector,
             },
             client: AsyncMutex::new(None),

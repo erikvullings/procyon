@@ -128,6 +128,13 @@ export function parseProductionBundleArguments(args) {
           '--release-base-url <https-url> --source-revision <git-sha>',
       );
     }
+    if (
+      !['--output', '--release-base-url', '--source-revision', '--gemma-original-files'].includes(
+        name,
+      )
+    ) {
+      throw new Error(`unknown semantic bundle argument: ${name}`);
+    }
     values.set(name, value);
   }
   for (const required of ['--output', '--release-base-url', '--source-revision']) {
@@ -239,6 +246,7 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
       )
     : undefined;
   const modelCache = await fetchMultilingualModel(path.join(cargoTarget, 'semantic-model-cache'));
+  const gemmaOriginalFiles = values.get('--gemma-original-files');
   run('rustup', ['target', 'add', target.rust]);
   run(
     'cargo',
@@ -251,7 +259,7 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
       '-p',
       'fm-semantic-worker',
       '--features',
-      'semantic-runtime',
+      gemmaOriginalFiles ? 'gemma-native' : 'semantic-runtime',
       '--bin',
       'fm-semantic-worker',
     ],
@@ -314,6 +322,7 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
     values.get('--source-revision'),
     PRODUCTION_CONVERTER_IDENTITY,
     PRODUCTION_CHUNKER_IDENTITY,
+    ...(gemmaOriginalFiles ? [path.resolve(gemmaOriginalFiles)] : []),
   ]);
   const output = path.resolve(values.get('--output'));
   smokePackagedExecutableOffline(

@@ -515,6 +515,44 @@ impl ComponentManager {
         Ok(Some(installed.installed_path().to_owned()))
     }
 
+    /// Re-verifies every installed original file of a signed model before offline worker launch.
+    ///
+    /// Returns `None` for a pack-backed model or a model whose files are not all installed.
+    /// Paths point at the original installed payloads, without extracting or duplicating weights.
+    pub fn verified_original_model_files(
+        &self,
+        catalog: &TrustedCatalog,
+        identity: &ModelIdentity,
+    ) -> Result<Option<BTreeMap<String, PathBuf>>, InstallError> {
+        let Some(model) = catalog.model(identity) else {
+            return Ok(None);
+        };
+        let Some(primary_name) = model.primary_file_name() else {
+            return Ok(None);
+        };
+        let state = self.state()?;
+        let mut files = BTreeMap::new();
+        for (name, id) in std::iter::once((primary_name, model.artifact_id()))
+            .chain(model.files().iter().map(|(name, id)| (name.as_str(), id)))
+        {
+            let artifact = catalog
+                .artifact(id)
+                .ok_or_else(|| CatalogError::UnknownArtifact { id: id.clone() })?;
+            let Some(installed) = state.retained_component(id) else {
+                return Ok(None);
+            };
+            if installed.artifact_id() != id
+                || installed.version() != artifact.version()
+                || installed.checksum() != artifact.checksum()
+            {
+                return Ok(None);
+            }
+            verify_installed_artifact(artifact, installed.installed_path())?;
+            files.insert(name.to_owned(), installed.installed_path().to_owned());
+        }
+        Ok(Some(files))
+    }
+
     /// Like [`Self::verified_installed_payload`], but skips the full SHA-256
     /// when this manager already hashed the same unchanged file.
     ///
@@ -782,6 +820,24 @@ impl ComponentManager {
         })
     }
 
+    /// Activates an installed model for a separately initialized empty library.
+    /// E5's installed package and its separate library data remain untouched.
+    pub fn activate_fresh_library_model(
+        &self,
+        profile: crate::SemanticProfile,
+        identity: crate::ModelIdentity,
+        index_schema_version: u32,
+    ) -> Result<(), crate::SemanticStateError> {
+        self.store.with_exclusive_lock(|| {
+            let mut state = self.store.load_or_default_unlocked(&self.app_data)?;
+            if state.installed_model(&identity).is_none() {
+                return Err(crate::SemanticStateError::FreshLibraryModelNotInstalled);
+            }
+            state.activate_fresh_library_model(profile, identity, index_schema_version)?;
+            self.store.save_unlocked(&state)
+        })
+    }
+
     fn install_locked(
         &self,
         consent: InstallationConsent,
@@ -840,7 +896,9 @@ impl ComponentManager {
         }
         let offered_index_schema_version =
             artifacts.iter().find_map(|artifact| match artifact.kind() {
-                ArtifactKind::Model(identity) if identity == &consent.resolved_model => {
+                ArtifactKind::Model(identity) | ArtifactKind::OriginalModel(identity)
+                    if identity == &consent.resolved_model =>
+                {
                     Some(artifact.compatibility().index_schema_version())
                 }
                 _ => None,
@@ -1509,7 +1567,9 @@ fn verify_artifact_file(artifact: &CatalogArtifact, path: &Path) -> Result<(), (
 
 fn artifact_data_category(artifact: &CatalogArtifact) -> DataCategory {
     match artifact.kind() {
-        ArtifactKind::Model(_) => DataCategory::Models,
+        ArtifactKind::Model(_) | ArtifactKind::OriginalModel(_) | ArtifactKind::ModelFile(_) => {
+            DataCategory::Models
+        }
         ArtifactKind::Worker | ArtifactKind::Runtime => DataCategory::Workers,
     }
 }

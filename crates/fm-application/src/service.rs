@@ -542,7 +542,10 @@ impl FileManagerService {
             providers.clone(),
         );
         let semantic = SemanticService::unavailable();
-        let semantic_indexing = Arc::new(SemanticIndexingService::new(providers.clone()));
+        let semantic_indexing = Arc::new(SemanticIndexingService::new(
+            providers.clone(),
+            events.clone(),
+        ));
         let semantic_ocr_directory = settings_directory.join("semantic-ocr");
         let semantic_ocr_policy = Arc::new(OcrPolicyStore::load(&semantic_ocr_directory));
         let semantic_ocr = SemanticOcrCoordinator::new(
@@ -915,6 +918,30 @@ impl FileManagerService {
         Ok(status)
     }
 
+    /// Starts a separate, empty Gemma library after explicit fresh-index consent.
+    pub async fn initialize_semantic_gemma_library(
+        &self,
+        dimensions: u32,
+        media: fm_semantic_library::GemmaMediaSelection,
+        confirm_fresh_index: bool,
+    ) -> Result<(), SemanticLibraryError> {
+        if !confirm_fresh_index {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
+        self.semantic_library
+            .initialize_gemma(&self.semantic_components, dimensions, media)
+            .await
+    }
+
+    /// Reads locked Gemma dimensions and media choices, if initialized.
+    pub async fn semantic_gemma_library_setup(
+        &self,
+    ) -> Result<Option<crate::semantic_library::GemmaLibrarySetup>, SemanticLibraryError> {
+        self.semantic_library
+            .gemma_setup(&self.semantic_components)
+            .await
+    }
+
     /// Replaces the composed default with an explicitly configured library
     /// service.
     #[must_use]
@@ -1012,12 +1039,13 @@ impl FileManagerService {
     ) -> Result<SemanticExclusionPlan, SemanticLibraryError> {
         let library = self.semantic_library().await;
         library.ensure_operation_allowed(access, SemanticLibraryOperation::PlanExclusion)?;
-        self.ensure_active_semantic_folder(&context).await?;
+        self.ensure_active_or_enrolled_semantic_root(access, &context, &library)
+            .await?;
         let context = self.semantic_consent_context(context).await;
         library.plan_exclusion(access, context, expected_revision)
     }
 
-    /// Confirms one exclusion plan for the still-active folder.
+    /// Confirms one exclusion plan for the active folder or an enrolled root.
     ///
     /// # Errors
     ///
@@ -1032,7 +1060,8 @@ impl FileManagerService {
     ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
         let library = self.semantic_library().await;
         library.ensure_operation_allowed(access, SemanticLibraryOperation::ConfirmExclusion)?;
-        self.ensure_active_semantic_folder(&context).await?;
+        self.ensure_active_or_enrolled_semantic_root(access, &context, &library)
+            .await?;
         let context = self.semantic_consent_context(context).await;
         library.confirm_exclusion(access, confirmation_id, expected_revision, &context)
     }
@@ -1273,6 +1302,33 @@ impl FileManagerService {
             .and_then(|pane| pane.tabs.iter().find(|tab| tab.id == pane.active_tab_id))
             .map(|tab| &tab.location);
         if active == Some(&context.location) {
+            Ok(())
+        } else {
+            Err(SemanticLibraryError::WorkspaceRequired)
+        }
+    }
+
+    async fn ensure_active_or_enrolled_semantic_root(
+        &self,
+        access: &SemanticAccessContext,
+        context: &SemanticFolderContext,
+        library: &SemanticLibraryService,
+    ) -> Result<(), SemanticLibraryError> {
+        if self.ensure_active_semantic_folder(context).await.is_ok() {
+            return Ok(());
+        }
+        self.workspaces
+            .load(context.workspace_id)
+            .await
+            .map_err(|_| SemanticLibraryError::WorkspaceRequired)?;
+        let consent_workspace: uuid::Uuid = self
+            .semantic_workspace_id(context.workspace_id)
+            .await
+            .into();
+        if library.status(access)?.roots.iter().any(|root| {
+            root.location == context.location
+                && root.workspace_references.contains(&consent_workspace)
+        }) {
             Ok(())
         } else {
             Err(SemanticLibraryError::WorkspaceRequired)
@@ -2670,6 +2726,12 @@ impl FileManagerService {
     #[must_use]
     pub fn list_operations(&self) -> Vec<OperationDto> {
         self.operations.list()
+    }
+
+    /// Whether a semantic root reconciliation is currently in progress.
+    #[must_use]
+    pub fn is_semantic_indexing_active(&self) -> bool {
+        self.semantic_indexing.is_reconciling()
     }
 
     /// Returns a bounded page of active and retained historical operations.
@@ -4446,6 +4508,40 @@ mod tests {
             page.operations[0].result_summary.as_deref(),
             Some("Interrupted after 0 items; it was not resumed.")
         );
+    }
+
+    #[tokio::test]
+    async fn semantic_reconciliation_announces_start_and_failure() {
+        let (_directory, service) = service();
+        let mut events =
+            service
+                .event_bus()
+                .subscribe(SessionId::new("activity-test"), [], Some(0));
+        let root_id = fm_semantic_library::RootId::new();
+        let result = service
+            .semantic_indexing
+            .reconcile(
+                service.semantic_library().await,
+                &SemanticAccessContext::Host,
+                root_id,
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await;
+        assert!(result.is_err());
+        assert!(!service.is_semantic_indexing_active());
+        for expected in ["reconciling", "failed"] {
+            let SubscriptionEvent::Event(envelope) = events.recv().await.expect("progress event")
+            else {
+                panic!("expected an event envelope");
+            };
+            let BackendEventPayload::SemanticIngestionProgress { job_id, stage, .. } =
+                envelope.payload
+            else {
+                panic!("expected semantic progress");
+            };
+            assert_eq!(job_id, format!("root:{root_id}"));
+            assert_eq!(stage, expected);
+        }
     }
 
     #[test]

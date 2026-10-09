@@ -18,6 +18,10 @@ import type {
   SemanticModelSelection,
   SemanticProfile,
 } from '../../models';
+import type {
+  GemmaLibrarySetup,
+  InitializeGemmaLibraryRequest,
+} from '../../models/semantic-components';
 
 export interface SemanticComponentManagementAttrs {
   readonly client: FileManagerClient;
@@ -44,6 +48,7 @@ interface LoadedState {
   capabilities: SemanticComponentCapabilities;
   status: SemanticComponentStatus;
   profiles: SemanticModelProfile[];
+  gemmaSetup: GemmaLibrarySetup | null;
 }
 
 interface LocalModelFields {
@@ -96,6 +101,8 @@ function profileName(profile: SemanticProfile): string {
       return t('semanticComponents', 'compactEnglishName');
     case 'multilingualQuality':
       return t('semanticComponents', 'multilingualQualityName');
+    case 'embeddingGemma2':
+      return t('semanticComponents', 'gemmaName');
   }
 }
 
@@ -107,6 +114,8 @@ function profileDescription(profile: SemanticProfile): string {
       return t('semanticComponents', 'compactEnglishDescription');
     case 'multilingualQuality':
       return t('semanticComponents', 'multilingualQualityDescription');
+    case 'embeddingGemma2':
+      return t('semanticComponents', 'gemmaDescription');
   }
 }
 
@@ -288,7 +297,7 @@ function modelAndComponentStatus(
   const activeProfileNeedsUpdate =
     activeProfile !== undefined &&
     !modelSelectionMatchesProfile(status.activeModel ?? undefined, activeProfile);
-  return [
+  const sections = [
     status.dataRoot == null
       ? undefined
       : m('dl.fm-semantic-definition-list.fm-semantic-data-root', [
@@ -307,12 +316,6 @@ function modelAndComponentStatus(
             m('dt', t('semanticComponents', 'revision')),
             m('dd', status.activeModel.identity.revision),
           ]),
-          activeProfileNeedsUpdate
-            ? m(
-                'p.fm-semantic-component-note',
-                t('semanticComponents', 'activeModelUpdateAvailable'),
-              )
-            : undefined,
         ]),
     m('section.fm-semantic-status-section', [
       m('h6', t('semanticComponents', 'installedComponentsHeading')),
@@ -364,6 +367,21 @@ function modelAndComponentStatus(
       ]),
     ]),
   ].filter((node): node is Vnode => node !== undefined);
+  return status.activeModel == null
+    ? sections
+    : [
+        m('p.fm-semantic-active-model', [
+          `${t('semanticComponents', 'activeModelHeading')}: `,
+          m('strong', profileName(status.activeModel.profile)),
+        ]),
+        activeProfileNeedsUpdate
+          ? m('p.fm-semantic-component-note', t('semanticComponents', 'activeModelUpdateAvailable'))
+          : undefined,
+        m('details.fm-semantic-status-details', [
+          m('summary', t('semanticComponents', 'componentDetails')),
+          ...sections,
+        ]),
+      ].filter((node): node is Vnode => node !== undefined);
 }
 
 function componentList(
@@ -393,6 +411,8 @@ function offerView(
   offer: SemanticInstallationOffer,
   busy: ActionName | undefined,
   onAccept: () => void,
+  setup?: Vnode,
+  canAccept = true,
 ): Vnode {
   const totals = offer.components.reduce(
     (result, component) => ({
@@ -407,12 +427,14 @@ function offerView(
     m('dl.fm-semantic-definition-list', [
       m('dt', t('semanticComponents', 'profile')),
       m('dd', profileName(offer.profile)),
-      m('dt', t('semanticComponents', 'catalogRevision')),
-      m('dd', offer.catalogRevision),
-      m('dt', t('semanticComponents', 'modelId')),
-      m('dd', offer.resolvedModel.modelId),
-      m('dt', t('semanticComponents', 'exactModelRevision')),
-      m('dd', offer.resolvedModel.revision),
+      m('dt', t('semanticComponents', 'totalDownload')),
+      m('dd', formatBytes(totals.download)),
+      m('dt', t('semanticComponents', 'totalInstalled')),
+      m('dd', formatBytes(totals.installed)),
+      m('dt', t('semanticComponents', 'peakRam')),
+      m('dd', formatBytes(totals.ram)),
+      m('dt', t('semanticComponents', 'license')),
+      m('dd', [...new Set(offer.components.map((component) => component.license.spdx))].join(', ')),
       m('dt', t('semanticComponents', 'localOnly')),
       m('dd', [
         `${offer.embeddingsStayLocal ? t('semanticComponents', 'yes') : t('semanticComponents', 'no')} · `,
@@ -420,66 +442,79 @@ function offerView(
       ]),
       m('dt', t('semanticComponents', 'dataRoot')),
       m('dd', offer.dataRoot),
-      m('dt', t('semanticComponents', 'minimumReserve')),
-      m('dd', formatBytes(offer.minimumFreeSpaceReserveBytes)),
     ]),
-    m('h6', t('semanticComponents', 'offerComponentsHeading')),
-    m(
-      'div.fm-semantic-table-wrap',
-      m('table.fm-semantic-component-table', [
-        m('thead', [
-          m('tr', [
-            m('th', t('semanticComponents', 'kind')),
-            m('th', t('semanticComponents', 'component')),
-            m('th', t('semanticComponents', 'signedArtifact')),
-            m('th', t('semanticComponents', 'version')),
-            m('th', t('semanticComponents', 'license')),
-            m('th', t('semanticComponents', 'downloadSize')),
-            m('th', t('semanticComponents', 'estimatedInstalledSize')),
-            m('th', t('semanticComponents', 'estimatedRam')),
-          ]),
-        ]),
-        m(
-          'tbody',
-          offer.components.map((component) =>
-            m('tr.fm-semantic-offer-component', { key: component.artifactId }, [
-              m('td', componentKindLabel(component.kind)),
-              m('td', [
-                component.componentId,
-                component.model == null
-                  ? undefined
-                  : m('small', `${component.model.modelId} · ${component.model.revision}`),
-              ]),
-              m('td', component.artifactId),
-              m('td', component.version),
-              m('td', [m('span', component.license.spdx), m('small', component.license.notice)]),
-              m('td', formatBytes(component.downloadBytes)),
-              m('td', formatBytes(component.estimatedInstalledBytes)),
-              m('td', formatBytes(component.estimatedRamBytes)),
-            ]),
-          ),
-        ),
+    setup,
+    m('details.fm-semantic-offer-details', [
+      m('summary', t('semanticComponents', 'technicalDetails')),
+      m('dl.fm-semantic-definition-list', [
+        m('dt', t('semanticComponents', 'catalogRevision')),
+        m('dd', offer.catalogRevision),
+        m('dt', t('semanticComponents', 'modelId')),
+        m('dd', offer.resolvedModel.modelId),
+        m('dt', t('semanticComponents', 'exactModelRevision')),
+        m('dd', offer.resolvedModel.revision),
+        m('dt', t('semanticComponents', 'minimumReserve')),
+        m('dd', formatBytes(offer.minimumFreeSpaceReserveBytes)),
       ]),
-    ),
-    m('h6', t('semanticComponents', 'aggregateSizes')),
-    m('dl.fm-semantic-definition-list', [
-      m('dt', t('semanticComponents', 'totalDownload')),
-      m('dd', formatBytes(totals.download)),
-      m('dt', t('semanticComponents', 'totalInstalled')),
-      m('dd', formatBytes(totals.installed)),
-      m('dt', t('semanticComponents', 'peakRam')),
-      m('dd', formatBytes(totals.ram)),
+      m('h6', t('semanticComponents', 'offerComponentsHeading')),
+      m(
+        'div.fm-semantic-table-wrap',
+        m('table.fm-semantic-component-table', [
+          m('thead', [
+            m('tr', [
+              m('th', t('semanticComponents', 'kind')),
+              m('th', t('semanticComponents', 'component')),
+              m('th', t('semanticComponents', 'signedArtifact')),
+              m('th', t('semanticComponents', 'version')),
+              m('th', t('semanticComponents', 'license')),
+              m('th', t('semanticComponents', 'downloadSize')),
+              m('th', t('semanticComponents', 'estimatedInstalledSize')),
+              m('th', t('semanticComponents', 'estimatedRam')),
+            ]),
+          ]),
+          m(
+            'tbody',
+            offer.components.map((component) =>
+              m('tr.fm-semantic-offer-component', { key: component.artifactId }, [
+                m('td', componentKindLabel(component.kind)),
+                m('td', [
+                  component.componentId,
+                  component.model == null
+                    ? undefined
+                    : m('small', `${component.model.modelId} · ${component.model.revision}`),
+                ]),
+                m('td', component.artifactId),
+                m('td', component.version),
+                m('td', [m('span', component.license.spdx), m('small', component.license.notice)]),
+                m('td', formatBytes(component.downloadBytes)),
+                m('td', formatBytes(component.estimatedInstalledBytes)),
+                m('td', formatBytes(component.estimatedRamBytes)),
+              ]),
+            ),
+          ),
+        ]),
+      ),
     ]),
     m('p.fm-semantic-consent-copy', t('semanticComponents', 'consentInstruction')),
+    busy === 'install'
+      ? m(
+          'p.fm-semantic-install-progress',
+          { role: 'status' },
+          t(
+            'semanticComponents',
+            offer.profile === 'embeddingGemma2' ? 'gemmaInstallStarting' : 'installStarting',
+          ),
+        )
+      : undefined,
     m(
       'button.btn.fm-semantic-action.fm-semantic-accept',
       {
         type: 'button',
-        disabled: busy !== undefined,
+        disabled: busy !== undefined || !canAccept,
         onclick: onAccept,
       },
       busy === 'install'
-        ? t('semanticComponents', 'working')
+        ? t('semanticComponents', 'installing')
         : t('semanticComponents', 'acceptAndInstall'),
     ),
   ]);
@@ -655,6 +690,11 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
   let pendingIndexRemoval: SemanticIndexRemovalPlan | undefined;
   let pendingMigration: SemanticModelMigrationPlan | undefined;
   let installProfile: SemanticProfile = 'compactMultilingual';
+  let gemmaDimensions: InitializeGemmaLibraryRequest['dimensions'] | undefined;
+  let gemmaImages = false;
+  let gemmaAudio = false;
+  let gemmaVideo = false;
+  let confirmFreshIndex = false;
   let migrationProfile: SemanticProfile = 'compactMultilingual';
   let localModelProfile: SemanticProfile = 'compactMultilingual';
   let checkpointDocuments = '';
@@ -704,11 +744,31 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         installProfile = recommended.profile;
         localModelProfile = recommended.profile;
       }
-      migrationProfile = status.activeModel?.profile ?? recommended?.profile ?? migrationProfile;
+      if (profiles.some((profile) => profile.profile === 'embeddingGemma2') && status.activeModel) {
+        installProfile =
+          status.activeModel.profile === 'embeddingGemma2'
+            ? (recommended?.profile ?? installProfile)
+            : 'embeddingGemma2';
+      }
+      migrationProfile =
+        status.activeModel?.profile === 'embeddingGemma2'
+          ? (recommended?.profile ?? migrationProfile)
+          : (status.activeModel?.profile ?? recommended?.profile ?? migrationProfile);
+      const gemmaSetup = profiles.some((profile) => profile.profile === 'embeddingGemma2')
+        ? await client.getGemmaLibrarySetup(loadController.signal)
+        : null;
       syncMigrationForm(status);
-      loaded = { capabilities, status, profiles };
+      loaded = { capabilities, status, profiles, gemmaSetup };
       onStatusChange?.(status);
       loadState = 'loaded';
+      if (
+        installProfile === 'embeddingGemma2' &&
+        capabilities.operations.includes('createInstallationOffer') &&
+        (capabilities.runtimeExecutableDownload === 'directDistribution' ||
+          capabilities.runtimeExecutableDownload === 'simulated')
+      ) {
+        createOffer();
+      }
     } catch (error: unknown) {
       if (loadController.signal.aborted) return;
       loadError = errorMessage(error);
@@ -801,6 +861,22 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
     const acceptedOffer = offer;
     void runAction('install', async () => {
       try {
+        if (acceptedOffer.profile === 'embeddingGemma2' && loaded?.gemmaSetup === null) {
+          if (gemmaDimensions === undefined || !confirmFreshIndex) {
+            throw new Error(t('semanticComponents', 'gemmaConsentRequired'));
+          }
+          const selected: InitializeGemmaLibraryRequest = {
+            dimensions: gemmaDimensions,
+            images: gemmaImages,
+            audio: gemmaAudio,
+            video: gemmaVideo,
+            confirmFreshIndex,
+          };
+          await client.initializeGemmaLibrary(selected);
+          if (loaded !== undefined) {
+            loaded = { ...loaded, gemmaSetup: selected };
+          }
+        }
         await client.acceptSemanticComponentInstallationOffer({ offerId: acceptedOffer.offerId });
       } finally {
         // Offers are single-use even when installation fails after consent.
@@ -1033,6 +1109,13 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
 
   function renderManagement(current: LoadedState): Vnode[] {
     const { capabilities, profiles, status } = current;
+    const switchProfiles = status.activeModel
+      ? profiles.filter((profile) =>
+          status.activeModel?.profile === 'embeddingGemma2'
+            ? profile.profile !== 'embeddingGemma2'
+            : profile.profile === 'embeddingGemma2',
+        )
+      : profiles;
     const managed =
       capabilities.authority === 'desktopManaged' || capabilities.authority === 'deterministicMock';
     const developerBundle = profiles.some((profile) =>
@@ -1073,28 +1156,54 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
       developerBundle
         ? m('p.fm-semantic-authority-note', t('semanticComponents', 'developmentBundle'))
         : undefined,
-      canOffer && installableLifecycle
-        ? m('fieldset.fm-semantic-install', [
-            m('legend', t('semanticComponents', 'installEnableLegend')),
-            status.lifecycle.state === 'offered' && offer === undefined
-              ? m('p', t('semanticComponents', 'existingOffer'))
-              : m('p', t('semanticComponents', 'reviewInstallation')),
-            profileChoices('fm-semantic-install-profile', profiles, installProfile, (profile) => {
-              installProfile = profile;
-              offer = undefined;
-            }),
-            m(
-              'button.btn.fm-semantic-action',
-              {
-                type: 'button',
-                disabled: busy !== undefined || profiles.length === 0,
-                onclick: createOffer,
-              },
-              busy === 'offer'
-                ? t('semanticComponents', 'working')
-                : t('semanticComponents', 'installEnableAction'),
-            ),
-          ])
+      canOffer && (installableLifecycle || switchProfiles.length > 0)
+        ? m(
+            status.activeModel?.profile === 'embeddingGemma2' && !installableLifecycle
+              ? 'details.fm-semantic-model-switch'
+              : 'div',
+            [
+              status.activeModel?.profile === 'embeddingGemma2' && !installableLifecycle
+                ? m('summary', t('semanticComponents', 'changeModel'))
+                : undefined,
+              m('fieldset.fm-semantic-install', [
+                m('legend', t('semanticComponents', 'installEnableLegend')),
+                status.lifecycle.state === 'offered' && offer === undefined && busy !== 'offer'
+                  ? m('p', t('semanticComponents', 'existingOffer'))
+                  : installProfile === 'embeddingGemma2'
+                    ? undefined
+                    : m('p', t('semanticComponents', 'reviewInstallation')),
+                profileChoices(
+                  'fm-semantic-install-profile',
+                  switchProfiles,
+                  installProfile,
+                  (profile) => {
+                    if (busy !== undefined) return;
+                    installProfile = profile;
+                    offer = undefined;
+                    if (profile === 'embeddingGemma2') createOffer();
+                  },
+                ),
+                installProfile === 'embeddingGemma2' && busy === 'offer'
+                  ? m('p', { role: 'status' }, t('semanticComponents', 'loadingOffer'))
+                  : undefined,
+                installProfile !== 'embeddingGemma2' || (offer === undefined && busy !== 'offer')
+                  ? m(
+                      'button.btn.fm-semantic-action',
+                      {
+                        type: 'button',
+                        disabled: busy !== undefined || switchProfiles.length === 0,
+                        onclick: createOffer,
+                      },
+                      busy === 'offer'
+                        ? t('semanticComponents', 'working')
+                        : installProfile === 'embeddingGemma2'
+                          ? t('semanticComponents', 'retryOffer')
+                          : t('semanticComponents', 'installEnableAction'),
+                    )
+                  : undefined,
+              ]),
+            ],
+          )
         : undefined,
       !canOffer &&
       installableLifecycle &&
@@ -1102,7 +1211,118 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
       capabilities.runtimeExecutableDownload === 'prohibitedByMacAppStore'
         ? m('p.fm-semantic-authority-note', t('semanticComponents', 'executableDownloadProhibited'))
         : undefined,
-      offer === undefined ? undefined : offerView(offer, busy, acceptOffer),
+      offer === undefined
+        ? undefined
+        : offerView(
+            offer,
+            busy,
+            acceptOffer,
+            offer.profile === 'embeddingGemma2'
+              ? current.gemmaSetup === null
+                ? m('fieldset.fm-semantic-form-grid.fm-semantic-gemma-setup', [
+                    m('legend', t('semanticComponents', 'gemmaSetupTitle')),
+                    m('p', t('semanticComponents', 'gemmaFreshLibraryExplanation')),
+                    m('.fm-semantic-field', [
+                      m(
+                        'label',
+                        { for: 'fm-semantic-gemma-dimensions' },
+                        t('semanticComponents', 'gemmaDimensions'),
+                      ),
+                      m(
+                        'select#fm-semantic-gemma-dimensions.browser-default',
+                        {
+                          value: gemmaDimensions === undefined ? '' : String(gemmaDimensions),
+                          onchange: (event: Event) => {
+                            const value = Number((event.target as HTMLSelectElement).value);
+                            gemmaDimensions =
+                              value === 128 || value === 256 || value === 512 || value === 768
+                                ? value
+                                : undefined;
+                          },
+                        },
+                        [
+                          m(
+                            'option',
+                            { value: '' },
+                            t('semanticComponents', 'gemmaSelectDimension'),
+                          ),
+                          ...([128, 256, 512, 768] as const).map((dimension) =>
+                            m('option', { value: String(dimension) }, String(dimension)),
+                          ),
+                        ],
+                      ),
+                      m('span', t('semanticComponents', 'gemmaDimensionTradeoff')),
+                    ]),
+                    ...(
+                      [
+                        [
+                          'images',
+                          'gemmaImages',
+                          gemmaImages,
+                          (value: boolean) => {
+                            gemmaImages = value;
+                          },
+                        ],
+                        [
+                          'audio',
+                          'gemmaAudio',
+                          gemmaAudio,
+                          (value: boolean) => {
+                            gemmaAudio = value;
+                          },
+                        ],
+                        [
+                          'video',
+                          'gemmaVideo',
+                          gemmaVideo,
+                          (value: boolean) => {
+                            gemmaVideo = value;
+                          },
+                        ],
+                      ] as const
+                    ).map(([id, label, checked, update]) =>
+                      m('label.fm-semantic-confirmation', { for: `fm-semantic-gemma-${id}` }, [
+                        m('input', {
+                          id: `fm-semantic-gemma-${id}`,
+                          type: 'checkbox',
+                          checked,
+                          onchange: (event: Event) =>
+                            update((event.target as HTMLInputElement).checked),
+                        }),
+                        m('span', t('semanticComponents', label)),
+                      ]),
+                    ),
+                    m('label.fm-semantic-confirmation', [
+                      m('input', {
+                        type: 'checkbox',
+                        checked: confirmFreshIndex,
+                        onchange: (event: Event) => {
+                          confirmFreshIndex = (event.target as HTMLInputElement).checked;
+                        },
+                      }),
+                      m('span', t('semanticComponents', 'gemmaFreshConsent')),
+                    ]),
+                  ])
+                : m(
+                    'p.fm-semantic-guidance',
+                    t('semanticComponents', 'gemmaExistingSetup', {
+                      dimensions: current.gemmaSetup.dimensions,
+                      images: current.gemmaSetup.images
+                        ? t('semanticComponents', 'yes')
+                        : t('semanticComponents', 'no'),
+                      audio: current.gemmaSetup.audio
+                        ? t('semanticComponents', 'yes')
+                        : t('semanticComponents', 'no'),
+                      video: current.gemmaSetup.video
+                        ? t('semanticComponents', 'yes')
+                        : t('semanticComponents', 'no'),
+                    }),
+                  )
+              : undefined,
+            offer.profile !== 'embeddingGemma2' ||
+              current.gemmaSetup !== null ||
+              (gemmaDimensions !== undefined && confirmFreshIndex),
+          ),
       m('section.fm-semantic-actions', [
         m('h6', t('semanticComponents', 'actionsHeading')),
         m('.fm-semantic-primary-actions', [
@@ -1270,7 +1490,9 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
             () => checkpointMigration(progress),
             () => completeMigration(progress),
           ),
-      can('planModelMigration') && status.activeModel != null
+      can('planModelMigration') &&
+      status.activeModel != null &&
+      status.activeModel.profile !== 'embeddingGemma2'
         ? m('details.fm-semantic-action-details.fm-semantic-migration-details', [
             m('summary', t('semanticComponents', 'migrationSummary')),
             m('p.fm-semantic-guidance', t('semanticComponents', 'migrationExplanation')),
@@ -1278,7 +1500,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
               m('legend', t('semanticComponents', 'migrationTargetLegend')),
               profileChoices(
                 'fm-semantic-migration-profile',
-                profiles,
+                profiles.filter((profile) => profile.profile !== 'embeddingGemma2'),
                 migrationProfile,
                 (profile) => {
                   migrationProfile = profile;

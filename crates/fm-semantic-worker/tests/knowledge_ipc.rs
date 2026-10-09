@@ -164,6 +164,7 @@ impl WorkerKnowledgeBackend for FullTextOnlyBackend {
 
 fn request() -> KnowledgeRetrievalRequest {
     KnowledgeRetrievalRequest {
+        intent: fm_semantic_protocol::v1::QueryIntent::Search,
         queries: vec![
             KnowledgeQuery {
                 text: "wind turbines".to_owned(),

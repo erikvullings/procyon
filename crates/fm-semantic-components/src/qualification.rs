@@ -301,7 +301,14 @@ fn install_into_profile(
     let base_artifacts = catalog
         .artifacts()
         .iter()
-        .filter(|artifact| !matches!(artifact.kind(), ArtifactKind::Model(_)))
+        .filter(|artifact| {
+            !matches!(
+                artifact.kind(),
+                ArtifactKind::Model(_)
+                    | ArtifactKind::OriginalModel(_)
+                    | ArtifactKind::ModelFile(_)
+            )
+        })
         .map(|artifact| artifact.id().clone())
         .collect::<Vec<_>>();
     let selected =
@@ -513,6 +520,7 @@ impl ActivationProbe for QualificationActivation {
                         .map_err(|error| ActivationError::new(error.to_string()))?;
                 }
             }
+            ArtifactKind::OriginalModel(_) | ArtifactKind::ModelFile(_) => {}
         }
         Ok(())
     }

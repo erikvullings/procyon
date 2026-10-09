@@ -520,6 +520,31 @@ pub struct LibrarySession<'coordinator> {
 // the in-process and the cross-process lock.
 
 impl<'coordinator> LibrarySession<'coordinator> {
+    /// Atomically starts a new, empty library without replacing an existing one.
+    ///
+    /// # Errors
+    ///
+    /// Refuses to change a previously committed library identity and reports
+    /// recovery, validation, or persistence failures.
+    pub fn initialize(&self, policy: &SemanticLibraryPolicy) -> Result<(), StoreError> {
+        self.recover()?;
+        if self.coordinator.policy_store.load_optional()?.is_some()
+            || self.coordinator.catalog_store.load_optional()?.is_some()
+            || self.coordinator.state_store.load_optional()?.is_some()
+        {
+            return Err(StoreError::AlreadyInitialized);
+        }
+        let id = policy.library().id();
+        self.transaction(
+            LibraryOperation::Enrolment,
+            Some(policy),
+            Some(&SemanticCatalog::new(id)),
+            Some(&SemanticLibraryState::new(id)),
+        )?
+        .commit()
+        .map(|_| ())
+    }
+
     /// Completes or rolls back every interrupted transaction.
     ///
     /// # Errors

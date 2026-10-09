@@ -940,6 +940,9 @@ pub enum RequestValidationError {
     /// Concept query identity or bounded concept selection is invalid.
     #[error("concept query requires a vocabulary and 1 to 256 concept URIs")]
     InvalidConceptQuery,
+    /// Query intent is not a supported text retrieval role.
+    #[error("query intent is invalid")]
+    InvalidQueryIntent,
     /// Query result limit is zero.
     #[error("maximum query results must be greater than zero")]
     InvalidMaximumResults,
@@ -1111,6 +1114,11 @@ pub fn validate_query(request: &v1::QueryRequest) -> Result<(), RequestValidatio
             || concept.concept_uris.iter().any(String::is_empty))
     {
         return Err(RequestValidationError::InvalidConceptQuery);
+    }
+    if v1::QueryIntent::try_from(request.intent).is_err()
+        || (request.concept_query.is_some() && request.intent != v1::QueryIntent::Search as i32)
+    {
+        return Err(RequestValidationError::InvalidQueryIntent);
     }
     if request.maximum_results == 0 {
         return Err(RequestValidationError::InvalidMaximumResults);

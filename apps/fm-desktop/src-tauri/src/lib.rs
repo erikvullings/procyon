@@ -23,6 +23,7 @@ use fm_application::FileManagerService;
 use fm_events::EventBus;
 use fm_transport_dto::RuntimeKindDto;
 use tauri::Manager;
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -48,6 +49,83 @@ pub struct AppState {
 #[derive(Default)]
 pub(crate) struct QuittingFlag(AtomicBool);
 
+#[derive(Default)]
+struct ExitWarning {
+    pending: AtomicBool,
+    approved: AtomicBool,
+}
+
+fn is_active_operation(state: fm_transport_dto::OperationStateDto) -> bool {
+    use fm_transport_dto::OperationStateDto;
+    matches!(
+        state,
+        OperationStateDto::Queued
+            | OperationStateDto::Planning
+            | OperationStateDto::Running
+            | OperationStateDto::Paused
+            | OperationStateDto::WaitingForConflictResolution
+            | OperationStateDto::Cancelling
+    )
+}
+
+fn warn_before_quit<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    on_confirm: impl FnOnce() + Send + 'static,
+) -> bool {
+    let warning = app.state::<ExitWarning>();
+    if warning.approved.load(Ordering::SeqCst) {
+        return false;
+    }
+    if warning.pending.load(Ordering::SeqCst) {
+        return true;
+    }
+    let service = &app.state::<AppState>().service;
+    let file_operations = service
+        .list_operations()
+        .iter()
+        .any(|operation| is_active_operation(operation.state));
+    let indexing = service.is_semantic_indexing_active();
+    if !file_operations && !indexing {
+        return false;
+    }
+    if !warning.pending.swap(true, Ordering::SeqCst) {
+        let message = match (file_operations, indexing) {
+            (true, true) => {
+                "File operations will stop and will not resume automatically. Partial deletes or moves remain changed. Semantic indexing will reconcile on restart."
+            }
+            (true, false) => {
+                "File operations will stop and will not resume automatically. Partial deletes or moves remain changed."
+            }
+            (false, true) => {
+                "Semantic indexing will stop and reconcile enrolled folders on restart."
+            }
+            (false, false) => unreachable!(),
+        };
+        let app = app.clone();
+        use tauri_plugin_dialog::{
+            DialogExt, MessageDialogButtons, MessageDialogKind, MessageDialogResult,
+        };
+        app.dialog()
+            .message(message)
+            .title("Background work is running")
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "Quit anyway".into(),
+                "Keep working".into(),
+            ))
+            .show_with_result(move |answer| {
+                let warning = app.state::<ExitWarning>();
+                warning.pending.store(false, Ordering::SeqCst);
+                if matches!(answer, MessageDialogResult::Custom(ref label) if label == "Quit anyway")
+                {
+                    warning.approved.store(true, Ordering::SeqCst);
+                    on_confirm();
+                }
+            });
+    }
+    true
+}
+
 impl QuittingFlag {
     fn mark_quitting(&self) {
         self.0.store(true, Ordering::SeqCst);
@@ -55,6 +133,27 @@ impl QuittingFlag {
 
     fn is_quitting(&self) -> bool {
         self.0.load(Ordering::SeqCst)
+    }
+}
+
+#[derive(Default)]
+struct WindowStateSaveDebouncer(Mutex<Option<tauri::async_runtime::JoinHandle<()>>>);
+
+impl WindowStateSaveDebouncer {
+    fn schedule<R: tauri::Runtime>(&self, app: tauri::AppHandle<R>) {
+        let mut pending = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(task) = pending.take() {
+            task.abort();
+        }
+        *pending = Some(tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            if let Err(error) = app.save_window_state(StateFlags::all()) {
+                tracing::warn!(%error, "could not save window geometry");
+            }
+        }));
     }
 }
 
@@ -160,10 +259,13 @@ pub fn run() {
                     &bundle.worker_data_directory,
                     &bundle.native_library_directory,
                     Some(Arc::clone(&bundle.active_model_pack)),
+                    bundle.original_model,
+                    bundle.ocr_executable,
                 );
                 service = service
                     .with_semantic_component_capability(bundle.components)
-                    .with_semantic_capability(Arc::new(semantic));
+                    .with_semantic_capability(Arc::new(semantic))
+                    .with_semantic_ocr_service(bundle.ocr);
                 semantic_reindex_pending_marker = Some(bundle.reindex_pending_marker);
             }
             if !semantic_managed_components
@@ -318,6 +420,7 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         // Persists and restores each window's frame (position, size, maximized state) keyed by
@@ -346,8 +449,38 @@ pub fn run() {
         .manage(terminal::TerminalRegistry::default())
         .manage(native_menu::NativeMenuActionChannel::default())
         .manage(QuittingFlag::default())
+        .manage(ExitWarning::default())
+        .manage(WindowStateSaveDebouncer::default())
         .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) {
+                window
+                    .state::<WindowStateSaveDebouncer>()
+                    .schedule(window.app_handle().clone());
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                #[cfg(not(target_os = "macos"))]
+                if (window.label() == "main" || window.label().starts_with("workspace-"))
+                    && window
+                        .app_handle()
+                        .webview_windows()
+                        .values()
+                        .filter(|candidate| {
+                            candidate.label() == "main"
+                                || candidate.label().starts_with("workspace-")
+                        })
+                        .count()
+                        == 1
+                {
+                    let closing_window = window.clone();
+                    if warn_before_quit(window.app_handle(), move || {
+                        if let Err(error) = closing_window.close() {
+                            tracing::warn!(%error, "could not close window after quit confirmation");
+                        }
+                    }) {
+                        api.prevent_close();
+                        return;
+                    }
+                }
                 let registry = window.state::<Arc<plugin_spa::PanelRegistry>>();
                 if registry.begin_window_close(window.label()) {
                     api.prevent_close();
@@ -423,6 +556,8 @@ pub fn run() {
             commands::complete_semantic_component_model_migration,
             commands::get_semantic_library_capabilities,
             commands::get_semantic_library_status,
+            commands::initialize_semantic_gemma_library,
+            commands::get_semantic_gemma_library_setup,
             commands::list_semantic_vocabularies,
             commands::import_semantic_vocabulary,
             commands::export_semantic_vocabulary,
@@ -609,6 +744,13 @@ pub fn run() {
         })
         .expect("error while building the Tauri application")
         .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+                let app = app_handle.clone();
+                if warn_before_quit(app_handle, move || app.exit(0)) {
+                    api.prevent_exit();
+                    return;
+                }
+            }
             if matches!(
                 event,
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
@@ -697,6 +839,30 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn quit_warning_distinguishes_inflight_from_interrupted_history() {
+        use fm_transport_dto::OperationStateDto;
+        for state in [
+            OperationStateDto::Queued,
+            OperationStateDto::Planning,
+            OperationStateDto::Running,
+            OperationStateDto::Paused,
+            OperationStateDto::WaitingForConflictResolution,
+            OperationStateDto::Cancelling,
+        ] {
+            assert!(is_active_operation(state), "{state:?} must warn");
+        }
+        for state in [
+            OperationStateDto::Completed,
+            OperationStateDto::CompletedWithWarnings,
+            OperationStateDto::Failed,
+            OperationStateDto::Cancelled,
+            OperationStateDto::Interrupted,
+        ] {
+            assert!(!is_active_operation(state), "{state:?} must not warn");
+        }
+    }
+
     fn create_app<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::App<R> {
         create_app_with_semantic_developer_bundle(builder, false)
     }
@@ -763,6 +929,8 @@ mod tests {
                 commands::complete_semantic_component_model_migration,
                 commands::get_semantic_library_capabilities,
                 commands::get_semantic_library_status,
+                commands::initialize_semantic_gemma_library,
+                commands::get_semantic_gemma_library_setup,
                 commands::list_semantic_vocabularies,
                 commands::import_semantic_vocabulary,
                 commands::export_semantic_vocabulary,
@@ -931,6 +1099,21 @@ mod tests {
             "tauri://localhost"
         };
         url.parse().expect("valid url")
+    }
+
+    #[test]
+    fn desktop_window_has_a_usable_minimum_on_high_density_displays() {
+        let context = build_context::<tauri::test::MockRuntime>();
+        let window = context
+            .config()
+            .app
+            .windows
+            .first()
+            .expect("main window config");
+        assert_eq!(window.width, 1280.0);
+        assert_eq!(window.height, 800.0);
+        assert_eq!(window.min_width, Some(960.0));
+        assert_eq!(window.min_height, Some(600.0));
     }
 
     #[test]

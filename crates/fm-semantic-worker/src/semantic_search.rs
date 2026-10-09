@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use fm_semantic_conversion::ChunkProvenance;
+use fm_semantic_protocol::v1::QueryIntent;
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
@@ -166,13 +167,31 @@ pub struct SemanticSearchService {
 /// IPC adapter that routes worker query frames through dense local retrieval.
 pub struct DenseWorkerQueryBackend {
     service: SemanticSearchService,
+    question_embedder: Option<Arc<dyn EmbeddingProvider>>,
+    code_embedder: Option<Arc<dyn EmbeddingProvider>>,
 }
 
 impl DenseWorkerQueryBackend {
     /// Wraps a configured dense retrieval service.
     #[must_use]
     pub const fn new(service: SemanticSearchService) -> Self {
-        Self { service }
+        Self {
+            service,
+            question_embedder: None,
+            code_embedder: None,
+        }
+    }
+
+    /// Selects distinct model-owned prompt roles where the model supports them.
+    #[must_use]
+    pub fn with_intent_embedders(
+        mut self,
+        question: Arc<dyn EmbeddingProvider>,
+        code: Arc<dyn EmbeddingProvider>,
+    ) -> Self {
+        self.question_embedder = Some(question);
+        self.code_embedder = Some(code);
+        self
     }
 }
 
@@ -234,9 +253,20 @@ impl WorkerQueryBackend for DenseWorkerQueryBackend {
                 })
                 .collect();
         }
+        let embedder = match input.intent {
+            QueryIntent::Search => self.service.embedder.as_ref(),
+            QueryIntent::QuestionAnswering => self
+                .question_embedder
+                .as_deref()
+                .unwrap_or(self.service.embedder.as_ref()),
+            QueryIntent::CodeRetrieval => self
+                .code_embedder
+                .as_deref()
+                .unwrap_or(self.service.embedder.as_ref()),
+        };
         let page = self
             .service
-            .search(
+            .search_with_embedder(
                 SemanticSearchRequest {
                     query: input.query,
                     filters: QueryFilters {
@@ -251,6 +281,7 @@ impl WorkerQueryBackend for DenseWorkerQueryBackend {
                     evidence_limit: 4,
                 },
                 cancellation,
+                embedder,
             )
             .map_err(|error| error.to_string())?;
         let coverage_json =
@@ -344,6 +375,15 @@ impl SemanticSearchService {
         request: SemanticSearchRequest,
         cancellation: &CancellationToken,
     ) -> Result<SemanticSearchPage, SemanticSearchError> {
+        self.search_with_embedder(request, cancellation, self.embedder.as_ref())
+    }
+
+    fn search_with_embedder(
+        &self,
+        request: SemanticSearchRequest,
+        cancellation: &CancellationToken,
+        embedder: &dyn EmbeddingProvider,
+    ) -> Result<SemanticSearchPage, SemanticSearchError> {
         if request.query.trim().is_empty() {
             return Err(SemanticSearchError::EmptyQuery);
         }
@@ -353,9 +393,7 @@ impl SemanticSearchService {
         if cancellation.is_cancelled() {
             return Err(SemanticSearchError::Cancelled);
         }
-        let query_vectors = self
-            .embedder
-            .embed(std::slice::from_ref(&request.query), cancellation)?;
+        let query_vectors = embedder.embed(std::slice::from_ref(&request.query), cancellation)?;
         let query_vector = query_vectors
             .into_iter()
             .next()
@@ -527,6 +565,86 @@ pub enum SemanticSearchError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::embedding::EmbeddingModelIdentity;
+
+    struct IntentEmbedder {
+        identity: EmbeddingModelIdentity,
+        role: &'static str,
+    }
+
+    impl EmbeddingProvider for IntentEmbedder {
+        fn identity(&self) -> &EmbeddingModelIdentity {
+            &self.identity
+        }
+
+        fn embed(
+            &self,
+            _inputs: &[String],
+            _cancellation: &CancellationToken,
+        ) -> Result<Vec<Vec<f32>>, EmbeddingError> {
+            Err(EmbeddingError::Backend(self.role.into()))
+        }
+    }
+
+    struct UnusedIndex;
+
+    impl SemanticCandidateIndex for UnusedIndex {
+        fn query(
+            &self,
+            _vector: &[f32],
+            _limit: usize,
+            _filters: &QueryFilters,
+        ) -> Result<Vec<ScoredRecord>, String> {
+            panic!("embedding should fail before index lookup");
+        }
+    }
+
+    #[test]
+    fn dense_backend_uses_each_requested_text_role_without_changing_search_default() {
+        let directory = tempfile::Builder::new()
+            .prefix("intent-search-")
+            .tempdir()
+            .unwrap();
+        let catalog = SemanticCatalog::open(directory.path().join("catalog.sqlite")).unwrap();
+        let role = |role| {
+            Arc::new(IntentEmbedder {
+                identity: EmbeddingModelIdentity {
+                    model_id: "intent-test".into(),
+                    model_revision: "1".into(),
+                    tokenizer: "test".into(),
+                    dimensions: 3,
+                    max_input_tokens: 32,
+                },
+                role,
+            }) as Arc<dyn EmbeddingProvider>
+        };
+        let backend = DenseWorkerQueryBackend::new(SemanticSearchService::new(
+            catalog,
+            role("search"),
+            Arc::new(UnusedIndex),
+        ))
+        .with_intent_embedders(role("question"), role("code"));
+        for (intent, expected) in [
+            (QueryIntent::Search, "search"),
+            (QueryIntent::QuestionAnswering, "question"),
+            (QueryIntent::CodeRetrieval, "code"),
+        ] {
+            let error = backend
+                .query(
+                    WorkerQueryInput {
+                        tenant_id: "tenant".into(),
+                        library_id: "library".into(),
+                        query: "query".into(),
+                        intent,
+                        concept_query: None,
+                        maximum_results: 2,
+                    },
+                    &CancellationToken::new(),
+                )
+                .unwrap_err();
+            assert!(error.contains(expected), "{intent:?}: {error}");
+        }
+    }
 
     fn evidence(
         document: &str,

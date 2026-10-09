@@ -13,4 +13,5 @@ export const SemanticProfileDto = {
   compactMultilingual: 'compactMultilingual',
   compactEnglish: 'compactEnglish',
   multilingualQuality: 'multilingualQuality',
+  embeddingGemma2: 'embeddingGemma2',
 } as const;

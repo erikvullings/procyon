@@ -14,6 +14,7 @@ import {
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
+import type { ActiveSourceState } from '../operations/operation-state';
 
 /** Renders an icon-only toggle button matching `IconButton`'s `.btn-flat.btn-icon` styling, but
  * without mithril-materialized's `waves-effect` ripple, which isn't needed for a plain toggle
@@ -232,6 +233,7 @@ export interface PaneAttrs {
   readonly entries: readonly EntrySummary[];
   readonly selectedEntryIds: ReadonlySet<EntryId>;
   readonly cutEntryIds: ReadonlySet<EntryId>;
+  readonly activeSourceStates?: ReadonlyMap<string, ActiveSourceState>;
   readonly active: boolean;
   readonly cursorIndex?: number;
   // Keyboard / action dispatch (4)
@@ -1751,6 +1753,9 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               source: entryArraySource(attrs.entries, ds.totalKnownEntries),
               selectedEntryIds: attrs.selectedEntryIds,
               cutEntryIds: attrs.cutEntryIds,
+              ...(attrs.activeSourceStates === undefined
+                ? {}
+                : { activeSourceStates: attrs.activeSourceStates }),
               ...(attrs.tableConfig.nativeIconLoader === undefined
                 ? {}
                 : { nativeIconLoader: attrs.tableConfig.nativeIconLoader }),

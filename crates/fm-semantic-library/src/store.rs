@@ -316,6 +316,9 @@ pub enum StoreError {
     /// No semantic consent policy has been written yet.
     #[error("no semantic library policy has been written")]
     PolicyMissing,
+    /// An initialization must not overwrite an existing library or its choices.
+    #[error("the semantic library is already initialized")]
+    AlreadyInitialized,
     /// No semantic catalog has been written yet.
     #[error("no semantic catalog has been written")]
     CatalogMissing,

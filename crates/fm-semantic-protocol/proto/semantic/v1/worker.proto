@@ -209,6 +209,14 @@ message QueryRequest {
   uint32 maximum_results = 5;
   // Optional stable concept-folder query. When set, `query` may be empty.
   ConceptQuery concept_query = 6;
+  // Text prompt role. Omitted by older clients means ordinary search.
+  QueryIntent intent = 7;
+}
+
+enum QueryIntent {
+  QUERY_INTENT_SEARCH = 0;
+  QUERY_INTENT_QUESTION_ANSWERING = 1;
+  QUERY_INTENT_CODE_RETRIEVAL = 2;
 }
 
 // Published concept annotations selected without re-embedding documents.
@@ -490,6 +498,8 @@ message KnowledgeSearchRequest {
   KnowledgeCoverage coverage = 8;
   // Exactly-scoped slices retrieved and ranked as one logical scope.
   repeated KnowledgeScopePartition partitions = 10;
+  // Model-owned text prompt; omitted by older clients means ordinary search.
+  QueryIntent intent = 11;
 }
 
 // Requests independently reported knowledge retrieval capabilities.

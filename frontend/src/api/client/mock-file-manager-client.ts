@@ -265,6 +265,8 @@ export type MockClientMethod =
   | 'getSemanticComponentCapabilities'
   | 'getSemanticComponentStatus'
   | 'listSemanticComponentProfiles'
+  | 'initializeGemmaLibrary'
+  | 'getGemmaLibrarySetup'
   | 'createSemanticComponentInstallationOffer'
   | 'acceptSemanticComponentInstallationOffer'
   | 'pauseSemanticComponentIndexing'
@@ -948,6 +950,7 @@ function mockSemanticIdentity(profile: SemanticProfile): SemanticModelIdentity {
     compactMultilingual: 'compact-multilingual',
     compactEnglish: 'compact-english',
     multilingualQuality: 'multilingual-quality',
+    embeddingGemma2: 'embeddinggemma-2',
   }[profile];
   return {
     modelId: `mock-${suffix}`,
@@ -1643,6 +1646,24 @@ export class MockFileManagerClient implements FileManagerClient {
     });
   }
 
+  getGemmaLibrarySetup(
+    signal?: AbortSignal,
+  ): Promise<import('../../models/semantic-components').GemmaLibrarySetup | null> {
+    return this.perform('getGemmaLibrarySetup', signal, () => null);
+  }
+
+  initializeGemmaLibrary(
+    _request: import('../../models/semantic-components').InitializeGemmaLibraryRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.perform('initializeGemmaLibrary', signal, () => {
+      throw new MockClientError(
+        'unavailable',
+        'The mock host does not include a signed Gemma package.',
+      );
+    });
+  }
+
   createSemanticComponentInstallationOffer(
     request: CreateSemanticInstallationOfferRequest,
     signal?: AbortSignal,
@@ -2225,7 +2246,7 @@ export class MockFileManagerClient implements FileManagerClient {
     signal?: AbortSignal,
   ): Promise<SemanticExclusionPlan> {
     return this.perform('planSemanticExclusion', signal, () => {
-      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      this.requireActiveOrEnrolledSemanticRoot(request.workspaceId, request.location);
       this.requireSemanticLibraryRevision(request.policyRevision);
       const root = this.semanticRootFor(request.location);
       if (root === undefined) {
@@ -2255,7 +2276,7 @@ export class MockFileManagerClient implements FileManagerClient {
     signal?: AbortSignal,
   ): Promise<SemanticLibraryStatus> {
     return this.perform('confirmSemanticExclusion', signal, () => {
-      this.requireActiveSemanticFolder(request.workspaceId, request.location);
+      this.requireActiveOrEnrolledSemanticRoot(request.workspaceId, request.location);
       this.requireSemanticLibraryRevision(request.policyRevision);
       const plan = this.semanticExclusionPlans.get(request.confirmationId);
       if (
@@ -5460,6 +5481,21 @@ export class MockFileManagerClient implements FileManagerClient {
     ) {
       throw new MockClientError('workspaceRequired', 'An active workspace/root is required');
     }
+  }
+
+  private requireActiveOrEnrolledSemanticRoot(workspaceId: WorkspaceId, location: Location): void {
+    if (
+      this.workspaces.has(workspaceId) &&
+      this.semanticLibrary.roots.some(
+        (root) =>
+          root.location.providerId === location.providerId &&
+          root.location.uri === location.uri &&
+          root.workspaceReferences.includes(workspaceId),
+      )
+    ) {
+      return;
+    }
+    this.requireActiveSemanticFolder(workspaceId, location);
   }
 
   private requireSemanticLibraryRevision(expected: number): void {

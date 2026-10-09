@@ -53,6 +53,9 @@ if (!onnxDescriptor && onnxRuntime) {
 const modelPack = path.join(bundle, 'artifacts', model.id);
 const workerExecutable = path.join(bundle, 'artifacts', worker.id);
 const nativeRuntime = path.join(bundle, 'artifacts', runtime.id);
+const gemmaModel = manifest.catalog.models.find(
+  (entry) => entry.metadata.identity.model === 'google-embeddinggemma-2',
+);
 const productionTrustRequired = process.env.PROCYON_REQUIRE_ZVEC_PRODUCTION_TRUST === '1';
 const qualification = verifyZvecRuntimeQualification(bundle, {
   requireProductionTrust: productionTrustRequired,
@@ -202,6 +205,35 @@ try {
         process.env.PROCYON_SEMANTIC_PRIVACY_CANARIES_FILE ?? generatedCanaryFile,
     },
   );
+  if (gemmaModel) {
+    const files = Object.fromEntries(
+      [
+        [gemmaModel.primary_file_name, gemmaModel.artifact_id],
+        ...Object.entries(gemmaModel.files),
+      ].map(([name, id]) => [name, path.join(bundle, 'artifacts', id)]),
+    );
+    run(
+      [
+        'test',
+        '--locked',
+        '--release',
+        '-p',
+        'fm-semantic-worker',
+        '--features',
+        'gemma-native',
+        '--test',
+        'packaged_production',
+        'packaged_gemma_worker_ingests_multimodal_sources_offline',
+        '--',
+        '--ignored',
+      ],
+      {
+        PROCYON_SEMANTIC_PRODUCTION_WORKER: workerExecutable,
+        PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY: isolatedRuntimeDirectory,
+        PROCYON_GEMMA_PACKAGED_FILES: JSON.stringify(files),
+      },
+    );
+  }
   run(
     [
       'test',

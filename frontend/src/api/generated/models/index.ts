@@ -161,6 +161,7 @@ export * from './knowledgeParseAmbiguityDto.ts';
 export * from './knowledgeParseConfidenceDto.ts';
 export * from './knowledgePlannedSearchDto.ts';
 export * from './knowledgeQueryDraftDto.ts';
+export * from './knowledgeQueryIntentDto.ts';
 export * from './knowledgeQueryInterpretationDto.ts';
 export * from './knowledgeRankContributionDto.ts';
 export * from './knowledgeRetrievalModeDto.ts';

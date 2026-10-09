@@ -92,6 +92,57 @@ fn journal_record_count(semantic_root: &Path) -> usize {
 }
 
 #[test]
+fn initializing_fresh_gemma_library_preserves_existing_identity_and_choices() {
+    let configuration = project_temp_dir("gemma-initialization-config-");
+    let semantic_root = project_temp_dir("gemma-initialization-data-");
+    let coordinator = coordinator(configuration.path(), semantic_root.path());
+    let media = fm_semantic_library::GemmaMediaSelection {
+        images: true,
+        audio: false,
+        video: true,
+    };
+    let policy = SemanticLibraryPolicy::new(
+        DeviceLibraryIdentity::new(
+            library_id(),
+            ModelIdentity::embeddinggemma_2(256, media).unwrap(),
+        ),
+        ResourceProfile {
+            kind: ResourceProfileKind::Balanced,
+            budgets: ResourceBudgets::default(),
+        },
+    )
+    .unwrap();
+    coordinator.lock().unwrap().initialize(&policy).unwrap();
+    let loaded = coordinator.load().unwrap();
+    assert_eq!(loaded.policy.library().model().dimensions(), 256);
+    assert_eq!(loaded.policy.library().model().gemma_media(), Some(media));
+    assert!(loaded.policy.roots().is_empty());
+
+    let changed = SemanticLibraryPolicy::new(
+        DeviceLibraryIdentity::new(
+            library_id(),
+            ModelIdentity::embeddinggemma_2(768, media).unwrap(),
+        ),
+        policy.resource_profile().clone(),
+    )
+    .unwrap();
+    assert!(matches!(
+        coordinator.lock().unwrap().initialize(&changed),
+        Err(fm_semantic_library::StoreError::AlreadyInitialized)
+    ));
+    assert_eq!(
+        coordinator
+            .load()
+            .unwrap()
+            .policy
+            .library()
+            .model()
+            .dimensions(),
+        256
+    );
+}
+
+#[test]
 fn model_migration_preserves_library_consent_catalog_and_state() {
     let configuration = project_temp_dir("model-migration-config-");
     let semantic_root = project_temp_dir("model-migration-data-");

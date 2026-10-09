@@ -20,6 +20,7 @@ export type {
   KnowledgeParseConfidenceDto as KnowledgeParseConfidence,
   KnowledgePlannedSearchDto as KnowledgePlannedSearch,
   KnowledgeQueryDraftDto as KnowledgeQueryDraft,
+  KnowledgeQueryIntentDto as KnowledgeQueryIntent,
   KnowledgeQueryInterpretationDto as KnowledgeQueryInterpretation,
   KnowledgeRankContributionDto as KnowledgeRankContribution,
   KnowledgeRetrievalModeDto as KnowledgeRetrievalMode,

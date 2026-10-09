@@ -251,6 +251,12 @@ pub enum UnitKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Provenance {
+    /// File-level media embedding; video evidence covers only sampled frames.
+    Media {
+        /// Presentation timestamps of the frames actually sampled from a video.
+        #[serde(rename = "sampledTimestampsMs")]
+        sampled_timestamps_ms: Vec<u64>,
+    },
     /// Inclusive 1-based line range of a plain-text, Markdown or HTML source.
     TextLines {
         /// First line of the unit.

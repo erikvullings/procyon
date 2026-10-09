@@ -18,7 +18,6 @@ import {
   cornerLeftUpIcon,
   layoutGridIcon,
   listIcon,
-  messageCircleIcon,
   plusIcon,
   searchIcon,
   settingsIcon,
@@ -128,9 +127,11 @@ import {
   parentLocation,
 } from '../features/navigation/navigation';
 import { rootLocationFor } from '../features/navigation/root-location';
+import { itemProgressSummary, operationKindLabel } from '../features/operations/operation-centre';
 import {
   createOperationsState,
   dismissOperation,
+  isActiveOperation,
   mergeOperationHistory,
   shouldAutoDismissOperation,
   summariseActiveOperations,
@@ -443,6 +444,16 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let settingsUpdateQueue = Promise.resolve();
   let settingsDisclosureElement: HTMLDetailsElement | undefined;
   let settingsDialogOpen = false;
+  let activityOpen = false;
+  function closeActivityOnOutsidePointer(event: PointerEvent): void {
+    if (!activityOpen || (event.target as Element).closest('.fm-activity-anchor')) return;
+    activityOpen = false;
+    m.redraw();
+  }
+  const semanticJobs = new Map<
+    string,
+    Extract<BackendEvent['payload'], { type: 'semantic.ingestionProgress' }>
+  >();
   let settingsInitialSection: SettingsSection = 'appearance';
   let availableAppUpdate: AppUpdateInfo | undefined;
   let aboutDialogOpen = false;
@@ -461,6 +472,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let shortcutsHelpOpen = false;
   let semanticAssistantAvailable = false;
   let knowledgeSearchAvailable = false;
+  let knowledgeSearchChecked = false;
   let semanticEnrolmentRequest:
     | { readonly workspaceId: WorkspaceId; readonly location: Location }
     | undefined;
@@ -2305,8 +2317,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       knowledgeSearchAvailable = capabilities.fullText || capabilities.semantic;
     } catch {
       knowledgeSearchAvailable = false;
+    } finally {
+      knowledgeSearchChecked = true;
+      m.redraw();
     }
-    m.redraw();
   }
 
   async function refreshSemanticAssistantAvailability(
@@ -2727,6 +2741,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getOperations: () => operations,
     setOperations: (next) => {
       operations = next;
+      if (summariseActiveOperations(next) === undefined && semanticJobs.size === 0) {
+        activityOpen = false;
+      }
+    },
+    onSemanticIngestionProgress: (progress) => {
+      if (['complete', 'cancelled', 'skipped'].includes(progress.stage)) {
+        semanticJobs.delete(progress.jobId);
+        if (semanticJobs.size === 0 && summariseActiveOperations(operations) === undefined) {
+          activityOpen = false;
+        }
+      } else {
+        semanticJobs.set(progress.jobId, progress);
+      }
     },
     getDismissedOperationIds: () => dismissedOperationIds,
     clearDismissedOperation,
@@ -4004,6 +4031,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getNativeDropInProgress: () => nativeDropInProgress,
     getRenameRequest: (paneId) => renameRequests.get(paneId),
     getAppState: () => appState,
+    getOperations: () =>
+      Object.values(operations.byId).filter(
+        (operation): operation is Operation => operation !== undefined,
+      ),
     clipboard,
     getDirectories: () => directories,
     getSelections: () => selections,
@@ -4359,6 +4390,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   return {
     oninit: ({ attrs }) => {
+      document.addEventListener('pointerdown', closeActivityOnOutsidePointer);
       attrsClient = attrs.client;
       void refreshSemanticAssistantAvailability();
       void refreshKnowledgeSearchAvailability();
@@ -4621,6 +4653,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     },
 
     onremove: () => {
+      document.removeEventListener('pointerdown', closeActivityOnOutsidePointer);
       removed = true;
       pendingOperationConfirmation?.resolve(false);
       pendingOperationConfirmation = undefined;
@@ -4656,11 +4689,22 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           operation?.kind === 'delete' && operation.state === 'waitingForConflictResolution',
       );
       const activeOperationProgress = summariseActiveOperations(operations);
-      // macOS's overlay title bar (spec follow-up) keeps the native traffic lights, but
-      // draws our own centred title in a reserved CSS row instead of the OS title text
-      // (hidden via hiddenTitle) -- this is what makes the frame colour match, since a
-      // plain "Transparent" title bar still let the OS render its own vibrancy behind it.
-      // The web build doesn't need this: the browser tab already shows the title.
+      const activeOperations = Object.values(operations.byId).filter(
+        (operation): operation is Operation =>
+          operation !== undefined && isActiveOperation(operation),
+      );
+      const failedSemanticJobs = [...semanticJobs.values()].filter((job) => job.stage === 'failed');
+      const activityCount = activeOperations.length + semanticJobs.size;
+      const activityLabel =
+        activityCount === 1
+          ? t('shell', 'activitySingle')
+          : t('shell', 'activityCount', { count: activityCount });
+      const activityStatusLabel =
+        failedSemanticJobs.length > 0
+          ? `${activityLabel}: ${t('shell', 'indexingFailed')}`
+          : activityLabel;
+      // The macOS overlay keeps native traffic lights while the toolbar draws the title.
+      // The browser tab already provides a title; Windows has its own menu/title row.
       const isMacOverlay = runtimeKind === 'tauri' && platform === 'macos';
       const localisedActions = keybindingActions();
       const keybindingContext = {
@@ -4765,12 +4809,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 ]),
               ])
             : undefined,
-          isMacOverlay
-            ? m('.fm-titlebar-spacer', { 'data-tauri-drag-region': '' }, [
-                m('span.fm-titlebar-label', t('shell', 'title')),
-              ])
-            : null,
-          m('.fm-workspace-toolbar', [
+          m('.fm-workspace-toolbar', { 'data-tauri-drag-region': isMacOverlay ? '' : undefined }, [
+            isMacOverlay
+              ? m('.fm-mac-toolbar-brand', { onmousedown: startWindowTitlebarDrag }, [
+                  m('img.fm-mac-toolbar-icon', {
+                    src: '/favicon-96x96.png',
+                    alt: '',
+                    'aria-hidden': 'true',
+                  }),
+                  m('span', t('shell', 'title')),
+                ])
+              : undefined,
             m('.fm-navigation-controls', { 'aria-label': t('shell', 'activePaneNavigation') }, [
               tooltip(
                 t('shell', 'back'),
@@ -4836,38 +4885,31 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   searchIcon(),
                 ),
               ),
-              knowledgeSearchAvailable
+              knowledgeSearchAvailable || !knowledgeSearchChecked
                 ? tooltip(
                     labelWithShortcut(
-                      t('knowledgeSearch', 'openTitle'),
+                      !knowledgeSearchChecked
+                        ? t('knowledgeSearch', 'checkingAvailability')
+                        : t(
+                            'knowledgeSearch',
+                            semanticAssistantAvailable ? 'openWithAskTitle' : 'openTitle',
+                          ),
                       shortcutFor('client.searchKnowledge'),
                     ),
                     m(
                       IconButton,
                       {
                         className: 'fm-knowledge-search-trigger',
-                        'aria-label': t('knowledgeSearch', 'openTitle'),
+                        disabled: !knowledgeSearchAvailable,
+                        'aria-label': !knowledgeSearchChecked
+                          ? t('knowledgeSearch', 'checkingAvailability')
+                          : t(
+                              'knowledgeSearch',
+                              semanticAssistantAvailable ? 'openWithAskTitle' : 'openTitle',
+                            ),
                         onclick: openKnowledgeSearch,
                       },
                       contentSearchIcon(),
-                    ),
-                  )
-                : undefined,
-              semanticAssistantAvailable
-                ? tooltip(
-                    labelWithShortcut(
-                      t('ragAsk', 'openAssistant'),
-                      shortcutFor('client.semanticAssistant'),
-                    ),
-                    m(
-                      IconButton,
-                      {
-                        className: 'fm-rag-ask-trigger',
-                        disabled: activeDirectory() === undefined,
-                        'aria-label': t('ragAsk', 'openAssistant'),
-                        onclick: openSemanticAssistant,
-                      },
-                      messageCircleIcon(),
                     ),
                   )
                 : undefined,
@@ -4939,7 +4981,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 commandIcon(),
               ),
             ),
-            m('.fm-toolbar-spacer', { 'aria-hidden': 'true' }),
+            m('.fm-toolbar-spacer', {
+              'aria-hidden': 'true',
+              'data-tauri-drag-region': isMacOverlay ? '' : undefined,
+            }),
             tooltip(
               t('shell', 'workspaceSwitcherLabel', { name: workspace?.name ?? t('shell', 'none') }),
               m(
@@ -5044,36 +5089,132 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               role: 'separator',
               'aria-orientation': 'vertical',
             }),
-            tooltip(
-              labelWithShortcut(t('shell', 'operationCentre'), 'Alt+Z'),
-              m(
-                IconButton,
-                {
-                  className: [
-                    'fm-operation-centre-button',
-                    activeOperationProgress === undefined ? '' : 'fm-operations-busy',
-                  ]
-                    .filter(Boolean)
-                    .join(' '),
-                  disabled: workspace === undefined,
-                  'aria-label': t('shell', 'operationCentre'),
-                  'aria-pressed': String(workspace?.operationCentre.visible === true),
-                  ...(activeOperationProgress === undefined
-                    ? {}
-                    : {
-                        'aria-busy': 'true',
-                        ...(activeOperationProgress.percent === undefined
-                          ? {}
-                          : {
-                              style: {
-                                '--fm-operation-progress': `${activeOperationProgress.percent}%`,
-                              },
-                            }),
-                      }),
-                  onclick: toggleOperationCentre,
+            m(
+              '.fm-activity-anchor',
+              {
+                onkeydown: (event: KeyboardEvent) => {
+                  if (event.key !== 'Escape' || !activityOpen) return;
+                  event.preventDefault();
+                  activityOpen = false;
+                  document.querySelector<HTMLButtonElement>('.fm-activity-count')?.focus();
                 },
-                listIcon(),
-              ),
+              },
+              [
+                m(
+                  IconButton,
+                  {
+                    className: [
+                      'fm-operation-centre-button',
+                      activeOperationProgress === undefined ? '' : 'fm-operations-busy',
+                    ]
+                      .filter(Boolean)
+                      .join(' '),
+                    disabled: workspace === undefined,
+                    'aria-label': t('shell', 'operationCentre'),
+                    title: t('shell', 'operationCentre'),
+                    'aria-pressed': String(workspace?.operationCentre.visible === true),
+                    ...(activeOperationProgress === undefined
+                      ? {}
+                      : {
+                          ...(activeOperationProgress.percent === undefined
+                            ? {}
+                            : {
+                                style: {
+                                  '--fm-operation-progress': `${activeOperationProgress.percent}%`,
+                                },
+                              }),
+                        }),
+                    onclick: () => {
+                      activityOpen = false;
+                      toggleOperationCentre();
+                    },
+                  },
+                  listIcon(),
+                ),
+                activityCount > 0
+                  ? m(
+                      'button.fm-activity-count',
+                      {
+                        type: 'button',
+                        className: failedSemanticJobs.length > 0 ? 'fm-activity-failed' : '',
+                        'aria-label': activityStatusLabel,
+                        'aria-expanded': String(activityOpen),
+                        'aria-controls': 'fm-activity-popover',
+                        title: activityStatusLabel,
+                        onclick: () => {
+                          activityOpen = !activityOpen;
+                        },
+                      },
+                      activityCount,
+                    )
+                  : undefined,
+                activityOpen && activityCount > 0
+                  ? m(
+                      '.fm-activity-popover#fm-activity-popover',
+                      {
+                        role: 'region',
+                        'aria-label': t('shell', 'showActivity'),
+                      },
+                      [
+                        m('strong', { key: 'heading' }, activityLabel),
+                        ...activeOperations.map((operation) =>
+                          m(
+                            'button.fm-activity-item',
+                            {
+                              type: 'button',
+                              key: operation.id,
+                              onclick: () => {
+                                activityOpen = false;
+                                setOperationCentreVisible(true);
+                                requestAnimationFrame(() => {
+                                  document
+                                    .querySelector<HTMLElement>(
+                                      `.fm-operation[data-operation-id="${operation.id}"]`,
+                                    )
+                                    ?.focus();
+                                });
+                              },
+                            },
+                            [
+                              m('span', operationKindLabel(operation.kind)),
+                              m('span', itemProgressSummary(operation)),
+                              m('span.fm-activity-target', t('shell', 'openOperation')),
+                            ],
+                          ),
+                        ),
+                        ...[...semanticJobs.values()].map((job) =>
+                          m(
+                            'button.fm-activity-item',
+                            {
+                              type: 'button',
+                              key: job.jobId,
+                              onclick: () => {
+                                activityOpen = false;
+                                if (job.stage === 'failed') semanticJobs.delete(job.jobId);
+                                openSettingsDialog('semantic');
+                              },
+                            },
+                            [
+                              m(
+                                'span',
+                                job.stage === 'failed'
+                                  ? t('shell', 'indexingFailed')
+                                  : t('shell', 'indexingActivity'),
+                              ),
+                              job.stage === 'failed'
+                                ? undefined
+                                : m(
+                                    'span',
+                                    t('shell', 'indexingScanned', { count: job.completed }),
+                                  ),
+                              m('span.fm-activity-target', t('shell', 'openSemanticStatus')),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : undefined,
+              ],
             ),
             tooltip(
               labelWithShortcut(
@@ -5514,6 +5655,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                         semanticEnrolmentRequest = undefined;
                         semanticEnrolmentReturnToAsk = false;
                         openRagAsk();
+                      },
+                      onCancel: () => {
+                        semanticEnrolmentRequest = undefined;
                       },
                     }),
                   ),

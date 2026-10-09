@@ -7,9 +7,11 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use fm_domain::{EntryKind, EntrySummary, GitFileStatus, Location, LocationError, WorkspaceId};
+use fm_events::{BackendEventPayload, EventAudience, EventBus};
 use fm_semantic_library::{
     ContentFingerprint, EligibilityCandidate, EligibilityEntryKind, EligibilityReason,
     OccurrenceId, RootId,
@@ -21,7 +23,7 @@ use fm_vfs::{
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
-use tokio::time::{Instant, sleep};
+use tokio::time::{Instant, MissedTickBehavior, interval_at, sleep};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -122,15 +124,29 @@ pub enum SemanticIndexingError {
 /// Deep application capability coordinating VFS, catalog, and worker state.
 pub struct SemanticIndexingService {
     providers: ProviderRegistry,
+    events: EventBus,
+    reconciling: AtomicBool,
+    scanned_entries: AtomicU64,
     semantic: std::sync::RwLock<SemanticService>,
     ocr_required_files: std::sync::RwLock<BTreeMap<RootId, Vec<Location>>>,
     run_lock: tokio::sync::Mutex<()>,
 }
 
+struct ReconciliationGuard<'a>(&'a AtomicBool);
+
+impl Drop for ReconciliationGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
 impl SemanticIndexingService {
-    pub(crate) fn new(providers: ProviderRegistry) -> Self {
+    pub(crate) fn new(providers: ProviderRegistry, events: EventBus) -> Self {
         Self {
             providers,
+            events,
+            reconciling: AtomicBool::new(false),
+            scanned_entries: AtomicU64::new(0),
             semantic: std::sync::RwLock::new(SemanticService::unavailable()),
             ocr_required_files: std::sync::RwLock::new(BTreeMap::new()),
             run_lock: tokio::sync::Mutex::new(()),
@@ -153,6 +169,10 @@ impl SemanticIndexingService {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = semantic;
     }
 
+    pub(crate) fn is_reconciling(&self) -> bool {
+        self.reconciling.load(Ordering::SeqCst)
+    }
+
     /// Enumerates, feeds, waits for, and commits one enrolled root.
     pub(crate) async fn reconcile(
         &self,
@@ -162,6 +182,62 @@ impl SemanticIndexingService {
         cancellation: CancellationToken,
     ) -> Result<SemanticIndexingReport, SemanticIndexingError> {
         let _run = self.run_lock.lock().await;
+        self.reconciling.store(true, Ordering::SeqCst);
+        let _active = ReconciliationGuard(&self.reconciling);
+        self.scanned_entries.store(0, Ordering::Relaxed);
+        let job_id = format!("root:{root_id}");
+        self.publish_progress(&job_id, "reconciling", 0, 0);
+        let work = self.reconcile_root(library, access, root_id, cancellation);
+        tokio::pin!(work);
+        let mut heartbeat = interval_at(
+            Instant::now() + Duration::from_secs(1),
+            Duration::from_secs(1),
+        );
+        heartbeat.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let result = loop {
+            tokio::select! {
+                result = &mut work => break result,
+                _ = heartbeat.tick() => self.publish_progress(
+                    &job_id,
+                    "reconciling",
+                    self.scanned_entries.load(Ordering::Relaxed),
+                    0,
+                ),
+            }
+        };
+        self.publish_progress(
+            &job_id,
+            match &result {
+                Ok(_) => "complete",
+                Err(SemanticIndexingError::Cancelled) => "cancelled",
+                Err(_) => "failed",
+            },
+            self.scanned_entries.load(Ordering::Relaxed),
+            u64::from(result.is_err()),
+        );
+        result
+    }
+
+    fn publish_progress(&self, job_id: &str, stage: &str, completed: u64, errors: u64) {
+        self.events.publish(
+            EventAudience::Global,
+            BackendEventPayload::SemanticIngestionProgress {
+                job_id: job_id.to_owned(),
+                stage: stage.to_owned(),
+                completed,
+                total: 0,
+                errors,
+            },
+        );
+    }
+
+    async fn reconcile_root(
+        &self,
+        library: Arc<SemanticLibraryService>,
+        access: &SemanticAccessContext,
+        root_id: RootId,
+        cancellation: CancellationToken,
+    ) -> Result<SemanticIndexingReport, SemanticIndexingError> {
         check_cancelled(&cancellation)?;
 
         let (context, provider, semantic) =
@@ -219,6 +295,7 @@ impl SemanticIndexingService {
                 for entry in page.entries {
                     check_cancelled(&cancellation)?;
                     entry_count = entry_count.saturating_add(1);
+                    self.scanned_entries.store(entry_count, Ordering::Relaxed);
                     if entry_count > MAX_ENTRIES {
                         return Err(SemanticIndexingError::LimitExceeded("entry count"));
                     }
@@ -492,6 +569,7 @@ impl SemanticIndexingService {
                 &decision,
                 FeedDocument {
                     tenant_id,
+                    title: entry.name.clone(),
                     root_id: context.root_id,
                     workspace_id: *workspace_id,
                     media_type: media_type(entry).ok_or(SemanticLibraryError::InvalidRequest)?,
@@ -719,6 +797,16 @@ fn media_type(entry: &EntrySummary) -> Option<&'static str> {
                 Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
             }
             "application/xml" => Some("application/xml"),
+            "image/jpeg" => Some("image/jpeg"),
+            "image/png" => Some("image/png"),
+            "image/webp" => Some("image/webp"),
+            "audio/wav" | "audio/x-wav" => Some("audio/wav"),
+            "audio/mpeg" => Some("audio/mpeg"),
+            "audio/flac" => Some("audio/flac"),
+            "audio/aac" => Some("audio/aac"),
+            "audio/mp4" => Some("audio/mp4"),
+            "video/mp4" => Some("video/mp4"),
+            "video/quicktime" => Some("video/quicktime"),
             "text/css" => Some("text/css"),
             "text/csv" => Some("text/csv"),
             "text/html" => Some("text/html"),
@@ -744,6 +832,16 @@ fn media_type(entry: &EntrySummary) -> Option<&'static str> {
         Some("css") => Some("text/css"),
         Some("js" | "mjs" | "cjs") => Some("text/javascript"),
         Some("pdf") => Some("application/pdf"),
+        Some("jpg" | "jpeg") => Some("image/jpeg"),
+        Some("png") => Some("image/png"),
+        Some("webp") => Some("image/webp"),
+        Some("wav") => Some("audio/wav"),
+        Some("mp3") => Some("audio/mpeg"),
+        Some("flac") => Some("audio/flac"),
+        Some("aac") => Some("audio/aac"),
+        Some("m4a") => Some("audio/mp4"),
+        Some("mp4" | "m4v") => Some("video/mp4"),
+        Some("mov") => Some("video/quicktime"),
         Some("docx") => {
             Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         }
@@ -810,6 +908,7 @@ async fn read_bounded(
 
 struct FeedDocument<'content> {
     tenant_id: String,
+    title: String,
     root_id: RootId,
     workspace_id: WorkspaceId,
     media_type: &'content str,
@@ -829,6 +928,9 @@ async fn ingest_and_wait(
     document: FeedDocument<'_>,
     cancellation: &CancellationToken,
 ) -> Result<IngestionOutcome, SemanticIndexingError> {
+    if document.title.len() > 1024 {
+        return Err(SemanticIndexingError::LimitExceeded("title bytes"));
+    }
     let operation_id = SemanticOperationId::new(Uuid::new_v4().to_string());
     let occurrence_id = decision.occurrence_id().to_string();
     let workspace = document.workspace_id.to_string();
@@ -837,7 +939,7 @@ async fn ingest_and_wait(
         TenantId::new(document.tenant_id),
         LibraryId::new(decision.library_id().to_string()),
     );
-    let metadata = BTreeMap::from([
+    let mut metadata = BTreeMap::from([
         ("occurrence_id".to_owned(), scoped_occurrence_id),
         ("source_id".to_owned(), occurrence_id),
         ("root_id".to_owned(), document.root_id.to_string()),
@@ -847,6 +949,7 @@ async fn ingest_and_wait(
             document.modified_at_ms.to_string(),
         ),
     ]);
+    metadata.insert("title".to_owned(), document.title);
     let job_id = semantic
         .ingest(DocumentIngestion {
             scope: scope.clone(),

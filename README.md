@@ -28,6 +28,20 @@ collection basket gathers files across folders and providers.
 Procyon never implements file mutations in the frontend. Every operation goes through the same
 typed Rust engine, whether the app is running through Tauri, Axum, or the in-process mock client.
 
+## Background work
+
+The badge beside Operations shows active file operations and semantic indexing. Open it for
+per-job progress and shortcuts to the Operations Centre or Semantic settings. A total or
+percentage appears only when the job knows one; permanent deletion instead reports items
+already removed. A folder being moved or deleted remains navigable and shows its current
+state until the operation finishes.
+
+Quitting the desktop app while work is active prompts for confirmation. File operations stop
+and are shown as interrupted after restart; partial changes, including permanently deleted
+items, are **not** rolled back or resumed automatically. Enrolled semantic folders are
+reconciled again on desktop startup. Closing a browser tab does not stop work in a separately
+running server, but restarting that server interrupts its file operations.
+
 ## Screenshots
 
 | Embedded terminal | Document preview |
@@ -122,6 +136,7 @@ Run commands from the repository root.
 | `pnpm dev:http` | Start Vite against the Axum backend |
 | `pnpm dev:server` | Start the Axum backend with automatic rebuilds |
 | `pnpm dev:tauri` | Launch the Tauri desktop app |
+| `pnpm dev:tauri:semantic:gemma` | Launch a local desktop with the optional Gemma development catalog |
 | `pnpm test` | Run Rust, frontend, and script tests |
 | `pnpm test:rust` | Run the Rust suite and doctests |
 | `pnpm test:frontend` | Run Vitest |
@@ -129,6 +144,44 @@ Run commands from the repository root.
 | `pnpm build` | Build the production Rust and frontend targets |
 | `pnpm build:tauri` | Package the desktop application |
 | `pnpm api:check` | Verify the OpenAPI document and generated client are current |
+
+### Try EmbeddingGemma 2 on your own folder
+
+Run `pnpm dev:tauri:semantic:gemma` from the repository root on macOS arm64
+(the locally verified target; other platforms are not yet qualified). The command verifies the
+pinned E5 and EmbeddingGemma 2 files, builds an optimized native Gemma worker,
+and launches the development desktop with a **development-key-signed**, local
+installation catalog. It needs about 1.5 GiB for the Gemma checkpoint plus
+space for the catalog and installed copies; the UI discloses an 8 GiB RAM
+estimate. The model download may require access to Google's gated Hugging Face
+repository. To build the bundle without launching Tauri, run
+`pnpm semantic:bundle:dev --gemma`.
+
+In the desktop, open **Settings → Semantic components**, choose **EmbeddingGemma
+2 (optional)**, select 128/256/512/768 dimensions and the desired image, audio,
+and video checkboxes, acknowledge the fresh index, then select **Accept and install**.
+The signed offer loads automatically; individual artifact files are available under
+**Technical details** if needed. Installation retains the existing E5 library and
+activates the separately initialized Gemma library. Open the folder
+you want to compare in a pane; in **Settings → Semantic library**, review its
+inclusion and choose **Include and index folder**. Once indexing progresses,
+search or Ask within the indexed folder. The selected dimensions and media
+permissions cannot be changed for that Gemma library. Existing E5 data is not
+deleted; no migration or representative quality result is implied by this
+development bundle. Standard release builds remain Gemma-disabled. Included
+folders can be removed directly from **Settings → Semantic library**, even when
+their sources are unavailable; confirm the displayed cleanup inventory to
+remove their local index data without deleting original files. Moving, deleting,
+or temporarily disconnecting an included root does not automatically purge its
+index, so remove it explicitly if it should no longer appear in search.
+
+To make scanned PDFs searchable, install OCRmyPDF 16.x or 17.x on the desktop,
+then open **Settings → Make scanned PDFs searchable** and allow OCRmyPDF.
+Procyon runs it only for reported PDFs you explicitly select, without replacing
+the original PDF. The development launcher (including
+`pnpm dev:tauri:semantic:ocr`) follows this Settings consent; its former
+`--ocr` environment opt-in does not override it. If an installed OCRmyPDF is
+not found, launch the desktop from a shell where `ocrmypdf` is on `PATH`.
 
 ### HTTP development
 

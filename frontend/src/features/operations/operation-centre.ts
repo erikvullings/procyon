@@ -134,7 +134,7 @@ function operationStateSymbol(state: OperationState): string {
   }
 }
 
-function operationKindLabel(kind: OperationKind | null | undefined): string {
+export function operationKindLabel(kind: OperationKind | null | undefined): string {
   switch (kind) {
     case 'createArchive':
       return t('operation', 'kindCreateArchive');
@@ -211,7 +211,7 @@ function button(label: string, action: string, onclick?: () => void, unavailable
   );
 }
 
-function itemProgressSummary(operation: Operation): string {
+export function itemProgressSummary(operation: Operation): string {
   const { completedItems, totalItems } = operation.progress;
   const completedSuccessfully =
     operation.state === 'completed' || operation.state === 'completedWithWarnings';
@@ -281,7 +281,7 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
               const eta = estimatedTimeRemaining(operation);
               return m(
                 'article.fm-operation',
-                { 'data-operation-id': operation.id, 'data-state': operation.state },
+                { 'data-operation-id': operation.id, 'data-state': operation.state, tabindex: -1 },
                 [
                   m('.fm-operation-summary', [
                     m('strong', [

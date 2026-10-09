@@ -581,6 +581,31 @@ impl SemanticLibraryConfiguration {
             },
         ))
     }
+
+    /// Creates a fresh Gemma library with fixed dimensions and media consent.
+    ///
+    /// # Errors
+    ///
+    /// Rejects unsupported embedding dimensions.
+    pub fn embeddinggemma_2(
+        configuration_directory: impl Into<PathBuf>,
+        semantic_data_root: impl Into<PathBuf>,
+        library_id: Uuid,
+        dimensions: u32,
+        media: core::GemmaMediaSelection,
+    ) -> Result<Self, SemanticLibraryError> {
+        let model =
+            core::ModelIdentity::embeddinggemma_2(dimensions, media).map_err(map_policy_error)?;
+        Ok(Self::new(
+            configuration_directory,
+            semantic_data_root,
+            core::DeviceLibraryIdentity::new(core::LibraryId::from_uuid(library_id), model),
+            core::ResourceProfile {
+                kind: core::ResourceProfileKind::Balanced,
+                budgets: core::ResourceBudgets::default(),
+            },
+        ))
+    }
 }
 
 /// Server tenant/user identity fixed by trusted host state, never by request
@@ -1864,7 +1889,10 @@ impl SemanticLibraryService {
         let tenant = managed.tenant_for(access)?;
         let mut locked = managed.lock()?;
         let data = locked.data()?;
-        let policy = core::EligibilityPolicy::curated_defaults();
+        let mut policy = core::EligibilityPolicy::curated_defaults();
+        if let Some(media) = data.policy.library().model().gemma_media() {
+            policy = policy.with_gemma_media(media);
+        }
         let budgets = data.policy.resource_profile().budgets;
         let usage = core::ResourceUsage::measure(&data.catalog);
         let mut eligible = Vec::new();
@@ -3730,7 +3758,138 @@ pub(crate) enum SemanticLibraryComposition {
     },
 }
 
+/// Choices permanently bound to a separately initialized Gemma library.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GemmaLibrarySetup {
+    /// Fixed vector width.
+    pub dimensions: u32,
+    /// Fixed media permissions.
+    pub media: core::GemmaMediaSelection,
+}
+
 impl SemanticLibraryComposition {
+    pub(crate) async fn gemma_setup(
+        &self,
+        components: &crate::semantic_components::SemanticComponentService,
+    ) -> Result<Option<GemmaLibrarySetup>, SemanticLibraryError> {
+        let Self::DesktopManagedComponents {
+            configuration_directory,
+            ..
+        } = self
+        else {
+            return Ok(None);
+        };
+        let status = components
+            .status()
+            .await
+            .map_err(|_| SemanticLibraryError::Unavailable)?;
+        let data_root = status
+            .data_root()
+            .ok_or(SemanticLibraryError::Unavailable)?;
+        let coordinator = core::SemanticLibraryCoordinator::new(
+            configuration_directory.join("semantic-library-gemma"),
+            data_root.join("library-gemma"),
+        );
+        let policy = match coordinator.load() {
+            Ok(loaded) => Some(loaded.policy),
+            Err(core::StoreError::PolicyMissing) => None,
+            Err(error) => {
+                tracing::error!(%error, "Gemma library choices could not be read");
+                return Err(SemanticLibraryError::Persistence);
+            }
+        };
+        policy
+            .map(|policy| {
+                let model = policy.library().model();
+                Ok(GemmaLibrarySetup {
+                    dimensions: model.dimensions(),
+                    media: model
+                        .gemma_media()
+                        .ok_or(SemanticLibraryError::IncompatibleLibraryIdentity)?,
+                })
+            })
+            .transpose()
+    }
+
+    pub(crate) async fn initialize_gemma(
+        &self,
+        components: &crate::semantic_components::SemanticComponentService,
+        dimensions: u32,
+        media: core::GemmaMediaSelection,
+    ) -> Result<(), SemanticLibraryError> {
+        let Self::DesktopManagedComponents {
+            configuration_directory,
+            ..
+        } = self
+        else {
+            return Err(SemanticLibraryError::Unavailable);
+        };
+        let model = core::ModelIdentity::embeddinggemma_2(dimensions, media)
+            .map_err(|_| SemanticLibraryError::InvalidRequest)?;
+        let profiles = components
+            .catalog_profiles()
+            .await
+            .map_err(|_| SemanticLibraryError::Unavailable)?;
+        if !profiles.iter().any(|profile| {
+            profile.profile == crate::semantic_components::SemanticProfile::EmbeddingGemma2
+                && profile.resolved_model.model_id() == "google-embeddinggemma-2"
+                && profile.resolved_model.revision() == model.revision()
+        }) {
+            return Err(SemanticLibraryError::Unavailable);
+        }
+        let status = components
+            .status()
+            .await
+            .map_err(|_| SemanticLibraryError::Unavailable)?;
+        let data_root = status
+            .data_root()
+            .ok_or(SemanticLibraryError::Unavailable)?;
+        let config = configuration_directory.join("semantic-library-gemma");
+        let id = Uuid::new_v5(
+            &Uuid::NAMESPACE_OID,
+            format!("procyon-device-semantic-library-gemma:{}", config.display()).as_bytes(),
+        );
+        let library_id = core::LibraryId::from_uuid(id);
+        let identity = core::DeviceLibraryIdentity::new(library_id, model);
+        let policy = core::SemanticLibraryPolicy::new(
+            identity.clone(),
+            core::ResourceProfile {
+                kind: core::ResourceProfileKind::Balanced,
+                budgets: core::ResourceBudgets::default(),
+            },
+        )
+        .map_err(|_| SemanticLibraryError::InvalidRequest)?;
+        let coordinator =
+            core::SemanticLibraryCoordinator::new(config, data_root.join("library-gemma"));
+        let session = coordinator
+            .lock()
+            .map_err(|_| SemanticLibraryError::Persistence)?;
+        match session.load() {
+            Ok(existing) => {
+                return if existing.policy.library() == &identity {
+                    Ok(())
+                } else {
+                    Err(SemanticLibraryError::IncompatibleLibraryIdentity)
+                };
+            }
+            Err(core::StoreError::PolicyMissing) => {}
+            Err(error) => {
+                tracing::error!(%error, "Gemma library state could not be read");
+                return Err(SemanticLibraryError::Persistence);
+            }
+        }
+        match session.initialize(&policy) {
+            Ok(()) => Ok(()),
+            Err(core::StoreError::AlreadyInitialized) => {
+                Err(SemanticLibraryError::IncompatibleLibraryIdentity)
+            }
+            Err(error) => {
+                tracing::error!(%error, "Gemma library initialization failed");
+                Err(SemanticLibraryError::Persistence)
+            }
+        }
+    }
+
     pub(crate) fn new(
         runtime: fm_transport_dto::RuntimeKindDto,
         configuration_directory: impl Into<PathBuf>,
@@ -3839,6 +3998,9 @@ async fn desktop_library_from_components(
     configuration_directory: &std::path::Path,
 ) -> Option<SemanticLibraryService> {
     let key = desktop_composition_key(components).await?;
+    if key.model_id == "google-embeddinggemma-2" {
+        return desktop_gemma_library_from_policy(&key, configuration_directory);
+    }
     let profiles = components.catalog_profiles().await.ok()?;
     let metadata = profiles
         .iter()
@@ -3884,6 +4046,7 @@ async fn desktop_library_from_components(
                 .backfill_root_filesystem_identity(root_id, identity)
                 .ok()?;
         }
+
         if changed {
             session
                 .transaction(
@@ -3929,6 +4092,33 @@ async fn desktop_library_from_components(
             ),
         )
         .ok()?,
+        Arc::new(LocalSemanticEnrolmentEstimator),
+    )
+    .ok()
+}
+
+fn desktop_gemma_library_from_policy(
+    key: &DesktopCompositionKey,
+    configuration_directory: &std::path::Path,
+) -> Option<SemanticLibraryService> {
+    let config = configuration_directory.join("semantic-library-gemma");
+    let data = key.data_root.join("library-gemma");
+    let coordinator = core::SemanticLibraryCoordinator::new(&config, &data);
+    let policy = coordinator.load().ok()?.policy;
+    let model = policy.library().model();
+    if model.model_id() != key.model_id
+        || model.revision() != key.model_revision
+        || model.gemma_media().is_none()
+    {
+        return None;
+    }
+    SemanticLibraryService::desktop_managed(
+        SemanticLibraryConfiguration::new(
+            config,
+            data,
+            policy.library().clone(),
+            policy.resource_profile().clone(),
+        ),
         Arc::new(LocalSemanticEnrolmentEstimator),
     )
     .ok()

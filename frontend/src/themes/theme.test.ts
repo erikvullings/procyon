@@ -420,6 +420,27 @@ describe('theme stylesheet', () => {
     expect(toolbarIcons).toContain('color: var(--fm-text);');
   });
 
+  it('aligns and groups the macOS overlay toolbar without changing other hosts', () => {
+    const macToolbar = themeBlock(
+      /\.fm-app-shell\[data-mac-titlebar-overlay="true"\] \.fm-workspace-toolbar\s*\{([^}]*)\}/,
+    );
+    const macSeparator = themeBlock(
+      /\.fm-app-shell\[data-mac-titlebar-overlay="true"\] \.fm-toolbar-separator\s*\{([^}]*)\}/,
+    );
+    const brand = themeBlock(/\.fm-mac-toolbar-brand\s*\{([^}]*)\}/);
+
+    expect(macToolbar).toContain('height: 28px');
+    expect(macToolbar).toContain('--mm-control-height: 28px');
+    expect(macSeparator).toContain('margin-inline: 0.25rem');
+    expect(themeCss).not.toMatch(
+      /\.fm-app-shell\[data-mac-titlebar-overlay="true"\] \.fm-toolbar-spacer\s*\{[^}]*order:\s*1/,
+    );
+    expect(brand).toContain('font-size: var(--fm-type-title)');
+    const badge = themeBlock(/\.fm-mac-toolbar-icon\s*\{([^}]*)\}/);
+    expect(badge).toContain('width: 16px');
+    expect(badge).toContain('transform: translateY(2px)');
+  });
+
   it('uses full touch targets for the command toolbar on coarse pointers', () => {
     expect(themeCss).toMatch(
       /@media \(pointer: coarse\)\s*\{[\s\S]*?\.fm-workspace-toolbar\s*\{[^}]*height:\s*44px[^}]*overflow-x:\s*auto[^}]*--mm-control-height:\s*44px/s,
@@ -518,14 +539,9 @@ describe('theme stylesheet', () => {
       /\.fm-app-shell \.fm-knowledge-search-submit\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-search-close\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-settings-trigger\.btn-icon\s*\{[^}]*width:\s*var\(--fm-row-height\)[^}]*height:\s*var\(--fm-row-height\)[^}]*padding:\s*0/s,
     );
     expect(themeCss).toMatch(
-      /\.fm-knowledge-search-options\s*\{[^}]*height:\s*var\(--fm-row-height\)[^}]*white-space:\s*nowrap/s,
+      /\.fm-knowledge-search-toolbar > \.fm-knowledge-intent\s*\{[^}]*height:\s*calc\(var\(--fm-row-height\) - 4px\)/s,
     );
-    expect(themeCss).toMatch(
-      /\.fm-knowledge-search-options \.fm-knowledge-inline-needs\s*\{[^}]*align-items:\s*center[^}]*overflow:\s*hidden[^}]*flex-wrap:\s*nowrap/s,
-    );
-    expect(themeCss).toMatch(
-      /\.fm-knowledge-search-options input\[type="checkbox"\] \+ span:not\(\.lever\)\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*center/s,
-    );
+    expect(themeCss).not.toMatch(/\.fm-knowledge-search-options\s*\{/);
     expect(themeCss).toMatch(
       /:where\(\.fm-knowledge-source-link span\)\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s,
     );

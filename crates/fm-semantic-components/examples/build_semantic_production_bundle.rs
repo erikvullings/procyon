@@ -7,7 +7,8 @@
 //! build_semantic_production_bundle \
 //!   <worker> <zvec-runtime> <onnx-runtime-or-dash> <model-cache> <output> \
 //!   <target-os> <target-arch> <release-base-url> \
-//!   <procyon-source-revision> <converter-identity> <chunker-identity>
+//!   <procyon-source-revision> <converter-identity> <chunker-identity> \
+//!   [<verified-gemma-original-files-directory>]
 //! ```
 //!
 //! Every input is explicit, including the release target, so a CI
@@ -21,7 +22,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use fm_semantic_components::{
-    ArtifactLocation, ProductionBundleSpec, build_production_release_bundle,
+    ArtifactLocation, ProductionBundleSpec, build_production_release_bundle_with_optional_gemma,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -42,6 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let procyon_revision = required(&mut arguments, "Procyon source revision")?;
     let converter_identity = required(&mut arguments, "converter identity")?;
     let chunker_identity = required(&mut arguments, "chunker identity")?;
+    let gemma_cache_directory = arguments.next().map(PathBuf::from);
     if arguments.next().is_some() {
         return Err("unexpected extra argument".into());
     }
@@ -60,7 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         output_directory: output_directory.clone(),
     };
 
-    build_production_release_bundle(&spec)?;
+    build_production_release_bundle_with_optional_gemma(&spec, gemma_cache_directory.as_deref())?;
     println!("{}", output_directory.display());
     Ok(())
 }

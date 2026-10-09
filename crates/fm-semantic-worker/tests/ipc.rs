@@ -181,6 +181,7 @@ async fn concept_query_preserves_stable_identity_scope_and_paging() {
     assert_eq!(captured.library_id, "library-1");
     assert!(captured.query.is_empty());
     assert_eq!(captured.maximum_results, 20);
+    assert_eq!(captured.intent, v1::QueryIntent::Search);
     assert_eq!(
         captured.concept_query,
         Some(ConceptFolderQuery {
@@ -191,6 +192,34 @@ async fn concept_query_preserves_stable_identity_scope_and_paging() {
             include_unavailable: true,
             offset: 40,
         })
+    );
+    for intent in [
+        v1::QueryIntent::Search,
+        v1::QueryIntent::QuestionAnswering,
+        v1::QueryIntent::CodeRetrieval,
+    ] {
+        client
+            .query_with_intent_and_request_id(
+                &format!("intent-{intent:?}"),
+                "tenant-1",
+                "library-1",
+                "find the implementation",
+                20,
+                intent,
+            )
+            .await
+            .unwrap();
+        let captured = backend.input.lock().unwrap().clone().unwrap();
+        assert_eq!(captured.intent, intent);
+        assert_eq!(captured.query, "find the implementation");
+    }
+    client
+        .query_with_request_id("legacy-search", "tenant-1", "library-1", "find", 20)
+        .await
+        .unwrap();
+    assert_eq!(
+        backend.input.lock().unwrap().as_ref().unwrap().intent,
+        v1::QueryIntent::Search
     );
 
     client.shutdown(Duration::from_millis(100)).await.unwrap();
@@ -613,6 +642,7 @@ async fn cancellation_sent_immediately_after_a_query_is_accepted_deterministical
                 query: "needle".to_owned(),
                 maximum_results: 1,
                 concept_query: None,
+                intent: v1::QueryIntent::Search as i32,
             })),
         },
         MAX_MESSAGE_BYTES,
@@ -2485,6 +2515,7 @@ async fn non_reading_client_releases_server_capacity_at_the_request_deadline() {
                 query: "needle".to_owned(),
                 maximum_results: 1,
                 concept_query: None,
+                intent: v1::QueryIntent::Search as i32,
             })),
         },
         512,

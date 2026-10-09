@@ -248,6 +248,58 @@ afterEach(() => {
 });
 
 describe('AppShell', () => {
+  it('places the macOS brand and commands in one overlay toolbar without changing other hosts', async () => {
+    const client = new MockFileManagerClient();
+    const capabilities = await client.getRuntimeCapabilities();
+    const runtimeCapabilities = vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
+      ...capabilities,
+      platform: 'macos',
+      runtime: 'tauri',
+    });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-app-shell')?.getAttribute('data-mac-titlebar-overlay')).toBe(
+        'true',
+      ),
+    );
+    const toolbar = root.querySelector('.fm-workspace-toolbar');
+    expect(root.querySelector('.fm-titlebar-spacer')).toBeNull();
+    expect(toolbar?.firstElementChild?.classList.contains('fm-mac-toolbar-brand')).toBe(true);
+    expect(toolbar?.querySelector('.fm-mac-toolbar-icon')).not.toBeNull();
+    expect(toolbar?.querySelector('.fm-command-palette-trigger')).not.toBeNull();
+    const dragSpace = toolbar?.querySelector('.fm-toolbar-spacer');
+    expect(toolbar?.hasAttribute('data-tauri-drag-region')).toBe(true);
+    expect(dragSpace?.hasAttribute('data-tauri-drag-region')).toBe(true);
+    expect(
+      dragSpace?.previousElementSibling?.querySelector('.fm-command-palette-trigger'),
+    ).not.toBeNull();
+    expect(
+      dragSpace?.nextElementSibling?.querySelector('.fm-workspace-switcher-button'),
+    ).not.toBeNull();
+
+    m.mount(root, null);
+    runtimeCapabilities.mockResolvedValue({
+      ...capabilities,
+      platform: 'windows',
+      runtime: 'tauri',
+    });
+    const userAgent = vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Windows NT 10.0');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
+    await vi.waitFor(() => expect(root.querySelector('.fm-windows-titlebar')).not.toBeNull());
+    expect(root.querySelector('.fm-mac-toolbar-brand')).toBeNull();
+    expect(
+      root.querySelector('.fm-workspace-toolbar')?.hasAttribute('data-tauri-drag-region'),
+    ).toBe(false);
+    expect(root.querySelector('.fm-workspace-toolbar .fm-navigation-controls')).not.toBeNull();
+
+    m.mount(root, null);
+    userAgent.mockRestore();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    expect(root.querySelector('.fm-mac-toolbar-brand')).toBeNull();
+    expect(root.querySelector('.fm-workspace-toolbar .fm-navigation-controls')).not.toBeNull();
+  });
+
   it('serializes initial pane loads that target the same protected location', async () => {
     const client = new MockFileManagerClient();
     const originalStartWorkspace = client.startWorkspace.bind(client);
@@ -1921,6 +1973,7 @@ describe('AppShell', () => {
       callback(0);
       return 1;
     });
+
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const createdAt = new Date(Date.now()).toISOString();
 
@@ -1952,6 +2005,111 @@ describe('AppShell', () => {
       vi.useRealTimers();
       raf.mockRestore();
     }
+  });
+
+  it('shows semantic indexing beside file activity and clears it on completion', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    client.emit({
+      eventId: 801,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: 'root:one',
+        stage: 'reconciling',
+        completed: 64,
+        total: 0,
+        errors: 0,
+      },
+    });
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLButtonElement>('.fm-activity-count')?.textContent).toBe('1'),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-activity-count')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-activity-popover')?.textContent).toContain(
+        '64 entries scanned',
+      ),
+    );
+    expect(root.querySelector('.fm-activity-popover')?.textContent).toContain(
+      'Open Semantic settings',
+    );
+    client.emit({
+      eventId: 802,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: 'root:one',
+        stage: 'complete',
+        completed: 64,
+        total: 0,
+        errors: 0,
+      },
+    });
+    await vi.waitFor(() => expect(root.querySelector('.fm-activity-count')).toBeNull());
+  });
+
+  it('reports removed items without inventing a percentage for an unknown-size deletion', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    const createdAt = new Date().toISOString();
+    client.emit({
+      eventId: 805,
+      timestamp: createdAt,
+      payload: {
+        type: 'operation.created',
+        operation: {
+          id: 'large-delete',
+          kind: 'delete',
+          state: 'running',
+          sources: [],
+          progress: { completedItems: 600, completedBytes: 0 },
+          conflictPolicy: 'ask',
+          createdAt,
+        },
+      },
+    });
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLButtonElement>('.fm-activity-count')?.textContent).toBe('1'),
+    );
+    expect(
+      root
+        .querySelector<HTMLButtonElement>('.fm-operation-centre-button')
+        ?.style.getPropertyValue('--fm-operation-progress'),
+    ).toBe('');
+    root.querySelector<HTMLButtonElement>('.fm-activity-count')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-activity-popover')?.textContent).toContain('600 items'),
+    );
+  });
+
+  it('keeps failed indexing visible until its details are opened', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    client.emit({
+      eventId: 811,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: 'root:failed',
+        stage: 'failed',
+        completed: 0,
+        total: 0,
+        errors: 1,
+      },
+    });
+    await vi.waitFor(() => expect(root.querySelector('.fm-activity-failed')).not.toBeNull());
+    root.querySelector<HTMLButtonElement>('.fm-activity-count')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-activity-popover')?.textContent).toContain(
+        'Semantic indexing failed',
+      ),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-activity-item')?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-activity-count')).toBeNull());
   });
 
   it('previews modified function-key commands while a modifier is held', async () => {
@@ -4537,6 +4695,31 @@ describe('AppShell', () => {
     expect(root.querySelector<HTMLDetailsElement>('.fm-settings-disclosure')?.open).toBe(true);
   });
 
+  it('shows one disabled search control immediately while worker availability is checked', async () => {
+    const client = new MockFileManagerClient();
+    let resolveCapabilities:
+      | ((value: { fullText: boolean; semantic: boolean; answerGeneration: boolean }) => void)
+      | undefined;
+    vi.spyOn(client, 'getKnowledgeCapabilities').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCapabilities = resolve;
+        }),
+    );
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    m.redraw.sync();
+
+    const trigger = root.querySelector<HTMLButtonElement>('.fm-knowledge-search-trigger');
+    expect(trigger?.disabled).toBe(true);
+    expect(root.querySelector('.fm-rag-ask-trigger')).toBeNull();
+    resolveCapabilities?.({ fullText: true, semantic: true, answerGeneration: false });
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLButtonElement>('.fm-knowledge-search-trigger')?.disabled).toBe(
+        false,
+      ),
+    );
+  });
+
   it('hides semantic chat while semantic components are inactive', async () => {
     m.mount(root, {
       view: () => m(AppShell, { runtime: 'mock', client: new MockFileManagerClient() }),
@@ -4568,6 +4751,7 @@ describe('AppShell', () => {
     // Ask needs a generation profile; knowledge search must not.
     expect(root.querySelector('button[aria-label="Ask your files"]')).toBeNull();
     const trigger = await toolbarButton('Semantic Search…');
+    expect(root.querySelector('.fm-rag-ask-trigger')).toBeNull();
 
     trigger.click();
 
@@ -4708,7 +4892,8 @@ describe('AppShell', () => {
     });
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
-    expect(await toolbarButton('Ask your files')).toBeInstanceOf(HTMLButtonElement);
+    expect(await toolbarButton('Semantic search & Ask')).toBeInstanceOf(HTMLButtonElement);
+    expect(root.querySelector('.fm-rag-ask-trigger')).toBeNull();
 
     root.querySelector<HTMLButtonElement>('button[aria-label="Command palette"]')?.click();
     await vi.waitFor(() =>
@@ -4733,17 +4918,19 @@ describe('AppShell', () => {
     root.querySelector<HTMLInputElement>('.fm-knowledge-include-folder input')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
     [...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-enrolment-modal button')]
-      .find((button) => button.textContent?.trim() === 'Close')
+      .find((button) => button.textContent?.trim() === 'Cancel')
       ?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-semantic-enrolment-modal')?.getAttribute('aria-hidden')).toBe(
+        'true',
+      ),
+    );
     root.querySelector<HTMLInputElement>('.fm-knowledge-include-folder input')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
-    await vi.waitFor(() =>
-      expect(root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')).not.toBeNull(),
-    );
-    root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')?.click();
+    expect(root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')).toBeNull();
     const includeButton = await vi.waitFor(() => {
       const candidate = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
-        (button) => button.textContent?.trim() === 'Include and index folder',
+        (button) => button.textContent?.trim() === 'OK, index folder',
       );
       expect(candidate?.disabled).toBe(false);
       return candidate;
@@ -4751,6 +4938,11 @@ describe('AppShell', () => {
     includeButton?.click();
 
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-include-folder')).toBeNull());
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-semantic-enrolment-modal')?.getAttribute('aria-hidden')).toBe(
+        'true',
+      ),
+    );
   });
 
   it('focuses the existing Knowledge tab instead of creating another Ask tab', async () => {
@@ -4775,7 +4967,7 @@ describe('AppShell', () => {
       redactFilenames: false,
     });
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
-    (await toolbarButton('Ask your files')).click();
+    (await toolbarButton('Semantic search & Ask')).click();
     document.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, shiftKey: true, bubbles: true }),
     );

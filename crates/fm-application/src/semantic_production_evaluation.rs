@@ -418,6 +418,16 @@ pub struct CitationObservation {
     pub chunk_ids: Vec<String>,
 }
 
+/// Score scale used by Ask candidate retrieval.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProductionScoreDomain {
+    /// Cosine similarity from dense retrieval.
+    DenseSimilarity,
+    /// Reciprocal rank from hybrid knowledge retrieval.
+    HybridRank,
+}
+
 /// Per-case evidence emitted by the packaged worker run.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -428,11 +438,17 @@ pub struct ProductionCaseObservation {
     pub ranked_file_ids: Vec<String>,
     /// Policy-qualified structural chunk ranking.
     pub ranked_chunks: Vec<RankedChunkEvidence>,
-    /// Every raw in-scope chunk returned before Ask threshold and cap packing.
+    /// Every raw in-scope dense-search chunk, including those below the Ask floor.
     pub candidate_chunks: Vec<RankedChunkEvidence>,
-    /// Strongest raw in-scope chunk score, when any candidate existed.
+    /// Ask candidates before context packing, in their own score domain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ask_candidate_chunks: Option<Vec<RankedChunkEvidence>>,
+    /// The score scale of Ask candidates and ranked chunks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ask_score_domain: Option<ProductionScoreDomain>,
+    /// Strongest raw dense chunk score, when any eligible candidate existed.
     pub strongest_score: Option<f64>,
-    /// Effective absolute-plus-relative score floor.
+    /// Effective absolute-plus-relative dense score floor.
     pub effective_minimum_score: f64,
     /// Deterministic citations selected from the ranked offline evidence.
     pub offline_citations: Vec<CitationObservation>,
@@ -1047,17 +1063,17 @@ fn validate_case_observation(
             return Err(ProductionEvaluationError::ScopeLeakage(file_id.clone()));
         }
     }
-    let mut candidate_chunks = BTreeMap::new();
+    let mut dense_chunks = BTreeMap::new();
     let mut previous_score = f64::INFINITY;
     for chunk in &observation.candidate_chunks {
         validate_ranked_chunk(corpus, chunk, &observation.case_id)?;
         if chunk.score > previous_score
-            || candidate_chunks
-                .insert(chunk.chunk_id.as_str(), chunk)
+            || dense_chunks
+                .insert(chunk.chunk_id.as_str(), chunk.score)
                 .is_some()
         {
             return Err(ProductionEvaluationError::InvalidObservation(
-                "candidate chunks must be unique and score ordered".into(),
+                "dense candidate chunks must be unique and score ordered".into(),
             ));
         }
         previous_score = chunk.score;
@@ -1078,6 +1094,48 @@ fn validate_case_observation(
         ));
     }
 
+    let (ask_candidates, ask_domain) = match (
+        observation.ask_candidate_chunks.as_deref(),
+        observation.ask_score_domain,
+    ) {
+        (Some(chunks), Some(domain)) => (chunks, domain),
+        (None, None) => (
+            observation.candidate_chunks.as_slice(),
+            ProductionScoreDomain::DenseSimilarity,
+        ),
+        _ => {
+            return Err(ProductionEvaluationError::InvalidObservation(
+                "Ask candidate evidence and score domain must be recorded together".into(),
+            ));
+        }
+    };
+    if ask_candidates.len() > 512 {
+        return Err(ProductionEvaluationError::InvalidObservation(
+            "Ask candidate chunk limit was exceeded".into(),
+        ));
+    }
+    let mut candidate_chunks = BTreeMap::new();
+    previous_score = f64::INFINITY;
+    for (rank, chunk) in ask_candidates.iter().enumerate() {
+        validate_ranked_chunk(corpus, chunk, &observation.case_id)?;
+        if chunk.score > previous_score
+            || candidate_chunks
+                .insert(chunk.chunk_id.as_str(), chunk)
+                .is_some()
+            || (ask_domain == ProductionScoreDomain::DenseSimilarity
+                && dense_chunks
+                    .get(chunk.chunk_id.as_str())
+                    .is_none_or(|score| (chunk.score - score).abs() > 1e-6))
+            || (ask_domain == ProductionScoreDomain::HybridRank
+                && (chunk.score - f64::from(1.0_f32 / (rank as f32 + 1.0))).abs() > 1e-6)
+        {
+            return Err(ProductionEvaluationError::InvalidObservation(
+                "Ask candidate chunks must be unique and ordered in their score domain".into(),
+            ));
+        }
+        previous_score = chunk.score;
+    }
+
     let mut chunks = BTreeSet::new();
     let mut chunks_per_file = BTreeMap::<&str, usize>::new();
     let mut selected_files = Vec::new();
@@ -1086,7 +1144,8 @@ fn validate_case_observation(
     for chunk in &observation.ranked_chunks {
         validate_ranked_chunk(corpus, chunk, &observation.case_id)?;
         if candidate_chunks.get(chunk.chunk_id.as_str()).copied() != Some(chunk)
-            || chunk.score + f64::EPSILON < observation.effective_minimum_score
+            || (ask_domain == ProductionScoreDomain::DenseSimilarity
+                && chunk.score + f64::EPSILON < observation.effective_minimum_score)
             || !observation.ranked_file_ids.contains(&chunk.file_id)
             || !chunks.insert(chunk.chunk_id.as_str())
         {
@@ -1808,6 +1867,18 @@ mod tests {
                     stale: false,
                     generated: false,
                 }],
+                ask_candidate_chunks: Some(vec![RankedChunkEvidence {
+                    chunk_id: "chunk-a".into(),
+                    file_id: "file-a".into(),
+                    score: 0.9,
+                    token_count: 2,
+                    source_id: "source-a".into(),
+                    provenance_kind: "textLines".into(),
+                    unavailable: false,
+                    stale: false,
+                    generated: false,
+                }]),
+                ask_score_domain: Some(ProductionScoreDomain::DenseSimilarity),
                 strongest_score: Some(0.9),
                 effective_minimum_score: 0.88,
                 offline_citations: vec![CitationObservation {
@@ -1833,6 +1904,8 @@ mod tests {
                     stale: false,
                     generated: false,
                 }],
+                ask_candidate_chunks: Some(Vec::new()),
+                ask_score_domain: Some(ProductionScoreDomain::DenseSimilarity),
                 strongest_score: Some(0.7),
                 effective_minimum_score: 0.84,
                 offline_citations: Vec::new(),
@@ -2023,6 +2096,66 @@ mod tests {
                 identity("macos-aarch64"),
                 true,
                 below_threshold
+            ),
+            Err(ProductionEvaluationError::InvalidObservation(_))
+        ));
+    }
+
+    #[test]
+    fn hybrid_ask_ranked_evidence_uses_rank_scores_without_a_dense_similarity_floor() {
+        let mut corpus = corpus();
+        let mut other = corpus.documents[0].clone();
+        other.id = "file-b".into();
+        other.source_id = "source-b".into();
+        other.chunks[0].id = "chunk-b".into();
+        corpus.documents.push(other);
+
+        let mut observations = observations();
+        let positive = &mut observations[0];
+        positive.ask_score_domain = Some(ProductionScoreDomain::HybridRank);
+        let ask_candidates = positive.ask_candidate_chunks.as_mut().unwrap();
+        let mut first = ask_candidates[0].clone();
+        first.chunk_id = "chunk-b".into();
+        first.file_id = "file-b".into();
+        first.source_id = "source-b".into();
+        first.score = 1.0;
+        ask_candidates[0].score = 0.5;
+        ask_candidates.insert(0, first);
+        positive.ranked_chunks[0].score = 0.5;
+
+        assert!(
+            ProductionTargetMeasurement::new(
+                &corpus,
+                identity("macos-aarch64"),
+                true,
+                observations.clone()
+            )
+            .is_ok()
+        );
+        observations[0].ask_candidate_chunks.as_mut().unwrap()[1].score = 0.9;
+        assert!(matches!(
+            ProductionTargetMeasurement::new(
+                &corpus,
+                identity("macos-aarch64"),
+                true,
+                observations
+            ),
+            Err(ProductionEvaluationError::InvalidObservation(_))
+        ));
+    }
+
+    #[test]
+    fn dense_ask_candidates_must_match_the_raw_dense_search() {
+        let corpus = corpus();
+        let mut observations = observations();
+        observations[0].ask_candidate_chunks.as_mut().unwrap()[0].score = 0.95;
+        observations[0].ranked_chunks[0].score = 0.95;
+        assert!(matches!(
+            ProductionTargetMeasurement::new(
+                &corpus,
+                identity("macos-aarch64"),
+                true,
+                observations
             ),
             Err(ProductionEvaluationError::InvalidObservation(_))
         ));
@@ -2487,6 +2620,7 @@ mod tests {
         evidence[1].ranked_file_ids = vec!["file-a".into()];
         evidence[1].ranked_chunks = evidence[0].ranked_chunks.clone();
         evidence[1].candidate_chunks = evidence[0].candidate_chunks.clone();
+        evidence[1].ask_candidate_chunks = evidence[0].ask_candidate_chunks.clone();
         evidence[1].strongest_score = Some(0.9);
         evidence[1].effective_minimum_score = 0.88;
         let measurement =

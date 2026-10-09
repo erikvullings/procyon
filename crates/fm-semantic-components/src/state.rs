@@ -470,6 +470,22 @@ impl SemanticState {
         Ok(())
     }
 
+    pub(crate) fn activate_fresh_library_model(
+        &mut self,
+        profile: SemanticProfile,
+        identity: ModelIdentity,
+        index_schema_version: u32,
+    ) -> Result<(), SemanticStateError> {
+        if index_schema_version == 0 {
+            return Err(SemanticStateError::InvalidIndexSchemaVersion);
+        }
+        let plan = self.plan_model_migration(profile, identity, ReindexEstimate::new(0, 0))?;
+        self.begin_model_migration(plan.confirm())?;
+        self.complete_model_migration()?;
+        self.active_index_schema_version = Some(index_schema_version);
+        Ok(())
+    }
+
     /// Returns installed component records.
     #[must_use]
     pub fn installed_components(&self) -> &[InstalledComponent] {
@@ -504,7 +520,11 @@ impl SemanticState {
             .iter()
             .chain(&self.retained_models)
             .find(|component| {
-                matches!(component.kind(), ArtifactKind::Model(model) if model == identity)
+                matches!(
+                    component.kind(),
+                    ArtifactKind::Model(model) | ArtifactKind::OriginalModel(model)
+                        if model == identity
+                )
             })
     }
 
@@ -638,7 +658,12 @@ impl SemanticState {
                 } else {
                     self.last_working_workers.push(previous);
                 }
-            } else if matches!(kind, ArtifactKind::Model(_)) {
+            } else if matches!(
+                kind,
+                ArtifactKind::Model(_)
+                    | ArtifactKind::OriginalModel(_)
+                    | ArtifactKind::ModelFile(_)
+            ) {
                 if let Some(existing) = self
                     .retained_models
                     .iter_mut()
@@ -735,7 +760,9 @@ impl SemanticState {
                 return Err(SemanticStateError::InvalidPersistedState);
             }
             let category = match component.kind() {
-                ArtifactKind::Model(_) => DataCategory::Models,
+                ArtifactKind::Model(_)
+                | ArtifactKind::OriginalModel(_)
+                | ArtifactKind::ModelFile(_) => DataCategory::Models,
                 ArtifactKind::Worker | ArtifactKind::Runtime => DataCategory::Workers,
             };
             validate_component_path(
@@ -759,10 +786,14 @@ impl SemanticState {
         }
         let mut retained_models = BTreeMap::new();
         for component in &self.retained_models {
-            if !matches!(component.kind, ArtifactKind::Model(_))
-                || retained_models
-                    .insert(component.component_id(), component.artifact_id())
-                    .is_some()
+            if !matches!(
+                component.kind,
+                ArtifactKind::Model(_)
+                    | ArtifactKind::OriginalModel(_)
+                    | ArtifactKind::ModelFile(_)
+            ) || retained_models
+                .insert(component.component_id(), component.artifact_id())
+                .is_some()
             {
                 return Err(SemanticStateError::InvalidPersistedState);
             }
@@ -1262,6 +1293,9 @@ pub enum SemanticStateError {
     /// Replacing an active embedding space requires an explicit migration.
     #[error("an active embedding space can only be replaced by a model migration")]
     ModelMigrationRequired,
+    /// An empty library cannot activate a model whose package is not installed.
+    #[error("the fresh library model is not installed")]
+    FreshLibraryModelNotInstalled,
     /// Replacing an active index schema requires an explicit migration.
     #[error(
         "active index schema {active_version} can only be replaced by an explicit migration to {offered_version}"

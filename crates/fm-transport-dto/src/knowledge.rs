@@ -59,6 +59,19 @@ pub enum KnowledgeRetrievalModeDto {
     Semantic,
 }
 
+/// Text prompt used to embed dense queries against indexed documents.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum KnowledgeQueryIntentDto {
+    /// Ordinary document search.
+    #[default]
+    Search,
+    /// Question answering over document evidence.
+    QuestionAnswering,
+    /// Natural-language code search.
+    CodeRetrieval,
+}
+
 /// Physical route actually used by one retrieval.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -496,6 +509,9 @@ pub struct PlanKnowledgeSearchRequestDto {
     /// Requested retrieval mode.
     #[serde(default)]
     pub mode: KnowledgeRetrievalModeDto,
+    /// Model prompt for dense queries; independent of the retrieval method.
+    #[serde(default)]
+    pub intent: KnowledgeQueryIntentDto,
     /// Optional bounded option overrides.
     #[serde(default)]
     pub options: Option<KnowledgeSearchOptionsDto>,
@@ -514,6 +530,9 @@ pub struct ExecuteKnowledgeSearchRequestDto {
     /// Requested retrieval mode.
     #[serde(default)]
     pub mode: KnowledgeRetrievalModeDto,
+    /// Model prompt for dense queries; independent of the retrieval method.
+    #[serde(default)]
+    pub intent: KnowledgeQueryIntentDto,
     /// Optional bounded option overrides.
     #[serde(default)]
     pub options: Option<KnowledgeSearchOptionsDto>,

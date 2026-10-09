@@ -5,8 +5,8 @@ use std::collections::BTreeSet;
 use fm_domain::Location;
 use fm_semantic_library::{
     EligibilityCandidate, EligibilityDecision, EligibilityEntryKind, EligibilityOverride,
-    EligibilityPolicy, EligibilityReason, EligibilityReasonCounts, ResourceBudgets, ResourceUsage,
-    symlink_target_is_confined,
+    EligibilityPolicy, EligibilityReason, EligibilityReasonCounts, GemmaMediaSelection,
+    ResourceBudgets, ResourceUsage, symlink_target_is_confined,
 };
 
 fn location(uri: &str) -> Location {
@@ -86,6 +86,50 @@ fn curated_defaults_report_aggregatable_reasons_without_input_order_assumptions(
     );
     assert_eq!(counts.get(EligibilityReason::BuildDirectory), 1);
     assert_eq!(counts.get(EligibilityReason::OverBudget), 1);
+}
+
+#[test]
+fn gemma_media_eligibility_respects_each_creation_time_choice() {
+    let root = location("file:///repo");
+    let candidate = |mime: &str| EligibilityCandidate {
+        location: location("file:///repo/media"),
+        kind: EligibilityEntryKind::File,
+        hidden: false,
+        system: false,
+        application_or_package_bundle: false,
+        git_ignored: false,
+        mime_type: Some(mime.to_owned()),
+        source_bytes: 10,
+        estimated_extracted_bytes: 10,
+        estimated_vector_bytes: 100,
+        symlink_target: None,
+    };
+    let selected = EligibilityPolicy::curated_defaults().with_gemma_media(GemmaMediaSelection {
+        images: false,
+        audio: true,
+        video: true,
+    });
+    let check = |policy: &EligibilityPolicy, mime| {
+        policy
+            .evaluate(
+                &root,
+                &candidate(mime),
+                &ResourceBudgets::default(),
+                ResourceUsage::default(),
+                &Default::default(),
+            )
+            .unwrap()
+    };
+    assert_eq!(check(&selected, "audio/wav"), EligibilityDecision::Eligible);
+    assert_eq!(check(&selected, "video/mp4"), EligibilityDecision::Eligible);
+    assert!(matches!(
+        check(&selected, "image/png"),
+        EligibilityDecision::Skipped(reasons) if reasons.contains(&EligibilityReason::UnsupportedMime)
+    ));
+    assert!(matches!(
+        check(&EligibilityPolicy::curated_defaults(), "audio/wav"),
+        EligibilityDecision::Skipped(reasons) if reasons.contains(&EligibilityReason::UnsupportedMime)
+    ));
 }
 
 #[test]

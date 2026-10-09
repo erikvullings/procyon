@@ -433,6 +433,7 @@ const fn semantic_profile_to_dto(profile: SemanticProfile) -> SemanticProfileDto
         SemanticProfile::CompactMultilingual => SemanticProfileDto::CompactMultilingual,
         SemanticProfile::CompactEnglish => SemanticProfileDto::CompactEnglish,
         SemanticProfile::MultilingualQuality => SemanticProfileDto::MultilingualQuality,
+        SemanticProfile::EmbeddingGemma2 => SemanticProfileDto::EmbeddingGemma2,
     }
 }
 
@@ -441,6 +442,7 @@ const fn semantic_profile_from_dto(profile: SemanticProfileDto) -> SemanticProfi
         SemanticProfileDto::CompactMultilingual => SemanticProfile::CompactMultilingual,
         SemanticProfileDto::CompactEnglish => SemanticProfile::CompactEnglish,
         SemanticProfileDto::MultilingualQuality => SemanticProfile::MultilingualQuality,
+        SemanticProfileDto::EmbeddingGemma2 => SemanticProfile::EmbeddingGemma2,
     }
 }
 

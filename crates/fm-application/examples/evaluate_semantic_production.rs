@@ -17,16 +17,17 @@ use fm_application::semantic::{
 use fm_application::semantic_production_evaluation::{
     CitationObservation, CorpusScope, CorpusSource, ProductionArtifactIdentity,
     ProductionCandidateIdentity, ProductionCaseObservation, ProductionEvaluationCorpus,
-    ProductionEvaluationReport, ProductionTargetMeasurement, RankedChunkEvidence,
-    RetrievalPolicyIdentity,
+    ProductionEvaluationReport, ProductionScoreDomain, ProductionTargetMeasurement,
+    RankedChunkEvidence, RetrievalPolicyIdentity,
 };
 use fm_semantic_components::{
-    PRODUCTION_MODEL_COMPONENT_ID, PRODUCTION_WORKER_COMPONENT_ID,
-    PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID, ProductionCatalogManifest, verify_production_payloads,
+    PRODUCTION_MODEL_COMPONENT_ID, PRODUCTION_ONNX_RUNTIME_COMPONENT_ID,
+    PRODUCTION_WORKER_COMPONENT_ID, PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID,
+    ProductionCatalogManifest, verify_production_payloads,
 };
 use fm_semantic_conversion::{ChunkProvenance, Provenance};
 use fm_semantic_worker::rag_retrieval::{
-    RagContext, RagRetrievalPolicy, RagRetrievalRequest, RagSourceRestriction,
+    RagContext, RagContextChunk, RagRetrievalPolicy, RagRetrievalRequest, RagSourceRestriction,
 };
 use fm_semantic_worker::semantic_search::SemanticEvidence;
 use fm_semantic_worker::semantic_storage::QueryFilters;
@@ -249,10 +250,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             policy,
         };
         let cancellation = CancellationToken::new();
+        let ask_score_domain = if capability
+            .knowledge_capabilities()
+            .await
+            .is_ok_and(|capabilities| capabilities.full_text)
+        {
+            ProductionScoreDomain::HybridRank
+        } else {
+            ProductionScoreDomain::DenseSimilarity
+        };
         let candidates = rag
             .retrieve_candidates(request.clone(), &cancellation)
             .await?;
-        let context = rag.pack_candidates(request, candidates).await?;
+        let context = rag.pack_candidates(request, candidates.clone()).await?;
         let mut raw = Vec::new();
         for result in results {
             let document_id = result.document_id.as_str().to_owned();
@@ -290,6 +300,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &corpus,
             case,
             &raw,
+            AskCandidateEvidence {
+                chunks: &candidates,
+                score_domain: ask_score_domain,
+            },
             &context,
             scenario_exercised,
             policy,
@@ -349,6 +363,15 @@ fn artifact_identities(manifest: &ProductionCatalogManifest) -> Vec<ProductionAr
         .catalog()
         .artifacts()
         .iter()
+        .filter(|artifact| {
+            matches!(
+                artifact.component_id().as_str(),
+                PRODUCTION_MODEL_COMPONENT_ID
+                    | PRODUCTION_WORKER_COMPONENT_ID
+                    | PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID
+                    | PRODUCTION_ONNX_RUNTIME_COMPONENT_ID
+            )
+        })
         .map(|artifact| ProductionArtifactIdentity {
             component_id: artifact.component_id().as_str().into(),
             artifact_id: artifact.id().as_str().into(),
@@ -416,10 +439,16 @@ fn semantic_scope(tenant: &str) -> SemanticScope {
     SemanticScope::new(TenantId::new(tenant), LibraryId::new(LIBRARY))
 }
 
+struct AskCandidateEvidence<'a> {
+    chunks: &'a [RagContextChunk],
+    score_domain: ProductionScoreDomain,
+}
+
 fn observation(
     corpus: &ProductionEvaluationCorpus,
     case: &fm_application::semantic_evaluation::EvaluationCase,
     results: &[(String, Vec<SemanticEvidence>)],
+    ask_candidates: AskCandidateEvidence<'_>,
     context: &RagContext,
     production_scenario_exercised: bool,
     policy: RagRetrievalPolicy,
@@ -445,35 +474,23 @@ fn observation(
         .collect::<Vec<_>>();
     let strongest = eligible_scores.iter().copied().max_by(f32::total_cmp);
     let effective = policy.effective_minimum_score(eligible_scores);
+    let ask_candidate_chunks = ask_candidates
+        .chunks
+        .iter()
+        .filter(|chunk| !chunk.adjacent)
+        .map(|chunk| ranked_context_evidence(corpus, chunk))
+        .collect::<Result<Vec<_>, _>>()?;
     let mut ranked_file_ids = Vec::new();
     let mut ranked_chunks = Vec::new();
     for chunk in &context.chunks {
         if chunk.adjacent {
             continue;
         }
-        let evidence = &chunk.evidence;
-        let labelled = corpus
-            .chunk_at(&evidence.document_id, evidence.source_position)
-            .ok_or_else(|| {
-                format!(
-                    "packed production chunk `{}` position {} has no corpus label",
-                    evidence.document_id, evidence.source_position
-                )
-            })?;
-        if !ranked_file_ids.contains(&evidence.document_id) {
-            ranked_file_ids.push(evidence.document_id.clone());
+        let ranked = ranked_context_evidence(corpus, chunk)?;
+        if !ranked_file_ids.contains(&ranked.file_id) {
+            ranked_file_ids.push(ranked.file_id.clone());
         }
-        ranked_chunks.push(RankedChunkEvidence {
-            chunk_id: labelled.id.clone(),
-            file_id: evidence.document_id.clone(),
-            score: f64::from(chunk.score),
-            token_count: evidence.token_count,
-            source_id: evidence.source_id.clone(),
-            provenance_kind: provenance_kind_from_json(&evidence.provenance)?,
-            unavailable: !evidence.available,
-            stale: chunk.stale,
-            generated: evidence.generated,
-        });
+        ranked_chunks.push(ranked);
     }
     let offline_citations = if case.expected_no_answer {
         Vec::new()
@@ -494,11 +511,39 @@ fn observation(
         ranked_file_ids,
         ranked_chunks,
         candidate_chunks,
+        ask_candidate_chunks: Some(ask_candidate_chunks),
+        ask_score_domain: Some(ask_candidates.score_domain),
         strongest_score: strongest.map(f64::from),
         effective_minimum_score: f64::from(effective),
         offline_citations,
         grounded_answer_citations: None,
         production_scenario_exercised,
+    })
+}
+
+fn ranked_context_evidence(
+    corpus: &ProductionEvaluationCorpus,
+    chunk: &RagContextChunk,
+) -> Result<RankedChunkEvidence, Box<dyn std::error::Error>> {
+    let evidence = &chunk.evidence;
+    let labelled = corpus
+        .chunk_at(&evidence.document_id, evidence.source_position)
+        .ok_or_else(|| {
+            format!(
+                "production Ask chunk `{}` position {} has no corpus label",
+                evidence.document_id, evidence.source_position
+            )
+        })?;
+    Ok(RankedChunkEvidence {
+        chunk_id: labelled.id.clone(),
+        file_id: evidence.document_id.clone(),
+        score: f64::from(chunk.score),
+        token_count: evidence.token_count,
+        source_id: evidence.source_id.clone(),
+        provenance_kind: provenance_kind_from_json(&evidence.provenance)?,
+        unavailable: !evidence.available,
+        stale: chunk.stale,
+        generated: evidence.generated,
     })
 }
 
@@ -556,6 +601,7 @@ fn provenance_kind(provenance: &ChunkProvenance) -> &'static str {
         Provenance::Slide { .. } => "slide",
         Provenance::SpreadsheetRange { .. } => "spreadsheetRange",
         Provenance::DocxBlock { .. } => "docxBlock",
+        Provenance::Media { .. } => "media",
         Provenance::EpubText { .. } => "epubText",
     }
 }

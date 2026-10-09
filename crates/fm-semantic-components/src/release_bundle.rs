@@ -2,7 +2,8 @@
 //!
 //! A production release bundle contains the semantic worker executable, the
 //! native Zvec runtime, the pinned multilingual-E5 model package, and any
-//! target-specific native inference loader required by that worker. Unlike the
+//! target-specific native inference loader required by that worker. An opt-in
+//! builder can also append unprofiled original EmbeddingGemma 2 files. Unlike the
 //! developer bundle, it never packs the deterministic token-hashing fixture
 //! and every model pack member is verified against its exact known byte length
 //! and SHA-256 before it is packed.
@@ -14,6 +15,7 @@
 //! signing key is never exposed to the (much larger, less audited) packaging
 //! surface exercised here.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -129,6 +131,69 @@ const PRODUCTION_MODEL_FILES: [PinnedModelFile; 5] = [
         sha256: "d05497f1da52c5e09554c0cd874037a083e1dc1b9cfd48034d1c717f1afc07a7",
     },
 ];
+
+const GEMMA_SOURCE_URL: &str = "https://huggingface.co/google/embeddinggemma-2";
+const GEMMA_REVISION: &str = "914f7f89142e33e77833254d9c9b90c3cef7303b";
+const GEMMA_MODEL_ID: &str = "google-embeddinggemma-2";
+/// Original files consumed by the native loader, not Python SentenceTransformers wrappers.
+const GEMMA_MODEL_FILES: [PinnedModelFile; 5] = [
+    PinnedModelFile {
+        name: "model.safetensors",
+        bytes: 1_488_915_288,
+        sha256: "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79",
+    },
+    PinnedModelFile {
+        name: "tokenizer.json",
+        bytes: 32_170_510,
+        sha256: "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4",
+    },
+    PinnedModelFile {
+        name: "config.json",
+        bytes: 4_455,
+        sha256: "b8f1e9931b57fbc054acdb445c41765d55b0074c58d145fa82839941ad1b5bb3",
+    },
+    PinnedModelFile {
+        name: "processor_config.json",
+        bytes: 1_788,
+        sha256: "168f6a08522f3ce5dea596d94d003af2fd691742d4f41fe1f9d8cce76bfbf69c",
+    },
+    PinnedModelFile {
+        name: "preprocessor_config.json",
+        bytes: 511,
+        sha256: "ea2ae257e901064abdd98dceb19f2b0da06af600bed15e0f99f5c85c37ee9d78",
+    },
+];
+
+/// One verified original EmbeddingGemma 2 file for local bundle assembly.
+pub struct VerifiedGemmaOriginalFile {
+    /// Upstream filename, used by the native loader.
+    pub name: &'static str,
+    /// Exact pinned byte length.
+    pub bytes: u64,
+    /// Exact pinned SHA-256 digest.
+    pub checksum: Sha256Digest,
+}
+
+/// Verifies the five native Gemma inputs against the pinned upstream revision.
+///
+/// # Errors
+///
+/// Returns an error if a file is missing, changed, or not a regular file.
+pub fn verify_gemma_original_files(
+    directory: &Path,
+) -> Result<Vec<VerifiedGemmaOriginalFile>, ProductionBundleError> {
+    GEMMA_MODEL_FILES
+        .iter()
+        .map(|file| {
+            verify_original_file(directory, file)?;
+            Ok(VerifiedGemmaOriginalFile {
+                name: file.name,
+                bytes: file.bytes,
+                checksum: digest_of(&directory.join(file.name))?,
+            })
+        })
+        .collect()
+}
 
 /// Explicit inputs to one production semantic release bundle build.
 ///
@@ -262,12 +327,39 @@ impl From<io::Error> for ProductionBundleError {
 pub fn build_production_release_bundle(
     spec: &ProductionBundleSpec,
 ) -> Result<ProductionCatalogManifest, ProductionBundleError> {
-    build_bundle(spec, &PRODUCTION_MODEL_FILES)
+    build_production_release_bundle_with_optional_gemma(spec, None)
 }
 
+/// Builds the E5 bundle with optional, unprofiled original Gemma files.
+/// The Gemma records cannot change the E5 pipeline or any production profile.
+///
+/// # Errors
+///
+/// Returns a model-cache mismatch for any missing, unsafe, or unpinned
+/// original file, or an ordinary production bundle error.
+pub fn build_production_release_bundle_with_optional_gemma(
+    spec: &ProductionBundleSpec,
+    gemma_cache_directory: Option<&Path>,
+) -> Result<ProductionCatalogManifest, ProductionBundleError> {
+    build_bundle_with_optional_gemma(
+        spec,
+        &PRODUCTION_MODEL_FILES,
+        gemma_cache_directory.map(|directory| (directory, GEMMA_MODEL_FILES.as_slice())),
+    )
+}
+
+#[cfg(test)]
 fn build_bundle(
     spec: &ProductionBundleSpec,
     pinned_files: &[PinnedModelFile],
+) -> Result<ProductionCatalogManifest, ProductionBundleError> {
+    build_bundle_with_optional_gemma(spec, pinned_files, None)
+}
+
+fn build_bundle_with_optional_gemma(
+    spec: &ProductionBundleSpec,
+    pinned_files: &[PinnedModelFile],
+    gemma: Option<(&Path, &[PinnedModelFile])>,
 ) -> Result<ProductionCatalogManifest, ProductionBundleError> {
     let target = supported_target(&spec.target_operating_system, &spec.target_architecture)?;
     let target_label = format!("{}-{}", target.operating_system(), target.architecture());
@@ -318,6 +410,11 @@ fn build_bundle(
         (false, None) => None,
     };
     verify_model_cache(&spec.model_cache_directory, pinned_files)?;
+    if let Some((directory, files)) = gemma {
+        for file in files {
+            verify_original_file(directory, file)?;
+        }
+    }
 
     let staging = spec.output_directory.with_extension("building");
     remove_existing(&staging)?;
@@ -463,7 +560,7 @@ fn build_bundle(
     )?;
     let runtime_artifact = CatalogArtifact::new(
         runtime_id.clone(),
-        runtime_component,
+        runtime_component.clone(),
         ArtifactKind::Runtime,
         runtime_version,
         distribution_location(&spec.release_base_url, &runtime_id)?,
@@ -525,8 +622,9 @@ fn build_bundle(
         ),
     )?;
     let model_manifest = ModelManifest::new(model_id.clone(), model_metadata);
-    let profiles = SemanticProfile::all()
+    let mut profiles: BTreeMap<_, _> = SemanticProfile::all()
         .iter()
+        .filter(|profile| **profile != SemanticProfile::EmbeddingGemma2)
         .map(|profile| (*profile, model_identity.clone()))
         .collect();
 
@@ -536,6 +634,18 @@ fn build_bundle(
         revision_checksums.push(*checksum);
     }
     revision_checksums.push(model_checksum);
+    let mut gemma_records = None;
+    if let Some((directory, files)) = gemma {
+        let records = append_optional_gemma(
+            &staging,
+            &spec.release_base_url,
+            &runtime_component,
+            directory,
+            files,
+        )?;
+        revision_checksums.extend(&records.3);
+        gemma_records = Some(records);
+    }
     for checksum in revision_checksums {
         revision_material.extend_from_slice(checksum.as_bytes());
     }
@@ -545,6 +655,15 @@ fn build_bundle(
         artifacts.push(artifact);
     }
     artifacts.push(model_artifact);
+    let mut models = vec![model_manifest];
+    if let Some((extra_artifacts, extra_model, _, _)) = &gemma_records {
+        profiles.insert(
+            SemanticProfile::EmbeddingGemma2,
+            extra_model.metadata().identity().clone(),
+        );
+        artifacts.extend(extra_artifacts.iter().cloned());
+        models.push(extra_model.clone());
+    }
     let catalog = CatalogManifest::new(
         ManifestRevision::new(format!(
             "procyon-{target_label}-{}-{}",
@@ -552,7 +671,7 @@ fn build_bundle(
             digest_prefix(revision_checksum)
         ))?,
         artifacts,
-        vec![model_manifest],
+        models,
         profiles,
     )?;
 
@@ -589,6 +708,9 @@ fn build_bundle(
         ArtifactLocation::new(PRODUCTION_MODEL_SOURCE_URL)?,
         ManifestRevision::new(PRODUCTION_MODEL_REVISION)?,
     ));
+    if let Some((_, _, extra_provenance, _)) = gemma_records {
+        provenance.extend(extra_provenance);
+    }
     let manifest = ProductionCatalogManifest::new(catalog, pipeline, provenance)?;
 
     fs::write(
@@ -599,6 +721,133 @@ fn build_bundle(
     remove_existing(&spec.output_directory)?;
     fs::rename(&staging, &spec.output_directory)?;
     Ok(manifest)
+}
+
+type OptionalModelRecords = (
+    Vec<CatalogArtifact>,
+    ModelManifest,
+    Vec<ProductionArtifactProvenance>,
+    Vec<Sha256Digest>,
+);
+
+fn verify_original_file(
+    directory: &Path,
+    file: &PinnedModelFile,
+) -> Result<(), ProductionBundleError> {
+    let path = directory.join(file.name);
+    let metadata = fs::symlink_metadata(&path)
+        .map_err(|_| ProductionBundleError::ModelCacheMemberMissing { name: file.name })?;
+    if !metadata.file_type().is_file() || metadata.len() != file.bytes {
+        return Err(ProductionBundleError::ModelCacheMemberMismatch { name: file.name });
+    }
+    let expected = parse_sha256(file.sha256)
+        .ok_or(ProductionBundleError::ModelCacheMemberMismatch { name: file.name })?;
+    if digest_of(&path)?.as_bytes() != &expected {
+        return Err(ProductionBundleError::ModelCacheMemberMismatch { name: file.name });
+    }
+    Ok(())
+}
+
+fn append_optional_gemma(
+    staging: &Path,
+    base_url: &ArtifactLocation,
+    runtime_component: &ComponentId,
+    directory: &Path,
+    files: &[PinnedModelFile],
+) -> Result<OptionalModelRecords, ProductionBundleError> {
+    let identity = ModelIdentity::new(
+        ModelId::new(GEMMA_MODEL_ID)?,
+        ModelRevision::new(GEMMA_REVISION)?,
+    );
+    let license = LicenseInfo::new(
+        "Apache-2.0",
+        "Original google/embeddinggemma-2 files, unmodified, at the pinned Hugging Face revision.",
+    )?;
+    let runtime = RuntimeCompatibility::new(
+        runtime_component.clone(),
+        VersionReq::parse(&format!("={PRODUCTION_ZVEC_VERSION}"))
+            .expect("pinned Zvec version literal is a valid requirement"),
+    );
+    let version = Version::new(1, 0, 0);
+    let source = ArtifactLocation::new(GEMMA_SOURCE_URL)?;
+    let revision = ManifestRevision::new(GEMMA_REVISION)?;
+    let mut artifacts = Vec::with_capacity(files.len());
+    let mut provenance = Vec::with_capacity(files.len());
+    let mut checksums = Vec::with_capacity(files.len());
+    let mut additional = BTreeMap::new();
+    let mut primary = None;
+    let mut disk_bytes = 0_u64;
+    // Provisional disclosure estimate, not CPU qualification.
+    const GEMMA_RAM_ESTIMATE: u64 = 8 * 1024 * 1024 * 1024;
+    for (index, file) in files.iter().enumerate() {
+        let is_primary = file.name == "model.safetensors";
+        let component = ComponentId::new(if is_primary {
+            "embeddinggemma2-original".to_owned()
+        } else {
+            format!("embeddinggemma2-file-{index}")
+        })?;
+        let source_path = directory.join(file.name);
+        let checksum = digest_of(&source_path)?;
+        let expected = parse_sha256(file.sha256)
+            .ok_or(ProductionBundleError::ModelCacheMemberMismatch { name: file.name })?;
+        if fs::metadata(&source_path)?.len() != file.bytes || checksum.as_bytes() != &expected {
+            return Err(ProductionBundleError::ModelCacheMemberMismatch { name: file.name });
+        }
+        let id = production_artifact_id(&component, None, &version, checksum)?;
+        let destination = staging.join("artifacts").join(id.as_str());
+        fs::copy(&source_path, &destination)?;
+        if fs::metadata(&destination)?.len() != file.bytes || digest_of(&destination)? != checksum {
+            return Err(ProductionBundleError::ModelCacheMemberMismatch { name: file.name });
+        }
+        let kind = if is_primary {
+            primary = Some(id.clone());
+            ArtifactKind::OriginalModel(identity.clone())
+        } else {
+            additional.insert(file.name.to_owned(), id.clone());
+            ArtifactKind::ModelFile(identity.clone())
+        };
+        disk_bytes = disk_bytes
+            .checked_add(file.bytes)
+            .ok_or(CatalogError::InvalidResourceEstimate)?;
+        artifacts.push(CatalogArtifact::new(
+            id.clone(),
+            component,
+            kind,
+            version.clone(),
+            distribution_location(base_url, &id)?,
+            license.clone(),
+            checksum,
+            ComponentResources::new(
+                file.bytes,
+                file.bytes,
+                if is_primary { GEMMA_RAM_ESTIMATE } else { 1 },
+            )?,
+            ArtifactCompatibility::new(None, None, vec![runtime.clone()], INDEX_SCHEMA_VERSION),
+        )?);
+        provenance.push(ProductionArtifactProvenance::new(
+            id,
+            source.clone(),
+            revision.clone(),
+        ));
+        checksums.push(checksum);
+    }
+    let primary = primary.ok_or(ProductionBundleError::ModelCacheMemberMissing {
+        name: "model.safetensors",
+    })?;
+    let metadata = ModelMetadata::new(
+        identity,
+        license,
+        TokenizerId::new("embeddinggemma-2-tokenizer")?,
+        768,
+        EmbeddingNormalization::UnitLength,
+        runtime,
+        PRODUCTION_MODEL_LANGUAGES,
+        disk_bytes,
+        GEMMA_RAM_ESTIMATE,
+    )?;
+    let model =
+        ModelManifest::new(primary, metadata).with_original_files("model.safetensors", additional);
+    Ok((artifacts, model, provenance, checksums))
 }
 
 /// Procyon's own release version: the packer binary's compiled-in
@@ -771,6 +1020,235 @@ fn preserve_executable_permissions(source: &Path, destination: &Path) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const FIXTURE_GEMMA_FILES: [PinnedModelFile; 5] = [
+        PinnedModelFile {
+            name: "model.safetensors",
+            bytes: 20,
+            sha256: "884044ade81696294f79f7c74594fd8cf652973319506d867a2113a9f51e52ff",
+        },
+        PinnedModelFile {
+            name: "tokenizer.json",
+            bytes: 23,
+            sha256: "6a48c29796788f90f7eb50a8c2dbb60de3a6f4aaa80accf580317b5973cf6749",
+        },
+        PinnedModelFile {
+            name: "config.json",
+            bytes: 6,
+            sha256: "b79606fb3afea5bd1609ed40b622142f1c98125abcfe89a76a661b0e8e343910",
+        },
+        PinnedModelFile {
+            name: "processor_config.json",
+            bytes: 6,
+            sha256: "b79606fb3afea5bd1609ed40b622142f1c98125abcfe89a76a661b0e8e343910",
+        },
+        PinnedModelFile {
+            name: "preprocessor_config.json",
+            bytes: 6,
+            sha256: "b79606fb3afea5bd1609ed40b622142f1c98125abcfe89a76a661b0e8e343910",
+        },
+    ];
+
+    fn fixture_gemma_cache(directory: &Path) -> PathBuf {
+        let cache = directory.join("gemma-cache");
+        fs::create_dir_all(&cache).unwrap();
+        fs::write(cache.join("model.safetensors"), b"fixture-onnx-bytes-A").unwrap();
+        fs::write(cache.join("tokenizer.json"), b"fixture-tokenizer-bytes").unwrap();
+        for name in [
+            "config.json",
+            "processor_config.json",
+            "preprocessor_config.json",
+        ] {
+            fs::write(cache.join(name), b"config").unwrap();
+        }
+        cache
+    }
+
+    #[test]
+    fn optional_gemma_preserves_e5_pipeline_and_emits_original_signed_files() {
+        use ed25519_dalek::SigningKey;
+        let directory = tempfile::tempdir().unwrap();
+        let spec = base_spec(directory.path());
+        let cache = fixture_gemma_cache(directory.path());
+        let e5_only = build(&spec);
+        let manifest = build_bundle_with_optional_gemma(
+            &spec,
+            &FIXTURE_MODEL_FILES,
+            Some((&cache, &FIXTURE_GEMMA_FILES)),
+        )
+        .unwrap();
+        assert_ne!(manifest.catalog().revision(), e5_only.catalog().revision());
+        assert_eq!(
+            manifest.pipeline().model().model_id().as_str(),
+            PRODUCTION_MODEL_ID
+        );
+        let gemma = manifest
+            .catalog()
+            .models()
+            .iter()
+            .find(|model| model.primary_file_name() == Some("model.safetensors"))
+            .unwrap();
+        assert_eq!(gemma.files().len(), 4);
+        assert_eq!(gemma.metadata().estimated_disk_bytes(), 20 + 23 + 6 * 3);
+        for (name, id) in std::iter::once(("model.safetensors", gemma.artifact_id()))
+            .chain(gemma.files().iter().map(|(name, id)| (name.as_str(), id)))
+        {
+            let artifact = manifest
+                .catalog()
+                .artifacts()
+                .iter()
+                .find(|artifact| artifact.id() == id)
+                .unwrap();
+            let bytes =
+                fs::read(spec.output_directory.join("artifacts").join(id.as_str())).unwrap();
+            assert_eq!(bytes, fs::read(cache.join(name)).unwrap());
+            assert_eq!(artifact.checksum(), Sha256Digest::calculate(&bytes));
+            assert_eq!(artifact.resources().download_bytes(), bytes.len() as u64);
+            assert!(
+                matches!(
+                    artifact.kind(),
+                    ArtifactKind::OriginalModel(_) if name == "model.safetensors"
+                ) || matches!(
+                    artifact.kind(),
+                    ArtifactKind::ModelFile(_) if name != "model.safetensors"
+                )
+            );
+            assert_eq!(
+                manifest
+                    .provenance()
+                    .iter()
+                    .find(|record| record.artifact_id() == id)
+                    .unwrap()
+                    .source_revision()
+                    .as_str(),
+                GEMMA_REVISION
+            );
+        }
+        let key = SigningKey::from_bytes(&[0x42; 32]);
+        let trusted = crate::TrustedCatalog::verify_production(
+            crate::sign_production_catalog(manifest, &key).unwrap(),
+            &key.verifying_key(),
+        )
+        .unwrap();
+        assert_eq!(
+            trusted
+                .resolve_profile(SemanticProfile::EmbeddingGemma2)
+                .unwrap()
+                .model_id()
+                .as_str(),
+            GEMMA_MODEL_ID
+        );
+        for profile in SemanticProfile::all() {
+            if *profile == SemanticProfile::EmbeddingGemma2 {
+                continue;
+            }
+            assert_eq!(
+                trusted
+                    .resolve_profile(*profile)
+                    .unwrap()
+                    .model_id()
+                    .as_str(),
+                PRODUCTION_MODEL_ID
+            );
+        }
+    }
+
+    #[test]
+    fn optional_gemma_requires_every_pinned_original_before_replacing_output() {
+        let directory = tempfile::tempdir().unwrap();
+        let spec = base_spec(directory.path());
+        let cache = fixture_gemma_cache(directory.path());
+        let original = build(&spec);
+        let original_catalog = fs::read(spec.output_directory.join("catalog-input.json")).unwrap();
+
+        fs::remove_file(cache.join("processor_config.json")).unwrap();
+        assert!(matches!(
+            build_bundle_with_optional_gemma(
+                &spec,
+                &FIXTURE_MODEL_FILES,
+                Some((&cache, &FIXTURE_GEMMA_FILES))
+            ),
+            Err(ProductionBundleError::ModelCacheMemberMissing {
+                name: "processor_config.json"
+            })
+        ));
+        fs::write(cache.join("processor_config.json"), b"config").unwrap();
+        fs::write(cache.join("model.safetensors"), b"fixture-onnx-bytes-B").unwrap();
+        assert!(matches!(
+            build_bundle_with_optional_gemma(
+                &spec,
+                &FIXTURE_MODEL_FILES,
+                Some((&cache, &FIXTURE_GEMMA_FILES))
+            ),
+            Err(ProductionBundleError::ModelCacheMemberMismatch {
+                name: "model.safetensors"
+            })
+        ));
+        assert_eq!(
+            fs::read(spec.output_directory.join("catalog-input.json")).unwrap(),
+            original_catalog
+        );
+        assert_eq!(original.catalog().models().len(), 1);
+    }
+
+    #[test]
+    fn original_model_file_symlink_is_not_a_release_source() {
+        #[cfg(unix)]
+        {
+            let directory = tempfile::tempdir().unwrap();
+            let spec = base_spec(directory.path());
+            let cache = fixture_gemma_cache(directory.path());
+            let original = cache.join("tokenizer.json");
+            fs::rename(&original, cache.join("actual-tokenizer")).unwrap();
+            std::os::unix::fs::symlink(cache.join("actual-tokenizer"), original).unwrap();
+            assert!(matches!(
+                build_bundle_with_optional_gemma(
+                    &spec,
+                    &FIXTURE_MODEL_FILES,
+                    Some((&cache, &FIXTURE_GEMMA_FILES))
+                ),
+                Err(ProductionBundleError::ModelCacheMemberMismatch {
+                    name: "tokenizer.json"
+                })
+            ));
+            assert!(!spec.output_directory.exists());
+        }
+    }
+
+    #[test]
+    fn native_gemma_release_pins_only_required_flat_upstream_files() {
+        assert_eq!(GEMMA_REVISION, "914f7f89142e33e77833254d9c9b90c3cef7303b");
+        assert_eq!(
+            GEMMA_MODEL_FILES.map(|file| (file.name, file.bytes, file.sha256)),
+            [
+                (
+                    "model.safetensors",
+                    1_488_915_288,
+                    "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79"
+                ),
+                (
+                    "tokenizer.json",
+                    32_170_510,
+                    "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4"
+                ),
+                (
+                    "config.json",
+                    4_455,
+                    "b8f1e9931b57fbc054acdb445c41765d55b0074c58d145fa82839941ad1b5bb3"
+                ),
+                (
+                    "processor_config.json",
+                    1_788,
+                    "168f6a08522f3ce5dea596d94d003af2fd691742d4f41fe1f9d8cce76bfbf69c"
+                ),
+                (
+                    "preprocessor_config.json",
+                    511,
+                    "ea2ae257e901064abdd98dceb19f2b0da06af600bed15e0f99f5c85c37ee9d78"
+                ),
+            ]
+        );
+    }
 
     /// Tiny stand-in pinned member descriptors so tests never touch the real
     /// 465 MiB multilingual model. Byte lengths and digests below are exact
@@ -1077,7 +1555,7 @@ mod tests {
     }
 
     #[test]
-    fn every_abstract_profile_resolves_to_the_shipped_production_model_once_signed() {
+    fn e5_only_bundle_keeps_gemma_unavailable_once_signed() {
         use ed25519_dalek::SigningKey;
 
         let directory = tempfile::tempdir().unwrap();
@@ -1091,7 +1569,10 @@ mod tests {
             crate::TrustedCatalog::verify_production(signed, &signing_key.verifying_key()).unwrap();
 
         for profile in SemanticProfile::all() {
-            assert_eq!(trusted.resolve_profile(*profile), Some(&expected));
+            assert_eq!(
+                trusted.resolve_profile(*profile),
+                (*profile != SemanticProfile::EmbeddingGemma2).then_some(&expected)
+            );
         }
     }
 

@@ -281,7 +281,7 @@ impl KnowledgeAnswerCoordinator {
             // the scope is empty rather than revoked.
             return Err(KnowledgeAnswerError::EvidenceRevoked);
         }
-        if retained.rows.is_empty() {
+        if retained.rows.is_empty() && !intent.allow_model_knowledge {
             return Ok(KnowledgeAnswer {
                 evidence_fingerprint: evidence_fingerprint.to_owned(),
                 profile_id: intent.profile_id,
@@ -342,7 +342,7 @@ impl KnowledgeAnswerCoordinator {
             text,
             citations,
             model_knowledge_allowed: intent.allow_model_knowledge,
-            insufficient: false,
+            insufficient: retained.rows.is_empty(),
             withheld_unauthorized: retained.withheld,
             stale_evidence: retained.stale,
             unavailable_evidence: retained.unavailable,
@@ -430,8 +430,8 @@ fn build_prompts(
     let mut system = grounded_system_prompt(intent.allow_model_knowledge);
     system.push_str(&format!(
         " You are answering from an evidence set the user already inspected; never claim to have \
-         searched again, and never ask for another search. Answer the question field when present, \
-         using only the inspected evidence; otherwise address the subjects. Goal: {}. Depth: {}. Presentation: {}. \
+         searched again, and never ask for another search. Answer the question field when present; \
+         otherwise address the subjects. Goal: {}. Depth: {}. Presentation: {}. \
          Knowledge answer version: {KNOWLEDGE_ANSWER_PROMPT_VERSION}.",
         action_instruction(intent.request.action),
         depth_instruction(intent.request.depth),
@@ -692,6 +692,72 @@ mod tests {
             profile_id,
             allow_model_knowledge: false,
         }
+    }
+
+    #[test]
+    fn model_knowledge_opt_in_does_not_conflict_with_evidence_grounding() {
+        let request = KnowledgeAnswerIntent {
+            allow_model_knowledge: true,
+            ..intent(Uuid::new_v4(), "sha256:set")
+        };
+        let (system, _) =
+            build_prompts(&plan(), &[evidence(0, "source-a")], &request, false).unwrap();
+        assert!(system.contains("general model knowledge"));
+        assert!(!system.contains("using only the inspected evidence"));
+    }
+
+    #[tokio::test]
+    async fn opted_in_answer_can_use_model_knowledge_when_no_evidence_matches() {
+        let transport = Arc::new(RecordingTransport::new(
+            r#"{"answer":"Wind turbines convert kinetic energy to electricity [MODEL]."}"#,
+        ));
+        let fixture = fixture(transport).await;
+        let request = KnowledgeAnswerIntent {
+            allow_model_knowledge: true,
+            ..intent(fixture.profile_id, "sha256:empty")
+        };
+        let answer = KnowledgeAnswerCoordinator::default()
+            .generate(
+                InspectedKnowledgeEvidence {
+                    request_id: Uuid::new_v4(),
+                    fingerprint: "sha256:empty",
+                    plan: &plan(),
+                    evidence: Vec::new(),
+                },
+                &request,
+                &StaticKnowledgeAuthorizationRefresh(snapshot(&[])),
+                &fixture.profiles,
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(fixture.transport.generations().len(), 1);
+        assert!(answer.text.contains("[MODEL]"));
+        assert!(answer.citations.is_empty());
+        assert!(answer.insufficient);
+    }
+
+    #[tokio::test]
+    async fn empty_evidence_without_opt_in_does_not_contact_the_model() {
+        let transport = Arc::new(RecordingTransport::new("unused"));
+        let fixture = fixture(transport).await;
+        let answer = KnowledgeAnswerCoordinator::default()
+            .generate(
+                InspectedKnowledgeEvidence {
+                    request_id: Uuid::new_v4(),
+                    fingerprint: "sha256:empty",
+                    plan: &plan(),
+                    evidence: Vec::new(),
+                },
+                &intent(fixture.profile_id, "sha256:empty"),
+                &StaticKnowledgeAuthorizationRefresh(snapshot(&[])),
+                &fixture.profiles,
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert!(fixture.transport.generations().is_empty());
+        assert!(answer.insufficient);
     }
 
     #[tokio::test]

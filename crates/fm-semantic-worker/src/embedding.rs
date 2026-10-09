@@ -255,6 +255,8 @@ impl EmbeddingCacheKey {
             hasher.update((part.len() as u64).to_le_bytes());
             hasher.update(part.as_bytes());
         }
+        hasher.update((identity.dimensions as u64).to_le_bytes());
+        hasher.update((identity.max_input_tokens as u64).to_le_bytes());
         Self(hasher.finalize().into())
     }
 
@@ -537,6 +539,30 @@ mod tests {
         assert_ne!(
             base,
             EmbeddingCacheKey::calculate("body", &identity, "lowercase", "structural/3")
+        );
+        assert_ne!(
+            base,
+            EmbeddingCacheKey::calculate(
+                "body",
+                &EmbeddingModelIdentity {
+                    dimensions: 768,
+                    ..identity.clone()
+                },
+                EMBEDDING_PREPROCESSING_VERSION,
+                "structural/2",
+            )
+        );
+        assert_ne!(
+            base,
+            EmbeddingCacheKey::calculate(
+                "body",
+                &EmbeddingModelIdentity {
+                    max_input_tokens: 8_192,
+                    ..identity.clone()
+                },
+                EMBEDDING_PREPROCESSING_VERSION,
+                "structural/2",
+            )
         );
     }
 

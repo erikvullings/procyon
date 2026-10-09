@@ -339,8 +339,8 @@ textarea {
 }
 
 /*
- * Pinned by row number rather than left to auto-placement: the mac-only
- * titlebar spacer only exists in the DOM in Tauri overlay mode, and
+ * Pinned by row number rather than left to auto-placement: the Windows
+ * titlebar only exists in the DOM in Tauri Windows mode, and
  * mithril-materialized's ModalPanel-based dialogs (command palette, context
  * menu, create-directory, find-files, permanent-delete) always render an
  * always-present `.modal-container` wrapper regardless of open/closed state.
@@ -349,10 +349,6 @@ textarea {
  * present, which previously let the operation centre grab the workspace's
  * intended `minmax(0, 1fr)` track and balloon to fill the screen.
  */
-.fm-titlebar-spacer {
-  grid-row: 1;
-}
-
 .fm-workspace-toolbar {
   grid-row: 2;
 }
@@ -559,9 +555,51 @@ main.fm-workspace {
 
 .fm-semantic-library-management {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.5rem;
   min-width: 0;
   width: 100%;
+}
+
+.fm-semantic-library-management p,
+.fm-semantic-library-root p {
+  margin-block: 0.3rem;
+}
+
+.fm-semantic-library-details > summary,
+.fm-settings-semantic-tools > summary,
+.fm-semantic-model-switch > summary,
+.fm-semantic-status-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.fm-semantic-active-model {
+  margin-block: 0.35rem;
+}
+
+.fm-semantic-library-details {
+  margin-top: 0.3rem;
+}
+
+.fm-semantic-library-root-heading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.fm-semantic-library-location {
+  overflow-wrap: anywhere;
+}
+
+.fm-semantic-library-guidance {
+  color: var(--fm-text-muted);
+  max-width: 72ch;
+}
+
+.fm-settings-semantic-tools {
+  margin: 0.5rem 0.75rem;
 }
 
 .fm-semantic-ocr-management {
@@ -732,9 +770,20 @@ main.fm-workspace {
 }
 
 .fm-semantic-library-source-unavailable,
-.fm-semantic-library-error,
-.fm-semantic-library-estimate-warning {
+.fm-semantic-library-error {
   color: var(--fm-error);
+}
+
+.fm-semantic-folder-prompt .fm-semantic-library-plan {
+  border: 0;
+  padding: 0;
+}
+
+.fm-semantic-library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
 }
 
 .fm-semantic-library-confirmation {
@@ -834,28 +883,34 @@ main.fm-workspace {
   color: var(--fm-text);
 }
 
-/*
- * macOS overlay title bar (tauri.conf.json titleBarStyle: Overlay + hiddenTitle):
- * reserves a row, coloured the same as the toolbar, for the native traffic lights,
- * with our own centred title label -- the OS title is hidden since it doesn't
- * centre reliably without an NSToolbar attached.
- */
-.fm-titlebar-spacer {
-  display: none;
+/* The macOS overlay toolbar begins after the native traffic lights. Only its brand
+   and flexible empty space initiate window dragging; controls remain clickable. */
+.fm-app-shell[data-mac-titlebar-overlay="true"] .fm-workspace-toolbar {
+  height: 28px;
+  min-height: 28px;
+  padding-left: 80px;
+  --mm-control-height: 28px;
 }
 
-.fm-app-shell[data-mac-titlebar-overlay="true"] .fm-titlebar-spacer {
-  display: flex;
+.fm-app-shell[data-mac-titlebar-overlay="true"] .fm-toolbar-separator {
+  margin-inline: 0.25rem;
+}
+
+.fm-mac-toolbar-brand {
+  display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
-  justify-content: center;
-  height: 22px;
-  background: var(--fm-surface-elevated);
+  gap: 6px;
+  margin-right: 4px;
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-title);
+  font-weight: 700;
 }
 
-.fm-titlebar-label {
-  color: var(--fm-text-muted);
-  font-size: 1em;
-  font-weight: 700;
+.fm-mac-toolbar-icon {
+  width: 16px;
+  height: 16px;
+  transform: translateY(2px);
 }
 
 .fm-windows-titlebar {
@@ -1670,6 +1725,19 @@ main.fm-workspace {
 .fm-semantic-field select:focus {
   border-color: var(--fm-accent);
   outline: 1px solid var(--fm-accent);
+}
+
+.fm-semantic-gemma-setup > p,
+.fm-semantic-gemma-setup > .fm-semantic-field {
+  grid-column: 1 / -1;
+}
+
+:where(.fm-semantic-gemma-setup)
+  .fm-semantic-confirmation
+  input[type="checkbox"]
+  + span:not(.lever) {
+  height: auto;
+  min-height: 20px;
 }
 
 .fm-semantic-uninstall-options {
@@ -2601,6 +2669,22 @@ input[type="text"].fm-shortcuts-help-capture-input {
   color: var(--fm-text-muted);
 }
 
+.fm-knowledge-search-toolbar > .fm-knowledge-intent {
+  flex: 0 0 auto;
+  max-width: 8rem;
+  height: calc(var(--fm-row-height) - 4px);
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fm-text);
+  font: inherit;
+}
+
+.fm-knowledge-search-toolbar > .fm-knowledge-intent:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: -2px;
+}
+
 .fm-knowledge-search-toolbar > textarea#fm-knowledge-subjects {
   flex: 1 1 auto;
   min-width: 0;
@@ -2637,23 +2721,8 @@ input[type="text"].fm-shortcuts-help-capture-input {
   color: var(--fm-text-muted);
 }
 
-.fm-knowledge-search-toolbar > .fm-tooltip:last-child,
-.fm-knowledge-search-options > .fm-tooltip:last-child {
+.fm-knowledge-search-toolbar > .fm-tooltip:last-child {
   margin-inline-end: 0.5rem;
-}
-
-.fm-knowledge-search-options {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  box-sizing: border-box;
-  height: var(--fm-row-height);
-  min-height: var(--fm-row-height);
-  padding-inline-start: 0.5rem;
-  border-bottom: 1px solid var(--fm-border);
-  background: var(--fm-surface);
-  font-size: 0.92em;
-  white-space: nowrap;
 }
 
 .fm-knowledge-include-folder,
@@ -2664,36 +2733,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-knowledge-include-folder {
-  flex: 0 0 auto;
-  padding-inline-end: 0.5rem;
-  border-inline-end: 1px solid var(--fm-border);
-}
-
-.fm-knowledge-search-for {
-  flex: 0 0 auto;
-  color: var(--fm-text-muted);
-}
-
-.fm-knowledge-search-options .fm-knowledge-inline-needs {
-  display: flex;
-  align-items: center;
-  flex: 1 1 auto;
-  gap: 0.5rem;
-  min-width: 0;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  flex-wrap: nowrap;
-}
-
-.fm-knowledge-search-options input[type="checkbox"] + span:not(.lever) {
-  display: inline-flex;
-  align-items: center;
-}
-
-.fm-knowledge-search-options > .fm-tooltip {
   flex: 0 0 auto;
 }
 
@@ -4796,6 +4835,65 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 /* Compact progress for active jobs while the operations centre stays closed. */
+.fm-activity-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.fm-activity-count {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 4px;
+  color: var(--fm-accent);
+  background: transparent;
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.fm-activity-count.fm-activity-failed {
+  color: var(--fm-error);
+}
+
+.fm-activity-popover {
+  position: absolute;
+  z-index: 25;
+  top: 100%;
+  right: 0;
+  width: min(320px, 85vw);
+  max-height: min(50vh, 360px);
+  overflow: auto;
+  padding: 8px;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  border: 1px solid var(--fm-border);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgb(23 32 51 / 16%);
+}
+
+.fm-activity-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  width: 100%;
+  padding: 6px 4px;
+  text-align: start;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.fm-activity-item:hover,
+.fm-activity-item:focus-visible {
+  background: var(--fm-hover);
+}
+
+.fm-activity-target {
+  color: var(--fm-accent);
+}
+
 .fm-operation-centre-button.fm-operations-busy {
   position: relative;
   color: var(--fm-accent);

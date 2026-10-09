@@ -129,6 +129,8 @@ export function isActiveOperation(operation: Operation): boolean {
   );
 }
 
+export type ActiveSourceState = 'move' | 'delete' | 'paused' | 'waiting';
+
 export interface ActiveOperationsSummary {
   readonly count: number;
   /** Overall completion (0-100) when every active job reports a byte or item total. */

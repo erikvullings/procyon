@@ -11,6 +11,7 @@ import type {
   EntrySummary,
   KnowledgeEvidence,
   Location,
+  Operation,
   PaneId,
   PluginDescriptor,
   SavedSearch,
@@ -47,6 +48,7 @@ import {
   type PaneDirectoryView,
   parentLocation,
 } from '../navigation/navigation';
+import type { ActiveSourceState } from '../operations/operation-state';
 import type { OperationsController } from '../operations/operations-controller';
 import type { PaneRenameRequest } from '../panes/pane';
 import { isParentEntry, withParentEntry } from '../panes/parent-entry';
@@ -113,6 +115,7 @@ export interface PaneContentContext {
   getNativeDragOutSupported(): boolean;
   getNativeDropInProgress(): boolean;
   getAppState(): AppState | undefined;
+  getOperations(): readonly Operation[];
   /** Revision bumped when the context menu or palette asks this pane to start renaming. */
   getRenameRequest?(paneId: PaneId): PaneRenameRequest | undefined;
   clipboard(): ClipboardState;
@@ -420,6 +423,35 @@ export function createPaneContentBuilder(
         directory.entries
           .filter((entry) => isCutLocation(context.clipboard(), entry.location))
           .map((entry) => entry.id),
+      ),
+      activeSourceStates: new Map<string, ActiveSourceState>(
+        context
+          .getOperations()
+          .filter(
+            (operation) =>
+              (operation.kind === 'delete' ||
+                operation.kind === 'trash' ||
+                operation.kind === 'move') &&
+              (operation.state === 'running' ||
+                operation.state === 'cancelling' ||
+                operation.state === 'paused' ||
+                operation.state === 'waitingForConflictResolution'),
+          )
+          .flatMap((operation) =>
+            operation.sources.map(
+              (source) =>
+                [
+                  `${source.location.providerId}:${source.location.uri}`,
+                  operation.state === 'paused'
+                    ? 'paused'
+                    : operation.state === 'waitingForConflictResolution'
+                      ? 'waiting'
+                      : operation.kind === 'move'
+                        ? 'move'
+                        : 'delete',
+                ] as const,
+            ),
+          ),
       ),
       sortLabel: context.sortLabel(context.effectiveSort(tab?.view.sort ?? [])),
       sort: context.effectiveSort(tab?.view.sort ?? []),

@@ -10,6 +10,26 @@ pub mod developer_bundle;
 mod developer_onnx;
 pub mod document_summary;
 pub mod embedding;
+#[cfg(feature = "gemma-probe")]
+pub mod gemma_audio;
+#[cfg(feature = "gemma-probe")]
+pub mod gemma_audio_decode;
+#[cfg(feature = "gemma-probe")]
+pub mod gemma_audio_features;
+#[cfg(feature = "gemma-probe")]
+pub mod gemma_embedding;
+#[cfg(feature = "gemma-probe")]
+pub mod gemma_fusion;
+#[cfg(feature = "gemma-probe")]
+pub mod gemma_multimodal;
+#[cfg(feature = "gemma-probe")]
+pub mod gemma_native;
+#[cfg(feature = "gemma-probe")]
+pub mod gemma_probe;
+#[cfg(feature = "gemma-probe")]
+pub mod gemma_vision;
+#[cfg(feature = "gemma-probe")]
+pub mod gemma_visual;
 pub mod ingestion;
 pub mod knowledge_ipc;
 pub mod knowledge_retrieval;
@@ -413,9 +433,11 @@ enum ConnectorSource {
         idle_timeout: Duration,
         startup_timeout: Duration,
         managed_worker: Option<ManagedWorkerResolver>,
+        developer_managed_worker: Option<DeveloperManagedWorkerResolver>,
         developer_data_directory: Option<PathBuf>,
         developer_native_library_directory: Option<PathBuf>,
         developer_model_pack: Option<DeveloperModelPackResolver>,
+        developer_ocr_executable: Option<DeveloperOcrExecutableResolver>,
     },
 }
 
@@ -427,17 +449,48 @@ enum ConnectorSource {
 pub type DeveloperModelPackResolver =
     Arc<dyn Fn() -> Result<Option<PathBuf>, String> + Send + Sync>;
 
+/// Resolves OCRmyPDF from host-owned consent and executable discovery at launch.
+pub type DeveloperOcrExecutableResolver = Arc<dyn Fn() -> Option<PathBuf> + Send + Sync>;
+
+/// Resolves a development-only managed model when the active profile needs
+/// original files instead of a model pack.
+pub type DeveloperManagedWorkerResolver =
+    Arc<dyn Fn() -> Result<Option<ManagedWorkerLaunch>, String> + Send + Sync>;
+
+/// The installed model shape selected by the trusted host for a managed worker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ManagedModel {
+    /// Existing production E5 model pack.
+    Pack(PathBuf),
+    /// Original pinned EmbeddingGemma 2 files with immutable library settings.
+    #[cfg(feature = "gemma-native")]
+    Gemma {
+        /// The five host-verified original model files.
+        files: crate::gemma_native::GemmaNativeFiles,
+        /// Supported Matryoshka vector width.
+        dimensions: usize,
+        /// Enabled media encoders for this library.
+        media: crate::gemma_native::GemmaMedia,
+    },
+}
+
 /// Host-verified paths required to launch one installed production worker generation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManagedWorkerLaunch {
     executable: PathBuf,
     data_directory: PathBuf,
     native_library_directory: PathBuf,
-    model_pack: PathBuf,
+    model: ManagedModel,
     ocrmypdf_executable: Option<PathBuf>,
 }
 
 impl ManagedWorkerLaunch {
+    /// The verified model selected for this launch.
+    #[must_use]
+    pub const fn model(&self) -> &ManagedModel {
+        &self.model
+    }
+
     /// Records paths selected exclusively from verified managed component state.
     #[must_use]
     pub fn new(
@@ -450,7 +503,31 @@ impl ManagedWorkerLaunch {
             executable,
             data_directory,
             native_library_directory,
-            model_pack,
+            model: ManagedModel::Pack(model_pack),
+            ocrmypdf_executable: None,
+        }
+    }
+
+    /// Construct a managed launch from the five verified original Gemma files.
+    #[cfg(feature = "gemma-native")]
+    #[must_use]
+    pub fn new_gemma(
+        executable: PathBuf,
+        data_directory: PathBuf,
+        native_library_directory: PathBuf,
+        files: crate::gemma_native::GemmaNativeFiles,
+        dimensions: usize,
+        media: crate::gemma_native::GemmaMedia,
+    ) -> Self {
+        Self {
+            executable,
+            data_directory,
+            native_library_directory,
+            model: ManagedModel::Gemma {
+                files,
+                dimensions,
+                media,
+            },
             ocrmypdf_executable: None,
         }
     }
@@ -510,9 +587,11 @@ impl WorkerConnector {
                 idle_timeout: Duration::from_secs(30),
                 startup_timeout: Duration::from_secs(2),
                 managed_worker: None,
+                developer_managed_worker: None,
                 developer_data_directory: None,
                 developer_native_library_directory: None,
                 developer_model_pack: None,
+                developer_ocr_executable: None,
             },
         }
     }
@@ -643,6 +722,38 @@ impl WorkerConnector {
         self
     }
 
+    /// Uses host consent and safe discovery instead of the legacy developer environment opt-in.
+    #[must_use]
+    pub fn with_developer_ocr_executable_resolver(
+        mut self,
+        resolver: DeveloperOcrExecutableResolver,
+    ) -> Self {
+        if let ConnectorSource::Desktop {
+            developer_ocr_executable,
+            ..
+        } = &mut self.source
+        {
+            *developer_ocr_executable = Some(resolver);
+        }
+        self
+    }
+
+    /// Selects a host-verified original-file development model at launch time.
+    #[must_use]
+    pub fn with_developer_managed_worker_resolver(
+        mut self,
+        resolver: DeveloperManagedWorkerResolver,
+    ) -> Self {
+        if let ConnectorSource::Desktop {
+            developer_managed_worker,
+            ..
+        } = &mut self.source
+        {
+            *developer_managed_worker = Some(resolver);
+        }
+        self
+    }
+
     /// Connects only to an already-running worker, never starting one.
     ///
     /// Hosts use this to act on a worker that is currently serving — for
@@ -747,9 +858,11 @@ impl WorkerConnector {
                 idle_timeout,
                 startup_timeout,
                 managed_worker,
+                developer_managed_worker,
                 developer_data_directory,
                 developer_native_library_directory,
                 developer_model_pack,
+                developer_ocr_executable,
             } => {
                 ensure_runtime_directory(runtime_directory)?;
                 let secret_path = runtime_directory.join("launch.secret");
@@ -785,10 +898,16 @@ impl WorkerConnector {
                     return Ok(client);
                 }
 
-                let managed_launch = managed_worker
-                    .as_ref()
-                    .map(resolve_managed_worker)
-                    .transpose()?;
+                let managed_launch = if let Some(resolver) = managed_worker.as_ref() {
+                    Some(resolve_managed_worker(resolver)?)
+                } else if let Some(resolver) = developer_managed_worker.as_ref() {
+                    resolver()
+                        .map_err(ClientError::InvalidManagedComponents)?
+                        .map(validate_managed_launch)
+                        .transpose()?
+                } else {
+                    None
+                };
                 let launch_executable = managed_launch
                     .as_ref()
                     .map_or(executable.as_path(), |launch| launch.executable.as_path());
@@ -807,6 +926,9 @@ impl WorkerConnector {
                     if let Some(pack) = resolve_developer_model_pack(developer_model_pack.as_ref())?
                     {
                         command.arg("--developer-model-pack").arg(pack);
+                    }
+                    if let Some(resolver) = developer_ocr_executable {
+                        configure_developer_ocr(&mut command, resolver);
                     }
                 }
                 if let Some(directory) = managed_launch
@@ -923,7 +1045,12 @@ fn resolve_developer_model_pack(
 fn resolve_managed_worker(
     resolver: &ManagedWorkerResolver,
 ) -> Result<ManagedWorkerLaunch, ClientError> {
-    let mut launch = resolver().map_err(ClientError::InvalidManagedComponents)?;
+    validate_managed_launch(resolver().map_err(ClientError::InvalidManagedComponents)?)
+}
+
+fn validate_managed_launch(
+    mut launch: ManagedWorkerLaunch,
+) -> Result<ManagedWorkerLaunch, ClientError> {
     for (label, path, file) in [
         ("worker executable", &launch.executable, true),
         ("semantic data directory", &launch.data_directory, false),
@@ -932,7 +1059,6 @@ fn resolve_managed_worker(
             &launch.native_library_directory,
             false,
         ),
-        ("model pack", &launch.model_pack, true),
     ] {
         if !path.is_absolute() {
             return Err(ClientError::InvalidManagedComponents(format!(
@@ -953,6 +1079,43 @@ fn resolve_managed_worker(
             )));
         }
     }
+    match &launch.model {
+        ManagedModel::Pack(path) => {
+            if !path.is_absolute() || !path.is_file() {
+                return Err(ClientError::InvalidManagedComponents(format!(
+                    "model pack must be an installed absolute regular file: {}",
+                    path.display()
+                )));
+            }
+        }
+        #[cfg(feature = "gemma-native")]
+        ManagedModel::Gemma {
+            files, dimensions, ..
+        } => {
+            if ![128, 256, 512, 768].contains(dimensions) {
+                return Err(ClientError::InvalidManagedComponents(
+                    "unsupported Gemma dimensions".into(),
+                ));
+            }
+            for (label, path) in [
+                ("Gemma weights", &files.weights),
+                ("Gemma tokenizer", &files.tokenizer),
+                ("Gemma config", &files.config),
+                ("Gemma visual processor", &files.visual_processor),
+                ("Gemma audio processor", &files.audio_processor),
+            ] {
+                if !path.is_absolute()
+                    || !std::fs::symlink_metadata(path)
+                        .is_ok_and(|metadata| metadata.file_type().is_file())
+                {
+                    return Err(ClientError::InvalidManagedComponents(format!(
+                        "{label} must be an installed absolute regular file: {}",
+                        path.display()
+                    )));
+                }
+            }
+        }
+    }
     // Optional OCR remediation must never block the worker: a missing or stale
     // executable is dropped here so the worker launches without OCR rather than
     // failing the whole semantic capability. It is re-checked at launch time
@@ -970,9 +1133,41 @@ fn managed_launch_arguments(launch: &ManagedWorkerLaunch) -> Vec<std::ffi::OsStr
     let mut arguments = vec![
         std::ffi::OsString::from("--semantic-data-dir"),
         launch.data_directory.clone().into_os_string(),
-        std::ffi::OsString::from("--semantic-model-pack"),
-        launch.model_pack.clone().into_os_string(),
     ];
+    match &launch.model {
+        ManagedModel::Pack(path) => {
+            arguments.push("--semantic-model-pack".into());
+            arguments.push(path.clone().into_os_string());
+        }
+        #[cfg(feature = "gemma-native")]
+        ManagedModel::Gemma {
+            files,
+            dimensions,
+            media,
+        } => {
+            for (flag, path) in [
+                ("--gemma-weights", &files.weights),
+                ("--gemma-tokenizer", &files.tokenizer),
+                ("--gemma-config", &files.config),
+                ("--gemma-visual-processor", &files.visual_processor),
+                ("--gemma-audio-processor", &files.audio_processor),
+            ] {
+                arguments.push(flag.into());
+                arguments.push(path.clone().into_os_string());
+            }
+            arguments.push("--gemma-dimensions".into());
+            arguments.push(dimensions.to_string().into());
+            for (enabled, flag) in [
+                (media.images, "--gemma-images"),
+                (media.audio, "--gemma-audio"),
+                (media.video, "--gemma-video"),
+            ] {
+                if enabled {
+                    arguments.push(flag.into());
+                }
+            }
+        }
+    }
     if let Some(executable) = &launch.ocrmypdf_executable {
         arguments.push(std::ffi::OsString::from("--ocrmypdf-executable"));
         arguments.push(executable.clone().into_os_string());
@@ -980,11 +1175,55 @@ fn managed_launch_arguments(launch: &ManagedWorkerLaunch) -> Vec<std::ffi::OsStr
     arguments
 }
 
+fn configure_developer_ocr(
+    command: &mut std::process::Command,
+    resolver: &DeveloperOcrExecutableResolver,
+) {
+    command.env_remove(fm_semantic_docling::OCRMYPDF_ENABLED_ENV);
+    if let Some(path) = sanitize_ocrmypdf_executable(resolver()) {
+        command.arg("--ocrmypdf-executable").arg(path);
+    }
+}
+
 #[cfg(test)]
 mod developer_connector_tests {
     use super::*;
     #[cfg(unix)]
     use std::os::unix::ffi::OsStrExt as _;
+
+    #[test]
+    fn developer_ocr_launch_uses_only_the_host_resolver() {
+        let directory = tempfile::tempdir().expect("directory");
+        let executable = directory.path().join("ocrmypdf");
+        std::fs::write(&executable, b"#!/bin/sh\n").expect("executable");
+        let selected = Arc::new(std::sync::Mutex::new(None::<PathBuf>));
+        let current = Arc::clone(&selected);
+        let resolver: DeveloperOcrExecutableResolver =
+            Arc::new(move || current.lock().expect("selection").clone());
+
+        let mut disabled = std::process::Command::new("worker");
+        configure_developer_ocr(&mut disabled, &resolver);
+        assert!(disabled.get_args().next().is_none());
+        assert!(disabled.get_envs().any(|(key, value)| {
+            key == fm_semantic_docling::OCRMYPDF_ENABLED_ENV && value.is_none()
+        }));
+
+        *selected.lock().expect("selection") = Some(executable.clone());
+        let mut enabled = std::process::Command::new("worker");
+        configure_developer_ocr(&mut enabled, &resolver);
+        assert_eq!(
+            enabled.get_args().collect::<Vec<_>>(),
+            vec![
+                std::ffi::OsStr::new("--ocrmypdf-executable"),
+                executable.as_os_str()
+            ]
+        );
+
+        *selected.lock().expect("selection") = Some(directory.path().join("missing"));
+        let mut stale = std::process::Command::new("worker");
+        configure_developer_ocr(&mut stale, &resolver);
+        assert!(stale.get_args().next().is_none());
+    }
 
     #[cfg(unix)]
     #[test]
@@ -1057,6 +1296,79 @@ mod developer_connector_tests {
         );
     }
 
+    #[cfg(feature = "gemma-native")]
+    #[test]
+    fn managed_gemma_launch_passes_five_original_files_and_refuses_missing_files() {
+        use crate::gemma_native::{GemmaMedia, GemmaNativeFiles};
+        let directory = tempfile::tempdir().unwrap();
+        let files = GemmaNativeFiles::from_directory(directory.path());
+        for path in [
+            &files.weights,
+            &files.tokenizer,
+            &files.config,
+            &files.visual_processor,
+            &files.audio_processor,
+        ] {
+            std::fs::write(path, b"original").unwrap();
+        }
+        let launch = ManagedWorkerLaunch::new_gemma(
+            directory.path().join("worker"),
+            directory.path().join("data"),
+            directory.path().to_owned(),
+            files,
+            512,
+            GemmaMedia {
+                images: true,
+                audio: false,
+                video: true,
+            },
+        );
+        let worker = directory.path().join("worker");
+        std::fs::write(&worker, b"worker").unwrap();
+        std::fs::create_dir_all(directory.path().join("data")).unwrap();
+        let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
+        let resolved = resolve_managed_worker(&resolver).unwrap();
+        let arguments = managed_launch_arguments(&resolved);
+        assert!(arguments.iter().any(|arg| arg == "--gemma-weights"));
+        assert!(arguments.iter().any(|arg| arg == "--gemma-video"));
+        assert!(!arguments.iter().any(|arg| arg == "--semantic-model-pack"));
+        std::fs::remove_file(directory.path().join("tokenizer.json")).unwrap();
+        assert!(matches!(
+            resolve_managed_worker(&resolver),
+            Err(ClientError::InvalidManagedComponents(_))
+        ));
+        for invalid in [PathBuf::from("relative"), directory.path().to_owned()] {
+            let mut invalid_launch = resolved.clone();
+            let ManagedModel::Gemma { files, .. } = &mut invalid_launch.model else {
+                unreachable!()
+            };
+            files.weights = invalid;
+            let bad: ManagedWorkerResolver = Arc::new(move || Ok(invalid_launch.clone()));
+            assert!(matches!(
+                resolve_managed_worker(&bad),
+                Err(ClientError::InvalidManagedComponents(_))
+            ));
+        }
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(
+                directory.path().join("config.json"),
+                directory.path().join("link"),
+            )
+            .unwrap();
+            let mut invalid_launch = resolved.clone();
+            let ManagedModel::Gemma { files, .. } = &mut invalid_launch.model else {
+                unreachable!()
+            };
+            files.config = directory.path().join("link");
+            let bad: ManagedWorkerResolver = Arc::new(move || Ok(invalid_launch.clone()));
+            assert!(matches!(
+                resolve_managed_worker(&bad),
+                Err(ClientError::InvalidManagedComponents(_))
+            ));
+        }
+    }
+
     #[test]
     fn a_relative_or_missing_ocr_executable_is_dropped_before_launch() {
         let directory = tempfile::tempdir().expect("directory");
@@ -1092,7 +1404,7 @@ mod developer_connector_tests {
             executable: worker,
             data_directory: data,
             native_library_directory: native,
-            model_pack: model,
+            model: ManagedModel::Pack(model),
             ocrmypdf_executable: Some(stale),
         };
         let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
@@ -1432,6 +1744,8 @@ pub struct WorkerQueryInput {
     pub library_id: String,
     /// User query text.
     pub query: String,
+    /// Model-owned text prompt role; legacy requests are search.
+    pub intent: v1::QueryIntent,
     /// Stable concept-folder selection, when this is not a dense text query.
     pub concept_query: Option<ConceptFolderQuery>,
     /// Maximum file-primary results.
@@ -1949,6 +2263,31 @@ impl WorkerClient {
         query: &str,
         maximum_results: u32,
     ) -> Result<Vec<SearchResult>, ClientError> {
+        self.query_with_intent_and_request_id(
+            request_id,
+            tenant_id,
+            library_id,
+            query,
+            maximum_results,
+            v1::QueryIntent::Search,
+        )
+        .await
+    }
+
+    /// Executes a scoped text query with an explicit embedding prompt role.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed transport, authentication, cancellation, or limit error.
+    pub async fn query_with_intent_and_request_id(
+        &self,
+        request_id: &str,
+        tenant_id: &str,
+        library_id: &str,
+        query: &str,
+        maximum_results: u32,
+        intent: v1::QueryIntent,
+    ) -> Result<Vec<SearchResult>, ClientError> {
         let payloads = self
             .request(
                 v1::client_frame::Payload::Query(v1::QueryRequest {
@@ -1961,6 +2300,7 @@ impl WorkerClient {
                     query: query.to_owned(),
                     maximum_results,
                     concept_query: None,
+                    intent: intent as i32,
                 }),
                 DeadlineKind::Stream,
             )
@@ -2013,6 +2353,7 @@ impl WorkerClient {
                         include_unavailable: query.include_unavailable,
                         offset: query.offset,
                     }),
+                    intent: v1::QueryIntent::Search as i32,
                 }),
                 DeadlineKind::Stream,
             )
@@ -3408,6 +3749,7 @@ async fn handle_frame(
                 .clone();
             let query_backend = state.query_backend.clone();
             let query_text = request.query.clone();
+            let intent = v1::QueryIntent::try_from(request.intent).expect("validated query intent");
             let concept_query = request.concept_query.map(|query| ConceptFolderQuery {
                 vocabulary_id: query.vocabulary_id,
                 concept_uris: query.concept_uris,
@@ -3430,6 +3772,7 @@ async fn handle_frame(
                                 tenant_id: backend_scope.tenant_id,
                                 library_id: backend_scope.library_id,
                                 query: query_text,
+                                intent,
                                 concept_query,
                                 maximum_results,
                             },
@@ -4813,6 +5156,7 @@ fn request_validation_error(error: RequestValidationError) -> v1::ProtocolError 
         | RequestValidationError::MissingDocumentId
         | RequestValidationError::EmptyQuery
         | RequestValidationError::InvalidConceptQuery
+        | RequestValidationError::InvalidQueryIntent
         | RequestValidationError::InvalidMaximumResults
         | RequestValidationError::InvalidKnowledgeQueries { .. }
         | RequestValidationError::InvalidKnowledgePolicy

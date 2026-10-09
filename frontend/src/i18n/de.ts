@@ -69,6 +69,18 @@ export const de = {
     comparePanesTooltip:
       'Wählt die Einträge aus, die sich zwischen den beiden Bereichen unterscheiden (Shift+F2)',
     operationCentre: 'Vorgänge (Alt+Z)',
+    activityCount: '{count} Hintergrundaktivitäten',
+    activitySingle: '1 Hintergrundaktivität',
+    indexingActivity: 'Semantische Indizierung',
+    indexingFailed: 'Semantische Indizierung fehlgeschlagen',
+    indexingScanned: '{count} Einträge durchsucht',
+    showActivity: 'Hintergrundaktivitäten anzeigen',
+    openOperation: 'Vorgang öffnen',
+    openSemanticStatus: 'Semantische Einstellungen öffnen',
+    movingFolder: 'Wird verschoben…',
+    deletingFolder: 'Wird gelöscht…',
+    folderOperationPaused: 'Vorgang angehalten',
+    folderOperationWaiting: 'Wartet auf eine Entscheidung',
     showOperationCentre: 'Vorgangszentrale anzeigen',
     hideOperationCentre: 'Vorgangszentrale ausblenden',
     operationCentreUpdateFailed:
