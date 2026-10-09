@@ -53,6 +53,7 @@ const ready = setInterval(() => {
   if (!process.env.PROCYON_NATIVE_SPA_SMOKE_PLUGINS)
     console.error('native-spa-stage: bundled-plugin-assets-selected');
   console.error('native-spa-stage: bridge-save-succeeded');
+  console.error('native-spa-stage: heartbeat-and-disable-teardown-succeeded');
 }, 5);
 setInterval(() => {}, 1000);
 `,
