@@ -28,6 +28,20 @@ collection basket gathers files across folders and providers.
 Procyon never implements file mutations in the frontend. Every operation goes through the same
 typed Rust engine, whether the app is running through Tauri, Axum, or the in-process mock client.
 
+## Background work
+
+The badge beside Operations shows active file operations and semantic indexing. Open it for
+per-job progress and shortcuts to the Operations Centre or Semantic settings. A total or
+percentage appears only when the job knows one; permanent deletion instead reports items
+already removed. A folder being moved or deleted remains navigable and shows its current
+state until the operation finishes.
+
+Quitting the desktop app while work is active prompts for confirmation. File operations stop
+and are shown as interrupted after restart; partial changes, including permanently deleted
+items, are **not** rolled back or resumed automatically. Enrolled semantic folders are
+reconciled again on desktop startup. Closing a browser tab does not stop work in a separately
+running server, but restarting that server interrupts its file operations.
+
 ## Screenshots
 
 | Embedded terminal | Document preview |

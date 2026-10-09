@@ -75,6 +75,9 @@ export interface BackendEventContext {
   setOperationFrame(frame: number | undefined): void;
   getOperations(): OperationCentreState;
   setOperations(next: OperationCentreState): void;
+  onSemanticIngestionProgress?(
+    progress: Extract<BackendEvent['payload'], { type: 'semantic.ingestionProgress' }>,
+  ): void;
   getDismissedOperationIds(): ReadonlySet<OperationId>;
   clearDismissedOperation(id: OperationId): void;
   scheduleAutoDismiss(id: OperationId, delayMs: number): void;
@@ -194,6 +197,11 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
 
   return function handleBackendEvent(event: BackendEvent): void {
     const payload = event.payload;
+    if (payload.type === 'semantic.ingestionProgress') {
+      ctx.onSemanticIngestionProgress?.(payload);
+      ctx.redraw();
+      return;
+    }
 
     // Workspace lifecycle events refresh the switcher summary list regardless of
     // which workspace they pertain to (task 0084).

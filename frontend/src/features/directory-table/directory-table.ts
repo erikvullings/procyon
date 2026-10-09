@@ -21,6 +21,7 @@ import {
   formatEntryModifiedAt,
   formatEntrySize,
 } from '../entry-formatting/entry-formatting';
+import type { ActiveSourceState } from '../operations/operation-state';
 import { isParentEntry } from '../panes/parent-entry';
 import { fileAgeColumn } from '../plugin-columns/file-age-column';
 import { entryIcon } from './entry-icons';
@@ -35,6 +36,19 @@ const DEFAULT_ROW_HEIGHT = 20;
 const DEFAULT_VIEWPORT_HEIGHT = 300;
 const DEFAULT_OVERSCAN = 1;
 const MIN_COLUMN_WIDTH = 60;
+
+export function activeSourceLabel(state: ActiveSourceState): string {
+  switch (state) {
+    case 'move':
+      return t('shell', 'movingFolder');
+    case 'delete':
+      return t('shell', 'deletingFolder');
+    case 'paused':
+      return t('shell', 'folderOperationPaused');
+    case 'waiting':
+      return t('shell', 'folderOperationWaiting');
+  }
+}
 
 /** A PDF's first-page render, or a video/comic's first frame/page, reads as a nice preview at
  * grid-tile size but not at this 16px list-row size - fetching/decoding one here is wasted work
@@ -138,6 +152,7 @@ export interface DirectoryTableAttrs {
   readonly centerCursor?: boolean;
   readonly selectedEntryIds?: ReadonlySet<EntryId>;
   readonly cutEntryIds?: ReadonlySet<EntryId>;
+  readonly activeSourceStates?: ReadonlyMap<string, ActiveSourceState>;
   readonly active?: boolean;
   readonly viewportHeight?: number;
   readonly overscan?: number;
@@ -977,6 +992,10 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
           }
           const cursor = entryIndex === attrs.cursorIndex;
           const selected = attrs.selectedEntryIds?.has(entry.id) ?? false;
+          const activeSource =
+            entry.kind === 'directory'
+              ? attrs.activeSourceStates?.get(`${entry.location.providerId}:${entry.location.uri}`)
+              : undefined;
           rows.push(
             m(
               '.fm-directory-row',
@@ -987,6 +1006,8 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                 'aria-rowindex': index + 2,
                 'aria-selected': selected ? 'true' : 'false',
                 'data-entry-index': entryIndex,
+                'data-active-source': activeSource,
+                title: activeSource === undefined ? undefined : activeSourceLabel(activeSource),
                 'data-row-stripe': index % 2 === 1 ? 'alternate' : undefined,
                 draggable:
                   attrs.onPointerDragStart !== undefined
@@ -1038,6 +1059,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                   cursor && attrs.renamingEntryId !== entry.id ? 'fm-cursor-row' : '',
                   selected ? 'fm-selected-row' : '',
                   attrs.cutEntryIds?.has(entry.id) === true ? 'fm-cut-entry' : '',
+                  activeSource !== undefined ? 'fm-active-source' : '',
                   dragTargetIndex === entryIndex ? 'fm-drop-target' : '',
                 ].join(' '),
                 style: {
@@ -1082,18 +1104,23 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                           ? undefined
                           : m('.fm-inline-rename-error', { role: 'alert' }, attrs.renameError),
                       ]
-                    : column.render(
-                        entry,
-                        attrs.nameMatchPrefix,
-                        attrs.formatSettings,
-                        now,
-                        attrs.nativeIconLoader,
-                        attrs.showFullPath,
-                        attrs.thumbnailLoader,
-                        attrs.finderTagsLoader,
-                        entryIndex === 0 ? undefined : source.entryAt(entryIndex - 1),
-                        separateExtension,
-                      ),
+                    : [
+                        column.render(
+                          entry,
+                          attrs.nameMatchPrefix,
+                          attrs.formatSettings,
+                          now,
+                          attrs.nativeIconLoader,
+                          attrs.showFullPath,
+                          attrs.thumbnailLoader,
+                          attrs.finderTagsLoader,
+                          entryIndex === 0 ? undefined : source.entryAt(entryIndex - 1),
+                          separateExtension,
+                        ),
+                        column.id === 'core.name' && activeSource !== undefined
+                          ? m('span.fm-source-state', ` · ${activeSourceLabel(activeSource)}`)
+                          : undefined,
+                      ],
                 ),
               ),
             ),

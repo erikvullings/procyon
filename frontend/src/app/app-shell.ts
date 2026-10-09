@@ -127,9 +127,11 @@ import {
   parentLocation,
 } from '../features/navigation/navigation';
 import { rootLocationFor } from '../features/navigation/root-location';
+import { itemProgressSummary, operationKindLabel } from '../features/operations/operation-centre';
 import {
   createOperationsState,
   dismissOperation,
+  isActiveOperation,
   mergeOperationHistory,
   shouldAutoDismissOperation,
   summariseActiveOperations,
@@ -442,6 +444,16 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let settingsUpdateQueue = Promise.resolve();
   let settingsDisclosureElement: HTMLDetailsElement | undefined;
   let settingsDialogOpen = false;
+  let activityOpen = false;
+  function closeActivityOnOutsidePointer(event: PointerEvent): void {
+    if (!activityOpen || (event.target as Element).closest('.fm-activity-anchor')) return;
+    activityOpen = false;
+    m.redraw();
+  }
+  const semanticJobs = new Map<
+    string,
+    Extract<BackendEvent['payload'], { type: 'semantic.ingestionProgress' }>
+  >();
   let settingsInitialSection: SettingsSection = 'appearance';
   let availableAppUpdate: AppUpdateInfo | undefined;
   let aboutDialogOpen = false;
@@ -2729,6 +2741,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getOperations: () => operations,
     setOperations: (next) => {
       operations = next;
+      if (summariseActiveOperations(next) === undefined && semanticJobs.size === 0) {
+        activityOpen = false;
+      }
+    },
+    onSemanticIngestionProgress: (progress) => {
+      if (['complete', 'cancelled', 'skipped'].includes(progress.stage)) {
+        semanticJobs.delete(progress.jobId);
+        if (semanticJobs.size === 0 && summariseActiveOperations(operations) === undefined) {
+          activityOpen = false;
+        }
+      } else {
+        semanticJobs.set(progress.jobId, progress);
+      }
     },
     getDismissedOperationIds: () => dismissedOperationIds,
     clearDismissedOperation,
@@ -4006,6 +4031,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getNativeDropInProgress: () => nativeDropInProgress,
     getRenameRequest: (paneId) => renameRequests.get(paneId),
     getAppState: () => appState,
+    getOperations: () =>
+      Object.values(operations.byId).filter(
+        (operation): operation is Operation => operation !== undefined,
+      ),
     clipboard,
     getDirectories: () => directories,
     getSelections: () => selections,
@@ -4361,6 +4390,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   return {
     oninit: ({ attrs }) => {
+      document.addEventListener('pointerdown', closeActivityOnOutsidePointer);
       attrsClient = attrs.client;
       void refreshSemanticAssistantAvailability();
       void refreshKnowledgeSearchAvailability();
@@ -4623,6 +4653,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     },
 
     onremove: () => {
+      document.removeEventListener('pointerdown', closeActivityOnOutsidePointer);
       removed = true;
       pendingOperationConfirmation?.resolve(false);
       pendingOperationConfirmation = undefined;
@@ -4658,6 +4689,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           operation?.kind === 'delete' && operation.state === 'waitingForConflictResolution',
       );
       const activeOperationProgress = summariseActiveOperations(operations);
+      const activeOperations = Object.values(operations.byId).filter(
+        (operation): operation is Operation =>
+          operation !== undefined && isActiveOperation(operation),
+      );
+      const failedSemanticJobs = [...semanticJobs.values()].filter((job) => job.stage === 'failed');
+      const activityCount = activeOperations.length + semanticJobs.size;
+      const activityLabel =
+        activityCount === 1
+          ? t('shell', 'activitySingle')
+          : t('shell', 'activityCount', { count: activityCount });
+      const activityStatusLabel =
+        failedSemanticJobs.length > 0
+          ? `${activityLabel}: ${t('shell', 'indexingFailed')}`
+          : activityLabel;
       // macOS's overlay title bar (spec follow-up) keeps the native traffic lights, but
       // draws our own centred title in a reserved CSS row instead of the OS title text
       // (hidden via hiddenTitle) -- this is what makes the frame colour match, since a
@@ -5039,36 +5084,132 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               role: 'separator',
               'aria-orientation': 'vertical',
             }),
-            tooltip(
-              labelWithShortcut(t('shell', 'operationCentre'), 'Alt+Z'),
-              m(
-                IconButton,
-                {
-                  className: [
-                    'fm-operation-centre-button',
-                    activeOperationProgress === undefined ? '' : 'fm-operations-busy',
-                  ]
-                    .filter(Boolean)
-                    .join(' '),
-                  disabled: workspace === undefined,
-                  'aria-label': t('shell', 'operationCentre'),
-                  'aria-pressed': String(workspace?.operationCentre.visible === true),
-                  ...(activeOperationProgress === undefined
-                    ? {}
-                    : {
-                        'aria-busy': 'true',
-                        ...(activeOperationProgress.percent === undefined
-                          ? {}
-                          : {
-                              style: {
-                                '--fm-operation-progress': `${activeOperationProgress.percent}%`,
-                              },
-                            }),
-                      }),
-                  onclick: toggleOperationCentre,
+            m(
+              '.fm-activity-anchor',
+              {
+                onkeydown: (event: KeyboardEvent) => {
+                  if (event.key !== 'Escape' || !activityOpen) return;
+                  event.preventDefault();
+                  activityOpen = false;
+                  document.querySelector<HTMLButtonElement>('.fm-activity-count')?.focus();
                 },
-                listIcon(),
-              ),
+              },
+              [
+                m(
+                  IconButton,
+                  {
+                    className: [
+                      'fm-operation-centre-button',
+                      activeOperationProgress === undefined ? '' : 'fm-operations-busy',
+                    ]
+                      .filter(Boolean)
+                      .join(' '),
+                    disabled: workspace === undefined,
+                    'aria-label': t('shell', 'operationCentre'),
+                    title: t('shell', 'operationCentre'),
+                    'aria-pressed': String(workspace?.operationCentre.visible === true),
+                    ...(activeOperationProgress === undefined
+                      ? {}
+                      : {
+                          ...(activeOperationProgress.percent === undefined
+                            ? {}
+                            : {
+                                style: {
+                                  '--fm-operation-progress': `${activeOperationProgress.percent}%`,
+                                },
+                              }),
+                        }),
+                    onclick: () => {
+                      activityOpen = false;
+                      toggleOperationCentre();
+                    },
+                  },
+                  listIcon(),
+                ),
+                activityCount > 0
+                  ? m(
+                      'button.fm-activity-count',
+                      {
+                        type: 'button',
+                        className: failedSemanticJobs.length > 0 ? 'fm-activity-failed' : '',
+                        'aria-label': activityStatusLabel,
+                        'aria-expanded': String(activityOpen),
+                        'aria-controls': 'fm-activity-popover',
+                        title: activityStatusLabel,
+                        onclick: () => {
+                          activityOpen = !activityOpen;
+                        },
+                      },
+                      activityCount,
+                    )
+                  : undefined,
+                activityOpen && activityCount > 0
+                  ? m(
+                      '.fm-activity-popover#fm-activity-popover',
+                      {
+                        role: 'region',
+                        'aria-label': t('shell', 'showActivity'),
+                      },
+                      [
+                        m('strong', { key: 'heading' }, activityLabel),
+                        ...activeOperations.map((operation) =>
+                          m(
+                            'button.fm-activity-item',
+                            {
+                              type: 'button',
+                              key: operation.id,
+                              onclick: () => {
+                                activityOpen = false;
+                                setOperationCentreVisible(true);
+                                requestAnimationFrame(() => {
+                                  document
+                                    .querySelector<HTMLElement>(
+                                      `.fm-operation[data-operation-id="${operation.id}"]`,
+                                    )
+                                    ?.focus();
+                                });
+                              },
+                            },
+                            [
+                              m('span', operationKindLabel(operation.kind)),
+                              m('span', itemProgressSummary(operation)),
+                              m('span.fm-activity-target', t('shell', 'openOperation')),
+                            ],
+                          ),
+                        ),
+                        ...[...semanticJobs.values()].map((job) =>
+                          m(
+                            'button.fm-activity-item',
+                            {
+                              type: 'button',
+                              key: job.jobId,
+                              onclick: () => {
+                                activityOpen = false;
+                                if (job.stage === 'failed') semanticJobs.delete(job.jobId);
+                                openSettingsDialog('semantic');
+                              },
+                            },
+                            [
+                              m(
+                                'span',
+                                job.stage === 'failed'
+                                  ? t('shell', 'indexingFailed')
+                                  : t('shell', 'indexingActivity'),
+                              ),
+                              job.stage === 'failed'
+                                ? undefined
+                                : m(
+                                    'span',
+                                    t('shell', 'indexingScanned', { count: job.completed }),
+                                  ),
+                              m('span.fm-activity-target', t('shell', 'openSemanticStatus')),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : undefined,
+              ],
             ),
             tooltip(
               labelWithShortcut(

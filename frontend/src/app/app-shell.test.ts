@@ -1921,6 +1921,7 @@ describe('AppShell', () => {
       callback(0);
       return 1;
     });
+
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const createdAt = new Date(Date.now()).toISOString();
 
@@ -1952,6 +1953,111 @@ describe('AppShell', () => {
       vi.useRealTimers();
       raf.mockRestore();
     }
+  });
+
+  it('shows semantic indexing beside file activity and clears it on completion', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    client.emit({
+      eventId: 801,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: 'root:one',
+        stage: 'reconciling',
+        completed: 64,
+        total: 0,
+        errors: 0,
+      },
+    });
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLButtonElement>('.fm-activity-count')?.textContent).toBe('1'),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-activity-count')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-activity-popover')?.textContent).toContain(
+        '64 entries scanned',
+      ),
+    );
+    expect(root.querySelector('.fm-activity-popover')?.textContent).toContain(
+      'Open Semantic settings',
+    );
+    client.emit({
+      eventId: 802,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: 'root:one',
+        stage: 'complete',
+        completed: 64,
+        total: 0,
+        errors: 0,
+      },
+    });
+    await vi.waitFor(() => expect(root.querySelector('.fm-activity-count')).toBeNull());
+  });
+
+  it('reports removed items without inventing a percentage for an unknown-size deletion', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    const createdAt = new Date().toISOString();
+    client.emit({
+      eventId: 805,
+      timestamp: createdAt,
+      payload: {
+        type: 'operation.created',
+        operation: {
+          id: 'large-delete',
+          kind: 'delete',
+          state: 'running',
+          sources: [],
+          progress: { completedItems: 600, completedBytes: 0 },
+          conflictPolicy: 'ask',
+          createdAt,
+        },
+      },
+    });
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLButtonElement>('.fm-activity-count')?.textContent).toBe('1'),
+    );
+    expect(
+      root
+        .querySelector<HTMLButtonElement>('.fm-operation-centre-button')
+        ?.style.getPropertyValue('--fm-operation-progress'),
+    ).toBe('');
+    root.querySelector<HTMLButtonElement>('.fm-activity-count')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-activity-popover')?.textContent).toContain('600 items'),
+    );
+  });
+
+  it('keeps failed indexing visible until its details are opened', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    client.emit({
+      eventId: 811,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: 'root:failed',
+        stage: 'failed',
+        completed: 0,
+        total: 0,
+        errors: 1,
+      },
+    });
+    await vi.waitFor(() => expect(root.querySelector('.fm-activity-failed')).not.toBeNull());
+    root.querySelector<HTMLButtonElement>('.fm-activity-count')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-activity-popover')?.textContent).toContain(
+        'Semantic indexing failed',
+      ),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-activity-item')?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-activity-count')).toBeNull());
   });
 
   it('previews modified function-key commands while a modifier is held', async () => {

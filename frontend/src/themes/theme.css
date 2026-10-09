@@ -4862,6 +4862,65 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 /* Compact progress for active jobs while the operations centre stays closed. */
+.fm-activity-anchor {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.fm-activity-count {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 4px;
+  color: var(--fm-accent);
+  background: transparent;
+  border: 1px solid var(--fm-border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.fm-activity-count.fm-activity-failed {
+  color: var(--fm-error);
+}
+
+.fm-activity-popover {
+  position: absolute;
+  z-index: 25;
+  top: 100%;
+  right: 0;
+  width: min(320px, 85vw);
+  max-height: min(50vh, 360px);
+  overflow: auto;
+  padding: 8px;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  border: 1px solid var(--fm-border);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgb(23 32 51 / 16%);
+}
+
+.fm-activity-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  width: 100%;
+  padding: 6px 4px;
+  text-align: start;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.fm-activity-item:hover,
+.fm-activity-item:focus-visible {
+  background: var(--fm-hover);
+}
+
+.fm-activity-target {
+  color: var(--fm-accent);
+}
+
 .fm-operation-centre-button.fm-operations-busy {
   position: relative;
   color: var(--fm-accent);

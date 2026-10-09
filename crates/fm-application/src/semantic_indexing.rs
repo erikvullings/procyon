@@ -7,9 +7,11 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use fm_domain::{EntryKind, EntrySummary, GitFileStatus, Location, LocationError, WorkspaceId};
+use fm_events::{BackendEventPayload, EventAudience, EventBus};
 use fm_semantic_library::{
     ContentFingerprint, EligibilityCandidate, EligibilityEntryKind, EligibilityReason,
     OccurrenceId, RootId,
@@ -21,7 +23,7 @@ use fm_vfs::{
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
-use tokio::time::{Instant, sleep};
+use tokio::time::{Instant, MissedTickBehavior, interval_at, sleep};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -122,15 +124,29 @@ pub enum SemanticIndexingError {
 /// Deep application capability coordinating VFS, catalog, and worker state.
 pub struct SemanticIndexingService {
     providers: ProviderRegistry,
+    events: EventBus,
+    reconciling: AtomicBool,
+    scanned_entries: AtomicU64,
     semantic: std::sync::RwLock<SemanticService>,
     ocr_required_files: std::sync::RwLock<BTreeMap<RootId, Vec<Location>>>,
     run_lock: tokio::sync::Mutex<()>,
 }
 
+struct ReconciliationGuard<'a>(&'a AtomicBool);
+
+impl Drop for ReconciliationGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
 impl SemanticIndexingService {
-    pub(crate) fn new(providers: ProviderRegistry) -> Self {
+    pub(crate) fn new(providers: ProviderRegistry, events: EventBus) -> Self {
         Self {
             providers,
+            events,
+            reconciling: AtomicBool::new(false),
+            scanned_entries: AtomicU64::new(0),
             semantic: std::sync::RwLock::new(SemanticService::unavailable()),
             ocr_required_files: std::sync::RwLock::new(BTreeMap::new()),
             run_lock: tokio::sync::Mutex::new(()),
@@ -153,6 +169,10 @@ impl SemanticIndexingService {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = semantic;
     }
 
+    pub(crate) fn is_reconciling(&self) -> bool {
+        self.reconciling.load(Ordering::SeqCst)
+    }
+
     /// Enumerates, feeds, waits for, and commits one enrolled root.
     pub(crate) async fn reconcile(
         &self,
@@ -162,6 +182,62 @@ impl SemanticIndexingService {
         cancellation: CancellationToken,
     ) -> Result<SemanticIndexingReport, SemanticIndexingError> {
         let _run = self.run_lock.lock().await;
+        self.reconciling.store(true, Ordering::SeqCst);
+        let _active = ReconciliationGuard(&self.reconciling);
+        self.scanned_entries.store(0, Ordering::Relaxed);
+        let job_id = format!("root:{root_id}");
+        self.publish_progress(&job_id, "reconciling", 0, 0);
+        let work = self.reconcile_root(library, access, root_id, cancellation);
+        tokio::pin!(work);
+        let mut heartbeat = interval_at(
+            Instant::now() + Duration::from_secs(1),
+            Duration::from_secs(1),
+        );
+        heartbeat.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let result = loop {
+            tokio::select! {
+                result = &mut work => break result,
+                _ = heartbeat.tick() => self.publish_progress(
+                    &job_id,
+                    "reconciling",
+                    self.scanned_entries.load(Ordering::Relaxed),
+                    0,
+                ),
+            }
+        };
+        self.publish_progress(
+            &job_id,
+            match &result {
+                Ok(_) => "complete",
+                Err(SemanticIndexingError::Cancelled) => "cancelled",
+                Err(_) => "failed",
+            },
+            self.scanned_entries.load(Ordering::Relaxed),
+            u64::from(result.is_err()),
+        );
+        result
+    }
+
+    fn publish_progress(&self, job_id: &str, stage: &str, completed: u64, errors: u64) {
+        self.events.publish(
+            EventAudience::Global,
+            BackendEventPayload::SemanticIngestionProgress {
+                job_id: job_id.to_owned(),
+                stage: stage.to_owned(),
+                completed,
+                total: 0,
+                errors,
+            },
+        );
+    }
+
+    async fn reconcile_root(
+        &self,
+        library: Arc<SemanticLibraryService>,
+        access: &SemanticAccessContext,
+        root_id: RootId,
+        cancellation: CancellationToken,
+    ) -> Result<SemanticIndexingReport, SemanticIndexingError> {
         check_cancelled(&cancellation)?;
 
         let (context, provider, semantic) =
@@ -219,6 +295,7 @@ impl SemanticIndexingService {
                 for entry in page.entries {
                     check_cancelled(&cancellation)?;
                     entry_count = entry_count.saturating_add(1);
+                    self.scanned_entries.store(entry_count, Ordering::Relaxed);
                     if entry_count > MAX_ENTRIES {
                         return Err(SemanticIndexingError::LimitExceeded("entry count"));
                     }

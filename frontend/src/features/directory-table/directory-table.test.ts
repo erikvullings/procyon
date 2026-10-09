@@ -45,6 +45,36 @@ afterEach(() => {
 });
 
 describe('DirectoryTable states', () => {
+  it('marks an active source directory without removing it from cursor navigation', () => {
+    const directory = entry({
+      id: 'folder',
+      kind: 'directory',
+      name: 'Project',
+      location: { providerId: 'local', uri: 'file:///projects/Project' },
+    });
+    const onActivate = vi.fn();
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource([directory]),
+      cursorIndex: 0,
+      viewportHeight: 120,
+      activeSourceStates: new Map([['local:file:///projects/Project', 'delete']]),
+      onActivate,
+    });
+
+    const row = root.querySelector<HTMLElement>('.fm-directory-row[data-active-source="delete"]');
+    expect(row?.textContent).toContain('Deleting');
+    row?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    expect(onActivate).toHaveBeenCalledWith(0);
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource([directory]),
+      viewportHeight: 120,
+      activeSourceStates: new Map([['local:file:///projects/Project', 'paused']]),
+    });
+    expect(root.querySelector('.fm-directory-row')?.textContent).toContain('Operation paused');
+  });
+
   it('pins its hidden cursor announcement inside the scroll viewport', () => {
     mount({ state: { type: 'loaded' }, source: entryArraySource([entry()]), viewportHeight: 120 });
 

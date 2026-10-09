@@ -542,7 +542,10 @@ impl FileManagerService {
             providers.clone(),
         );
         let semantic = SemanticService::unavailable();
-        let semantic_indexing = Arc::new(SemanticIndexingService::new(providers.clone()));
+        let semantic_indexing = Arc::new(SemanticIndexingService::new(
+            providers.clone(),
+            events.clone(),
+        ));
         let semantic_ocr_directory = settings_directory.join("semantic-ocr");
         let semantic_ocr_policy = Arc::new(OcrPolicyStore::load(&semantic_ocr_directory));
         let semantic_ocr = SemanticOcrCoordinator::new(
@@ -2725,6 +2728,12 @@ impl FileManagerService {
         self.operations.list()
     }
 
+    /// Whether a semantic root reconciliation is currently in progress.
+    #[must_use]
+    pub fn is_semantic_indexing_active(&self) -> bool {
+        self.semantic_indexing.is_reconciling()
+    }
+
     /// Returns a bounded page of active and retained historical operations.
     #[must_use]
     pub fn list_operation_page(
@@ -4499,6 +4508,40 @@ mod tests {
             page.operations[0].result_summary.as_deref(),
             Some("Interrupted after 0 items; it was not resumed.")
         );
+    }
+
+    #[tokio::test]
+    async fn semantic_reconciliation_announces_start_and_failure() {
+        let (_directory, service) = service();
+        let mut events =
+            service
+                .event_bus()
+                .subscribe(SessionId::new("activity-test"), [], Some(0));
+        let root_id = fm_semantic_library::RootId::new();
+        let result = service
+            .semantic_indexing
+            .reconcile(
+                service.semantic_library().await,
+                &SemanticAccessContext::Host,
+                root_id,
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await;
+        assert!(result.is_err());
+        assert!(!service.is_semantic_indexing_active());
+        for expected in ["reconciling", "failed"] {
+            let SubscriptionEvent::Event(envelope) = events.recv().await.expect("progress event")
+            else {
+                panic!("expected an event envelope");
+            };
+            let BackendEventPayload::SemanticIngestionProgress { job_id, stage, .. } =
+                envelope.payload
+            else {
+                panic!("expected semantic progress");
+            };
+            assert_eq!(job_id, format!("root:{root_id}"));
+            assert_eq!(stage, expected);
+        }
     }
 
     #[test]

@@ -199,6 +199,7 @@ engine, conflict handling, clipboard, drag-and-drop, comparison and checksums th
 - [x] 0045 Conflict detection, policies and resolution dialog
 - [x] 0046 Operation cancellation, pause and resume
 - [x] 0047 Operation queue and history
+- [x] 0240 Background activity and quit safety *(needs 0036, 0047, 0182)*
 - [x] 0048 In-application clipboard copy / cut / paste
 - [ ] 0062 Drag and drop within the app and with the OS *(in_progress — Finder drag-in/out works,
   but drag-out shows a false no-operation cursor; Explorer manual checks remain)*

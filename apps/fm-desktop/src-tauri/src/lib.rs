@@ -49,6 +49,83 @@ pub struct AppState {
 #[derive(Default)]
 pub(crate) struct QuittingFlag(AtomicBool);
 
+#[derive(Default)]
+struct ExitWarning {
+    pending: AtomicBool,
+    approved: AtomicBool,
+}
+
+fn is_active_operation(state: fm_transport_dto::OperationStateDto) -> bool {
+    use fm_transport_dto::OperationStateDto;
+    matches!(
+        state,
+        OperationStateDto::Queued
+            | OperationStateDto::Planning
+            | OperationStateDto::Running
+            | OperationStateDto::Paused
+            | OperationStateDto::WaitingForConflictResolution
+            | OperationStateDto::Cancelling
+    )
+}
+
+fn warn_before_quit<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    on_confirm: impl FnOnce() + Send + 'static,
+) -> bool {
+    let warning = app.state::<ExitWarning>();
+    if warning.approved.load(Ordering::SeqCst) {
+        return false;
+    }
+    if warning.pending.load(Ordering::SeqCst) {
+        return true;
+    }
+    let service = &app.state::<AppState>().service;
+    let file_operations = service
+        .list_operations()
+        .iter()
+        .any(|operation| is_active_operation(operation.state));
+    let indexing = service.is_semantic_indexing_active();
+    if !file_operations && !indexing {
+        return false;
+    }
+    if !warning.pending.swap(true, Ordering::SeqCst) {
+        let message = match (file_operations, indexing) {
+            (true, true) => {
+                "File operations will stop and will not resume automatically. Partial deletes or moves remain changed. Semantic indexing will reconcile on restart."
+            }
+            (true, false) => {
+                "File operations will stop and will not resume automatically. Partial deletes or moves remain changed."
+            }
+            (false, true) => {
+                "Semantic indexing will stop and reconcile enrolled folders on restart."
+            }
+            (false, false) => unreachable!(),
+        };
+        let app = app.clone();
+        use tauri_plugin_dialog::{
+            DialogExt, MessageDialogButtons, MessageDialogKind, MessageDialogResult,
+        };
+        app.dialog()
+            .message(message)
+            .title("Background work is running")
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "Quit anyway".into(),
+                "Keep working".into(),
+            ))
+            .show_with_result(move |answer| {
+                let warning = app.state::<ExitWarning>();
+                warning.pending.store(false, Ordering::SeqCst);
+                if matches!(answer, MessageDialogResult::Custom(ref label) if label == "Quit anyway")
+                {
+                    warning.approved.store(true, Ordering::SeqCst);
+                    on_confirm();
+                }
+            });
+    }
+    true
+}
+
 impl QuittingFlag {
     fn mark_quitting(&self) {
         self.0.store(true, Ordering::SeqCst);
@@ -343,6 +420,7 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         // Persists and restores each window's frame (position, size, maximized state) keyed by
@@ -371,6 +449,7 @@ pub fn run() {
         .manage(terminal::TerminalRegistry::default())
         .manage(native_menu::NativeMenuActionChannel::default())
         .manage(QuittingFlag::default())
+        .manage(ExitWarning::default())
         .manage(WindowStateSaveDebouncer::default())
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) {
@@ -379,6 +458,29 @@ pub fn run() {
                     .schedule(window.app_handle().clone());
             }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                #[cfg(not(target_os = "macos"))]
+                if (window.label() == "main" || window.label().starts_with("workspace-"))
+                    && window
+                        .app_handle()
+                        .webview_windows()
+                        .values()
+                        .filter(|candidate| {
+                            candidate.label() == "main"
+                                || candidate.label().starts_with("workspace-")
+                        })
+                        .count()
+                        == 1
+                {
+                    let closing_window = window.clone();
+                    if warn_before_quit(window.app_handle(), move || {
+                        if let Err(error) = closing_window.close() {
+                            tracing::warn!(%error, "could not close window after quit confirmation");
+                        }
+                    }) {
+                        api.prevent_close();
+                        return;
+                    }
+                }
                 let registry = window.state::<Arc<plugin_spa::PanelRegistry>>();
                 if registry.begin_window_close(window.label()) {
                     api.prevent_close();
@@ -642,6 +744,13 @@ pub fn run() {
         })
         .expect("error while building the Tauri application")
         .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+                let app = app_handle.clone();
+                if warn_before_quit(app_handle, move || app.exit(0)) {
+                    api.prevent_exit();
+                    return;
+                }
+            }
             if matches!(
                 event,
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
@@ -729,6 +838,30 @@ mod tests {
     use tauri::webview::InvokeRequest;
 
     use super::*;
+
+    #[test]
+    fn quit_warning_distinguishes_inflight_from_interrupted_history() {
+        use fm_transport_dto::OperationStateDto;
+        for state in [
+            OperationStateDto::Queued,
+            OperationStateDto::Planning,
+            OperationStateDto::Running,
+            OperationStateDto::Paused,
+            OperationStateDto::WaitingForConflictResolution,
+            OperationStateDto::Cancelling,
+        ] {
+            assert!(is_active_operation(state), "{state:?} must warn");
+        }
+        for state in [
+            OperationStateDto::Completed,
+            OperationStateDto::CompletedWithWarnings,
+            OperationStateDto::Failed,
+            OperationStateDto::Cancelled,
+            OperationStateDto::Interrupted,
+        ] {
+            assert!(!is_active_operation(state), "{state:?} must not warn");
+        }
+    }
 
     fn create_app<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::App<R> {
         create_app_with_semantic_developer_bundle(builder, false)
