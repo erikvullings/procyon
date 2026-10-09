@@ -488,3 +488,23 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   checks require operators. Independent realistic multilingual/code/media
   labels, matched E5 quality, and dimension/platform CPU resource bounds are
   still missing. Do not enable Gemma or lift the publication guard.
+- 2026-10-09: The bounded [four-target signed CPU resource probe](../docs/evaluations/embeddinggemma-signed-cpu-2026-10-09.md)
+  passed in read-only run
+  [37992680322](https://github.com/erikvullings/procyon/actions/runs/37992680322)
+  using the exact retained candidate artifact 11640886748, with all
+  build/sign/collect/publish jobs skipped. Installed originals powered a
+  fresh native worker/index at **128, 256, 512, and 768 dimensions** on
+  macOS ARM, Windows x86, Linux x86, and Linux ARM. Each dimension ingested
+  one synthetic PNG, MP3, H.264 MP4, and short text document; three text
+  queries per modality, worker restart/recovery, bounded wall time and
+  per-item ingestion rates are recorded in the checked-in machine reports.
+  Across dimensions, OS worker RSS high-water values were 3.46 GiB on
+  Linux ARM, 3.47 GiB on Linux x86, and 3.42 GiB on Windows. The macOS
+  virtual M1 runner's **sampled** maximum was at least 3.33 GiB; it is
+  not an exact peak. Linux ARM exposed only `unknown` for the CPU model,
+  but the runner image, CPU count and RAM are recorded. One synthetic
+  asset per modality is neither sustained throughput nor a representative
+  resource ceiling. Realistic independently labelled retrieval quality,
+  larger and hard-negative media, matched E5 measurements, prior signed
+  candidate upgrade/rollback, and manual accessibility/consent UI review
+  remain open. Do not promote Gemma or change the release guard.
