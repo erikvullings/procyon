@@ -60,3 +60,28 @@ has synchronous dispatch/transfer overhead. More measurements, a
 device-resident attention
 path, and supported-target fallback/resource qualification are needed before
 GPU can be advertised or enabled in a released worker.
+
+## Repeat after unloading the large MLX-Serve model
+
+The initial measurements ran while MLX-Serve reported a loaded 68 GB Qwen
+model. After the user quit that model, its server process and API were gone.
+The already-built release test binary was run twice more, without rebuilding,
+against the same pinned checkpoint and PNG. A separate `omp --model` process
+remained on the machine (about 1% CPU when checked), so these runs do not
+prove exclusive access to the GPU.
+
+| Width | CPU run 1 | Metal run 1 | CPU run 2 | Metal run 2 |
+| --- | ---: | ---: | ---: | ---: |
+| 128 | 26.41 s | 28.23 s | 27.62 s | 28.22 s |
+| 256 | 27.95 s | 28.94 s | 27.58 s | 28.15 s |
+| 512 | 27.75 s | 28.34 s | 27.43 s | 28.31 s |
+| 768 | 27.46 s | 28.29 s | 27.49 s | 28.21 s |
+
+Every vector retained the original >0.99999 CPU/Metal/upstream cosine and
+620 Metal GEMM dispatches. The two test processes peaked at 2,482,454,528
+and 2,489,204,736 resident bytes. The earlier 50.70-second Metal outlier did
+not repeat, but Metal still took about 0.57-1.82 seconds longer per image
+in these paired measurements. The large competing model is therefore not a
+sufficient explanation for the lack of speedup. Attribution of the remaining
+gap requires stage-level profiling; CPU vision attention and per-GEMM
+synchronization are candidates, not yet proven bottlenecks.

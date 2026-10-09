@@ -387,3 +387,12 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   See `docs/evaluations/embeddinggemma-metal-image.md` for method and numbers.
   Metal remains hidden; a device-resident vision attention path, supported-target
   measurements, and fallback qualification are still required before exposure.
+- 2026-10-09: Repeated the exact optimized, pinned-checkpoint image benchmark
+  twice after the user's 68 GB MLX-Serve model was unloaded. At every width,
+  Metal remained 0.57-1.82 seconds slower per image than CPU; both runs
+  retained >0.99999 reference parity and 620 GPU GEMM dispatches, with
+  2.48-2.49 GB test-process peak resident memory. The prior 50.7-second
+  Metal outlier did not recur. A separate small `omp --model` process
+  remained, so these are not guaranteed GPU-exclusive measurements.
+  See `docs/evaluations/embeddinggemma-metal-image.md`; do not promote Metal
+  until stage-level profiling and a demonstrable benefit justify it.
