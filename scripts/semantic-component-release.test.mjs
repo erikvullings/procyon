@@ -154,6 +154,18 @@ test('publication verifies every payload against its catalog fingerprint', (cont
   assert.throws(() => verifySemanticPayloads(envelope, root, 'linux-x86_64'), /invalid payload ID/);
 });
 
+test('Gemma payloads cannot publish without a Gemma-specific release decision', (context) => {
+  const root = mkdtempSync(join(tmpdir(), 'semantic-component-gemma-gate-'));
+  context.after(() => rmSync(root, { force: true, recursive: true }));
+  writeFileSync(join(root, 'worker.abc'), payload);
+  const envelope = JSON.parse(catalog.toString());
+  envelope.catalog.models = [{ metadata: { identity: { model: 'google-embeddinggemma-2' } } }];
+  assert.throws(
+    () => verifySemanticPayloads(envelope, root, 'linux-x86_64'),
+    /Gemma-specific release qualification is required/u,
+  );
+});
+
 test('qualification emits a reviewable lock over every catalog and signature', (context) => {
   const root = mkdtempSync(join(tmpdir(), 'semantic-component-release-'));
   context.after(() => rmSync(root, { force: true, recursive: true }));

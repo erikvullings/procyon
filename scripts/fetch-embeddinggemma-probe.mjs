@@ -1,5 +1,5 @@
-// Development-only pinned EmbeddingGemma 2 checkpoint for Rust/Python parity.
-// Never imported by managed component installation or worker launch.
+// Pinned EmbeddingGemma 2 files for local development and private release qualification.
+// The release bundle independently verifies its packaged originals.
 
 import { fileURLToPath } from 'node:url';
 import { fetchPinnedModel } from './fetch-semantic-model.mjs';

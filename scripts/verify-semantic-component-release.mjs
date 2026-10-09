@@ -11,6 +11,13 @@ import {
 const supportedTargets = ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'];
 
 export function verifySemanticPayloads(envelope, assetsRoot, target) {
+  if (
+    envelope.catalog?.models?.some(
+      (model) => model.metadata?.identity?.model === 'google-embeddinggemma-2',
+    )
+  ) {
+    throw new Error('Gemma-specific release qualification is required before publication');
+  }
   const artifacts = envelope.catalog?.artifacts;
   if (!Array.isArray(artifacts) || artifacts.length === 0) {
     throw new Error(`semantic component ${target} catalog has no payloads`);

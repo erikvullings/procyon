@@ -368,3 +368,10 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   Advanced rather than occupying a second toolbar row; the DSL editor keeps
   the selected prompt mode unchanged. E5 continues using its existing query
   prefix regardless of intent. This does not qualify Gemma for release.
+- 2026-10-09: The private four-target semantic-component qualification workflow
+  can now explicitly fetch verified, pinned Gemma originals and build/smoke
+  Gemma-enabled worker candidates without changing its default E5-only path.
+  Publication still rejects catalogs containing Gemma until independent
+  model-specific quality and supported-platform evidence is reviewed and a
+  release decision is implemented. This does not enable Gemma in standard
+  desktop builds or change the workspace version to 0.5.0.
