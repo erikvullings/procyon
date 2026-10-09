@@ -22,6 +22,11 @@ on:
         required: false
         default: false
         type: boolean
+      measure_installed_gemma:
+        description: With qualify_installed_gemma, measure the installed candidate at 128/256/512/768d
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -29,7 +34,7 @@ permissions:
 jobs:
   semantic-payloads:
     name: Semantic payloads (${{ matrix.target }})
-    if: inputs.qualification_run_id == '' && inputs.qualify_installed_gemma != true
+    if: inputs.qualification_run_id == '' && inputs.qualify_installed_gemma != true && inputs.measure_installed_gemma != true
     runs-on: ${{ matrix.runner }}
     environment: desktop-release
     timeout-minutes: 240
@@ -268,7 +273,7 @@ jobs:
 
   semantic-publish:
     name: Publish approved semantic component release
-    if: ${{ inputs.qualification_run_id != '' && inputs.qualify_installed_gemma != true && vars.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true' }}
+    if: ${{ inputs.qualification_run_id != '' && inputs.qualify_installed_gemma != true && inputs.measure_installed_gemma != true && vars.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true' }}
     runs-on: ubuntu-latest
     environment: desktop-release
     permissions:
@@ -350,6 +355,8 @@ jobs:
             runner: ubuntu-22.04
           - target: windows-x86_64
             runner: windows-latest
+          - target: macos-aarch64
+            runner: macos-15
     steps:
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
@@ -399,6 +406,9 @@ jobs:
       - name: Configure the MSVC tool environment
         if: matrix.target == 'windows-x86_64'
         uses: ilammy/msvc-dev-cmd@v1
+      - name: Install the configured macOS linker
+        if: matrix.target == 'macos-aarch64'
+        run: brew install lld
       - name: Select the MSVC linker
         if: matrix.target == 'windows-x86_64'
         shell: pwsh
@@ -437,6 +447,9 @@ jobs:
         env:
           GEMMA_TARGET: ${{ matrix.target }}
         run: |
+          if [[ "${{ inputs.measure_installed_gemma }}" == "true" ]]; then
+            export PROCYON_GEMMA_MEASURE_DIR="$RUNNER_TEMP/gemma-cpu"
+          fi
           cargo run --quiet -p fm-semantic-components \
             --example qualify_semantic_lifecycle -- \
             "candidate/semantic-catalog-$GEMMA_TARGET.json" \
@@ -445,10 +458,57 @@ jobs:
             "$RUNNER_TEMP/semantic-catalog.pub" \
             "$RUNNER_TEMP/gemma-installed-lifecycle" \
             "$RUNNER_TEMP/gemma-installed-report.json"
+      - name: Record runner hardware and bounded CPU measurements
+        if: inputs.measure_installed_gemma == true
+        shell: bash
+        env:
+          GEMMA_TARGET: ${{ matrix.target }}
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const os = require("node:os");
+            const path = require("node:path");
+            const root = path.join(process.env.RUNNER_TEMP, "gemma-cpu");
+            const dimensions = [128, 256, 512, 768].map((size) =>
+              JSON.parse(fs.readFileSync(path.join(root, `${size}.json`), "utf8")));
+            const lifecycle = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, "gemma-installed-report.json"), "utf8"));
+            if (lifecycle.target !== process.env.GEMMA_TARGET || lifecycle.networkArtifactReads !== 0 ||
+                lifecycle.checks.filter(({ status }) => status === "pass").length !== 13) {
+              throw new Error("signed installed lifecycle report did not pass before measurement");
+            }
+            if (dimensions.some((report, index) => report.dimensions !== [128, 256, 512, 768][index] ||
+                report.workerPeakRssBytes <= 0 || report.measurements.length !== 4)) {
+              throw new Error("missing or invalid per-dimension CPU measurement");
+            }
+            fs.writeFileSync(path.join(root, "resource-report.json"), JSON.stringify({
+              schemaVersion: 1,
+              target: process.env.GEMMA_TARGET,
+              qualificationRunId: process.env.GITHUB_RUN_ID,
+              qualificationSourceRevision: process.env.GITHUB_SHA,
+              candidateRunId: "37974984924",
+              candidateArtifactId: "11640886748",
+              catalogRevision: lifecycle.catalogRevision,
+              catalogSha256: lifecycle.catalogSha256,
+              hardware: {
+                runnerImage: process.env.ImageOS ?? null,
+                runnerName: process.env.RUNNER_NAME,
+                cpuModel: os.cpus()[0]?.model,
+                logicalCpuCount: os.cpus().length,
+                totalMemoryBytes: os.totalmem(),
+                platform: os.platform(),
+                arch: os.arch(),
+                osRelease: os.release(),
+              },
+              dimensions,
+              limitations: "Single synthetic asset per modality and three text queries; fresh process and index per dimension; CPU runner class is virtualized; wall includes IPC and queueing; no quality labels, GPU measurements, sustained throughput, or user workload. macOS peak is sampled, not a kernel high-water mark.",
+            }, null, 2));
+          '
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: installed-gemma-${{ matrix.target }}
-          path: ${{ runner.temp }}/gemma-installed-report.json
+          path: |
+            ${{ runner.temp }}/gemma-installed-report.json
+            ${{ runner.temp }}/gemma-cpu/*.json
           if-no-files-found: warn
           retention-days: 14

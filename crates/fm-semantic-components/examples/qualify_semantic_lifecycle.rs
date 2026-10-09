@@ -456,7 +456,10 @@ fn qualify_installed_gemma(
             native.join("libonnxruntime.so.1"),
         )?;
     }
-    let mut command = std::process::Command::new(test);
+    let measure_dir = std::env::var_os("PROCYON_GEMMA_MEASURE_DIR").map(PathBuf::from);
+    if let Some(directory) = &measure_dir {
+        fs::create_dir(directory)?;
+    }
     let loader_variable = if cfg!(target_os = "macos") {
         "DYLD_LIBRARY_PATH"
     } else if cfg!(windows) {
@@ -468,24 +471,41 @@ fn qualify_installed_gemma(
     if let Some(existing) = std::env::var_os(loader_variable) {
         loader_paths.extend(std::env::split_paths(&existing));
     }
-    let status = command
-        .args([
-            "--exact",
-            "packaged_gemma_worker_ingests_multimodal_sources_offline",
-            "--ignored",
-            "--nocapture",
-        ])
-        .env("PROCYON_SEMANTIC_PRODUCTION_WORKER", launch_worker)
-        .env("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY", native)
-        .env(loader_variable, std::env::join_paths(loader_paths)?)
-        .env(
-            "PROCYON_GEMMA_PACKAGED_FILES",
-            serde_json::to_string(&originals)?,
-        )
-        .env("PROCYON_GEMMA_QUALIFY_RESTART", "1")
-        .status()?;
-    if !status.success() {
-        return Err(format!("installed Gemma offline media smoke failed: {status}").into());
+    for dimensions in if measure_dir.is_some() {
+        vec![128, 256, 512, 768]
+    } else {
+        vec![128]
+    } {
+        let mut command = std::process::Command::new(test);
+        command
+            .args([
+                "--exact",
+                "packaged_gemma_worker_ingests_multimodal_sources_offline",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("PROCYON_SEMANTIC_PRODUCTION_WORKER", &launch_worker)
+            .env("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY", &native)
+            .env(loader_variable, std::env::join_paths(&loader_paths)?)
+            .env(
+                "PROCYON_GEMMA_PACKAGED_FILES",
+                serde_json::to_string(&originals)?,
+            )
+            .env("PROCYON_GEMMA_QUALIFY_RESTART", "1");
+        if let Some(directory) = &measure_dir {
+            command
+                .env("PROCYON_GEMMA_MEASURE_DIMENSIONS", dimensions.to_string())
+                .env(
+                    "PROCYON_GEMMA_MEASURE_REPORT",
+                    directory.join(format!("{dimensions}.json")),
+                );
+        }
+        let status = command.status()?;
+        if !status.success() {
+            return Err(
+                format!("installed Gemma {dimensions}d offline smoke failed: {status}").into(),
+            );
+        }
     }
     Ok(())
 }
