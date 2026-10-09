@@ -13,6 +13,7 @@ env:
   CARGO_TERM_COLOR: always
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
 
@@ -24,8 +25,27 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       frontend: ${{ steps.filter.outputs.frontend }}
       desktop: ${{ steps.filter.outputs.desktop }}
+      reuse: ${{ steps.reuse.outputs.reuse }}
     steps:
       - uses: actions/checkout@v7
+      # A squash merge whose tree is identical to a fully green PR run reuses that result
+      # instead of rebuilding every platform; any mismatch or lookup failure runs full CI.
+      - name: Reuse pull-request CI for an identical tree
+        id: reuse
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-reuse-gate.mjs
+      - name: Record tested tree
+        if: github.event_name == 'pull_request'
+        run: git rev-parse 'HEAD^{tree}' > tree.txt
+      - name: Upload tested tree
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-tested-tree
+          path: tree.txt
+          retention-days: 14
       - uses: dorny/paths-filter@v4
         id: filter
         with:
@@ -74,7 +94,7 @@ jobs:
   rust:
     name: Rust (${{ matrix.os }})
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
+    if: needs.changes.outputs.reuse != 'true' && (github.event_name == 'push' || needs.changes.outputs.rust == 'true')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -107,7 +127,7 @@ jobs:
   frontend:
     name: Frontend
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.reuse != 'true' && (github.event_name == 'push' || needs.changes.outputs.frontend == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -133,7 +153,7 @@ jobs:
   desktop:
     name: Tauri build (${{ matrix.os }})
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.desktop == 'true'
+    if: needs.changes.outputs.reuse != 'true' && (github.event_name == 'push' || needs.changes.outputs.desktop == 'true')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -161,7 +181,7 @@ jobs:
   native-spa-smoke:
     name: Native SPA (${{ matrix.os }})
     needs: changes
-    if: github.event_name == 'push' || needs.changes.outputs.desktop == 'true'
+    if: needs.changes.outputs.reuse != 'true' && (github.event_name == 'push' || needs.changes.outputs.desktop == 'true')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
