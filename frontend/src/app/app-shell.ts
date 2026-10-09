@@ -4703,11 +4703,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         failedSemanticJobs.length > 0
           ? `${activityLabel}: ${t('shell', 'indexingFailed')}`
           : activityLabel;
-      // macOS's overlay title bar (spec follow-up) keeps the native traffic lights, but
-      // draws our own centred title in a reserved CSS row instead of the OS title text
-      // (hidden via hiddenTitle) -- this is what makes the frame colour match, since a
-      // plain "Transparent" title bar still let the OS render its own vibrancy behind it.
-      // The web build doesn't need this: the browser tab already shows the title.
+      // The macOS overlay keeps native traffic lights while the toolbar draws the title.
+      // The browser tab already provides a title; Windows has its own menu/title row.
       const isMacOverlay = runtimeKind === 'tauri' && platform === 'macos';
       const localisedActions = keybindingActions();
       const keybindingContext = {
@@ -4812,12 +4809,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 ]),
               ])
             : undefined,
-          isMacOverlay
-            ? m('.fm-titlebar-spacer', { 'data-tauri-drag-region': '' }, [
-                m('span.fm-titlebar-label', t('shell', 'title')),
-              ])
-            : null,
-          m('.fm-workspace-toolbar', [
+          m('.fm-workspace-toolbar', { 'data-tauri-drag-region': isMacOverlay ? '' : undefined }, [
+            isMacOverlay
+              ? m('.fm-mac-toolbar-brand', { onmousedown: startWindowTitlebarDrag }, [
+                  m('img.fm-mac-toolbar-icon', {
+                    src: '/favicon-96x96.png',
+                    alt: '',
+                    'aria-hidden': 'true',
+                  }),
+                  m('span', t('shell', 'title')),
+                ])
+              : undefined,
             m('.fm-navigation-controls', { 'aria-label': t('shell', 'activePaneNavigation') }, [
               tooltip(
                 t('shell', 'back'),
@@ -4979,7 +4981,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 commandIcon(),
               ),
             ),
-            m('.fm-toolbar-spacer', { 'aria-hidden': 'true' }),
+            m('.fm-toolbar-spacer', {
+              'aria-hidden': 'true',
+              'data-tauri-drag-region': isMacOverlay ? '' : undefined,
+            }),
             tooltip(
               t('shell', 'workspaceSwitcherLabel', { name: workspace?.name ?? t('shell', 'none') }),
               m(

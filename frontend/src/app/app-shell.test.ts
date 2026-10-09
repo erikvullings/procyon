@@ -248,6 +248,58 @@ afterEach(() => {
 });
 
 describe('AppShell', () => {
+  it('places the macOS brand and commands in one overlay toolbar without changing other hosts', async () => {
+    const client = new MockFileManagerClient();
+    const capabilities = await client.getRuntimeCapabilities();
+    const runtimeCapabilities = vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
+      ...capabilities,
+      platform: 'macos',
+      runtime: 'tauri',
+    });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-app-shell')?.getAttribute('data-mac-titlebar-overlay')).toBe(
+        'true',
+      ),
+    );
+    const toolbar = root.querySelector('.fm-workspace-toolbar');
+    expect(root.querySelector('.fm-titlebar-spacer')).toBeNull();
+    expect(toolbar?.firstElementChild?.classList.contains('fm-mac-toolbar-brand')).toBe(true);
+    expect(toolbar?.querySelector('.fm-mac-toolbar-icon')).not.toBeNull();
+    expect(toolbar?.querySelector('.fm-command-palette-trigger')).not.toBeNull();
+    const dragSpace = toolbar?.querySelector('.fm-toolbar-spacer');
+    expect(toolbar?.hasAttribute('data-tauri-drag-region')).toBe(true);
+    expect(dragSpace?.hasAttribute('data-tauri-drag-region')).toBe(true);
+    expect(
+      dragSpace?.previousElementSibling?.querySelector('.fm-command-palette-trigger'),
+    ).not.toBeNull();
+    expect(
+      dragSpace?.nextElementSibling?.querySelector('.fm-workspace-switcher-button'),
+    ).not.toBeNull();
+
+    m.mount(root, null);
+    runtimeCapabilities.mockResolvedValue({
+      ...capabilities,
+      platform: 'windows',
+      runtime: 'tauri',
+    });
+    const userAgent = vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Windows NT 10.0');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'tauri', client }) });
+    await vi.waitFor(() => expect(root.querySelector('.fm-windows-titlebar')).not.toBeNull());
+    expect(root.querySelector('.fm-mac-toolbar-brand')).toBeNull();
+    expect(
+      root.querySelector('.fm-workspace-toolbar')?.hasAttribute('data-tauri-drag-region'),
+    ).toBe(false);
+    expect(root.querySelector('.fm-workspace-toolbar .fm-navigation-controls')).not.toBeNull();
+
+    m.mount(root, null);
+    userAgent.mockRestore();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    expect(root.querySelector('.fm-mac-toolbar-brand')).toBeNull();
+    expect(root.querySelector('.fm-workspace-toolbar .fm-navigation-controls')).not.toBeNull();
+  });
+
   it('serializes initial pane loads that target the same protected location', async () => {
     const client = new MockFileManagerClient();
     const originalStartWorkspace = client.startWorkspace.bind(client);

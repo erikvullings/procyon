@@ -339,8 +339,8 @@ textarea {
 }
 
 /*
- * Pinned by row number rather than left to auto-placement: the mac-only
- * titlebar spacer only exists in the DOM in Tauri overlay mode, and
+ * Pinned by row number rather than left to auto-placement: the Windows
+ * titlebar only exists in the DOM in Tauri Windows mode, and
  * mithril-materialized's ModalPanel-based dialogs (command palette, context
  * menu, create-directory, find-files, permanent-delete) always render an
  * always-present `.modal-container` wrapper regardless of open/closed state.
@@ -349,10 +349,6 @@ textarea {
  * present, which previously let the operation centre grab the workspace's
  * intended `minmax(0, 1fr)` track and balloon to fill the screen.
  */
-.fm-titlebar-spacer {
-  grid-row: 1;
-}
-
 .fm-workspace-toolbar {
   grid-row: 2;
 }
@@ -887,28 +883,34 @@ main.fm-workspace {
   color: var(--fm-text);
 }
 
-/*
- * macOS overlay title bar (tauri.conf.json titleBarStyle: Overlay + hiddenTitle):
- * reserves a row, coloured the same as the toolbar, for the native traffic lights,
- * with our own centred title label -- the OS title is hidden since it doesn't
- * centre reliably without an NSToolbar attached.
- */
-.fm-titlebar-spacer {
-  display: none;
+/* The macOS overlay toolbar begins after the native traffic lights. Only its brand
+   and flexible empty space initiate window dragging; controls remain clickable. */
+.fm-app-shell[data-mac-titlebar-overlay="true"] .fm-workspace-toolbar {
+  height: 28px;
+  min-height: 28px;
+  padding-left: 80px;
+  --mm-control-height: 28px;
 }
 
-.fm-app-shell[data-mac-titlebar-overlay="true"] .fm-titlebar-spacer {
-  display: flex;
+.fm-app-shell[data-mac-titlebar-overlay="true"] .fm-toolbar-separator {
+  margin-inline: 0.25rem;
+}
+
+.fm-mac-toolbar-brand {
+  display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
-  justify-content: center;
-  height: 22px;
-  background: var(--fm-surface-elevated);
+  gap: 6px;
+  margin-right: 4px;
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-title);
+  font-weight: 700;
 }
 
-.fm-titlebar-label {
-  color: var(--fm-text-muted);
-  font-size: 1em;
-  font-weight: 700;
+.fm-mac-toolbar-icon {
+  width: 16px;
+  height: 16px;
+  transform: translateY(2px);
 }
 
 .fm-windows-titlebar {
