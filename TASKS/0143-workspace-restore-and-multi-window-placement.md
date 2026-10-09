@@ -478,3 +478,11 @@ Spaces-assignment itself as a known macOS limitation.
     check` (both clean), `vitest run` (1400 passed, no regressions). No HTTP/OpenAPI regeneration
     needed - `resync_workspace` has no `fm-server` route, desktop-only as designed. **Not yet
     confirmed in the real app** - same standing limitation as the rest of this task.
+- 2026-10-09: Dev restarts can terminate the process before the window-state plugin's
+  `RunEvent::Exit` disk save. Debounced move/resize saves now persist a settled frame while the app
+  is still running; ordinary quit keeps the plugin's existing exit save. The declared window keeps
+  its 1280x800 logical-pixel default and now has a 960x600 minimum, so an old undersized saved
+  frame cannot shrink the app to a near-VGA viewport. Verified in the macOS Gemma dev desktop:
+  resizing to 637x391 clamped to 960x600, resizing to 1100x700 wrote the new frame to disk, and a
+  full dev stop/restart reopened it at 1100x700. The mock-runtime config test locks in the declared
+  minimum; the dev-process termination path requires the live host check.

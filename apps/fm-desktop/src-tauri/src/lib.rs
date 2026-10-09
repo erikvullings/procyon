@@ -23,6 +23,7 @@ use fm_application::FileManagerService;
 use fm_events::EventBus;
 use fm_transport_dto::RuntimeKindDto;
 use tauri::Manager;
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -55,6 +56,27 @@ impl QuittingFlag {
 
     fn is_quitting(&self) -> bool {
         self.0.load(Ordering::SeqCst)
+    }
+}
+
+#[derive(Default)]
+struct WindowStateSaveDebouncer(Mutex<Option<tauri::async_runtime::JoinHandle<()>>>);
+
+impl WindowStateSaveDebouncer {
+    fn schedule<R: tauri::Runtime>(&self, app: tauri::AppHandle<R>) {
+        let mut pending = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(task) = pending.take() {
+            task.abort();
+        }
+        *pending = Some(tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            if let Err(error) = app.save_window_state(StateFlags::all()) {
+                tracing::warn!(%error, "could not save window geometry");
+            }
+        }));
     }
 }
 
@@ -349,7 +371,13 @@ pub fn run() {
         .manage(terminal::TerminalRegistry::default())
         .manage(native_menu::NativeMenuActionChannel::default())
         .manage(QuittingFlag::default())
+        .manage(WindowStateSaveDebouncer::default())
         .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) {
+                window
+                    .state::<WindowStateSaveDebouncer>()
+                    .schedule(window.app_handle().clone());
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let registry = window.state::<Arc<plugin_spa::PanelRegistry>>();
                 if registry.begin_window_close(window.label()) {
@@ -938,6 +966,21 @@ mod tests {
             "tauri://localhost"
         };
         url.parse().expect("valid url")
+    }
+
+    #[test]
+    fn desktop_window_has_a_usable_minimum_on_high_density_displays() {
+        let context = build_context::<tauri::test::MockRuntime>();
+        let window = context
+            .config()
+            .app
+            .windows
+            .first()
+            .expect("main window config");
+        assert_eq!(window.width, 1280.0);
+        assert_eq!(window.height, 800.0);
+        assert_eq!(window.min_width, Some(960.0));
+        assert_eq!(window.min_height, Some(600.0));
     }
 
     #[test]
