@@ -17,6 +17,11 @@ on:
         required: false
         default: false
         type: boolean
+      qualify_installed_gemma:
+        description: Read-only installed lifecycle against retained candidate run 37974984924
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -24,7 +29,7 @@ permissions:
 jobs:
   semantic-payloads:
     name: Semantic payloads (${{ matrix.target }})
-    if: inputs.qualification_run_id == ''
+    if: inputs.qualification_run_id == '' && inputs.qualify_installed_gemma != true
     runs-on: ${{ matrix.runner }}
     environment: desktop-release
     timeout-minutes: 240
@@ -263,7 +268,7 @@ jobs:
 
   semantic-publish:
     name: Publish approved semantic component release
-    if: ${{ inputs.qualification_run_id != '' && vars.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true' }}
+    if: ${{ inputs.qualification_run_id != '' && inputs.qualify_installed_gemma != true && vars.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true' }}
     runs-on: ubuntu-latest
     environment: desktop-release
     permissions:
@@ -325,3 +330,95 @@ jobs:
             --latest=false \
             --notes "Qualified optional semantic components for Procyon." \
             semantic-release-assets/*
+
+  installed-gemma-qualification:
+    name: Installed Gemma (${{ matrix.target }})
+    if: inputs.qualify_installed_gemma == true && inputs.qualification_run_id == ''
+    runs-on: ${{ matrix.runner }}
+    environment: desktop-release
+    timeout-minutes: 180
+    permissions:
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-aarch64
+            runner: ubuntu-24.04-arm
+          - target: linux-x86_64
+            runner: ubuntu-22.04
+          - target: windows-x86_64
+            runner: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v8
+        with:
+          name: semantic-component-candidate-d3f921fe08e4994a905727a71af102979f4fbe23
+          path: candidate
+          github-token: ${{ github.token }}
+          run-id: 37974984924
+      - name: Stage exact signed target payloads
+        shell: bash
+        env:
+          GEMMA_TARGET: ${{ matrix.target }}
+          VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
+        run: |
+          test -n "$VERIFYING_KEY_BASE64"
+          printf '%s' "$VERIFYING_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/semantic-catalog.pub"
+          node -e '
+            const fs = require("node:fs");
+            const path = require("node:path");
+            const catalog = JSON.parse(fs.readFileSync(path.join("candidate", `semantic-catalog-${process.env.GEMMA_TARGET}.json`), "utf8"));
+            fs.mkdirSync("candidate-payloads");
+            for (const { id } of catalog.catalog.artifacts) {
+              if (!/^[a-zA-Z0-9._-]+$/.test(id)) throw new Error(`invalid artifact id: ${id}`);
+              fs.linkSync(path.join("candidate", id), path.join("candidate-payloads", id));
+            }
+          '
+      - name: Configure the MSVC tool environment
+        if: matrix.target == 'windows-x86_64'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Select the MSVC linker
+        if: matrix.target == 'windows-x86_64'
+        shell: pwsh
+        run: |
+          $linker = Join-Path $env:VCToolsInstallDir 'bin\Hostx64\x64\link.exe'
+          if (-not (Test-Path -PathType Leaf $linker)) {
+            throw "MSVC linker was not found at $linker"
+          }
+          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" >> $env:GITHUB_ENV
+      - name: Build existing offline media smoke
+        shell: bash
+        run: |
+          cargo test -p fm-semantic-worker --features gemma-native \
+            --test packaged_production --no-run --message-format=json \
+            > "$RUNNER_TEMP/gemma-test-build.json"
+          node -e '
+            const fs = require("node:fs");
+            const messages = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").map((line) => JSON.parse(line));
+            const tests = messages.filter((message) => message.reason === "compiler-artifact" && message.target.name === "packaged_production" && message.executable);
+            if (tests.length !== 1) throw new Error(`expected one packaged_production executable, got ${tests.length}`);
+            fs.appendFileSync(process.env.GITHUB_ENV, `PROCYON_GEMMA_INSTALLED_TEST=${tests[0].executable}\n`);
+          ' "$RUNNER_TEMP/gemma-test-build.json"
+      - name: Qualify exact signed installed Gemma lifecycle offline
+        shell: bash
+        env:
+          GEMMA_TARGET: ${{ matrix.target }}
+        run: |
+          cargo run --quiet -p fm-semantic-components \
+            --example qualify_semantic_lifecycle -- \
+            "candidate/semantic-catalog-$GEMMA_TARGET.json" \
+            "candidate/semantic-catalog-$GEMMA_TARGET.sig" \
+            candidate-payloads \
+            "$RUNNER_TEMP/semantic-catalog.pub" \
+            "$RUNNER_TEMP/gemma-installed-lifecycle" \
+            "$RUNNER_TEMP/gemma-installed-report.json"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: installed-gemma-${{ matrix.target }}
+          path: ${{ runner.temp }}/gemma-installed-report.json
+          if-no-files-found: warn
+          retention-days: 14
