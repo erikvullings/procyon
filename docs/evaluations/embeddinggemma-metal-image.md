@@ -2,9 +2,11 @@
 
 The optional `gemma-metal` feature offloads FP32 matrix multiplications in the
 native vision tower, vision-to-language projection, and soft-token language
-fusion using the pinned Lattice Metal GEMM primitive. Bicubic image preparation,
-vision attention/normalization/pooling, and fusion attention/normalization remain
-on CPU. BF16 checkpoint weights are decoded to FP32; there is no FP16 inference.
+fusion using the pinned Lattice Metal GEMM primitive. Vision attention's
+query/key and probability/value products also run through that primitive;
+bicubic preprocessing, attention softmax, normalization, pooling, and fusion
+attention remain on CPU. BF16 checkpoint weights are decoded to FP32; there
+is no FP16 inference.
 Small matrices below Lattice's dispatch threshold use its CPU GEMM. The managed
 worker still constructs the CPU encoder, even when built with `gemma-metal`:
 this is an explicitly selected, image-only local parity probe, not a user-facing
@@ -29,13 +31,12 @@ PROCYON_GEMMA_PROBE_MODEL_DIR="$PWD/target/semantic-model-cache/google--embeddin
 
 `/usr/bin/time -l` reports process peak resident bytes. Run once to compile,
 then execute the built test binary directly for an inference-process reading.
-This is one
-PNG on one machine; neither GPU speedup nor memory limits across supported
-targets are established by a dispatch count. Do not enable GPU in installed
+This is one PNG on one machine; dispatch counts alone do not establish a
+speedup or memory limits across supported targets. Do not enable GPU in installed
 workers or reuse existing indexed vectors until cross-platform quality,
 resource, and CPU-fallback qualification is complete.
 
-## Local measurements (2026-10-09)
+## Initial GEMM-only measurements (2026-10-09)
 
 Apple M4 Max (40 GPU cores, Metal 4), macOS, pinned BF16 checkpoint decoded
 to FP32, optimized Rust build. One patterned 128 x 96 PNG, each encoder
@@ -55,11 +56,10 @@ the built test binary directly). The earlier test, which kept multiple
 encoder instances alive concurrently, peaked at 7,926,235,136 bytes. The
 final test releases one encoder before loading the next. An earlier repeat
 also had a 50.70-second Metal outlier at width 256. These measurements show
-**no reliable speedup**; vision attention remains on CPU, and each Metal GEMM
-has synchronous dispatch/transfer overhead. More measurements, a
-device-resident attention
-path, and supported-target fallback/resource qualification are needed before
-GPU can be advertised or enabled in a released worker.
+**no reliable speedup** in the initial implementation: vision attention was
+still on CPU, and each Metal GEMM synchronized before continuing. The later
+vision-attention change below resolves this local bottleneck; supported-target
+fallback/resource qualification remains necessary before release.
 
 ## Repeat after unloading the large MLX-Serve model
 
@@ -82,6 +82,44 @@ Every vector retained the original >0.99999 CPU/Metal/upstream cosine and
 and 2,489,204,736 resident bytes. The earlier 50.70-second Metal outlier did
 not repeat, but Metal still took about 0.57-1.82 seconds longer per image
 in these paired measurements. The large competing model is therefore not a
-sufficient explanation for the lack of speedup. Attribution of the remaining
-gap requires stage-level profiling; CPU vision attention and per-GEMM
-synchronization are candidates, not yet proven bottlenecks.
+sufficient explanation for the lack of speedup. At this point the remaining
+gap still needed stage-level profiling; CPU vision attention and per-GEMM
+synchronization were candidates.
+
+## Profile and vision-attention offload
+
+On the same pinned checkpoint, a temporary stage timer and macOS CPU sample
+identified the 2,394-patch vision attention loop as the dominant cost. The
+unmodified CPU path spent 25.96-26.60 seconds in vision attention and about
+27 seconds in the vision stage; preprocessing took about 5 ms, projection
+43-47 ms, and fusion about 1 second. The initial Metal path still ran that
+attention loop on CPU. Its 620 synchronous GEMM calls took approximately
+1.06-1.10 seconds in total, including GPU dispatch/wait. Those calls
+referenced 4.72 GB of input/output buffer extents; this is **not** measured
+bus traffic because Lattice uses shared Metal buffers.
+
+The bounded change uses the existing pinned FP32 Metal GEMM for each vision
+head's query/key score product and probability/value product. Softmax and the
+CPU default remain unchanged. On the instrumented optimized build,
+attention took 2.95-3.08 seconds on this Metal path, vision 4.48-4.63 seconds,
+projection 48-56 ms, and fusion 1.18-1.21 seconds. The 1,004 Metal dispatches
+per image spent about 1.60-1.64 seconds total in synchronous GEMM calls;
+the summed buffer extents were 13.99 GB (again, not measured transfer bytes).
+
+After removing the temporary profiler, the final release test binary
+repeated the paired comparison without recompilation or the large MLX-Serve
+model:
+
+| Width | CPU | Metal | CPU/Python cosine | Metal/Python cosine |
+| --- | ---: | ---: | ---: | ---: |
+| 128 | 28.10 s | 5.83 s | 0.999999921 | 0.999999927 |
+| 256 | 28.39 s | 5.75 s | 0.999999912 | 0.999999902 |
+| 512 | 27.83 s | 5.67 s | 0.999999895 | 0.999999891 |
+| 768 | 27.98 s | 5.64 s | 0.999999868 | 0.999999878 |
+
+The test passed all four widths with 1,004 successful GPU dispatches each,
+Metal/CPU cosine >0.99999998, and 2,523,824,128 bytes peak resident memory
+for the direct test process. On this one image and M4 Max this is roughly
+4.8-5.0x faster end to end, excluding model loading. It does not qualify
+other image shapes, devices, installed-worker GPU fallback, memory ceilings,
+or retrieval quality; the feature remains a local-only opt-in probe.

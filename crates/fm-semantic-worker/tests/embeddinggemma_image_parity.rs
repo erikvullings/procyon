@@ -95,9 +95,9 @@ fn metal_image_matches_cpu_and_upstream_at_every_dimension() {
         let metal_time = start.elapsed();
         let dispatches = metal.metal_dispatches() - before;
         drop(metal);
-        assert!(
-            dispatches > 0,
-            "no Metal dispatch at dimension {dimensions}"
+        assert_eq!(
+            dispatches, 1004,
+            "vision attention, projection and fusion must dispatch on Metal at dimension {dimensions}"
         );
         assert_eq!(actual.len(), dimensions);
         let cosine = |a: &[f32], b: &[f32]| -> f64 {

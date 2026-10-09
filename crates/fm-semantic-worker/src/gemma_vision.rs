@@ -285,32 +285,11 @@ impl GemmaVisionTower {
                     rotary(&mut k[start..start + HEAD], position);
                 }
             }
-            let mut context = vec![0.0; n * WIDTH];
-            for h in 0..HEADS {
-                for t in 0..valid_patches {
-                    if cancellation.is_cancelled() {
-                        return Err(GemmaVisionError::Cancelled);
-                    }
-                    let qt = &q[t * WIDTH + h * HEAD..t * WIDTH + (h + 1) * HEAD];
-                    let mut logits = Vec::with_capacity(valid_patches);
-                    for j in 0..valid_patches {
-                        let kj = &k[j * WIDTH + h * HEAD..j * WIDTH + (h + 1) * HEAD];
-                        logits.push(qt.iter().zip(kj).map(|(a, b)| a * b).sum::<f32>());
-                    }
-                    let max = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-                    for score in &mut logits {
-                        *score = (*score - max).exp();
-                    }
-                    let total: f32 = logits.iter().sum();
-                    let out = &mut context[t * WIDTH + h * HEAD..t * WIDTH + (h + 1) * HEAD];
-                    for (j, score) in logits.iter().enumerate() {
-                        let value = &v[j * WIDTH + h * HEAD..j * WIDTH + (h + 1) * HEAD];
-                        for d in 0..HEAD {
-                            out[d] += (score / total) * value[d];
-                        }
-                    }
-                }
-            }
+            let context = match self.compute {
+                GemmaCompute::Cpu => attention_cpu(&q, &k, &v, n, cancellation)?,
+                #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+                GemmaCompute::Metal(_) => self.attention_metal(&q, &k, &v, n, cancellation)?,
+            };
             let mut attention = self.linear(&context, &layer.o, n, WIDTH, WIDTH);
             rms_norm(&mut attention, &layer.post_attn_norm, WIDTH, EPS);
             for (dst, update) in hidden.iter_mut().zip(attention) {
@@ -372,6 +351,101 @@ impl GemmaVisionTower {
             .matmul_bt(input, weights, &mut result, rows, cols, output);
         result
     }
+
+    #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+    fn attention_metal(
+        &self,
+        q: &[f32],
+        k: &[f32],
+        v: &[f32],
+        n: usize,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<f32>, GemmaVisionError> {
+        let mut context = vec![0.0; n * WIDTH];
+        for h in 0..HEADS {
+            if cancellation.is_cancelled() {
+                return Err(GemmaVisionError::Cancelled);
+            }
+            let mut queries = vec![0.0; n * HEAD];
+            let mut keys = vec![0.0; n * HEAD];
+            let mut values_transposed = vec![0.0; n * HEAD];
+            for t in 0..n {
+                let start = t * WIDTH + h * HEAD;
+                queries[t * HEAD..(t + 1) * HEAD].copy_from_slice(&q[start..start + HEAD]);
+                keys[t * HEAD..(t + 1) * HEAD].copy_from_slice(&k[start..start + HEAD]);
+                for d in 0..HEAD {
+                    values_transposed[d * n + t] = v[start + d];
+                }
+            }
+            let mut probabilities = vec![0.0; n * n];
+            self.compute
+                .matmul_bt(&queries, &keys, &mut probabilities, n, HEAD, n);
+            for row in probabilities.chunks_exact_mut(n) {
+                if cancellation.is_cancelled() {
+                    return Err(GemmaVisionError::Cancelled);
+                }
+                let max = row.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+                for score in row.iter_mut() {
+                    *score = (*score - max).exp();
+                }
+                let total: f32 = row.iter().sum();
+                for score in row {
+                    *score /= total;
+                }
+            }
+            let mut head_context = vec![0.0; n * HEAD];
+            self.compute.matmul_bt(
+                &probabilities,
+                &values_transposed,
+                &mut head_context,
+                n,
+                n,
+                HEAD,
+            );
+            for t in 0..n {
+                let start = t * WIDTH + h * HEAD;
+                context[start..start + HEAD]
+                    .copy_from_slice(&head_context[t * HEAD..(t + 1) * HEAD]);
+            }
+        }
+        Ok(context)
+    }
+}
+
+fn attention_cpu(
+    q: &[f32],
+    k: &[f32],
+    v: &[f32],
+    n: usize,
+    cancellation: &CancellationToken,
+) -> Result<Vec<f32>, GemmaVisionError> {
+    let mut context = vec![0.0; n * WIDTH];
+    for h in 0..HEADS {
+        for t in 0..n {
+            if cancellation.is_cancelled() {
+                return Err(GemmaVisionError::Cancelled);
+            }
+            let qt = &q[t * WIDTH + h * HEAD..t * WIDTH + (h + 1) * HEAD];
+            let mut logits = Vec::with_capacity(n);
+            for j in 0..n {
+                let kj = &k[j * WIDTH + h * HEAD..j * WIDTH + (h + 1) * HEAD];
+                logits.push(qt.iter().zip(kj).map(|(a, b)| a * b).sum::<f32>());
+            }
+            let max = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            for score in &mut logits {
+                *score = (*score - max).exp();
+            }
+            let total: f32 = logits.iter().sum();
+            let out = &mut context[t * WIDTH + h * HEAD..t * WIDTH + (h + 1) * HEAD];
+            for (j, score) in logits.iter().enumerate() {
+                let value = &v[j * WIDTH + h * HEAD..j * WIDTH + (h + 1) * HEAD];
+                for d in 0..HEAD {
+                    out[d] += (score / total) * value[d];
+                }
+            }
+        }
+    }
+    Ok(context)
 }
 
 fn rotary(vector: &mut [f32], position: [i32; 2]) {
@@ -443,6 +517,45 @@ mod tests {
         assert!(matches!(
             tower.encode_patches(&bad_pixels, &positions, 9),
             Err(GemmaVisionError::Input(_))
+        ));
+    }
+
+    #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+    #[test]
+    #[ignore = "requires an Apple Metal device"]
+    fn metal_attention_matches_cpu_with_and_without_gpu_dispatch() {
+        let tower = GemmaVisionTower {
+            compute: GemmaCompute::metal().expect("Metal device"),
+            patch_projection: Vec::new(),
+            position_table: Vec::new(),
+            layers: Vec::new(),
+        };
+        let cancellation = CancellationToken::new();
+        for n in [9, 64] {
+            let values = |offset: usize| {
+                (0..n * WIDTH)
+                    .map(|i| (((i + offset) % 113) as f32 - 56.0) / 300.0)
+                    .collect::<Vec<_>>()
+            };
+            let q = values(0);
+            let k = values(29);
+            let v = values(61);
+            let cpu = attention_cpu(&q, &k, &v, n, &cancellation).expect("CPU attention");
+            let metal = tower
+                .attention_metal(&q, &k, &v, n, &cancellation)
+                .expect("Metal attention");
+            let max_delta = cpu
+                .iter()
+                .zip(metal)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0_f32, f32::max);
+            assert!(max_delta < 1e-4, "n={n} max attention delta {max_delta}");
+        }
+        assert_eq!(tower.compute.dispatches(), 2 * HEADS);
+        cancellation.cancel();
+        assert!(matches!(
+            tower.attention_metal(&[], &[], &[], 64, &cancellation),
+            Err(GemmaVisionError::Cancelled)
         ));
     }
 }

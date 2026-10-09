@@ -396,3 +396,14 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   remained, so these are not guaranteed GPU-exclusive measurements.
   See `docs/evaluations/embeddinggemma-metal-image.md`; do not promote Metal
   until stage-level profiling and a demonstrable benefit justify it.
+- 2026-10-09: Profiled that GEMM-only image probe and found vision attention
+  consumed 25.96-26.60 seconds on CPU, versus ~1.1 seconds spent in 620
+  synchronous Metal GEMM calls. Added FP32 Metal query/key and
+  probability/value GEMM in each vision head, retaining CPU softmax and the
+  CPU default. Pinned-checkpoint final release-mode image parity passed at
+  all 128/256/512/768 widths: Metal 5.64-5.83 seconds versus CPU 27.83-28.39
+  seconds for one patterned PNG, with 1,004 actual Metal dispatches and
+  2,523,824,128 bytes direct-process peak resident memory. This is a measured
+  ~4.8-5.0x local M4 Max speedup, not installed-worker or cross-platform
+  qualification. Keep Gemma Metal hidden until supported-target resource,
+  quality, and fallback gates have independent evidence.
