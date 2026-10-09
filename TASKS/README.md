@@ -76,6 +76,7 @@ The dual-pane shell: layout, panes, tabs, sorting, selection, and finding things
 - [ ] 0169 Saved advanced filter presets *(needs 0030, 0067)*
 - [x] 0069 Tabs per pane
 - [x] 0070 Favourites, bookmarks and recent locations
+- [ ] 0241 Guided walkthroughs and in-app help *(blocked: real recording, captions and first-run invitation pending)*
 - [x] 0089 Content search across files
 - [x] 0090 Total Commander-style selection toggles (invert, select/deselect by mask)
 - [x] 0144 Volumes in Favourites/Go menu, plus Go menu Servers/Cloud/Network sections

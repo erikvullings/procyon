@@ -248,6 +248,19 @@ afterEach(() => {
 });
 
 describe('AppShell', () => {
+  it('opens the bundled guide catalog in both mock and HTTP hosts', () => {
+    for (const runtime of ['mock', 'http'] as const) {
+      m.mount(root, {
+        view: () => m(AppShell, { runtime, client: new MockFileManagerClient() }),
+      });
+      m.redraw.sync();
+      root.querySelector<HTMLButtonElement>('.fm-help-trigger')?.click();
+      m.redraw.sync();
+      expect(root.querySelectorAll('.fm-walkthrough-nav button')).toHaveLength(7);
+      m.mount(root, null);
+    }
+  });
+
   it('places the macOS brand and commands in one overlay toolbar without changing other hosts', async () => {
     const client = new MockFileManagerClient();
     const capabilities = await client.getRuntimeCapabilities();

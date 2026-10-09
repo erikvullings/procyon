@@ -3,6 +3,13 @@ import type { LocalisedCatalogue } from './types';
 
 /** Portuguese (European) catalogue (task 0098). Keep the key set identical to `en`. */
 export const pt = {
+  walkthroughs: {
+    ...en.walkthroughs,
+    title: 'Guias',
+    close: 'Fechar guias',
+    chooseGuide: 'Escolher guia',
+    englishContent: 'Os guias estão atualmente disponíveis apenas em inglês.',
+  },
   basket: {
     ...en.basket,
     title: 'Cesto de ficheiros',

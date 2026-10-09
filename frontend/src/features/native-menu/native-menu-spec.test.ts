@@ -669,9 +669,15 @@ describe('buildNativeMenuSpec', () => {
       { kind: 'separator' },
       {
         kind: 'action',
+        id: 'ui.openWalkthroughs',
+        title: 'Walkthroughs',
+        enabled: true,
+        checked: false,
+      },
+      {
+        kind: 'action',
         id: 'core.showShortcutsHelp',
         title: 'Keyboard Shortcuts',
-        shortcut: undefined,
         enabled: true,
         checked: false,
       },

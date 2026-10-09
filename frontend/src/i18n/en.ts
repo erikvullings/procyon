@@ -2,6 +2,12 @@ import type { CatalogueShape } from './types';
 
 /** English catalogue: the initial and fallback locale (task 0098). */
 export const en = {
+  walkthroughs: {
+    title: 'Walkthroughs',
+    close: 'Close walkthroughs',
+    chooseGuide: 'Choose a guide',
+    englishContent: 'Guides and captions are currently available in English.',
+  },
   basket: {
     title: 'Collection basket',
     add: 'Add selection to basket',

@@ -397,6 +397,13 @@ function helpMenu(actions: readonly ActionDescriptor[]): NativeMenu {
         checked: false,
       },
       { kind: 'separator' },
+      {
+        kind: 'action',
+        id: 'ui.openWalkthroughs',
+        title: t('walkthroughs', 'title'),
+        enabled: true,
+        checked: false,
+      },
       ...actionItems(actions, ['core.showShortcutsHelp']),
     ],
   };

@@ -190,6 +190,8 @@ import {
 import { tauriTerminalClient } from '../features/terminal/terminal-client';
 import { TerminalDrawer } from '../features/terminal/terminal-drawer';
 import { focusOpenedTerminal, isTerminalVisible } from '../features/terminal/terminal-state';
+import { WalkthroughPanel } from '../features/walkthroughs/walkthrough-panel';
+import type { WalkthroughId } from '../features/walkthroughs/walkthroughs';
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
 import {
   createPaneContentBuilder,
@@ -470,6 +472,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let connections: readonly Connection[] = [];
   let connectionsManagerOpen = false;
   let shortcutsHelpOpen = false;
+  let walkthroughsOpen = false;
+  let selectedWalkthrough: WalkthroughId = 'basics';
   let semanticAssistantAvailable = false;
   let knowledgeSearchAvailable = false;
   let knowledgeSearchChecked = false;
@@ -679,6 +683,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     },
     openShortcutsHelp: () => {
       shortcutsHelpOpen = true;
+      m.redraw();
+    },
+    openWalkthroughs: () => {
+      walkthroughsOpen = true;
       m.redraw();
     },
     activateTabByKey: (key) => {
@@ -5241,6 +5249,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               ),
             ),
             m(
+              'button.fm-help-trigger',
+              {
+                type: 'button',
+                'aria-label': t('walkthroughs', 'title'),
+                onclick: () => {
+                  walkthroughsOpen = true;
+                },
+              },
+              t('menu', 'help'),
+            ),
+            m(
               'details.fm-settings-disclosure',
               {
                 oncreate: ({ dom }) => {
@@ -5348,6 +5367,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               ],
             ),
           ]),
+          walkthroughsOpen
+            ? m(WalkthroughPanel, {
+                selected: selectedWalkthrough,
+                onSelect: (id) => {
+                  selectedWalkthrough = id;
+                },
+                onClose: () => {
+                  walkthroughsOpen = false;
+                  document.querySelector<HTMLButtonElement>('.fm-help-trigger')?.focus();
+                },
+              })
+            : undefined,
           m('main.fm-workspace', [
             (() => {
               if (!treeSidebarOpen || treeRootLocation === undefined) return undefined;
