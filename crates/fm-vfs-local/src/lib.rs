@@ -346,7 +346,7 @@ impl FileSystemProvider for LocalFileSystemProvider {
             };
             enum Step {
                 Visit(PathBuf, Option<std::fs::FileType>),
-                Children(PathBuf, std::fs::ReadDir),
+                Children(PathBuf, Box<std::fs::ReadDir>),
                 Complete(PathBuf),
             }
             let mut stack = vec![Step::Visit(root, None)];
@@ -439,7 +439,7 @@ impl FileSystemProvider for LocalFileSystemProvider {
                         }
                     };
                     stack.push(Step::Complete(path.clone()));
-                    stack.push(Step::Children(path, directory));
+                    stack.push(Step::Children(path, Box::new(directory)));
                 } else {
                     let result = if directory_link {
                         std::fs::remove_dir(&path)
