@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 use std::error::Error;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{Cursor, Read};
 use std::path::Path;
 use std::time::Instant;
@@ -95,6 +95,34 @@ struct Query {
     text: String,
     relevant: Vec<String>,
     task: GemmaTextTask,
+    eligible: Option<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+struct LabelledCorpus {
+    documents: Vec<CodeDocument>,
+    cases: Vec<LabelledCase>,
+}
+
+#[derive(Deserialize)]
+struct LabelledCase {
+    id: String,
+    query: String,
+    #[serde(rename = "relevantIds")]
+    relevant: Vec<String>,
+    #[serde(rename = "eligibleIds")]
+    eligible: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct LabelledPhoto {
+    id: String,
+    path: String,
+    sha256: String,
+    #[serde(rename = "positiveCaption")]
+    positive: String,
+    #[serde(rename = "negativeCaption")]
+    negative: String,
 }
 
 fn verify_checkpoint(directory: &Path) -> Result<(), Box<dyn Error>> {
@@ -175,6 +203,7 @@ fn rank(
     vectors: &[Vec<f32>],
     query: &[f32],
     dimensions: usize,
+    eligible: Option<&HashSet<&str>>,
 ) -> Vec<String> {
     let mut indices = (0..documents.len()).collect::<Vec<_>>();
     indices.sort_by(|&left, &right| {
@@ -186,6 +215,7 @@ fn rank(
     indices
         .into_iter()
         .flat_map(|index| documents[index].ids.iter().cloned())
+        .filter(|id| eligible.is_none_or(|allowed| allowed.contains(id.as_str())))
         .filter(|id| seen.insert(id.clone()))
         .collect()
 }
@@ -218,7 +248,28 @@ fn metrics(
     let mut recall_at_two = 0.0;
     let mut positives = 0;
     for (case, query_vector) in queries.iter().zip(query_vectors) {
-        let ranked = rank(documents, vectors, query_vector, dimensions);
+        let allowed = case
+            .eligible
+            .as_ref()
+            .map(|ids| ids.iter().map(String::as_str).collect::<HashSet<_>>());
+        if allowed
+            .as_ref()
+            .is_some_and(|ids| ids.is_empty() || ids.iter().any(|id| !eligible.contains(id)))
+            || case.relevant.iter().any(|id| {
+                allowed
+                    .as_ref()
+                    .is_some_and(|ids| !ids.contains(id.as_str()))
+            })
+        {
+            return Err(format!("{} has inconsistent eligible labels", case.id).into());
+        }
+        let ranked = rank(
+            documents,
+            vectors,
+            query_vector,
+            dimensions,
+            allowed.as_ref(),
+        );
         if case.relevant.is_empty() {
             cases.push(json!({"id": case.id, "negativeControl": true, "topIds": &ranked[..ranked.len().min(3)]}));
             continue;
@@ -325,6 +376,7 @@ fn evaluate_images(encoder: &GemmaNativeEncoder) -> Result<Value, Box<dyn Error>
         text: format!("a {text} on a white background"),
         relevant: vec![id.to_owned()],
         task: GemmaTextTask::Search,
+        eligible: None,
     })
     .collect::<Vec<_>>();
     let mut query_latencies = Vec::new();
@@ -390,10 +442,99 @@ fn evaluate(
     }))
 }
 
+fn evaluate_labelled(
+    encoder: &GemmaNativeEncoder,
+    path: &Path,
+    task: GemmaTextTask,
+) -> Result<Value, Box<dyn Error>> {
+    let raw = fs::read_to_string(path)?;
+    let corpus: LabelledCorpus = serde_json::from_str(&raw)?;
+    if corpus.cases.iter().any(|case| case.relevant.is_empty()) {
+        return Err("labelled evaluation has a case without a judged positive".into());
+    }
+    let documents = corpus
+        .documents
+        .into_iter()
+        .map(|document| Document {
+            ids: vec![document.id],
+            text: document.text,
+        })
+        .collect();
+    let queries = corpus
+        .cases
+        .into_iter()
+        .map(|case| Query {
+            id: case.id,
+            text: case.query,
+            relevant: case.relevant,
+            task,
+            eligible: Some(case.eligible),
+        })
+        .collect();
+    evaluate(encoder, documents, queries, &raw)
+}
+
+fn evaluate_labelled_photos(
+    encoder: &GemmaNativeEncoder,
+    path: &Path,
+) -> Result<Value, Box<dyn Error>> {
+    let raw = fs::read_to_string(path)?;
+    let photos: Vec<LabelledPhoto> = serde_json::from_str(&raw)?;
+    if photos.is_empty() {
+        return Err("photo fixture is empty".into());
+    }
+    let mut by_dimension = serde_json::Map::new();
+    let mut scored = DIMENSIONS
+        .into_iter()
+        .map(|dimension| (dimension, Vec::new()))
+        .collect::<std::collections::HashMap<_, _>>();
+    for photo in &photos {
+        let bytes = fs::read(&photo.path)?;
+        if hex_digest(Sha256::digest(&bytes).as_ref()) != photo.sha256 {
+            return Err(format!("photo {} differs from its pinned digest", photo.id).into());
+        }
+        let image = encoder.encode_image(&bytes)?;
+        let positive = encoder.encode_text(GemmaTextTask::Search, &photo.positive, None)?;
+        let negative = encoder.encode_text(GemmaTextTask::Search, &photo.negative, None)?;
+        for dimension in DIMENSIONS {
+            let margin = normalized_score(&image, &positive, dimension)
+                - normalized_score(&image, &negative, dimension);
+            if !margin.is_finite() {
+                return Err(format!("photo {} produced invalid similarity", photo.id).into());
+            }
+            scored
+                .get_mut(&dimension)
+                .ok_or("missing dimension")?
+                .push(json!({
+                    "id": photo.id, "positiveBeatsHardNegative": margin > 0.0,
+                    "cosineMargin": margin
+                }));
+        }
+    }
+    for dimension in DIMENSIONS {
+        let cases = scored.remove(&dimension).ok_or("missing dimension")?;
+        let correct = cases
+            .iter()
+            .filter(|case| case["positiveBeatsHardNegative"] == true)
+            .count();
+        by_dimension.insert(
+            dimension.to_string(),
+            json!({"accuracy": correct as f64 / cases.len() as f64, "cases": cases}),
+        );
+    }
+    Ok(json!({
+        "fixtureSha256": hex_digest(Sha256::digest(raw.as_bytes()).as_ref()),
+        "pairCount": photos.len(),
+        "task": "real-photo image versus independently validated positive/hard-negative captions",
+        "dimensions": by_dimension
+    }))
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
-    let directory = std::env::args_os()
-        .nth(1)
-        .ok_or("usage: evaluate_gemma_native MODEL_DIR")?;
+    let args = std::env::args_os().skip(1).collect::<Vec<_>>();
+    let directory = args
+        .first()
+        .ok_or("usage: evaluate_gemma_native MODEL_DIR [--labelled-corpus JSON search|code | --labelled-photos JSON]")?;
     let directory = Path::new(&directory);
     verify_checkpoint(directory)?;
     let started = Instant::now();
@@ -407,6 +548,33 @@ fn main() -> Result<(), Box<dyn Error>> {
         },
     )?;
     let load_seconds = started.elapsed().as_secs_f64();
+    if args.len() != 1 {
+        let result = match args.get(1).and_then(|value| value.to_str()) {
+            Some("--labelled-corpus") if args.len() == 4 => {
+                let task = match args[3].to_str() {
+                    Some("search") => GemmaTextTask::Search,
+                    Some("code") => GemmaTextTask::Code,
+                    _ => return Err("labelled corpus intent must be search or code".into()),
+                };
+                evaluate_labelled(&encoder, Path::new(&args[2]), task)?
+            }
+            Some("--labelled-photos") if args.len() == 3 => {
+                evaluate_labelled_photos(&encoder, Path::new(&args[2]))?
+            }
+            _ => return Err("invalid labelled evaluation arguments".into()),
+        };
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "model": "google/embeddinggemma-2", "revision": REVISION,
+                "runtime": "native-rust-cpu-fp32", "measurementWidth": 768,
+                "dimensionMethod": "truncate and L2 renormalize both sides",
+                "os": std::env::consts::OS, "architecture": std::env::consts::ARCH,
+                "modelLoadSeconds": load_seconds, "result": result
+            }))?
+        );
+        return Ok(());
+    }
 
     let knowledge: KnowledgeCorpus = serde_json::from_str(KNOWLEDGE)?;
     let documents = knowledge
@@ -446,6 +614,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 text: case.question,
                 relevant: case.relevant,
                 task: GemmaTextTask::Search,
+                eligible: None,
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -472,6 +641,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 text: case.query,
                 relevant: case.relevant,
                 task: GemmaTextTask::Code,
+                eligible: None,
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -520,12 +690,14 @@ mod tests {
                 text: String::new(),
                 relevant: vec!["correct".into()],
                 task: GemmaTextTask::Search,
+                eligible: None,
             },
             Query {
                 id: "negative".into(),
                 text: String::new(),
                 relevant: vec![],
                 task: GemmaTextTask::Search,
+                eligible: None,
             },
         ];
         let result = metrics(&documents, &vectors, &queries, &vectors, 2).unwrap();
@@ -539,9 +711,44 @@ mod tests {
             text: String::new(),
             relevant: vec!["missing".into()],
             task: GemmaTextTask::Search,
+            eligible: None,
         };
         assert!(metrics(&documents, &vectors, &[invalid], &vectors, 2).is_err());
         assert!(metrics(&documents, &vectors[..1], &queries, &vectors, 2).is_err());
+    }
+
+    #[test]
+    fn ranking_only_uses_assessed_candidates() {
+        let documents = ["positive", "unjudged", "negative"]
+            .into_iter()
+            .map(|id| Document {
+                ids: vec![id.into()],
+                text: String::new(),
+            })
+            .collect::<Vec<_>>();
+        let vectors = vec![vec![0.8, 0.6], vec![1.0, 0.0], vec![0.0, 1.0]];
+        let query = Query {
+            id: "judged".into(),
+            text: String::new(),
+            relevant: vec!["positive".into()],
+            task: GemmaTextTask::Code,
+            eligible: Some(vec!["positive".into(), "negative".into()]),
+        };
+        let result = metrics(&documents, &vectors, &[query], &[vec![1.0, 0.0]], 2).unwrap();
+        assert_eq!(result["hitAt1"], 1.0);
+        assert_eq!(
+            result["cases"][0]["topIds"],
+            json!(["positive", "negative"])
+        );
+
+        let invalid = Query {
+            id: "unjudged-positive".into(),
+            text: String::new(),
+            relevant: vec!["unjudged".into()],
+            task: GemmaTextTask::Code,
+            eligible: Some(vec!["positive".into(), "negative".into()]),
+        };
+        assert!(metrics(&documents, &vectors, &[invalid], &[vec![1.0, 0.0]], 2).is_err());
     }
 
     #[test]

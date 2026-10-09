@@ -1,0 +1,89 @@
+{
+  "model": "intfloat/multilingual-e5-small",
+  "revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+  "runtime": "Python onnxruntime 1.22.1 CPU mean-pooling",
+  "dimensions": 384,
+  "corpusSha256": "e638dbb84ac1300b0a8f8af5598de96f8aa40aef5dd362afeeb7a8201e1e1dc1",
+  "documentCount": 26,
+  "queryCount": 8,
+  "result": {
+    "positiveCases": 8,
+    "hitAt1": 1.0,
+    "hitAt3": 1.0,
+    "mrr": 1.0,
+    "cases": [
+      {
+        "id": "telugu-2",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "259006#0",
+          "99990#2",
+          "99994#3"
+        ]
+      },
+      {
+        "id": "telugu-15",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "105605#2",
+          "99997#1",
+          "99997#2"
+        ]
+      },
+      {
+        "id": "telugu-17",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "105028#1",
+          "99990#2",
+          "99971#3"
+        ]
+      },
+      {
+        "id": "telugu-21",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "52481#0",
+          "99988#1",
+          "99990#2"
+        ]
+      },
+      {
+        "id": "telugu-28",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "105922#4",
+          "99990#2",
+          "99982#1"
+        ]
+      },
+      {
+        "id": "telugu-34",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "29541#0",
+          "225465#8",
+          "35084#21"
+        ]
+      },
+      {
+        "id": "telugu-35",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "34672#2",
+          "99990#2",
+          "99988#0"
+        ]
+      },
+      {
+        "id": "telugu-37",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "141339#0",
+          "99990#2",
+          "99314#6"
+        ]
+      }
+    ]
+  }
+}

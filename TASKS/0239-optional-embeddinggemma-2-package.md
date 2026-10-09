@@ -508,3 +508,26 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   larger and hard-negative media, matched E5 measurements, prior signed
   candidate upgrade/rollback, and manual accessibility/consent UI review
   remain open. Do not promote Gemma or change the release guard.
+- 2026-10-09: The [bounded independently sourced quality probe](../docs/evaluations/embeddinggemma-labelled-2026-10-09.md)
+  authenticated the exact retained candidate 11640886748 and compared its
+  Gemma native FP32 CPU encoder (128/256/512/768d) with its E5 ONNX CPU model
+  (384d) on **identical** source-pinned corpus/query fixtures on one macOS ARM
+  host. Mr. TyDi v1.1 supplied 16 human-labelled Swahili/Telugu dev questions;
+  their lexical distractors remain *unjudged* and must not be claimed as hard
+  negatives. Four CodeSearchNet Python queries used seven positive and ten
+  explicitly grade-0 code snippets from commit-pinned, licence-checked repos,
+  excluding contradictory/ambiguous annotations. Five SugarCrepe swapped
+  caption pairs used real COCO photos whose **individual current** Flickr
+  CC BY/BY-SA licences were checked (photos not redistributed); E5 has no
+  image encoder. Gemma's text hit@1 was 8/8 in each language; E5 was 7/8 in
+  Swahili and 8/8 in Telugu, but E5's one top distractor is *unjudged* and
+  may be relevant. E5 hit@1 was 4/4 on code; Gemma hit@1 was 3/4 at **all**
+  dimensions, ranking human-irrelevant snippets ahead of a relevant buffered
+  file reader. Gemma preferred the wrong hard caption for one of the five
+  real photos at **all** dimensions. Per-case machine reports and the
+  reproducible harness/source digests are retained beside that document.
+  This deliberately small one-host model/runtime comparison is **not**
+  release qualification: a larger explicitly judged multilingual
+  hard-negative pool, broader code/photo coverage including photo-to-photo
+  negatives, lawful media labels, and installed-target matched quality
+  remain open. Preserve the release guard and default-hidden Gemma.
