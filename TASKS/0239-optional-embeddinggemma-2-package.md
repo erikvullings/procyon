@@ -408,3 +408,44 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   rejection. Broader independent labels, photographic/media negatives,
   platform/dimension resource data, matched packaged E5 comparison and
   installed/offline lifecycle remain open; Gemma stays hidden.
+- 2026-10-09: **Signed installed lifecycle, macOS ARM only.** Re-downloaded the
+  exact read-only candidate from run
+  [37974984924](https://github.com/erikvullings/procyon/actions/runs/37974984924),
+  artifact `semantic-component-candidate-d3f921fe08e4994a905727a71af102979f4fbe23`
+  (ID **11640886748**, retained until 2026-10-23). The macOS-aarch64
+  signed catalog revision was
+  `procyon-macos-aarch64-0.4.2-417f9e72bdc56f325f336878e70b1cf0`;
+  catalog SHA-256
+  `e81c2d43ec2cc3a8bc1146d3fcca5d0f94d465e9f97e9af4bdf78d982cf660d3`,
+  detached-signature SHA-256
+  `1c238c6a87f5a272e19401e7c00162be4703ca47cd78a92881ed5f60a7deee67`.
+  A locally staged hard-linked subset contained exactly the eight catalog
+  payloads, without changing their bytes; the public environment verification
+  key authenticated the catalog and the harness checked all signed payload
+  hashes. An opt-in `PROCYON_GEMMA_INSTALLED_TEST` mode of the existing
+  `qualify_semantic_lifecycle` example installed the Gemma profile through
+  its filesystem-only source and explicit installation offer/consent. Its
+  fresh manager verified all seven *selected* installed artifacts (worker,
+  Zvec runtime, and five originals); the catalog's E5 pack was verified as
+  a downloaded payload but not installed. A copy of the verified installed
+  worker was staged beside a copy of the verified runtime, as in the desktop
+  launcher, while the worker used the installed originals. The ignored
+  packaged-worker test ingested and retrieved PNG, MP3, and H.264 MP4 offline
+  (27.6/2.1/12.4 seconds), including sampled-video timestamps; after killing
+  the worker, a new worker recovered all three document indexes. The full
+  lifecycle harness passed absent-state, low-disk, signature tampering,
+  payload corruption, interrupted/resumed install, manager restart,
+  installed-worker tampering, cross-process locking, explicit retain/delete
+  uninstall, and clean reinstall checks with **zero network artifact reads**.
+  The successful local report is `target/gemma-installed-report.json`
+  (task-local, not a published release artifact). An initial run against the
+  combined four-target artifact correctly rejected unrelated files, and a
+  second attempt exposed macOS's `@loader_path` requirement; both were fixed
+  in the test setup before the clean passing run. This checks neither the
+  desktop's durable library-consent UI nor cross-platform installed lifecycle:
+  Linux x86_64/aarch64 and Windows x86_64 were **not tested** by this gate.
+  Preceding-candidate upgrade/rollback remains blocked without an exact
+  preceding signed candidate; native assistive-technology and packaged UI
+  checks still require operators. Independent realistic retrieval labels,
+  matched E5 comparison, and per-dimension/platform resource limits remain
+  open. Keep the release guard and Gemma's default-hidden status intact.

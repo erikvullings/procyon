@@ -273,7 +273,39 @@ async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
             assert!(provenance.contains("1000"), "{provenance}");
         }
     }
-    client.shutdown(Duration::from_secs(10)).await.unwrap();
+    if std::env::var_os("PROCYON_GEMMA_QUALIFY_RESTART").is_some() {
+        let first_pid = std::fs::read_to_string(runtime.path().join("worker.pid"))
+            .expect("read installed Gemma worker pid");
+        terminate_worker(first_pid.trim());
+        drop(client);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let restarted = connector
+            .connect()
+            .await
+            .expect("restart installed Gemma worker");
+        let second_pid = std::fs::read_to_string(runtime.path().join("worker.pid"))
+            .expect("read restarted Gemma worker pid");
+        assert_ne!(first_pid.trim(), second_pid.trim());
+        for name in ["image", "audio", "video"] {
+            assert!(
+                restarted
+                    .query(
+                        "qualification-tenant",
+                        "qualification-library",
+                        &format!("Gemma {name}"),
+                        10,
+                    )
+                    .await
+                    .expect("query recovered installed Gemma index")
+                    .iter()
+                    .any(|result| result.document_id == format!("document-{name}")),
+                "{name} was not retrievable after worker restart"
+            );
+        }
+        restarted.shutdown(Duration::from_secs(10)).await.unwrap();
+    } else {
+        client.shutdown(Duration::from_secs(10)).await.unwrap();
+    }
     connector
         .wait_until_stopped(Duration::from_secs(12))
         .await
