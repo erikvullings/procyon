@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use fm_semantic_conversion::{
     Cancellation, CancellationSignal, Chunker, ConversionBudgets, ConversionContext,
-    ConversionOutcome, DocumentConverter, DocumentMetadata, SourceContent,
+    ConversionOutcome, DocumentConverter, DocumentMetadata, FormatKind, SourceContent,
 };
 use fm_semantic_docling::converter_with_baseline_fallback;
 use sha2::{Digest, Sha256};
@@ -21,6 +21,24 @@ use crate::semantic_storage::{
 use crate::{IngestionState, WorkerIngestionBackend, WorkerIngestionInput, WorkerIngestionJob};
 
 const EMBEDDING_CHECKPOINT_INPUTS: usize = 8;
+
+/// Rejects only long PDF text with overwhelming evidence of character-spaced extraction.
+/// Short headings and non-Latin writing do not supply enough evidence to exclude a chunk.
+pub(crate) fn is_corrupted_pdf_text(text: &str) -> bool {
+    let mut words = 0_usize;
+    let mut single_letters = 0_usize;
+    let mut word_length = 0_usize;
+    for character in text.chars().chain(std::iter::once(' ')) {
+        if character.is_ascii_alphabetic() {
+            word_length += 1;
+        } else if word_length > 0 {
+            words += 1;
+            single_letters += usize::from(word_length == 1);
+            word_length = 0;
+        }
+    }
+    words >= 100 && single_letters * 10 >= words * 9
+}
 
 /// Persisted ingestion/reconciliation state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -720,6 +738,38 @@ impl IngestionCoordinator {
 
         self.transition(document, IngestionStage::Chunking, attempts, None, 0, 1)?;
         let chunks = Chunker::default().chunk(&converted);
+        let total_chunks = chunks.len();
+        let chunks = chunks
+            .into_iter()
+            .filter(|chunk| {
+                chunk.format != FormatKind::Pdf || !is_corrupted_pdf_text(&chunk.embedding_input)
+            })
+            .collect::<Vec<_>>();
+        let excluded_chunks = total_chunks - chunks.len();
+        let quality_detail = (excluded_chunks > 0)
+            .then(|| format!("excluded {excluded_chunks} unreadable PDF chunks"));
+        if excluded_chunks > 0 {
+            eprintln!(
+                "Procyon semantic ingestion: excluded {excluded_chunks} unreadable PDF chunks from document {}",
+                document.document_id
+            );
+        }
+        if total_chunks > 0 && chunks.is_empty() {
+            let detail = "unreadable PDF text extraction; run OCR on the source PDF and re-index";
+            let deleted = self.catalog.delete_occurrence(&document.occurrence_id)?;
+            self.index
+                .delete(&deleted.record_ids)
+                .map_err(IngestionError::DerivedCleanup)?;
+            self.transition(
+                document,
+                IngestionStage::Skipped,
+                attempts,
+                Some(detail),
+                0,
+                1,
+            )?;
+            return Err(IngestionError::Excluded(detail.to_owned()));
+        }
         self.check_cancelled(document, attempts, cancellation)?;
 
         self.transition(
@@ -892,7 +942,7 @@ impl IngestionCoordinator {
             document,
             IngestionStage::Complete,
             attempts,
-            None,
+            quality_detail.as_deref(),
             chunks.len() as u64,
             chunks.len() as u64,
         )?;
@@ -1629,6 +1679,10 @@ mod tests {
     }
 
     fn positioned_pdf(content: &str) -> Vec<u8> {
+        positioned_pdf_pages(&[content])
+    }
+
+    fn positioned_pdf_pages(contents: &[&str]) -> Vec<u8> {
         let mut document = Document::with_version("1.5");
         let pages_id = document.new_object_id();
         let font_id = document.add_object(dictionary! {
@@ -1639,20 +1693,25 @@ mod tests {
         let resources_id = document.add_object(dictionary! {
             "Font" => dictionary! { "F1" => font_id },
         });
-        let content_id =
-            document.add_object(Stream::new(dictionary! {}, content.as_bytes().to_vec()));
-        let page_id = document.add_object(dictionary! {
-            "Type" => "Page",
-            "Parent" => pages_id,
-            "Contents" => content_id,
-            "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
-        });
+        let page_ids = contents
+            .iter()
+            .map(|content| {
+                let content_id =
+                    document.add_object(Stream::new(dictionary! {}, content.as_bytes().to_vec()));
+                document.add_object(dictionary! {
+                    "Type" => "Page",
+                    "Parent" => pages_id,
+                    "Contents" => content_id,
+                    "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+                })
+            })
+            .collect::<Vec<_>>();
         document.objects.insert(
             pages_id,
             Object::Dictionary(dictionary! {
                 "Type" => "Pages",
-                "Kids" => vec![Object::Reference(page_id)],
-                "Count" => 1,
+                "Kids" => page_ids.into_iter().map(Object::Reference).collect::<Vec<_>>(),
+                "Count" => contents.len() as i64,
                 "Resources" => resources_id,
             }),
         );
@@ -1689,6 +1748,87 @@ mod tests {
         assert!(
             excerpt.find("Left column starts").expect("left column")
                 < excerpt.find("Right column starts").expect("right column")
+        );
+    }
+
+    #[test]
+    fn pdf_quality_gate_rejects_character_spaced_extraction_without_hiding_ordinary_text() {
+        let damaged = "T A R G E T W e n e e d t o i n c r e a s e s a l e s ".repeat(8);
+        assert!(is_corrupted_pdf_text(&damaged));
+        assert!(!is_corrupted_pdf_text(
+            &"The target is to increase sales by designing a better product. ".repeat(20)
+        ));
+        assert!(!is_corrupted_pdf_text("T A R G E T is a short heading."));
+        assert!(!is_corrupted_pdf_text(
+            &"技術革新の原理と手法を説明します。".repeat(20)
+        ));
+    }
+
+    #[test]
+    fn unreadable_pdf_does_not_publish_vectors() {
+        let fixture = Fixture::new(healthy_resources());
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        document.bytes = positioned_pdf(
+            "BT /F1 12 Tf 72 720 Td (Readable methods for inventive problem solving.) Tj ET\n",
+        );
+        fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("initial readable PDF");
+        assert!(!fixture.index.records.lock().unwrap().is_empty());
+
+        let damaged = "T A R G E T W e n e e d t o i n c r e a s e s a l e s ".repeat(8);
+        document.bytes = positioned_pdf(&format!("BT /F1 12 Tf 72 720 Td ({damaged}) Tj ET\n"));
+
+        let outcome = fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new());
+
+        assert!(matches!(
+            outcome,
+            Err(IngestionError::Excluded(ref detail)) if detail.contains("unreadable PDF")
+        ));
+        assert!(fixture.index.records.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn readable_pdf_page_survives_omission_of_a_corrupted_page() {
+        let fixture = Fixture::new(healthy_resources());
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        let damaged = "T A R G E T W e n e e d t o i n c r e a s e s a l e s ".repeat(8);
+        let damaged_page = format!("BT /F1 12 Tf 72 720 Td ({damaged}) Tj ET\n");
+        let readable_page =
+            "BT /F1 12 Tf 72 720 Td (Inventive patterns solve technical contradictions.) Tj ET\n";
+        document.bytes = positioned_pdf_pages(&[&damaged_page, readable_page]);
+
+        let receipt = fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("partially readable PDF");
+
+        let records = fixture.index.records.lock().unwrap();
+        assert_eq!(receipt.chunks, 1);
+        assert!(
+            records
+                .values()
+                .all(|record| !record.content.contains("T A R G E T"))
+        );
+        assert!(
+            records
+                .values()
+                .any(|record| record.content.contains("Inventive patterns"))
+        );
+        assert!(
+            fixture
+                .catalog
+                .job(&document.job_id)
+                .unwrap()
+                .unwrap()
+                .detail
+                .unwrap()
+                .contains("excluded 1 unreadable PDF chunks")
         );
     }
 

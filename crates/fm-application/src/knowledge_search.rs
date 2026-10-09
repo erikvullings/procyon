@@ -604,6 +604,25 @@ impl KnowledgeSearchCoordinator {
         refresh: &dyn KnowledgeAuthorizationRefresh,
         cancellation: &CancellationToken,
     ) -> Result<KnowledgeSearchOutcome, KnowledgeSearchError> {
+        self.execute_with_intent(
+            request_id,
+            authorized,
+            refresh,
+            cancellation,
+            fm_semantic_protocol::v1::QueryIntent::Search,
+        )
+        .await
+    }
+
+    /// Executes an authorized plan with an explicit dense-query prompt role.
+    pub async fn execute_with_intent(
+        &self,
+        request_id: Uuid,
+        authorized: AuthorizedKnowledgeSearch,
+        refresh: &dyn KnowledgeAuthorizationRefresh,
+        cancellation: &CancellationToken,
+        intent: fm_semantic_protocol::v1::QueryIntent,
+    ) -> Result<KnowledgeSearchOutcome, KnowledgeSearchError> {
         if !self.release_access.is_available() {
             return Err(KnowledgeSearchError::Unavailable);
         }
@@ -612,7 +631,7 @@ impl KnowledgeSearchCoordinator {
         else {
             return Err(KnowledgeSearchError::DuplicateRequest);
         };
-        self.execute_registered(&authorized, refresh, &cancellation)
+        self.execute_registered(&authorized, refresh, &cancellation, intent)
             .await
     }
 
@@ -627,6 +646,7 @@ impl KnowledgeSearchCoordinator {
         authorized: &AuthorizedKnowledgeSearch,
         refresh: &dyn KnowledgeAuthorizationRefresh,
         cancellation: &CancellationToken,
+        intent: fm_semantic_protocol::v1::QueryIntent,
     ) -> Result<KnowledgeSearchOutcome, KnowledgeSearchError> {
         if cancellation.is_cancelled() {
             return Err(KnowledgeSearchError::Cancelled);
@@ -662,7 +682,7 @@ impl KnowledgeSearchCoordinator {
         // returns what an unpartitioned search of the same scope would.
         let retrieval = self
             .capability
-            .retrieve(request_for(authorized), cancellation)
+            .retrieve(request_for(authorized, intent), cancellation)
             .await?;
         if cancellation.is_cancelled() {
             return Err(KnowledgeSearchError::Cancelled);
@@ -678,8 +698,12 @@ impl KnowledgeSearchCoordinator {
     }
 }
 
-fn request_for(authorized: &AuthorizedKnowledgeSearch) -> KnowledgeRetrievalRequest {
+fn request_for(
+    authorized: &AuthorizedKnowledgeSearch,
+    intent: fm_semantic_protocol::v1::QueryIntent,
+) -> KnowledgeRetrievalRequest {
     KnowledgeRetrievalRequest {
+        intent,
         queries: authorized
             .plan
             .searches

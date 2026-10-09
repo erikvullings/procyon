@@ -250,6 +250,7 @@ impl SemanticRagRetrievalCapability {
         let retrieval = self.semantic.knowledge_search(
             request_id.clone(),
             KnowledgeRetrievalRequest {
+                intent: fm_semantic_protocol::v1::QueryIntent::QuestionAnswering,
                 queries: vec![KnowledgeQuery {
                     text: request.question,
                     reason: KnowledgeRetrievalReason::Subject,

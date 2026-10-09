@@ -359,3 +359,12 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   semantic-library enrolment unavailable even though installation and native
   worker launch succeeded. The signed development bundle now verifies the
   active model and enrollable Gemma library after installing beside E5.
+- 2026-10-09: Knowledge retrieval now selects Gemma's SearchQuery,
+  QuestionAnswering, or CodeRetrieval prompt per explicit query intent, instead
+  of using QuestionAnswering for every search. The Knowledge pane defaults to
+  Documents, offers Questions and Code beside the query, and selects Questions
+  when Ask starts without existing results. Ask over displayed evidence still
+  does not rerun retrieval. Needs-based query expansions remain available in
+  Advanced rather than occupying a second toolbar row; the DSL editor keeps
+  the selected prompt mode unchanged. E5 continues using its existing query
+  prefix regardless of intent. This does not qualify Gemma for release.

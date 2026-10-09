@@ -223,6 +223,7 @@ pub fn request_to_wire(
             })
             .collect(),
         route: route_to_wire(request.route).into(),
+        intent: request.intent.into(),
         policy: Some(policy_to_wire(request.policy)),
         coverage: Some(coverage_to_wire(request.coverage)),
         partitions: request
@@ -299,6 +300,8 @@ pub fn request_from_wire(
             })
             .collect::<Result<Vec<_>, KnowledgeWireError>>()?,
         route: route_from_wire(request.route)?,
+        intent: v1::QueryIntent::try_from(request.intent)
+            .map_err(|_| KnowledgeWireError::Unsupported("query intent"))?,
         scopes,
         current_hashes: HashMap::new(),
         coverage: request
@@ -724,6 +727,7 @@ mod tests {
     #[test]
     fn requests_round_trip_every_scope_partition_through_the_wire_model() {
         let request = KnowledgeRetrievalRequest {
+            intent: v1::QueryIntent::CodeRetrieval,
             queries: vec![KnowledgeQuery {
                 text: "wind turbines".to_owned(),
                 reason: KnowledgeRetrievalReason::Subject,
@@ -754,6 +758,7 @@ mod tests {
         let decoded = request_from_wire(&wire).expect("decode");
 
         assert_eq!(decoded.queries, request.queries);
+        assert_eq!(decoded.intent, request.intent);
         assert_eq!(decoded.route, request.route);
         assert_eq!(decoded.scopes.len(), 2);
         for (decoded, expected) in decoded.scopes.iter().zip(&request.scopes) {
@@ -772,6 +777,20 @@ mod tests {
         }
         assert_eq!(decoded.policy, request.policy);
         assert_eq!(decoded.coverage, request.coverage);
+
+        let mut legacy_wire = wire.clone();
+        legacy_wire.intent = 0;
+        assert_eq!(
+            request_from_wire(&legacy_wire)
+                .expect("legacy request")
+                .intent,
+            v1::QueryIntent::Search
+        );
+        legacy_wire.intent = i32::MAX;
+        assert!(matches!(
+            request_from_wire(&legacy_wire),
+            Err(KnowledgeWireError::Unsupported("query intent"))
+        ));
     }
 
     /// A request that names no scope is rejected rather than decoded into an
@@ -785,6 +804,7 @@ mod tests {
             },
             "request".to_owned(),
             &KnowledgeRetrievalRequest {
+                intent: v1::QueryIntent::Search,
                 queries: vec![KnowledgeQuery {
                     text: "wind turbines".to_owned(),
                     reason: KnowledgeRetrievalReason::Subject,

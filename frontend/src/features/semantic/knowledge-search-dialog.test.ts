@@ -209,7 +209,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     );
   });
 
-  it('uses a fixed filter-style toolbar and moves search settings into a modal', async () => {
+  it('keeps prompt focus beside the query and moves retrieval refinements into Advanced', async () => {
     mount();
 
     await ready();
@@ -225,22 +225,63 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     const settings = toolbar?.querySelector<HTMLButtonElement>(
       'button[aria-label="Search settings"]',
     );
-    expect(settings).toBeNull();
-    const options = root.querySelector('.fm-knowledge-search-options');
-    expect(options).not.toBeNull();
-    expect(options?.textContent).toContain('Search for:');
-    const more = options?.querySelector<HTMLButtonElement>('button[aria-label="Search settings"]');
-    expect(more).not.toBeNull();
-    expect(root.querySelector('.fm-knowledge-search-options > .fm-knowledge-needs')).not.toBeNull();
+    expect(settings).not.toBeNull();
+    expect(
+      toolbar?.querySelector<HTMLSelectElement>('select[name="knowledge-intent"]')?.value,
+    ).toBe('search');
+    expect(root.querySelector('.fm-knowledge-search-options')).toBeNull();
     expect(root.querySelector('.fm-knowledge-composer > .fm-knowledge-advanced')).toBeNull();
 
-    more?.click();
+    settings?.click();
     m.redraw.sync();
 
     expect(root.querySelector('.fm-knowledge-settings-modal')).not.toBeNull();
     expect(
       root.querySelector('.fm-knowledge-settings-modal .fm-knowledge-advanced'),
     ).not.toBeNull();
+    expect(
+      root.querySelector('.fm-knowledge-settings-modal .fm-knowledge-needs input'),
+    ).not.toBeNull();
+  });
+
+  it('routes selected question and code prompts without rewriting the advanced query', async () => {
+    const client = mount({ initialSubject: 'retrieval' });
+    const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+    await ready();
+    const focus = root.querySelector<HTMLSelectElement>('select[name="knowledge-intent"]');
+    if (focus === null) throw new Error('search focus selector not rendered');
+    focus.value = 'questionAnswering';
+    focus.dispatchEvent(new Event('change', { bubbles: true }));
+    await search();
+    expect(execute.mock.calls[0]?.[0]?.intent).toBe('questionAnswering');
+
+    focus.value = 'codeRetrieval';
+    focus.dispatchEvent(new Event('change', { bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-knowledge-results-heading[role="status"]')).toBeNull();
+    type(dsl(), 'about: "index implementation"');
+    await vi.waitFor(() => expect(subjects().value).toContain('index implementation'));
+    expect(root.querySelector<HTMLSelectElement>('select[name="knowledge-intent"]')?.value).toBe(
+      'codeRetrieval',
+    );
+    await search();
+    expect(execute.mock.calls[1]?.[0]?.intent).toBe('codeRetrieval');
+  });
+
+  it('prefills Ask from a single question without generating an answer on search', async () => {
+    const client = new MockFileManagerClient();
+    await configureProfile(client);
+    const generate = vi.spyOn(client, 'generateKnowledgeAnswer');
+    mount({ client, initialSubject: 'Why do turbines spin?' });
+    await answersReady();
+    const focus = root.querySelector<HTMLSelectElement>('select[name="knowledge-intent"]');
+    if (focus === null) throw new Error('search focus selector not rendered');
+    focus.value = 'questionAnswering';
+    focus.dispatchEvent(new Event('change', { bubbles: true }));
+    await search();
+
+    expect(question().value).toBe('Why do turbines spin?');
+    expect(generate).not.toHaveBeenCalled();
   });
 
   it('offers one-way inclusion for an unindexed current folder', async () => {
@@ -283,9 +324,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await ready();
 
     expect(root.querySelector('.fm-knowledge-include-folder')).toBeNull();
-    expect(root.querySelector('.fm-knowledge-search-options')?.textContent).toContain(
-      'Search for:',
-    );
+    expect(root.querySelector('.fm-knowledge-search-options')).toBeNull();
   });
 
   it('closes the transient search pane from the toolbar close button', async () => {
@@ -609,7 +648,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     );
   });
 
-  it('renders decoded document-ranked Markdown without per-chunk query diagnostics', async () => {
+  it('renders decoded document-ranked PDF excerpts without interpreting their text as Markdown', async () => {
     const client = new MockFileManagerClient();
     const original = client.executeKnowledgeSearch.bind(client);
     vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
@@ -622,7 +661,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
           {
             ...first,
             title: 'TRIZ%20Substance-Field%20Modelling.pdf',
-            content: '## Su-Field model\n\nA **substance-field** section.',
+            content: '## Su-Field model\n\nA **substance-field**\nsection.',
+            mediaType: 'application/pdf',
             fusedScore: 0.023456,
             sectionPath: ['Standards', 'Su-Field synthesis'],
             provenance:
@@ -634,6 +674,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
             recordId: `${first.recordId}-page-168`,
             title: 'TRIZ%20Substance-Field%20Modelling.pdf',
             content: 'A continuation without an indexed heading.',
+            mediaType: 'application/pdf',
             fusedScore: 0.012345,
             finalRank: 8,
             sectionPath: [],
@@ -676,12 +717,11 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.textContent).not.toContain('0.023');
     expect(root.textContent).not.toContain('0.012');
     expect(root.textContent).not.toContain('Matching section');
-    expect(root.querySelector('.fm-knowledge-result-markdown h2')?.textContent).toBe(
-      'Su-Field model',
+    expect(root.querySelector('.fm-knowledge-result-markdown p')?.textContent).toBe(
+      '## Su-Field model\n\nA **substance-field**\nsection.',
     );
-    expect(root.querySelector('.fm-knowledge-result-markdown strong')?.textContent).toBe(
-      'substance-field',
-    );
+    expect(root.querySelector('.fm-knowledge-result-markdown h2')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-result-markdown strong')).toBeNull();
     expect(root.querySelector('.fm-knowledge-reasons')).toBeNull();
     expect(root.querySelector('.fm-knowledge-result-meta')).toBeNull();
     expect(root.querySelector('#fm-knowledge-grouping')).toBeNull();
@@ -1018,7 +1058,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.textContent).not.toContain('do: apply');
   });
 
-  it('ranks documents by their best match and sections by source position', () => {
+  it('ranks documents by their best match and sections by relevance', () => {
     const row = (
       documentId: string,
       recordId: string,
@@ -1061,7 +1101,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     expect(groups).toHaveLength(2);
     expect(groups.map((group) => group.documentId)).toEqual(['document-a', 'document-b']);
-    expect(groups[0]?.rows.map((entry) => entry.sourcePosition)).toEqual([3, 8]);
+    expect(groups[0]?.rows.map((entry) => entry.finalRank)).toEqual([1, 4]);
     expect(groups[0]?.rows.map((entry) => entry.recordId)).not.toContain('record-a-adjacent');
     expect(groups[0]?.bestRank).toBe(1);
     expect(groups[0]?.openEvidence.recordId).toBe('record-a-earlier');
@@ -1902,6 +1942,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
 
     expect(execute).toHaveBeenCalledOnce();
     expect(execute.mock.calls[0]?.[0]?.draft.about).toEqual(['How does retrieval work?']);
+    expect(execute.mock.calls[0]?.[0]?.intent).toBe('questionAnswering');
     expect(subjects().value).toContain('How does retrieval work?');
     expect(generate.mock.calls[0]?.[0]?.question).toBe('How does retrieval work?');
     expect(question().value).toBe('How does retrieval work?');
@@ -1912,15 +1953,19 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     const client = new MockFileManagerClient();
     await configureProfile(client);
     const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+    const generate = vi.spyOn(client, 'generateKnowledgeAnswer');
     mount({ client, initialSubject: 'retrieval' });
     await answersReady();
     await askBarReady();
 
     openAsk();
+    type(question(), 'How is it ranked?');
     await generateAnswer();
 
     expect(execute).toHaveBeenCalledOnce();
     expect(execute.mock.calls[0]?.[0]?.draft.about).toEqual(['retrieval']);
+    expect(execute.mock.calls[0]?.[0]?.intent).toBe('questionAnswering');
+    expect(generate.mock.calls[0]?.[0]?.question).toBe('How is it ranked?');
   });
 
   it('answers with the default profile activated in Settings', async () => {

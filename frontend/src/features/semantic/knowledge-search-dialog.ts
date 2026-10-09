@@ -23,6 +23,7 @@ import type {
   KnowledgeEvidence,
   KnowledgeNeed,
   KnowledgeQueryDraft,
+  KnowledgeQueryIntent,
   KnowledgeQueryInterpretation,
   KnowledgeRetrievalMode,
   KnowledgeRoot,
@@ -73,6 +74,7 @@ const NEEDS: readonly KnowledgeNeed[] = [
 ];
 
 const MODES: readonly KnowledgeRetrievalMode[] = ['hybrid', 'fullText', 'semantic'];
+const INTENTS: readonly KnowledgeQueryIntent[] = ['search', 'questionAnswering', 'codeRetrieval'];
 
 const SCOPE_KINDS: readonly KnowledgeScopeKind[] = [
   'entireLibrary',
@@ -136,6 +138,17 @@ function needLabel(need: KnowledgeNeed): string {
       return t('knowledgeSearch', 'needLimitations');
     case 'references':
       return t('knowledgeSearch', 'needReferences');
+  }
+}
+
+function intentLabel(intent: KnowledgeQueryIntent): string {
+  switch (intent) {
+    case 'search':
+      return t('knowledgeSearch', 'intentDocuments');
+    case 'questionAnswering':
+      return t('knowledgeSearch', 'intentQuestions');
+    case 'codeRetrieval':
+      return t('knowledgeSearch', 'intentCode');
   }
 }
 
@@ -383,10 +396,10 @@ function joinSubjects(values: readonly string[]): string {
 }
 
 /**
- * Ranks documents by their matched evidence while restoring each document's
- * structural order. Adjacent chunks remain available to grounded-answer
- * generation, but are not presented as search matches. Two documents can
- * share a title, so the stable `documentId` remains the key.
+ * Ranks documents by their best match and chunks within each document by
+ * relevance. Adjacent chunks remain available to grounded-answer generation,
+ * but are not presented as search matches. Two documents can share a title,
+ * so the stable `documentId` remains the key.
  */
 export function groupEvidenceByDocument(evidence: readonly KnowledgeEvidence[]): readonly {
   readonly documentId: string;
@@ -445,8 +458,8 @@ export function groupEvidenceByDocument(evidence: readonly KnowledgeEvidence[]):
       ...group,
       rows: group.rows.toSorted(
         (left, right) =>
-          left.sourcePosition - right.sourcePosition ||
           left.finalRank - right.finalRank ||
+          left.sourcePosition - right.sourcePosition ||
           left.recordId.localeCompare(right.recordId),
       ),
     }))
@@ -702,6 +715,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   let draft: KnowledgeQueryDraft = emptyDraft();
   let subjectsText = '';
   let mode: KnowledgeRetrievalMode = 'hybrid';
+  let intent: KnowledgeQueryIntent = 'search';
   let scopeKind: KnowledgeScopeKind = 'entireLibrary';
   let selectedRootIds = new Set<string>();
   let dslText = '';
@@ -978,6 +992,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     roots = [];
     selectedRootIds = new Set();
     mode = 'hybrid';
+    intent = 'search';
     scopeKind = 'entireLibrary';
     focusSubjectOnOpen = true;
     searchAfterLoad = false;
@@ -1071,6 +1086,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         draft: currentDraft(),
         scope: scope(attrs),
         mode,
+        intent,
         options: searchOptions(),
       });
       // A plan built for a query the user has already edited away would
@@ -1147,6 +1163,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           draft: currentDraft(),
           scope: scope(attrs),
           mode,
+          intent,
           options: searchOptions(),
         },
         controller.signal,
@@ -1155,6 +1172,13 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       result = executed;
       plan = executed.plan;
       capabilities = executed.capabilities;
+      if (
+        intent === 'questionAnswering' &&
+        draft.about?.length === 1 &&
+        questionText.trim().length === 0
+      ) {
+        questionText = draft.about[0] ?? '';
+      }
     } catch (cause) {
       if (startGeneration !== generation || searchRevision !== revision) return;
       if (cause instanceof DOMException && cause.name === 'AbortError') {
@@ -1223,10 +1247,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     if (!canGenerateAnswer(attrs)) return;
     if (result === undefined) {
       const asked = questionText;
+      intent = 'questionAnswering';
+      edited();
       if (!hasSubject()) {
         draft = { ...draft, about: [asked.trim()] };
         subjectsText = joinSubjects(draft.about ?? []);
-        edited();
         void reinterpret(attrs);
       }
       // search() clears the question synchronously; keep it on screen.
@@ -1438,7 +1463,12 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           ),
         ]),
       ]),
-      m('.fm-knowledge-result-markdown', m.trust(safeMarkdownHtml(row.content))),
+      m(
+        '.fm-knowledge-result-markdown',
+        row.mediaType === 'application/pdf'
+          ? m('p', row.content)
+          : m.trust(safeMarkdownHtml(row.content)),
+      ),
       states.length === 0
         ? undefined
         : m(
@@ -1950,6 +1980,23 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           m('.fm-knowledge-composer', [
             m('.fm-knowledge-search-toolbar', [
               filterIcon({ className: 'fm-knowledge-search-icon', size: 14 }),
+              m(
+                'select.fm-knowledge-intent.browser-default',
+                {
+                  name: 'knowledge-intent',
+                  value: intent,
+                  disabled: busy === 'searching',
+                  'aria-label': t('knowledgeSearch', 'intent'),
+                  onchange: (event: Event) => {
+                    intent = (event.currentTarget as HTMLSelectElement)
+                      .value as KnowledgeQueryIntent;
+                    edited();
+                  },
+                },
+                INTENTS.map((candidate) =>
+                  m('option', { key: candidate, value: candidate }, intentLabel(candidate)),
+                ),
+              ),
               m('textarea#fm-knowledge-subjects', {
                 name: 'knowledge-subjects',
                 rows: 1,
@@ -2009,51 +2056,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 ),
               ),
               tooltip(
-                t('knowledgeSearch', 'close'),
-                m(
-                  IconButton,
-                  {
-                    type: 'button',
-                    className: 'fm-knowledge-search-close',
-                    'aria-label': t('knowledgeSearch', 'close'),
-                    onclick: () => close(attrs),
-                  },
-                  closeIcon({ size: 13 }),
-                ),
-              ),
-            ]),
-            m('.fm-knowledge-search-options', [
-              !currentFolderIndexed && attrs.currentFolder !== undefined
-                ? m('label.fm-knowledge-include-folder', [
-                    m('input', {
-                      type: 'checkbox',
-                      checked: false,
-                      disabled: busy === 'loading',
-                      onchange: (event: Event) => {
-                        (event.currentTarget as HTMLInputElement).checked = false;
-                        enrolmentOpen = true;
-                      },
-                    }),
-                    m('span', t('knowledgeSearch', 'includeFolder')),
-                  ])
-                : undefined,
-              m('span.fm-knowledge-search-for', t('knowledgeSearch', 'searchFor')),
-              m('fieldset.fm-knowledge-inline-needs.fm-knowledge-needs', [
-                m('legend.fm-visually-hidden', t('knowledgeSearch', 'searchFor')),
-                NEEDS.map((need) =>
-                  m('label', { key: need }, [
-                    m('input', {
-                      type: 'checkbox',
-                      checked: (draft.needs ?? []).includes(need),
-                      disabled: busy === 'searching',
-                      onchange: (event: Event) =>
-                        updateNeed(attrs, need, (event.currentTarget as HTMLInputElement).checked),
-                    }),
-                    m('span', needLabel(need)),
-                  ]),
-                ),
-              ]),
-              tooltip(
                 t('knowledgeSearch', 'settings'),
                 m(
                   IconButton,
@@ -2066,6 +2068,19 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     },
                   },
                   dotsIcon({ size: 16 }),
+                ),
+              ),
+              tooltip(
+                t('knowledgeSearch', 'close'),
+                m(
+                  IconButton,
+                  {
+                    type: 'button',
+                    className: 'fm-knowledge-search-close',
+                    'aria-label': t('knowledgeSearch', 'close'),
+                    onclick: () => close(attrs),
+                  },
+                  closeIcon({ size: 13 }),
                 ),
               ),
             ]),
@@ -2105,9 +2120,43 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 settingsOpen = open;
               },
               description: m('.fm-knowledge-settings', [
+                !currentFolderIndexed && attrs.currentFolder !== undefined
+                  ? m('label.fm-knowledge-include-folder', [
+                      m('input', {
+                        type: 'checkbox',
+                        checked: false,
+                        disabled: busy === 'loading',
+                        onchange: (event: Event) => {
+                          (event.currentTarget as HTMLInputElement).checked = false;
+                          settingsOpen = false;
+                          enrolmentOpen = true;
+                        },
+                      }),
+                      m('span', t('knowledgeSearch', 'includeFolder')),
+                    ])
+                  : undefined,
                 m('details.fm-knowledge-advanced', [
                   m('summary', t('knowledgeSearch', 'showAdvanced')),
                   m('.fm-knowledge-advanced-body', [
+                    m('fieldset.fm-knowledge-inline-needs.fm-knowledge-needs', [
+                      m('legend', t('knowledgeSearch', 'searchFor')),
+                      NEEDS.map((need) =>
+                        m('label', { key: need }, [
+                          m('input', {
+                            type: 'checkbox',
+                            checked: (draft.needs ?? []).includes(need),
+                            disabled: busy === 'searching',
+                            onchange: (event: Event) =>
+                              updateNeed(
+                                attrs,
+                                need,
+                                (event.currentTarget as HTMLInputElement).checked,
+                              ),
+                          }),
+                          m('span', needLabel(need)),
+                        ]),
+                      ),
+                    ]),
                     m('.fm-knowledge-row', [
                       m('label.fm-knowledge-field', [
                         m('span', t('knowledgeSearch', 'scope')),

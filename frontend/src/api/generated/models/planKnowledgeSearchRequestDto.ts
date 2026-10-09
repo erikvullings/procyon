@@ -3,6 +3,7 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type { KnowledgeQueryDraftDto } from './knowledgeQueryDraftDto.ts';
+import type { KnowledgeQueryIntentDto } from './knowledgeQueryIntentDto.ts';
 import type { KnowledgeRetrievalModeDto } from './knowledgeRetrievalModeDto.ts';
 import type { KnowledgeScopeDto } from './knowledgeScopeDto.ts';
 import type { KnowledgeSearchOptionsDto } from './knowledgeSearchOptionsDto.ts';
@@ -13,6 +14,8 @@ import type { KnowledgeSearchOptionsDto } from './knowledgeSearchOptionsDto.ts';
 export interface PlanKnowledgeSearchRequestDto {
   /** Typed composer state. */
   draft: KnowledgeQueryDraftDto;
+  /** Model prompt for dense queries; independent of the retrieval method. */
+  intent?: KnowledgeQueryIntentDto;
   /** Requested retrieval mode. */
   mode?: KnowledgeRetrievalModeDto;
   options?: null | KnowledgeSearchOptionsDto;

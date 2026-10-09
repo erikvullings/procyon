@@ -866,26 +866,25 @@ impl DeveloperWorker {
         )
     }
 
-    /// Composes Ask retrieval over the same catalog and native Zvec index;
-    /// Gemma uses its question prompt while E5 retains its search prefix.
+    /// Composes knowledge retrieval over the same catalog and native Zvec index.
     fn knowledge_backend(&self) -> Arc<dyn crate::WorkerKnowledgeBackend> {
-        #[cfg(feature = "gemma-native")]
-        let queries = self
-            .gemma_question
-            .as_ref()
-            .unwrap_or(&self.queries)
-            .clone();
-        #[cfg(not(feature = "gemma-native"))]
-        let queries = Arc::clone(&self.queries);
         let vector_index: Arc<dyn SemanticCandidateIndex> = self.index.clone();
         let full_text_index: Arc<dyn crate::knowledge_retrieval::FullTextCandidateIndex> =
             self.index.clone();
-        Arc::new(crate::knowledge_retrieval::KnowledgeRetrievalService::new(
+        let service = crate::knowledge_retrieval::KnowledgeRetrievalService::new(
             self.catalog.clone(),
-            Some(queries),
+            Some(Arc::clone(&self.queries)),
             Some(vector_index),
             Some(full_text_index),
-        ))
+        );
+        #[cfg(feature = "gemma-native")]
+        let service = match (&self.gemma_question, &self.gemma_code) {
+            (Some(question), Some(code)) => {
+                service.with_intent_embedders(Arc::clone(question), Arc::clone(code))
+            }
+            _ => service,
+        };
+        Arc::new(service)
     }
 
     fn backends(&self) -> (Arc<dyn WorkerIngestionBackend>, Arc<dyn WorkerQueryBackend>) {

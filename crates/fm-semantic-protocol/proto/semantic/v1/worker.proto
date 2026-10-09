@@ -498,6 +498,8 @@ message KnowledgeSearchRequest {
   KnowledgeCoverage coverage = 8;
   // Exactly-scoped slices retrieved and ranked as one logical scope.
   repeated KnowledgeScopePartition partitions = 10;
+  // Model-owned text prompt; omitted by older clients means ordinary search.
+  QueryIntent intent = 11;
 }
 
 // Requests independently reported knowledge retrieval capabilities.

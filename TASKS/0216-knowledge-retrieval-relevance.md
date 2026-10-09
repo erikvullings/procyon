@@ -55,3 +55,19 @@ Adjacent retrieval context must also not be presented as though it were a matche
   match. Search Knowledge now omits adjacent retrieval-only context from its document sections,
   while retaining it in the result set for grounded-answer generation. Added a grouping
   regression and verified the focused 97-test frontend suite.
+- 2026-10-09: Search results still rank documents by their best match, but now
+  show matched chunks within each document by retrieval rank instead of source
+  position. PDF snippets render as browser-collapsed, escaped text rather than
+  treating extracted PDF text as Markdown; their source text remains intact.
+  The retained Gemma TRIZ index contains
+  malformed PDF text-layer fragments (spaced letters and short blocks);
+  presentation cleanup cannot repair their embeddings or citations. OCR
+  quality/reindexing remains a separate indexing concern.
+- 2026-10-09: A conservative PDF chunk-quality gate now omits long chunks whose
+  Latin text is overwhelmingly character-spaced before embedding or FTS
+  publication. Fully unreadable PDFs are skipped with an OCR/re-index hint;
+  readable chunks from the same PDF remain eligible. Retrieval also excludes
+  legacy corrupted PDF chunks from already-published indexes without altering
+  their stored bytes. Reindexing an enrolled PDF is still needed to reclaim old
+  derived records and restore candidate capacity; the gate does not repair
+  arbitrary OCR errors or impose an uncalibrated similarity threshold.

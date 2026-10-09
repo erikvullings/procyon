@@ -264,6 +264,17 @@ impl KnowledgeService {
     ) -> Result<fm_transport_dto::KnowledgeSearchResultDto, ApplicationError> {
         self.release_gate()?;
         let request_id = request.request_id;
+        let intent = match request.intent {
+            fm_transport_dto::KnowledgeQueryIntentDto::Search => {
+                fm_semantic_protocol::v1::QueryIntent::Search
+            }
+            fm_transport_dto::KnowledgeQueryIntentDto::QuestionAnswering => {
+                fm_semantic_protocol::v1::QueryIntent::QuestionAnswering
+            }
+            fm_transport_dto::KnowledgeQueryIntentDto::CodeRetrieval => {
+                fm_semantic_protocol::v1::QueryIntent::CodeRetrieval
+            }
+        };
         let resolved = self.resolve(
             authority.as_ref(),
             access,
@@ -292,7 +303,7 @@ impl KnowledgeService {
         };
         let outcome = self
             .coordinator
-            .execute(request_id, authorized, &refresh, cancellation)
+            .execute_with_intent(request_id, authorized, &refresh, cancellation, intent)
             .await
             .map_err(search_error)?;
         let indexed_content_hashes = outcome
@@ -1185,6 +1196,7 @@ mod tests {
                     draft: draft(),
                     scope: scope(fixture.workspace_id),
                     mode: KnowledgeRetrievalModeDto::Hybrid,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1210,6 +1222,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn knowledge_search_preserves_the_selected_dense_query_intent() {
+        let capability = Arc::new(RecordingCapability::new(Vec::new()));
+        let fixture = fixture(capability.clone());
+        capability.set_evidence(vec![evidence("r1", &fixture.source_id)]);
+        for (selected, expected) in [
+            (
+                fm_transport_dto::KnowledgeQueryIntentDto::Search,
+                fm_semantic_protocol::v1::QueryIntent::Search,
+            ),
+            (
+                fm_transport_dto::KnowledgeQueryIntentDto::QuestionAnswering,
+                fm_semantic_protocol::v1::QueryIntent::QuestionAnswering,
+            ),
+            (
+                fm_transport_dto::KnowledgeQueryIntentDto::CodeRetrieval,
+                fm_semantic_protocol::v1::QueryIntent::CodeRetrieval,
+            ),
+        ] {
+            fixture
+                .service
+                .execute_knowledge_search(
+                    &SemanticAccessContext::Host,
+                    ExecuteKnowledgeSearchRequestDto {
+                        request_id: Uuid::new_v4(),
+                        draft: draft(),
+                        scope: scope(fixture.workspace_id),
+                        mode: KnowledgeRetrievalModeDto::Hybrid,
+                        intent: selected,
+                        options: None,
+                    },
+                )
+                .await
+                .expect("selected search");
+            assert_eq!(capability.requests().last().unwrap().intent, expected);
+        }
+    }
+
+    #[tokio::test]
     async fn entire_library_search_keeps_indexed_evidence_after_workspace_replacement() {
         let capability = Arc::new(RecordingCapability::new(Vec::new()));
         let fixture = fixture(capability.clone());
@@ -1225,6 +1275,7 @@ mod tests {
                     draft: draft(),
                     scope: scope(replacement_workspace),
                     mode: KnowledgeRetrievalModeDto::Hybrid,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1264,6 +1315,7 @@ mod tests {
                     draft: draft(),
                     scope: scope(fixture.workspace_id),
                     mode: KnowledgeRetrievalModeDto::Hybrid,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1280,6 +1332,7 @@ mod tests {
                     draft: draft(),
                     scope: scope(fixture.workspace_id),
                     mode: KnowledgeRetrievalModeDto::Hybrid,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1346,6 +1399,7 @@ mod tests {
                     draft: draft(),
                     scope: scope(fixture.workspace_id),
                     mode: KnowledgeRetrievalModeDto::Hybrid,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1360,6 +1414,7 @@ mod tests {
                     draft: draft(),
                     scope: scope(fixture.workspace_id),
                     mode: KnowledgeRetrievalModeDto::Hybrid,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1384,6 +1439,7 @@ mod tests {
                     draft: draft(),
                     scope: scope(fixture.workspace_id),
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1414,6 +1470,7 @@ mod tests {
                         semantic_source_ids: Vec::new(),
                     },
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1450,6 +1507,7 @@ mod tests {
                     draft: draft(),
                     scope: scope(fixture.workspace_id),
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1477,6 +1535,7 @@ mod tests {
                     },
                     scope: scope(fixture.workspace_id),
                     mode: KnowledgeRetrievalModeDto::Hybrid,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1645,6 +1704,7 @@ mod tests {
                     draft: draft(),
                     scope: scope(fixture.workspace_id),
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1686,6 +1746,7 @@ mod tests {
                     draft: draft(),
                     scope: scope(fixture.workspace_id),
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1731,6 +1792,7 @@ mod tests {
                     draft: draft(),
                     scope: scope(fixture.workspace_id),
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1777,6 +1839,7 @@ mod tests {
                     draft: draft(),
                     scope: scope(fixture.workspace_id),
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1872,6 +1935,7 @@ mod resolved_scope_tests {
                         semantic_source_ids: Vec::new(),
                     },
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1913,6 +1977,7 @@ mod resolved_scope_tests {
                         semantic_source_ids: Vec::new(),
                     },
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1954,6 +2019,7 @@ mod resolved_scope_tests {
                         semantic_source_ids: Vec::new(),
                     },
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -1995,6 +2061,7 @@ mod resolved_scope_tests {
                         semantic_source_ids: Vec::new(),
                     },
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -2034,6 +2101,7 @@ mod resolved_scope_tests {
                         semantic_source_ids: Vec::new(),
                     },
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -2073,6 +2141,7 @@ mod resolved_scope_tests {
                         semantic_source_ids: Vec::new(),
                     },
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -2119,6 +2188,7 @@ mod resolved_scope_tests {
                         semantic_source_ids: Vec::new(),
                     },
                     mode: KnowledgeRetrievalModeDto::FullText,
+                    intent: Default::default(),
                     options: None,
                 },
             )
@@ -2512,6 +2582,7 @@ mod answer_flow_tests {
                 semantic_source_ids: Vec::new(),
             },
             mode: KnowledgeRetrievalModeDto::FullText,
+            intent: Default::default(),
             options: None,
         }
     }

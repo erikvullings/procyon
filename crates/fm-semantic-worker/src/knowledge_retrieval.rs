@@ -17,11 +17,12 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use fm_semantic_conversion::ChunkProvenance;
+use fm_semantic_protocol::v1::QueryIntent;
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
 use crate::embedding::EmbeddingError;
-use crate::ingestion::EmbeddingProvider;
+use crate::ingestion::{EmbeddingProvider, is_corrupted_pdf_text};
 use crate::semantic_search::{SearchCoverage, SemanticCandidateIndex};
 use crate::semantic_storage::{
     CatalogReader, QueryEvidence, QueryFilters, SemanticCatalog, StorageError,
@@ -246,6 +247,8 @@ impl KnowledgeSourceRestriction {
 pub struct KnowledgeRetrievalRequest {
     /// Planned source queries; the logical plan is owned by the caller.
     pub queries: Vec<KnowledgeQuery>,
+    /// Text prompt role for dense retrieval; full-text queries are unchanged.
+    pub intent: QueryIntent,
     /// Requested physical route.
     pub route: KnowledgeRoute,
     /// Exactly-scoped slices retrieved and ranked as one logical scope.
@@ -505,6 +508,8 @@ pub enum KnowledgeRetrievalError {
 pub struct KnowledgeRetrievalService {
     catalog: SemanticCatalog,
     embedder: Option<Arc<dyn EmbeddingProvider>>,
+    question_embedder: Option<Arc<dyn EmbeddingProvider>>,
+    code_embedder: Option<Arc<dyn EmbeddingProvider>>,
     vector_index: Option<Arc<dyn SemanticCandidateIndex>>,
     full_text_index: Option<Arc<dyn FullTextCandidateIndex>>,
 }
@@ -521,9 +526,23 @@ impl KnowledgeRetrievalService {
         Self {
             catalog,
             embedder,
+            question_embedder: None,
+            code_embedder: None,
             vector_index,
             full_text_index,
         }
+    }
+
+    /// Selects model-specific query prompts without changing the document index.
+    #[must_use]
+    pub fn with_intent_embedders(
+        mut self,
+        question: Arc<dyn EmbeddingProvider>,
+        code: Arc<dyn EmbeddingProvider>,
+    ) -> Self {
+        self.question_embedder = Some(question);
+        self.code_embedder = Some(code);
+        self
     }
 
     /// Reports full-text and query-embedding availability independently.
@@ -650,8 +669,15 @@ impl KnowledgeRetrievalService {
         request: &KnowledgeRetrievalRequest,
         cancellation: &CancellationToken,
     ) -> Result<Vec<RankedCandidateList>, KnowledgeRetrievalError> {
-        let (Some(embedder), Some(index)) = (&self.embedder, &self.vector_index) else {
+        let (Some(search_embedder), Some(index)) = (&self.embedder, &self.vector_index) else {
             return Err(KnowledgeRetrievalError::SemanticUnavailable);
+        };
+        let embedder = match request.intent {
+            QueryIntent::Search => search_embedder,
+            QueryIntent::QuestionAnswering => {
+                self.question_embedder.as_ref().unwrap_or(search_embedder)
+            }
+            QueryIntent::CodeRetrieval => self.code_embedder.as_ref().unwrap_or(search_embedder),
         };
         let texts = request
             .queries
@@ -752,6 +778,10 @@ impl KnowledgeRetrievalService {
             let Some((scope_index, evidence)) = authorized.get(&candidate.record_id) else {
                 continue;
             };
+            if evidence.media_type == "application/pdf" && is_corrupted_pdf_text(&evidence.content)
+            {
+                continue;
+            }
             let identity = ChunkIdentity::of(evidence);
             if let Some(existing) = logical_chunks.get(&identity) {
                 let duplicates = duplicates.entry(existing.clone()).or_default();
@@ -820,6 +850,8 @@ impl KnowledgeRetrievalService {
                     || !scope.source_restriction.permits(&context.source_id)
                     || (request.policy.section_bounded_context
                         && context.section_path != primary.section_path)
+                    || (context.media_type == "application/pdf"
+                        && is_corrupted_pdf_text(&context.content))
                     || logical_chunks.contains_key(&ChunkIdentity::of(&context))
                 {
                     continue;
@@ -1803,6 +1835,7 @@ mod tests {
         scopes: Vec<KnowledgeRetrievalScope>,
     ) -> KnowledgeRetrievalRequest {
         KnowledgeRetrievalRequest {
+            intent: QueryIntent::Search,
             queries: vec![KnowledgeQuery {
                 text: "structured knowledge".into(),
                 reason: KnowledgeRetrievalReason::Subject,
@@ -1813,6 +1846,36 @@ mod tests {
             coverage: crate::semantic_search::SearchCoverage::default(),
             policy,
         }
+    }
+
+    #[test]
+    fn dense_queries_use_the_selected_text_prompt_role() {
+        let path = catalog_path();
+        let search = FakeEmbedder::working();
+        let question = FakeEmbedder::working();
+        let code = FakeEmbedder::working();
+        let service = KnowledgeRetrievalService::new(
+            fixture(&path),
+            Some(search.clone()),
+            Some(FakeVectorIndex::returning(vec![])),
+            None,
+        )
+        .with_intent_embedders(question.clone(), code.clone());
+        let reader = service.catalog.begin_read().unwrap();
+        let mut request = request(KnowledgeRoute::Semantic, policy());
+        for intent in [
+            QueryIntent::Search,
+            QueryIntent::QuestionAnswering,
+            QueryIntent::CodeRetrieval,
+        ] {
+            request.intent = intent;
+            service
+                .query_semantic(&reader, &request, &CancellationToken::new())
+                .unwrap();
+        }
+        assert_eq!(*search.calls.lock().unwrap(), 1);
+        assert_eq!(*question.calls.lock().unwrap(), 1);
+        assert_eq!(*code.calls.lock().unwrap(), 1);
     }
 
     fn scope(filters: QueryFilters, allowed: &[&str]) -> KnowledgeRetrievalScope {
@@ -1937,6 +2000,92 @@ mod tests {
 
         assert_eq!(record_ids(&restricted), ["a-0"]);
         assert_eq!(restricted.evidence[0].source_id, "source-a");
+    }
+
+    #[test]
+    fn corrupted_legacy_pdf_candidate_does_not_consume_the_result_budget() {
+        let path = catalog_path();
+        let catalog = fixture(&path);
+        let mut pdf = occurrence(
+            "pdf-occurrence",
+            "pdf-source",
+            "root-a",
+            "workspace-a",
+            true,
+        );
+        pdf.media_type = "application/pdf".into();
+        let mut bad = record("bad-pdf", "pdf-occurrence", 0);
+        bad.content = "T A R G E T W e n e e d t o i n c r e a s e s a l e s ".repeat(8);
+        publish(&catalog, "tenant-a", "pdf-document", vec![pdf], vec![bad]);
+        let service = KnowledgeRetrievalService::new(
+            catalog,
+            Some(FakeEmbedder::working()),
+            Some(FakeVectorIndex::returning(vec![vec![
+                ("bad-pdf", 0.9),
+                ("a-0", 0.7),
+            ]])),
+            None,
+        );
+        let retrieval = service
+            .retrieve(
+                request(
+                    KnowledgeRoute::Semantic,
+                    KnowledgeRetrievalPolicy {
+                        result_limit: 1,
+                        ..policy()
+                    },
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("search retained index");
+
+        assert_eq!(record_ids(&retrieval), ["a-0"]);
+        assert_eq!(retrieval.evidence[0].final_rank, 1);
+    }
+
+    #[test]
+    fn corrupted_legacy_pdf_adjacent_context_is_not_shown() {
+        let path = catalog_path();
+        let catalog = fixture(&path);
+        let mut pdf = occurrence(
+            "pdf-occurrence",
+            "pdf-source",
+            "root-a",
+            "workspace-a",
+            true,
+        );
+        pdf.media_type = "application/pdf".into();
+        let good = record("good-pdf", "pdf-occurrence", 0);
+        let mut bad = record("bad-pdf", "pdf-occurrence", 1);
+        bad.content = "T A R G E T W e n e e d t o i n c r e a s e s a l e s ".repeat(8);
+        publish(
+            &catalog,
+            "tenant-a",
+            "pdf-document",
+            vec![pdf],
+            vec![good, bad],
+        );
+        let service = KnowledgeRetrievalService::new(
+            catalog,
+            Some(FakeEmbedder::working()),
+            Some(FakeVectorIndex::returning(vec![vec![("good-pdf", 0.9)]])),
+            None,
+        );
+        let retrieval = service
+            .retrieve(
+                request(
+                    KnowledgeRoute::Semantic,
+                    KnowledgeRetrievalPolicy {
+                        adjacent_chunk_radius: 1,
+                        section_bounded_context: false,
+                        ..policy()
+                    },
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("search retained index");
+
+        assert_eq!(record_ids(&retrieval), ["good-pdf"]);
     }
 
     /// A scope described by an exact source set must still return a full
