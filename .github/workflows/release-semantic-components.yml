@@ -376,7 +376,26 @@ jobs:
               if (!/^[a-zA-Z0-9._-]+$/.test(id)) throw new Error(`invalid artifact id: ${id}`);
               fs.linkSync(path.join("candidate", id), path.join("candidate-payloads", id));
             }
+            if (process.env.GEMMA_TARGET === "linux-x86_64") {
+              const onnx = catalog.catalog.artifacts.find(({ component_id }) => component_id === "procyon.semantic.onnx-runtime");
+              if (!onnx) throw new Error("signed Linux x86 catalog has no ONNX Runtime");
+              fs.mkdirSync("candidate-onnx-runtime");
+              for (const name of ["libonnxruntime.so", "libonnxruntime.so.1"]) {
+                fs.linkSync(path.join("candidate", onnx.id), path.join("candidate-onnx-runtime", name));
+              }
+              fs.appendFileSync(process.env.GITHUB_ENV, `ORT_LIB_PATH=${path.resolve("candidate-onnx-runtime")}\nORT_PREFER_DYNAMIC_LINK=1\nORT_SKIP_DOWNLOAD=1\n`);
+            }
           '
+      - name: Verify signed catalog and exact target payloads before linking
+        shell: bash
+        env:
+          GEMMA_TARGET: ${{ matrix.target }}
+        run: |
+          cargo run --quiet -p fm-semantic-components \
+            --example semantic_production_catalog -- \
+            verify "candidate/semantic-catalog-$GEMMA_TARGET.json" \
+            "candidate/semantic-catalog-$GEMMA_TARGET.sig" \
+            candidate-payloads "$RUNNER_TEMP/semantic-catalog.pub"
       - name: Configure the MSVC tool environment
         if: matrix.target == 'windows-x86_64'
         uses: ilammy/msvc-dev-cmd@v1

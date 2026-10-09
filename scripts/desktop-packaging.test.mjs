@@ -438,6 +438,8 @@ test('semantic components qualify and publish exact retained artifacts independe
     /semantic-component-candidate-d3f921fe08e4994a905727a71af102979f4fbe23/u,
   );
   assert.match(JSON.stringify(installed), /qualify_semantic_lifecycle/u);
+  assert.match(JSON.stringify(installed), /semantic_production_catalog/u);
+  assert.match(JSON.stringify(installed), /ORT_LIB_PATH/u);
   assert.doesNotMatch(JSON.stringify(installed), /gh release create|SEMANTIC_CATALOG_SIGNING_KEY/u);
 });
 
