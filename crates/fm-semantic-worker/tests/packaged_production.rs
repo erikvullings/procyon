@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::Instant;
 
 #[cfg(feature = "gemma-native")]
 use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeFiles};
@@ -46,8 +47,10 @@ fn privacy_canaries() -> BTreeMap<String, String> {
 async fn wait_for_ingestion(
     client: &fm_semantic_worker::WorkerClient,
     job_id: &str,
+    timeout: Duration,
 ) -> IngestionState {
-    for _ in 0..600 {
+    let started = Instant::now();
+    while started.elapsed() < timeout {
         let state = client
             .ingestion_job("qualification-tenant", "qualification-library", job_id)
             .await
@@ -64,7 +67,7 @@ async fn wait_for_ingestion(
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    panic!("packaged ingestion did not finish within 60 seconds");
+    panic!("packaged ingestion did not finish within {timeout:?}");
 }
 
 fn terminate_worker(pid: &str) {
@@ -120,7 +123,7 @@ async fn packaged_worker_ingests_recovers_after_crash_and_reopens_offline() {
         .await
         .expect("ingest privacy fixture through packaged worker");
     assert_eq!(
-        wait_for_ingestion(&client, &job_id).await,
+        wait_for_ingestion(&client, &job_id, Duration::from_secs(60)).await,
         IngestionState::Completed
     );
     assert!(
@@ -240,10 +243,15 @@ async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
             )
             .await
             .expect("submit packaged media");
+        let started = Instant::now();
         assert_eq!(
-            wait_for_ingestion(&client, &job_id).await,
+            wait_for_ingestion(&client, &job_id, Duration::from_secs(300)).await,
             IngestionState::Completed,
             "{name}"
+        );
+        println!(
+            "Gemma {name} packaged ingestion completed in {:.1}s",
+            started.elapsed().as_secs_f64()
         );
         let results = client
             .query(

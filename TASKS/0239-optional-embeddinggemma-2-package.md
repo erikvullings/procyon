@@ -375,3 +375,14 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   model-specific quality and supported-platform evidence is reviewed and a
   release decision is implemented. This does not enable Gemma in standard
   desktop builds or change the workspace version to 0.5.0.
+- 2026-10-09: Read-only qualification run 37971224110 on main
+  (96d697ad4d2bf4adcb546617102831ec290f58b8) built the four Gemma
+  candidates. Windows passed packaged smoke, lifecycle/privacy qualification,
+  and payload upload. Both Linux targets and macOS failed the packaged Gemma
+  ingestion smoke at its 60-second per-job test deadline; therefore catalog
+  signing and aggregate collection were skipped and no release was published.
+  The Gemma-specific smoke deadline is now 300 seconds, with per-media elapsed
+  times logged, while the E5 deadline stays at 60 seconds. A fresh four-target
+  run on this change is required to distinguish slow inference from a stalled
+  job; neither the Windows result nor E5 evaluation qualifies Gemma retrieval
+  quality, resources, or installation across supported targets.
