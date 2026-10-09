@@ -539,14 +539,9 @@ describe('theme stylesheet', () => {
       /\.fm-app-shell \.fm-knowledge-search-submit\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-search-close\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-settings-trigger\.btn-icon\s*\{[^}]*width:\s*var\(--fm-row-height\)[^}]*height:\s*var\(--fm-row-height\)[^}]*padding:\s*0/s,
     );
     expect(themeCss).toMatch(
-      /\.fm-knowledge-search-options\s*\{[^}]*height:\s*var\(--fm-row-height\)[^}]*white-space:\s*nowrap/s,
+      /\.fm-knowledge-search-toolbar > \.fm-knowledge-intent\s*\{[^}]*height:\s*calc\(var\(--fm-row-height\) - 4px\)/s,
     );
-    expect(themeCss).toMatch(
-      /\.fm-knowledge-search-options \.fm-knowledge-inline-needs\s*\{[^}]*align-items:\s*center[^}]*overflow:\s*hidden[^}]*flex-wrap:\s*nowrap/s,
-    );
-    expect(themeCss).toMatch(
-      /\.fm-knowledge-search-options input\[type="checkbox"\] \+ span:not\(\.lever\)\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*center/s,
-    );
+    expect(themeCss).not.toMatch(/\.fm-knowledge-search-options\s*\{/);
     expect(themeCss).toMatch(
       /:where\(\.fm-knowledge-source-link span\)\s*\{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/s,
     );
