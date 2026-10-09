@@ -450,6 +450,12 @@ fn qualify_installed_gemma(
         "libzvec_c_api.so"
     };
     fs::copy(runtime, native.join(runtime_name))?;
+    if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        fs::copy(
+            installed("procyon.semantic.onnx-runtime")?,
+            native.join("libonnxruntime.so.1"),
+        )?;
+    }
     let mut command = std::process::Command::new(test);
     let loader_variable = if cfg!(target_os = "macos") {
         "DYLD_LIBRARY_PATH"
