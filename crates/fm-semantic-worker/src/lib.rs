@@ -17,6 +17,8 @@ pub mod gemma_audio_decode;
 #[cfg(feature = "gemma-probe")]
 pub mod gemma_audio_features;
 #[cfg(feature = "gemma-probe")]
+mod gemma_compute;
+#[cfg(feature = "gemma-probe")]
 pub mod gemma_embedding;
 #[cfg(feature = "gemma-probe")]
 pub mod gemma_fusion;

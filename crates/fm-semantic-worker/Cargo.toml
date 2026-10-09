@@ -24,6 +24,8 @@ developer-bundle = ["semantic-runtime"]
 # worker binaries must be built with gemma-native.
 gemma-native = ["semantic-runtime", "gemma-probe"]
 gemma-probe = ["dep:fm-metadata", "dep:image", "dep:lattice-inference", "dep:symphonia", "dep:tokenizers"]
+# Probe-only FP32 GEMM offload; never selected by the managed worker.
+gemma-metal = ["gemma-probe", "lattice-inference/metal-gpu"]
 
 [dependencies]
 caseless.workspace = true

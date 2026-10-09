@@ -11,6 +11,7 @@ use tokio_util::sync::CancellationToken;
 use crate::gemma_audio::{GemmaAudioError, GemmaAudioTower};
 use crate::gemma_audio_decode::{AudioDecodeError, decode_audio_16k_cancellable};
 use crate::gemma_audio_features::{GemmaAudioFeatureExtractor, GemmaAudioFeaturesError};
+use crate::gemma_compute::GemmaCompute;
 use crate::gemma_fusion::{GemmaFusionEncoder, GemmaFusionError};
 use crate::gemma_multimodal::{GemmaModality, GemmaProjection, GemmaProjectionError};
 use crate::gemma_probe::{GemmaProbeError, GemmaTextTask};
@@ -114,6 +115,7 @@ mod original_files_tests {
 
 /// Native text and optional media encoder. A single language model serves all modalities.
 pub struct GemmaNativeEncoder {
+    compute: GemmaCompute,
     language: GemmaFusionEncoder,
     tokenizer: Tokenizer,
     vision: Option<(GemmaVisionTower, GemmaProjection)>,
@@ -143,6 +145,34 @@ impl GemmaNativeEncoder {
         self.dimensions
     }
 
+    /// Number of FP32 GEMM dispatches actually executed on the GPU.
+    #[must_use]
+    pub fn metal_dispatches(&self) -> usize {
+        self.compute.dispatches()
+    }
+
+    /// Explicit local-only Metal probe; the managed worker always uses `open_files`.
+    #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+    pub fn open_metal(
+        directory: &Path,
+        dimensions: usize,
+        media: GemmaMedia,
+    ) -> Result<Self, GemmaNativeError> {
+        if !media.images || media.audio || media.video {
+            return Err(GemmaNativeError::Input(
+                "Metal probe supports standalone images only",
+            ));
+        }
+        let compute = GemmaCompute::metal()
+            .ok_or(GemmaNativeError::Input("Metal FP32 GEMM is unavailable"))?;
+        Self::open_files_with_compute(
+            &GemmaNativeFiles::from_directory(directory),
+            dimensions,
+            media,
+            compute,
+        )
+    }
+
     /// Load the pinned local BF16/F32 checkpoint for FP32 CPU inference.
     pub fn open(
         directory: &Path,
@@ -161,6 +191,15 @@ impl GemmaNativeEncoder {
         files: &GemmaNativeFiles,
         dimensions: usize,
         media: GemmaMedia,
+    ) -> Result<Self, GemmaNativeError> {
+        Self::open_files_with_compute(files, dimensions, media, GemmaCompute::Cpu)
+    }
+
+    fn open_files_with_compute(
+        files: &GemmaNativeFiles,
+        dimensions: usize,
+        media: GemmaMedia,
+        compute: GemmaCompute,
     ) -> Result<Self, GemmaNativeError> {
         if ![128, 256, 512, 768].contains(&dimensions) {
             return Err(GemmaNativeError::Input("unsupported embedding dimension"));
@@ -191,12 +230,25 @@ impl GemmaNativeEncoder {
         let eoa = tokenizer
             .token_to_id("<audio|>")
             .ok_or(GemmaNativeError::Input("missing end-of-audio token"))?;
-        let language = GemmaFusionEncoder::open_files(&files.config, &files.weights)?;
+        let language = GemmaFusionEncoder::open_files_with_compute(
+            &files.config,
+            &files.weights,
+            compute.clone(),
+        )?;
         let vision = if media.images || media.video {
             validate_processor_config_file(&files.visual_processor)?;
             Some((
-                GemmaVisionTower::open_files(&files.config, &files.weights)?,
-                GemmaProjection::open_files(&files.config, &files.weights, GemmaModality::Vision)?,
+                GemmaVisionTower::open_files_with_compute(
+                    &files.config,
+                    &files.weights,
+                    compute.clone(),
+                )?,
+                GemmaProjection::open_files_with_compute(
+                    &files.config,
+                    &files.weights,
+                    GemmaModality::Vision,
+                    compute.clone(),
+                )?,
             ))
         } else {
             None
@@ -211,6 +263,7 @@ impl GemmaNativeEncoder {
             None
         };
         Ok(Self {
+            compute,
             language,
             tokenizer,
             vision,

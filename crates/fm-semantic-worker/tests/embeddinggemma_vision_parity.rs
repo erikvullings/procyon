@@ -1,6 +1,9 @@
 //! Pinned upstream vision-tower parity; explicitly opt in to the local checkpoint.
 #![cfg(feature = "gemma-probe")]
 
+#[allow(dead_code)]
+#[path = "../src/gemma_compute.rs"]
+mod gemma_compute;
 #[allow(dead_code, unreachable_pub)]
 #[path = "../src/gemma_vision.rs"]
 mod gemma_vision;

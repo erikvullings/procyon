@@ -3,10 +3,12 @@
 use std::{fs::File, path::Path};
 
 use lattice_inference::{
-    forward::cpu::{matmul_bt, rms_norm},
+    forward::cpu::rms_norm,
     weights::{SafetensorsFile, TensorSource},
 };
 use tokio_util::sync::CancellationToken;
+
+use crate::gemma_compute::GemmaCompute;
 
 const WIDTH: usize = 768;
 const HEAD: usize = 64;
@@ -65,6 +67,7 @@ struct Layer {
 
 /// Holds only vision weights; the caller supplies patches and valid positions.
 pub struct GemmaVisionTower {
+    compute: GemmaCompute,
     patch_projection: Vec<f32>,
     position_table: Vec<f32>,
     layers: Vec<Layer>,
@@ -104,6 +107,14 @@ impl GemmaVisionTower {
 
     /// Load the original config and vision weights from independent verified paths.
     pub fn open_files(config_path: &Path, weights_path: &Path) -> Result<Self, GemmaVisionError> {
+        Self::open_files_with_compute(config_path, weights_path, GemmaCompute::Cpu)
+    }
+
+    pub(crate) fn open_files_with_compute(
+        config_path: &Path,
+        weights_path: &Path,
+        compute: GemmaCompute,
+    ) -> Result<Self, GemmaVisionError> {
         let config: serde_json::Value = serde_json::from_reader(File::open(config_path)?)?;
         let c = &config["vision_config"];
         if config["model_type"] != "embedding_gemma2"
@@ -165,6 +176,7 @@ impl GemmaVisionTower {
             });
         }
         Ok(Self {
+            compute,
             patch_projection,
             position_table,
             layers,
@@ -242,7 +254,7 @@ impl GemmaVisionTower {
             .iter()
             .map(|&v| 2.0 * (v - 0.5))
             .collect();
-        let mut hidden = linear(&scaled, &self.patch_projection, n, PATCH_PIXELS, WIDTH);
+        let mut hidden = self.linear(&scaled, &self.patch_projection, n, PATCH_PIXELS, WIDTH);
         for (i, pos) in positions.iter().take(valid_patches).enumerate() {
             for d in 0..WIDTH {
                 hidden[i * WIDTH + d] += self.position_table[pos[0] as usize * WIDTH + d]
@@ -255,9 +267,9 @@ impl GemmaVisionTower {
             }
             let mut x = hidden.clone();
             rms_norm(&mut x, &layer.input_norm, WIDTH, EPS);
-            let mut q = linear(&x, &layer.q, n, WIDTH, WIDTH);
-            let mut k = linear(&x, &layer.k, n, WIDTH, WIDTH);
-            let mut v = linear(&x, &layer.v, n, WIDTH, WIDTH);
+            let mut q = self.linear(&x, &layer.q, n, WIDTH, WIDTH);
+            let mut k = self.linear(&x, &layer.k, n, WIDTH, WIDTH);
+            let mut v = self.linear(&x, &layer.v, n, WIDTH, WIDTH);
             for (t, &position) in positions.iter().take(n).enumerate() {
                 for h in 0..HEADS {
                     let start = t * WIDTH + h * HEAD;
@@ -299,20 +311,20 @@ impl GemmaVisionTower {
                     }
                 }
             }
-            let mut attention = linear(&context, &layer.o, n, WIDTH, WIDTH);
+            let mut attention = self.linear(&context, &layer.o, n, WIDTH, WIDTH);
             rms_norm(&mut attention, &layer.post_attn_norm, WIDTH, EPS);
             for (dst, update) in hidden.iter_mut().zip(attention) {
                 *dst += update;
             }
             let mut x = hidden.clone();
             rms_norm(&mut x, &layer.pre_ff_norm, WIDTH, EPS);
-            let mut gate = linear(&x, &layer.gate, n, WIDTH, INTERMEDIATE);
-            let up = linear(&x, &layer.up, n, WIDTH, INTERMEDIATE);
+            let mut gate = self.linear(&x, &layer.gate, n, WIDTH, INTERMEDIATE);
+            let up = self.linear(&x, &layer.up, n, WIDTH, INTERMEDIATE);
             for (g, u) in gate.iter_mut().zip(up) {
                 let z = *g;
                 *g = 0.5 * z * (1.0 + (0.797_884_6 * (z + 0.044_715 * z.powi(3))).tanh()) * u;
             }
-            let mut ff = linear(&gate, &layer.down, n, INTERMEDIATE, WIDTH);
+            let mut ff = self.linear(&gate, &layer.down, n, INTERMEDIATE, WIDTH);
             rms_norm(&mut ff, &layer.post_ff_norm, WIDTH, EPS);
             for (dst, update) in hidden.iter_mut().zip(ff) {
                 *dst += update;
@@ -346,12 +358,20 @@ impl GemmaVisionTower {
         }
         Ok(pooled)
     }
-}
 
-fn linear(input: &[f32], weights: &[f32], rows: usize, cols: usize, output: usize) -> Vec<f32> {
-    let mut result = vec![0.0; rows * output];
-    matmul_bt(input, weights, &mut result, rows, cols, output);
-    result
+    fn linear(
+        &self,
+        input: &[f32],
+        weights: &[f32],
+        rows: usize,
+        cols: usize,
+        output: usize,
+    ) -> Vec<f32> {
+        let mut result = vec![0.0; rows * output];
+        self.compute
+            .matmul_bt(input, weights, &mut result, rows, cols, output);
+        result
+    }
 }
 
 fn rotary(vector: &mut [f32], position: [i32; 2]) {
@@ -397,6 +417,7 @@ mod tests {
     #[test]
     fn invalid_patches_and_coordinates_are_rejected() {
         let tower = GemmaVisionTower {
+            compute: GemmaCompute::Cpu,
             patch_projection: Vec::new(),
             position_table: Vec::new(),
             layers: Vec::new(),

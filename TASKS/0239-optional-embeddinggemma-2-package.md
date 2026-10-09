@@ -375,3 +375,15 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   model-specific quality and supported-platform evidence is reviewed and a
   release decision is implemented. This does not enable Gemma in standard
   desktop builds or change the workspace version to 0.5.0.
+- 2026-10-09: Added a separate, explicitly selected `gemma-metal` image probe on
+  macOS using the pinned Lattice FP32 Metal GEMM primitive in the native vision
+  tower, vision projection, and soft-token language fusion. Default/managed
+  inference stays CPU; FP16 is not used. A pinned-checkpoint M4 Max test executes
+  620 Metal GEMM dispatches per image and matches CPU/upstream image vectors at
+  all 128/256/512/768 widths (cosine >0.99999). The measured direct test process
+  peaked at 2,521,169,920 resident bytes. End-to-end encode times remain about
+  28-31 seconds for CPU and 29-30 seconds for Metal on one patterned image,
+  with a 50.7-second Metal outlier on a repeat: **no acceleration is qualified**.
+  See `docs/evaluations/embeddinggemma-metal-image.md` for method and numbers.
+  Metal remains hidden; a device-resident vision attention path, supported-target
+  measurements, and fallback qualification are still required before exposure.
