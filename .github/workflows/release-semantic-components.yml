@@ -392,9 +392,20 @@ jobs:
       - name: Build existing offline media smoke
         shell: bash
         run: |
-          cargo test -p fm-semantic-worker --features gemma-native \
+          if ! cargo test -p fm-semantic-worker --features gemma-native \
             --test packaged_production --no-run --message-format=json \
-            > "$RUNNER_TEMP/gemma-test-build.json"
+            > "$RUNNER_TEMP/gemma-test-build.json"; then
+            node -e '
+              const fs = require("node:fs");
+              for (const line of fs.readFileSync(process.argv[1], "utf8").trim().split("\n")) {
+                const message = JSON.parse(line);
+                if (message.reason === "compiler-message" && message.message.level === "error") {
+                  console.error(message.message.rendered);
+                }
+              }
+            ' "$RUNNER_TEMP/gemma-test-build.json"
+            exit 1
+          fi
           node -e '
             const fs = require("node:fs");
             const messages = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").map((line) => JSON.parse(line));
