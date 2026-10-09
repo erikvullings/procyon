@@ -449,3 +449,42 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   checks still require operators. Independent realistic retrieval labels,
   matched E5 comparison, and per-dimension/platform resource limits remain
   open. Keep the release guard and Gemma's default-hidden status intact.
+- 2026-10-09: **Three remaining signed installed targets passed** in read-only
+  [run 37990723942](https://github.com/erikvullings/procyon/actions/runs/37990723942)
+  (qualification harness SHA `9efb7c8947f3ab201b197cdc1e151c1cdac5b54c`).
+  The manual workflow downloaded the *same* retained candidate from run
+  37974984924, artifact ID 11640886748, and skipped all payload-building,
+  catalog-signing, collection, and publication jobs. Each target verified
+  its detached catalog signature with the public environment key and all
+  exact signed payload hashes before testing an offline installation. The
+  existing lifecycle harness installed the Gemma worker, runtimes, and five
+  original files through an explicit offer/consent, reverified installed
+  bytes after manager restart, ingested and queried PNG/MP3/H.264 MP4 with
+  timestamp provenance, killed/restarted the worker and recovered all three
+  indexed documents, then checked tampering, interrupted resume,
+  cross-process locking, retain/delete uninstall, and clean reinstall.
+  Each uploaded report records **13 passed checks and zero network artifact
+  reads** (the earlier Actions artifact download is not an offline operation):
+
+  | Target | Installed report artifact ID | Catalog SHA-256 | Signature SHA-256 |
+  | --- | ---: | --- | --- |
+  | Linux ARM64 | 11645322065 | `b158c0b7c2f25aa16215fdacc34268d2326e1c26fb0f593a09617bd987e534df` | `4e25397654c2c47afd60920501ca13731d0617dc397482ce395062cf11dec34e` |
+  | Linux x86_64 | 11644539558 | `c7ae0e2625d9d83a6e93621a6bb51fd2731200ede4cd188dd8b389b58d8f1724` | `5ce2a65b0376594ff58037597125d46ae104c36569c27315e0f6c90aa043d0ad` |
+  | Windows x86_64 | 11645457780 | `83cb7c83d0f279ab85c97c127ba87969046d0ef6f65c39e65d973fab127fc382` | `fa890ce8cb0e39ce05fc5e7c64110084da925f73c22d0a0df9f7c1993496516b` |
+
+  The first x86 attempt (run 37986807776) failed *before installation*
+  because the CI-built test binary lacked `ORT_LIB_PATH`; the diagnostic
+  retry (37988792465) confirmed an unresolved `OrtGetApiBase` linker symbol
+  and was stopped after the diagnosis. A further run (37989503641) linked
+  against the retained signed ONNX payload, then failed at test startup
+  because its shared library was not on the test process loader path.
+  The passing run staged that **verified installed** ONNX payload beside the
+  installed worker and Zvec library, rather than using an unsigned/system
+  replacement. The macOS ARM result above plus these three reports establish
+  this bounded signed installed/offline gate on all four supported targets,
+  **not** Gemma release qualification. All four reports still mark
+  preceding-candidate upgrade/rollback blocked without an exact prior signed
+  candidate; native screen-reader and packaged consent/progress/error UI
+  checks require operators. Independent realistic multilingual/code/media
+  labels, matched E5 quality, and dimension/platform CPU resource bounds are
+  still missing. Do not enable Gemma or lift the publication guard.
