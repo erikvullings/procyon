@@ -12,7 +12,15 @@ jobs:
     name: Create GitHub prerelease
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    environment: desktop-release
     steps:
+      - uses: actions/checkout@v7
+      - name: Require exact experimental Gemma approval before publishing
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
+        run: node scripts/check-desktop-gemma-release.mjs
       - uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true

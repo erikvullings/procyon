@@ -309,11 +309,31 @@ jobs:
           path: semantic-catalogs
           github-token: ${{ github.token }}
           run-id: ${{ inputs.qualification_run_id }}
+      - name: Select exact reviewed Gemma candidate
+        id: gemma_candidate
+        if: inputs.approve_experimental_gemma == true
+        shell: bash
+        env:
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const manifest = JSON.parse(fs.readFileSync("docs/evaluations/semantic-gemma-experimental-v1.json", "utf8"));
+            if (manifest.decision !== "go" || manifest.experimentalGemma?.approval !== "explicit-opt-in-experimental" ||
+                manifest.qualificationRunId !== Number(process.env.QUALIFICATION_RUN_ID) ||
+                manifest.releaseTag !== process.env.RELEASE_TAG ||
+                !/^[0-9a-f]{40}$/.test(manifest.sourceRevision) ||
+                manifest.sourceRevision === "d3f921fe08e4994a905727a71af102979f4fbe23") {
+              throw new Error("a new exact reviewed Gemma candidate is required");
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `source_revision=${manifest.sourceRevision}\n`);
+          '
       - name: Download exact Gemma candidate fingerprint lock
         if: inputs.approve_experimental_gemma == true
         uses: actions/download-artifact@v8
         with:
-          name: semantic-component-candidate-d3f921fe08e4994a905727a71af102979f4fbe23
+          name: semantic-component-candidate-${{ steps.gemma_candidate.outputs.source_revision }}
           path: candidate-lock
           github-token: ${{ github.token }}
           run-id: ${{ inputs.qualification_run_id }}

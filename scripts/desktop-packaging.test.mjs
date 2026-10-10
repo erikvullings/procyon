@@ -428,6 +428,15 @@ test('semantic components qualify and publish exact retained artifacts independe
   assert.match(JSON.stringify(publish), /verify-semantic-component-release\.mjs/);
   assert.match(JSON.stringify(publish), /gh release create/);
   assert.match(JSON.stringify(publish), /--latest=false/);
+  const candidateSelection = publish.steps.find(
+    (step) => step.name === 'Select exact reviewed Gemma candidate',
+  );
+  const candidateDownload = publish.steps.find(
+    (step) => step.name === 'Download exact Gemma candidate fingerprint lock',
+  );
+  assert.match(candidateSelection.run, /manifest\.decision !== "go"/u);
+  assert.match(candidateSelection.run, /manifest\.sourceRevision === "d3f921f/u);
+  assert.match(candidateDownload.with.name, /steps\.gemma_candidate\.outputs\.source_revision/u);
   assert.match(componentText, /semantic-component-release-v1\.json/);
   assert.match(componentText, /semantic-gemma-experimental-v1\.json/);
 
@@ -592,6 +601,17 @@ test('release desktop builds fail closed without a measured knowledge-search go 
 
 test('Gemma desktop packaging requires a separately approved signed four-target candidate', () => {
   const release = workflow('release-desktop.yml');
+  assert.equal(release.jobs.release.environment, 'desktop-release');
+  const releaseSteps = release.jobs.release.steps;
+  const releaseApproval = releaseSteps.findIndex((step) =>
+    /check-desktop-gemma-release\.mjs/u.test(step.run ?? ''),
+  );
+  const publish = releaseSteps.findIndex((step) => step.uses === 'softprops/action-gh-release@v3');
+  assert.ok(releaseApproval >= 0 && releaseApproval < publish);
+  assert.equal(
+    releaseSteps[releaseApproval].if,
+    "vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'",
+  );
   for (const jobName of ['macos', 'linux', 'windows']) {
     const steps = release.jobs[jobName].steps;
     const approval = steps.findIndex((step) =>
