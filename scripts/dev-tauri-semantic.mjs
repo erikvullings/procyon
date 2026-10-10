@@ -19,7 +19,6 @@ const result = spawnSync(
       PROCYON_SEMANTIC_COMPONENTS: '',
       PROCYON_SEMANTIC_DEVELOPER_BUNDLE: bundle,
       PROCYON_SEMANTIC_OCRMYPDF: '',
-      PROCYON_SEMANTIC_GEMMA_METAL_IMAGES: metalImages ? '1' : '',
     },
     stdio: 'inherit',
   },

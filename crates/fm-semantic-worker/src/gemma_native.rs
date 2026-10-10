@@ -165,7 +165,7 @@ impl GemmaNativeEncoder {
         )
     }
 
-    /// Load host-verified original files for an explicitly selected macOS Metal image worker.
+    /// Load host-verified original files for a macOS Metal image worker.
     #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
     pub fn open_metal_files(
         files: &GemmaNativeFiles,

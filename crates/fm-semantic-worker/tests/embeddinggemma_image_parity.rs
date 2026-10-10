@@ -321,6 +321,62 @@ fn cancelled_image_request_does_not_decode_or_infer() {
         encoder.encode_image_cancellable(&patterned_png(), &cancellation),
         Err(GemmaNativeError::Cancelled)
     ));
+    #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+    {
+        drop(encoder);
+        let encoder = GemmaNativeEncoder::open_metal(
+            &directory,
+            768,
+            GemmaMedia {
+                images: true,
+                audio: false,
+                video: false,
+            },
+        )
+        .expect("Metal image encoder");
+        assert!(matches!(
+            encoder.encode_image_cancellable(&patterned_png(), &cancellation),
+            Err(GemmaNativeError::Cancelled)
+        ));
+        assert_eq!(encoder.metal_dispatches(), 0);
+    }
+}
+
+#[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned checkpoint"]
+fn concurrent_metal_images_match_sequential_embedding() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let encoder = GemmaNativeEncoder::open_metal(
+        &directory,
+        128,
+        GemmaMedia {
+            images: true,
+            audio: false,
+            video: false,
+        },
+    )
+    .expect("Metal image encoder");
+    let png = patterned_png();
+    let expected = encoder.encode_image(&png).unwrap();
+    std::thread::scope(|scope| {
+        let results: Vec<_> = (0..2)
+            .map(|_| scope.spawn(|| encoder.encode_image(&png).unwrap()))
+            .collect();
+        for result in results {
+            let actual = result.join().unwrap();
+            let cosine: f64 = actual
+                .iter()
+                .zip(&expected)
+                .map(|(a, b)| f64::from(*a) * f64::from(*b))
+                .sum();
+            assert!(cosine > 0.99999, "concurrent image cosine {cosine}");
+        }
+    });
+    assert_eq!(encoder.metal_dispatches(), 3 * 1004);
 }
 
 #[test]

@@ -7,11 +7,13 @@ query/key and probability/value products also run through that primitive;
 bicubic preprocessing, attention softmax, normalization, pooling, and fusion
 attention remain on CPU. BF16 checkpoint weights are decoded to FP32; there
 is no FP16 inference.
-Small matrices below Lattice's dispatch threshold use its CPU GEMM. Managed
-workers construct the CPU encoder by default. An explicitly opted-in **macOS
-development** worker can use the same path for image-only libraries; standard
-bundles and production releases do not include `gemma-metal`. Audio and video
-remain unqualified on this path.
+Small matrices below Lattice's dispatch threshold use its CPU GEMM. In a
+macOS worker built with the optional `gemma-metal` feature, a consented,
+image-only Gemma library selects Metal automatically when available; an
+unavailable device or mixed image/audio/video library uses CPU with an
+explicit backend report. The standard production bundle recipe still builds
+without `gemma-metal`, and default E5 libraries are unchanged. Audio and
+video remain unqualified on this Metal path.
 
 The real-checkpoint test `metal_image_matches_cpu_and_upstream_at_every_dimension`
 uses the pinned revision `914f7f89142e33e77833254d9c9b90c3cef7303b`
@@ -37,35 +39,39 @@ speedup or memory limits across supported targets. Do not enable GPU in
 production workers until cross-platform quality, resource, and CPU-fallback
 qualification is complete.
 
-## Installed development worker (opt-in only)
+## Installed development worker (feature-gated automatic selection)
 
 `pnpm dev:tauri:semantic:gemma:metal` builds a separately signed development
-bundle with `developer-bundle,gemma-native,gemma-metal`, then passes a fixed
-`--gemma-metal-images` flag only when launching the Gemma worker from verified
-installed originals. `pnpm dev:tauri:semantic:gemma` remains CPU-only. No
-environment variable in the worker can select Metal; a production worker
-without the feature rejects the flag. The backend decision is printed to the
-development terminal. When Metal is unavailable, or the library enables
-audio/video, the worker prints the reason and uses CPU. A failed checkpoint
-load remains an error rather than a successful-looking fallback. If a GPU
-GEMM cannot dispatch during inference, the first such CPU fallback is also
-reported. Existing cancellation checks are shared by both backends. This
-mode is not exposed in the app's user-facing settings.
+bundle with `developer-bundle,gemma-native,gemma-metal`; no runtime Metal
+opt-in flag or environment variable is needed. The worker selects the backend
+from its compiled feature, device availability and immutable library media.
+`pnpm dev:tauri:semantic:gemma` builds a CPU-only worker. A development-only
+`--gemma-cpu-images` launch argument provides paired CPU baseline measurements;
+production feature builds reject it. Both the selected backend and CPU
+fallback reason are printed to the host's inherited stderr and the selected
+startup backend is recorded in the owner-only worker runtime directory's
+`gemma-backend` file, refreshed on each managed launch. If the device is
+unavailable or images are mixed with audio/video, the worker uses CPU. A
+failed checkpoint load remains an error rather than a successful-looking
+fallback. If a GPU GEMM does not dispatch during inference, it computes that
+shape on CPU and reports the first occurrence; the tested FP32 CPU and Metal
+vectors share the same pinned embedding space. Existing cancellation checks
+are shared by both backends. This mode is not exposed in the app's settings.
 
 The ignored desktop integration test
 `installed_development_gemma_resolves_verified_original_files` first
 installs the signed original checkpoint through the development component
 manager, then launches the **installed** optimized worker from those verified
-file paths. With `PROCYON_GEMMA_METAL_INTEGRATION=1` and
-`PROCYON_SEMANTIC_GEMMA_METAL_IMAGES=1`, it ingests the same patterned PNG
-into separate CPU and opt-in Metal indexes at all four widths, queries it
+file paths. With `PROCYON_GEMMA_METAL_INTEGRATION=1`, it ingests the same patterned PNG into
+separate forced-CPU baseline and automatically selected Metal indexes at all
+four widths, queries it
 through worker IPC, and compares the actual persisted image vectors with each
 other and the checked-in pinned Python reference. Run against a built signed
 development bundle:
 
 ```sh
 PROCYON_GEMMA_DEVELOPER_BUNDLE="$PWD/target/semantic-developer-bundle/darwin-arm64-gemma-metal" \
-PROCYON_GEMMA_METAL_INTEGRATION=1 PROCYON_SEMANTIC_GEMMA_METAL_IMAGES=1 \
+PROCYON_GEMMA_METAL_INTEGRATION=1 \
   cargo test -p fm-desktop --features semantic-gemma --lib \
   installed_development_gemma_resolves_verified_original_files -- --ignored --nocapture
 ```
@@ -89,7 +95,12 @@ mark. CPU/Python cosine was 0.999999868 or better, and Metal/Python was
 by the launched worker; the direct parity test above separately confirmed
 1,004 successful GPU dispatches per image on this checkpoint. This is a
 development-only single-image result, **not** a release resource, device,
-fallback, or retrieval-quality qualification.
+fallback, or retrieval-quality qualification. CPU fallback for mixed media
+and a simulated failed dispatch are covered by focused tests; an actually
+unavailable Apple device cannot be exercised on this Metal-capable machine.
+The simulated unavailable-device startup and failed GEMM tests exercise both
+fallback paths; concurrent images and pre-cancelled Metal images have separate
+pinned-checkpoint tests.
 
 The same test passed again after rebuilding the final signed bundle. In that
 run CPU ingestion was 31.08/31.28/80.00/85.11 seconds and Metal ingestion
@@ -99,6 +110,25 @@ seconds; sampled RSS remained between 2.35 and 2.46 GB. The large wall-time
 variation, especially at 512/768 CPU, means these numbers are not an
 uncontended hardware throughput guarantee. Both runs favored Metal for this
 one image; further device/load coverage is required before product exposure.
+
+With automatic device selection (no Metal launch flag), a newly signed
+development worker completed the same installed image ingest/query at all
+four widths. The forced-CPU development baseline took
+28.34/28.06/27.83/29.29 seconds to ingest at 128/256/512/768; automatic
+Metal took 5.81/5.83/5.80/6.12 seconds. Startup was 1.40-1.49 seconds,
+query 56-91 ms, and sampled peak worker RSS 2.33-2.41 GB (all below the
+test's 4 GiB bound). The actual persisted CPU/Metal vectors each matched
+the pinned Python reference (cosine >0.99999); CPU/Metal cosine was
+0.999999989/1.000000001/0.999999997/1.000000006. Startup logs reported
+FP32 Metal on automatic launches and CPU on forced-baseline launches.
+
+A final signed-bundle run also asserted the installed worker's `gemma-backend`
+status file at every width before ingestion. It passed: forced CPU ingest
+28.53/28.16/28.80/28.13 seconds versus automatic Metal
+5.90/6.05/6.22/5.92 seconds at 128/256/512/768. Persisted vectors retained
+the same >0.99999 parity; query latency was 55-121 ms and sampled peak
+worker RSS was 2.33-2.46 GB. Results are local single-image measurements
+on an M4 Max, not cross-device production qualification.
 
 ## Initial GEMM-only measurements (2026-10-09)
 

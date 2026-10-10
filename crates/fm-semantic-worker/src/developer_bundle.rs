@@ -372,7 +372,22 @@ impl DeveloperModel {
         files: &GemmaNativeFiles,
         dimensions: usize,
         media: GemmaMedia,
-        metal_images: bool,
+        force_cpu_images: bool,
+    ) -> Result<Self, DeveloperBundleError> {
+        #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+        let metal_available = lattice_inference::forward::metal_gemm::is_available();
+        #[cfg(not(all(target_os = "macos", feature = "gemma-metal")))]
+        let metal_available = false;
+        Self::resolve_gemma_with_device(files, dimensions, media, force_cpu_images, metal_available)
+    }
+
+    #[cfg(feature = "gemma-native")]
+    fn resolve_gemma_with_device(
+        files: &GemmaNativeFiles,
+        dimensions: usize,
+        media: GemmaMedia,
+        force_cpu_images: bool,
+        metal_available: bool,
     ) -> Result<Self, DeveloperBundleError> {
         for path in [
             &files.weights,
@@ -393,33 +408,38 @@ impl DeveloperModel {
         #[cfg(not(all(target_os = "macos", feature = "gemma-metal")))]
         let description = "google/embeddinggemma-2 (native CPU)".to_owned();
         #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
-        let encoder = if metal_images {
-            if !media.images || media.audio || media.video {
-                description.push_str(" [Metal requested; image-only media required; CPU fallback]");
-                GemmaNativeEncoder::open_files(files, dimensions, media)
-            } else {
-                match GemmaNativeEncoder::open_metal_files(files, dimensions, media) {
-                    Ok(encoder) => {
-                        description = "google/embeddinggemma-2 (FP32 Metal images)".to_owned();
-                        Ok(encoder)
-                    }
-                    Err(crate::gemma_native::GemmaNativeError::MetalUnavailable) => {
-                        description.push_str(" [Metal unavailable; CPU fallback]");
-                        GemmaNativeEncoder::open_files(files, dimensions, media)
-                    }
-                    Err(error) => Err(error),
-                }
-            }
-        } else {
+        let encoder = if force_cpu_images {
+            description.push_str(" [development CPU baseline]");
             GemmaNativeEncoder::open_files(files, dimensions, media)
+        } else if !media.images || media.audio || media.video {
+            if media.images {
+                description.push_str(" [Metal unsupported for mixed media; CPU fallback]");
+            }
+            GemmaNativeEncoder::open_files(files, dimensions, media)
+        } else if !metal_available {
+            description.push_str(" [Metal unavailable; CPU fallback]");
+            GemmaNativeEncoder::open_files(files, dimensions, media)
+        } else {
+            match GemmaNativeEncoder::open_metal_files(files, dimensions, media) {
+                Ok(encoder) => {
+                    description = "google/embeddinggemma-2 (FP32 Metal images)".to_owned();
+                    Ok(encoder)
+                }
+                Err(crate::gemma_native::GemmaNativeError::MetalUnavailable) => {
+                    description.push_str(" [Metal unavailable; CPU fallback]");
+                    GemmaNativeEncoder::open_files(files, dimensions, media)
+                }
+                Err(error) => Err(error),
+            }
         };
         #[cfg(not(all(target_os = "macos", feature = "gemma-metal")))]
         let encoder = {
-            if metal_images {
-                return Err(DeveloperBundleError::Gemma(
-                    "Metal images require a macOS gemma-metal development worker".to_owned(),
-                ));
+            if media.images {
+                eprintln!(
+                    "Procyon Gemma image backend: Metal is not compiled for this worker/target; using CPU"
+                );
             }
+            let _ = (force_cpu_images, metal_available);
             GemmaNativeEncoder::open_files(files, dimensions, media)
         };
         let encoder =
@@ -873,7 +893,7 @@ impl DeveloperWorker {
         data_directory: &Path,
         model: &ManagedModel,
         ocrmypdf_executable: Option<&Path>,
-        metal_images: bool,
+        force_cpu_images: bool,
     ) -> Result<Self, DeveloperBundleError> {
         if !data_directory.is_absolute() {
             return Err(DeveloperBundleError::RelativeDataDirectory);
@@ -886,9 +906,9 @@ impl DeveloperWorker {
         }
         let model = match model {
             ManagedModel::Pack(path) => {
-                if metal_images {
-                    return Err(DeveloperBundleError::MetalSelection(
-                        "Metal images require a Gemma model".to_owned(),
+                if force_cpu_images {
+                    return Err(DeveloperBundleError::CpuSelection(
+                        "CPU image override requires a Gemma model".to_owned(),
                     ));
                 }
                 DeveloperModel::resolve_managed(path)?
@@ -898,7 +918,7 @@ impl DeveloperWorker {
                 files,
                 dimensions,
                 media,
-            } => DeveloperModel::resolve_gemma(files, *dimensions, *media, metal_images)?,
+            } => DeveloperModel::resolve_gemma(files, *dimensions, *media, force_cpu_images)?,
         };
         Self::open_with_model(
             data_directory,
@@ -1072,20 +1092,42 @@ pub async fn run_managed_worker(
     model: &ManagedModel,
     ocrmypdf_executable: Option<&Path>,
     idle_timeout: Duration,
-    metal_images: bool,
+    force_cpu_images: bool,
 ) -> Result<(), ServerError> {
     run_desktop_worker_with_factory(runtime_directory, idle_timeout, |config| {
-        DeveloperWorker::open_managed(data_directory, model, ocrmypdf_executable, metal_images)
-            .inspect(|worker| {
-                if metal_images {
-                    eprintln!(
-                        "Procyon semantic development worker: {}",
-                        worker.description
-                    );
-                }
-            })
-            .map(|worker| worker.into_server(config))
-            .map_err(|error| ServerError::Io(io::Error::other(error)))
+        #[cfg(feature = "gemma-native")]
+        let status = runtime_directory.join("gemma-backend");
+        #[cfg(feature = "gemma-native")]
+        match std::fs::remove_file(&status) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(ServerError::Io(error)),
+        }
+        let worker = DeveloperWorker::open_managed(
+            data_directory,
+            model,
+            ocrmypdf_executable,
+            force_cpu_images,
+        )
+        .map_err(|error| ServerError::Io(io::Error::other(error)))?;
+        #[cfg(feature = "gemma-native")]
+        if matches!(model, ManagedModel::Gemma { .. }) {
+            let temporary = runtime_directory.join(format!(
+                "gemma-backend.{}-{}",
+                std::process::id(),
+                rand::random::<u64>()
+            ));
+            let mut file = std::fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&temporary)?;
+            use std::io::Write;
+            writeln!(file, "{}", worker.description)?;
+            file.sync_all()?;
+            std::fs::rename(temporary, status)?;
+            eprintln!("Procyon semantic managed worker: {}", worker.description);
+        }
+        Ok(worker.into_server(config))
     })
     .await
 }
@@ -1093,8 +1135,8 @@ pub async fn run_managed_worker(
 /// Failure to assemble the explicitly non-production developer worker.
 #[derive(Debug, thiserror::Error)]
 enum DeveloperBundleError {
-    #[error("invalid development Metal selection: {0}")]
-    MetalSelection(String),
+    #[error("invalid development CPU selection: {0}")]
+    CpuSelection(String),
     #[error("developer data directory must be an absolute host-provided path")]
     RelativeDataDirectory,
     #[error("developer model pack must be an absolute host-resolved path")]
@@ -1261,7 +1303,7 @@ mod tests {
     #[cfg(feature = "gemma-native")]
     #[test]
     #[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned original files"]
-    fn managed_metal_selection_reports_backend_and_unsupported_media_fallback() {
+    fn managed_gemma_auto_selects_metal_and_reports_cpu_fallback() {
         let original = PathBuf::from(
             std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR").expect("pinned checkpoint directory"),
         );
@@ -1271,14 +1313,23 @@ mod tests {
             audio: false,
             video: false,
         };
-        let cpu = DeveloperModel::resolve_gemma(&files, 128, images, false).unwrap();
+        let cpu = DeveloperModel::resolve_gemma(&files, 128, images, true).unwrap();
         assert!(cpu.description.contains("native CPU"));
         drop(cpu);
         #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
         {
-            let metal = DeveloperModel::resolve_gemma(&files, 128, images, true).unwrap();
+            let metal = DeveloperModel::resolve_gemma(&files, 128, images, false).unwrap();
             assert!(metal.description.contains("FP32 Metal images"));
             drop(metal);
+            let unavailable =
+                DeveloperModel::resolve_gemma_with_device(&files, 128, images, false, false)
+                    .unwrap();
+            assert!(
+                unavailable
+                    .description
+                    .contains("Metal unavailable; CPU fallback")
+            );
+            assert_eq!(unavailable.gemma.unwrap().0.metal_dispatches(), 0);
             let mixed = DeveloperModel::resolve_gemma(
                 &files,
                 128,
@@ -1286,7 +1337,7 @@ mod tests {
                     video: true,
                     ..images
                 },
-                true,
+                false,
             )
             .unwrap();
             assert!(mixed.description.contains("CPU fallback"));

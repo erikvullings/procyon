@@ -295,15 +295,7 @@ fn original_model_resolver(
             media,
         )
         .with_ocrmypdf_executable(ocr_executable());
-        Ok(Some(
-            if std::env::var_os("PROCYON_SEMANTIC_GEMMA_METAL_IMAGES")
-                .is_some_and(|value| value == "1")
-            {
-                launch.with_development_metal_images()
-            } else {
-                launch
-            },
-        ))
+        Ok(Some(launch))
     })
 }
 
@@ -737,8 +729,8 @@ mod tests {
                         dimensions,
                         *media,
                     );
-                    if metal {
-                        selected = selected.with_development_metal_images();
+                    if !metal {
+                        selected = selected.with_development_cpu_images();
                     }
                     let resolver: ManagedWorkerResolver = Arc::new(move || Ok(selected.clone()));
                     let connector = WorkerConnector::desktop_managed_resolved(&runtime, resolver)
@@ -768,6 +760,13 @@ mod tests {
                     let start = std::time::Instant::now();
                     let client = connector.connect().await.expect("installed worker startup");
                     let startup_time = start.elapsed();
+                    let backend = fs::read_to_string(runtime.join("gemma-backend"))
+                        .expect("installed worker reports its backend");
+                    if metal {
+                        assert!(backend.contains("FP32 Metal images"), "{backend}");
+                    } else {
+                        assert!(backend.contains("development CPU baseline"), "{backend}");
+                    }
                     let ingest_start = std::time::Instant::now();
                     let job = client
                         .ingest(
@@ -821,6 +820,10 @@ mod tests {
                     stop.store(true, Ordering::Relaxed);
                     sampler.await.unwrap();
                     assert!(peak.load(Ordering::Relaxed) > 0, "{label} RSS not sampled");
+                    assert!(
+                        peak.load(Ordering::Relaxed) < 4 * 1024 * 1024 * 1024,
+                        "{label} exceeded the 4 GiB development-worker RSS bound"
+                    );
                     eprintln!(
                         "installed Gemma image {label}: startup={startup_time:?} ingest={ingestion_time:?} query={query_time:?} sampled_peak_rss={} bytes",
                         peak.load(Ordering::Relaxed),

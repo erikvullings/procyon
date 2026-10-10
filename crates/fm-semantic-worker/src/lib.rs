@@ -485,7 +485,7 @@ pub struct ManagedWorkerLaunch {
     model: ManagedModel,
     ocrmypdf_executable: Option<PathBuf>,
     #[cfg(feature = "gemma-native")]
-    development_metal_images: bool,
+    development_cpu_images: bool,
 }
 
 impl ManagedWorkerLaunch {
@@ -510,7 +510,7 @@ impl ManagedWorkerLaunch {
             model: ManagedModel::Pack(model_pack),
             ocrmypdf_executable: None,
             #[cfg(feature = "gemma-native")]
-            development_metal_images: false,
+            development_cpu_images: false,
         }
     }
 
@@ -535,7 +535,7 @@ impl ManagedWorkerLaunch {
                 media,
             },
             ocrmypdf_executable: None,
-            development_metal_images: false,
+            development_cpu_images: false,
         }
     }
 
@@ -553,11 +553,11 @@ impl ManagedWorkerLaunch {
         self
     }
 
-    /// Opt in only a macOS development Gemma worker to the experimental image backend.
+    /// Force the development Gemma worker to CPU for baseline measurements.
     #[cfg(feature = "gemma-native")]
     #[must_use]
-    pub fn with_development_metal_images(mut self) -> Self {
-        self.development_metal_images = true;
+    pub fn with_development_cpu_images(mut self) -> Self {
+        self.development_cpu_images = true;
         self
     }
 }
@@ -963,7 +963,7 @@ impl WorkerConnector {
                         if managed_launch.as_ref().is_some_and(|launch| {
                             #[cfg(feature = "gemma-native")]
                             {
-                                launch.development_metal_images
+                                matches!(launch.model, ManagedModel::Gemma { .. })
                             }
                             #[cfg(not(feature = "gemma-native"))]
                             {
@@ -1200,8 +1200,8 @@ fn managed_launch_arguments(launch: &ManagedWorkerLaunch) -> Vec<std::ffi::OsStr
                     arguments.push(flag.into());
                 }
             }
-            if launch.development_metal_images {
-                arguments.push("--gemma-metal-images".into());
+            if launch.development_cpu_images {
+                arguments.push("--gemma-cpu-images".into());
             }
         }
     }
@@ -1369,14 +1369,13 @@ mod developer_connector_tests {
         assert!(arguments.iter().any(|arg| arg == "--gemma-weights"));
         assert!(arguments.iter().any(|arg| arg == "--gemma-video"));
         assert!(!arguments.iter().any(|arg| arg == "--semantic-model-pack"));
-        assert!(!arguments.iter().any(|arg| arg == "--gemma-metal-images"));
-        let metal_arguments =
-            managed_launch_arguments(&resolved.clone().with_development_metal_images());
-        assert!(
-            metal_arguments
-                .iter()
-                .any(|arg| arg == "--gemma-metal-images")
-        );
+        assert!(!arguments.iter().any(|arg| arg == "--gemma-cpu-images"));
+        #[cfg(feature = "developer-bundle")]
+        {
+            let cpu_arguments =
+                managed_launch_arguments(&resolved.clone().with_development_cpu_images());
+            assert!(cpu_arguments.iter().any(|arg| arg == "--gemma-cpu-images"));
+        }
         std::fs::remove_file(directory.path().join("tokenizer.json")).unwrap();
         assert!(matches!(
             resolve_managed_worker(&resolver),
@@ -1452,7 +1451,7 @@ mod developer_connector_tests {
             model: ManagedModel::Pack(model),
             ocrmypdf_executable: Some(stale),
             #[cfg(feature = "gemma-native")]
-            development_metal_images: false,
+            development_cpu_images: false,
         };
         let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
         let resolved = resolve_managed_worker(&resolver).expect("launch");

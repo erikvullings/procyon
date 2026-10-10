@@ -13,6 +13,8 @@ pub(crate) enum GemmaCompute {
 pub(crate) struct MetalStats {
     dispatches: std::sync::atomic::AtomicUsize,
     fallback_reported: std::sync::atomic::AtomicBool,
+    #[cfg(test)]
+    fail_next_dispatch: std::sync::atomic::AtomicBool,
 }
 
 impl GemmaCompute {
@@ -41,9 +43,17 @@ impl GemmaCompute {
     ) {
         #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
         if let Self::Metal(stats) = self {
-            if lattice_inference::forward::metal_gemm::metal_matmul_bt(
-                input, weights, result, rows, cols, output,
-            ) {
+            #[cfg(test)]
+            let simulated_failure = stats
+                .fail_next_dispatch
+                .swap(false, std::sync::atomic::Ordering::Relaxed);
+            #[cfg(not(test))]
+            let simulated_failure = false;
+            if !simulated_failure
+                && lattice_inference::forward::metal_gemm::metal_matmul_bt(
+                    input, weights, result, rows, cols, output,
+                )
+            {
                 stats
                     .dispatches
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -86,5 +96,53 @@ mod tests {
         compute.matmul_bt(&input, &weights, &mut output, 64, 64, 64);
         assert!(output.iter().all(|value| (*value - 8.0).abs() < 1e-5));
         assert_eq!(compute.dispatches(), 1);
+    }
+
+    #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+    #[test]
+    fn failed_metal_dispatch_uses_cpu_without_publishing_an_invalid_result() {
+        use std::sync::atomic::Ordering;
+
+        let compute = GemmaCompute::metal().expect("Apple Metal device");
+        let GemmaCompute::Metal(stats) = &compute else {
+            unreachable!()
+        };
+        stats.fail_next_dispatch.store(true, Ordering::Relaxed);
+        let mut output = vec![0.0; 64 * 64];
+        compute.matmul_bt(
+            &vec![0.25; 64 * 64],
+            &vec![0.5; 64 * 64],
+            &mut output,
+            64,
+            64,
+            64,
+        );
+        assert!(output.iter().all(|value| (*value - 8.0).abs() < 1e-5));
+        assert_eq!(compute.dispatches(), 0);
+        assert!(stats.fallback_reported.load(Ordering::Relaxed));
+    }
+
+    #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+    #[test]
+    fn concurrent_metal_dispatches_share_a_safe_backend() {
+        let compute = GemmaCompute::metal().expect("Apple Metal device");
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                let compute = compute.clone();
+                scope.spawn(move || {
+                    let mut output = vec![0.0; 64 * 64];
+                    compute.matmul_bt(
+                        &vec![0.25; 64 * 64],
+                        &vec![0.5; 64 * 64],
+                        &mut output,
+                        64,
+                        64,
+                        64,
+                    );
+                    assert!(output.iter().all(|value| (*value - 8.0).abs() < 1e-5));
+                });
+            }
+        });
+        assert_eq!(compute.dispatches(), 4);
     }
 }
