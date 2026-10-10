@@ -735,6 +735,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "block"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
+
+[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3030,6 +3036,7 @@ dependencies = [
  "fm-semantic-worker",
  "fm-transport-dto",
  "fs2",
+ "image",
  "portable-pty",
  "raw-window-handle",
  "reqwest",
@@ -5551,6 +5558,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-fann"
+version = "0.11.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=17915f3748a4047c0af61bd8bc7066d1dccf24b4#17915f3748a4047c0af61bd8bc7066d1dccf24b4"
+dependencies = [
+ "rand 0.8.8",
+ "rand_distr",
+ "thiserror 2.0.20",
+ "tracing",
+]
+
+[[package]]
 name = "lattice-inference"
 version = "0.11.0"
 source = "git+https://github.com/ohdearquant/lattice.git?rev=17915f3748a4047c0af61bd8bc7066d1dccf24b4#17915f3748a4047c0af61bd8bc7066d1dccf24b4"
@@ -5560,8 +5578,11 @@ dependencies = [
  "half",
  "image",
  "indexmap 2.14.0",
+ "lattice-fann",
  "libc",
  "memmap2",
+ "metal",
+ "objc",
  "rayon",
  "rustc-hash",
  "serde",
@@ -5889,6 +5910,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc04a4c58212d57930a24bf47d3fa87485264a3a054e9c10e042eb373573ad3c"
 
 [[package]]
+name = "malloc_buf"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6001,6 +6031,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "metal"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7047791b5bc903b8cd963014b355f71dc9864a9a0b727057676c1dcae5cbc15"
+dependencies = [
+ "bitflags 2.13.1",
+ "block",
+ "core-graphics-types",
+ "foreign-types 0.5.0",
+ "log",
+ "objc",
+ "paste",
 ]
 
 [[package]]
@@ -6428,6 +6473,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
+ "libm",
 ]
 
 [[package]]
@@ -6450,6 +6496,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "objc"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "915b1b472bc21c53464d6c8461c9d3af805ba1ef837e1cac254428f4a77177b1"
+dependencies = [
+ "malloc_buf",
 ]
 
 [[package]]
@@ -8219,6 +8274,16 @@ name = "rand_core"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
+
+[[package]]
+name = "rand_distr"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
+dependencies = [
+ "num-traits",
+ "rand 0.8.8",
+]
 
 [[package]]
 name = "rand_pcg"

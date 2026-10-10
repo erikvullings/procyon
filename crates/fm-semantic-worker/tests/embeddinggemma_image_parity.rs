@@ -38,6 +38,95 @@ fn patterned_png() -> Vec<u8> {
     png.into_inner()
 }
 
+#[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+#[test]
+fn metal_probe_rejects_unqualified_media_before_loading_weights() {
+    assert!(matches!(
+        GemmaNativeEncoder::open_metal(
+            std::path::Path::new("/nonexistent"),
+            768,
+            GemmaMedia {
+                images: true,
+                audio: true,
+                video: false,
+            },
+        ),
+        Err(GemmaNativeError::Input(
+            "Metal probe supports standalone images only"
+        ))
+    ));
+}
+
+#[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned checkpoint and Apple Metal"]
+fn metal_image_matches_cpu_and_upstream_at_every_dimension() {
+    use std::time::Instant;
+
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let reference: Reference =
+        serde_json::from_str(include_str!("embeddinggemma-image-reference-v1.json"))
+            .expect("Python reference");
+    assert_eq!(
+        reference.revision,
+        "914f7f89142e33e77833254d9c9b90c3cef7303b"
+    );
+    let media = GemmaMedia {
+        images: true,
+        audio: false,
+        video: false,
+    };
+    let png = patterned_png();
+    for dimensions in [128, 256, 512, 768] {
+        let cpu = GemmaNativeEncoder::open(&directory, dimensions, media).expect("CPU encoder");
+        let start = Instant::now();
+        let expected = cpu.encode_image(&png).expect("CPU image vector");
+        let cpu_time = start.elapsed();
+        assert_eq!(cpu.metal_dispatches(), 0);
+        drop(cpu);
+        let metal =
+            GemmaNativeEncoder::open_metal(&directory, dimensions, media).expect("Metal encoder");
+        let before = metal.metal_dispatches();
+        let start = Instant::now();
+        let actual = metal.encode_image(&png).expect("Metal image vector");
+        let metal_time = start.elapsed();
+        let dispatches = metal.metal_dispatches() - before;
+        drop(metal);
+        assert_eq!(
+            dispatches, 1004,
+            "vision attention, projection and fusion must dispatch on Metal at dimension {dimensions}"
+        );
+        assert_eq!(actual.len(), dimensions);
+        let cosine = |a: &[f32], b: &[f32]| -> f64 {
+            a.iter()
+                .zip(b)
+                .map(|(a, b)| f64::from(*a) * f64::from(*b))
+                .sum()
+        };
+        let mut upstream = reference.vector[..dimensions].to_vec();
+        let norm = upstream
+            .iter()
+            .map(|x| f64::from(*x).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        for value in &mut upstream {
+            *value = (f64::from(*value) / norm) as f32;
+        }
+        let cpu_cosine = cosine(&expected, &upstream);
+        let metal_cosine = cosine(&actual, &upstream);
+        let parity = cosine(&expected, &actual);
+        eprintln!(
+            "image dimension={dimensions} CPU={cpu_time:?} Metal={metal_time:?} dispatches={dispatches} CPU/reference={cpu_cosine:.9} Metal/reference={metal_cosine:.9} Metal/CPU={parity:.9}"
+        );
+        assert!(cpu_cosine > 0.99999);
+        assert!(metal_cosine > 0.99999);
+        assert!(parity > 0.99999);
+    }
+}
+
 #[test]
 fn all_native_stages_report_a_single_cancellation_error() {
     assert!(matches!(
@@ -232,6 +321,62 @@ fn cancelled_image_request_does_not_decode_or_infer() {
         encoder.encode_image_cancellable(&patterned_png(), &cancellation),
         Err(GemmaNativeError::Cancelled)
     ));
+    #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+    {
+        drop(encoder);
+        let encoder = GemmaNativeEncoder::open_metal(
+            &directory,
+            768,
+            GemmaMedia {
+                images: true,
+                audio: false,
+                video: false,
+            },
+        )
+        .expect("Metal image encoder");
+        assert!(matches!(
+            encoder.encode_image_cancellable(&patterned_png(), &cancellation),
+            Err(GemmaNativeError::Cancelled)
+        ));
+        assert_eq!(encoder.metal_dispatches(), 0);
+    }
+}
+
+#[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned checkpoint"]
+fn concurrent_metal_images_match_sequential_embedding() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let encoder = GemmaNativeEncoder::open_metal(
+        &directory,
+        128,
+        GemmaMedia {
+            images: true,
+            audio: false,
+            video: false,
+        },
+    )
+    .expect("Metal image encoder");
+    let png = patterned_png();
+    let expected = encoder.encode_image(&png).unwrap();
+    std::thread::scope(|scope| {
+        let results: Vec<_> = (0..2)
+            .map(|_| scope.spawn(|| encoder.encode_image(&png).unwrap()))
+            .collect();
+        for result in results {
+            let actual = result.join().unwrap();
+            let cosine: f64 = actual
+                .iter()
+                .zip(&expected)
+                .map(|(a, b)| f64::from(*a) * f64::from(*b))
+                .sum();
+            assert!(cosine > 0.99999, "concurrent image cosine {cosine}");
+        }
+    });
+    assert_eq!(encoder.metal_dispatches(), 3 * 1004);
 }
 
 #[test]

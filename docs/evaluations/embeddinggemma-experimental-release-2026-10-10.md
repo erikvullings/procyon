@@ -115,4 +115,8 @@ the catalog and signature matching that approval, validates its Gemma model
 revision, and compiles `semantic-gemma` only in that branch. Merely changing
 the switch cannot enable the revoked candidate. A new qualification run and
 reviewed manifest remain outstanding; do not enable the switch or tag 0.5.0
-until the integrated worker and app path have been exercised.
+until the integrated worker and app path have been exercised. Its Gemma
+candidate recipe includes automatic FP32 Metal images on macOS ARM only,
+with CPU fallback for unavailable Metal and mixed media; the other three
+signed targets remain CPU-only. This new recipe does not retroactively
+qualify the old CPU-only candidate or establish quality gains.

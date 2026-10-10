@@ -17,6 +17,8 @@ pub mod gemma_audio_decode;
 #[cfg(feature = "gemma-probe")]
 pub mod gemma_audio_features;
 #[cfg(feature = "gemma-probe")]
+mod gemma_compute;
+#[cfg(feature = "gemma-probe")]
 pub mod gemma_embedding;
 #[cfg(feature = "gemma-probe")]
 pub mod gemma_fusion;
@@ -482,6 +484,8 @@ pub struct ManagedWorkerLaunch {
     native_library_directory: PathBuf,
     model: ManagedModel,
     ocrmypdf_executable: Option<PathBuf>,
+    #[cfg(feature = "gemma-native")]
+    development_cpu_images: bool,
 }
 
 impl ManagedWorkerLaunch {
@@ -505,6 +509,8 @@ impl ManagedWorkerLaunch {
             native_library_directory,
             model: ManagedModel::Pack(model_pack),
             ocrmypdf_executable: None,
+            #[cfg(feature = "gemma-native")]
+            development_cpu_images: false,
         }
     }
 
@@ -529,6 +535,7 @@ impl ManagedWorkerLaunch {
                 media,
             },
             ocrmypdf_executable: None,
+            development_cpu_images: false,
         }
     }
 
@@ -543,6 +550,14 @@ impl ManagedWorkerLaunch {
     #[must_use]
     pub fn with_ocrmypdf_executable(mut self, executable: Option<PathBuf>) -> Self {
         self.ocrmypdf_executable = sanitize_ocrmypdf_executable(executable);
+        self
+    }
+
+    /// Force the development Gemma worker to CPU for baseline measurements.
+    #[cfg(feature = "gemma-native")]
+    #[must_use]
+    pub fn with_development_cpu_images(mut self) -> Self {
+        self.development_cpu_images = true;
         self
     }
 }
@@ -826,6 +841,9 @@ impl WorkerConnector {
                 managed_worker: Some(_),
                 ..
             } | ConnectorSource::Desktop {
+                developer_managed_worker: Some(_),
+                ..
+            } | ConnectorSource::Desktop {
                 developer_model_pack: Some(_),
                 ..
             }
@@ -941,7 +959,23 @@ impl WorkerConnector {
                 let child = command
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
-                    .stderr(Stdio::null())
+                    .stderr(
+                        if managed_launch.as_ref().is_some_and(|launch| {
+                            #[cfg(feature = "gemma-native")]
+                            {
+                                matches!(launch.model, ManagedModel::Gemma { .. })
+                            }
+                            #[cfg(not(feature = "gemma-native"))]
+                            {
+                                let _ = launch;
+                                false
+                            }
+                        }) {
+                            Stdio::inherit()
+                        } else {
+                            Stdio::null()
+                        },
+                    )
                     .spawn()?;
                 spawn_child_reaper(child);
 
@@ -1166,6 +1200,9 @@ fn managed_launch_arguments(launch: &ManagedWorkerLaunch) -> Vec<std::ffi::OsStr
                     arguments.push(flag.into());
                 }
             }
+            if launch.development_cpu_images {
+                arguments.push("--gemma-cpu-images".into());
+            }
         }
     }
     if let Some(executable) = &launch.ocrmypdf_executable {
@@ -1332,6 +1369,13 @@ mod developer_connector_tests {
         assert!(arguments.iter().any(|arg| arg == "--gemma-weights"));
         assert!(arguments.iter().any(|arg| arg == "--gemma-video"));
         assert!(!arguments.iter().any(|arg| arg == "--semantic-model-pack"));
+        assert!(!arguments.iter().any(|arg| arg == "--gemma-cpu-images"));
+        #[cfg(feature = "developer-bundle")]
+        {
+            let cpu_arguments =
+                managed_launch_arguments(&resolved.clone().with_development_cpu_images());
+            assert!(cpu_arguments.iter().any(|arg| arg == "--gemma-cpu-images"));
+        }
         std::fs::remove_file(directory.path().join("tokenizer.json")).unwrap();
         assert!(matches!(
             resolve_managed_worker(&resolver),
@@ -1406,6 +1450,8 @@ mod developer_connector_tests {
             native_library_directory: native,
             model: ManagedModel::Pack(model),
             ocrmypdf_executable: Some(stale),
+            #[cfg(feature = "gemma-native")]
+            development_cpu_images: false,
         };
         let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
         let resolved = resolve_managed_worker(&resolver).expect("launch");

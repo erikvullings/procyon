@@ -604,3 +604,43 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   This checks the host media path (not just direct worker ingestion) but
   uses synthetic files on one host; it does not qualify the still-unbuilt
   integrated automatic-Metal candidate, UI, or retrieval ranking quality.
+- 2026-10-09: Added a separate, explicitly selected `gemma-metal` image probe on
+  macOS using the pinned Lattice FP32 Metal GEMM primitive in the native vision
+  tower, vision projection, and soft-token language fusion. Default/managed
+  inference stays CPU; FP16 is not used. A pinned-checkpoint M4 Max test executes
+  620 Metal GEMM dispatches per image and matches CPU/upstream image vectors at
+  all 128/256/512/768 widths (cosine >0.99999). The measured direct test process
+  peaked at 2,521,169,920 resident bytes. End-to-end encode times remain about
+  28-31 seconds for CPU and 29-30 seconds for Metal on one patterned image,
+  with a 50.7-second Metal outlier on a repeat: **no acceleration is qualified**.
+  See `docs/evaluations/embeddinggemma-metal-image.md` for method and numbers.
+  Metal remains hidden; a device-resident vision attention path, supported-target
+  measurements, and fallback qualification are still required before exposure.
+- 2026-10-09: Repeated the exact optimized, pinned-checkpoint image benchmark
+  twice after the user's 68 GB MLX-Serve model was unloaded. At every width,
+  Metal remained 0.57-1.82 seconds slower per image than CPU; both runs
+  retained >0.99999 reference parity and 620 GPU GEMM dispatches, with
+  2.48-2.49 GB test-process peak resident memory. The prior 50.7-second
+  Metal outlier did not recur. A separate small `omp --model` process
+  remained, so these are not guaranteed GPU-exclusive measurements.
+  See `docs/evaluations/embeddinggemma-metal-image.md`; do not promote Metal
+  until stage-level profiling and a demonstrable benefit justify it.
+- 2026-10-09: Profiled that GEMM-only image probe and found vision attention
+  consumed 25.96-26.60 seconds on CPU, versus ~1.1 seconds spent in 620
+  synchronous Metal GEMM calls. Added FP32 Metal query/key and
+  probability/value GEMM in each vision head, retaining CPU softmax and the
+  CPU default. Pinned-checkpoint final release-mode image parity passed at
+  all 128/256/512/768 widths: Metal 5.64-5.83 seconds versus CPU 27.83-28.39
+  seconds for one patterned PNG, with 1,004 actual Metal dispatches and
+  2,523,824,128 bytes direct-process peak resident memory. This is a measured
+  ~4.8-5.0x local M4 Max speedup, not installed-worker or cross-platform
+  qualification. Keep Gemma Metal hidden until supported-target resource,
+  quality, and fallback gates have independent evidence.
+- 2026-10-10: Integrated automatic Metal image selection from
+  `gemma-metal-images` into the 0.5.0 experimental release source. Only
+  newly qualified macOS ARM Gemma candidate workers compile `gemma-metal`;
+  other targets and ordinary E5 candidates remain CPU-only. The historical
+  four-target Gemma candidate is explicitly no-go and cannot be reused.
+  A fresh four-target signed run, installed-worker checks, integrated
+  application/UI media verification, and an exact reviewed approval are
+  still required before publishing or tagging a desktop release.

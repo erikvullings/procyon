@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -119,6 +119,15 @@ test('unapproved or incomplete component releases fail closed', () => {
 });
 
 test('experimental desktop rejects missing consent, old candidates and mismatched model revisions', () => {
+  const historicalApproval = JSON.parse(
+    readFileSync(
+      new URL('../docs/evaluations/semantic-gemma-experimental-v1.json', import.meta.url),
+    ),
+  );
+  assert.throws(
+    () => checkDesktopGemmaRelease(historicalApproval, 'true', 'true'),
+    /approved semantic component release/u,
+  );
   const targets = Object.fromEntries(
     ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'].map((target) => [
       target,

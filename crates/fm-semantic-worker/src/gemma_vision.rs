@@ -3,10 +3,12 @@
 use std::{fs::File, path::Path};
 
 use lattice_inference::{
-    forward::cpu::{matmul_bt, rms_norm},
+    forward::cpu::rms_norm,
     weights::{SafetensorsFile, TensorSource},
 };
 use tokio_util::sync::CancellationToken;
+
+use crate::gemma_compute::GemmaCompute;
 
 const WIDTH: usize = 768;
 const HEAD: usize = 64;
@@ -65,6 +67,7 @@ struct Layer {
 
 /// Holds only vision weights; the caller supplies patches and valid positions.
 pub struct GemmaVisionTower {
+    compute: GemmaCompute,
     patch_projection: Vec<f32>,
     position_table: Vec<f32>,
     layers: Vec<Layer>,
@@ -104,6 +107,14 @@ impl GemmaVisionTower {
 
     /// Load the original config and vision weights from independent verified paths.
     pub fn open_files(config_path: &Path, weights_path: &Path) -> Result<Self, GemmaVisionError> {
+        Self::open_files_with_compute(config_path, weights_path, GemmaCompute::Cpu)
+    }
+
+    pub(crate) fn open_files_with_compute(
+        config_path: &Path,
+        weights_path: &Path,
+        compute: GemmaCompute,
+    ) -> Result<Self, GemmaVisionError> {
         let config: serde_json::Value = serde_json::from_reader(File::open(config_path)?)?;
         let c = &config["vision_config"];
         if config["model_type"] != "embedding_gemma2"
@@ -165,6 +176,7 @@ impl GemmaVisionTower {
             });
         }
         Ok(Self {
+            compute,
             patch_projection,
             position_table,
             layers,
@@ -242,7 +254,7 @@ impl GemmaVisionTower {
             .iter()
             .map(|&v| 2.0 * (v - 0.5))
             .collect();
-        let mut hidden = linear(&scaled, &self.patch_projection, n, PATCH_PIXELS, WIDTH);
+        let mut hidden = self.linear(&scaled, &self.patch_projection, n, PATCH_PIXELS, WIDTH);
         for (i, pos) in positions.iter().take(valid_patches).enumerate() {
             for d in 0..WIDTH {
                 hidden[i * WIDTH + d] += self.position_table[pos[0] as usize * WIDTH + d]
@@ -255,9 +267,9 @@ impl GemmaVisionTower {
             }
             let mut x = hidden.clone();
             rms_norm(&mut x, &layer.input_norm, WIDTH, EPS);
-            let mut q = linear(&x, &layer.q, n, WIDTH, WIDTH);
-            let mut k = linear(&x, &layer.k, n, WIDTH, WIDTH);
-            let mut v = linear(&x, &layer.v, n, WIDTH, WIDTH);
+            let mut q = self.linear(&x, &layer.q, n, WIDTH, WIDTH);
+            let mut k = self.linear(&x, &layer.k, n, WIDTH, WIDTH);
+            let mut v = self.linear(&x, &layer.v, n, WIDTH, WIDTH);
             for (t, &position) in positions.iter().take(n).enumerate() {
                 for h in 0..HEADS {
                     let start = t * WIDTH + h * HEAD;
@@ -273,46 +285,25 @@ impl GemmaVisionTower {
                     rotary(&mut k[start..start + HEAD], position);
                 }
             }
-            let mut context = vec![0.0; n * WIDTH];
-            for h in 0..HEADS {
-                for t in 0..valid_patches {
-                    if cancellation.is_cancelled() {
-                        return Err(GemmaVisionError::Cancelled);
-                    }
-                    let qt = &q[t * WIDTH + h * HEAD..t * WIDTH + (h + 1) * HEAD];
-                    let mut logits = Vec::with_capacity(valid_patches);
-                    for j in 0..valid_patches {
-                        let kj = &k[j * WIDTH + h * HEAD..j * WIDTH + (h + 1) * HEAD];
-                        logits.push(qt.iter().zip(kj).map(|(a, b)| a * b).sum::<f32>());
-                    }
-                    let max = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-                    for score in &mut logits {
-                        *score = (*score - max).exp();
-                    }
-                    let total: f32 = logits.iter().sum();
-                    let out = &mut context[t * WIDTH + h * HEAD..t * WIDTH + (h + 1) * HEAD];
-                    for (j, score) in logits.iter().enumerate() {
-                        let value = &v[j * WIDTH + h * HEAD..j * WIDTH + (h + 1) * HEAD];
-                        for d in 0..HEAD {
-                            out[d] += (score / total) * value[d];
-                        }
-                    }
-                }
-            }
-            let mut attention = linear(&context, &layer.o, n, WIDTH, WIDTH);
+            let context = match self.compute {
+                GemmaCompute::Cpu => attention_cpu(&q, &k, &v, n, cancellation)?,
+                #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+                GemmaCompute::Metal(_) => self.attention_metal(&q, &k, &v, n, cancellation)?,
+            };
+            let mut attention = self.linear(&context, &layer.o, n, WIDTH, WIDTH);
             rms_norm(&mut attention, &layer.post_attn_norm, WIDTH, EPS);
             for (dst, update) in hidden.iter_mut().zip(attention) {
                 *dst += update;
             }
             let mut x = hidden.clone();
             rms_norm(&mut x, &layer.pre_ff_norm, WIDTH, EPS);
-            let mut gate = linear(&x, &layer.gate, n, WIDTH, INTERMEDIATE);
-            let up = linear(&x, &layer.up, n, WIDTH, INTERMEDIATE);
+            let mut gate = self.linear(&x, &layer.gate, n, WIDTH, INTERMEDIATE);
+            let up = self.linear(&x, &layer.up, n, WIDTH, INTERMEDIATE);
             for (g, u) in gate.iter_mut().zip(up) {
                 let z = *g;
                 *g = 0.5 * z * (1.0 + (0.797_884_6 * (z + 0.044_715 * z.powi(3))).tanh()) * u;
             }
-            let mut ff = linear(&gate, &layer.down, n, INTERMEDIATE, WIDTH);
+            let mut ff = self.linear(&gate, &layer.down, n, INTERMEDIATE, WIDTH);
             rms_norm(&mut ff, &layer.post_ff_norm, WIDTH, EPS);
             for (dst, update) in hidden.iter_mut().zip(ff) {
                 *dst += update;
@@ -346,12 +337,115 @@ impl GemmaVisionTower {
         }
         Ok(pooled)
     }
+
+    fn linear(
+        &self,
+        input: &[f32],
+        weights: &[f32],
+        rows: usize,
+        cols: usize,
+        output: usize,
+    ) -> Vec<f32> {
+        let mut result = vec![0.0; rows * output];
+        self.compute
+            .matmul_bt(input, weights, &mut result, rows, cols, output);
+        result
+    }
+
+    #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+    fn attention_metal(
+        &self,
+        q: &[f32],
+        k: &[f32],
+        v: &[f32],
+        n: usize,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<f32>, GemmaVisionError> {
+        let mut context = vec![0.0; n * WIDTH];
+        for h in 0..HEADS {
+            if cancellation.is_cancelled() {
+                return Err(GemmaVisionError::Cancelled);
+            }
+            let mut queries = vec![0.0; n * HEAD];
+            let mut keys = vec![0.0; n * HEAD];
+            let mut values_transposed = vec![0.0; n * HEAD];
+            for t in 0..n {
+                let start = t * WIDTH + h * HEAD;
+                queries[t * HEAD..(t + 1) * HEAD].copy_from_slice(&q[start..start + HEAD]);
+                keys[t * HEAD..(t + 1) * HEAD].copy_from_slice(&k[start..start + HEAD]);
+                for d in 0..HEAD {
+                    values_transposed[d * n + t] = v[start + d];
+                }
+            }
+            let mut probabilities = vec![0.0; n * n];
+            self.compute
+                .matmul_bt(&queries, &keys, &mut probabilities, n, HEAD, n);
+            for row in probabilities.chunks_exact_mut(n) {
+                if cancellation.is_cancelled() {
+                    return Err(GemmaVisionError::Cancelled);
+                }
+                let max = row.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+                for score in row.iter_mut() {
+                    *score = (*score - max).exp();
+                }
+                let total: f32 = row.iter().sum();
+                for score in row {
+                    *score /= total;
+                }
+            }
+            let mut head_context = vec![0.0; n * HEAD];
+            self.compute.matmul_bt(
+                &probabilities,
+                &values_transposed,
+                &mut head_context,
+                n,
+                n,
+                HEAD,
+            );
+            for t in 0..n {
+                let start = t * WIDTH + h * HEAD;
+                context[start..start + HEAD]
+                    .copy_from_slice(&head_context[t * HEAD..(t + 1) * HEAD]);
+            }
+        }
+        Ok(context)
+    }
 }
 
-fn linear(input: &[f32], weights: &[f32], rows: usize, cols: usize, output: usize) -> Vec<f32> {
-    let mut result = vec![0.0; rows * output];
-    matmul_bt(input, weights, &mut result, rows, cols, output);
-    result
+fn attention_cpu(
+    q: &[f32],
+    k: &[f32],
+    v: &[f32],
+    n: usize,
+    cancellation: &CancellationToken,
+) -> Result<Vec<f32>, GemmaVisionError> {
+    let mut context = vec![0.0; n * WIDTH];
+    for h in 0..HEADS {
+        for t in 0..n {
+            if cancellation.is_cancelled() {
+                return Err(GemmaVisionError::Cancelled);
+            }
+            let qt = &q[t * WIDTH + h * HEAD..t * WIDTH + (h + 1) * HEAD];
+            let mut logits = Vec::with_capacity(n);
+            for j in 0..n {
+                let kj = &k[j * WIDTH + h * HEAD..j * WIDTH + (h + 1) * HEAD];
+                logits.push(qt.iter().zip(kj).map(|(a, b)| a * b).sum::<f32>());
+            }
+            let max = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            for score in &mut logits {
+                *score = (*score - max).exp();
+            }
+            let total: f32 = logits.iter().sum();
+            let out = &mut context[t * WIDTH + h * HEAD..t * WIDTH + (h + 1) * HEAD];
+            for (j, score) in logits.iter().enumerate() {
+                let value = &v[j * WIDTH + h * HEAD..j * WIDTH + (h + 1) * HEAD];
+                for d in 0..HEAD {
+                    out[d] += (score / total) * value[d];
+                }
+            }
+        }
+    }
+    Ok(context)
 }
 
 fn rotary(vector: &mut [f32], position: [i32; 2]) {
@@ -397,6 +491,7 @@ mod tests {
     #[test]
     fn invalid_patches_and_coordinates_are_rejected() {
         let tower = GemmaVisionTower {
+            compute: GemmaCompute::Cpu,
             patch_projection: Vec::new(),
             position_table: Vec::new(),
             layers: Vec::new(),
@@ -422,6 +517,45 @@ mod tests {
         assert!(matches!(
             tower.encode_patches(&bad_pixels, &positions, 9),
             Err(GemmaVisionError::Input(_))
+        ));
+    }
+
+    #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+    #[test]
+    #[ignore = "requires an Apple Metal device"]
+    fn metal_attention_matches_cpu_with_and_without_gpu_dispatch() {
+        let tower = GemmaVisionTower {
+            compute: GemmaCompute::metal().expect("Metal device"),
+            patch_projection: Vec::new(),
+            position_table: Vec::new(),
+            layers: Vec::new(),
+        };
+        let cancellation = CancellationToken::new();
+        for n in [9, 64] {
+            let values = |offset: usize| {
+                (0..n * WIDTH)
+                    .map(|i| (((i + offset) % 113) as f32 - 56.0) / 300.0)
+                    .collect::<Vec<_>>()
+            };
+            let q = values(0);
+            let k = values(29);
+            let v = values(61);
+            let cpu = attention_cpu(&q, &k, &v, n, &cancellation).expect("CPU attention");
+            let metal = tower
+                .attention_metal(&q, &k, &v, n, &cancellation)
+                .expect("Metal attention");
+            let max_delta = cpu
+                .iter()
+                .zip(metal)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0_f32, f32::max);
+            assert!(max_delta < 1e-4, "n={n} max attention delta {max_delta}");
+        }
+        assert_eq!(tower.compute.dispatches(), 2 * HEADS);
+        cancellation.cancel();
+        assert!(matches!(
+            tower.attention_metal(&[], &[], &[], 64, &cancellation),
+            Err(GemmaVisionError::Cancelled)
         ));
     }
 }
