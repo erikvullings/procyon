@@ -644,3 +644,16 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   A fresh four-target signed run, installed-worker checks, integrated
   application/UI media verification, and an exact reviewed approval are
   still required before publishing or tagging a desktop release.
+- 2026-10-10: Integrated signed candidate run 38077959991 at source
+  `c6c7a94058950bf2704aca484f9c4b77c6dd2dcf` passed four-target
+  catalog/payload verification, and exact installed run 38082235196 passed
+  13 offline automated lifecycle checks per target (including media and text
+  at all four dimensions); both runs skipped publication. The new signed
+  macOS worker passed host/VFS/IPC authorized mixed-media retrieval with CPU
+  fallback and selected FP32 Metal automatically for an image-only library.
+  The installed reports retain blocked preceding-candidate upgrade/rollback
+  and manual-required accessibility and packaged UI checks. The candidate
+  evaluation and experimental lock remain `noGo`; no release-owner approval,
+  tag, component publication, or desktop release has occurred. See the
+  [release decision](../docs/evaluations/embeddinggemma-experimental-release-2026-10-10.md)
+  for the exact retained artifact and expiry. Task remains in progress.

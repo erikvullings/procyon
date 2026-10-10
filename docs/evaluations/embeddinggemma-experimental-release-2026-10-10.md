@@ -13,6 +13,48 @@ dispatch publication, publish, tag, or enable it. The future release-owner
 override must be an explicit new decision, **not** a reclassification of
 E5 aggregate measurements as Gemma quality evidence.
 
+The integrated, **still unapproved** four-target signed candidate was built
+from source `c6c7a94058950bf2704aca484f9c4b77c6dd2dcf` in
+[run 38077959991](https://github.com/erikvullings/procyon/actions/runs/38077959991)
+for tag `semantic-v0.5.0-gemma-experimental-r1`. Its retained artifact is
+`semantic-component-candidate-c6c7a94058950bf2704aca484f9c4b77c6dd2dcf`
+(ID **11679899935**, expires **2026-10-24 19:54:23 UTC**) and its aggregate
+fingerprint is
+`sha256:a0c16d0fec4f1ecc266af4587c31440d5e2ac0dccf69f6505a94b8d28b51becf`.
+All four signed catalogs and their catalog-listed payload bytes were verified
+against the release public key. The candidate evaluation is still `noGo`,
+`experimental-alpha`: its E5 measurements are negative controls, **not**
+Gemma retrieval-quality evidence. The old candidate below remains revoked;
+neither candidate has a reviewed `go` approval.
+
+The [exact installed qualification run
+38082235196](https://github.com/erikvullings/procyon/actions/runs/38082235196)
+downloaded that retained candidate using its run ID and source revision.
+On Linux aarch64/x86-64, macOS aarch64, and Windows x86-64, each signed
+offline lifecycle passed **13 automated checks**, with zero network artifact
+reads. Image, audio, video, and text ingestion, query, and worker restart
+passed at 128/256/512/768 dimensions. Each target's report still marks
+preceding-candidate upgrade/rollback **blocked** without an exact preceding
+signed candidate, and native screen-reader and packaged keyboard/consent/
+progress/error/citation/deletion checks **manual-required**. The four
+`installed-gemma-*` run artifacts retain the per-dimension measurements.
+The bounded synthetic mixed-media runs used CPU fallback on macOS; image
+ingestion took approximately 56-67 seconds on a virtual M1, 101-106 seconds
+on Linux ARM, 75-77 seconds on Linux x86-64, and 87-93 seconds on Windows
+x86-64. Observed worker peak RSS was about 2.7-3.6 GiB across targets,
+not a safe minimum; retain the 8 GiB planning estimate. These single-item
+measurements do not establish quality, sustained throughput, GPU performance,
+or a representative user workload.
+
+The new signed macOS worker also passed the opt-in application-level test:
+consented PNG, MP3, and MP4 sources crossed host/VFS/IPC, returned with
+available citations in the authorized tenant, and were absent from another
+tenant. Its mixed-media library reported CPU fallback; a separate image-only
+startup of the same signed worker automatically selected FP32 Metal images.
+The local image-only Metal comparison in
+[`embeddinggemma-metal-image.md`](embeddinggemma-metal-image.md) is bounded
+hardware evidence, not a GPU benchmark of the installed four-target run.
+
 The historical, **not publishable** candidate is [qualification run
 37974984924](https://github.com/erikvullings/procyon/actions/runs/37974984924),
 retained candidate artifact **11640886748**, source revision
@@ -83,20 +125,13 @@ unsupported media must remain clear, not silently treated as indexed.
 Supported signed CPU targets are the four named above; packaging a component
 alone does not establish quality or GPU behavior on them.
 
-**Before any publication:** integrate the Metal-enabled worker, mixed-media
-UI, and application-level consented media enrollment and authorized search
-through host/VFS/worker; verify automatic Metal selection and CPU fallback on
-supported hardware. Build and qualify a **new four-target signed candidate**
-from the integrated source. Its catalog URLs are bound to its release tag,
-and its source revision, candidate run ID, artifact fingerprints and
-signatures must receive a new reviewed experimental lock and disclosure.
-For the next installed lifecycle check, provide the new candidate's exact
-`installed_candidate_run_id` and `installed_candidate_source_revision`:
-the read-only workflow downloads the artifact for that pair and rejects the
-historical source. Candidate artifacts expire after 14 days, so complete
-installed checks and retain the reviewed manifests before they expire;
-if expired, qualify a fresh candidate rather than substituting the old run.
-Only after these checks and a fresh explicit
+**Before any publication:** review the integrated candidate and installed
+reports above, complete or explicitly disposition the blocked/manual checks,
+and record a fresh experimental lock and release-owner decision bound to
+the new run, source, release tag, evaluation report, and four signed catalogs.
+The candidate artifact expires after 14 days; if unavailable when that
+review is complete, qualify a fresh candidate rather than substituting the
+old run. Only after those checks and a fresh explicit
 release-owner decision may an operator request publication with
 `approve_experimental_gemma=true` and both independent release environment
 gates (`SEMANTIC_COMPONENTS_RELEASE_QUALIFIED` and
@@ -114,8 +149,9 @@ exactly four target catalogs and an explicit opt-in. The desktop fetches only
 the catalog and signature matching that approval, validates its Gemma model
 revision, and compiles `semantic-gemma` only in that branch. Merely changing
 the switch cannot enable the revoked candidate. A new qualification run and
-reviewed manifest remain outstanding; do not enable the switch or tag 0.5.0
-until the integrated worker and app path have been exercised. Its Gemma
+reviewed manifest are separate: the former has passed, while the latter
+remains outstanding. Do not enable the switch or tag 0.5.0 before the
+remaining review and approval. Its Gemma
 candidate recipe includes automatic FP32 Metal images on macOS ARM only,
 with CPU fallback for unavailable Metal and mixed media; the other three
 signed targets remain CPU-only. This new recipe does not retroactively
