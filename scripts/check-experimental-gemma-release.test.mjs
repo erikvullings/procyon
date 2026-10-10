@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import { checkExperimentalGemmaRelease } from './check-experimental-gemma-release.mjs';
 import { createSemanticComponentReleaseManifest } from './create-semantic-component-release-manifest.mjs';
@@ -193,5 +194,42 @@ test('missing Gemma originals or a different model revision fail closed', (conte
   assert.throws(
     () => checkExperimentalGemmaRelease(assets, candidateRoot, approval),
     /catalog SHA-256 does not match approval/u,
+  );
+});
+
+test('the historical pre-Metal candidate is explicitly blocked from publication', (context) => {
+  const lock = JSON.parse(
+    readFileSync(
+      fileURLToPath(
+        new URL('../docs/evaluations/semantic-gemma-experimental-v1.json', import.meta.url),
+      ),
+      'utf8',
+    ),
+  );
+  assert.equal(lock.decision, 'noGo');
+  assert.equal(lock.experimentalGemma.approval, 'blocked-stale-pre-integration-candidate');
+  const { assets, candidateRoot } = fixture(context);
+  assert.throws(
+    () => checkExperimentalGemmaRelease(assets, candidateRoot, lock),
+    /no-go evidence/u,
+  );
+  const oldCandidate = JSON.parse(
+    readFileSync(join(candidateRoot, 'semantic-component-release.json'), 'utf8'),
+  );
+  oldCandidate.sourceRevision = lock.sourceRevision;
+  const bytes = `${JSON.stringify(oldCandidate, null, 2)}\n`;
+  writeFileSync(join(candidateRoot, 'semantic-component-release.json'), bytes);
+  assert.throws(
+    () =>
+      checkExperimentalGemmaRelease(assets, candidateRoot, {
+        ...lock,
+        decision: 'go',
+        experimentalGemma: {
+          ...lock.experimentalGemma,
+          approval: 'explicit-opt-in-experimental',
+          candidateManifestSha256: sha(bytes),
+        },
+      }),
+    /pre-integration Gemma worker cannot publish/u,
   );
 });

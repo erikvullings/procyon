@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "decision": "go",
+  "decision": "noGo",
   "repository": "erikvullings/procyon",
   "releaseTag": "semantic-v0.4.2-gemma-qualification-r2",
   "qualificationRunId": 37974984924,
   "sourceRevision": "d3f921fe08e4994a905727a71af102979f4fbe23",
   "releaseCandidateFingerprint": "sha256:acf96cda7d0bb0c706e76a41ac14f27ffa484dd3fabdf935f47a3e134887fd77",
   "experimentalGemma": {
-    "approval": "explicit-opt-in-experimental",
+    "approval": "blocked-stale-pre-integration-candidate",
     "candidateDecision": "noGo",
     "candidateManifestSha256": "eaf917d0d46406aa6934b5388728a9d6fee2109038654c8df8c5d9c88dc8e0fb",
     "evaluationSha256": "64f3c49c67fdbf83578e08de3a5c73037d1068f1a340d7af61c74a39014017ec",

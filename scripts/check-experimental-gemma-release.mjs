@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { verifySemanticComponentRelease } from './verify-semantic-component-release.mjs';
 
 const targets = ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'];
+const preIntegrationSource = 'd3f921fe08e4994a905727a71af102979f4fbe23';
 const gemmaFiles = [
   'embeddinggemma2-original',
   'embeddinggemma2-file-1',
@@ -26,6 +27,9 @@ export function checkExperimentalGemmaRelease(assetsRoot, candidateRoot, approva
   const reportBytes = fs.readFileSync(path.join(assetsRoot, 'semantic-production-evaluation.json'));
   const report = JSON.parse(reportBytes);
   const consent = approval.experimentalGemma;
+  if (candidate.sourceRevision === preIntegrationSource) {
+    throw new Error('pre-integration Gemma worker cannot publish without a new signed candidate');
+  }
   if (
     approval.schemaVersion !== 1 ||
     approval.decision !== 'go' ||

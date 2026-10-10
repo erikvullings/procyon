@@ -1,31 +1,48 @@
 # Experimental opt-in EmbeddingGemma 2 component: release decision
 
-**Decision: offer an explicitly opt-in EXPERIMENTAL package, not a
-quality-qualified replacement for E5.** E5 remains the default. This is a
-release-owner override of the signed candidate's intentional `noGo`
-negative-control decision, **not** a reclassification of its E5 aggregate
-measurements as Gemma quality evidence. No automatic publication, desktop
-enablement, or release tag follows from this document. The application
-integrator must first combine and validate the concurrent UI/consent and
-Metal work, including CPU fallback. The workflow must not run its publication
-mode until the release environment and exact experimental approval are
-deliberately enabled.
+**Decision: an explicitly opt-in EXPERIMENTAL package is desired, but no
+candidate is approved for publication yet.** E5 remains the default. The
+reviewed candidate predates both the automatic Metal worker and mixed-media
+UI work. It would ship a CPU-only worker even if a newer desktop binary
+enabled Metal. Its checked-in experimental lock is deliberately `noGo` and
+`blocked-stale-pre-integration-candidate`: the manual publication workflow
+rejects it even if its release environment gates are set to `true`; the
+experimental verifier independently rejects that historical source revision
+even if someone changes the lock decision to `go`. Do not
+dispatch publication, publish, tag, or enable it. The future release-owner
+override must be an explicit new decision, **not** a reclassification of
+E5 aggregate measurements as Gemma quality evidence.
 
-The only approved candidate is [qualification run
+The historical, **not publishable** candidate is [qualification run
 37974984924](https://github.com/erikvullings/procyon/actions/runs/37974984924),
 retained candidate artifact **11640886748**, source revision
 `d3f921fe08e4994a905727a71af102979f4fbe23`, catalog release tag
 `semantic-v0.4.2-gemma-qualification-r2`, and aggregate candidate fingerprint
 `sha256:acf96cda7d0bb0c706e76a41ac14f27ffa484dd3fabdf935f47a3e134887fd77`.
-The four target catalog/signature hashes, precise run/tag/source, original
+Its four target catalog/signature hashes, precise run/tag/source, original
 Gemma model revision, negative-control report hash, and candidate-lock hash
-are reviewed in
+remain recorded in
 [`semantic-gemma-experimental-v1.json`](semantic-gemma-experimental-v1.json).
 All four signed catalogs and their exact catalog-listed bytes were verified
-offline using the release public verification key on 2026-10-10. Candidate
-artifact retention was previously recorded as ending **2026-10-23**; if
-expired, a new qualification and **new reviewed lock** are required, not a
-substitution under this approval.
+offline using the release public verification key on 2026-10-10. Signed bytes
+alone cannot make this pre-integration worker suitable for automatic Metal.
+Candidate artifact retention was previously recorded as ending
+**2026-10-23**, but its availability does not make it publishable.
+
+An opt-in application-level [integration probe](../../crates/fm-application/tests/semantic_indexing.rs)
+on macOS ARM additionally confirmed the **old signed CPU worker** receives
+three real files through an enrolled local folder, VFS listing/read, host
+consent/eligibility decisions, and the IPC ingestion boundary. A PNG,
+44 kHz MP3, and two-second MP4 were admitted only for a Gemma library with
+all three media types selected; all three ingestions completed and a
+tenant-scoped worker search returned each with its correct media type and a
+host-resolved, available source citation. Another tenant saw no results.
+This is a bounded synthetic *pipeline* check, not a retrieval-quality
+judgement, a full desktop UI check, automatic Metal validation, a
+four-target application-level test, or qualification of an integrated
+worker. The existing default-library test checks that unselected media
+are skipped. Re-run the same end-to-end check on the new integrated,
+signed candidate before claiming mixed-media search in a release.
 
 The installed/offline lifecycle (activation, restart, supported media, and
 cleanup/recovery) passed on macOS aarch64, Linux aarch64/x86-64, and Windows
@@ -66,14 +83,20 @@ unsupported media must remain clear, not silently treated as indexed.
 Supported signed CPU targets are the four named above; packaging a component
 alone does not establish quality or GPU behavior on them.
 
-For publication, dispatch the manual semantic-component workflow against the
-approved workflow revision with **that exact release tag and qualification
-run ID**, `approve_experimental_gemma=true`, and both independent release
-environment gates (`SEMANTIC_COMPONENTS_RELEASE_QUALIFIED` and
-`SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED`) explicitly set to `true`. The workflow
-rejects changed source, report, catalog/signature, payload, model revision,
-run, or tag, and cryptographically verifies all four signed catalogs before
-publication. Ordinary qualification dispatches remain read-only. This
-approval does not change the standard desktop's approved E5 component lock;
-the integrator must decide when and how to make a genuinely opt-in Gemma
-catalog available to application users.
+**Before any publication:** integrate the Metal-enabled worker, mixed-media
+UI, and application-level consented media enrollment and authorized search
+through host/VFS/worker; verify automatic Metal selection and CPU fallback on
+supported hardware. Build and qualify a **new four-target signed candidate**
+from the integrated source. Its catalog URLs are bound to its release tag,
+and its source revision, candidate run ID, artifact fingerprints and
+signatures must receive a new reviewed experimental lock and disclosure.
+The workflow's currently hardcoded historical candidate artifact name must
+also be updated for that run. Only after these checks and a fresh explicit
+release-owner decision may an operator request publication with
+`approve_experimental_gemma=true` and both independent release environment
+gates (`SEMANTIC_COMPONENTS_RELEASE_QUALIFIED` and
+`SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED`) enabled. The verifier rejects the
+historical lock and changed source, report, catalog/signature, payload,
+model revision, run or tag; it cryptographically verifies signed catalogs
+before any release. Ordinary qualification dispatches remain read-only.
+The standard desktop's approved E5 component lock is unchanged.

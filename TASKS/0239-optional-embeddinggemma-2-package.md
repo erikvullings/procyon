@@ -588,3 +588,19 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   and standard desktop builds are not enabled; concurrent UI/consent and
   Metal/fallback integration must be combined and checked first. Task
   remains in progress.
+- 2026-10-10: Integration correction: the reviewed candidate
+  37974984924 predates the automatic Metal worker and mixed-media UI.
+  Its experimental approval lock is now explicitly **blocked** (`noGo`),
+  so environment gates alone cannot publish it. A new signed four-target
+  candidate from the integrated source, matched release-tag URLs, and a
+  new reviewed experimental approval are mandatory. Standalone media
+  enrollment from authorized folders must also be verified end-to-end
+  before claiming mixed-media search in an experimental release.
+- 2026-10-10: An opt-in macOS ARM application integration probe of the
+  **old signed CPU worker** confirmed provider-enumerated, consented PNG,
+  MP3 and MP4 files are read through VFS and ingested over IPC; tenant
+  search returned all three and host citation resolution recovered their
+  enrolled source locations, while another tenant received no results.
+  This checks the host media path (not just direct worker ingestion) but
+  uses synthetic files on one host; it does not qualify the still-unbuilt
+  integrated automatic-Metal candidate, UI, or retrieval ranking quality.
