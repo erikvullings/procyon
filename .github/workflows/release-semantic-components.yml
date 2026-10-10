@@ -18,10 +18,20 @@ on:
         default: false
         type: boolean
       qualify_installed_gemma:
-        description: Read-only installed lifecycle against retained candidate run 37974984924
+        description: Read-only installed lifecycle against a retained signed candidate
         required: false
         default: false
         type: boolean
+      installed_candidate_run_id:
+        description: Exact retained candidate qualification run for installed Gemma checks
+        required: false
+        default: ""
+        type: string
+      installed_candidate_source_revision:
+        description: Exact 40-character candidate source revision for installed Gemma checks
+        required: false
+        default: ""
+        type: string
       measure_installed_gemma:
         description: With qualify_installed_gemma, measure the installed candidate at 128/256/512/768d
         required: false
@@ -424,10 +434,27 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: actions/download-artifact@v8
         with:
-          name: semantic-component-candidate-d3f921fe08e4994a905727a71af102979f4fbe23
+          name: semantic-component-candidate-${{ inputs.installed_candidate_source_revision }}
           path: candidate
           github-token: ${{ github.token }}
-          run-id: 37974984924
+          run-id: ${{ inputs.installed_candidate_run_id }}
+      - name: Require exact retained candidate identity
+        shell: bash
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.installed_candidate_run_id }}
+          CANDIDATE_SOURCE_REVISION: ${{ inputs.installed_candidate_source_revision }}
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const manifest = JSON.parse(fs.readFileSync("candidate/semantic-component-release.json", "utf8"));
+            if (!/^[1-9][0-9]*$/.test(process.env.CANDIDATE_RUN_ID) ||
+                !/^[0-9a-f]{40}$/.test(process.env.CANDIDATE_SOURCE_REVISION) ||
+                manifest.qualificationRunId !== Number(process.env.CANDIDATE_RUN_ID) ||
+                manifest.sourceRevision !== process.env.CANDIDATE_SOURCE_REVISION ||
+                manifest.sourceRevision === "d3f921fe08e4994a905727a71af102979f4fbe23") {
+              throw new Error("installed Gemma requires a new exact retained candidate");
+            }
+          '
       - name: Stage exact signed target payloads
         shell: bash
         env:
@@ -526,6 +553,8 @@ jobs:
         shell: bash
         env:
           GEMMA_TARGET: ${{ matrix.target }}
+          CANDIDATE_RUN_ID: ${{ inputs.installed_candidate_run_id }}
+          CANDIDATE_SOURCE_REVISION: ${{ inputs.installed_candidate_source_revision }}
         run: |
           node -e '
             const fs = require("node:fs");
@@ -548,8 +577,8 @@ jobs:
               target: process.env.GEMMA_TARGET,
               qualificationRunId: process.env.GITHUB_RUN_ID,
               qualificationSourceRevision: process.env.GITHUB_SHA,
-              candidateRunId: "37974984924",
-              candidateArtifactId: "11640886748",
+              candidateRunId: process.env.CANDIDATE_RUN_ID,
+              candidateSourceRevision: process.env.CANDIDATE_SOURCE_REVISION,
               catalogRevision: lifecycle.catalogRevision,
               catalogSha256: lifecycle.catalogSha256,
               hardware: {

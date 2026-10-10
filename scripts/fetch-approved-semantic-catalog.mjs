@@ -24,6 +24,21 @@ export function semanticComponentReleasePlan(manifest, target) {
   if (manifest?.schemaVersion !== 1 || manifest?.decision !== 'go') {
     throw new Error('an approved semantic component release is required');
   }
+  if (manifest.experimentalGemma) {
+    if (
+      manifest.experimentalGemma.approval !== 'explicit-opt-in-experimental' ||
+      manifest.experimentalGemma.candidateDecision !== 'noGo' ||
+      manifest.sourceRevision === 'd3f921fe08e4994a905727a71af102979f4fbe23' ||
+      Object.keys(manifest.targets ?? {})
+        .sort()
+        .join(',') !==
+        ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'].join(',')
+    ) {
+      throw new Error(
+        'a new, explicitly approved four-target experimental Gemma release is required',
+      );
+    }
+  }
   const repository = requireString(manifest.repository, 'repository');
   const releaseTag = requireString(manifest.releaseTag, 'releaseTag');
   const sourceRevision = requireString(manifest.sourceRevision, 'sourceRevision');
@@ -40,6 +55,14 @@ export function semanticComponentReleasePlan(manifest, target) {
     catalogRevision: requireString(targetEvidence.catalogRevision, 'catalogRevision'),
     catalogSha256: requireString(targetEvidence.catalogSha256, 'catalogSha256'),
     signatureSha256: requireString(targetEvidence.signatureSha256, 'signatureSha256'),
+    ...(manifest.experimentalGemma
+      ? {
+          experimentalGemmaRevision: requireString(
+            manifest.experimentalGemma.modelRevision,
+            'experimental Gemma model revision',
+          ),
+        }
+      : {}),
     catalogUrl: `${baseUrl}/semantic-catalog-${target}.json`,
     signatureUrl: `${baseUrl}/semantic-catalog-${target}.sig`,
     artifactBaseUrl: `${baseUrl}/`,
@@ -54,6 +77,17 @@ export function verifySemanticCatalogBytes(plan, catalogBytes, signatureBytes) {
     throw new Error(`semantic component ${plan.target} signature SHA-256 does not match approval`);
   }
   const envelope = JSON.parse(catalogBytes.toString('utf8'));
+  if (plan.experimentalGemmaRevision) {
+    const models = envelope.catalog?.models?.filter(
+      (model) => model.metadata?.identity?.model === 'google-embeddinggemma-2',
+    );
+    if (
+      models?.length !== 1 ||
+      models[0].metadata.identity.revision !== plan.experimentalGemmaRevision
+    ) {
+      throw new Error('semantic component experimental Gemma model identity differs from approval');
+    }
+  }
   if (envelope.catalog?.revision !== plan.catalogRevision) {
     throw new Error(`semantic component ${plan.target} catalog revision does not match approval`);
   }

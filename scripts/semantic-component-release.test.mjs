@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-
+import { checkDesktopGemmaRelease } from './check-desktop-gemma-release.mjs';
 import {
   createSemanticComponentReleaseManifest,
   semanticCatalogSourceRevision,
@@ -115,6 +115,74 @@ test('unapproved or incomplete component releases fail closed', () => {
   assert.throws(
     () => semanticComponentReleasePlan(manifest, 'windows-x86_64'),
     /target windows-x86_64/,
+  );
+});
+
+test('experimental desktop rejects missing consent, old candidates and mismatched model revisions', () => {
+  const targets = Object.fromEntries(
+    ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'].map((target) => [
+      target,
+      manifest.targets['linux-x86_64'],
+    ]),
+  );
+  const proposed = {
+    ...manifest,
+    sourceRevision: 'a'.repeat(40),
+    targets,
+    experimentalGemma: {
+      approval: 'explicit-opt-in-experimental',
+      candidateDecision: 'noGo',
+      modelRevision: 'b'.repeat(40),
+    },
+  };
+  assert.throws(() => checkDesktopGemmaRelease(proposed, 'false', 'true'), /both independent/u);
+  assert.throws(() => checkDesktopGemmaRelease(proposed, 'true', 'false'), /both independent/u);
+  assert.doesNotThrow(() => checkDesktopGemmaRelease(proposed, 'true', 'true'));
+  assert.throws(
+    () => checkDesktopGemmaRelease({ ...proposed, experimentalGemma: undefined }, 'true', 'true'),
+    /explicit experimental/u,
+  );
+  assert.throws(
+    () =>
+      checkDesktopGemmaRelease(
+        { ...proposed, sourceRevision: 'd3f921fe08e4994a905727a71af102979f4fbe23' },
+        'true',
+        'true',
+      ),
+    /new, explicitly approved/u,
+  );
+  assert.throws(
+    () =>
+      verifySemanticCatalogBytes(
+        semanticComponentReleasePlan(proposed, 'linux-x86_64'),
+        catalog,
+        signature,
+      ),
+    /catalog SHA-256/u,
+  );
+  const matchingSource = Buffer.from(
+    catalog
+      .toString()
+      .replace('"source_revision":"abc123"', `"source_revision":"${'a'.repeat(40)}"`),
+  );
+  const matching = {
+    ...proposed,
+    targets: {
+      ...targets,
+      'linux-x86_64': {
+        ...targets['linux-x86_64'],
+        catalogSha256: sha256(matchingSource),
+      },
+    },
+  };
+  assert.throws(
+    () =>
+      verifySemanticCatalogBytes(
+        semanticComponentReleasePlan(matching, 'linux-x86_64'),
+        matchingSource,
+        signature,
+      ),
+    /model identity differs/u,
   );
 });
 

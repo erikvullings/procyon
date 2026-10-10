@@ -439,10 +439,10 @@ test('semantic components qualify and publish exact retained artifacts independe
     'macos-aarch64',
     'windows-x86_64',
   ]);
-  assert.match(JSON.stringify(installed), /run-id.*37974984924/u);
+  assert.match(JSON.stringify(installed), /run-id.*installed_candidate_run_id/u);
   assert.match(
     JSON.stringify(installed),
-    /semantic-component-candidate-d3f921fe08e4994a905727a71af102979f4fbe23/u,
+    /semantic-component-candidate-.*installed_candidate_source_revision/u,
   );
   assert.match(JSON.stringify(installed), /qualify_semantic_lifecycle/u);
   assert.match(JSON.stringify(installed), /semantic_production_catalog/u);
@@ -588,6 +588,32 @@ test('release desktop builds fail closed without a measured knowledge-search go 
   // The existing semantic gate keeps its own, separate variable and behaviour.
   assert.match(releaseText, /vars\.SEMANTIC_RELEASE_QUALIFIED == 'true'/);
   assert.match(releaseText, /vars\.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED/);
+});
+
+test('Gemma desktop packaging requires a separately approved signed four-target candidate', () => {
+  const release = workflow('release-desktop.yml');
+  for (const jobName of ['macos', 'linux', 'windows']) {
+    const steps = release.jobs[jobName].steps;
+    const approval = steps.findIndex((step) =>
+      /check-desktop-gemma-release\.mjs/u.test(step.run ?? ''),
+    );
+    const experimental = steps.findIndex((step) =>
+      /fetch-approved-semantic-catalog\.mjs[\s\S]*semantic-gemma-experimental-v1\.json/u.test(
+        step.run ?? '',
+      ),
+    );
+    const signature = steps.findIndex((step) =>
+      /semantic_production_catalog[\s\S]*verify-signature/u.test(step.run ?? ''),
+    );
+    const build = steps.findIndex((step) => /build:tauri/u.test(step.run ?? ''));
+    assert.ok(
+      approval >= 0 && approval < experimental && experimental < signature && signature < build,
+    );
+    assert.equal(steps[approval].if, "vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'");
+    assert.match(steps[build].run, /--features semantic-gemma/u);
+    assert.match(steps[build].run, /GEMMA_DESKTOP_EXPERIMENTAL.*true/u);
+    assert.match(steps[experimental].if, /SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL/u);
+  }
 });
 
 test('knowledge qualification exporter compiles the flag only for an exact visibility decision', () => {

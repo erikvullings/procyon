@@ -90,8 +90,13 @@ supported hardware. Build and qualify a **new four-target signed candidate**
 from the integrated source. Its catalog URLs are bound to its release tag,
 and its source revision, candidate run ID, artifact fingerprints and
 signatures must receive a new reviewed experimental lock and disclosure.
-The workflow's currently hardcoded historical candidate artifact name must
-also be updated for that run. Only after these checks and a fresh explicit
+For the next installed lifecycle check, provide the new candidate's exact
+`installed_candidate_run_id` and `installed_candidate_source_revision`:
+the read-only workflow downloads the artifact for that pair and rejects the
+historical source. Candidate artifacts expire after 14 days, so complete
+installed checks and retain the reviewed manifests before they expire;
+if expired, qualify a fresh candidate rather than substituting the old run.
+Only after these checks and a fresh explicit
 release-owner decision may an operator request publication with
 `approve_experimental_gemma=true` and both independent release environment
 gates (`SEMANTIC_COMPONENTS_RELEASE_QUALIFIED` and
@@ -100,3 +105,14 @@ historical lock and changed source, report, catalog/signature, payload,
 model revision, run or tag; it cryptographically verifies signed catalogs
 before any release. Ordinary qualification dispatches remain read-only.
 The standard desktop's approved E5 component lock is unchanged.
+
+The 0.5.0 integration branch prepares a separate desktop opt-in switch,
+`SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL=true`. It fails closed unless both
+`SEMANTIC_RELEASE_QUALIFIED` and `SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED` are
+`true` and the checked-in experimental approval records a fresh `go` decision,
+exactly four target catalogs and an explicit opt-in. The desktop fetches only
+the catalog and signature matching that approval, validates its Gemma model
+revision, and compiles `semantic-gemma` only in that branch. Merely changing
+the switch cannot enable the revoked candidate. A new qualification run and
+reviewed manifest remain outstanding; do not enable the switch or tag 0.5.0
+until the integrated worker and app path have been exercised.
