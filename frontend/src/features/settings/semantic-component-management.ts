@@ -1154,7 +1154,16 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         ? m('p.fm-semantic-authority-note', t('semanticComponents', 'developmentSimulation'))
         : undefined,
       developerBundle
-        ? m('p.fm-semantic-authority-note', t('semanticComponents', 'developmentBundle'))
+        ? m(
+            'p.fm-semantic-authority-note',
+            t(
+              'semanticComponents',
+              installProfile === 'embeddingGemma2' ||
+                status.activeModel?.profile === 'embeddingGemma2'
+                ? 'developmentGemmaBundle'
+                : 'developmentBundle',
+            ),
+          )
         : undefined,
       canOffer && (installableLifecycle || switchProfiles.length > 0)
         ? m(

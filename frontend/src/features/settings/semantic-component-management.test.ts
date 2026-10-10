@@ -248,6 +248,7 @@ describe('SemanticComponentManagement', () => {
 
   it('labels an installed developer catalog as non-production', async () => {
     const client = new MockFileManagerClient();
+    await withGemmaProfile(client);
     const profiles = await client.listSemanticComponentProfiles();
     vi.spyOn(client, 'getSemanticComponentCapabilities').mockResolvedValue({
       authority: 'desktopManaged',
@@ -259,7 +260,10 @@ describe('SemanticComponentManagement', () => {
         ...profile,
         resolvedModel: {
           ...profile.resolvedModel,
-          modelId: 'procyon.dev.hashing-embedding',
+          modelId:
+            profile.profile === 'embeddingGemma2'
+              ? profile.resolvedModel.modelId
+              : 'procyon.dev.hashing-embedding',
         },
       })),
     );
@@ -268,7 +272,16 @@ describe('SemanticComponentManagement', () => {
     await waitForLoaded();
 
     expect(root.textContent).toContain('Development-only bundle');
+    expect(root.textContent).toContain('deterministic test embedder');
     expect(root.textContent).toContain('must not be used in production');
+
+    root
+      .querySelector<HTMLInputElement>('.fm-semantic-install input[value="embeddingGemma2"]')
+      ?.click();
+    m.redraw.sync();
+    expect(root.textContent).toContain('Development-only Gemma bundle');
+    expect(root.textContent).toContain('pinned native model');
+    expect(root.textContent).not.toContain('deterministic test embedder');
   });
 
   it('shows administrator-provisioned status read-only without forbidden controls', async () => {
