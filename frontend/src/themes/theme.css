@@ -3160,6 +3160,30 @@ input[type="text"].fm-shortcuts-help-capture-input {
   overflow-wrap: anywhere;
 }
 
+.fm-knowledge-media-evidence {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fm-knowledge-media-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fm-knowledge-media-modified {
+  color: var(--fm-text-muted);
+}
+
+.fm-knowledge-media-open {
+  margin-inline-start: auto;
+}
+
+.fm-knowledge-media-evidence p {
+  margin-block: 0.25rem 0;
+}
+
 .fm-knowledge-result-markdown > :first-child {
   margin-top: 0;
 }

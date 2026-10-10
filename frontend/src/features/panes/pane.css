@@ -57,6 +57,30 @@
   margin: 0;
 }
 
+.fm-semantic-media {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block-start: 0.4rem;
+}
+
+.fm-semantic-media-thumbnail {
+  width: 4rem;
+  height: 3rem;
+  object-fit: contain;
+  background: var(--fm-surface);
+}
+
+.fm-semantic-media-description {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fm-semantic-media-description small {
+  color: var(--fm-text-muted);
+}
+
 .fm-semantic-evidence-actions {
   display: flex;
   flex-wrap: wrap;

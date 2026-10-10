@@ -54,6 +54,7 @@ export interface DirectoryGridAttrs {
   readonly photoMode?: boolean;
   readonly nativeIconLoader?: NativeIconLoader;
   readonly thumbnailLoader?: ThumbnailLoader;
+  readonly thumbnailAllowed?: (entry: EntrySummary) => boolean;
   readonly onCursorChange?: (index: number, modifiers?: CursorClickModifiers) => void;
   readonly onActivate?: (index: number) => void;
   readonly onRetry?: () => void;
@@ -139,7 +140,10 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
       entry.kind === 'directory'
         ? attrs.activeSourceStates?.get(`${entry.location.providerId}:${entry.location.uri}`)
         : undefined;
-    const thumbnailDataUri = thumbnailViewport?.thumbnailDataUri(entry, size);
+    const thumbnailDataUri =
+      attrs.thumbnailAllowed?.(entry) === false
+        ? undefined
+        : thumbnailViewport?.thumbnailDataUri(entry, size);
     const nativeIconDataUri = attrs.nativeIconLoader?.iconDataUri(entry);
     return m(
       '.fm-grid-tile',
