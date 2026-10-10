@@ -669,3 +669,16 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   UI or VoiceOver. The unpublished catalog and no-go gate preclude honest
   live desktop installation preflight until explicit approval. Manual checks
   and release-owner review remain outstanding.
+- 2026-10-10: A bounded isolated macOS ARM Tauri **development** UI preflight
+  used the locally development-signed `darwin-arm64-gemma-metal` bundle, not
+  the unpublished production-signed candidate. Native accessibility inspection
+  found labelled Gemma consent/media/dimension controls; explicit 768d
+  image/audio/video consent enabled installation, which displayed progress and
+  reached "Installed and enabled". Keyboard Return opened an isolated media
+  folder, and folder inclusion was confirmed with indexing generation 1.
+  Its catalog nevertheless contained zero documents, so native media results,
+  source opening, stale/unavailable behavior, and deletion were **not**
+  exercised. The fixtures sat under ignored `target/`; this is not proof of
+  a general indexing defect. No deliberate install-error or VoiceOver session
+  or Windows/Linux native UI review was performed. See the release decision
+  document for the exact observations and remaining gates; keep `noGo`.

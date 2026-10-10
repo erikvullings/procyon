@@ -72,13 +72,47 @@ stale-result disabling, and labelled, focusable Gemma setup controls. The
 focused settings/pane/Knowledge run passed 289 tests before the extra
 accessible-name/focus regression was added; that new settings test also
 passed. These are DOM and mock-client checks, not interaction with the
-signed installed candidate. A normal desktop cannot install that candidate
-while its signed catalog is unpublished and its approval lock is `noGo`;
-bypassing those gates to make the UI appear releasable would invalidate this
-preflight. No real packaged desktop UI installation, keyboard navigation,
-macOS VoiceOver session, or Windows/Linux native accessibility and deletion
-walkthrough has been performed. Release-owner review must obtain or
-explicitly disposition those manual checks before approval.
+signed installed candidate.
+
+On 2026-10-10 a **bounded native development UI preflight** used a macOS
+ARM Tauri debug build (`fm-desktop` v0.5.0, `semantic-gemma` feature) and the
+locally development-key-signed `darwin-arm64-gemma-metal` bundle, in an
+isolated `dev.procyon.gemma-review` app/home. This is **not** the four-target
+production-key-signed candidate or a packaged release binary. Through the
+native window, macOS accessibility inspection found named Settings, Semantic,
+Gemma profile, media-permission checkboxes, dimension selector, fresh-index
+acknowledgment, and install button. E5 remained the recommended profile.
+Selecting Gemma exposed the 1.5 GiB download/install, 8.1 GiB planning
+RAM, licenses, local processing, and separate-library disclosure. The
+install action was disabled until 768 dimensions and fresh-index
+acknowledgment were selected. Explicitly opting into image/audio/video
+and accepting displayed "Starting the signed model download and
+installation"; the isolated app then displayed "Installed and enabled" and
+"Exact active model: EmbeddingGemma 2 (optional)". Its development-bundle
+warning explicitly says it cannot validate retrieval quality.
+
+Keyboard Return opened an isolated fixture folder in a pane. The native
+folder-consent view named **only** that folder, showed an unavailable size
+estimate and local retention warning, and accepted "Include and index folder".
+Settings subsequently showed the root enrolled and indexing generation 1.
+However, the isolated catalog's `documents` and `occurrences` remained
+empty; native semantic search showed "No indexed documents are available
+in this scope." The fixtures were inside this repository's ignored
+`target/` review root, so this does **not** establish a general indexing
+failure. No native image/audio/video result appeared to open, navigate,
+test stale/unavailable behavior, or delete. No install error was deliberately
+induced, and no macOS VoiceOver session was run: inspecting accessible names
+with System Events is **not** a screen-reader walkthrough. The review
+window later disappeared while its process remained; the isolated Tauri/Vite
+session was stopped. Windows/Linux native UI, production-signed packaged
+keyboard/consent/progress/error/deletion, and full macOS VoiceOver checks
+remain untested.
+
+A normal desktop cannot install the exact candidate while its catalog is
+unpublished and the approval lock is `noGo`; bypassing those gates to make
+the UI appear releasable would invalidate this preflight. Release-owner
+review must obtain or explicitly disposition the remaining manual checks
+before approval.
 
 The historical, **not publishable** candidate is [qualification run
 37974984924](https://github.com/erikvullings/procyon/actions/runs/37974984924),
