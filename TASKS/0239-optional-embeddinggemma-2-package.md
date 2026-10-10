@@ -573,3 +573,18 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   temporal annotations lack judged negative intervals and verified clip
   rights. No audio/video results were fabricated. These are still open
   quality/release gates; do not enable, publish or change the guard.
+- 2026-10-10: Release owner authorized an **explicitly opt-in
+  EXPERIMENTAL** signed package so users can evaluate Gemma in practice
+  despite unresolved quality gates. The
+  [release decision](../docs/evaluations/embeddinggemma-experimental-release-2026-10-10.md)
+  records truthful E5-vs-Gemma and media limitations, 8 GiB model RAM
+  planning estimate, large download, CPU costs, and immutable per-library
+  dimensions/media choices. A separate reviewed experimental lock binds
+  the exact four-target candidate run 37974984924, source, release tag,
+  aggregate E5 negative-control report, catalogs and signed asset bytes.
+  The existing default release gate still rejects Gemma; a manual
+  publication override requires independent Gemma-specific approval and
+  signature verification. No artifact was published, no release was tagged,
+  and standard desktop builds are not enabled; concurrent UI/consent and
+  Metal/fallback integration must be combined and checked first. Task
+  remains in progress.

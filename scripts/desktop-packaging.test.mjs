@@ -420,6 +420,8 @@ test('semantic components qualify and publish exact retained artifacts independe
   assert.match(JSON.stringify(collect), /create-semantic-component-release-manifest\.mjs/);
   assert.match(publish.if, /vars\.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true'/);
   assert.match(publish.if, /inputs\.qualification_run_id != ''/);
+  assert.match(publish.if, /vars\.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED == 'true'/);
+  assert.equal(component.on.workflow_dispatch.inputs.approve_experimental_gemma.default, false);
   assert.match(publish.if, /inputs\.qualify_installed_gemma != true/);
   assert.match(publish.if, /inputs\.measure_installed_gemma != true/);
   assert.match(JSON.stringify(publish), /run-id/);
@@ -427,6 +429,7 @@ test('semantic components qualify and publish exact retained artifacts independe
   assert.match(JSON.stringify(publish), /gh release create/);
   assert.match(JSON.stringify(publish), /--latest=false/);
   assert.match(componentText, /semantic-component-release-v1\.json/);
+  assert.match(componentText, /semantic-gemma-experimental-v1\.json/);
 
   const installed = component.jobs['installed-gemma-qualification'];
   assert.match(installed.if, /inputs\.qualify_installed_gemma == true/);
