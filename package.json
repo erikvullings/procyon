@@ -1,7 +1,7 @@
 {
   "name": "fm",
   "private": true,
-  "version": "0.4.2",
+  "version": "0.5.0",
   "type": "module",
   "packageManager": "pnpm@12.3.4",
   "scripts": {
@@ -13,6 +13,7 @@
     "dev:tauri": "cd apps/fm-desktop/src-tauri && pnpm exec cross-env PROCYON_SEMANTIC_COMPONENTS=mock pnpm exec tauri dev",
     "dev:tauri:semantic": "node scripts/dev-tauri-semantic.mjs",
     "dev:tauri:semantic:gemma": "node scripts/dev-tauri-semantic.mjs --gemma",
+    "dev:tauri:semantic:gemma:metal": "node scripts/dev-tauri-semantic.mjs --gemma --metal-images",
     "dev:tauri:semantic:ocr": "node scripts/dev-tauri-semantic.mjs --ocr",
     "semantic:bundle:dev": "node scripts/build-semantic-developer-bundle.mjs",
     "semantic:bundle:production": "node scripts/build-semantic-production-bundle.mjs",

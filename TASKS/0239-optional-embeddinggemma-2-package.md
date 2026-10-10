@@ -375,3 +375,312 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   model-specific quality and supported-platform evidence is reviewed and a
   release decision is implemented. This does not enable Gemma in standard
   desktop builds or change the workspace version to 0.5.0.
+- 2026-10-09: Read-only qualification run 37971224110 on main
+  (96d697ad4d2bf4adcb546617102831ec290f58b8) built the four Gemma
+  candidates. Windows passed packaged smoke, lifecycle/privacy qualification,
+  and payload upload. Both Linux targets and macOS failed the packaged Gemma
+  ingestion smoke at its 60-second per-job test deadline; therefore catalog
+  signing and aggregate collection were skipped and no release was published.
+  The Gemma-specific smoke deadline is now 300 seconds, with per-media elapsed
+  times logged, while the E5 deadline stays at 60 seconds. The initial
+  Windows result and E5 evaluation alone do not qualify Gemma.
+- 2026-10-09: Read-only rerun 37974984924 on the bounded-smoke commit
+  d3f921fe08e4994a905727a71af102979f4fbe23 succeeded on all four
+  supported targets: packaged smoke, lifecycle/privacy checks, signed
+  per-target catalog, aggregate E5 evaluation, and fingerprint-locked
+  candidate collection. The retained candidate artifact is
+  `semantic-component-candidate-d3f921fe08e4994a905727a71af102979f4fbe23`
+  (ID 11640886748; expires 2026-10-23). The Linux ARM signed catalog contains
+  both E5 and the pinned Gemma original-file profile (`embedding-gemma2`).
+  Publication was skipped. This qualifies the candidate workflow path, not
+  Gemma for product release: independently labelled model-specific retrieval
+  quality, per-dimension/platform latency and peak RAM, signed installed
+  offline lifecycle and release decision remain open.
+- 2026-10-09: A separate [native CPU retrieval probe](../docs/evaluations/embeddinggemma-native-qualification.md)
+  uses the candidate's hash-verified originals and the same labelled
+  multilingual and generated-code fixtures as the exploratory E5 comparison.
+  This macOS M4 Max run measured knowledge MRR 0.95 (E5's earlier Python
+  baseline was 1.0) and code MRR 1.0 at all four Gemma dimensions. Four
+  synthetic text-to-image queries each ranked their labelled colored shape
+  above same-color or same-shape distractors. The mixed run peaked at
+  2,583,347,200 bytes RSS; image throughput was 0.039/s. The probe records
+  per-case misses and unanswerable queries without pretending to qualify
+  rejection. Broader independent labels, photographic/media negatives,
+  platform/dimension resource data, matched packaged E5 comparison and
+  installed/offline lifecycle remain open; Gemma stays hidden.
+- 2026-10-09: **Signed installed lifecycle, macOS ARM only.** Re-downloaded the
+  exact read-only candidate from run
+  [37974984924](https://github.com/erikvullings/procyon/actions/runs/37974984924),
+  artifact `semantic-component-candidate-d3f921fe08e4994a905727a71af102979f4fbe23`
+  (ID **11640886748**, retained until 2026-10-23). The macOS-aarch64
+  signed catalog revision was
+  `procyon-macos-aarch64-0.4.2-417f9e72bdc56f325f336878e70b1cf0`;
+  catalog SHA-256
+  `e81c2d43ec2cc3a8bc1146d3fcca5d0f94d465e9f97e9af4bdf78d982cf660d3`,
+  detached-signature SHA-256
+  `1c238c6a87f5a272e19401e7c00162be4703ca47cd78a92881ed5f60a7deee67`.
+  A locally staged hard-linked subset contained exactly the eight catalog
+  payloads, without changing their bytes; the public environment verification
+  key authenticated the catalog and the harness checked all signed payload
+  hashes. An opt-in `PROCYON_GEMMA_INSTALLED_TEST` mode of the existing
+  `qualify_semantic_lifecycle` example installed the Gemma profile through
+  its filesystem-only source and explicit installation offer/consent. Its
+  fresh manager verified all seven *selected* installed artifacts (worker,
+  Zvec runtime, and five originals); the catalog's E5 pack was verified as
+  a downloaded payload but not installed. A copy of the verified installed
+  worker was staged beside a copy of the verified runtime, as in the desktop
+  launcher, while the worker used the installed originals. The ignored
+  packaged-worker test ingested and retrieved PNG, MP3, and H.264 MP4 offline
+  (27.6/2.1/12.4 seconds), including sampled-video timestamps; after killing
+  the worker, a new worker recovered all three document indexes. The full
+  lifecycle harness passed absent-state, low-disk, signature tampering,
+  payload corruption, interrupted/resumed install, manager restart,
+  installed-worker tampering, cross-process locking, explicit retain/delete
+  uninstall, and clean reinstall checks with **zero network artifact reads**.
+  The successful local report is `target/gemma-installed-report.json`
+  (task-local, not a published release artifact). An initial run against the
+  combined four-target artifact correctly rejected unrelated files, and a
+  second attempt exposed macOS's `@loader_path` requirement; both were fixed
+  in the test setup before the clean passing run. This checks neither the
+  desktop's durable library-consent UI nor cross-platform installed lifecycle:
+  Linux x86_64/aarch64 and Windows x86_64 were **not tested** by this gate.
+  Preceding-candidate upgrade/rollback remains blocked without an exact
+  preceding signed candidate; native assistive-technology and packaged UI
+  checks still require operators. Independent realistic retrieval labels,
+  matched E5 comparison, and per-dimension/platform resource limits remain
+  open. Keep the release guard and Gemma's default-hidden status intact.
+- 2026-10-09: **Three remaining signed installed targets passed** in read-only
+  [run 37990723942](https://github.com/erikvullings/procyon/actions/runs/37990723942)
+  (qualification harness SHA `9efb7c8947f3ab201b197cdc1e151c1cdac5b54c`).
+  The manual workflow downloaded the *same* retained candidate from run
+  37974984924, artifact ID 11640886748, and skipped all payload-building,
+  catalog-signing, collection, and publication jobs. Each target verified
+  its detached catalog signature with the public environment key and all
+  exact signed payload hashes before testing an offline installation. The
+  existing lifecycle harness installed the Gemma worker, runtimes, and five
+  original files through an explicit offer/consent, reverified installed
+  bytes after manager restart, ingested and queried PNG/MP3/H.264 MP4 with
+  timestamp provenance, killed/restarted the worker and recovered all three
+  indexed documents, then checked tampering, interrupted resume,
+  cross-process locking, retain/delete uninstall, and clean reinstall.
+  Each uploaded report records **13 passed checks and zero network artifact
+  reads** (the earlier Actions artifact download is not an offline operation):
+
+  | Target | Installed report artifact ID | Catalog SHA-256 | Signature SHA-256 |
+  | --- | ---: | --- | --- |
+  | Linux ARM64 | 11645322065 | `b158c0b7c2f25aa16215fdacc34268d2326e1c26fb0f593a09617bd987e534df` | `4e25397654c2c47afd60920501ca13731d0617dc397482ce395062cf11dec34e` |
+  | Linux x86_64 | 11644539558 | `c7ae0e2625d9d83a6e93621a6bb51fd2731200ede4cd188dd8b389b58d8f1724` | `5ce2a65b0376594ff58037597125d46ae104c36569c27315e0f6c90aa043d0ad` |
+  | Windows x86_64 | 11645457780 | `83cb7c83d0f279ab85c97c127ba87969046d0ef6f65c39e65d973fab127fc382` | `fa890ce8cb0e39ce05fc5e7c64110084da925f73c22d0a0df9f7c1993496516b` |
+
+  The first x86 attempt (run 37986807776) failed *before installation*
+  because the CI-built test binary lacked `ORT_LIB_PATH`; the diagnostic
+  retry (37988792465) confirmed an unresolved `OrtGetApiBase` linker symbol
+  and was stopped after the diagnosis. A further run (37989503641) linked
+  against the retained signed ONNX payload, then failed at test startup
+  because its shared library was not on the test process loader path.
+  The passing run staged that **verified installed** ONNX payload beside the
+  installed worker and Zvec library, rather than using an unsigned/system
+  replacement. The macOS ARM result above plus these three reports establish
+  this bounded signed installed/offline gate on all four supported targets,
+  **not** Gemma release qualification. All four reports still mark
+  preceding-candidate upgrade/rollback blocked without an exact prior signed
+  candidate; native screen-reader and packaged consent/progress/error UI
+  checks require operators. Independent realistic multilingual/code/media
+  labels, matched E5 quality, and dimension/platform CPU resource bounds are
+  still missing. Do not enable Gemma or lift the publication guard.
+- 2026-10-09: The bounded [four-target signed CPU resource probe](../docs/evaluations/embeddinggemma-signed-cpu-2026-10-09.md)
+  passed in read-only run
+  [37992680322](https://github.com/erikvullings/procyon/actions/runs/37992680322)
+  using the exact retained candidate artifact 11640886748, with all
+  build/sign/collect/publish jobs skipped. Installed originals powered a
+  fresh native worker/index at **128, 256, 512, and 768 dimensions** on
+  macOS ARM, Windows x86, Linux x86, and Linux ARM. Each dimension ingested
+  one synthetic PNG, MP3, H.264 MP4, and short text document; three text
+  queries per modality, worker restart/recovery, bounded wall time and
+  per-item ingestion rates are recorded in the checked-in machine reports.
+  Across dimensions, OS worker RSS high-water values were 3.46 GiB on
+  Linux ARM, 3.47 GiB on Linux x86, and 3.42 GiB on Windows. The macOS
+  virtual M1 runner's **sampled** maximum was at least 3.33 GiB; it is
+  not an exact peak. Linux ARM exposed only `unknown` for the CPU model,
+  but the runner image, CPU count and RAM are recorded. One synthetic
+  asset per modality is neither sustained throughput nor a representative
+  resource ceiling. Realistic independently labelled retrieval quality,
+  larger and hard-negative media, matched E5 measurements, prior signed
+  candidate upgrade/rollback, and manual accessibility/consent UI review
+  remain open. Do not promote Gemma or change the release guard.
+- 2026-10-09: The [bounded independently sourced quality probe](../docs/evaluations/embeddinggemma-labelled-2026-10-09.md)
+  authenticated the exact retained candidate 11640886748 and compared its
+  Gemma native FP32 CPU encoder (128/256/512/768d) with its E5 ONNX CPU model
+  (384d) on **identical** source-pinned corpus/query fixtures on one macOS ARM
+  host. Mr. TyDi v1.1 supplied 16 human-labelled Swahili/Telugu dev questions;
+  their lexical distractors remain *unjudged* and must not be claimed as hard
+  negatives. Four CodeSearchNet Python queries used seven positive and ten
+  explicitly grade-0 code snippets from commit-pinned, licence-checked repos,
+  excluding contradictory/ambiguous annotations. Five SugarCrepe swapped
+  caption pairs used real COCO photos whose **individual current** Flickr
+  CC BY/BY-SA licences were checked (photos not redistributed); E5 has no
+  image encoder. Gemma's text hit@1 was 8/8 in each language; E5 was 7/8 in
+  Swahili and 8/8 in Telugu, but E5's one top distractor is *unjudged* and
+  may be relevant. E5 hit@1 was 4/4 on code; Gemma hit@1 was 3/4 at **all**
+  dimensions, ranking human-irrelevant snippets ahead of a relevant buffered
+  file reader. Gemma preferred the wrong hard caption for one of the five
+  real photos at **all** dimensions. Per-case machine reports and the
+  reproducible harness/source digests are retained beside that document.
+  This deliberately small one-host model/runtime comparison is **not**
+  release qualification: a larger explicitly judged multilingual
+  hard-negative pool, broader code/photo coverage including photo-to-photo
+  negatives, lawful media labels, and installed-target matched quality
+  remain open. Preserve the release guard and default-hidden Gemma.
+- 2026-10-10: The [larger human-judged retrieval slice](../docs/evaluations/embeddinggemma-judged-2026-10-10.md)
+  replaced unjudged multilingual distractors with **explicit grade-0,
+  native-speaker-annotated MIRACL negatives**: 50 Swahili and 50 Bengali dev
+  questions, one judged positive and three pooled/judged hard negatives each,
+  from pinned ~70 MiB source archives. It expanded realistic CodeSearchNet
+  code from four to **14** human-graded queries, 48 snippets from
+  47 exact-revision permissively licensed repository sources; no external
+  passage, code, or photo bytes were checked in. The exact signed candidate
+  Gemma native CPU at 128/256/512/768d and E5 ONNX at 384d ranked identical
+  inputs locally on macOS ARM. At 768d Swahili hit@1 was **.86 Gemma / .72
+  E5** and Bengali **.80 / .66** over four judged candidates/query. Paired
+  per-query wins/ties/losses were 8/41/1 and 11/35/4; conditional bootstrap
+  intervals for Gemma-minus-E5 were [+.04,+.26] and [.00,+.28] (not
+  population-wide confidence). Code hit@1 was **.857/.857** at 768d, with
+  wide paired interval [-.214,+.214]; at 128d Gemma fell to .714. The
+  buffered-reader code failure persisted at every Gemma dimension despite
+  production-matching prompt roles and no token truncation of decisive
+  snippets. Its highest-ranked grade-0 distractor has only one annotator,
+  so attribution to model quality versus judgement/document context remains
+  uncertain. All per-query failures and the exact pinned-source hashes are
+  retained in machine reports. These deterministic four-candidate pools,
+  one-host model/runtime confound, Wikipedia source-rights caveat, sparse
+  code labels, untested installed-target quality, and still-small 4/5 photo
+  evidence **do not qualify Gemma for release**. Do not enable, publish or
+  change the guard.
+- 2026-10-10: The [bounded real-photo media follow-up](../docs/evaluations/embeddinggemma-media-2026-10-10.md)
+  added five distinct, individually live Flickr CC BY/BY-SA-verified COCO
+  photographs with human-validated SugarCrepe hard-negative captions (ten
+  photos total, three pinned annotation categories). Exact signed candidate
+  11640886748 ran natively on macOS ARM at 128/256/512/768 dimensions:
+  **8/10** correct caption preferences at each dimension. The prior
+  teddy-bear/sheep failure and a new kitchen attribute swap both ranked
+  their negative higher at every dimension. The committed per-pair report
+  and source/image hashes permit replay, but this opportunistic tiny sample
+  is not representative image retrieval or E5-matched evidence. No
+  independently judged, rights-verified photo-to-photo hard negatives
+  were obtained. Winoground Getty images returned HTTP 401 without accepting
+  gated terms; Clotho's positive audio captions lack judged hard negatives
+  (and require individual source-rights checks), while examined Charades-STA
+  temporal annotations lack judged negative intervals and verified clip
+  rights. No audio/video results were fabricated. These are still open
+  quality/release gates; do not enable, publish or change the guard.
+- 2026-10-10: Release owner authorized an **explicitly opt-in
+  EXPERIMENTAL** signed package so users can evaluate Gemma in practice
+  despite unresolved quality gates. The
+  [release decision](../docs/evaluations/embeddinggemma-experimental-release-2026-10-10.md)
+  records truthful E5-vs-Gemma and media limitations, 8 GiB model RAM
+  planning estimate, large download, CPU costs, and immutable per-library
+  dimensions/media choices. A separate reviewed experimental lock binds
+  the exact four-target candidate run 37974984924, source, release tag,
+  aggregate E5 negative-control report, catalogs and signed asset bytes.
+  The existing default release gate still rejects Gemma; a manual
+  publication override requires independent Gemma-specific approval and
+  signature verification. No artifact was published, no release was tagged,
+  and standard desktop builds are not enabled; concurrent UI/consent and
+  Metal/fallback integration must be combined and checked first. Task
+  remains in progress.
+- 2026-10-10: Integration correction: the reviewed candidate
+  37974984924 predates the automatic Metal worker and mixed-media UI.
+  Its experimental approval lock is now explicitly **blocked** (`noGo`),
+  so environment gates alone cannot publish it. A new signed four-target
+  candidate from the integrated source, matched release-tag URLs, and a
+  new reviewed experimental approval are mandatory. Standalone media
+  enrollment from authorized folders must also be verified end-to-end
+  before claiming mixed-media search in an experimental release.
+- 2026-10-10: An opt-in macOS ARM application integration probe of the
+  **old signed CPU worker** confirmed provider-enumerated, consented PNG,
+  MP3 and MP4 files are read through VFS and ingested over IPC; tenant
+  search returned all three and host citation resolution recovered their
+  enrolled source locations, while another tenant received no results.
+  This checks the host media path (not just direct worker ingestion) but
+  uses synthetic files on one host; it does not qualify the still-unbuilt
+  integrated automatic-Metal candidate, UI, or retrieval ranking quality.
+- 2026-10-09: Added a separate, explicitly selected `gemma-metal` image probe on
+  macOS using the pinned Lattice FP32 Metal GEMM primitive in the native vision
+  tower, vision projection, and soft-token language fusion. Default/managed
+  inference stays CPU; FP16 is not used. A pinned-checkpoint M4 Max test executes
+  620 Metal GEMM dispatches per image and matches CPU/upstream image vectors at
+  all 128/256/512/768 widths (cosine >0.99999). The measured direct test process
+  peaked at 2,521,169,920 resident bytes. End-to-end encode times remain about
+  28-31 seconds for CPU and 29-30 seconds for Metal on one patterned image,
+  with a 50.7-second Metal outlier on a repeat: **no acceleration is qualified**.
+  See `docs/evaluations/embeddinggemma-metal-image.md` for method and numbers.
+  Metal remains hidden; a device-resident vision attention path, supported-target
+  measurements, and fallback qualification are still required before exposure.
+- 2026-10-09: Repeated the exact optimized, pinned-checkpoint image benchmark
+  twice after the user's 68 GB MLX-Serve model was unloaded. At every width,
+  Metal remained 0.57-1.82 seconds slower per image than CPU; both runs
+  retained >0.99999 reference parity and 620 GPU GEMM dispatches, with
+  2.48-2.49 GB test-process peak resident memory. The prior 50.7-second
+  Metal outlier did not recur. A separate small `omp --model` process
+  remained, so these are not guaranteed GPU-exclusive measurements.
+  See `docs/evaluations/embeddinggemma-metal-image.md`; do not promote Metal
+  until stage-level profiling and a demonstrable benefit justify it.
+- 2026-10-09: Profiled that GEMM-only image probe and found vision attention
+  consumed 25.96-26.60 seconds on CPU, versus ~1.1 seconds spent in 620
+  synchronous Metal GEMM calls. Added FP32 Metal query/key and
+  probability/value GEMM in each vision head, retaining CPU softmax and the
+  CPU default. Pinned-checkpoint final release-mode image parity passed at
+  all 128/256/512/768 widths: Metal 5.64-5.83 seconds versus CPU 27.83-28.39
+  seconds for one patterned PNG, with 1,004 actual Metal dispatches and
+  2,523,824,128 bytes direct-process peak resident memory. This is a measured
+  ~4.8-5.0x local M4 Max speedup, not installed-worker or cross-platform
+  qualification. Keep Gemma Metal hidden until supported-target resource,
+  quality, and fallback gates have independent evidence.
+- 2026-10-10: Integrated automatic Metal image selection from
+  `gemma-metal-images` into the 0.5.0 experimental release source. Only
+  newly qualified macOS ARM Gemma candidate workers compile `gemma-metal`;
+  other targets and ordinary E5 candidates remain CPU-only. The historical
+  four-target Gemma candidate is explicitly no-go and cannot be reused.
+  A fresh four-target signed run, installed-worker checks, integrated
+  application/UI media verification, and an exact reviewed approval are
+  still required before publishing or tagging a desktop release.
+- 2026-10-10: Integrated signed candidate run 38077959991 at source
+  `c6c7a94058950bf2704aca484f9c4b77c6dd2dcf` passed four-target
+  catalog/payload verification, and exact installed run 38082235196 passed
+  13 offline automated lifecycle checks per target (including media and text
+  at all four dimensions); both runs skipped publication. The new signed
+  macOS worker passed host/VFS/IPC authorized mixed-media retrieval with CPU
+  fallback and selected FP32 Metal automatically for an image-only library.
+  The installed reports retain blocked preceding-candidate upgrade/rollback
+  and manual-required accessibility and packaged UI checks. The candidate
+  evaluation and experimental lock remain `noGo`; no release-owner approval,
+  tag, component publication, or desktop release has occurred. See the
+  [release decision](../docs/evaluations/embeddinggemma-experimental-release-2026-10-10.md)
+  for the exact retained artifact and expiry. Task remains in progress.
+- 2026-10-10: The existing experimental lock now binds the **new** signed
+  candidate's run/source, manifest and evaluation hashes, original model,
+  four catalogs and signatures; its decision stays `noGo` with
+  `blocked-pending-release-owner-review`. On macOS, the signed-worker
+  application regression additionally confirmed deletion revokes image
+  citation and file-primary display after reconciliation, and shuts down
+  cleanly before temporary index cleanup. Mock-client UI tests cover consent,
+  install progress/error states, deletion choices, media navigation, stale
+  results, and labelled/focusable controls, but not a real packaged native
+  UI or VoiceOver. The unpublished catalog and no-go gate preclude honest
+  live desktop installation preflight until explicit approval. Manual checks
+  and release-owner review remain outstanding.
+- 2026-10-10: A bounded isolated macOS ARM Tauri **development** UI preflight
+  used the locally development-signed `darwin-arm64-gemma-metal` bundle, not
+  the unpublished production-signed candidate. Native accessibility inspection
+  found labelled Gemma consent/media/dimension controls; explicit 768d
+  image/audio/video consent enabled installation, which displayed progress and
+  reached "Installed and enabled". Keyboard Return opened an isolated media
+  folder, and folder inclusion was confirmed with indexing generation 1.
+  Its catalog nevertheless contained zero documents, so native media results,
+  source opening, stale/unavailable behavior, and deletion were **not**
+  exercised. The fixtures sat under ignored `target/`; a retry with non-ignored
+  fixtures was blocked by a native window absent from accessibility despite a
+  running Tauri process. This is not proof of a general indexing defect.
+  No deliberate install-error or VoiceOver session
+  or Windows/Linux native UI review was performed. See the release decision
+  document for the exact observations and remaining gates; keep `noGo`.

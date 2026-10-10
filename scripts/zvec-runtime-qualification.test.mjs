@@ -205,6 +205,15 @@ test('Gemma qualification is explicit and uses verified originals on every targe
   const build = steps.find((step) => step.name === 'Build verified semantic release payloads');
   assert.match(build.run, /--gemma-original-files/u);
   assert.match(build.run, /GEMMA_ORIGINAL_FILES/u);
+  assert.equal(workflow.on.workflow_dispatch.inputs.approve_experimental_gemma.default, false);
+  const publish = workflow.jobs['semantic-publish'];
+  assert.match(publish.if, /SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED/u);
+  const experimental = publish.steps.find(
+    (step) => step.name === 'Check explicit experimental Gemma approval and exact signed candidate',
+  );
+  assert.match(experimental.if, /approve_experimental_gemma == true/u);
+  assert.match(experimental.run, /check-experimental-gemma-release\.mjs/u);
+  assert.match(JSON.stringify(publish), /semantic_production_catalog/u);
 });
 
 test('private qualification rejects release events and enabled release gates', () => {

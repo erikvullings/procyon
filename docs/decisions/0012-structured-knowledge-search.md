@@ -49,6 +49,18 @@ retrieval reason, route-specific ranks, final rank, availability, and authorizat
 navigation. An optional bounded trace explains planning and fallback decisions without exposing
 filesystem paths or document content.
 
+The Knowledge pane renders evidence with an image, audio, or video media type as a labelled
+source result with its bounded description, indexed modification time when known, and an Open
+control. It does not interpret media evidence as Markdown or construct a playable URL from an
+opaque source ID. Opening resolves the source again with workspace authorization and uses the
+ordinary file viewer in the opposite pane. File-primary semantic results can additionally show
+the existing authorized thumbnail for available, unchanged images and supported videos. Audio
+has a labelled source action rather than an inline player. Baseline document conversion does
+not index standalone image/audio/video bytes; these presentations apply to media evidence
+provided by a compatible converter/index, not to unsupported binary files automatically.
+Stale or unavailable file-primary hits suppress thumbnails in both the evidence panel and the
+directory row/grid, so a current or cached preview cannot be mistaken for indexed evidence.
+
 ## Authority and capability boundaries
 
 - `fm-semantic-worker` owns native indexing and candidate retrieval. It receives opaque identifiers

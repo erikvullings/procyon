@@ -17,6 +17,31 @@ on:
         required: false
         default: false
         type: boolean
+      qualify_installed_gemma:
+        description: Read-only installed lifecycle against a retained signed candidate
+        required: false
+        default: false
+        type: boolean
+      installed_candidate_run_id:
+        description: Exact retained candidate qualification run for installed Gemma checks
+        required: false
+        default: ""
+        type: string
+      installed_candidate_source_revision:
+        description: Exact 40-character candidate source revision for installed Gemma checks
+        required: false
+        default: ""
+        type: string
+      measure_installed_gemma:
+        description: With qualify_installed_gemma, measure the installed candidate at 128/256/512/768d
+        required: false
+        default: false
+        type: boolean
+      approve_experimental_gemma:
+        description: Explicitly publish only the reviewed signed Gemma candidate as EXPERIMENTAL (never used for qualification)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -24,7 +49,7 @@ permissions:
 jobs:
   semantic-payloads:
     name: Semantic payloads (${{ matrix.target }})
-    if: inputs.qualification_run_id == ''
+    if: inputs.qualification_run_id == '' && inputs.qualify_installed_gemma != true && inputs.measure_installed_gemma != true
     runs-on: ${{ matrix.runner }}
     environment: desktop-release
     timeout-minutes: 240
@@ -263,7 +288,7 @@ jobs:
 
   semantic-publish:
     name: Publish approved semantic component release
-    if: ${{ inputs.qualification_run_id != '' && vars.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true' }}
+    if: ${{ inputs.qualification_run_id != '' && inputs.qualify_installed_gemma != true && inputs.measure_installed_gemma != true && vars.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true' && (inputs.approve_experimental_gemma != true || vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED == 'true') }}
     runs-on: ubuntu-latest
     environment: desktop-release
     permissions:
@@ -284,6 +309,34 @@ jobs:
           path: semantic-catalogs
           github-token: ${{ github.token }}
           run-id: ${{ inputs.qualification_run_id }}
+      - name: Select exact reviewed Gemma candidate
+        id: gemma_candidate
+        if: inputs.approve_experimental_gemma == true
+        shell: bash
+        env:
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const manifest = JSON.parse(fs.readFileSync("docs/evaluations/semantic-gemma-experimental-v1.json", "utf8"));
+            if (manifest.decision !== "go" || manifest.experimentalGemma?.approval !== "explicit-opt-in-experimental" ||
+                manifest.qualificationRunId !== Number(process.env.QUALIFICATION_RUN_ID) ||
+                manifest.releaseTag !== process.env.RELEASE_TAG ||
+                !/^[0-9a-f]{40}$/.test(manifest.sourceRevision) ||
+                manifest.sourceRevision === "d3f921fe08e4994a905727a71af102979f4fbe23") {
+              throw new Error("a new exact reviewed Gemma candidate is required");
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `source_revision=${manifest.sourceRevision}\n`);
+          '
+      - name: Download exact Gemma candidate fingerprint lock
+        if: inputs.approve_experimental_gemma == true
+        uses: actions/download-artifact@v8
+        with:
+          name: semantic-component-candidate-${{ steps.gemma_candidate.outputs.source_revision }}
+          path: candidate-lock
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.qualification_run_id }}
       - name: Collect exact retained component assets
         run: >
           node scripts/collect-semantic-release-assets.mjs
@@ -295,12 +348,14 @@ jobs:
           semantic-release-assets/semantic-production-evaluation.json
           docs/evaluations/semantic-production-v1.json
       - name: Match exact evaluated payloads to reviewed evidence
+        if: inputs.approve_experimental_gemma != true
         run: >
           node scripts/check-semantic-release-preconditions.mjs
           --policy experimental-alpha
           --report semantic-release-assets/semantic-production-evaluation.json
           --approved-report docs/evaluations/semantic-production-v1.json
       - name: Match exact assets to the approved component lock
+        if: inputs.approve_experimental_gemma != true
         env:
           QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
           RELEASE_TAG: ${{ inputs.release_tag }}
@@ -310,18 +365,262 @@ jobs:
           "$QUALIFICATION_RUN_ID"
           "$RELEASE_TAG"
           docs/evaluations/semantic-component-release-v1.json
+      - name: Check explicit experimental Gemma approval and exact signed candidate
+        if: inputs.approve_experimental_gemma == true
+        env:
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          node scripts/check-experimental-gemma-release.mjs \
+            semantic-release-assets candidate-lock \
+            docs/evaluations/semantic-gemma-experimental-v1.json
+          node -e '
+            const approval = require("./docs/evaluations/semantic-gemma-experimental-v1.json");
+            if (String(approval.qualificationRunId) !== process.env.QUALIFICATION_RUN_ID ||
+                approval.releaseTag !== process.env.RELEASE_TAG) {
+              throw new Error("experimental Gemma dispatch run/tag differs from reviewed approval");
+            }
+          '
+      - name: Verify four signed Gemma catalogs with the release public key
+        if: inputs.approve_experimental_gemma == true
+        env:
+          VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
+        run: |
+          test -n "$VERIFYING_KEY_BASE64"
+          printf '%s' "$VERIFYING_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/semantic-catalog.pub"
+          for target in linux-aarch64 linux-x86_64 macos-aarch64 windows-x86_64; do
+            mkdir "$RUNNER_TEMP/catalog-payloads-$target"
+            GEMMA_TARGET="$target" node -e '
+              const fs = require("node:fs");
+              const path = require("node:path");
+              const target = process.env.GEMMA_TARGET;
+              const catalog = require(`./semantic-release-assets/semantic-catalog-${target}.json`);
+              for (const { id } of catalog.catalog.artifacts) {
+                if (!/^[a-zA-Z0-9._-]+$/.test(id)) throw new Error(`invalid artifact id: ${id}`);
+                fs.linkSync(path.join("semantic-release-assets", id),
+                  path.join(process.env.RUNNER_TEMP, `catalog-payloads-${target}`, id));
+              }
+            '
+            cargo run --quiet --locked -p fm-semantic-components \
+              --example semantic_production_catalog -- \
+              verify "semantic-release-assets/semantic-catalog-$target.json" \
+              "semantic-release-assets/semantic-catalog-$target.sig" \
+              "$RUNNER_TEMP/catalog-payloads-$target" "$RUNNER_TEMP/semantic-catalog.pub"
+          done
       - name: Publish immutable semantic component release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          APPROVE_EXPERIMENTAL_GEMMA: ${{ inputs.approve_experimental_gemma }}
         run: |
-          SOURCE_REVISION="$(
-            jq -r '.sourceRevision' docs/evaluations/semantic-component-release-v1.json
-          )"
+          if [[ "$APPROVE_EXPERIMENTAL_GEMMA" == "true" ]]; then
+            SOURCE_REVISION="$(jq -r '.sourceRevision' docs/evaluations/semantic-gemma-experimental-v1.json)"
+            RELEASE_NOTES="$(cat docs/evaluations/embeddinggemma-experimental-release-2026-10-10.md)"
+          else
+            SOURCE_REVISION="$(jq -r '.sourceRevision' docs/evaluations/semantic-component-release-v1.json)"
+            RELEASE_NOTES="Qualified optional semantic components for Procyon."
+          fi
           test -z "$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")"
           gh release create "$RELEASE_TAG" \
             --target "$SOURCE_REVISION" \
             --title "$RELEASE_TAG" \
             --latest=false \
-            --notes "Qualified optional semantic components for Procyon." \
+            --notes "$RELEASE_NOTES" \
             semantic-release-assets/*
+
+  installed-gemma-qualification:
+    name: Installed Gemma (${{ matrix.target }})
+    if: inputs.qualify_installed_gemma == true && inputs.qualification_run_id == ''
+    runs-on: ${{ matrix.runner }}
+    environment: desktop-release
+    timeout-minutes: 180
+    permissions:
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-aarch64
+            runner: ubuntu-24.04-arm
+          - target: linux-x86_64
+            runner: ubuntu-22.04
+          - target: windows-x86_64
+            runner: windows-latest
+          - target: macos-aarch64
+            runner: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/download-artifact@v8
+        with:
+          name: semantic-component-candidate-${{ inputs.installed_candidate_source_revision }}
+          path: candidate
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.installed_candidate_run_id }}
+      - name: Require exact retained candidate identity
+        shell: bash
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.installed_candidate_run_id }}
+          CANDIDATE_SOURCE_REVISION: ${{ inputs.installed_candidate_source_revision }}
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const manifest = JSON.parse(fs.readFileSync("candidate/semantic-component-release.json", "utf8"));
+            if (!/^[1-9][0-9]*$/.test(process.env.CANDIDATE_RUN_ID) ||
+                !/^[0-9a-f]{40}$/.test(process.env.CANDIDATE_SOURCE_REVISION) ||
+                manifest.qualificationRunId !== Number(process.env.CANDIDATE_RUN_ID) ||
+                manifest.sourceRevision !== process.env.CANDIDATE_SOURCE_REVISION ||
+                manifest.sourceRevision === "d3f921fe08e4994a905727a71af102979f4fbe23") {
+              throw new Error("installed Gemma requires a new exact retained candidate");
+            }
+          '
+      - name: Stage exact signed target payloads
+        shell: bash
+        env:
+          GEMMA_TARGET: ${{ matrix.target }}
+          VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
+        run: |
+          test -n "$VERIFYING_KEY_BASE64"
+          printf '%s' "$VERIFYING_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/semantic-catalog.pub"
+          node -e '
+            const fs = require("node:fs");
+            const path = require("node:path");
+            const catalog = JSON.parse(fs.readFileSync(path.join("candidate", `semantic-catalog-${process.env.GEMMA_TARGET}.json`), "utf8"));
+            fs.mkdirSync("candidate-payloads");
+            for (const { id } of catalog.catalog.artifacts) {
+              if (!/^[a-zA-Z0-9._-]+$/.test(id)) throw new Error(`invalid artifact id: ${id}`);
+              fs.linkSync(path.join("candidate", id), path.join("candidate-payloads", id));
+            }
+            if (process.env.GEMMA_TARGET === "linux-x86_64") {
+              const onnx = catalog.catalog.artifacts.find(({ component_id }) => component_id === "procyon.semantic.onnx-runtime");
+              if (!onnx) throw new Error("signed Linux x86 catalog has no ONNX Runtime");
+              fs.mkdirSync("candidate-onnx-runtime");
+              for (const name of ["libonnxruntime.so", "libonnxruntime.so.1"]) {
+                fs.linkSync(path.join("candidate", onnx.id), path.join("candidate-onnx-runtime", name));
+              }
+              fs.appendFileSync(process.env.GITHUB_ENV, `ORT_LIB_PATH=${path.resolve("candidate-onnx-runtime")}\nORT_PREFER_DYNAMIC_LINK=1\nORT_SKIP_DOWNLOAD=1\n`);
+            }
+          '
+      - name: Verify signed catalog and exact target payloads before linking
+        shell: bash
+        env:
+          GEMMA_TARGET: ${{ matrix.target }}
+        run: |
+          cargo run --quiet -p fm-semantic-components \
+            --example semantic_production_catalog -- \
+            verify "candidate/semantic-catalog-$GEMMA_TARGET.json" \
+            "candidate/semantic-catalog-$GEMMA_TARGET.sig" \
+            candidate-payloads "$RUNNER_TEMP/semantic-catalog.pub"
+      - name: Configure the MSVC tool environment
+        if: matrix.target == 'windows-x86_64'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Install the configured macOS linker
+        if: matrix.target == 'macos-aarch64'
+        run: brew install lld
+      - name: Select the MSVC linker
+        if: matrix.target == 'windows-x86_64'
+        shell: pwsh
+        run: |
+          $linker = Join-Path $env:VCToolsInstallDir 'bin\Hostx64\x64\link.exe'
+          if (-not (Test-Path -PathType Leaf $linker)) {
+            throw "MSVC linker was not found at $linker"
+          }
+          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" >> $env:GITHUB_ENV
+      - name: Build existing offline media smoke
+        shell: bash
+        run: |
+          if ! cargo test -p fm-semantic-worker --features gemma-native \
+            --test packaged_production --no-run --message-format=json \
+            > "$RUNNER_TEMP/gemma-test-build.json"; then
+            node -e '
+              const fs = require("node:fs");
+              for (const line of fs.readFileSync(process.argv[1], "utf8").trim().split("\n")) {
+                const message = JSON.parse(line);
+                if (message.reason === "compiler-message" && message.message.level === "error") {
+                  console.error(message.message.rendered);
+                }
+              }
+            ' "$RUNNER_TEMP/gemma-test-build.json"
+            exit 1
+          fi
+          node -e '
+            const fs = require("node:fs");
+            const messages = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").map((line) => JSON.parse(line));
+            const tests = messages.filter((message) => message.reason === "compiler-artifact" && message.target.name === "packaged_production" && message.executable);
+            if (tests.length !== 1) throw new Error(`expected one packaged_production executable, got ${tests.length}`);
+            fs.appendFileSync(process.env.GITHUB_ENV, `PROCYON_GEMMA_INSTALLED_TEST=${tests[0].executable}\n`);
+          ' "$RUNNER_TEMP/gemma-test-build.json"
+      - name: Qualify exact signed installed Gemma lifecycle offline
+        shell: bash
+        env:
+          GEMMA_TARGET: ${{ matrix.target }}
+          MEASURE_INSTALLED_GEMMA: ${{ inputs.measure_installed_gemma }}
+        run: |
+          if [[ "$MEASURE_INSTALLED_GEMMA" == "true" ]]; then
+            export PROCYON_GEMMA_MEASURE_DIR="$RUNNER_TEMP/gemma-cpu"
+          fi
+          cargo run --quiet -p fm-semantic-components \
+            --example qualify_semantic_lifecycle -- \
+            "candidate/semantic-catalog-$GEMMA_TARGET.json" \
+            "candidate/semantic-catalog-$GEMMA_TARGET.sig" \
+            candidate-payloads \
+            "$RUNNER_TEMP/semantic-catalog.pub" \
+            "$RUNNER_TEMP/gemma-installed-lifecycle" \
+            "$RUNNER_TEMP/gemma-installed-report.json"
+      - name: Record runner hardware and bounded CPU measurements
+        if: inputs.measure_installed_gemma == true
+        shell: bash
+        env:
+          GEMMA_TARGET: ${{ matrix.target }}
+          CANDIDATE_RUN_ID: ${{ inputs.installed_candidate_run_id }}
+          CANDIDATE_SOURCE_REVISION: ${{ inputs.installed_candidate_source_revision }}
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const os = require("node:os");
+            const path = require("node:path");
+            const root = path.join(process.env.RUNNER_TEMP, "gemma-cpu");
+            const dimensions = [128, 256, 512, 768].map((size) =>
+              JSON.parse(fs.readFileSync(path.join(root, `${size}.json`), "utf8")));
+            const lifecycle = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, "gemma-installed-report.json"), "utf8"));
+            if (lifecycle.target !== process.env.GEMMA_TARGET || lifecycle.networkArtifactReads !== 0 ||
+                lifecycle.checks.filter(({ status }) => status === "pass").length !== 13) {
+              throw new Error("signed installed lifecycle report did not pass before measurement");
+            }
+            if (dimensions.some((report, index) => report.dimensions !== [128, 256, 512, 768][index] ||
+                report.workerPeakRssBytes <= 0 || report.measurements.length !== 4)) {
+              throw new Error("missing or invalid per-dimension CPU measurement");
+            }
+            fs.writeFileSync(path.join(root, "resource-report.json"), JSON.stringify({
+              schemaVersion: 1,
+              target: process.env.GEMMA_TARGET,
+              qualificationRunId: process.env.GITHUB_RUN_ID,
+              qualificationSourceRevision: process.env.GITHUB_SHA,
+              candidateRunId: process.env.CANDIDATE_RUN_ID,
+              candidateSourceRevision: process.env.CANDIDATE_SOURCE_REVISION,
+              catalogRevision: lifecycle.catalogRevision,
+              catalogSha256: lifecycle.catalogSha256,
+              hardware: {
+                runnerImage: process.env.ImageOS ?? null,
+                runnerName: process.env.RUNNER_NAME,
+                cpuModel: os.cpus()[0]?.model,
+                logicalCpuCount: os.cpus().length,
+                totalMemoryBytes: os.totalmem(),
+                platform: os.platform(),
+                arch: os.arch(),
+                osRelease: os.release(),
+              },
+              dimensions,
+              limitations: "Single synthetic asset per modality and three text queries; fresh process and index per dimension; CPU runner class is virtualized; wall includes IPC and queueing; no quality labels, GPU measurements, sustained throughput, or user workload. macOS peak is sampled, not a kernel high-water mark.",
+            }, null, 2));
+          '
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: installed-gemma-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/gemma-installed-report.json
+            ${{ runner.temp }}/gemma-cpu/*.json
+          if-no-files-found: warn
+          retention-days: 14

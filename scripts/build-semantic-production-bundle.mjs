@@ -32,6 +32,13 @@ export function supportedSemanticTarget(platform = process.platform, architectur
   return { os: target.operatingSystem, arch: target.architecture, rust: target.rustTarget };
 }
 
+export function productionWorkerFeatures(target, gemmaOriginalFiles) {
+  if (!gemmaOriginalFiles) return 'semantic-runtime';
+  return target.os === 'macos' && target.arch === 'aarch64'
+    ? 'gemma-native,gemma-metal'
+    : 'gemma-native';
+}
+
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: repositoryRoot,
@@ -259,7 +266,7 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
       '-p',
       'fm-semantic-worker',
       '--features',
-      gemmaOriginalFiles ? 'gemma-native' : 'semantic-runtime',
+      productionWorkerFeatures(target, gemmaOriginalFiles),
       '--bin',
       'fm-semantic-worker',
     ],

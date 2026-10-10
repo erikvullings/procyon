@@ -44,6 +44,7 @@ import { lastPathSegment } from '../navigation/navigation';
 import { copyText } from '../preview/clipboard';
 import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
 import { decodeEvidenceTitle } from './evidence-title';
+import { mediaDescription, mediaKind, mediaLabel, mediaModifiedLabel } from './media-evidence';
 
 /** Everything the shell knows about the default scope when the dialog opens. */
 export interface KnowledgeSearchDialogAttrs {
@@ -1425,6 +1426,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           : 'resultRelevanceLow';
     const relevance = t('knowledgeSearch', relevanceKey);
     const openable = !row.unavailable && attrs.onOpenSource !== undefined;
+    const kind = mediaKind(row.mediaType);
+    const modifiedLabel = mediaModifiedLabel(row.modifiedAtMs);
     const states = [
       row.adjacent ? t('knowledgeSearch', 'adjacentEvidence') : undefined,
       row.generated ? t('knowledgeSearch', 'generatedEvidence') : undefined,
@@ -1463,12 +1466,31 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           ),
         ]),
       ]),
-      m(
-        '.fm-knowledge-result-markdown',
-        row.mediaType === 'application/pdf'
-          ? m('p', row.content)
-          : m.trust(safeMarkdownHtml(row.content)),
-      ),
+      kind === undefined
+        ? m(
+            '.fm-knowledge-result-markdown',
+            row.mediaType === 'application/pdf'
+              ? m('p', row.content)
+              : m.trust(safeMarkdownHtml(row.content)),
+          )
+        : m('.fm-knowledge-media-evidence', [
+            m('.fm-knowledge-media-summary', [
+              m('strong', mediaLabel(kind)),
+              modifiedLabel === undefined
+                ? undefined
+                : m('small.fm-knowledge-media-modified', modifiedLabel),
+              m(
+                'button.fm-knowledge-media-open',
+                {
+                  type: 'button',
+                  disabled: !openable,
+                  onclick: () => void openSource(attrs, row),
+                },
+                t('search', 'openMedia', { type: mediaLabel(kind).toLowerCase() }),
+              ),
+            ]),
+            m('p', mediaDescription(row.excerpt)),
+          ]),
       states.length === 0
         ? undefined
         : m(

@@ -735,6 +735,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "block"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
+
+[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2792,7 +2798,7 @@ dependencies = [
 
 [[package]]
 name = "fm-application"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2866,7 +2872,7 @@ dependencies = [
 
 [[package]]
 name = "fm-archive"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "bzip2",
@@ -2890,7 +2896,7 @@ dependencies = [
 
 [[package]]
 name = "fm-auth-oauth"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "rand 0.10.2",
@@ -2907,7 +2913,7 @@ dependencies = [
 
 [[package]]
 name = "fm-checksum"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "blake3",
  "crc32fast",
@@ -2929,7 +2935,7 @@ dependencies = [
 
 [[package]]
 name = "fm-cli"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2940,7 +2946,7 @@ dependencies = [
 
 [[package]]
 name = "fm-comparison"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "fm-checksum",
@@ -2958,7 +2964,7 @@ dependencies = [
 
 [[package]]
 name = "fm-connections"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2974,7 +2980,7 @@ dependencies = [
 
 [[package]]
 name = "fm-credentials"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -2987,7 +2993,7 @@ dependencies = [
 
 [[package]]
 name = "fm-credentials-macos"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "fm-credentials",
@@ -2998,7 +3004,7 @@ dependencies = [
 
 [[package]]
 name = "fm-credentials-windows"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "fm-credentials",
@@ -3009,7 +3015,7 @@ dependencies = [
 
 [[package]]
 name = "fm-desktop"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "dirs",
@@ -3030,6 +3036,7 @@ dependencies = [
  "fm-semantic-worker",
  "fm-transport-dto",
  "fs2",
+ "image",
  "portable-pty",
  "raw-window-handle",
  "reqwest",
@@ -3058,7 +3065,7 @@ dependencies = [
 
 [[package]]
 name = "fm-domain"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "criterion",
@@ -3071,7 +3078,7 @@ dependencies = [
 
 [[package]]
 name = "fm-events"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "fm-domain",
@@ -3083,7 +3090,7 @@ dependencies = [
 
 [[package]]
 name = "fm-metadata"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "flate2",
  "image",
@@ -3097,7 +3104,7 @@ dependencies = [
 
 [[package]]
 name = "fm-operations"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3115,7 +3122,7 @@ dependencies = [
 
 [[package]]
 name = "fm-platform"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "bitflags 2.13.1",
  "fm-domain",
@@ -3124,7 +3131,7 @@ dependencies = [
 
 [[package]]
 name = "fm-platform-macos"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "block2",
  "dirs",
@@ -3144,7 +3151,7 @@ dependencies = [
 
 [[package]]
 name = "fm-platform-windows"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "fm-domain",
  "fm-platform",
@@ -3158,7 +3165,7 @@ dependencies = [
 
 [[package]]
 name = "fm-plugin-api"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3168,7 +3175,7 @@ dependencies = [
 
 [[package]]
 name = "fm-plugin-runtime"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "fm-plugin-api",
  "mlua",
@@ -3182,7 +3189,7 @@ dependencies = [
 
 [[package]]
 name = "fm-pptx-renderer"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "ooxmlsdk-pdf",
  "thiserror 2.0.20",
@@ -3191,7 +3198,7 @@ dependencies = [
 
 [[package]]
 name = "fm-search"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3209,7 +3216,7 @@ dependencies = [
 
 [[package]]
 name = "fm-search-acceleration"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "thiserror 2.0.20",
  "tokio-util",
@@ -3217,7 +3224,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-components"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "ed25519-dalek",
  "fs2",
@@ -3235,7 +3242,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-conversion"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "blake3",
  "calamine",
@@ -3251,7 +3258,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-docling"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "docling-core",
  "docling-pdf",
@@ -3263,7 +3270,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-library"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "fm-domain",
  "fm-settings",
@@ -3278,7 +3285,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-protocol"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "prost",
  "prost-build",
@@ -3289,7 +3296,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-worker"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "caseless",
  "fm-metadata",
@@ -3323,7 +3330,7 @@ dependencies = [
 
 [[package]]
 name = "fm-server"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "axum",
  "axum-server",
@@ -3368,7 +3375,7 @@ dependencies = [
 
 [[package]]
 name = "fm-settings"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "dirs",
  "fm-domain",
@@ -3381,7 +3388,7 @@ dependencies = [
 
 [[package]]
 name = "fm-ssh"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3401,7 +3408,7 @@ dependencies = [
 
 [[package]]
 name = "fm-test-support"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3409,7 +3416,7 @@ dependencies = [
 
 [[package]]
 name = "fm-transport-dto"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "fm-domain",
@@ -3422,7 +3429,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vcs-status"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "dunce",
@@ -3436,7 +3443,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "bitflags 2.13.1",
@@ -3452,7 +3459,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-ftp"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "fm-domain",
@@ -3468,7 +3475,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-local"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3487,7 +3494,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-onedrive"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3507,7 +3514,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-s3"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3524,7 +3531,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-sftp"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3541,7 +3548,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-webdav"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -5551,6 +5558,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-fann"
+version = "0.11.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=17915f3748a4047c0af61bd8bc7066d1dccf24b4#17915f3748a4047c0af61bd8bc7066d1dccf24b4"
+dependencies = [
+ "rand 0.8.8",
+ "rand_distr",
+ "thiserror 2.0.20",
+ "tracing",
+]
+
+[[package]]
 name = "lattice-inference"
 version = "0.11.0"
 source = "git+https://github.com/ohdearquant/lattice.git?rev=17915f3748a4047c0af61bd8bc7066d1dccf24b4#17915f3748a4047c0af61bd8bc7066d1dccf24b4"
@@ -5560,8 +5578,11 @@ dependencies = [
  "half",
  "image",
  "indexmap 2.14.0",
+ "lattice-fann",
  "libc",
  "memmap2",
+ "metal",
+ "objc",
  "rayon",
  "rustc-hash",
  "serde",
@@ -5889,6 +5910,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc04a4c58212d57930a24bf47d3fa87485264a3a054e9c10e042eb373573ad3c"
 
 [[package]]
+name = "malloc_buf"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6001,6 +6031,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "metal"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7047791b5bc903b8cd963014b355f71dc9864a9a0b727057676c1dcae5cbc15"
+dependencies = [
+ "bitflags 2.13.1",
+ "block",
+ "core-graphics-types",
+ "foreign-types 0.5.0",
+ "log",
+ "objc",
+ "paste",
 ]
 
 [[package]]
@@ -6428,6 +6473,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
+ "libm",
 ]
 
 [[package]]
@@ -6450,6 +6496,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "objc"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "915b1b472bc21c53464d6c8461c9d3af805ba1ef837e1cac254428f4a77177b1"
+dependencies = [
+ "malloc_buf",
 ]
 
 [[package]]
@@ -8219,6 +8274,16 @@ name = "rand_core"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
+
+[[package]]
+name = "rand_distr"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
+dependencies = [
+ "num-traits",
+ "rand 0.8.8",
+]
 
 [[package]]
 name = "rand_pcg"

@@ -12,7 +12,15 @@ jobs:
     name: Create GitHub prerelease
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    environment: desktop-release
     steps:
+      - uses: actions/checkout@v7
+      - name: Require exact experimental Gemma approval before publishing
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
+        run: node scripts/check-desktop-gemma-release.mjs
       - uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
@@ -35,6 +43,12 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Require exact experimental Gemma desktop approval
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
+        run: node scripts/check-desktop-gemma-release.mjs
       - name: Compile the production semantic catalog trust key
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
@@ -43,10 +57,16 @@ jobs:
           node scripts/export-semantic-verifying-key.mjs
           "$GITHUB_ENV" "$RUNNER_TEMP/semantic-catalog.pub"
       - name: Fetch the approved macOS arm64 semantic catalog
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true'
         run: >
           node scripts/fetch-approved-semantic-catalog.mjs
           macos-aarch64 apps/fm-desktop/src-tauri/resources/semantic
+      - name: Fetch the approved experimental macOS arm64 semantic catalog
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          macos-aarch64 apps/fm-desktop/src-tauri/resources/semantic
+          docs/evaluations/semantic-gemma-experimental-v1.json
       - name: Verify the approved semantic catalog signature
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         run: >
@@ -120,7 +140,13 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm run build:tauri --target universal-apple-darwin
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
+        run: |
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" ]]; then
+            pnpm run build:tauri --target universal-apple-darwin --features semantic-gemma
+          else
+            pnpm run build:tauri --target universal-apple-darwin
+          fi
       - name: Notarize and staple the DMG
         env:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
@@ -213,6 +239,12 @@ jobs:
             patchelf
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Require exact experimental Gemma desktop approval
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
+        run: node scripts/check-desktop-gemma-release.mjs
       - name: Compile the production semantic catalog trust key
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
@@ -221,10 +253,16 @@ jobs:
           node scripts/export-semantic-verifying-key.mjs
           "$GITHUB_ENV" "$RUNNER_TEMP/semantic-catalog.pub"
       - name: Fetch the approved Linux x86-64 semantic catalog
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true'
         run: >
           node scripts/fetch-approved-semantic-catalog.mjs
           linux-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+      - name: Fetch the approved experimental Linux x86-64 semantic catalog
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          linux-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+          docs/evaluations/semantic-gemma-experimental-v1.json
       - name: Verify the approved semantic catalog signature
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         run: >
@@ -250,7 +288,13 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm run build:tauri
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
+        run: |
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" ]]; then
+            pnpm run build:tauri --features semantic-gemma
+          else
+            pnpm run build:tauri
+          fi
       - uses: softprops/action-gh-release@v3
         if: github.event_name == 'push'
         with:
@@ -275,6 +319,12 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Require exact experimental Gemma desktop approval
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
+        run: node scripts/check-desktop-gemma-release.mjs
       - name: Compile the production semantic catalog trust key
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
@@ -283,10 +333,16 @@ jobs:
           node scripts/export-semantic-verifying-key.mjs
           "$env:GITHUB_ENV" "$env:RUNNER_TEMP/semantic-catalog.pub"
       - name: Fetch the approved Windows x86-64 semantic catalog
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true'
         run: >
           node scripts/fetch-approved-semantic-catalog.mjs
           windows-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+      - name: Fetch the approved experimental Windows x86-64 semantic catalog
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          windows-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+          docs/evaluations/semantic-gemma-experimental-v1.json
       - name: Verify the approved semantic catalog signature
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         run: >
@@ -309,10 +365,17 @@ jobs:
         if: vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED == 'true'
         run: node scripts/check-knowledge-search-preconditions.mjs --allow-unqualified
       - name: Build unsigned Windows installers
+        shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm run build:tauri
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
+        run: |
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" ]]; then
+            pnpm run build:tauri --features semantic-gemma
+          else
+            pnpm run build:tauri
+          fi
       - uses: softprops/action-gh-release@v3
         if: github.event_name == 'push'
         with:

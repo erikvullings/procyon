@@ -1,5 +1,6 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import type { KeybindingRuntime } from '../../keybindings/dispatcher';
 import type {
   ActionDescriptor,
@@ -20,6 +21,7 @@ import type {
 import type { GridIconSize } from '../directory-table/directory-grid';
 import type { DirectoryColumnDescriptor } from '../directory-table/directory-table';
 import type { NativeIconLoader } from '../directory-table/native-icon-loader';
+import { ThumbnailLoader } from '../directory-table/thumbnail-loader';
 import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
 import type { SearchPresentation } from '../search/search-presentation';
@@ -206,6 +208,7 @@ type FlatAttrsInput = Partial<{
   formatSettings: EntryFormatSettings;
   pluginColumns: readonly DirectoryColumnDescriptor[];
   nativeIconLoader: NativeIconLoader;
+  thumbnailLoader: ThumbnailLoader;
   viewMode: 'table' | 'grid';
   iconSize: GridIconSize;
   onViewModeChange: (viewMode: 'table' | 'grid', iconSize: GridIconSize) => void;
@@ -304,6 +307,7 @@ function attrs(input: FlatAttrsInput = {}): PaneAttrs {
       formatSettings: input.formatSettings,
       pluginColumns: input.pluginColumns,
       nativeIconLoader: input.nativeIconLoader,
+      thumbnailLoader: input.thumbnailLoader,
       viewMode: input.viewMode,
       iconSize: input.iconSize,
       onViewModeChange: input.onViewModeChange,
@@ -893,6 +897,201 @@ describe('Pane search breadcrumb rendering', () => {
     );
     root.querySelector<HTMLButtonElement>('.fm-semantic-evidence-actions button')?.click();
     expect(onOpenEntry).toHaveBeenCalledWith(selectedEntry, 'Beste bewijs voor het rapport.');
+  });
+
+  it.each([
+    ['image/png', 'Image', 'Open image', true],
+    ['audio/mpeg', 'Audio', 'Open audio', false],
+    ['video/mp4', 'Video', 'Open video', true],
+  ])(
+    'renders %s evidence and opens the file without searching its excerpt',
+    (mimeType, label, action, hasThumbnail) => {
+      const onOpenEntry = vi.fn();
+      const source = entries[0];
+      if (source === undefined) throw new Error('missing entry fixture');
+      const entry: EntrySummary = {
+        ...source,
+        mimeType,
+        extension: mimeType === 'image/png' ? 'png' : mimeType === 'audio/mpeg' ? 'mp3' : 'mp4',
+        modifiedAt: '2026-04-12T09:30:00.000Z',
+      };
+      const thumbnailLoader = new ThumbnailLoader(new MockFileManagerClient());
+      const rowThumbnail = vi.spyOn(thumbnailLoader, 'thumbnailDataUri').mockReturnValue(undefined);
+      const viewport = thumbnailLoader.createViewport();
+      const thumbnailDataUri = vi
+        .spyOn(viewport, 'thumbnailDataUri')
+        .mockReturnValue('data:image/jpeg;base64,/9j/4A==');
+      const dispose = vi.spyOn(viewport, 'dispose');
+      vi.spyOn(thumbnailLoader, 'createViewport').mockReturnValue(viewport);
+      mount(
+        attrs({
+          entries: [entry],
+          selectedEntryIds: new Set([entry.id]),
+          onOpenEntry,
+          thumbnailLoader,
+          searchPresentation: {
+            kind: 'semantic',
+            term: 'landscape',
+            executionMode: 'semantic',
+            semanticResults: [
+              {
+                entryId: entry.id,
+                location: entry.location,
+                score: 0.91,
+                bestEvidence: {
+                  recordId: 'media-record',
+                  sourceId: 'media-source',
+                  score: 0.91,
+                  chunkKind: 'chunk',
+                  excerpt: '<|image|>',
+                  provenanceJson: '{}',
+                  indexedContentHash: 'sha256:media',
+                  generation: 1,
+                  available: true,
+                  stale: false,
+                  generated: false,
+                  sourcePosition: 0,
+                },
+                additionalEvidence: [],
+                additionalSourceIds: [],
+              },
+            ],
+          },
+        }),
+      );
+      expect(root.querySelector('.fm-semantic-media')?.textContent).toContain(label);
+      expect(root.querySelector('.fm-semantic-media')?.textContent).toContain('Modified');
+      expect(root.querySelector('.fm-semantic-evidence-item')?.textContent).not.toContain(
+        '<|image|>',
+      );
+      expect(root.querySelector('.fm-semantic-evidence-item')?.textContent).toContain(
+        'Open the source',
+      );
+      expect(root.querySelector('.fm-semantic-media-thumbnail') !== null).toBe(hasThumbnail);
+      expect(thumbnailDataUri).toHaveBeenCalledTimes(hasThumbnail ? 1 : 0);
+      expect(rowThumbnail).toHaveBeenCalledTimes(mimeType === 'video/mp4' ? 0 : 1);
+      const open = [
+        ...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-evidence-actions button'),
+      ].find((button) => button.textContent === action);
+      open?.click();
+      expect(onOpenEntry).toHaveBeenCalledWith(entry, undefined);
+      m.mount(root, null);
+      expect(dispose).toHaveBeenCalledTimes(hasThumbnail ? 1 : 0);
+    },
+  );
+
+  it('does not fetch a thumbnail for stale media or open an unavailable source', () => {
+    const source = entries[0];
+    if (source === undefined) throw new Error('missing entry fixture');
+    const entry: EntrySummary = { ...source, mimeType: 'image/png', extension: 'png' };
+    const onOpenEntry = vi.fn();
+    const thumbnailLoader = new ThumbnailLoader(new MockFileManagerClient());
+    const rowThumbnail = vi.spyOn(thumbnailLoader, 'thumbnailDataUri');
+    const createViewport = vi.spyOn(thumbnailLoader, 'createViewport');
+    mount(
+      attrs({
+        entries: [entry],
+        selectedEntryIds: new Set([entry.id]),
+        onOpenEntry,
+        thumbnailLoader,
+        searchPresentation: {
+          kind: 'semantic',
+          term: 'landscape',
+          executionMode: 'semantic',
+          semanticResults: [
+            {
+              entryId: entry.id,
+              location: entry.location,
+              score: 0.7,
+              bestEvidence: {
+                recordId: 'old-media',
+                sourceId: 'old-source',
+                score: 0.7,
+                chunkKind: 'chunk',
+                excerpt: 'Landscape',
+                provenanceJson: '{}',
+                indexedContentHash: 'sha256:old',
+                generation: 1,
+                available: false,
+                stale: true,
+                generated: false,
+                sourcePosition: 0,
+              },
+              additionalEvidence: [],
+              additionalSourceIds: [],
+            },
+          ],
+        },
+      }),
+    );
+    expect(createViewport).not.toHaveBeenCalled();
+    expect(rowThumbnail).not.toHaveBeenCalled();
+    expect(root.querySelector('.fm-semantic-evidence')?.textContent).toContain(
+      'Source is unavailable',
+    );
+    expect(root.querySelector('.fm-semantic-evidence')?.textContent).toContain(
+      'Indexed content has changed',
+    );
+    const open = [
+      ...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-evidence-actions button'),
+    ].find((button) => button.textContent === 'Open image');
+    expect(open?.disabled).toBe(true);
+    open?.click();
+    expect(onOpenEntry).not.toHaveBeenCalled();
+  });
+
+  it('suppresses stale media thumbnails in grid view while keeping available media visible', () => {
+    const source = entries[0];
+    if (source === undefined) throw new Error('missing entry fixture');
+    const image: EntrySummary = { ...source, mimeType: 'image/png', extension: 'png' };
+    const current: EntrySummary = {
+      ...source,
+      id: 'current-image' as EntryId,
+      location: { providerId: 'file', uri: 'file:///home/erik/current.png' },
+      name: 'current.png',
+      mimeType: 'image/png',
+      extension: 'png',
+    };
+    const evidence = (entry: EntrySummary, stale: boolean) => ({
+      entryId: entry.id,
+      location: entry.location,
+      score: 0.8,
+      bestEvidence: {
+        recordId: entry.id,
+        sourceId: entry.id,
+        score: 0.8,
+        chunkKind: 'chunk',
+        excerpt: 'landscape',
+        provenanceJson: '{}',
+        indexedContentHash: 'hash',
+        generation: 1,
+        available: true,
+        stale,
+        generated: false,
+        sourcePosition: 0,
+      },
+      additionalEvidence: [],
+      additionalSourceIds: [],
+    });
+    const thumbnailLoader = new ThumbnailLoader(new MockFileManagerClient());
+    const viewport = thumbnailLoader.createViewport();
+    const thumbnailDataUri = vi.spyOn(viewport, 'thumbnailDataUri').mockReturnValue(undefined);
+    vi.spyOn(thumbnailLoader, 'createViewport').mockReturnValue(viewport);
+    mount(
+      attrs({
+        entries: [image, current],
+        viewMode: 'grid',
+        thumbnailLoader,
+        searchPresentation: {
+          kind: 'semantic',
+          term: 'landscape',
+          executionMode: 'semantic',
+          semanticResults: [evidence(image, true), evidence(current, false)],
+        },
+      }),
+    );
+    expect(thumbnailDataUri).not.toHaveBeenCalledWith(image, expect.anything());
+    expect(thumbnailDataUri).toHaveBeenCalledWith(current, expect.anything());
   });
 
   it('offers Search Knowledge from the semantic result set when the shell supports it (task 0206)', () => {

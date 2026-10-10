@@ -76,6 +76,10 @@ export async function buildSemanticDeveloperBundle() {
     }),
   );
   const gemma = process.argv.includes('--gemma');
+  const metalImages = process.argv.includes('--metal-images');
+  if (metalImages && (!gemma || process.platform !== 'darwin' || process.arch !== 'arm64')) {
+    throw new Error('Metal images require --gemma on macOS arm64');
+  }
   const profile = process.argv.includes('--release') || gemma ? 'release' : 'debug';
   // Fetched and verified before the long compile so a bad or missing download
   // fails in seconds rather than after a full ONNX Runtime build.
@@ -93,7 +97,9 @@ export async function buildSemanticDeveloperBundle() {
     '-p',
     'fm-semantic-worker',
     '--features',
-    gemma ? 'developer-bundle,gemma-native' : 'developer-bundle',
+    gemma
+      ? `developer-bundle,gemma-native${metalImages ? ',gemma-metal' : ''}`
+      : 'developer-bundle',
     '--bin',
     'fm-semantic-worker',
   ];
@@ -108,7 +114,7 @@ export async function buildSemanticDeveloperBundle() {
   const output = path.join(
     metadata.target_directory,
     'semantic-developer-bundle',
-    `${process.platform}-${process.arch}${gemma ? '-gemma' : ''}`,
+    `${process.platform}-${process.arch}${gemma ? '-gemma' : ''}${metalImages ? '-metal' : ''}`,
   );
   const nativeRuntime = findZvecNativeLibrary(metadata.target_directory, profile);
   const bundleArgs = [

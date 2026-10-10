@@ -156,6 +156,10 @@ space for the catalog and installed copies; the UI discloses an 8 GiB RAM
 estimate. The model download may require access to Google's gated Hugging Face
 repository. To build the bundle without launching Tauri, run
 `pnpm semantic:bundle:dev --gemma`.
+On macOS arm64, `pnpm dev:tauri:semantic:gemma:metal` instead compiles the
+experimental image-only Metal path; the worker selects Metal automatically
+when a device is available and falls back to CPU for unavailable devices or
+mixed image/audio/video libraries. Audio and video are CPU-only.
 
 In the desktop, open **Settings → Semantic components**, choose **EmbeddingGemma
 2 (optional)**, select 128/256/512/768 dimensions and the desired image, audio,
@@ -168,7 +172,16 @@ inclusion and choose **Include and index folder**. Once indexing progresses,
 search or Ask within the indexed folder. The selected dimensions and media
 permissions cannot be changed for that Gemma library. Existing E5 data is not
 deleted; no migration or representative quality result is implied by this
-development bundle. Standard release builds remain Gemma-disabled. Included
+development bundle. Standard release builds remain Gemma-disabled unless the
+release owner explicitly approves a **new**, four-target signed Gemma candidate
+and sets both independent semantic approval gates plus
+`SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL=true`. The desktop release then compiles
+`semantic-gemma` and fetches that candidate's reviewed, signed target catalog;
+the historical CPU-only candidate is blocked. Version 0.5.0 source alone is
+**not** a published Gemma package. E5 stays the default, and Gemma's measured
+quality does not establish an improvement over E5. Before a new release is
+approved, verify image acceleration and CPU fallback on supported hardware
+and rerun the integrated mixed-media ingestion/search checks. Included
 folders can be removed directly from **Settings → Semantic library**, even when
 their sources are unavailable; confirm the displayed cleanup inventory to
 remove their local index data without deleting original files. Moving, deleting,

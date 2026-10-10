@@ -735,6 +735,86 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     );
   });
 
+  it.each([
+    ['image/png', 'Image', 'Open image'],
+    ['audio/mpeg', 'Audio', 'Open audio'],
+    ['video/mp4', 'Video', 'Open video'],
+  ])(
+    'presents %s as media evidence with authorized source navigation',
+    async (mediaType, label, action) => {
+      const client = new MockFileManagerClient();
+      const original = client.executeKnowledgeSearch.bind(client);
+      vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+        const result = await original(request, signal);
+        const first = result.evidence[0];
+        if (first === undefined) throw new Error('missing knowledge fixture');
+        return {
+          ...result,
+          evidence: [
+            {
+              ...first,
+              mediaType,
+              modifiedAtMs: Date.parse('2026-04-12T09:30:00.000Z'),
+              content: '# <|image|> **not markdown**',
+              excerpt: 'A garden path beside a stone wall.',
+              unavailable: false,
+              provenance: '',
+              sectionPath: [],
+            },
+          ],
+        };
+      });
+      const onOpenSource = vi.fn();
+      mount({ client, initialSubject: 'retrieval', onOpenSource });
+      await ready();
+      await search();
+
+      const media = root.querySelector('.fm-knowledge-media-evidence');
+      expect(media?.textContent).toContain(label);
+      expect(media?.textContent).toContain('Modified');
+      expect(media?.textContent).toContain('A garden path beside a stone wall.');
+      expect(media?.textContent).not.toContain('<|image|>');
+      expect(root.querySelector('.fm-knowledge-result-markdown')).toBeNull();
+      root.querySelector<HTMLButtonElement>('.fm-knowledge-media-open')?.click();
+      expect(root.querySelector<HTMLButtonElement>('.fm-knowledge-media-open')?.textContent).toBe(
+        action,
+      );
+      expect(onOpenSource).toHaveBeenCalledWith(expect.objectContaining({ mediaType }));
+    },
+  );
+
+  it('does not open unavailable media and never treats media placeholders as markdown', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            mediaType: 'audio/wav',
+            excerpt: '<|audio|>',
+            content: '[audio]',
+            unavailable: true,
+          },
+        ],
+      };
+    });
+    const onOpenSource = vi.fn();
+    mount({ client, initialSubject: 'retrieval', onOpenSource });
+    await ready();
+    await search();
+    expect(root.querySelector('.fm-knowledge-media-evidence')?.textContent).toContain(
+      'Open the source',
+    );
+    expect(root.querySelector<HTMLButtonElement>('.fm-knowledge-media-open')?.disabled).toBe(true);
+    expect(root.querySelector('.fm-knowledge-source-link')?.hasAttribute('disabled')).toBe(true);
+    expect(onOpenSource).not.toHaveBeenCalled();
+  });
+
   it('explains that a hybrid request ran as full text when embeddings are unavailable', async () => {
     mount({ initialSubject: 'retrieval' });
     await ready();

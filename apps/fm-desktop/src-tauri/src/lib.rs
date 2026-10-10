@@ -1869,7 +1869,20 @@ mod tests {
             .expect("semantic profiles command must succeed")
             .deserialize::<Vec<fm_transport_dto::SemanticModelProfileDto>>()
             .expect("profiles response must deserialize");
-        assert_eq!(profiles.len(), 3);
+        assert_eq!(
+            profiles.len(),
+            if cfg!(feature = "semantic-gemma") {
+                4
+            } else {
+                3
+            }
+        );
+        assert_eq!(
+            profiles.iter().any(|profile| {
+                profile.profile == fm_transport_dto::SemanticProfileDto::EmbeddingGemma2
+            }),
+            cfg!(feature = "semantic-gemma")
+        );
 
         let offer = invoke!(
             "create_semantic_component_installation_offer",

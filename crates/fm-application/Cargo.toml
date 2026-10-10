@@ -12,6 +12,8 @@ default = []
 # full-text indexes. Off by default: the official SDK dynamically links Zvec and
 # downloads a native artifact at build time unless ZVEC_LIB_DIR is supplied.
 zvec = ["fm-semantic-worker/zvec"]
+# Opt-in installed-worker integration probe; normal application builds stay E5-only.
+gemma-native = ["fm-semantic-worker/gemma-native"]
 
 [dependencies]
 async-trait.workspace = true

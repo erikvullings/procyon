@@ -793,6 +793,12 @@ export const nl = {
     semanticStale: 'Geïndexeerde inhoud is gewijzigd',
     semanticUnavailable: 'Bron is niet beschikbaar',
     openEvidence: 'Bron openen',
+    imageResult: 'Afbeelding',
+    audioResult: 'Audio',
+    videoResult: 'Video',
+    mediaModified: 'Gewijzigd {date}',
+    mediaInspectSource: 'Open de bron om dit mediabestand te bekijken.',
+    openMedia: 'Open {type}',
     relevant: 'Relevant',
     notRelevant: 'Niet relevant',
     exportEvaluation: 'Evaluatie exporteren',
@@ -1288,6 +1294,8 @@ export const nl = {
       'Ontwikkelsimulatie: de levenscyclusbediening gebruikt testdubbels en installeert geen echt model of indexbestanden.',
     developmentBundle:
       'Alleen voor ontwikkeling: deze bundel installeert een echte lokale worker en index met een deterministische test-embedder. Hiermee test u de keten, niet de kwaliteit van semantisch zoeken; gebruik de bundel niet in productie.',
+    developmentGemmaBundle:
+      'Alleen voor ontwikkeling: deze Gemma-bundel installeert een echte lokale worker en index met het vastgelegde native model. Dit is niet het voor productie ondertekende pakket, bewijst de kwaliteit van semantisch zoeken niet en mag niet in productie worden gebruikt.',
     executableDownloadProhibited:
       'Deze distributie kan geen uitvoerbare semantische onderdelen downloaden. Bestaande, door de beheerder geleverde onderdelen blijven alleen-lezen beschikbaar.',
     statusHeading: 'Status',

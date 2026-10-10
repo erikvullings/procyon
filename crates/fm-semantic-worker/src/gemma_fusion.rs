@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use lattice_inference::forward::cpu::{elementwise_mul, matmul_bt};
+use lattice_inference::forward::cpu::elementwise_mul;
 use lattice_inference::model::embeddinggemma2_config::{
     EmbeddingGemma2Config, EmbeddingGemma2LayerKind,
 };
@@ -12,6 +12,8 @@ use lattice_inference::model::gemma4_ops::{
 };
 use lattice_inference::weights::{SafetensorsFile, TensorSource};
 use tokio_util::sync::CancellationToken;
+
+use crate::gemma_compute::GemmaCompute;
 
 const MAX_TOKENS: usize = 8192;
 
@@ -37,6 +39,7 @@ struct Layer {
 
 /// Bidirectional EmbeddingGemma 2 language model with soft-token replacement.
 pub struct GemmaFusionEncoder {
+    compute: GemmaCompute,
     config: EmbeddingGemma2Config,
     embeddings: Vec<f32>,
     ple_projection: Vec<f32>,
@@ -77,6 +80,14 @@ impl GemmaFusionEncoder {
 
     /// Load the original upstream config and safetensors from independent verified paths.
     pub fn open_files(config_path: &Path, weights_path: &Path) -> Result<Self, GemmaFusionError> {
+        Self::open_files_with_compute(config_path, weights_path, GemmaCompute::Cpu)
+    }
+
+    pub(crate) fn open_files_with_compute(
+        config_path: &Path,
+        weights_path: &Path,
+        compute: GemmaCompute,
+    ) -> Result<Self, GemmaFusionError> {
         let config_text = std::fs::read_to_string(config_path)?;
         let config = EmbeddingGemma2Config::from_config_json_str(&config_text)?;
         let root: serde_json::Value = serde_json::from_str(&config_text)?;
@@ -150,6 +161,7 @@ impl GemmaFusionEncoder {
             &[config.embedding_dim, hidden],
         )?;
         Ok(Self {
+            compute,
             config,
             embeddings,
             ple_projection,
@@ -236,7 +248,7 @@ impl GemmaFusionEncoder {
         }
         gemma4_rms_norm(&mut states, &self.output_norm, width, cfg.rms_norm_eps);
         let mut projected = vec![0.0; length * cfg.embedding_dim];
-        matmul_bt(
+        self.compute.matmul_bt(
             &states,
             &self.output_projection,
             &mut projected,
@@ -281,9 +293,12 @@ impl GemmaFusionEncoder {
         let mut q = vec![0.0; n * q_dim];
         let mut k = vec![0.0; n * kv_dim];
         let mut v = vec![0.0; n * kv_dim];
-        matmul_bt(&normalized, &layer.q, &mut q, n, h, q_dim);
-        matmul_bt(&normalized, &layer.k, &mut k, n, h, kv_dim);
-        matmul_bt(&normalized, &layer.v, &mut v, n, h, kv_dim);
+        self.compute
+            .matmul_bt(&normalized, &layer.q, &mut q, n, h, q_dim);
+        self.compute
+            .matmul_bt(&normalized, &layer.k, &mut k, n, h, kv_dim);
+        self.compute
+            .matmul_bt(&normalized, &layer.v, &mut v, n, h, kv_dim);
         gemma4_qk_norm_v_unscaled(
             &mut q,
             &mut k,
@@ -331,7 +346,8 @@ impl GemmaFusionEncoder {
             cancellation,
         )?;
         let mut result = vec![0.0; n * h];
-        matmul_bt(&attended, &layer.o, &mut result, n, q_dim, h);
+        self.compute
+            .matmul_bt(&attended, &layer.o, &mut result, n, q_dim, h);
         gemma4_rms_norm(&mut result, &layer.attention_norm, h, eps);
         add(states, &result);
         if cancellation.is_cancelled() {
@@ -342,25 +358,40 @@ impl GemmaFusionEncoder {
         gemma4_rms_norm(&mut normalized, &layer.feed_norm, h, eps);
         let ff = cfg.intermediate_size;
         let mut feed = vec![0.0; n * h];
-        gemma4_geglu_mlp(
-            &normalized,
-            &layer.gate,
-            &layer.up,
-            &layer.down,
-            n,
-            h,
-            ff,
-            &mut vec![0.0; n * ff],
-            &mut vec![0.0; n * ff],
-            &mut feed,
-        );
+        match self.compute {
+            GemmaCompute::Cpu => gemma4_geglu_mlp(
+                &normalized,
+                &layer.gate,
+                &layer.up,
+                &layer.down,
+                n,
+                h,
+                ff,
+                &mut vec![0.0; n * ff],
+                &mut vec![0.0; n * ff],
+                &mut feed,
+            ),
+            #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+            GemmaCompute::Metal(_) => {
+                let mut gate = vec![0.0; n * ff];
+                let mut up = vec![0.0; n * ff];
+                self.compute
+                    .matmul_bt(&normalized, &layer.gate, &mut gate, n, h, ff);
+                self.compute
+                    .matmul_bt(&normalized, &layer.up, &mut up, n, h, ff);
+                gemma4_gelu_tanh(&mut gate);
+                elementwise_mul(&mut gate, &up);
+                self.compute
+                    .matmul_bt(&gate, &layer.down, &mut feed, n, ff, h);
+            }
+        }
         gemma4_rms_norm(&mut feed, &layer.feed_output_norm, h, eps);
         add(states, &feed);
 
         let ple_width = cfg.hidden_size_per_layer_input;
         let mut ple = vec![0.0; n * ple_width];
         let start = index * ple_width * h;
-        matmul_bt(
+        self.compute.matmul_bt(
             base,
             &self.ple_projection[start..start + ple_width * h],
             &mut ple,
@@ -374,11 +405,13 @@ impl GemmaFusionEncoder {
         }
         gemma4_rms_norm(&mut ple, &self.ple_norm, ple_width, eps);
         let mut gate = vec![0.0; n * ple_width];
-        matmul_bt(states, &layer.ple_gate, &mut gate, n, h, ple_width);
+        self.compute
+            .matmul_bt(states, &layer.ple_gate, &mut gate, n, h, ple_width);
         gemma4_gelu_tanh(&mut gate);
         elementwise_mul(&mut gate, &ple);
         let mut input = vec![0.0; n * h];
-        matmul_bt(&gate, &layer.ple_projection, &mut input, n, ple_width, h);
+        self.compute
+            .matmul_bt(&gate, &layer.ple_projection, &mut input, n, ple_width, h);
         gemma4_rms_norm(&mut input, &layer.ple_output_norm, h, eps);
         add(states, &input);
         for value in states {

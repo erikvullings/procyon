@@ -754,6 +754,12 @@ export const fr = {
   },
   search: {
     ...en.search,
+    imageResult: 'Image',
+    audioResult: 'Audio',
+    videoResult: 'Vidéo',
+    mediaModified: 'Modifié le {date}',
+    mediaInspectSource: 'Ouvrez la source pour consulter ce média.',
+    openMedia: 'Ouvrir {type}',
     unableToStart: 'Impossible de démarrer la recherche',
     refresh: 'Actualiser la recherche',
     filterLimitations: "Certains filtres n'ont pas pu être évalués ({message}).",

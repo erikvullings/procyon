@@ -9,6 +9,7 @@ import {
   PRODUCTION_CHUNKER_IDENTITY,
   PRODUCTION_CONVERTER_IDENTITY,
   parseProductionBundleArguments,
+  productionWorkerFeatures,
   requireRelocatableWorkerLoaderPath,
   sourceBuildIdentity,
   supportedSemanticTarget,
@@ -100,6 +101,22 @@ test('Gemma original files require an explicit release builder input', () => {
       ]),
     /unknown semantic bundle argument/u,
   );
+});
+
+test('signed Gemma workers compile Metal only for macOS ARM images', () => {
+  for (const [platform, arch] of [
+    ['darwin', 'arm64'],
+    ['win32', 'x64'],
+    ['linux', 'x64'],
+    ['linux', 'arm64'],
+  ]) {
+    const target = supportedSemanticTarget(platform, arch);
+    assert.equal(productionWorkerFeatures(target, undefined), 'semantic-runtime');
+    assert.equal(
+      productionWorkerFeatures(target, '/verified/gemma-originals'),
+      platform === 'darwin' ? 'gemma-native,gemma-metal' : 'gemma-native',
+    );
+  }
 });
 
 test('Zvec native library names are platform-specific', () => {
