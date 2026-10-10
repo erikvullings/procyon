@@ -99,7 +99,13 @@ However, the isolated catalog's `documents` and `occurrences` remained
 empty; native semantic search showed "No indexed documents are available
 in this scope." The fixtures were inside this repository's ignored
 `target/` review root, so this does **not** establish a general indexing
-failure. No native image/audio/video result appeared to open, navigate,
+failure. A second attempt prepared the same fixtures in a separate,
+non-ignored worktree folder and launched fresh isolated Tauri identities and
+homes, but neither relaunched process exposed an accessibility window (the
+second owned a visible macOS window according to CoreGraphics, yet System
+Events and the native AX API exposed no window). The app could not be
+interacted with safely to enroll that folder. No native image/audio/video
+result appeared to open, navigate,
 test stale/unavailable behavior, or delete. No install error was deliberately
 induced, and no macOS VoiceOver session was run: inspecting accessible names
 with System Events is **not** a screen-reader walkthrough. The review

@@ -678,7 +678,9 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   folder, and folder inclusion was confirmed with indexing generation 1.
   Its catalog nevertheless contained zero documents, so native media results,
   source opening, stale/unavailable behavior, and deletion were **not**
-  exercised. The fixtures sat under ignored `target/`; this is not proof of
-  a general indexing defect. No deliberate install-error or VoiceOver session
+  exercised. The fixtures sat under ignored `target/`; a retry with non-ignored
+  fixtures was blocked by a native window absent from accessibility despite a
+  running Tauri process. This is not proof of a general indexing defect.
+  No deliberate install-error or VoiceOver session
   or Windows/Linux native UI review was performed. See the release decision
   document for the exact observations and remaining gates; keep `noGo`.
