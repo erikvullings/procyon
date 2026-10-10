@@ -1,0 +1,381 @@
+{
+  "model": "google/embeddinggemma-2",
+  "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "runtime": "native-rust-cpu-fp32",
+  "measurementWidth": 768,
+  "dimensionMethod": "truncate and L2 renormalize both sides",
+  "os": "macos",
+  "architecture": "aarch64",
+  "modelLoadSeconds": 0.981187792,
+  "result": {
+    "corpusSha256": "e638dbb84ac1300b0a8f8af5598de96f8aa40aef5dd362afeeb7a8201e1e1dc1",
+    "documentCount": 26,
+    "queryCount": 8,
+    "documentSeconds": 324.870189291,
+    "documentsPerSecond": 0.08003196617314338,
+    "queryLatencyMedianMs": 116.573229,
+    "queryLatencyP95Ms": 140.613166,
+    "dimensions": {
+      "128": {
+        "positiveCases": 8,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 1.0,
+        "hitAt3": 1.0,
+        "recallAt2": 1.0,
+        "mrr": 1.0,
+        "cases": [
+          {
+            "id": "telugu-2",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "259006#0",
+              "99994#3",
+              "99990#2"
+            ]
+          },
+          {
+            "id": "telugu-15",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105605#2",
+              "99994#8",
+              "99997#2"
+            ]
+          },
+          {
+            "id": "telugu-17",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105028#1",
+              "99971#3",
+              "99970#2"
+            ]
+          },
+          {
+            "id": "telugu-21",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "52481#0",
+              "99990#2",
+              "99988#1"
+            ]
+          },
+          {
+            "id": "telugu-28",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105922#4",
+              "99982#12",
+              "99982#1"
+            ]
+          },
+          {
+            "id": "telugu-34",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "29541#0",
+              "94126#1",
+              "225465#8"
+            ]
+          },
+          {
+            "id": "telugu-35",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "34672#2",
+              "99990#2",
+              "99988#1"
+            ]
+          },
+          {
+            "id": "telugu-37",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "141339#0",
+              "99990#2",
+              "99314#6"
+            ]
+          }
+        ]
+      },
+      "256": {
+        "positiveCases": 8,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 1.0,
+        "hitAt3": 1.0,
+        "recallAt2": 1.0,
+        "mrr": 1.0,
+        "cases": [
+          {
+            "id": "telugu-2",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "259006#0",
+              "99990#2",
+              "99994#3"
+            ]
+          },
+          {
+            "id": "telugu-15",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105605#2",
+              "99997#2",
+              "99994#8"
+            ]
+          },
+          {
+            "id": "telugu-17",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105028#1",
+              "99971#3",
+              "99990#2"
+            ]
+          },
+          {
+            "id": "telugu-21",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "52481#0",
+              "99990#2",
+              "99988#1"
+            ]
+          },
+          {
+            "id": "telugu-28",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105922#4",
+              "99990#2",
+              "99982#12"
+            ]
+          },
+          {
+            "id": "telugu-34",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "29541#0",
+              "225465#8",
+              "94126#1"
+            ]
+          },
+          {
+            "id": "telugu-35",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "34672#2",
+              "99990#2",
+              "99988#1"
+            ]
+          },
+          {
+            "id": "telugu-37",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "141339#0",
+              "99990#2",
+              "99314#6"
+            ]
+          }
+        ]
+      },
+      "512": {
+        "positiveCases": 8,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 1.0,
+        "hitAt3": 1.0,
+        "recallAt2": 1.0,
+        "mrr": 1.0,
+        "cases": [
+          {
+            "id": "telugu-2",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "259006#0",
+              "99990#2",
+              "99994#3"
+            ]
+          },
+          {
+            "id": "telugu-15",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105605#2",
+              "99997#2",
+              "99997#1"
+            ]
+          },
+          {
+            "id": "telugu-17",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105028#1",
+              "99971#3",
+              "99990#2"
+            ]
+          },
+          {
+            "id": "telugu-21",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "52481#0",
+              "99990#2",
+              "99988#1"
+            ]
+          },
+          {
+            "id": "telugu-28",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105922#4",
+              "99990#2",
+              "99982#12"
+            ]
+          },
+          {
+            "id": "telugu-34",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "29541#0",
+              "94126#1",
+              "225465#8"
+            ]
+          },
+          {
+            "id": "telugu-35",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "34672#2",
+              "99990#2",
+              "99988#1"
+            ]
+          },
+          {
+            "id": "telugu-37",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "141339#0",
+              "99990#2",
+              "99314#6"
+            ]
+          }
+        ]
+      },
+      "768": {
+        "positiveCases": 8,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 1.0,
+        "hitAt3": 1.0,
+        "recallAt2": 1.0,
+        "mrr": 1.0,
+        "cases": [
+          {
+            "id": "telugu-2",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "259006#0",
+              "99990#2",
+              "99994#3"
+            ]
+          },
+          {
+            "id": "telugu-15",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105605#2",
+              "99997#2",
+              "99997#1"
+            ]
+          },
+          {
+            "id": "telugu-17",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105028#1",
+              "99971#3",
+              "99990#2"
+            ]
+          },
+          {
+            "id": "telugu-21",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "52481#0",
+              "99990#2",
+              "99988#1"
+            ]
+          },
+          {
+            "id": "telugu-28",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105922#4",
+              "99990#2",
+              "99982#12"
+            ]
+          },
+          {
+            "id": "telugu-34",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "29541#0",
+              "225465#8",
+              "94126#1"
+            ]
+          },
+          {
+            "id": "telugu-35",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "34672#2",
+              "99990#2",
+              "99988#1"
+            ]
+          },
+          {
+            "id": "telugu-37",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "141339#0",
+              "99990#2",
+              "99314#6"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

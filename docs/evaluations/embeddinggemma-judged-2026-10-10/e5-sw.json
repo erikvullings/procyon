@@ -1,0 +1,467 @@
+{
+  "model": "intfloat/multilingual-e5-small",
+  "revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+  "runtime": "Python onnxruntime 1.22.1 CPU mean-pooling",
+  "dimensions": 384,
+  "corpusSha256": "b3ee4b90c7988b38bdee5c10c1bc76f13f4fb46d1d43ee30d0f776dbe848dcd1",
+  "documentCount": 194,
+  "queryCount": 50,
+  "result": {
+    "positiveCases": 50,
+    "hitAt1": 0.72,
+    "hitAt3": 0.94,
+    "mrr": 0.835,
+    "cases": [
+      {
+        "id": "sw-6",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "32589#0",
+          "32480#0",
+          "33690#3"
+        ]
+      },
+      {
+        "id": "sw-8",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2172#10",
+          "43586#0",
+          "15709#0"
+        ]
+      },
+      {
+        "id": "sw-12",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "56960#0",
+          "56960#2",
+          "56960#8"
+        ]
+      },
+      {
+        "id": "sw-13",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "103275#1",
+          "104308#2",
+          "103726#0"
+        ]
+      },
+      {
+        "id": "sw-22",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2633#5",
+          "1783#42",
+          "14102#5"
+        ]
+      },
+      {
+        "id": "sw-29",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "8390#3",
+          "32763#47",
+          "32763#10"
+        ]
+      },
+      {
+        "id": "sw-32",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2173#25",
+          "78818#5",
+          "108479#4"
+        ]
+      },
+      {
+        "id": "sw-34",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "11783#3",
+          "1183#11",
+          "32995#14"
+        ]
+      },
+      {
+        "id": "sw-35",
+        "firstRelevantRank": 3,
+        "topIds": [
+          "103311#2",
+          "27138#1",
+          "93981#1"
+        ]
+      },
+      {
+        "id": "sw-38",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2142#0",
+          "2142#3",
+          "2142#10"
+        ]
+      },
+      {
+        "id": "sw-43",
+        "firstRelevantRank": 3,
+        "topIds": [
+          "34638#0",
+          "34638#3",
+          "34638#1"
+        ]
+      },
+      {
+        "id": "sw-49",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "14827#0",
+          "14827#1",
+          "14827#5"
+        ]
+      },
+      {
+        "id": "sw-52",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2377#3",
+          "2377#0",
+          "1676#106"
+        ]
+      },
+      {
+        "id": "sw-56",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "101862#0",
+          "101862#3",
+          "101862#2"
+        ]
+      },
+      {
+        "id": "sw-62",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2059#2",
+          "2059#6",
+          "2059#5"
+        ]
+      },
+      {
+        "id": "sw-72",
+        "firstRelevantRank": 4,
+        "topIds": [
+          "70144#2",
+          "83744#0",
+          "18140#16"
+        ]
+      },
+      {
+        "id": "sw-80",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "32398#6",
+          "102148#1",
+          "102069#1"
+        ]
+      },
+      {
+        "id": "sw-99",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "14200#0",
+          "14200#1",
+          "14200#17"
+        ]
+      },
+      {
+        "id": "sw-105",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "1676#3",
+          "28417#1",
+          "14200#0"
+        ]
+      },
+      {
+        "id": "sw-108",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2172#11",
+          "33459#0",
+          "33546#6"
+        ]
+      },
+      {
+        "id": "sw-119",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "13146#6",
+          "106489#4",
+          "13252#3"
+        ]
+      },
+      {
+        "id": "sw-122",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "77546#0",
+          "6264#0",
+          "6170#0"
+        ]
+      },
+      {
+        "id": "sw-128",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "73389#4",
+          "2753#0",
+          "100461#4"
+        ]
+      },
+      {
+        "id": "sw-136",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "86695#7",
+          "1783#33",
+          "1783#30"
+        ]
+      },
+      {
+        "id": "sw-138",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "24213#0",
+          "108465#0",
+          "2172#5"
+        ]
+      },
+      {
+        "id": "sw-141",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "58067#19",
+          "11797#1",
+          "99681#1"
+        ]
+      },
+      {
+        "id": "sw-144",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "14778#3",
+          "14778#2",
+          "106016#1"
+        ]
+      },
+      {
+        "id": "sw-146",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "2172#11",
+          "45924#0",
+          "3457#0"
+        ]
+      },
+      {
+        "id": "sw-172",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2347#20",
+          "2347#12",
+          "35714#4"
+        ]
+      },
+      {
+        "id": "sw-178",
+        "firstRelevantRank": 3,
+        "topIds": [
+          "2121#46",
+          "2121#10",
+          "2121#36"
+        ]
+      },
+      {
+        "id": "sw-182",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "35940#1",
+          "34147#4",
+          "34147#13"
+        ]
+      },
+      {
+        "id": "sw-185",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "36959#0",
+          "36959#1",
+          "36962#0"
+        ]
+      },
+      {
+        "id": "sw-187",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "5474#1",
+          "5474#4",
+          "42910#0"
+        ]
+      },
+      {
+        "id": "sw-193",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "3231#21",
+          "14129#0",
+          "2762#12"
+        ]
+      },
+      {
+        "id": "sw-195",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2560#35",
+          "34309#4",
+          "2762#12"
+        ]
+      },
+      {
+        "id": "sw-203",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "78801#3",
+          "17#25",
+          "35413#1"
+        ]
+      },
+      {
+        "id": "sw-209",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2404#39",
+          "1859#1",
+          "2365#0"
+        ]
+      },
+      {
+        "id": "sw-213",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "10242#12",
+          "10242#0",
+          "87180#0"
+        ]
+      },
+      {
+        "id": "sw-214",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "3913#5",
+          "1201#1",
+          "32763#133"
+        ]
+      },
+      {
+        "id": "sw-215",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "19480#4",
+          "19480#8",
+          "19480#13"
+        ]
+      },
+      {
+        "id": "sw-221",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "32574#0",
+          "72140#0",
+          "12947#1"
+        ]
+      },
+      {
+        "id": "sw-226",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "6494#0",
+          "7883#0",
+          "35890#6"
+        ]
+      },
+      {
+        "id": "sw-232",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "1679#7",
+          "35420#5",
+          "3930#7"
+        ]
+      },
+      {
+        "id": "sw-234",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "21127#0",
+          "21127#1",
+          "35598#0"
+        ]
+      },
+      {
+        "id": "sw-238",
+        "firstRelevantRank": 4,
+        "topIds": [
+          "35819#2",
+          "33558#23",
+          "16451#1"
+        ]
+      },
+      {
+        "id": "sw-242",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "35000#0",
+          "36022#0",
+          "36011#0"
+        ]
+      },
+      {
+        "id": "sw-244",
+        "firstRelevantRank": 4,
+        "topIds": [
+          "34263#2",
+          "34263#3",
+          "3099#3"
+        ]
+      },
+      {
+        "id": "sw-248",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "33837#0",
+          "33837#3",
+          "33837#2"
+        ]
+      },
+      {
+        "id": "sw-254",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "18640#0",
+          "18640#2",
+          "18640#3"
+        ]
+      },
+      {
+        "id": "sw-256",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2670#0",
+          "2670#6",
+          "15336#1"
+        ]
+      }
+    ]
+  }
+}

@@ -10,6 +10,8 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use fm_application::FileManagerService;
+#[cfg(all(unix, feature = "gemma-native"))]
+use fm_application::semantic::IpcSemanticCapability;
 use fm_application::semantic::{
     DocumentIngestion, FakeSemanticCapability, SemanticCapability, SemanticError, SemanticHealth,
     SemanticIngestionJob, SemanticIngestionState, SemanticJobId, SemanticOperationId,
@@ -33,6 +35,10 @@ use fm_semantic_library::{
     GemmaMediaSelection, LibraryId, ModelIdentity, ResourceBudgets, ResourceProfile,
     ResourceProfileKind, RootId,
 };
+#[cfg(all(unix, feature = "gemma-native"))]
+use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeFiles};
+#[cfg(all(unix, feature = "gemma-native"))]
+use fm_semantic_worker::{ManagedWorkerLaunch, ManagedWorkerResolver};
 #[cfg(unix)]
 use fm_transport_dto::ResolveRagCitationRequestDto;
 use fm_transport_dto::RuntimeKindDto;
@@ -341,6 +347,154 @@ async fn reconciliation_feeds_only_media_enabled_for_the_gemma_library() {
         .unwrap();
     assert_eq!(report.observed_files, 2);
     assert_eq!(report.ingested_occurrences, 2);
+}
+
+#[cfg(all(unix, feature = "gemma-native"))]
+#[tokio::test]
+#[ignore = "requires a signed Gemma worker, runtime, and verified original model files"]
+async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
+    use image::{ImageBuffer, ImageFormat, Rgb};
+
+    let files: BTreeMap<String, std::path::PathBuf> = serde_json::from_str(
+        &std::env::var("PROCYON_GEMMA_PACKAGED_FILES").expect("verified original-file paths"),
+    )
+    .unwrap();
+    let model = GemmaNativeFiles::from_original_files(&files).unwrap();
+    let root = project_temp_dir("gemma-host-media-");
+    let state = project_temp_dir("gemma-host-state-");
+    let runtime = project_temp_dir("gemma-host-runtime-");
+    let image = ImageBuffer::from_fn(128, 96, |x, y| {
+        Rgb([
+            ((x * 2 + y) % 256) as u8,
+            ((x + y * 2) % 256) as u8,
+            ((x + y) % 256) as u8,
+        ])
+    });
+    let mut png = std::io::Cursor::new(Vec::new());
+    image.write_to(&mut png, ImageFormat::Png).unwrap();
+    for (name, bytes) in [
+        ("photo.png", png.into_inner()),
+        (
+            "sound.mp3",
+            include_bytes!("../../fm-semantic-worker/tests/fixtures/gemma-audio-440hz-44k.mp3")
+                .to_vec(),
+        ),
+        (
+            "clip.mp4",
+            include_bytes!("../../fm-semantic-worker/tests/fixtures/gemma-video-2s.mp4").to_vec(),
+        ),
+    ] {
+        std::fs::write(root.path().join(name), bytes).unwrap();
+    }
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1911));
+    let library = library_with_model(
+        &state,
+        ModelIdentity::embeddinggemma_2(
+            128,
+            GemmaMediaSelection {
+                images: true,
+                audio: true,
+                video: true,
+            },
+        )
+        .unwrap(),
+    );
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let launch = ManagedWorkerLaunch::new_gemma(
+        std::env::var("PROCYON_SEMANTIC_PRODUCTION_WORKER")
+            .expect("signed packaged worker")
+            .into(),
+        state.path().join("worker-data"),
+        std::env::var("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY")
+            .expect("verified native runtime directory")
+            .into(),
+        model,
+        128,
+        GemmaMedia {
+            images: true,
+            audio: true,
+            video: true,
+        },
+    );
+    let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(IpcSemanticCapability::desktop_managed(
+        runtime.path(),
+        resolver,
+    )));
+
+    let report = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(report.observed_files, 3);
+    assert_eq!(report.ingested_occurrences, 3, "{report:?}");
+    assert_eq!(report.failed_occurrences, 0, "{report:?}");
+    assert_eq!(report.excluded_occurrences, 0, "{report:?}");
+    let results = service
+        .semantic_query(SemanticQuery {
+            scope: SemanticScope::new(
+                TenantId::new(workspace_id.to_string()),
+                WorkerLibraryId::new(report.library_id.clone()),
+            ),
+            request_id: SemanticOperationId::new("media-host-query"),
+            text: "search enrolled media".to_owned(),
+            concept: None,
+            maximum_results: 10,
+        })
+        .await
+        .unwrap();
+    for (name, media_type) in [
+        ("photo.png", "image/png"),
+        ("sound.mp3", "audio/mpeg"),
+        ("clip.mp4", "video/mp4"),
+    ] {
+        let result = results
+            .iter()
+            .find(|result| {
+                result
+                    .metadata
+                    .get("media_type")
+                    .is_some_and(|kind| kind == media_type)
+            })
+            .unwrap_or_else(|| panic!("enrolled {name} was not returned: {results:?}"));
+        let resolved = service
+            .resolve_rag_citation(
+                &HOST,
+                ResolveRagCitationRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                    source_id: result.metadata.get("semantic.sourceId").unwrap().clone(),
+                },
+            )
+            .await
+            .unwrap();
+        let location: Location = resolved.location.into();
+        assert!(location.uri.ends_with(name), "{location:?}");
+        assert!(resolved.available);
+    }
+    let outside = service
+        .semantic_query(SemanticQuery {
+            scope: SemanticScope::new(
+                TenantId::new("other-workspace"),
+                WorkerLibraryId::new(report.library_id),
+            ),
+            request_id: SemanticOperationId::new("media-host-other-workspace"),
+            text: "photo.png".to_owned(),
+            concept: None,
+            maximum_results: 10,
+        })
+        .await
+        .unwrap();
+    assert!(outside.is_empty(), "unenrolled workspace saw media");
 }
 
 fn enrol(library: &SemanticLibraryService, workspace_id: WorkspaceId, root: Location) -> RootId {

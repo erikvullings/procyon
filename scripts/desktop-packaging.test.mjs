@@ -378,6 +378,8 @@ test('semantic components qualify and publish exact retained artifacts independe
   assert.ok(component.on.workflow_dispatch);
   assert.ok(component.on.workflow_dispatch.inputs.release_tag.required);
   assert.ok(component.on.workflow_dispatch.inputs.qualification_run_id);
+  assert.ok(component.on.workflow_dispatch.inputs.qualify_installed_gemma);
+  assert.ok(component.on.workflow_dispatch.inputs.measure_installed_gemma);
 
   const payloads = component.jobs['semantic-payloads'];
   const catalogs = component.jobs['semantic-catalogs'];
@@ -385,6 +387,8 @@ test('semantic components qualify and publish exact retained artifacts independe
   const publish = component.jobs['semantic-publish'];
 
   assert.match(payloads.if, /inputs\.qualification_run_id == ''/);
+  assert.match(payloads.if, /inputs\.qualify_installed_gemma != true/);
+  assert.match(payloads.if, /inputs\.measure_installed_gemma != true/);
   assert.deepEqual(payloads.strategy.matrix.include.map(({ target }) => target).sort(), [
     'linux-aarch64',
     'linux-x86_64',
@@ -416,11 +420,36 @@ test('semantic components qualify and publish exact retained artifacts independe
   assert.match(JSON.stringify(collect), /create-semantic-component-release-manifest\.mjs/);
   assert.match(publish.if, /vars\.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true'/);
   assert.match(publish.if, /inputs\.qualification_run_id != ''/);
+  assert.match(publish.if, /vars\.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED == 'true'/);
+  assert.equal(component.on.workflow_dispatch.inputs.approve_experimental_gemma.default, false);
+  assert.match(publish.if, /inputs\.qualify_installed_gemma != true/);
+  assert.match(publish.if, /inputs\.measure_installed_gemma != true/);
   assert.match(JSON.stringify(publish), /run-id/);
   assert.match(JSON.stringify(publish), /verify-semantic-component-release\.mjs/);
   assert.match(JSON.stringify(publish), /gh release create/);
   assert.match(JSON.stringify(publish), /--latest=false/);
   assert.match(componentText, /semantic-component-release-v1\.json/);
+  assert.match(componentText, /semantic-gemma-experimental-v1\.json/);
+
+  const installed = component.jobs['installed-gemma-qualification'];
+  assert.match(installed.if, /inputs\.qualify_installed_gemma == true/);
+  assert.deepEqual(installed.strategy.matrix.include.map(({ target }) => target).sort(), [
+    'linux-aarch64',
+    'linux-x86_64',
+    'macos-aarch64',
+    'windows-x86_64',
+  ]);
+  assert.match(JSON.stringify(installed), /run-id.*37974984924/u);
+  assert.match(
+    JSON.stringify(installed),
+    /semantic-component-candidate-d3f921fe08e4994a905727a71af102979f4fbe23/u,
+  );
+  assert.match(JSON.stringify(installed), /qualify_semantic_lifecycle/u);
+  assert.match(JSON.stringify(installed), /semantic_production_catalog/u);
+  assert.match(JSON.stringify(installed), /ORT_LIB_PATH/u);
+  assert.match(JSON.stringify(installed), /gemma-cpu\/\*\.json/u);
+  assert.match(JSON.stringify(installed), /workerPeakRssBytes/u);
+  assert.doesNotMatch(JSON.stringify(installed), /gh release create|SEMANTIC_CATALOG_SIGNING_KEY/u);
 });
 
 test('semantic release preconditions require a current four-target measured go', () => {
