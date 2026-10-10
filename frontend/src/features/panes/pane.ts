@@ -82,7 +82,7 @@ import {
 } from '../directory-table/directory-table';
 import type { FinderTagsLoader } from '../directory-table/finder-tags-loader';
 import type { NativeIconLoader } from '../directory-table/native-icon-loader';
-import type { ThumbnailLoader } from '../directory-table/thumbnail-loader';
+import type { ThumbnailLoader, ThumbnailViewport } from '../directory-table/thumbnail-loader';
 import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
 import { isRestorableRecentLocation, truncateLocationForDisplay } from '../favourites/favourites';
@@ -92,6 +92,12 @@ import type { SearchPresentation } from '../search/search-presentation';
 import { exportSemanticEvaluationCases, recordSemanticFeedback } from '../search/semantic-feedback';
 import type { SelectionPlatform } from '../selection/keybindings';
 import type { SelectionAction } from '../selection/selection';
+import {
+  mediaDescription,
+  mediaKind,
+  mediaLabel,
+  mediaModifiedLabel,
+} from '../semantic/media-evidence';
 import { BreadcrumbTrail, breadcrumbSegments, searchBreadcrumbSegments } from './breadcrumb-view';
 import { formatListingSummary, sizeLabel } from './pane-status-summary';
 import { isParentEntry } from './parent-entry';
@@ -399,6 +405,33 @@ function searchExecutionModeLabel(mode: SearchPresentation['executionMode']): st
   }
 }
 
+const SemanticMediaPreview: FactoryComponent<{
+  entry: EntrySummary;
+  loader: ThumbnailLoader;
+}> = () => {
+  let loader: ThumbnailLoader | undefined;
+  let viewport: ThumbnailViewport | undefined;
+  return {
+    onremove: () => viewport?.dispose(),
+    view: ({ attrs }) => {
+      if (loader !== attrs.loader) {
+        viewport?.dispose();
+        loader = attrs.loader;
+        viewport = loader.createViewport();
+      }
+      viewport?.beginFrame();
+      const src = viewport?.thumbnailDataUri(attrs.entry, 'medium');
+      viewport?.endFrame();
+      return m(
+        'span.fm-semantic-media-preview',
+        src === undefined
+          ? undefined
+          : m('img.fm-semantic-media-thumbnail', { src, alt: '', 'aria-hidden': 'true' }),
+      );
+    },
+  };
+};
+
 function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
   const presentation = attrs.searchPresentation;
   const results = presentation?.semanticResults;
@@ -426,6 +459,9 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
 
   const entry = attrs.entries.find((candidate) => candidate.id === selected.entryId);
   const evidence = [selected.bestEvidence, ...selected.additionalEvidence];
+  const kind = mediaKind(entry?.mimeType);
+  const mediaAvailable = selected.bestEvidence.available && !selected.bestEvidence.stale;
+  const modifiedLabel = mediaModifiedLabel(entry?.modifiedAt);
   return m('.fm-semantic-evidence', [
     coverageLabel === undefined ? undefined : m('div', { role: 'status' }, coverageLabel),
     m('details', [
@@ -436,9 +472,26 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
           score: selected.score.toFixed(2),
         }),
       ),
+      kind === undefined
+        ? undefined
+        : m('.fm-semantic-media', [
+            kind !== 'audio' &&
+            mediaAvailable &&
+            entry !== undefined &&
+            attrs.tableConfig.thumbnailLoader !== undefined
+              ? m(SemanticMediaPreview, {
+                  entry,
+                  loader: attrs.tableConfig.thumbnailLoader,
+                })
+              : undefined,
+            m('.fm-semantic-media-description', [
+              m('strong', mediaLabel(kind)),
+              modifiedLabel === undefined ? undefined : m('small', modifiedLabel),
+            ]),
+          ]),
       evidence.map((item) =>
         m('.fm-semantic-evidence-item', [
-          m('p', item.excerpt),
+          m('p', kind === undefined ? item.excerpt : mediaDescription(item.excerpt)),
           m(
             'small',
             [
@@ -456,12 +509,19 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
           'button',
           {
             type: 'button',
-            disabled: entry === undefined,
+            disabled: entry === undefined || !selected.bestEvidence.available,
             onclick: () => {
-              if (entry !== undefined) void attrs.onOpenEntry(entry, selected.bestEvidence.excerpt);
+              if (entry !== undefined && selected.bestEvidence.available) {
+                void attrs.onOpenEntry(
+                  entry,
+                  kind === undefined ? selected.bestEvidence.excerpt : undefined,
+                );
+              }
             },
           },
-          t('search', 'openEvidence'),
+          kind === undefined
+            ? t('search', 'openEvidence')
+            : t('search', 'openMedia', { type: mediaLabel(kind).toLowerCase() }),
         ),
         m(
           'button',

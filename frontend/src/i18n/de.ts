@@ -754,6 +754,12 @@ export const de = {
   },
   search: {
     ...en.search,
+    imageResult: 'Bild',
+    audioResult: 'Audio',
+    videoResult: 'Video',
+    mediaModified: 'Geändert {date}',
+    mediaInspectSource: 'Quelle öffnen, um dieses Medium anzusehen.',
+    openMedia: '{type} öffnen',
     unableToStart: 'Suche kann nicht gestartet werden',
     refresh: 'Suche aktualisieren',
     filterLimitations: 'Einige Filter konnten nicht ausgewertet werden ({message}).',
