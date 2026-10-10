@@ -2,13 +2,13 @@
 
 **Decision: an explicitly opt-in EXPERIMENTAL package is desired, but no
 candidate is approved for publication yet.** E5 remains the default. The
-reviewed candidate predates both the automatic Metal worker and mixed-media
+historical candidate predates both the automatic Metal worker and mixed-media
 UI work. It would ship a CPU-only worker even if a newer desktop binary
-enabled Metal. Its checked-in experimental lock is deliberately `noGo` and
-`blocked-stale-pre-integration-candidate`: the manual publication workflow
-rejects it even if its release environment gates are set to `true`; the
-experimental verifier independently rejects that historical source revision
-even if someone changes the lock decision to `go`. Do not
+enabled Metal. The checked-in lock now identifies the integrated candidate,
+but remains deliberately `noGo` and `blocked-pending-release-owner-review`:
+the manual publication workflow rejects it even if its release environment
+gates are set to `true`; the experimental verifier independently rejects the
+historical source revision even if someone changes the lock decision to `go`. Do not
 dispatch publication, publish, tag, or enable it. The future release-owner
 override must be an explicit new decision, **not** a reclassification of
 E5 aggregate measurements as Gemma quality evidence.
@@ -25,7 +25,9 @@ All four signed catalogs and their catalog-listed payload bytes were verified
 against the release public key. The candidate evaluation is still `noGo`,
 `experimental-alpha`: its E5 measurements are negative controls, **not**
 Gemma retrieval-quality evidence. The old candidate below remains revoked;
-neither candidate has a reviewed `go` approval.
+neither candidate has a reviewed `go` approval. The checked-in experimental
+lock binds this new candidate's exact manifest, report, model revision, and
+four catalog/signature hashes without authorizing publication.
 
 The [exact installed qualification run
 38082235196](https://github.com/erikvullings/procyon/actions/runs/38082235196)
@@ -51,9 +53,32 @@ consented PNG, MP3, and MP4 sources crossed host/VFS/IPC, returned with
 available citations in the authorized tenant, and were absent from another
 tenant. Its mixed-media library reported CPU fallback; a separate image-only
 startup of the same signed worker automatically selected FP32 Metal images.
+An additional run of that exact signed worker removed the enrolled PNG:
+reconciliation revoked its citation, and the file-primary semantic search
+excluded it even though the worker's derived index could still return a raw
+stale vector. The application test now waits for a clean worker shutdown
+before removing its temporary index. This is **automated host-path evidence**,
+not a manual desktop check or a claim that raw worker vectors are immediately
+erased.
 The local image-only Metal comparison in
 [`embeddinggemma-metal-image.md`](embeddinggemma-metal-image.md) is bounded
 hardware evidence, not a GPU benchmark of the installed four-target run.
+
+**UI preflight boundary:** automated Mithril tests cover explicit Gemma
+fresh-index consent and immutable media/dimension choices, immediate install
+progress and typed errors, distinct retain/delete uninstall choices, media
+source-open actions in file-primary and Knowledge results, unavailable and
+stale-result disabling, and labelled, focusable Gemma setup controls. The
+focused settings/pane/Knowledge run passed 289 tests before the extra
+accessible-name/focus regression was added; that new settings test also
+passed. These are DOM and mock-client checks, not interaction with the
+signed installed candidate. A normal desktop cannot install that candidate
+while its signed catalog is unpublished and its approval lock is `noGo`;
+bypassing those gates to make the UI appear releasable would invalidate this
+preflight. No real packaged desktop UI installation, keyboard navigation,
+macOS VoiceOver session, or Windows/Linux native accessibility and deletion
+walkthrough has been performed. Release-owner review must obtain or
+explicitly disposition those manual checks before approval.
 
 The historical, **not publishable** candidate is [qualification run
 37974984924](https://github.com/erikvullings/procyon/actions/runs/37974984924),
@@ -63,8 +88,9 @@ retained candidate artifact **11640886748**, source revision
 `sha256:acf96cda7d0bb0c706e76a41ac14f27ffa484dd3fabdf935f47a3e134887fd77`.
 Its four target catalog/signature hashes, precise run/tag/source, original
 Gemma model revision, negative-control report hash, and candidate-lock hash
-remain recorded in
-[`semantic-gemma-experimental-v1.json`](semantic-gemma-experimental-v1.json).
+were retained during its evaluation; the current
+[`semantic-gemma-experimental-v1.json`](semantic-gemma-experimental-v1.json)
+instead binds the new integrated candidate without approving it.
 All four signed catalogs and their exact catalog-listed bytes were verified
 offline using the release public verification key on 2026-10-10. Signed bytes
 alone cannot make this pre-integration worker suitable for automatic Metal.
@@ -127,8 +153,9 @@ alone does not establish quality or GPU behavior on them.
 
 **Before any publication:** review the integrated candidate and installed
 reports above, complete or explicitly disposition the blocked/manual checks,
-and record a fresh experimental lock and release-owner decision bound to
-the new run, source, release tag, evaluation report, and four signed catalogs.
+and obtain a fresh release-owner decision on the fail-closed experimental
+lock bound to the new run, source, release tag, evaluation report, and four
+signed catalogs.
 The candidate artifact expires after 14 days; if unavailable when that
 review is complete, qualify a fresh candidate rather than substituting the
 old run. Only after those checks and a fresh explicit

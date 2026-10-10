@@ -197,7 +197,7 @@ test('missing Gemma originals or a different model revision fail closed', (conte
   );
 });
 
-test('the historical pre-Metal candidate is explicitly blocked from publication', (context) => {
+test('the integrated lock remains blocked and the historical pre-Metal source cannot publish', (context) => {
   const lock = JSON.parse(
     readFileSync(
       fileURLToPath(
@@ -207,7 +207,8 @@ test('the historical pre-Metal candidate is explicitly blocked from publication'
     ),
   );
   assert.equal(lock.decision, 'noGo');
-  assert.equal(lock.experimentalGemma.approval, 'blocked-stale-pre-integration-candidate');
+  assert.equal(lock.sourceRevision, 'c6c7a94058950bf2704aca484f9c4b77c6dd2dcf');
+  assert.equal(lock.experimentalGemma.approval, 'blocked-pending-release-owner-review');
   const { assets, candidateRoot } = fixture(context);
   assert.throws(
     () => checkExperimentalGemmaRelease(assets, candidateRoot, lock),
@@ -216,7 +217,7 @@ test('the historical pre-Metal candidate is explicitly blocked from publication'
   const oldCandidate = JSON.parse(
     readFileSync(join(candidateRoot, 'semantic-component-release.json'), 'utf8'),
   );
-  oldCandidate.sourceRevision = lock.sourceRevision;
+  oldCandidate.sourceRevision = 'd3f921fe08e4994a905727a71af102979f4fbe23';
   const bytes = `${JSON.stringify(oldCandidate, null, 2)}\n`;
   writeFileSync(join(candidateRoot, 'semantic-component-release.json'), bytes);
   assert.throws(

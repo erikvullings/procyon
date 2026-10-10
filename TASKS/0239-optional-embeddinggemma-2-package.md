@@ -657,3 +657,15 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   tag, component publication, or desktop release has occurred. See the
   [release decision](../docs/evaluations/embeddinggemma-experimental-release-2026-10-10.md)
   for the exact retained artifact and expiry. Task remains in progress.
+- 2026-10-10: The existing experimental lock now binds the **new** signed
+  candidate's run/source, manifest and evaluation hashes, original model,
+  four catalogs and signatures; its decision stays `noGo` with
+  `blocked-pending-release-owner-review`. On macOS, the signed-worker
+  application regression additionally confirmed deletion revokes image
+  citation and file-primary display after reconciliation, and shuts down
+  cleanly before temporary index cleanup. Mock-client UI tests cover consent,
+  install progress/error states, deletion choices, media navigation, stale
+  results, and labelled/focusable controls, but not a real packaged native
+  UI or VoiceOver. The unpublished catalog and no-go gate preclude honest
+  live desktop installation preflight until explicit approval. Manual checks
+  and release-owner review remain outstanding.

@@ -42,6 +42,11 @@ use fm_semantic_worker::{ManagedWorkerLaunch, ManagedWorkerResolver};
 #[cfg(unix)]
 use fm_transport_dto::ResolveRagCitationRequestDto;
 use fm_transport_dto::RuntimeKindDto;
+#[cfg(all(unix, feature = "gemma-native"))]
+use fm_transport_dto::{
+    SearchModeDto, SearchQueryDto, SearchScopeDto, SearchSemanticPredicateDto,
+    SemanticSearchScopeDto, StartSearchRequestDto,
+};
 use tempfile::TempDir;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -453,6 +458,7 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
         })
         .await
         .unwrap();
+    let mut image_source_id = None;
     for (name, media_type) in [
         ("photo.png", "image/png"),
         ("sound.mp3", "audio/mpeg"),
@@ -467,6 +473,9 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
                     .is_some_and(|kind| kind == media_type)
             })
             .unwrap_or_else(|| panic!("enrolled {name} was not returned: {results:?}"));
+        if name == "photo.png" {
+            image_source_id = result.metadata.get("semantic.sourceId").cloned();
+        }
         let resolved = service
             .resolve_rag_citation(
                 &HOST,
@@ -495,6 +504,91 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
         .await
         .unwrap();
     assert!(outside.is_empty(), "unenrolled workspace saw media");
+
+    std::fs::remove_file(root.path().join("photo.png")).unwrap();
+    let after_deletion = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(after_deletion.observed_files, 2);
+    assert!(matches!(
+        service
+            .resolve_rag_citation(
+                &HOST,
+                ResolveRagCitationRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                    source_id: image_source_id.expect("indexed image source"),
+                },
+            )
+            .await,
+        Err(fm_application::ApplicationError::NotFound)
+    ));
+    let root_location: fm_transport_dto::LocationDto =
+        Location::from_native_path(root.path()).unwrap().into();
+    let remaining = service
+        .start_search(StartSearchRequestDto {
+            workspace_id: workspace_id.into_inner(),
+            roots: vec![root_location.clone()],
+            query: String::new(),
+            content_query: None,
+            content_regex: false,
+            content_case_sensitive: false,
+            content_whole_word: false,
+            recurse: true,
+            show_hidden: false,
+            structured_query: Some(SearchQueryDto {
+                schema_version: 2,
+                mode: SearchModeDto::Semantic,
+                scope: SearchScopeDto {
+                    locations: vec![root_location],
+                    recurse: true,
+                    show_hidden: false,
+                },
+                name: None,
+                entry_kinds: Vec::new(),
+                mime_types: Vec::new(),
+                min_size_bytes: None,
+                max_size_bytes: None,
+                modified_after: None,
+                modified_before: None,
+                content: None,
+                semantic: Some(SearchSemanticPredicateDto {
+                    query: "photo.png".to_owned(),
+                    library_id: after_deletion.library_id,
+                    scope: SemanticSearchScopeDto::CurrentFolder,
+                    enrolled_root_ids: Vec::new(),
+                }),
+                concept: None,
+                git_statuses: Vec::new(),
+                tags: Vec::new(),
+                metadata: BTreeMap::new(),
+            }),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        remaining.semantic_results.len(),
+        2,
+        "the audio and video should remain visible after image deletion: {remaining:?}"
+    );
+    assert!(
+        remaining
+            .semantic_results
+            .iter()
+            .all(|result| !result.location.uri.ends_with("photo.png")),
+        "deleted image was still visible in file-primary search: {remaining:?}"
+    );
+    service
+        .semantic_shutdown(Duration::from_secs(10))
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(12), async {
+        while runtime.path().join("worker.pid").exists() {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("signed worker stopped before temporary index cleanup");
 }
 
 fn enrol(library: &SemanticLibraryService, workspace_id: WorkspaceId, root: Location) -> RootId {

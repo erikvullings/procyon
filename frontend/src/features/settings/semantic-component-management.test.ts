@@ -88,6 +88,33 @@ describe('SemanticComponentManagement', () => {
     expect(root.querySelector('.fm-semantic-offer')?.textContent).toContain('Total download');
   });
 
+  it('gives the Gemma setup and consent focusable, labelled controls', async () => {
+    const client = new MockFileManagerClient();
+    await withGemmaProfile(client);
+    mountComponent(client);
+    await waitForLoaded();
+    root
+      .querySelector<HTMLInputElement>('.fm-semantic-install input[value="embeddingGemma2"]')
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-gemma-setup')).not.toBeNull());
+
+    const controls = [
+      '#fm-semantic-gemma-dimensions',
+      '#fm-semantic-gemma-images',
+      '#fm-semantic-gemma-audio',
+      '#fm-semantic-gemma-video',
+      '.fm-semantic-gemma-setup .fm-semantic-confirmation:last-child input',
+    ];
+    for (const selector of controls) {
+      const input = root.querySelector<HTMLInputElement | HTMLSelectElement>(selector);
+      expect(input, selector).not.toBeNull();
+      expect(input?.labels?.[0]?.textContent?.trim(), selector).toBeTruthy();
+      input?.focus();
+      expect(document.activeElement, selector).toBe(input);
+    }
+    expect(button('Accept and install').disabled).toBe(true);
+  });
+
   it('requires immutable Gemma choices and fresh-index consent before installing beside E5', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     await withGemmaProfile(client);
