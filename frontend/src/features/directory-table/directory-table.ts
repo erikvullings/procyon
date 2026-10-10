@@ -168,6 +168,8 @@ export interface DirectoryTableAttrs {
   readonly nativeIconLoader?: NativeIconLoader;
   /** Overlays a downscaled preview onto the icon column for supported files (task 0134). */
   readonly thumbnailLoader?: ThumbnailLoader;
+  /** Suppresses previews for results whose indexed source is stale or unavailable. */
+  readonly thumbnailAllowed?: (entry: EntrySummary) => boolean;
   /** Overlays Finder-tag color dots next to the name for supported hosts (task 0136). */
   readonly finderTagsLoader?: FinderTagsLoader;
   /** Enabled declarative plugin columns, already validated by the host. */
@@ -1075,7 +1077,13 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                   { key: column.id, role: 'gridcell' },
                   column.id === 'core.name' && attrs.renamingEntryId === entry.id
                     ? [
-                        listEntryIcon(entry, attrs.nativeIconLoader, attrs.thumbnailLoader),
+                        listEntryIcon(
+                          entry,
+                          attrs.nativeIconLoader,
+                          attrs.thumbnailAllowed?.(entry) === false
+                            ? undefined
+                            : attrs.thumbnailLoader,
+                        ),
                         m('input[type=text].fm-inline-rename-input', {
                           value: attrs.renameValue ?? entry.name,
                           'aria-label': t('table', 'rename', { name: entry.name }),
@@ -1112,7 +1120,9 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                           now,
                           attrs.nativeIconLoader,
                           attrs.showFullPath,
-                          attrs.thumbnailLoader,
+                          attrs.thumbnailAllowed?.(entry) === false
+                            ? undefined
+                            : attrs.thumbnailLoader,
                           attrs.finderTagsLoader,
                           entryIndex === 0 ? undefined : source.entryAt(entryIndex - 1),
                           separateExtension,

@@ -58,6 +58,8 @@ the existing authorized thumbnail for available, unchanged images and supported 
 has a labelled source action rather than an inline player. Baseline document conversion does
 not index standalone image/audio/video bytes; these presentations apply to media evidence
 provided by a compatible converter/index, not to unsupported binary files automatically.
+Stale or unavailable file-primary hits suppress thumbnails in both the evidence panel and the
+directory row/grid, so a current or cached preview cannot be mistaken for indexed evidence.
 
 ## Authority and capability boundaries
 

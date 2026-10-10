@@ -916,6 +916,7 @@ describe('Pane search breadcrumb rendering', () => {
         modifiedAt: '2026-04-12T09:30:00.000Z',
       };
       const thumbnailLoader = new ThumbnailLoader(new MockFileManagerClient());
+      const rowThumbnail = vi.spyOn(thumbnailLoader, 'thumbnailDataUri').mockReturnValue(undefined);
       const viewport = thumbnailLoader.createViewport();
       const thumbnailDataUri = vi
         .spyOn(viewport, 'thumbnailDataUri')
@@ -968,6 +969,7 @@ describe('Pane search breadcrumb rendering', () => {
       );
       expect(root.querySelector('.fm-semantic-media-thumbnail') !== null).toBe(hasThumbnail);
       expect(thumbnailDataUri).toHaveBeenCalledTimes(hasThumbnail ? 1 : 0);
+      expect(rowThumbnail).toHaveBeenCalledTimes(mimeType === 'video/mp4' ? 0 : 1);
       const open = [
         ...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-evidence-actions button'),
       ].find((button) => button.textContent === action);
@@ -984,6 +986,7 @@ describe('Pane search breadcrumb rendering', () => {
     const entry: EntrySummary = { ...source, mimeType: 'image/png', extension: 'png' };
     const onOpenEntry = vi.fn();
     const thumbnailLoader = new ThumbnailLoader(new MockFileManagerClient());
+    const rowThumbnail = vi.spyOn(thumbnailLoader, 'thumbnailDataUri');
     const createViewport = vi.spyOn(thumbnailLoader, 'createViewport');
     mount(
       attrs({
@@ -1022,6 +1025,7 @@ describe('Pane search breadcrumb rendering', () => {
       }),
     );
     expect(createViewport).not.toHaveBeenCalled();
+    expect(rowThumbnail).not.toHaveBeenCalled();
     expect(root.querySelector('.fm-semantic-evidence')?.textContent).toContain(
       'Source is unavailable',
     );
@@ -1034,6 +1038,60 @@ describe('Pane search breadcrumb rendering', () => {
     expect(open?.disabled).toBe(true);
     open?.click();
     expect(onOpenEntry).not.toHaveBeenCalled();
+  });
+
+  it('suppresses stale media thumbnails in grid view while keeping available media visible', () => {
+    const source = entries[0];
+    if (source === undefined) throw new Error('missing entry fixture');
+    const image: EntrySummary = { ...source, mimeType: 'image/png', extension: 'png' };
+    const current: EntrySummary = {
+      ...source,
+      id: 'current-image' as EntryId,
+      location: { providerId: 'file', uri: 'file:///home/erik/current.png' },
+      name: 'current.png',
+      mimeType: 'image/png',
+      extension: 'png',
+    };
+    const evidence = (entry: EntrySummary, stale: boolean) => ({
+      entryId: entry.id,
+      location: entry.location,
+      score: 0.8,
+      bestEvidence: {
+        recordId: entry.id,
+        sourceId: entry.id,
+        score: 0.8,
+        chunkKind: 'chunk',
+        excerpt: 'landscape',
+        provenanceJson: '{}',
+        indexedContentHash: 'hash',
+        generation: 1,
+        available: true,
+        stale,
+        generated: false,
+        sourcePosition: 0,
+      },
+      additionalEvidence: [],
+      additionalSourceIds: [],
+    });
+    const thumbnailLoader = new ThumbnailLoader(new MockFileManagerClient());
+    const viewport = thumbnailLoader.createViewport();
+    const thumbnailDataUri = vi.spyOn(viewport, 'thumbnailDataUri').mockReturnValue(undefined);
+    vi.spyOn(thumbnailLoader, 'createViewport').mockReturnValue(viewport);
+    mount(
+      attrs({
+        entries: [image, current],
+        viewMode: 'grid',
+        thumbnailLoader,
+        searchPresentation: {
+          kind: 'semantic',
+          term: 'landscape',
+          executionMode: 'semantic',
+          semanticResults: [evidence(image, true), evidence(current, false)],
+        },
+      }),
+    );
+    expect(thumbnailDataUri).not.toHaveBeenCalledWith(image, expect.anything());
+    expect(thumbnailDataUri).toHaveBeenCalledWith(current, expect.anything());
   });
 
   it('offers Search Knowledge from the semantic result set when the shell supports it (task 0206)', () => {

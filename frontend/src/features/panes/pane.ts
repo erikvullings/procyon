@@ -1808,6 +1808,15 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
           semanticEvidencePanel(attrs),
           (() => {
             const isGridView = attrs.tableConfig.viewMode === 'grid';
+            const suppressedThumbnails = new Set(
+              attrs.searchPresentation?.semanticResults
+                ?.filter((result) =>
+                  [result.bestEvidence, ...result.additionalEvidence].some(
+                    (evidence) => !evidence.available || evidence.stale,
+                  ),
+                )
+                .map((result) => result.entryId),
+            );
             const sharedListAttrs = {
               state: attrs.state,
               source: entryArraySource(attrs.entries, ds.totalKnownEntries),
@@ -1822,6 +1831,11 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               ...(attrs.tableConfig.thumbnailLoader === undefined
                 ? {}
                 : { thumbnailLoader: attrs.tableConfig.thumbnailLoader }),
+              ...(attrs.searchPresentation?.semanticResults === undefined
+                ? {}
+                : {
+                    thumbnailAllowed: (entry: EntrySummary) => !suppressedThumbnails.has(entry.id),
+                  }),
               ...(attrs.tableConfig.finderTagsLoader === undefined
                 ? {}
                 : { finderTagsLoader: attrs.tableConfig.finderTagsLoader }),
