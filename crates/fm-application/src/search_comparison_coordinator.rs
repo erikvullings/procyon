@@ -598,10 +598,11 @@ fn semantic_result_entry(
     let provider_id = result.metadata.get("provider_id")?;
     let uri = result.metadata.get("uri")?;
     let location = Location::try_new(ProviderId::new(provider_id), uri.clone()).ok()?;
-    if query
+    if (query
         .semantic
         .as_ref()
         .is_some_and(|semantic| semantic.scope == SemanticSearchScopeDto::CurrentFolder)
+        || (query.mode == SearchModeDto::Concept && !roots.is_empty()))
         && !roots.iter().any(|root| location_is_within(&location, root))
     {
         return None;
@@ -914,6 +915,28 @@ mod tests {
             })
             .await
             .expect("ingest fixture");
+        capability
+            .ingest(DocumentIngestion {
+                scope: SemanticScope::new(
+                    TenantId::new(workspace_id.to_string()),
+                    LibraryId::new("library-1"),
+                ),
+                operation_id: SemanticOperationId::new("ingest-other"),
+                document_id: DocumentId::new("document-other"),
+                metadata: BTreeMap::from([
+                    ("provider_id".to_owned(), "local".to_owned()),
+                    ("uri".to_owned(), "file:///other/ml.pdf".to_owned()),
+                    ("name".to_owned(), "other-ml.pdf".to_owned()),
+                    (
+                        "concept_uri".to_owned(),
+                        "https://example.test/concepts/ml".to_owned(),
+                    ),
+                ]),
+                media_type: "application/pdf".to_owned(),
+                content: b"machine learning".to_vec(),
+            })
+            .await
+            .expect("ingest out-of-scope fixture");
         let coordinator = SearchComparisonCoordinator::new(
             SearchEngine::new(Arc::clone(&search_store), events.clone(), providers.clone()),
             ComparisonEngine::new(Arc::clone(&comparison_store), events.clone(), providers),
@@ -963,7 +986,10 @@ mod tests {
                 schema_version: 3,
                 mode: SearchModeDto::Concept,
                 scope: SearchScopeDto {
-                    locations: Vec::new(),
+                    locations: vec![fm_transport_dto::LocationDto {
+                        provider_id: "local".to_owned(),
+                        uri: "file:///library".to_owned(),
+                    }],
                     recurse: true,
                     show_hidden: false,
                 },

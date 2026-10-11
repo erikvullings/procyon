@@ -1,0 +1,287 @@
+{
+  "format": "procyon-skos-1",
+  "id": "gemet-climate-energy",
+  "name": "Climate and renewable energy (GEMET 4.2.3 excerpt)",
+  "concepts": [
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/11967",
+      "prefLabels": {
+        "en": "hydroelectric energy"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "The free renewable source of energy provided by falling water that drives the turbines. Hydropower is the most important of the regenerable energy sources because of its highest efficiency at the energy conversion. There are two types of hydroelectric power plants: a) run-of-river power plants for the use of affluent water; b) storage power plants (power stations with reservoir) where the influx can be regulated with the help of a reservoir. Mostly greater differences in altitudes are being used, like mountain creeks. Power stations with reservoirs are generally marked by barrages with earth fill dam or concrete dams. Though hydropower generally can be called environmentally acceptable, there exist also some problems: a) change of groundwater level and fill up of the river bed with rubble. b) Risk of dam breaks. c) Great demand for land space for the reservoir. d) Diminution, but partly also increase of value of recreation areas. As the hydropowers of the world are limited, the world energy demand however is rising, finally the share of hydropower will decrease."
+      },
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/15271"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/1471",
+      "prefLabels": {
+        "en": "climate change"
+      },
+      "altLabels": {
+        "en": ["climatic change"]
+      },
+      "definitions": {
+        "en": "The long-term fluctuations in temperature, precipitation, wind, and all other aspects of the Earth's climate. External processes, such as solar-irradiance variations, variations of the Earth's orbital parameters (eccentricity, precession, and inclination), lithosphere motions, and volcanic activity, are factors in climatic variation. Internal variations of the climate system, e.g., changes in the abundance of greenhouse gases, also may produce fluctuations of sufficient magnitude and variability to explain observed climate change through the feedback processes interrelating the components of the climate system."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://www.eionet.europa.eu/gemet/concept/15032",
+        "http://www.eionet.europa.eu/gemet/concept/15033",
+        "http://www.eionet.europa.eu/gemet/concept/15096",
+        "http://www.eionet.europa.eu/gemet/concept/15167"
+      ],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/15032",
+      "prefLabels": {
+        "en": "climate change mitigation"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/1471"],
+      "narrower": [],
+      "related": [
+        "http://www.eionet.europa.eu/gemet/concept/15033",
+        "http://www.eionet.europa.eu/gemet/concept/15096"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/15033",
+      "prefLabels": {
+        "en": "climate change adaptation"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "process of preparing to cope with living in a changing climate"
+      },
+      "scopeNotes": {
+        "en": "Improved definition (EN only): process of preparing to cope with living in a changing climate, e.g. increased rainfall, higher temperatures, scarce water, or more frequent storms"
+      },
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/1471"],
+      "narrower": ["http://www.eionet.europa.eu/gemet/concept/15046"],
+      "related": ["http://www.eionet.europa.eu/gemet/concept/15032"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/15046",
+      "prefLabels": {
+        "en": "adaptive capacity"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "The property of a system to adjust its characteristics or behaviour, in order to expand its coping range under existing climate variability, or future climate conditions. \nACC definition: The ability of systems, institutions, humans, and other organisms to\nadjust to potential damage, to take advantage of opportunities, or to\nrespond to consequences."
+      },
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/15033"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/15077",
+      "prefLabels": {
+        "en": "biofuel production"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Conversion of biomass to biofuel"
+      },
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/885"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/15096",
+      "prefLabels": {
+        "en": "climate change impact"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Consequences of climate change on natural and human systems"
+      },
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/1471"],
+      "narrower": [
+        "http://www.eionet.europa.eu/gemet/concept/15332",
+        "http://www.eionet.europa.eu/gemet/concept/15333"
+      ],
+      "related": ["http://www.eionet.europa.eu/gemet/concept/15032"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/15167",
+      "prefLabels": {
+        "en": "feedback loop"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "vicious or virtuous circle accelerating or decelerating a warming trend in climate change"
+      },
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/1471"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/15271",
+      "prefLabels": {
+        "en": "renewable energy"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Energy derived from natural processes (e.g. sunlight and wind) that are replenished at a faster rate than they are consumed. Solar, wind, geothermal, hydro, and some forms of biomass are common sources of renewable energy."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://www.eionet.europa.eu/gemet/concept/11967",
+        "http://www.eionet.europa.eu/gemet/concept/3658",
+        "http://www.eionet.europa.eu/gemet/concept/7107",
+        "http://www.eionet.europa.eu/gemet/concept/7906",
+        "http://www.eionet.europa.eu/gemet/concept/885",
+        "http://www.eionet.europa.eu/gemet/concept/9259"
+      ],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/15332",
+      "prefLabels": {
+        "en": "water scarcity"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "situation in which water demand exceeds the water resources exploitable under sustainable conditions"
+      },
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/15096"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/15333",
+      "prefLabels": {
+        "en": "water stress"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "sub-optimal disponibility of water which makes impossible to meet human and ecological demand"
+      },
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/15096"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/3658",
+      "prefLabels": {
+        "en": "geothermal energy"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "An energy produced by tapping the earth's internal heat. At present, the only available technologies to do this are those that extract heat from hydrothermal convection systems, where water or steam transfer the heat from the deeper part of the earth to the areas where the energy can be tapped. The amount of pollutants found in geothermal vary from area to area but may contain arsenic, boron, selenium, lead, cadmium, and fluorides. They also may contain hydrogen sulphide, mercury, ammonia, radon, carbon dioxide, and methane."
+      },
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/15271"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/7107",
+      "prefLabels": {
+        "en": "renewable energy source"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Energy sources that do not rely on fuels of which there are only finite stocks. The most widely used renewable source is hydroelectric power; other renewable sources are biomass energy, solar energy, tidal energy, wave energy, and wind energy; biomass energy does not avoid the danger of the greenhouse effect."
+      },
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/15271"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/7906",
+      "prefLabels": {
+        "en": "solar energy"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "The energy transmitted from the sun in the form of electromagnetic radiation. The most successful examples of energy extraction from the sun are so far solar cells used in satellites and solar collectors used to heat water."
+      },
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/15271"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/8475",
+      "prefLabels": {
+        "en": "tidal power"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Mechanical power, which may be converted to electrical power, generated by the rise and fall of ocean tides. The possibilities of utilizing tidal power have been studied for many generations, but the only feasible schemes devised so far are based on the use of one or more tidal basins, separated from the sea by dams (known as barrages), and of hydraulic turbines through which water passes on its way between the basins and the sea."
+      },
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/9259"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/885",
+      "prefLabels": {
+        "en": "biomass energy"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "A renewable energy source that makes use of such biofuels as methane (biogas) generated by sewage, farm, industrial, or household organic waste materials. Other biofuels include trees grown in so-called \"energy forests\" or other plants, such as sugar cane, grown for their energy potential. Biomass energy relies on combustion and therefore produces carbon dioxide; its use would not, therefore, alleviate the greenhouse effect."
+      },
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/15271"],
+      "narrower": ["http://www.eionet.europa.eu/gemet/concept/15077"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://www.eionet.europa.eu/gemet/concept/9259",
+      "prefLabels": {
+        "en": "wave energy"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Power extracted from the motion of sea waves at the coast."
+      },
+      "scopeNotes": {},
+      "broader": ["http://www.eionet.europa.eu/gemet/concept/15271"],
+      "narrower": ["http://www.eionet.europa.eu/gemet/concept/8475"],
+      "related": [],
+      "extensions": {}
+    }
+  ],
+  "extensions": {
+    "https://procyon.app/ns/skos-starter/source": "https://www.eionet.europa.eu/gemet/4.2.3/gemet.rdf.gz",
+    "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by/4.0/",
+    "https://procyon.app/ns/skos-starter/selection": ["concept/1471", "concept/15271"]
+  }
+}

@@ -7,7 +7,6 @@ import type { SemanticVocabulary, WorkspaceId } from '../../models';
 export interface SemanticVocabularyManagementAttrs {
   readonly client: FileManagerClient;
   readonly workspaceId?: WorkspaceId;
-  readonly onCreateConceptFolder: (vocabulary: SemanticVocabulary, conceptUri: string) => void;
 }
 
 function message(error: unknown): string {
@@ -37,6 +36,25 @@ export const SemanticVocabularyManagement: FactoryComponent<
     }
   };
 
+  const importVocabulary = async (
+    client: FileManagerClient,
+    skosJson: string,
+  ): Promise<boolean> => {
+    busy = true;
+    error = undefined;
+    try {
+      const imported = await client.importSemanticVocabulary(skosJson);
+      vocabularies = [...vocabularies, imported];
+      return true;
+    } catch (cause) {
+      error = message(cause);
+      return false;
+    } finally {
+      busy = false;
+      m.redraw();
+    }
+  };
+
   return {
     oninit: ({ attrs }) => void load(attrs.client),
     view: ({ attrs }) =>
@@ -55,18 +73,10 @@ export const SemanticVocabularyManagement: FactoryComponent<
           'button.btn',
           {
             type: 'button',
-            disabled: busy || source.trim().length === 0,
+            disabled: busy || loading || source.trim().length === 0,
             onclick: async () => {
-              busy = true;
-              error = undefined;
-              try {
-                await attrs.client.importSemanticVocabulary(source);
+              if (await importVocabulary(attrs.client, source)) {
                 source = '';
-                vocabularies = await attrs.client.listSemanticVocabularies();
-              } catch (cause) {
-                error = message(cause);
-              } finally {
-                busy = false;
                 m.redraw();
               }
             },
@@ -154,23 +164,14 @@ export const SemanticVocabularyManagement: FactoryComponent<
                   m(
                     'ul.fm-semantic-concept-list',
                     vocabulary.concepts.map((concept) =>
-                      m('li', { key: concept.uri }, [
-                        m(
-                          'span',
-                          concept.prefLabels.en ??
-                            concept.prefLabels.nl ??
-                            Object.values(concept.prefLabels)[0] ??
-                            concept.uri,
-                        ),
-                        m(
-                          'button.btn-flat',
-                          {
-                            type: 'button',
-                            onclick: () => attrs.onCreateConceptFolder(vocabulary, concept.uri),
-                          },
-                          t('semanticVocabulary', 'createFolder'),
-                        ),
-                      ]),
+                      m(
+                        'li',
+                        { key: concept.uri },
+                        concept.prefLabels.en ??
+                          concept.prefLabels.nl ??
+                          Object.values(concept.prefLabels)[0] ??
+                          concept.uri,
+                      ),
                     ),
                   ),
                   vocabulary.reviewQueue

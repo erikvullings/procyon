@@ -332,6 +332,59 @@ unreadable path, symbolic link, stale capture, or evidence change fails the targ
 Remote LLM requests always show their profile, locality, scope, minimized metadata, and exact
 content preview before transmission. The semantic worker itself has no network authority.
 
+## Optional SKOS starter vocabularies
+
+**Find Files > Find by concept** offers five opt-in English-language excerpts:
+**Climate and renewable energy** from GEMET 4.2.3; **Natural sciences**, **Information technology**,
+**Psychology**, and **Defence and military engineering** from the UNESCO Thesaurus. These are
+selections of real SKOS concepts, not complete copies of either thesaurus or generic taxonomies.
+The defence excerpt is limited to those UNESCO subjects, not a military-wide vocabulary.
+Each concept retains its original stable URI; only links between included concepts are retained.
+The picker shows source, snapshot/version and license; selecting one does not import or attach it.
+**Settings > Semantic > Concept vocabularies** is for importing your own `procyon-skos-1` JSON
+and managing imported vocabularies. Imported vocabularies also appear in the picker without
+attachment. Attachment remains available for the separate annotation and review workflows.
+Locally extracted terms enter the review queue of an existing vocabulary; they do not create a
+SKOS source or become authoritative automatically. The Find by concept tab is visible only when
+semantic components are enabled and the active workspace has an indexed document in an available
+root. Type a label and select a bundled or imported concept (recent selections appear before
+typing). This runs a similarity search of indexed document chunks across the active workspace;
+**Current folder only** is optional. Results are *related to* the concept, not authoritative
+concept assignments. **Save as smart folder** pins this similarity search in Smart folders using
+the selected label and definition as a snapshot; it does not assign labels to files. Recreate
+the saved search if the concept's text changes. Only indexed/authorized documents can appear.
+Previously saved exact-concept folders remain readable, but are not created by this discovery
+flow; they require separately published concept annotations to return documents.
+
+The [GEMET 4.2.3 RDF export](https://www.eionet.europa.eu/gemet/en/exports/rdf/4.2.3)
+is © European Environment Agency (EEA), licensed
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+The [UNESCO Thesaurus RDF export](https://vocabularies.unesco.org/exports/thesaurus/latest/unesco-thesaurus.rdf)
+is © UNESCO, licensed [CC BY-SA 3.0 IGO](https://creativecommons.org/licenses/by-sa/3.0/igo/).
+The adapted UNESCO excerpt JSON files in `frontend/src/features/settings/skos-starters/`
+are distributed **under CC BY-SA 3.0 IGO**, not under Procyon's code license; no UNESCO endorsement
+is implied. Adaptations retain English labels only, filter relationships to selected concepts,
+and convert RDF to `procyon-skos-1`. The source has no immutable versioned download URL: the
+bundled snapshot was retrieved 2026-10-11, its concept scheme reports modification date
+2026-08-31, and its exact bytes are pinned by SHA-256 in `scripts/generate-skos-starters.py`.
+If UNESCO updates `/latest/`, regeneration deliberately fails until the snapshot and provenance
+are reviewed and refreshed.
+
+The script selects the UNESCO `mt2.75` natural-sciences members (53 concepts), `mt5.40` and
+`mt5.45` information-technology members (98), and `mt4.10` psychology members (53).
+For defence and military engineering it selects two narrower levels from UNESCO `concept2877`,
+`concept613`, and `concept652` (16). The GEMET excerpt selects two narrower levels from
+`concept/1471` and `concept/15271` (17). The script verifies the official download checksums and
+supports `--check` to compare bundled JSON content to pinned sources (format generated JSON with
+Biome before committing). Original RDF downloads are not bundled; the attributed excerpts work
+offline at runtime.
+
+The separate `erikvullings/rag` project's task 0103 builds project-specific SKOS-like terms
+from its indexed chunks. It does not ship an external generic SKOS dataset that can be reused
+here; its older task 0026's military/research predicate groups are extraction predicates, not a
+published SKOS thesaurus. Other possible sources such as EuroVoc, AGROVOC and LCSH are not bundled
+without verifying exact source bytes, permission to redistribute, and a compatible SKOS export.
+
 ## Backup and recovery
 
 Ordinary backup includes enrolment policy/exclusions, exact model manifest identity, profile

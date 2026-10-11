@@ -10,6 +10,32 @@ import {
 import type { FindFilesSearchParams } from './find-files-dialog';
 
 describe('searchQueryFromParams', () => {
+  it('uses the configured library for an unscoped concept-similarity search', () => {
+    const root = { providerId: 'local', uri: 'file:///current' };
+    const query = searchQueryFromParams(
+      root,
+      {
+        mode: 'semantic',
+        filenameQuery: '',
+        semanticQuery: 'Machine learning. Learning from examples',
+        semanticLibraryId: 'library-1',
+        semanticScope: 'entireLibrary',
+        contentRegex: false,
+        contentCaseSensitive: false,
+        contentWholeWord: false,
+        recurse: true,
+      },
+      false,
+    );
+    expect(query.semantic).toEqual({
+      query: 'Machine learning. Learning from examples',
+      libraryId: 'library-1',
+      scope: 'entireLibrary',
+      enrolledRootIds: [],
+    });
+    expect(query.scope.locations).toEqual([root]);
+  });
+
   it('preserves unexposed query semantics and scope while editing', () => {
     const existing: SearchQuery = {
       schemaVersion: 1,

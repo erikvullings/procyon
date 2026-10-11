@@ -4382,6 +4382,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     },
     getFocusPane: () => focusPane,
     getSettings: () => currentSettings,
+    getWorkspaceId: () => workspace?.id,
     updateSettings: (update) => updateLocationSettings(attrsClient, update),
     includeCurrentSemanticFolder: (workspaceId, location) => {
       semanticEnrolmentRequest = { workspaceId, location };

@@ -1,0 +1,867 @@
+{
+  "format": "procyon-skos-1",
+  "id": "unesco-natural-sciences",
+  "name": "Natural sciences (UNESCO Thesaurus 2026-08-31 snapshot excerpt)",
+  "concepts": [
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept10913",
+      "prefLabels": {
+        "en": "Marine fish"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2625"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept2426"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept10957",
+      "prefLabels": {
+        "en": "Plants"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept4251"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept2630",
+        "http://vocabularies.unesco.org/thesaurus/concept2672",
+        "http://vocabularies.unesco.org/thesaurus/concept4936",
+        "http://vocabularies.unesco.org/thesaurus/concept8551"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept234",
+        "http://vocabularies.unesco.org/thesaurus/concept4263"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept12033",
+      "prefLabels": {
+        "en": "Primates"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2462"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17137"],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept4084"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept12641",
+      "prefLabels": {
+        "en": "Tsetse flies"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2461"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept15229",
+      "prefLabels": {
+        "en": "Plant transpiration"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept4262"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept17137",
+      "prefLabels": {
+        "en": "Great apes"
+      },
+      "altLabels": {
+        "en": ["Chimpanzees", "Gorillas", "Orangutans"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept12033"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept17155",
+      "prefLabels": {
+        "en": "Invasive species"
+      },
+      "altLabels": {
+        "en": [
+          "Exotic species",
+          "Introduced species",
+          "Non-indigenous species",
+          "Non-native species"
+        ]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept234"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept17175",
+      "prefLabels": {
+        "en": "Algae"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2630"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept2016"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept1765",
+      "prefLabels": {
+        "en": "Animal genetics"
+      },
+      "altLabels": {
+        "en": ["Animal breeding", "Animal reproduction"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept1766",
+      "prefLabels": {
+        "en": "Plant genetics"
+      },
+      "altLabels": {
+        "en": ["Plant breeding", "Plant reproduction"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept230"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2016",
+      "prefLabels": {
+        "en": "Marine algae"
+      },
+      "altLabels": {
+        "en": ["Marine plants", "Seaweed", "Seaweeds"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept17175"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept229",
+      "prefLabels": {
+        "en": "Anthropology"
+      },
+      "altLabels": {
+        "en": ["Physical anthropology"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept2509"],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept231",
+        "http://vocabularies.unesco.org/thesaurus/concept233"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept230",
+      "prefLabels": {
+        "en": "Botany"
+      },
+      "altLabels": {
+        "en": ["Botanical research", "Plant biology"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept1766",
+        "http://vocabularies.unesco.org/thesaurus/concept3991",
+        "http://vocabularies.unesco.org/thesaurus/concept4259",
+        "http://vocabularies.unesco.org/thesaurus/concept4260",
+        "http://vocabularies.unesco.org/thesaurus/concept4261",
+        "http://vocabularies.unesco.org/thesaurus/concept4262",
+        "http://vocabularies.unesco.org/thesaurus/concept4263",
+        "http://vocabularies.unesco.org/thesaurus/concept4264"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept231",
+        "http://vocabularies.unesco.org/thesaurus/concept232",
+        "http://vocabularies.unesco.org/thesaurus/concept233",
+        "http://vocabularies.unesco.org/thesaurus/concept235"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept231",
+      "prefLabels": {
+        "en": "Life sciences"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept229",
+        "http://vocabularies.unesco.org/thesaurus/concept230",
+        "http://vocabularies.unesco.org/thesaurus/concept233",
+        "http://vocabularies.unesco.org/thesaurus/concept235"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept232",
+      "prefLabels": {
+        "en": "Natural history"
+      },
+      "altLabels": {
+        "en": ["Nature study"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept230",
+        "http://vocabularies.unesco.org/thesaurus/concept233",
+        "http://vocabularies.unesco.org/thesaurus/concept235"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept233",
+      "prefLabels": {
+        "en": "Natural sciences"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept229",
+        "http://vocabularies.unesco.org/thesaurus/concept230",
+        "http://vocabularies.unesco.org/thesaurus/concept231",
+        "http://vocabularies.unesco.org/thesaurus/concept232",
+        "http://vocabularies.unesco.org/thesaurus/concept235",
+        "http://vocabularies.unesco.org/thesaurus/concept2456",
+        "http://vocabularies.unesco.org/thesaurus/concept4104",
+        "http://vocabularies.unesco.org/thesaurus/concept4263",
+        "http://vocabularies.unesco.org/thesaurus/concept9990"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept234",
+      "prefLabels": {
+        "en": "Species"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17155"],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept10957",
+        "http://vocabularies.unesco.org/thesaurus/concept2380"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept235",
+      "prefLabels": {
+        "en": "Zoology"
+      },
+      "altLabels": {
+        "en": ["Animal biology"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept1765",
+        "http://vocabularies.unesco.org/thesaurus/concept2380",
+        "http://vocabularies.unesco.org/thesaurus/concept2396",
+        "http://vocabularies.unesco.org/thesaurus/concept2413",
+        "http://vocabularies.unesco.org/thesaurus/concept2432",
+        "http://vocabularies.unesco.org/thesaurus/concept2456",
+        "http://vocabularies.unesco.org/thesaurus/concept4104",
+        "http://vocabularies.unesco.org/thesaurus/concept9990"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept230",
+        "http://vocabularies.unesco.org/thesaurus/concept231",
+        "http://vocabularies.unesco.org/thesaurus/concept232",
+        "http://vocabularies.unesco.org/thesaurus/concept233"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2380",
+      "prefLabels": {
+        "en": "Animals"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept2382",
+        "http://vocabularies.unesco.org/thesaurus/concept2394",
+        "http://vocabularies.unesco.org/thesaurus/concept2405",
+        "http://vocabularies.unesco.org/thesaurus/concept2430",
+        "http://vocabularies.unesco.org/thesaurus/concept2445",
+        "http://vocabularies.unesco.org/thesaurus/concept2447",
+        "http://vocabularies.unesco.org/thesaurus/concept2461",
+        "http://vocabularies.unesco.org/thesaurus/concept2462",
+        "http://vocabularies.unesco.org/thesaurus/concept2463"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept1765",
+        "http://vocabularies.unesco.org/thesaurus/concept234",
+        "http://vocabularies.unesco.org/thesaurus/concept2396",
+        "http://vocabularies.unesco.org/thesaurus/concept2432"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2382",
+      "prefLabels": {
+        "en": "Aquatic animals"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept2426",
+        "http://vocabularies.unesco.org/thesaurus/concept2625"
+      ],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2394",
+      "prefLabels": {
+        "en": "Laboratory animals"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2396",
+      "prefLabels": {
+        "en": "Animal diseases"
+      },
+      "altLabels": {
+        "en": ["Animal pathology", "Zoopathology"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2405",
+      "prefLabels": {
+        "en": "Domestic animals"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2413",
+      "prefLabels": {
+        "en": "Zoogeography"
+      },
+      "altLabels": {
+        "en": ["Animal distribution"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept2445"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2426",
+      "prefLabels": {
+        "en": "Marine animals"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2382"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept10913",
+        "http://vocabularies.unesco.org/thesaurus/concept6617"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2430",
+      "prefLabels": {
+        "en": "Birds"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept4104"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2432",
+      "prefLabels": {
+        "en": "Animal nutrition"
+      },
+      "altLabels": {
+        "en": ["Animal feeding"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2445",
+      "prefLabels": {
+        "en": "Fauna"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept2413",
+        "http://vocabularies.unesco.org/thesaurus/concept4251"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2447",
+      "prefLabels": {
+        "en": "Wild animals"
+      },
+      "altLabels": {
+        "en": ["Game animals"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2456",
+      "prefLabels": {
+        "en": "Animal taxonomy"
+      },
+      "altLabels": {
+        "en": ["Zoological taxonomy"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Classification of the species of animals."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept233"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2461",
+      "prefLabels": {
+        "en": "Insects"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept12641",
+        "http://vocabularies.unesco.org/thesaurus/concept5653"
+      ],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept9990"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2462",
+      "prefLabels": {
+        "en": "Mammals"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept12033",
+        "http://vocabularies.unesco.org/thesaurus/concept4084"
+      ],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2463",
+      "prefLabels": {
+        "en": "Reptiles"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2509",
+      "prefLabels": {
+        "en": "Prehistoric man"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept229"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2625",
+      "prefLabels": {
+        "en": "Fish"
+      },
+      "altLabels": {
+        "en": ["Freshwater fish"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2382"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept10913",
+        "http://vocabularies.unesco.org/thesaurus/concept6617"
+      ],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2630",
+      "prefLabels": {
+        "en": "Aquatic plants"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept10957"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17175"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2672",
+      "prefLabels": {
+        "en": "Trees"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept10957"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3991",
+      "prefLabels": {
+        "en": "Phytogeography"
+      },
+      "altLabels": {
+        "en": ["Plant distribution", "Plant geography"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept230"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept4251"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4084",
+      "prefLabels": {
+        "en": "Human species"
+      },
+      "altLabels": {
+        "en": ["Human beings", "Humankind", "Humans", "Mankind"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2462"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept12033"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4104",
+      "prefLabels": {
+        "en": "Ornithology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept233",
+        "http://vocabularies.unesco.org/thesaurus/concept2430"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4251",
+      "prefLabels": {
+        "en": "Flora"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept4264"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept10957"],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept2445",
+        "http://vocabularies.unesco.org/thesaurus/concept3991"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4259",
+      "prefLabels": {
+        "en": "Ethnobotany"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Knowledge, uses and methods of management of plant resources by communities."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept230"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept8551"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4260",
+      "prefLabels": {
+        "en": "Plant diseases"
+      },
+      "altLabels": {
+        "en": ["Phytopathology", "Plant pathology"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept230"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept4936"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4261",
+      "prefLabels": {
+        "en": "Plant nutrition"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept230"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4262",
+      "prefLabels": {
+        "en": "Plant physiology"
+      },
+      "altLabels": {
+        "en": ["Plant growth", "Plant metabolism"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept230"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept15229"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4263",
+      "prefLabels": {
+        "en": "Plant taxonomy"
+      },
+      "altLabels": {
+        "en": ["Botanical taxonomy"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Classification of the species of plants."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept230"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept10957",
+        "http://vocabularies.unesco.org/thesaurus/concept233"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4264",
+      "prefLabels": {
+        "en": "Vegetation"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Plant life characteristic of an ecological area. For taxonomic aspects use \"flora\"."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept230"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept4251",
+        "http://vocabularies.unesco.org/thesaurus/concept4700"
+      ],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4700",
+      "prefLabels": {
+        "en": "Vegetation maps"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept4264"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4936",
+      "prefLabels": {
+        "en": "Fungi"
+      },
+      "altLabels": {
+        "en": ["Mould", "Mushrooms", "Mycology"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept10957"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept4260"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5653",
+      "prefLabels": {
+        "en": "Termites"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2461"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6617",
+      "prefLabels": {
+        "en": "Shellfish"
+      },
+      "altLabels": {
+        "en": ["Crustacea"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2625"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept2426"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept8551",
+      "prefLabels": {
+        "en": "Medicinal plants"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept10957"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept4259"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept9990",
+      "prefLabels": {
+        "en": "Entomology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept233",
+        "http://vocabularies.unesco.org/thesaurus/concept2461"
+      ],
+      "extensions": {}
+    }
+  ],
+  "extensions": {
+    "https://procyon.app/ns/skos-starter/source": "https://vocabularies.unesco.org/exports/thesaurus/latest/unesco-thesaurus.rdf",
+    "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by-sa/3.0/igo/",
+    "https://procyon.app/ns/skos-starter/selection": ["mt2.75"]
+  }
+}

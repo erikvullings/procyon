@@ -149,6 +149,7 @@ semantic components are not installed.
 - [ ] 0239 Optional EmbeddingGemma 2 semantic package *(needs 0195, 0196;
   separately installed alongside default E5, with measured qualification)*
 - [x] 0241 Restore Include folder in semantic search *(consent copy simplified; native manual preflight remains open)*
+- [x] 0242 Curated SKOS starter vocabularies *(needs 0187; opt-in, independent of release gates)*
 - [x] 0243 Generation profile UX and model limits *(needs 0184; independent follow-up)*
 
 ## Structured knowledge search
