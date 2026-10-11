@@ -42,6 +42,8 @@ export function selectionClipboardText(
   return selectedEntries
     .map((entry) => {
       if (actionId === 'core.copyName') return entry.name;
+      if (actionId === 'core.copyPath' && isParentEntry(entry.id))
+        return pathFromUri(activeDirectory.uri);
       const path = pathFromUri(
         isParentEntry(entry.id) ? parentLocation(activeDirectory).uri : entry.location.uri,
       );
