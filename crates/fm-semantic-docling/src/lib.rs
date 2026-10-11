@@ -1800,6 +1800,50 @@ mod tests {
     }
 
     #[test]
+    fn pdf_abstract_heading_and_long_text_index_as_one_section() {
+        let document = DoclingDocument {
+            name: "fixture".into(),
+            nodes: vec![
+                Node::PageInfo {
+                    page_no: 1,
+                    width: 612.0,
+                    height: 792.0,
+                },
+                Node::Heading {
+                    level: 1,
+                    text: "Abstract".into(),
+                },
+                Node::Paragraph {
+                    text: "finding ".repeat(140),
+                },
+                Node::Heading {
+                    level: 1,
+                    text: "Methods".into(),
+                },
+                Node::Paragraph {
+                    text: "We tested the method.".into(),
+                },
+            ],
+            strict_markdown: false,
+            compact_tables: false,
+            links: Vec::new(),
+            confidence: None,
+        };
+        let context = ConversionContext::new();
+        let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 1, 1, None);
+        mapper.map_document(document);
+        let outcome = mapper.finish();
+        let converted = outcome.document().expect("converted");
+        let chunks = fm_semantic_conversion::Chunker::default().chunk(converted);
+
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].section_path, ["Abstract"]);
+        assert_eq!(chunks[0].unit_orders, [0, 1]);
+        assert!(chunks[0].embedding_input.contains("finding"));
+        assert_eq!(chunks[1].section_path, ["Methods"]);
+    }
+
+    #[test]
     fn docling_pdf_repairs_spaced_doi_before_chunking() {
         let document = DoclingDocument {
             name: "fixture".into(),

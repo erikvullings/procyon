@@ -149,7 +149,7 @@ test('macOS production workers require a loader-relative native-library path', (
 });
 
 test('production bundle records the compiled structural chunker identity', () => {
-  assert.equal(PRODUCTION_CHUNKER_IDENTITY, 'structural/3');
+  assert.equal(PRODUCTION_CHUNKER_IDENTITY, 'structural/4');
 });
 
 test('production bundle records the current PDF and baseline converter identity', () => {

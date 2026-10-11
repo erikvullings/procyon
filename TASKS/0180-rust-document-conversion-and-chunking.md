@@ -65,3 +65,11 @@ optional advanced converters and must not block useful local semantic search.
   with hierarchy-aware hard token limits, bounded overlap, display excerpts, and versioned BLAKE3
   fingerprints that exclude path metadata. Verified 114 crate tests, 6 application bridge tests,
   the workspace architecture test, and the full Rust/Biome lint gate.
+- Fixed PDF-style heading orphaning when its first paragraph crosses the chunk target or needs
+  splitting under the hard maximum. Same-page headings remain associated with their first text
+  window and retain source order/provenance; section and page boundaries remain respected.
+  The chunker pipeline identity advances to `structural/4`: existing libraries with a
+  `structural/3` manifest require an explicitly authorized migration/reindex; this change does
+  not touch user data automatically. A new signed worker candidate must reflect the new identity.
+  `S1`/`S2` passage labels are summary evidence identifiers, not PDF text; the
+  Document text list now displays actual section paths instead.

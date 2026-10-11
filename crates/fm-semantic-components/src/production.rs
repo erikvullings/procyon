@@ -20,7 +20,7 @@ pub const PRODUCTION_VERIFYING_KEY_HEX_ENV: &str = "PROCYON_SEMANTIC_CATALOG_VER
 /// Converter pipeline compiled into the production semantic worker.
 pub const PRODUCTION_CONVERTER_IDENTITY: &str = "docling-pdf/1036001+baseline/3";
 /// Structural chunker compiled into the production semantic worker.
-pub const PRODUCTION_CHUNKER_IDENTITY: &str = "structural/3";
+pub const PRODUCTION_CHUNKER_IDENTITY: &str = "structural/4";
 /// Unicode normalization applied symmetrically before production embeddings.
 pub const PRODUCTION_EMBEDDING_PREPROCESSING_IDENTITY: &str = "unicode-default-case-fold/1";
 /// Logical component identity of the production semantic worker.

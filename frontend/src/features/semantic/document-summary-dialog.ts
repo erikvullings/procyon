@@ -274,7 +274,9 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
             'ol.fm-document-summary-passages',
             preview?.keyPassages.map((passage) =>
               m('li', { key: passage.chunkId }, [
-                m('strong', `${passage.label} · ${passage.sectionPath.join(' / ')}`),
+                passage.sectionPath.length > 0
+                  ? m('strong', passage.sectionPath.join(' / '))
+                  : undefined,
                 m('p', passage.content),
               ]),
             ),

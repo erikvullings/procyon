@@ -48,6 +48,8 @@ describe('DocumentSummaryDialog', () => {
     await vi.waitFor(() => expect(root.textContent).toContain('A representative passage'));
     expect(root.textContent).toContain('No generation profile is configured');
     expect(root.textContent).toContain('Key passages');
+    expect(root.textContent).toContain('Overview');
+    expect(root.textContent).not.toContain('S1');
   });
 
   it('discloses cloud transfer and generates a persisted summary', async () => {
