@@ -235,6 +235,8 @@ pub enum UnitKind {
     Paragraph,
     /// One item of a list.
     ListItem,
+    /// A navigational entry, such as a PDF table-of-contents line.
+    Navigation,
     /// A fenced or indented code block, or a run of source code.
     CodeBlock,
     /// A table, or a bounded band of spreadsheet rows.

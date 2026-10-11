@@ -496,6 +496,17 @@ later retry. Unsupported, encrypted, malformed, and over-budget documents remain
 skip or omission reasons. Browser/server mode exposes OCR as unavailable and has no OCR mutation
 routes.
 
+PDF text-layer conversion removes whitespace-delimited dot leaders of at least four dots before
+embedding and labels the affected blocks (and recognized Contents sections) as navigation;
+ordinary three-dot ellipses in prose remain unchanged. Knowledge fusion and file-primary semantic
+ranking weight these navigational hits at one quarter of their normal score, **not** zero: a
+contents entry can still guide a search when no stronger body passage is available. Previously
+indexed PDF evidence is also cleaned and deprioritized at retrieval, but its stored vectors retain
+their original text until that PDF is reindexed. An open Knowledge tab refreshes answer/profile
+availability after Settings closes, so selecting a local Ollama profile reveals Ask without
+discarding inspected search results; removing generation availability hides Ask without hiding
+Search.
+
 Local embedding work is checkpointed in small durable batches. Interrupted ingestion reuses those
 vectors without exposing them to search until the complete document generation is published.
 Publication respects Zvec's 1,024-document write limit, and one document that exceeds the

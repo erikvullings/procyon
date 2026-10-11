@@ -17,6 +17,7 @@ use lopdf::Document;
 use crate::budget::Stop;
 use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
 use crate::model::{Omission, Provenance, TopLevelBoundary, UnitKind, VisualProvenance};
+use crate::pdf_toc::clean_pdf_toc_text;
 
 /// Maximum decompressed content bytes per page.
 const MAX_PAGE_CONTENT_BYTES: usize = 16 * 1024 * 1024;
@@ -45,6 +46,7 @@ impl From<Stop> for PdfError {
 fn page_blocks(text: &str) -> Vec<String> {
     let mut blocks = Vec::new();
     let mut current = String::new();
+    let mut current_navigation = false;
     for line in text.lines() {
         let trimmed = line.split_whitespace().collect::<Vec<_>>().join(" ");
         if trimmed.is_empty() {
@@ -54,6 +56,11 @@ fn page_blocks(text: &str) -> Vec<String> {
             current.clear();
             continue;
         }
+        let navigation = clean_pdf_toc_text(&trimmed).1;
+        if !current.is_empty() && current_navigation != navigation {
+            blocks.push(std::mem::take(&mut current));
+        }
+        current_navigation = navigation;
         if !current.is_empty() {
             current.push('\n');
         }
@@ -105,11 +112,16 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
             if builder.is_saturated() {
                 break;
             }
+            let (text, navigation) = clean_pdf_toc_text(&block);
             let pushed = builder
                 .push(UnitDraft {
-                    kind: UnitKind::Paragraph,
+                    kind: if navigation {
+                        UnitKind::Navigation
+                    } else {
+                        UnitKind::Paragraph
+                    },
                     section_path: Vec::new(),
-                    text: block,
+                    text,
                     provenance: Provenance::PdfBlock {
                         page_number,
                         block_index: block_index as u32,
@@ -238,6 +250,26 @@ pub(crate) mod tests {
     /// Generates a PDF whose single page has no text-drawing operators.
     pub(crate) fn image_only_pdf() -> Vec<u8> {
         text_pdf(&[&[]])
+    }
+
+    #[test]
+    fn baseline_pdf_removes_only_navigation_leaders() {
+        let pdf = text_pdf(&[&[
+            "........................ Aggression",
+            "Alcohol/drug abuse .......... 12",
+            "",
+            "Ordinary prose... retains its ellipsis.",
+        ]]);
+        let document = convert_pdf(&pdf).expect("convert PDF");
+        assert_eq!(document.units()[0].kind, UnitKind::Navigation);
+        assert!(!document.units()[0].text.contains("...."));
+        assert!(
+            document
+                .units()
+                .iter()
+                .any(|unit| unit.kind == UnitKind::Paragraph
+                    && unit.text.contains("prose... retains"))
+        );
     }
 
     fn convert_pdf(bytes: &[u8]) -> Result<ConvertedDocument, PdfError> {

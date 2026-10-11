@@ -24,6 +24,7 @@ interface MountOptions {
   readonly onClose?: () => void;
   readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
   readonly isSourceOpen?: (evidence: KnowledgeEvidence) => boolean;
+  readonly profileRevision?: () => number;
 }
 
 function mount(options: MountOptions = {}): MockFileManagerClient {
@@ -37,6 +38,7 @@ function mount(options: MountOptions = {}): MockFileManagerClient {
         currentFolder: options.currentFolder,
         semanticSourceIds: options.semanticSourceIds ?? [],
         initialSubject: options.initialSubject,
+        profileRevision: options.profileRevision?.() ?? 0,
         onClose: options.onClose ?? vi.fn(),
         ...(options.onOpenSource === undefined ? {} : { onOpenSource: options.onOpenSource }),
         ...(options.isSourceOpen === undefined ? {} : { isSourceOpen: options.isSourceOpen }),
@@ -2158,6 +2160,61 @@ async function answersReady(): Promise<void> {
 }
 
 describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
+  it('offers Ask for an activated Ollama profile without reopening an existing Knowledge tab', async () => {
+    const client = new MockFileManagerClient();
+    let revision = 0;
+    mount({ client, initialSubject: 'retrieval', profileRevision: () => revision });
+    await ready();
+    await search();
+    expect(answerSection()).toBeNull();
+
+    const profile = await client.createLlmProfile({
+      name: 'Local Ollama',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'mock-model',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
+    await client.activateLlmProfile(profile.id, false);
+    revision++;
+    m.redraw.sync();
+
+    await askBarReady();
+    expect(root.querySelector('.fm-knowledge-ask-bar')).not.toBeNull();
+    expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+  });
+
+  it('hides Ask if refreshed host capabilities revoke generation without losing search results', async () => {
+    const client = new MockFileManagerClient();
+    await configureProfile(client);
+    let revision = 0;
+    mount({ client, initialSubject: 'retrieval', profileRevision: () => revision });
+    await askBarReady();
+    await search();
+    vi.spyOn(client, 'getKnowledgeCapabilities').mockResolvedValue({
+      fullText: true,
+      semantic: false,
+      answerGeneration: false,
+    });
+    revision++;
+    m.redraw.sync();
+
+    await vi.waitFor(() => expect(answerSection()).toBeNull());
+    expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+  });
+
   it('retrieves once and answers only after an explicit question', async () => {
     const client = new MockFileManagerClient();
     await configureProfile(client);

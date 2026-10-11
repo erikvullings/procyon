@@ -40,6 +40,18 @@ pub(crate) fn is_corrupted_pdf_text(text: &str) -> bool {
     words >= 100 && single_letters * 10 >= words * 9
 }
 
+pub(crate) fn is_pdf_navigation(
+    media_type: &str,
+    record_kind: &str,
+    section_path: &[String],
+    content: &str,
+) -> bool {
+    media_type == "application/pdf"
+        && (record_kind == "navigation"
+            || fm_semantic_conversion::is_pdf_toc_section(section_path)
+            || fm_semantic_conversion::clean_pdf_toc_text(content).1)
+}
+
 /// Persisted ingestion/reconciliation state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IngestionStage {
@@ -868,7 +880,12 @@ impl IngestionCoordinator {
                 occurrence_id: document.occurrence_id.clone(),
                 cache_key: key,
                 vector: vector.clone(),
-                record_kind: "chunk".into(),
+                record_kind: if chunk.is_navigation {
+                    "navigation"
+                } else {
+                    "chunk"
+                }
+                .into(),
                 excerpt: chunk.display_excerpt.clone(),
                 content: chunk.embedding_input.clone(),
                 token_count: chunk.estimated_tokens,

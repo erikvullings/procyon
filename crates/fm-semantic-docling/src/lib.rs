@@ -23,7 +23,8 @@ use fm_semantic_conversion::{
     BaselineConverter, ComponentVersion, ConversionContext, ConversionError, ConversionOutcome,
     ConversionWarning, ConvertedDocument, DocumentConverter, DocumentMetadata, FormatKind,
     Omission, OptionalConverter, Provenance, ProvenancePrecision, SourceContent, SourceMap,
-    StructuralUnit, TopLevelBoundary, UnitKind, instruction_like_excerpt, sanitize,
+    StructuralUnit, TopLevelBoundary, UnitKind, clean_pdf_toc_text, instruction_like_excerpt,
+    is_pdf_toc_section, sanitize,
 };
 
 const OCR_REQUIRED_GUIDANCE: &str = "This PDF has no searchable text layer and was excluded from \
@@ -1452,7 +1453,13 @@ impl<'a> Mapper<'a> {
             return false;
         }
         let order = self.units.len() as u32;
-        let mut text = sanitized.text;
+        let (mut text, has_leader) = clean_pdf_toc_text(&sanitized.text);
+        let kind = if kind != UnitKind::Heading && (has_leader || is_pdf_toc_section(&section_path))
+        {
+            UnitKind::Navigation
+        } else {
+            kind
+        };
         let mut truncated = false;
         let unit_limit = self.context.budgets().max_unit_chars as usize;
         if text.chars().count() > unit_limit {
@@ -1713,6 +1720,62 @@ mod tests {
                 .units()
                 .iter()
                 .all(|unit| !unit.text.contains("Repeated footer"))
+        );
+    }
+
+    #[test]
+    fn toc_leaders_are_removed_before_embedding_and_navigation_is_separate_from_prose() {
+        let document = DoclingDocument {
+            name: "fixture".into(),
+            nodes: vec![
+                Node::PageInfo {
+                    page_no: 1,
+                    width: 612.0,
+                    height: 792.0,
+                },
+                Node::Heading {
+                    level: 1,
+                    text: "Table of Contents".into(),
+                },
+                Node::Paragraph {
+                    text: "........................ Aggression\nAlcohol/drug abuse .......... 12"
+                        .into(),
+                },
+                Node::Heading {
+                    level: 1,
+                    text: "Introduction".into(),
+                },
+                Node::Paragraph {
+                    text: "A substantive passage... with ordinary ellipses.".into(),
+                },
+            ],
+            strict_markdown: false,
+            compact_tables: false,
+            links: Vec::new(),
+            confidence: None,
+        };
+        let context = ConversionContext::new();
+        let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 1, 1, None);
+        mapper.map_document(document);
+        let converted = mapper.finish().document().expect("converted").clone();
+        let chunks = fm_semantic_conversion::Chunker::default().chunk(&converted);
+
+        assert_eq!(
+            chunks
+                .iter()
+                .map(|chunk| (chunk.is_navigation, chunk.embedding_input.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                (true, "Table of Contents\n\nTable of Contents"),
+                (
+                    true,
+                    "Table of Contents\n\nAggression\nAlcohol/drug abuse 12"
+                ),
+                (
+                    false,
+                    "Introduction\n\nA substantive passage... with ordinary ellipses."
+                )
+            ]
         );
     }
 

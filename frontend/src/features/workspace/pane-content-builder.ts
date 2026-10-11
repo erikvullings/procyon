@@ -98,6 +98,7 @@ export interface PaneContentContext {
   // Scalar state getters
   getWorkspace(): WorkspaceProjection | undefined;
   getCurrentSettings(): Settings | undefined;
+  getKnowledgeAnswerRevision(): number;
   getSystemLocations(): readonly SystemLocation[];
   getSystemLocationsError(): string | undefined;
   getVolumes(): readonly Volume[];
@@ -987,6 +988,7 @@ export function createPaneContentBuilder(
                       currentFolder: knowledgeSearch.currentFolder,
                       semanticSourceIds: knowledgeSearch.semanticSourceIds,
                       initialSubject: knowledgeSearch.initialSubject,
+                      profileRevision: context.getKnowledgeAnswerRevision(),
                       onClose: () => context.closeKnowledgeSearch(paneId, knowledgeSearch.tabId),
                       onOpenSource: (evidence) => context.openKnowledgeSource(paneId, evidence),
                       isSourceOpen: context.isKnowledgeSourceOpen,

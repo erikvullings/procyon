@@ -119,6 +119,8 @@ pub struct Chunk {
     pub unit_orders: Vec<u32>,
     /// Format the chunk came from.
     pub format: FormatKind,
+    /// A PDF navigation entry, kept searchable but ranked behind substantive text.
+    pub is_navigation: bool,
     /// Section hierarchy of the chunk's first unit.
     pub section_path: Vec<String>,
     /// Whether the section hierarchy had to be shortened to leave room for
@@ -192,6 +194,8 @@ impl Chunker {
             }
             let compatible = pending.last().is_none_or(|previous| {
                 unit.kind != UnitKind::Heading
+                    && (previous.kind == UnitKind::Navigation)
+                        == (unit.kind == UnitKind::Navigation)
                     && previous.boundary == unit.boundary
                     && chunk_section_path(previous) == chunk_section_path(unit)
             });
@@ -245,6 +249,11 @@ impl Chunker {
             &content,
             provenance,
             None,
+            document.format() == FormatKind::Pdf
+                && units.iter().all(|unit| {
+                    unit.kind == UnitKind::Navigation
+                        || crate::is_pdf_toc_section(&chunk_section_path(unit))
+                }),
         );
         chunks.push(chunk);
     }
@@ -287,6 +296,9 @@ impl Chunker {
                     total,
                     overlap_tokens,
                 }),
+                document.format() == FormatKind::Pdf
+                    && (unit.kind == UnitKind::Navigation
+                        || crate::is_pdf_toc_section(&chunk_section_path(unit))),
             );
             chunks.push(chunk);
         }
@@ -379,6 +391,7 @@ impl Chunker {
         content: &str,
         provenance: ChunkProvenance,
         part: Option<ChunkPart>,
+        is_navigation: bool,
     ) -> Chunk {
         let embedding_input = embedding_input(&section_path, content);
         debug_assert!(estimate_tokens(&embedding_input) <= self.options.max_tokens);
@@ -389,6 +402,7 @@ impl Chunker {
             source_order,
             unit_orders,
             format: document.format(),
+            is_navigation,
             section_path,
             section_path_truncated,
             estimated_tokens: estimate_tokens(&embedding_input),

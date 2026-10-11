@@ -583,8 +583,8 @@ impl KnowledgeRetrievalService {
         if cancellation.is_cancelled() {
             return Err(KnowledgeRetrievalError::Cancelled);
         }
-        let fused = fuse_ranked_candidates(&lists, request.policy.rank_constant);
-        let evidence = self.materialize(&reader, &fused, &lists, &request, cancellation)?;
+        let mut fused = fuse_ranked_candidates(&lists, request.policy.rank_constant);
+        let evidence = self.materialize(&reader, &mut fused, &lists, &request, cancellation)?;
         let token_count = evidence
             .iter()
             .map(|item| item.token_count)
@@ -760,12 +760,30 @@ impl KnowledgeRetrievalService {
     fn materialize(
         &self,
         reader: &CatalogReader,
-        fused: &[FusedCandidate],
+        fused: &mut [FusedCandidate],
         lists: &[RankedCandidateList],
         request: &KnowledgeRetrievalRequest,
         cancellation: &CancellationToken,
     ) -> Result<Vec<KnowledgeEvidence>, KnowledgeRetrievalError> {
         let authorized = self.authorize_candidates(reader, fused, lists, request, cancellation)?;
+        for candidate in fused.iter_mut() {
+            if let Some((_, item)) = authorized.get(&candidate.record_id)
+                && crate::ingestion::is_pdf_navigation(
+                    &item.media_type,
+                    &item.record_kind,
+                    &item.section_path,
+                    &item.content,
+                )
+            {
+                candidate.score *= 0.25;
+            }
+        }
+        fused.sort_by(|left, right| {
+            right
+                .score
+                .total_cmp(&left.score)
+                .then_with(|| left.record_id.cmp(&right.record_id))
+        });
         let mut primaries = Vec::<(usize, QueryEvidence)>::new();
         let mut duplicates = HashMap::<String, BTreeSet<String>>::new();
         let mut logical_chunks = HashMap::<ChunkIdentity, String>::new();
@@ -1174,6 +1192,20 @@ fn build_evidence(
 ) -> Result<KnowledgeEvidence, KnowledgeRetrievalError> {
     let provenance = serde_json::from_str(&evidence.provenance)
         .map_err(|_| KnowledgeRetrievalError::InvalidProvenance)?;
+    let navigation = crate::ingestion::is_pdf_navigation(
+        &evidence.media_type,
+        &evidence.record_kind,
+        &evidence.section_path,
+        &evidence.content,
+    );
+    let (excerpt, content) = if evidence.media_type == "application/pdf" {
+        (
+            fm_semantic_conversion::clean_pdf_toc_text(&evidence.excerpt).0,
+            fm_semantic_conversion::clean_pdf_toc_text(&evidence.content).0,
+        )
+    } else {
+        (evidence.excerpt.clone(), evidence.content.clone())
+    };
     let stale = request
         .current_hashes
         .get(&evidence.source_id)
@@ -1187,9 +1219,13 @@ fn build_evidence(
             .unwrap_or_default(),
         document_id: evidence.document_id,
         library_id: evidence.library_id,
-        chunk_kind: evidence.record_kind,
-        excerpt: evidence.excerpt,
-        content: evidence.content,
+        chunk_kind: if navigation {
+            "navigation".into()
+        } else {
+            evidence.record_kind
+        },
+        excerpt,
+        content,
         token_count: evidence.token_count,
         section_path: evidence.section_path,
         provenance,
@@ -1927,6 +1963,54 @@ mod tests {
         assert_eq!(record_ids(&retrieval), ["b-0", "a-0", "a-1"]);
         assert_eq!(retrieval.evidence[0].final_rank, 1);
         assert_eq!(retrieval.evidence[2].final_rank, 3);
+    }
+
+    #[test]
+    fn toc_candidates_keep_navigation_access_without_outranking_body_evidence() {
+        let path = catalog_path();
+        let catalog = SemanticCatalog::open(&path).expect("catalog");
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .expect("library");
+        let mut toc_occurrence = occurrence("toc-occ", "toc-source", "root-a", "workspace-a", true);
+        toc_occurrence.media_type = "application/pdf".into();
+        let mut body_occurrence =
+            occurrence("body-occ", "body-source", "root-a", "workspace-a", true);
+        body_occurrence.media_type = "application/pdf".into();
+        let mut toc = record("toc-0", "toc-occ", 0);
+        toc.record_kind = "navigation".into();
+        toc.excerpt = "........................ Aggression".into();
+        toc.content = toc.excerpt.clone();
+        publish(&catalog, "tenant-a", "toc", vec![toc_occurrence], vec![toc]);
+        publish(
+            &catalog,
+            "tenant-a",
+            "body",
+            vec![body_occurrence],
+            vec![record("body-0", "body-occ", 0)],
+        );
+        let service = KnowledgeRetrievalService::new(
+            catalog,
+            None,
+            None,
+            Some(FakeFullTextIndex::returning(vec![vec!["toc-0", "body-0"]])),
+        );
+        let mut request = request(KnowledgeRoute::FullText, policy());
+        request.policy.include_trace = true;
+        let result = service
+            .retrieve(request, &CancellationToken::new())
+            .expect("retrieve");
+        assert_eq!(
+            result
+                .evidence
+                .iter()
+                .map(|item| (item.record_id.as_str(), item.content.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("body-0", "complete text for body-0"),
+                ("toc-0", "Aggression")
+            ]
+        );
     }
 
     #[test]
@@ -3034,10 +3118,11 @@ mod tests {
             route: KnowledgeRoute::FullText,
             record_ids: vec!["a-0".into()],
         }];
+        let mut fused = fuse_ranked_candidates(&lists, DEFAULT_RANK_CONSTANT);
         assert!(matches!(
             service.materialize(
                 &service.catalog.begin_read().expect("read lease"),
-                &fuse_ranked_candidates(&lists, DEFAULT_RANK_CONSTANT),
+                &mut fused,
                 &lists,
                 &request(
                     KnowledgeRoute::FullText,

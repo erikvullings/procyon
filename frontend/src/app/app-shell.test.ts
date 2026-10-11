@@ -5030,6 +5030,43 @@ describe('AppShell', () => {
     );
   });
 
+  it('reveals Ask in an already-open Knowledge tab after selecting Ollama in Settings', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    (await toolbarButton('Semantic Search…')).click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-workspace')).not.toBeNull());
+    expect(root.querySelector('.fm-knowledge-ask-bar')).toBeNull();
+
+    const profile = await client.createLlmProfile({
+      name: 'Local Ollama',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'mock-model',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
+    await client.activateLlmProfile(profile.id, false);
+    root.querySelector<HTMLButtonElement>('.fm-settings-button')?.click();
+    m.redraw.sync();
+    root.querySelector<HTMLButtonElement>('.fm-settings-button')?.click();
+    m.redraw.sync();
+
+    await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-ask-bar')).not.toBeNull());
+    expect(root.querySelectorAll('.fm-knowledge-workspace')).toHaveLength(1);
+    expect(await toolbarButton('Semantic search & Ask')).not.toBeNull();
+  });
+
   it('focuses the existing Knowledge tab instead of creating another Ask tab', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     await client.createLlmProfile({

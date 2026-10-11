@@ -57,6 +57,8 @@ export interface KnowledgeSearchDialogAttrs {
   readonly semanticSourceIds: readonly string[];
   /** Initial subject text, e.g. the active quick filter or semantic query. */
   readonly initialSubject?: string | undefined;
+  /** Changes when Settings may have activated or removed a generation profile. */
+  readonly profileRevision?: number;
   readonly onClose: () => void;
   readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
   readonly isSourceOpen?: (evidence: KnowledgeEvidence) => boolean;
@@ -745,6 +747,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    */
   let answerProfiles: readonly LlmProfile[] = [];
   let answerProfilesFailed = false;
+  let loadedProfileRevision = 0;
   let answerCopied = false;
   /** Grounded-only by default; the opt-in is explicit and labelled. */
   let allowModelKnowledge = false;
@@ -978,6 +981,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     generation += 1;
     revision += 1;
     const loadGeneration = generation;
+    const profileRevision = attrs.profileRevision ?? 0;
     pendingParse = undefined;
     busy = 'loading';
     error = undefined;
@@ -1007,6 +1011,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     searchAfterLoad = false;
     answerProfiles = [];
     answerProfilesFailed = false;
+    loadedProfileRevision = profileRevision;
     allowModelKnowledge = false;
     settingsOpen = false;
     enrolmentOpen = false;
@@ -1046,7 +1051,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           folderIndexedRequest,
         ]);
       if (loadGeneration !== generation) return;
-      capabilities = reportedCapabilities;
+      if (loadedProfileRevision === profileRevision) {
+        capabilities = reportedCapabilities;
+        answerProfiles = profileResult.profiles;
+        answerProfilesFailed = profileResult.failed;
+      }
       roots = availableRoots;
       selectedRootIds = new Set(
         availableRoots.filter((root) => root.available).map((r) => r.rootId),
@@ -1056,8 +1065,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         : reportedCapabilities.fullText
           ? 'hybrid'
           : 'fullText';
-      answerProfiles = profileResult.profiles;
-      answerProfilesFailed = profileResult.failed;
       if (currentFolder !== undefined) currentFolderIndexed = folderIndexed;
       scopeKind = scopeAvailable(attrs, 'currentFolder')
         ? 'currentFolder'
@@ -1244,10 +1251,26 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    */
   function answerAvailable(): boolean {
     return (
-      (result?.capabilities ?? capabilities)?.answerGeneration === true &&
-      !answerProfilesFailed &&
-      answerProfiles.length > 0
+      capabilities?.answerGeneration === true && !answerProfilesFailed && answerProfiles.length > 0
     );
+  }
+
+  async function refreshAnswerProfiles(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
+    const requestedRevision = attrs.profileRevision ?? 0;
+    const requestedGeneration = generation;
+    try {
+      const reported = await attrs.client.getKnowledgeCapabilities();
+      const profiles = reported.answerGeneration ? await attrs.client.listLlmProfiles() : [];
+      if (generation !== requestedGeneration || loadedProfileRevision !== requestedRevision) return;
+      capabilities = reported;
+      answerProfiles = profiles;
+      answerProfilesFailed = false;
+    } catch {
+      if (generation !== requestedGeneration || loadedProfileRevision !== requestedRevision) return;
+      answerProfiles = [];
+      answerProfilesFailed = true;
+    }
+    m.redraw();
   }
 
   /** Whether the Generate control can run right now. */
@@ -2079,6 +2102,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       currentAttrs = attrs;
       if (attrs.open && !wasOpen) void load(attrs);
       wasOpen = attrs.open;
+      if (attrs.open && loadedProfileRevision !== (attrs.profileRevision ?? 0)) {
+        loadedProfileRevision = attrs.profileRevision ?? 0;
+        void refreshAnswerProfiles(attrs);
+      }
       // The modal keeps its content mounted while closed, so the subject
       // field's own `oncreate` only ever runs once, long before the dialog is
       // opened. Focus is therefore taken on the closed -> open transition.

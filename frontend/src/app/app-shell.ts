@@ -477,6 +477,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let semanticAssistantAvailable = false;
   let knowledgeSearchAvailable = false;
   let knowledgeSearchChecked = false;
+  let knowledgeAnswerRevision = 0;
   let semanticEnrolmentRequest:
     | { readonly workspaceId: WorkspaceId; readonly location: Location }
     | undefined;
@@ -1016,7 +1017,16 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   function closeSettingsDialog(): void {
+    const wasOpen = settingsDialogOpen;
     settingsController.closeSettingsDialog();
+    if (wasOpen) settingsClosed();
+  }
+
+  function settingsClosed(): void {
+    knowledgeAnswerRevision++;
+    void refreshSemanticAssistantAvailability();
+    void refreshKnowledgeSearchAvailability();
+    m.redraw();
   }
 
   /** Opens the Settings dialog (Cmd+,/Ctrl+,) - mirrors the settings toolbar button's "open"
@@ -4064,6 +4074,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getPluginByPane: () => pluginByPane,
     getDiskUsageByTab: () => diskUsageByTab,
     getKnowledgeSearchByTab: () => knowledgeSearchByTab,
+    getKnowledgeAnswerRevision: () => knowledgeAnswerRevision,
     setConnections: (conns) => {
       connections = conns;
     },
@@ -5276,6 +5287,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     settingsDialogOpen = settingsDisclosureElement.open;
                     if (!settingsDialogOpen && currentSettings !== undefined) {
                       applyAppearance(currentSettings);
+                      settingsClosed();
                     }
                     m.redraw();
                   },
@@ -5298,8 +5310,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   settingsDialogOpen = open;
                   if (!open && currentSettings !== undefined) {
                     applyAppearance(currentSettings);
-                    void refreshSemanticAssistantAvailability();
-                    void refreshKnowledgeSearchAvailability();
+                    settingsClosed();
                   }
                   m.redraw();
                 },
