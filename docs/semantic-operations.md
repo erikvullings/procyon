@@ -496,6 +496,10 @@ later retry. Unsupported, encrypted, malformed, and over-budget documents remain
 skip or omission reasons. Browser/server mode exposes OCR as unavailable and has no OCR mutation
 routes. A PDF whose page content cannot be decompressed within the page limit reports the
 unreadable page and limit instead of incorrectly offering OCR guidance.
+If any selected PDF page fails conversion, baseline and optional ML conversion fail that
+replacement instead of publishing only readable pages. The prior complete generation remains
+searchable, and the failed job names the unreadable page. This does not make pages with no
+extractable text searchable or lift the 64 MiB production source limit.
 
 PDF text-layer conversion removes whitespace-delimited dot leaders of at least four dots before
 embedding and labels the affected blocks (and recognized Contents sections) as navigation;

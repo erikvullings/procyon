@@ -1181,8 +1181,6 @@ fn convert_ml(
         }
     };
     let mut combined = DoclingDocument::new("document.pdf");
-    let mut omissions = Vec::new();
-    let mut first_error = None;
     for page in 1..=selected_pages {
         if let Some(outcome) = stopped(context) {
             pipeline.set_pages(None);
@@ -1201,20 +1199,20 @@ fn convert_ml(
                 }
             }
             Err(error) => {
-                let detail = format!("Docling could not convert PDF page {page}: {error}");
-                if first_error.is_none() {
-                    first_error = Some(error);
-                }
-                omissions.push(Omission::UnreadablePart { detail });
+                pipeline.set_pages(None);
+                return conversion(match pdf_error_outcome(error) {
+                    ConversionOutcome::Encrypted { detail } => ConversionOutcome::Encrypted {
+                        detail: format!("PDF page {page}: {detail}"),
+                    },
+                    ConversionOutcome::Malformed { detail } => ConversionOutcome::Malformed {
+                        detail: format!("PDF page {page}: {detail}"),
+                    },
+                    _ => unreachable!("PDF errors classify as encrypted or malformed"),
+                });
             }
         }
     }
     pipeline.set_pages(None);
-    if combined.nodes.is_empty()
-        && let Some(error) = first_error
-    {
-        return conversion(pdf_error_outcome(error));
-    }
 
     let mut mapper = Mapper::new(
         version,
@@ -1223,9 +1221,6 @@ fn convert_ml(
         selected_pages,
         Some(language),
     );
-    for omission in omissions {
-        mapper.omit(omission);
-    }
     mapper.map_document(combined);
     conversion(mapper.finish())
 }
@@ -1631,8 +1626,7 @@ mod tests {
     use docling_core::Table;
     use lopdf::{Object, Stream, dictionary};
 
-    #[test]
-    fn preferred_pdf_converter_does_not_call_an_unreadable_page_ocr_required() {
+    fn pdf_with_oversized_page(include_text_page: bool) -> Vec<u8> {
         let mut pdf = lopdf::Document::with_version("1.5");
         let pages_id = pdf.new_object_id();
         let mut content = Stream::new(dictionary! {}, vec![b' '; 17 * 1024 * 1024]);
@@ -1644,18 +1638,45 @@ mod tests {
             "Contents" => content_id,
             "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
         });
+        let mut kids = vec![Object::Reference(page_id)];
+        if include_text_page {
+            let font_id = pdf.add_object(dictionary! {
+                "Type" => "Font",
+                "Subtype" => "Type1",
+                "BaseFont" => "Helvetica",
+            });
+            let text_id = pdf.add_object(Stream::new(
+                dictionary! {},
+                b"BT /F1 12 Tf 12 12 Td (substantive second page) Tj ET".to_vec(),
+            ));
+            let text_page = pdf.add_object(dictionary! {
+                "Type" => "Page",
+                "Parent" => pages_id,
+                "Contents" => text_id,
+                "Resources" => dictionary! { "Font" => dictionary! { "F1" => font_id } },
+                "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+            });
+            kids.push(Object::Reference(text_page));
+        }
+        let count = kids.len() as i64;
         pdf.objects.insert(
             pages_id,
             Object::Dictionary(dictionary! {
                 "Type" => "Pages",
-                "Kids" => vec![Object::Reference(page_id)],
-                "Count" => 1,
+                "Kids" => kids,
+                "Count" => count,
             }),
         );
         let catalog_id = pdf.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
         pdf.trailer.set("Root", catalog_id);
         let mut bytes = Vec::new();
         pdf.save_to(&mut bytes).expect("save fixture");
+        bytes
+    }
+
+    #[test]
+    fn preferred_pdf_converter_does_not_call_an_unreadable_page_ocr_required() {
+        let bytes = pdf_with_oversized_page(false);
         let result = converter_with_baseline_fallback()
             .convert(
                 SourceContent::Bytes(&bytes),
@@ -1665,6 +1686,22 @@ mod tests {
             .expect("convert");
         assert!(
             matches!(result, ConversionOutcome::Malformed { detail } if detail.contains("page 1"))
+        );
+    }
+
+    #[test]
+    fn preferred_converter_cannot_publish_a_body_page_when_another_page_is_unreadable() {
+        let bytes = pdf_with_oversized_page(true);
+        let result = converter_with_baseline_fallback()
+            .convert(
+                SourceContent::Bytes(&bytes),
+                &DocumentMetadata::unknown().with_media_type("application/pdf"),
+                &ConversionContext::new(),
+            )
+            .expect("convert");
+        assert!(
+            matches!(result, ConversionOutcome::Malformed { detail } if detail.contains("page 1")),
+            "one readable body page must not hide an unreadable page or blame OCR"
         );
     }
 

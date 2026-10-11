@@ -16,7 +16,7 @@ use lopdf::Document;
 
 use crate::budget::Stop;
 use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
-use crate::model::{Omission, Provenance, TopLevelBoundary, UnitKind, VisualProvenance};
+use crate::model::{Provenance, TopLevelBoundary, UnitKind, VisualProvenance};
 use crate::pdf_toc::clean_pdf_toc_text;
 
 /// Maximum decompressed content bytes per page.
@@ -93,7 +93,6 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
         .map_err(PdfError::from)?;
 
     let mut extracted_any = false;
-    let mut first_unreadable = None;
     for page_number in page_numbers {
         builder.checkpoint().map_err(PdfError::from)?;
         if builder.is_saturated() {
@@ -102,12 +101,9 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
         let text = match document.extract_text_with_limit(&[page_number], MAX_PAGE_CONTENT_BYTES) {
             Ok(text) => text,
             Err(error) => {
-                let detail = format!("page {page_number} could not be read: {error}");
-                if first_unreadable.is_none() {
-                    first_unreadable = Some(detail.clone());
-                }
-                builder.omit(Omission::UnreadablePart { detail });
-                continue;
+                return Err(PdfError::Malformed(format!(
+                    "page {page_number} could not be read: {error}"
+                )));
             }
         };
         for (block_index, block) in page_blocks(&text).into_iter().enumerate() {
@@ -143,9 +139,6 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
         }
     }
     if !extracted_any && !builder.has_visuals() {
-        if let Some(detail) = first_unreadable {
-            return Err(PdfError::Malformed(detail));
-        }
         return Err(PdfError::NoTextLayer(
             "the PDF pages contain no extractable text layer; an OCR pack is required".to_owned(),
         ));
@@ -342,6 +335,27 @@ pub(crate) mod tests {
         assert!(
             matches!(convert_pdf(&bytes), Err(PdfError::Malformed(detail)) if detail.contains("page 1")),
             "an unreadable page must not offer OCR guidance"
+        );
+    }
+
+    #[test]
+    fn unreadable_page_does_not_publish_other_pages_as_complete() {
+        let bytes = text_pdf(&[&["good first page"], &["good second page"]]);
+        let mut document = Document::load_mem(&bytes).expect("load fixture");
+        let content_id = document.get_page_contents(document.get_pages()[&1])[0];
+        let stream = document
+            .get_object_mut(content_id)
+            .expect("page content")
+            .as_stream_mut()
+            .expect("content stream");
+        stream.content = vec![b' '; MAX_PAGE_CONTENT_BYTES + 1];
+        stream.compress().expect("compress content");
+        let mut bytes = Vec::new();
+        document.save_to(&mut bytes).expect("save fixture");
+
+        assert!(
+            matches!(convert_pdf(&bytes), Err(PdfError::Malformed(detail)) if detail.contains("page 1")),
+            "the good second page cannot mask an unreadable first page"
         );
     }
 

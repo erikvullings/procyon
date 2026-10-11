@@ -139,3 +139,10 @@ optional Docling ML/PDFium pack is qualified on those targets.
   Remaining release blockers include an isolated killable converter, negotiated PDF-only spool,
   bounded renderer with audited four-target packaging, atomic text+vision staging, host/UI
   coverage and exact signed installed qualification.
+- 2026-10-11 Copilot: A synthetic two-page PDF regression exposed partial success when the first
+  page exceeded its decompression limit and the second remained readable. Baseline extraction now
+  fails the whole replacement with a page-specific error; optional ML Docling likewise stops on
+  a page-conversion error instead of accumulating readable pages and publishing omissions. A
+  worker ingestion regression confirms a failed PDF replacement retains the previous complete
+  searchable generation and records a failed job. These checks do not establish full coverage for
+  pages with empty or unextractable text, nor remove the production 64 MiB source cap.

@@ -1939,6 +1939,47 @@ mod tests {
     }
 
     #[test]
+    fn unreadable_pdf_page_does_not_replace_prior_complete_generation() {
+        let fixture = Fixture::new(healthy_resources());
+        let original = fixture.document("prior complete evidence");
+        fixture
+            .coordinator
+            .ingest(&original, &CancellationToken::new())
+            .expect("initial ingestion");
+
+        let mut updated = original;
+        updated.media_type = "application/pdf".into();
+        let bytes = positioned_pdf_pages(&[
+            "BT /F1 12 Tf 72 720 Td (first page) Tj ET",
+            "BT /F1 12 Tf 72 720 Td (second page) Tj ET",
+        ]);
+        let mut pdf = Document::load_mem(&bytes).expect("PDF fixture");
+        let page_id = pdf.get_pages()[&1];
+        let content_id = pdf.get_page_contents(page_id)[0];
+        let stream = pdf
+            .get_object_mut(content_id)
+            .expect("content")
+            .as_stream_mut()
+            .expect("stream");
+        stream.content = vec![b' '; 17 * 1024 * 1024];
+        stream.compress().expect("compress oversized page");
+        updated.bytes.clear();
+        pdf.save_to(&mut updated.bytes).expect("save update");
+
+        assert!(matches!(
+            fixture
+                .coordinator
+                .ingest(&updated, &CancellationToken::new()),
+            Err(IngestionError::PipelineFailed(_))
+        ));
+        assert_eq!(fixture.visible_excerpt(), "prior complete evidence");
+        assert_eq!(
+            fixture.catalog.job(&updated.job_id).unwrap().unwrap().stage,
+            "failed"
+        );
+    }
+
+    #[test]
     fn identical_chunk_reuses_cached_vector_after_a_move() {
         let fixture = Fixture::new(healthy_resources());
         let first = fixture.document("same content");
