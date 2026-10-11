@@ -1579,6 +1579,10 @@ export const nl = {
     },
     legacyVerificationPending: '{count} eerdere bronnen nog niet geverifieerd',
     scannedEntries: '{count} items gescand (niet alles is geïndexeerd)',
+    oversizedNotIndexed: {
+      1: '1 bestand overschrijdt de indexeringslimiet van 64 MiB en is niet doorzoekbaar. Zie Indexeringsdetails.',
+      n: '{n} bestanden overschrijden de indexeringslimiet van 64 MiB en zijn niet doorzoekbaar. Zie Indexeringsdetails.',
+    },
     lastWorkerDevice: 'Laatste workerstart: {device}',
     metal: 'Metal',
     cpu: 'CPU',

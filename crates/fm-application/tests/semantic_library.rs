@@ -1075,6 +1075,28 @@ fn the_worker_feed_applies_the_curated_eligibility_policy_and_stops_while_paused
                         false,
                     ),
                 },
+                SemanticFeedCandidate {
+                    root_id,
+                    candidate: EligibilityCandidate {
+                        source_bytes: 64 * 1024 * 1024,
+                        ..candidate(
+                            "file:///docs/within-limit.pdf",
+                            Some("application/pdf"),
+                            false,
+                        )
+                    },
+                },
+                SemanticFeedCandidate {
+                    root_id,
+                    candidate: EligibilityCandidate {
+                        source_bytes: 64 * 1024 * 1024 + 1,
+                        ..candidate(
+                            "file:///docs/over-limit.pdf",
+                            Some("application/pdf"),
+                            false,
+                        )
+                    },
+                },
             ],
         )
         .unwrap();
@@ -1082,7 +1104,10 @@ fn the_worker_feed_applies_the_curated_eligibility_policy_and_stops_while_paused
     assert!(!plan.paused);
     assert_eq!(
         plan.eligible_locations,
-        [location("file:///docs/report.md")]
+        [
+            location("file:///docs/report.md"),
+            location("file:///docs/within-limit.pdf")
+        ]
     );
     assert_eq!(
         plan.skipped_reason_counts
@@ -1097,6 +1122,14 @@ fn the_worker_feed_applies_the_curated_eligibility_policy_and_stops_while_paused
             .find(|count| count.reason == EligibilityReason::UnsupportedMime)
             .map(|count| count.count),
         Some(1)
+    );
+    assert_eq!(
+        plan.skipped_reason_counts
+            .iter()
+            .find(|count| count.reason == EligibilityReason::Oversized)
+            .map(|count| count.count),
+        Some(1),
+        "the host's 64 MiB read limit must apply before the broader library quota"
     );
     assert_eq!(plan.decisions.len(), 1, "one consented occurrence is fed");
 

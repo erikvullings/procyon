@@ -391,6 +391,8 @@ function rootStatusView(
   ) => void,
 ): Vnode {
   const removed = rootExclusion(root) !== undefined;
+  const oversizedCount =
+    root.eligibilityReasonCounts.find((reason) => reason.reason === 'oversized')?.count ?? 0;
   return m('li.fm-semantic-library-root', { key: root.id }, [
     m('.fm-semantic-library-root-heading', [
       m('strong.fm-semantic-library-location', root.location.uri),
@@ -420,6 +422,13 @@ function rootStatusView(
       ? m(
           'p.fm-semantic-library-ocr-needed',
           t('semanticLibrary', 'ocrNeededCount', { count: root.ocrRequiredFiles.length }),
+        )
+      : undefined,
+    oversizedCount > 0
+      ? m(
+          'p.fm-semantic-library-skipped',
+          { role: 'status' },
+          t('semanticLibrary', 'oversizedNotIndexed', oversizedCount),
         )
       : undefined,
     confirmedCompletedSources === undefined

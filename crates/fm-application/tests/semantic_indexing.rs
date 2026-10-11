@@ -1074,7 +1074,30 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
             .map(|count| count.count),
         Some(1)
     );
+    let persisted = crate::library(&state).status(&HOST).unwrap();
+    assert_eq!(
+        persisted.roots[0]
+            .eligibility_reason_counts
+            .iter()
+            .find(|count| count.reason == EligibilityReason::Oversized)
+            .map(|count| count.count),
+        Some(1),
+        "the 64 MiB exclusion remains discoverable after reopening"
+    );
     assert_eq!(report.reconciliation_generation, 1);
+
+    std::fs::remove_file(root.path().join("oversized.txt")).unwrap();
+    service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(
+        crate::library(&state).status(&HOST).unwrap().roots[0]
+            .eligibility_reason_counts
+            .iter()
+            .all(|count| count.reason != EligibilityReason::Oversized),
+        "a completed reconciliation clears obsolete oversized exclusions"
+    );
 }
 
 #[tokio::test]

@@ -41,7 +41,7 @@ const PAGE_SIZE: usize = 128;
 const MAX_ENTRIES: u64 = 100_000;
 const MAX_DIRECTORIES: u64 = 10_000;
 const MAX_RECURSION_DEPTH: u16 = 64;
-const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
+pub(crate) const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
 const INGESTION_POLL_INTERVAL: Duration = Duration::from_millis(25);
 // Covers conversion, chunking, local CPU embedding, and publication. Durable
 // embedding checkpoints make retries resumable; expiry isolates one stranded
@@ -380,8 +380,8 @@ impl SemanticIndexingService {
         }
 
         check_cancelled(&cancellation)?;
-        let reconciliation_generation =
-            library.complete_reconciliation_preserving(access, root_id, &observed, &preserved)?;
+        let reconciliation_generation = library
+            .complete_reconciliation_preserving(access, root_id, &observed, &preserved, &skipped)?;
         self.ocr_required_files
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)

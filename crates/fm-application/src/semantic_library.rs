@@ -1828,7 +1828,13 @@ impl SemanticLibraryService {
         root_id: core::RootId,
         observed_occurrences: &BTreeSet<core::OccurrenceId>,
     ) -> Result<u64, SemanticLibraryError> {
-        self.complete_reconciliation_preserving(access, root_id, observed_occurrences, &[])
+        self.complete_reconciliation_preserving(
+            access,
+            root_id,
+            observed_occurrences,
+            &[],
+            &BTreeMap::new(),
+        )
     }
 
     /// Commits an enumeration that could not read some entries, retaining
@@ -1843,6 +1849,7 @@ impl SemanticLibraryService {
         root_id: core::RootId,
         observed_occurrences: &BTreeSet<core::OccurrenceId>,
         preserved: &[Location],
+        skipped: &BTreeMap<core::EligibilityReason, u64>,
     ) -> Result<u64, SemanticLibraryError> {
         let managed = self.managed_backend()?;
         managed.authorize(access)?;
@@ -1861,6 +1868,12 @@ impl SemanticLibraryService {
         next.state
             .record_indexed_generation(root_id, generation)
             .map_err(|_| SemanticLibraryError::InvalidRequest)?;
+        next.state.set_eligibility_reason_counts(
+            root_id,
+            core::EligibilityReasonCounts::from_counts(
+                skipped.iter().map(|(reason, count)| (*reason, *count)),
+            ),
+        );
         locked.commit(next, core::LibraryOperation::Reconciliation)?;
         Ok(generation)
     }
@@ -1896,7 +1909,10 @@ impl SemanticLibraryService {
         if let Some(media) = data.policy.library().model().gemma_media() {
             policy = policy.with_gemma_media(media);
         }
-        let budgets = data.policy.resource_profile().budgets;
+        let mut budgets = data.policy.resource_profile().budgets;
+        budgets.max_source_bytes_per_document = budgets
+            .max_source_bytes_per_document
+            .min(crate::semantic_indexing::MAX_SOURCE_BYTES);
         let usage = core::ResourceUsage::measure(&data.catalog);
         let mut eligible = Vec::new();
         let mut decisions = Vec::new();

@@ -1575,6 +1575,10 @@ export const en = {
     },
     legacyVerificationPending: '{count} earlier sources not yet verified',
     scannedEntries: '{count} entries scanned (not all are indexed)',
+    oversizedNotIndexed: {
+      1: '1 file exceeds the 64 MiB indexing limit and is not searchable. See Indexing details.',
+      n: '{n} files exceed the 64 MiB indexing limit and are not searchable. See Indexing details.',
+    },
     lastWorkerDevice: 'Last worker launch: {device}',
     metal: 'Metal',
     cpu: 'CPU',

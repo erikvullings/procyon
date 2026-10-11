@@ -305,7 +305,10 @@ describe('SemanticLibraryManagement', () => {
           workspaceReferences: [workspace.id],
           eligibilityOverrides: [],
           attachedVocabularyIds: ['vocabulary-1'],
-          eligibilityReasonCounts: [{ reason: 'hidden', count: 3 }],
+          eligibilityReasonCounts: [
+            { reason: 'hidden', count: 3 },
+            { reason: 'oversized', count: 1 },
+          ],
           ocrRequiredFiles: [
             {
               providerId: 'file',
@@ -326,6 +329,16 @@ describe('SemanticLibraryManagement', () => {
     await waitForLoaded();
 
     expect(root.textContent).toContain('Source unavailable');
+    expect(root.querySelector('.fm-semantic-library-skipped')?.textContent).toContain(
+      '1 file exceeds the 64 MiB indexing limit and is not searchable',
+    );
+    setLocale('nl');
+    m.redraw.sync();
+    expect(root.querySelector('.fm-semantic-library-skipped')?.textContent).toContain(
+      '1 bestand overschrijdt de indexeringslimiet van 64 MiB',
+    );
+    setLocale('en');
+    m.redraw.sync();
     expect(root.textContent).toContain('removable volume is offline');
     const details = root.querySelector<HTMLDetailsElement>('.fm-semantic-library-root details');
     expect(details?.open).toBe(false);
