@@ -86,6 +86,11 @@ test('creates page-local reusable JPEG, text-plus-figure, and non-reusable image
   assert.ok(!source.includes('Synthetic search marker on page 1'));
   assert.ok(!source.includes('Synthetic search marker on page 3'));
   assert.equal([...pdf.toString('hex').matchAll(/ffd8ffe0/g)].length, 2);
+  assert.equal(
+    [...pdf.toString('hex').matchAll(/ffc000110800080008/g)].length,
+    2,
+    'both JPEGs have complete 8x8 start-of-frame headers',
+  );
   assert.deepEqual(pdf, generate('mixed-again.pdf', 'mixed', 3));
   const invalid = spawnSync(process.execPath, [
     script,

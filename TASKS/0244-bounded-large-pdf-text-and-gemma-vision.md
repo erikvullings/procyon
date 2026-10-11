@@ -146,6 +146,12 @@ optional Docling ML/PDFium pack is qualified on those targets.
   worker ingestion regression confirms a failed PDF replacement retains the previous complete
   searchable generation and records a failed job. These checks do not establish full coverage for
   pages with empty or unextractable text, nor remove the production 64 MiB source cap.
+- 2026-10-11 Copilot: The mixed synthetic PDF's original JPEG fixture failed visual header
+  validation despite containing JPEG signatures. Replaced it with an original, valid 8x8 JPEG
+  and added a start-of-frame regression. An evaluation-only converter probe now verifies two
+  retained JPEG images with page provenance and explicitly reports the third page's non-JPEG
+  omission; one text-bearing page is extracted. This verifies bounded XObject reuse, not PDF
+  image embeddings or scanned-page rendering.
 - 2026-10-11 Copilot: Read-only renderer research confirmed the normal build excludes
   `pdfium-render` (`docling-pdf`'s `ml` feature is off) and that the wrapper does not supply
   native PDFium. The upstream `bblanchon/pdfium-binaries` `chromium/8086` release provides
