@@ -51,10 +51,45 @@ paired results and CPU fallback tests are documented in
 resource report's inherited `limitations` text still describes a "CPU runner
 class" and "no GPU measurements" even for macOS; its actual
 `workerComputeBackend` field and per-width macOS runs explicitly record
-Metal. The limitation wording is stale, not a reason to discard that backend
-record or claim paired GPU speedup. Measured peak RSS is not a safe minimum;
+Metal. That report is immutable evidence of the original run; the installed
+report generator now derives backend-specific limitations from the observed
+backend, without changing its signed candidate. Neither report establishes
+paired CI-runner GPU speedup. Measured peak RSS is not a safe minimum;
 retain the 8 GiB planning estimate. These single-item measurements do not
 establish quality, sustained throughput, or a representative user workload.
+
+The corrected, **read-only** installed [rerun
+38149243446](https://github.com/erikvullings/procyon/actions/runs/38149243446)
+used workflow source `2e49dfe063358156b789ab365dc39bbfc16fddce`
+after the independent generation-profile PR #117 was merged into this
+integration branch. It downloaded the **unchanged** signed candidate from
+run `38129345964` and source `021e8ab9a40fa98591ba997d700ad501693b8e2b`;
+the candidate manifest, fingerprint, catalogs, signatures, and checked-in
+`noGo` approval lock were not regenerated. All four installed jobs passed
+again: 13 automated lifecycle checks and zero network artifact reads per
+target. The downloaded reports match the lock's four catalog/signature
+hashes and candidate run/source; their new limitations text reports FP32
+Metal on macOS ARM and CPU on Linux ARM/x86-64 and Windows x86-64 at all
+four widths. The old report with stale wording remains historical evidence,
+not something to edit in place. The rerun did not publish or approve assets.
+
+On 2026-10-11 the **exact signed macOS ARM candidate** from run
+`38129345964` was independently extracted from the digest-checked retained
+ZIP. Its catalog signature and all catalog-listed payload bytes verified
+against the release public key. A local application integration test used
+those verified original model files, macOS worker, and Zvec runtime in
+temporary host state (not the user's running review app). After explicit
+folder consent, real VFS listing/read and application/IPC ingestion indexed
+a PNG, MP3, MP4, and text file in one all-media-enabled library. The launched
+signed worker reported `FP32 Metal`, and each returned result resolved to an
+available source citation. An unenrolled tenant returned no results.
+Deleting the PNG and reconciling revoked its citation and excluded it from
+file-primary search while audio, video, and text remained visible. The same
+test passed again after the generation-profile branch merge. This is
+**automated local macOS host-path evidence** at 128 dimensions, not a
+four-target host test, a production-signed desktop UI walkthrough, a
+retrieval-quality judgment, or an assertion that deleting a citation
+immediately erases all worker-derived vectors.
 
 The preceding image-only-Metal signed macOS worker (source `c6c7a94...`)
 also passed the opt-in application-level test:
@@ -170,10 +205,10 @@ This is a bounded synthetic *pipeline* check, not a retrieval-quality
 judgement, a full desktop UI check, automatic Metal validation, a
 four-target application-level test, or qualification of the current signed
 worker. The existing default-library test checks that unselected media
-are skipped. The current signed candidate's installed four-target lifecycle
-checks cover each media type through worker IPC, but do **not** replace an
-application-level host/VFS/IPC test of the exact new candidate before
-claiming release-level mixed-media search.
+are skipped. The current candidate's four-target installed lifecycle covers
+each media type through worker IPC; the separate local macOS host/VFS/IPC
+check above now covers the exact new candidate. Neither supplies a packaged
+native UI walkthrough or all-platform application-level evidence.
 
 The installed/offline lifecycle (activation, restart, supported media, and
 cleanup/recovery) passed on macOS aarch64, Linux aarch64/x86-64, and Windows

@@ -60,8 +60,19 @@ checks passed. The signed macOS worker reported FP32 Metal with all media
 enabled at all four widths; Linux and Windows reported CPU. These installed
 checks are synthetic lifecycle/resource evidence, not a CPU/Metal paired
 benchmark on the CI runner or representative retrieval-quality evidence.
-The running review app and the older candidate retain their CPU mixed-media
-worker; neither is changed by the signed qualification.
+Read-only [installed rerun 38149243446](https://github.com/erikvullings/procyon/actions/runs/38149243446)
+reused the exact same signed candidate and corrected its report generator:
+the new macOS limitations explicitly acknowledge Metal while the other
+targets report CPU. Both runs passed 13 offline checks per target with
+zero network artifact reads. Neither run measures paired CPU/Metal
+throughput on the same CI runner.
+The exact signed macOS worker also passed a local consented PNG/MP3/MP4/text
+host/VFS/IPC test at 128 dimensions, including citation availability,
+cross-tenant exclusion, and deleted-image citation/file-search revocation;
+see the [release decision](embeddinggemma-experimental-release-2026-10-10.md).
+The previously running review app used an older CPU mixed-media worker; it
+was not replaced by this qualification. The older candidate also retains
+its CPU mixed-media worker.
 
 Reproduce the model-level comparison with:
 
