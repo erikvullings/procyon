@@ -1,6 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { FlatButton, IconButton, ModalPanel, Skeleton } from 'mithril-materialized';
 
+import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import {
   brainIcon,
@@ -47,6 +48,7 @@ import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { lastPathSegment } from '../navigation/navigation';
 import { copyImageDataUri, copyText } from '../preview/clipboard';
 import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
+import { pathFromUri } from '../workspace/workspace-layout';
 import { decodeEvidenceTitle } from './evidence-title';
 import { mediaDescription, mediaKind, mediaLabel, mediaModifiedLabel } from './media-evidence';
 
@@ -2445,6 +2447,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
             t('knowledgeSearch', 'question'),
           ),
           m('textarea#fm-knowledge-question', {
+            ...technicalTextInputAttrs,
             name: 'knowledge-answer-question',
             rows: 1,
             maxlength: 8192,
@@ -2615,11 +2618,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 ),
               ),
               m('textarea#fm-knowledge-subjects', {
+                ...technicalTextInputAttrs,
                 name: 'knowledge-subjects',
                 rows: 1,
                 value: subjectsText,
                 disabled: busy === 'searching',
-                autocomplete: 'off',
                 'aria-label': t('knowledgeSearch', 'subjects'),
                 placeholder: t('knowledgeSearch', 'subjectsPlaceholder'),
                 onupdate: ({ dom }: m.VnodeDOM) => {
@@ -2719,9 +2722,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                   m(
                     'span',
                     t('knowledgeSearch', 'includeOnlyCurrentFolder', {
-                      folder:
-                        openingFolder.uri.replace(/\/+$/u, '').split('/').at(-1) ||
-                        openingFolder.uri,
+                      folder: lastPathSegment(openingFolder) ?? pathFromUri(openingFolder.uri),
                     }),
                   ),
                 ]),
@@ -2905,11 +2906,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     m('details.fm-knowledge-dsl', [
                       m('summary', t('knowledgeSearch', 'dsl')),
                       m('textarea#fm-knowledge-dsl-input', {
+                        ...technicalTextInputAttrs,
                         name: 'knowledge-dsl',
                         rows: 4,
                         value: dslText,
                         disabled: busy === 'searching',
-                        autocomplete: 'off',
                         'aria-describedby': 'fm-knowledge-dsl-hint',
                         oninput: (event: InputEvent) => {
                           dslText = (event.currentTarget as HTMLTextAreaElement).value;

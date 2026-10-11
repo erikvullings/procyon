@@ -203,6 +203,13 @@ function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
+function isEditableEvent(event: KeyboardEvent): boolean {
+  return (
+    isEditableTarget(event.target) ||
+    event.composedPath().some((target) => isEditableTarget(target))
+  );
+}
+
 function isWithinModal(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.closest('[role="dialog"]') !== null;
 }
@@ -470,7 +477,7 @@ const ACTION_KEYDOWN_ROUTES = [
     id: 'viewer-paged',
     tryHandle: (context, event) => {
       if (
-        !isEditableTarget(event.target) &&
+        !isEditableEvent(event) &&
         !event.altKey &&
         !event.ctrlKey &&
         !event.metaKey &&
@@ -687,7 +694,7 @@ const ACTION_KEYDOWN_ROUTES = [
   {
     id: 'alt-space',
     tryHandle: (context, event) => {
-      if (!isEditableTarget(event.target) && event.altKey && event.code === 'Space') {
+      if (!isEditableEvent(event) && event.altKey && event.code === 'Space') {
         const active = context.activeDirectory();
         const selection =
           active === undefined
@@ -759,7 +766,7 @@ const ACTION_KEYDOWN_ROUTES = [
     id: 'primary-modifier',
     tryHandle: (context, event) => {
       if (
-        !isEditableTarget(event.target) &&
+        !isEditableEvent(event) &&
         hasPrimaryModifier(event, context.getPlatform()) &&
         !event.altKey
       ) {
@@ -843,7 +850,7 @@ const ACTION_KEYDOWN_ROUTES = [
         event.ctrlKey ||
         event.metaKey ||
         event.shiftKey ||
-        isEditableTarget(event.target)
+        isEditableEvent(event)
       ) {
         return false;
       }
@@ -862,7 +869,7 @@ const ACTION_KEYDOWN_ROUTES = [
           !event.ctrlKey &&
           !event.metaKey &&
           !event.shiftKey &&
-          !isEditableTarget(event.target) &&
+          !isEditableEvent(event) &&
           context.collectIntoBasketIfVisible()
         ) {
           event.preventDefault();
@@ -1813,7 +1820,7 @@ export function dispatchGlobalKeydown(
   let dispatchedAction = dispatchKeybinding(
     event,
     {
-      scope: isEditableTarget(event.target) ? 'pathInput' : 'table',
+      scope: isEditableEvent(event) ? 'pathInput' : 'table',
       platform: context.getPlatform(),
       runtime: context.getKeybindingRuntime(),
     },
@@ -1821,7 +1828,7 @@ export function dispatchGlobalKeydown(
     context.getCurrentSettings()?.keybindings ?? {},
   );
   if (
-    !isEditableTarget(event.target) &&
+    !isEditableEvent(event) &&
     !event.altKey &&
     !event.ctrlKey &&
     !event.metaKey &&
@@ -1841,10 +1848,9 @@ export function dispatchGlobalKeydown(
   // platform fallback to preserve the established external-view behaviour.
   const state: KeydownRouteState = {
     dispatchedAction,
-    forceSystemView:
-      !isEditableTarget(event.target) && event.altKey && event.key.toUpperCase() === 'F3',
+    forceSystemView: !isEditableEvent(event) && event.altKey && event.key.toUpperCase() === 'F3',
     forceSystemEdit:
-      !isEditableTarget(event.target) &&
+      !isEditableEvent(event) &&
       event.shiftKey &&
       event.altKey &&
       !event.ctrlKey &&

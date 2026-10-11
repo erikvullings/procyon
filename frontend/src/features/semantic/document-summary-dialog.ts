@@ -64,27 +64,20 @@ function validatedPreview(
   profileId: string | undefined,
 ): DocumentSummaryPreview {
   if (
-    profileId !== undefined &&
-    (!Number.isSafeInteger(preview.sourceTokens) ||
-      preview.sourceTokens <= 0 ||
-      !Number.isSafeInteger(preview.sourcePassCount) ||
-      preview.sourcePassCount <= 0 ||
-      !Number.isSafeInteger(preview.effectiveContextWindow) ||
-      (preview.effectiveContextWindow ?? 0) <= 0)
+    typeof preview.textPreview !== 'string' ||
+    preview.textPreview.length === 0 ||
+    typeof preview.textPreviewTruncated !== 'boolean' ||
+    (profileId !== undefined &&
+      (!Number.isSafeInteger(preview.sourceTokens) ||
+        preview.sourceTokens <= 0 ||
+        !Number.isSafeInteger(preview.sourcePassCount) ||
+        preview.sourcePassCount <= 0 ||
+        !Number.isSafeInteger(preview.effectiveContextWindow) ||
+        (preview.effectiveContextWindow ?? 0) <= 0))
   ) {
     throw new Error(t('documentSummary', 'invalidPreview'));
   }
   return preview;
-}
-
-function passageBody(passage: DocumentSummaryPreview['keyPassages'][number]): string {
-  const heading = passage.sectionPath.join(' > ');
-  if (heading.length === 0) return passage.content;
-  if (passage.content === heading) return '';
-  const prefix = `${heading}\n\n`;
-  return passage.content.startsWith(prefix)
-    ? passage.content.slice(prefix.length)
-    : passage.content;
 }
 
 function attributionOrigin(attribution: SummaryAttribution): string {
@@ -242,7 +235,12 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
           if (!open) attrs.onClose();
         },
         description: m('.fm-document-summary', [
-          busy && !generating ? m('p', t('documentSummary', 'working')) : undefined,
+          busy && !generating
+            ? m('.fm-document-summary-progress', { role: 'status', 'aria-busy': 'true' }, [
+                m('span', t('documentSummary', 'working')),
+                m(Skeleton, { count: 4, className: 'fm-document-summary-skeleton' }),
+              ])
+            : undefined,
           generating
             ? m('.fm-document-summary-progress', { role: 'status', 'aria-busy': 'true' }, [
                 m(
@@ -256,7 +254,9 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
               ])
             : undefined,
           error === undefined ? undefined : m('p.fm-document-summary-error', error),
-          profiles.length === 0 ? m('p', t('documentSummary', 'keyPassagesOnly')) : undefined,
+          !busy && profiles.length === 0
+            ? m('p', t('documentSummary', 'profileRequired'))
+            : undefined,
           preview?.imageInputAvailable !== true
             ? undefined
             : m('label.fm-document-summary-image-mode', [
@@ -317,25 +317,19 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
                 m('h4', t('documentSummary', 'full')),
                 m('p', summary.full),
               ]),
-          m(
-            'h4',
-            t(
-              'documentSummary',
-              preview?.selectionMode === 'fullDocument' ? 'documentText' : 'keyPassages',
-            ),
-          ),
-          m(
-            'ol.fm-document-summary-passages',
-            preview?.keyPassages.map((passage) => {
-              const body = passageBody(passage);
-              return m('li', { key: passage.chunkId }, [
-                passage.sectionPath.length > 0
-                  ? m('strong', passage.sectionPath.join(' / '))
+          preview === undefined
+            ? undefined
+            : m('.fm-document-summary-extracted', [
+                m('h4', t('documentSummary', 'documentText')),
+                m(
+                  'pre.fm-document-summary-text',
+                  { tabindex: 0, 'aria-label': t('documentSummary', 'documentText') },
+                  preview.textPreview,
+                ),
+                preview.textPreviewTruncated
+                  ? m('p.fm-document-summary-disclosure', t('documentSummary', 'textPreviewLimit'))
                   : undefined,
-                body ? m('p', body) : undefined,
-              ]);
-            }),
-          ),
+              ]),
         ]),
         buttons: [
           { label: t('button', 'close'), onclick: attrs.onClose },

@@ -78,6 +78,7 @@ export const de = {
       n: '{n} Quellen konnten nicht indiziert werden',
     },
     indexingScanned: '{count} Einträge durchsucht',
+    indexingScannedOne: '1 Eintrag durchsucht',
     showActivity: 'Hintergrundaktivitäten anzeigen',
     openOperation: 'Vorgang öffnen',
     openSemanticStatus: 'Semantische Einstellungen öffnen',
@@ -120,6 +121,7 @@ export const de = {
     exit: 'Beenden',
     file: 'Datei',
     edit: 'Bearbeiten',
+    cutText: 'Ausschneiden',
     view: 'Ansicht',
     tools: 'Werkzeuge',
     go: 'Wechseln zu',
@@ -992,12 +994,21 @@ export const de = {
   semanticOcr: en.semanticOcr,
   semanticVocabulary: en.semanticVocabulary,
   llmProfiles: en.llmProfiles,
-  documentSummary: en.documentSummary,
+  documentSummary: {
+    ...en.documentSummary,
+    profileRequired:
+      'Richten Sie in den Einstellungen ein Generierungsprofil ein, um eine Zusammenfassung zu erstellen.',
+    documentText: 'Extrahierter Text',
+    textPreviewLimit:
+      'Nur der Anfang wird angezeigt. Die Zusammenfassung verwendet den gesamten extrahierten Text.',
+  },
   ragAsk: en.ragAsk,
   knowledgeSearch: {
     ...en.knowledgeSearch,
     title: 'Semantische Suche',
     openTitle: 'Semantische Suche…',
+    subjectsPlaceholder: 'Suchbegriffe eingeben',
+    includeOnlyCurrentFolder: 'Nur aktuellen Ordner "{folder}" einbeziehen',
     ask: 'Fragen',
     question: 'Frage zu diesen Ergebnissen',
     questionPlaceholder: 'Stellen Sie eine Frage zu Ihren Dokumenten…',

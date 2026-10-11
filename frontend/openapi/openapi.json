@@ -9784,6 +9784,8 @@
           "selectionFingerprint",
           "representativeTokens",
           "sourceTokens",
+          "textPreview",
+          "textPreviewTruncated",
           "selectionMode",
           "imageInputAvailable",
           "includedImageCount",
@@ -9869,6 +9871,14 @@
             "format": "int32",
             "description": "Estimated tokens across the entire extracted text, including passages not previewed.",
             "minimum": 0
+          },
+          "textPreview": {
+            "type": "string",
+            "description": "First bounded characters of extracted text in source order, not representative chunks."
+          },
+          "textPreviewTruncated": {
+            "type": "boolean",
+            "description": "Whether the source contains more extracted text than the visible preview."
           }
         }
       },

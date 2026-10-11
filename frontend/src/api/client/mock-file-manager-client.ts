@@ -4493,6 +4493,8 @@ export class MockFileManagerClient implements FileManagerClient {
         selectionFingerprint: `mock-summary-${request.target.entryId}`,
         representativeTokens: Math.min(request.inputTokenBudget, 72),
         sourceTokens: request.target.location.uri.includes('large-report') ? 12_288 : 72,
+        textPreview: 'Overview\n\nA representative passage from the selected document.',
+        textPreviewTruncated: request.target.location.uri.includes('large-report'),
         selectionMode:
           request.inputTokenBudget > 4_096 && !request.target.location.uri.includes('large-report')
             ? 'fullDocument'

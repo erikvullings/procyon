@@ -90,6 +90,12 @@ pub struct DocumentSummaryPreviewDto {
     pub representative_tokens: u32,
     /// Estimated tokens across the entire extracted text, including passages not previewed.
     pub source_tokens: u32,
+    /// First bounded characters of extracted text in source order, not representative chunks.
+    #[serde(default)]
+    pub text_preview: String,
+    /// Whether the source contains more extracted text than the visible preview.
+    #[serde(default)]
+    pub text_preview_truncated: bool,
     /// Whether the preview contains the complete extracted text or selected passages.
     pub selection_mode: DocumentSummarySelectionModeDto,
     /// Whether the selected model and document support bounded image input.
@@ -105,6 +111,7 @@ pub struct DocumentSummaryPreviewDto {
     /// Whether persisted support metadata was reused.
     pub reused_selection: bool,
     /// Number of bounded generation passes over complete source evidence.
+    #[serde(default)]
     pub source_pass_count: u32,
     /// Context window used for summary budgeting; may be trusted from the saved profile.
     #[serde(default)]
@@ -252,6 +259,7 @@ mod tests {
         let preview = serde_json::json!({
             "selectionFingerprint": "fingerprint",
             "representativeTokens": 20,
+            "sourceTokens": 20,
             "selectionMode": "representativePassages",
             "imageInputAvailable": false,
             "includedImageCount": 0,
@@ -262,6 +270,8 @@ mod tests {
         });
         let parsed: DocumentSummaryPreviewDto = serde_json::from_value(preview).unwrap();
         assert_eq!(parsed.source_pass_count, 0);
+        assert_eq!(parsed.text_preview, "");
+        assert!(!parsed.text_preview_truncated);
         assert_eq!(parsed.effective_context_window, None);
         assert!(!parsed.provider_limit_verified);
     }

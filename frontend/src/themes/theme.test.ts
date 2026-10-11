@@ -457,7 +457,24 @@ describe('theme stylesheet', () => {
 
     expect(macToolbar).toContain('height: 28px');
     expect(macToolbar).toContain('--mm-control-height: 28px');
-    expect(macSeparator).toContain('margin-inline: 0.25rem');
+    expect(macToolbar).toContain('padding-left: 80px');
+    expect(macToolbar).toContain('gap: 0');
+    expect(macSeparator).toContain('margin-inline: 6px');
+    const macButtons = themeBlock(
+      /\.fm-app-shell\[data-mac-titlebar-overlay="true"\]\s+:is\([^)]*\)\s+> button\s*\{([^}]*)\}/,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-app-shell\[data-mac-titlebar-overlay="true"\]\s+:is\([^)]*\.fm-workspace-toolbar > \.fm-tooltip[^)]*\.fm-activity-anchor/,
+    );
+    expect(macButtons).toContain('width: 32px');
+    expect(macButtons).toContain('box-sizing: border-box');
+    expect(macButtons).toContain('padding-inline: 4px');
+    expect(themeCss).not.toMatch(
+      /\.fm-app-shell\[data-mac-titlebar-overlay="true"\] \.fm-workspace-toolbar button\s*\{/,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-app-shell\[data-mac-titlebar-overlay="true"\] \.fm-navigation-controls,\s*\.fm-app-shell\[data-mac-titlebar-overlay="true"\] \.fm-search-controls\s*\{[^}]*gap:\s*0/s,
+    );
     expect(themeCss).not.toMatch(
       /\.fm-app-shell\[data-mac-titlebar-overlay="true"\] \.fm-toolbar-spacer\s*\{[^}]*order:\s*1/,
     );
@@ -473,6 +490,59 @@ describe('theme stylesheet', () => {
     );
     expect(themeCss).toMatch(
       /@media \(pointer: coarse\)\s*\{[\s\S]*?\.fm-workspace-toolbar button\s*\{[^}]*width:\s*44px !important[^}]*height:\s*44px !important[^}]*min-width:\s*44px[^}]*min-height:\s*44px/s,
+    );
+  });
+
+  it('allocates the full function-key strip to adjacent semantic button cells', () => {
+    const bar = themeBlock(/\.fm-function-key-bar\s*\{([^}]*justify-content:[^}]*)\}/);
+    const list = themeBlock(/\.fm-function-key-list\s*\{([^}]*)\}/);
+    const key = themeBlock(/\.fm-function-key\s*\{([^}]*)\}/);
+    expect(bar).toContain('gap: 0');
+    expect(list).toContain('display: flex');
+    expect(list).toContain('width: 100%');
+    expect(list).toContain('gap: 0');
+    expect(key).toContain('flex: 1 1 0');
+    expect(key).toContain('min-height: 28px');
+    expect(themeCss).toMatch(/\.fm-function-key:focus-visible\s*\{[^}]*outline:/s);
+    expect(themeCss).toMatch(
+      /@media \(max-width: 720px\)\s*\{[\s\S]*?\.fm-function-key-list\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/s,
+    );
+  });
+
+  it('gives activity rows the full popover width rather than toolbar-button sizing', () => {
+    const item = themeBlock(/\.fm-activity-popover > button\.fm-activity-item\s*\{([^}]*)\}/);
+    expect(item).toContain('display: grid');
+    expect(item).toContain('grid-template-columns: minmax(0, 1fr)');
+    expect(item).toContain('box-sizing: border-box');
+    expect(item).toContain('width: 100%');
+    expect(themeCss).toMatch(/\.fm-activity-target\s*\{[^}]*white-space:\s*nowrap/s);
+  });
+
+  it('aligns the Knowledge folder filter within the pane header frame', () => {
+    const filter = themeBlock(/\.fm-knowledge-folder-filter\s*\{([^}]*)\}/);
+    const intent = themeBlock(
+      /\.fm-app-shell \.fm-knowledge-search-toolbar > select\.fm-knowledge-intent\.browser-default\s*\{([^}]*)\}/,
+    );
+    expect(filter).toContain('height: var(--fm-row-height)');
+    expect(filter).toContain('background: var(--fm-surface-elevated)');
+    expect(filter).toContain('margin: 0');
+    expect(filter).toContain('color: var(--fm-text-muted)');
+    expect(filter).toContain('font-size: 0.92em');
+    expect(filter).toContain('font-weight: 600');
+    expect(themeCss).toMatch(
+      /\.fm-knowledge-folder-filter > span\s*\{[^}]*top:\s*2px[^}]*text-overflow:\s*ellipsis[^}]*font-size:\s*0\.92em/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-knowledge-folder-filter\s+>\s+input\[type="checkbox"\]\s+\+\s+span:not\(\.lever\)::before,[\s\S]*?::after\s*\{[^}]*top:\s*-1px/s,
+    );
+    expect(intent).toContain('background: transparent');
+    expect(intent).toContain('border: 0');
+    expect(intent).toContain('min-height: 0');
+    expect(intent).toContain('color: var(--fm-text-muted)');
+    expect(intent).toContain('font-size: 0.92em');
+    expect(intent).toContain('font-weight: 600');
+    expect(themeCss).toMatch(
+      /select\.fm-knowledge-intent\.browser-default:focus-visible\s*\{[^}]*outline:/s,
     );
   });
 
@@ -565,7 +635,7 @@ describe('theme stylesheet', () => {
       /\.fm-app-shell \.fm-knowledge-search-submit\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-search-close\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-settings-trigger\.btn-icon\s*\{[^}]*width:\s*var\(--fm-row-height\)[^}]*height:\s*var\(--fm-row-height\)[^}]*padding:\s*0/s,
     );
     expect(themeCss).toMatch(
-      /\.fm-knowledge-search-toolbar > \.fm-knowledge-intent\s*\{[^}]*height:\s*calc\(var\(--fm-row-height\) - 4px\)/s,
+      /\.fm-app-shell \.fm-knowledge-search-toolbar > select\.fm-knowledge-intent\.browser-default\s*\{[^}]*height:\s*calc\(var\(--fm-row-height\) - 4px\)/s,
     );
     expect(themeCss).not.toMatch(/\.fm-knowledge-search-options\s*\{/);
     expect(themeCss).toMatch(

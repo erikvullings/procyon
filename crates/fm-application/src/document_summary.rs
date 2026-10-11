@@ -33,6 +33,7 @@ const MAX_SUMMARY_PROMPT_BYTES: usize = 1024 * 1024;
 const MAX_SUMMARY_SOURCE_PASSES: usize = 256;
 const MAX_SUMMARY_REDUCTION_ROUNDS: usize = 16;
 const SUMMARY_PROMPT_RESERVE: u32 = 1024;
+const MAX_SUMMARY_TEXT_PREVIEW_CHARS: usize = 24_000;
 const ATTRIBUTION_SOURCE_TOKENS: u32 = 500;
 const ATTRIBUTION_MAX_OUTPUT_TOKENS: u32 = 1024;
 const SOURCE_SUMMARY_TASK: &str =
@@ -135,6 +136,10 @@ pub struct DocumentSummaryPreview {
     pub representative_tokens: u32,
     /// Estimated token count across all source passages, not just previewed key passages.
     pub source_tokens: u32,
+    /// Opening extracted text, bounded independently of the generation input.
+    pub text_preview: String,
+    /// Whether further extracted text exists beyond the visible preview.
+    pub text_preview_truncated: bool,
     /// Whether all extracted chunks fit or representative passages were selected.
     pub selection_mode: RepresentativeSelectionMode,
     /// Whether the selected model and document support bounded image input.
@@ -338,6 +343,7 @@ impl DocumentSummaryCoordinator {
         let profile = Self::profile_disclosure(profile_id, profiles)?;
         let budget = Self::generation_budget(profile_id, profiles, cancellation).await?;
         let source_pass_count = Self::source_pass_count(&prepared.source_chunks, budget.as_ref())?;
+        let (text_preview, text_preview_truncated) = source_text_preview(&prepared.source_chunks);
         Ok(DocumentSummaryPreview {
             selection_fingerprint: Self::selection_fingerprint(
                 &prepared.selection.fingerprint,
@@ -346,6 +352,8 @@ impl DocumentSummaryCoordinator {
             representative_tokens: u32::try_from(prepared.selection.selected_tokens)
                 .map_err(|_| DocumentSummaryError::InvalidRequest)?,
             source_tokens: source_token_count(&prepared.source_chunks)?,
+            text_preview,
+            text_preview_truncated,
             selection_mode: prepared.selection.mode,
             image_input_available: image_evidence.available,
             included_image_count: u32::try_from(image_evidence.images.len()).unwrap_or(u32::MAX),
@@ -397,6 +405,7 @@ impl DocumentSummaryCoordinator {
         let profile = Self::profile_disclosure(profile_id, profiles)?;
         let budget = Self::generation_budget(profile_id, profiles, cancellation).await?;
         let source_pass_count = Self::source_pass_count(&prepared.source_chunks, budget.as_ref())?;
+        let (text_preview, text_preview_truncated) = source_text_preview(&prepared.source_chunks);
         let representative_tokens = u32::try_from(prepared.selection.selected_tokens)
             .map_err(|_| DocumentSummaryError::InvalidRequest)?;
         Ok(DocumentSummaryPreview {
@@ -406,6 +415,8 @@ impl DocumentSummaryCoordinator {
             ),
             representative_tokens,
             source_tokens: source_token_count(&prepared.source_chunks)?,
+            text_preview,
+            text_preview_truncated,
             selection_mode: prepared.selection.mode,
             image_input_available: image_evidence.available,
             included_image_count: u32::try_from(image_evidence.images.len()).unwrap_or(u32::MAX),
@@ -730,6 +741,30 @@ fn opening_evidence(sources: &[SummarySourceChunk], limit: u32) -> Vec<SummarySo
     opening
 }
 
+fn source_text_preview(sources: &[SummarySourceChunk]) -> (String, bool) {
+    let mut ordered = sources.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|source| source.source_position);
+    let mut preview = String::new();
+    let mut remaining = MAX_SUMMARY_TEXT_PREVIEW_CHARS;
+    for source in ordered.into_iter().filter(|source| !source.text.is_empty()) {
+        if !preview.is_empty() {
+            if remaining < 2 {
+                return (preview, true);
+            }
+            preview.push_str("\n\n");
+            remaining -= 2;
+        }
+        for character in source.text.chars() {
+            if remaining == 0 {
+                return (preview, true);
+            }
+            preview.push(character);
+            remaining -= 1;
+        }
+    }
+    (preview, false)
+}
+
 fn source_token_count(sources: &[SummarySourceChunk]) -> Result<u32, DocumentSummaryError> {
     sources.iter().try_fold(0_u32, |sum, source| {
         sum.checked_add(
@@ -1034,6 +1069,28 @@ mod tests {
 
     fn ephemeral_coordinator() -> DocumentSummaryCoordinator {
         DocumentSummaryCoordinator::new(std::sync::Arc::new(UnavailableDocumentSummaryCapability))
+    }
+
+    #[test]
+    fn text_preview_uses_source_order_and_marks_a_bounded_view_as_incomplete() {
+        let mut later = representative("second passage").source;
+        later.source_position = 2;
+        let mut opening = representative(&"opening passage ".repeat(2_000)).source;
+        opening.source_position = 0;
+        let (text, truncated) = source_text_preview(&[later, opening]);
+        assert!(text.starts_with("opening passage"));
+        assert!(!text.contains("second passage"));
+        assert_eq!(text.chars().count(), MAX_SUMMARY_TEXT_PREVIEW_CHARS);
+        assert!(truncated);
+
+        let mut first = representative("first passage").source;
+        first.source_position = 0;
+        let mut second = representative("second passage").source;
+        second.source_position = 1;
+        assert_eq!(
+            source_text_preview(&[second, first]),
+            ("first passage\n\nsecond passage".into(), false)
+        );
     }
 
     #[test]

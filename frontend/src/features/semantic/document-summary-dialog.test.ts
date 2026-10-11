@@ -33,26 +33,45 @@ afterEach(() => {
 });
 
 describe('DocumentSummaryDialog', () => {
-  it('labels representative evidence as key passages when no profile exists', async () => {
+  it('shows a preparation skeleton then extracted text without requiring a generation profile', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.previewDocumentSummary.bind(client);
+    let finish: (() => void) | undefined;
+    const preview = vi
+      .spyOn(client, 'previewDocumentSummary')
+      .mockImplementation(async (request, signal) => {
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        return original(request, signal);
+      });
     m.mount(root, {
       view: () =>
         m(DocumentSummaryDialog, {
           open: true,
-          client: new MockFileManagerClient(),
+          client,
           workspaceId: '22222222-2222-4222-8222-222222222222',
           entry,
           onClose: vi.fn(),
         }),
     });
 
-    await vi.waitFor(() => expect(root.textContent).toContain('A representative passage'));
-    expect(root.textContent).toContain('No generation profile is configured');
-    expect(root.textContent).toContain('Key passages');
-    expect(root.textContent).toContain('Overview');
-    expect(root.textContent).not.toContain('S1');
-    expect(root.querySelector('.fm-document-summary-passages li p')?.textContent).toBe(
-      'A representative passage from the selected document.',
+    await vi.waitFor(() => expect(preview).toHaveBeenCalledOnce());
+    m.redraw.sync();
+    expect(root.textContent).toContain('Preparing document content');
+    expect(root.textContent).not.toContain('Key passages');
+    expect(
+      root.querySelector('.fm-document-summary-progress[aria-busy="true"] .mm-skeleton'),
+    ).not.toBeNull();
+    expect(root.querySelector('.fm-document-summary-text')).toBeNull();
+    finish?.();
+    await vi.waitFor(() => expect(root.textContent).not.toContain('Preparing document content'));
+    expect(root.textContent).toContain('Configure a generation profile');
+    expect(root.querySelector('.fm-document-summary-text')?.textContent).toContain(
+      'A representative passage',
     );
+    expect(root.querySelector('.fm-document-summary-text')?.getAttribute('tabindex')).toBe('0');
+    expect(root.textContent).not.toContain('Key passages');
   });
 
   it('discloses cloud transfer and generates a persisted summary', async () => {
@@ -119,7 +138,7 @@ describe('DocumentSummaryDialog', () => {
     expect(root.textContent).toContain('Full summary');
   });
 
-  it('shows an accessible skeleton only during summary generation', async () => {
+  it('shows an accessible skeleton during summary generation and keeps text inspectable', async () => {
     const client = new MockFileManagerClient();
     await client.createLlmProfile({
       name: 'Local profile',
@@ -175,6 +194,9 @@ describe('DocumentSummaryDialog', () => {
       4,
     );
     expect(progress?.querySelector('.mm-skeleton-group')?.getAttribute('aria-hidden')).toBe('true');
+    expect(root.querySelector('.fm-document-summary-text')?.textContent).toContain(
+      'A representative passage',
+    );
     finish?.();
     await vi.waitFor(() => expect(root.querySelector('.fm-document-summary-progress')).toBeNull());
     expect(root.textContent).toContain('A concise document summary.');
@@ -217,6 +239,7 @@ describe('DocumentSummaryDialog', () => {
     });
 
     await vi.waitFor(() => expect(root.textContent).toContain('A representative passage'));
+    expect(root.textContent).toContain('Showing the beginning only');
     expect(root.textContent).not.toContain('token');
     expect(root.textContent).not.toContain('Summarizing in parts');
     expect(root.querySelector('.fm-document-summary-input-mode')).toBeNull();
@@ -280,7 +303,7 @@ describe('DocumentSummaryDialog', () => {
     expect(preview).toHaveBeenLastCalledWith(expect.objectContaining({ includeImages: true }));
   });
 
-  it('loads representative passages when no persisted summary exists', async () => {
+  it('loads extracted text when no persisted summary exists', async () => {
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'getDocumentSummary').mockResolvedValue(null);
 
@@ -297,6 +320,28 @@ describe('DocumentSummaryDialog', () => {
 
     await vi.waitFor(() => expect(root.textContent).toContain('A representative passage'));
     expect(root.textContent).not.toContain('The summary could not be loaded.');
+  });
+
+  it('reports preview extraction failure instead of showing empty text', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'previewDocumentSummary').mockRejectedValue(
+      new Error('Document exceeds the extraction limit'),
+    );
+    m.mount(root, {
+      view: () =>
+        m(DocumentSummaryDialog, {
+          open: true,
+          client,
+          workspaceId: '22222222-2222-4222-8222-222222222222',
+          entry,
+          onClose: vi.fn(),
+        }),
+    });
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain('Document exceeds the extraction limit'),
+    );
+    expect(root.querySelector('.fm-document-summary-text')).toBeNull();
+    expect(root.querySelector('.fm-document-summary-progress')).toBeNull();
   });
 
   it.each(['missing source estimate', 'zero context window'])(

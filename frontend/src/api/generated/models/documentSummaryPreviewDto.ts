@@ -55,4 +55,8 @@ export interface DocumentSummaryPreviewDto {
      * @minimum 0
      */
   sourceTokens: number;
+  /** First bounded characters of extracted text in source order, not representative chunks. */
+  textPreview: string;
+  /** Whether the source contains more extracted text than the visible preview. */
+  textPreviewTruncated: boolean;
 }

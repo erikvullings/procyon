@@ -1694,6 +1694,22 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.querySelector<HTMLSelectElement>('#fm-knowledge-scope')?.value).toBe(
       'enrolledRoots',
     );
+    const input = root.querySelector<HTMLTextAreaElement>('#fm-knowledge-subjects');
+    expect(input?.placeholder).toBe('Enter your search terms');
+    expect(input?.getAttribute('aria-label')).toBeTruthy();
+    expect(input?.getAttribute('autocomplete')).toBe('off');
+    expect(input?.getAttribute('autocorrect')).toBe('off');
+    expect(input?.getAttribute('autocapitalize')).toBe('off');
+    expect(input?.getAttribute('spellcheck')).toBe('false');
+  });
+
+  it('uses a distinct Dutch search placeholder while keeping a programmatic label', async () => {
+    setLocale('nl');
+    mount();
+    await ready();
+    const input = root.querySelector<HTMLTextAreaElement>('#fm-knowledge-subjects');
+    expect(input?.placeholder).toBe('Voer je zoektermen in');
+    expect(input?.getAttribute('aria-label')).toBeTruthy();
   });
 
   it('searches enrolled roots across navigation and pins the optional folder filter', async () => {
@@ -1706,6 +1722,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       sourceAvailable: true,
       unavailableReason: null,
     });
+
     const execute = vi.spyOn(client, 'executeKnowledgeSearch');
     let displayedFolder = { providerId: 'local', uri: 'file:///documents/first' };
     mount({
@@ -1763,6 +1780,43 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       folder: null,
     });
   });
+
+  it.each([
+    ['file:///Custom%20Chat%20Leiden', 'Custom Chat Leiden'],
+    ['file:///A%2520B%2C%20C', 'A%20B, C'],
+    ['file:///A%22B%27', 'A"B\''],
+    ['file:///', '/'],
+  ])(
+    'displays a decoded folder label without changing the pinned URI for %s',
+    async (uri, name) => {
+      const client = new MockFileManagerClient();
+      vi.spyOn(client, 'getSemanticFolderStatus').mockResolvedValue({
+        consent: 'includedHere',
+        rootId: 'mock-knowledge-root-handbook',
+        exclusionId: null,
+        workspaceReferenced: true,
+        sourceAvailable: true,
+        unavailableReason: null,
+      });
+      const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+      mount({
+        client,
+        initialSubject: 'retrieval',
+        currentFolder: { providerId: 'local', uri },
+      });
+      await ready();
+      const filter = root.querySelector<HTMLInputElement>('.fm-knowledge-folder-filter input');
+      expect(filter?.closest('label')?.textContent).toContain(`"${name}"`);
+      filter?.click();
+      submitSearch();
+      await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+      expect(execute.mock.lastCall?.[0].scope).toMatchObject({
+        workspaceId,
+        kind: 'currentFolder',
+        folder: { uri },
+      });
+    },
+  );
 
   it('lists selectable indexed roots and marks the unavailable one', async () => {
     mount();

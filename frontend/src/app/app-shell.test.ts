@@ -1920,6 +1920,15 @@ describe('AppShell', () => {
       'F7 New folder',
       'F8 Delete',
     ]);
+    const keys = [
+      ...root.querySelectorAll<HTMLButtonElement>('.fm-function-key-list .fm-function-key'),
+    ];
+    expect(keys).toHaveLength(8);
+    expect(keys.every((key) => key instanceof HTMLButtonElement && key.type === 'button')).toBe(
+      true,
+    );
+    expect(keys[0]?.tabIndex).toBe(0);
+    expect(keys[0]?.disabled).toBe(false);
   });
 
   it('toggles and persists the hidden operation centre from the toolbar and Alt+Z', async () => {
@@ -2018,7 +2027,7 @@ describe('AppShell', () => {
         type: 'semantic.ingestionProgress',
         jobId: 'root:one',
         stage: 'reconciling',
-        completed: 64,
+        completed: 1,
         total: 0,
         errors: 0,
       },
@@ -2040,15 +2049,32 @@ describe('AppShell', () => {
     ).toBeTruthy();
     root.querySelector<HTMLButtonElement>('.fm-activity-count')?.click();
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-activity-popover')?.textContent).toContain(
-        '64 entries scanned',
-      ),
+      expect(root.querySelector('.fm-activity-popover')?.textContent).toContain('1 entry scanned'),
     );
+    expect(root.querySelector('.fm-activity-count')?.getAttribute('aria-label')).toContain(
+      '1 background activity',
+    );
+    const activity = root.querySelector<HTMLButtonElement>('.fm-activity-item');
+    expect(activity?.textContent).toContain('Semantic indexing');
+    expect(activity?.textContent).toContain('Open Semantic settings');
+    client.emit({
+      eventId: 802,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: 'root:one',
+        stage: 'embedding',
+        completed: 64,
+        total: 0,
+        errors: 0,
+      },
+    });
+    await vi.waitFor(() => expect(activity?.textContent).toContain('64 entries scanned'));
     expect(root.querySelector('.fm-activity-popover')?.textContent).toContain(
       'Open Semantic settings',
     );
     client.emit({
-      eventId: 802,
+      eventId: 803,
       timestamp: new Date().toISOString(),
       payload: {
         type: 'semantic.ingestionProgress',
@@ -2532,7 +2558,7 @@ describe('AppShell', () => {
       span.textContent?.includes('F5 Copy'),
     );
     expect(footerKey).not.toBeUndefined();
-    footerKey?.click();
+    footerKey?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 1 }));
 
     expect(startOperation).not.toHaveBeenCalled();
     await confirmRoutineOperation('Copy');
@@ -2543,6 +2569,35 @@ describe('AppShell', () => {
       destination: { uri: 'mock:///Documents' },
       conflictPolicy: 'ask',
     });
+  });
+
+  it('routes a click in the neighboring F6 button cell to Move, not Copy', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('.env'));
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    [...(activePane?.querySelectorAll<HTMLElement>('.fm-directory-row') ?? [])]
+      .find((row) => row.textContent?.includes('.env'))
+      ?.click();
+    m.redraw.sync();
+    const keys = [...root.querySelectorAll<HTMLButtonElement>('.fm-function-key')];
+    const move = keys.find((key) => key.textContent?.includes('F6 Move'));
+    expect(move?.previousElementSibling?.textContent).toContain('F5 Copy');
+    move?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 9999 }));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation-confirmation-modal.active')).not.toBeNull(),
+    );
+    const modal = root.querySelector('.fm-operation-confirmation-modal.active');
+    expect(
+      [...(modal?.querySelectorAll<HTMLButtonElement>('button') ?? [])].some(
+        (button) => button.textContent?.trim() === 'Move',
+      ),
+    ).toBe(true);
+    expect(
+      [...(modal?.querySelectorAll<HTMLButtonElement>('button') ?? [])].some(
+        (button) => button.textContent?.trim() === 'Copy',
+      ),
+    ).toBe(false);
   });
 
   it('trashes the selected file with F8 when core.trash owns the shortcut (task 0043)', async () => {

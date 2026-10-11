@@ -5243,7 +5243,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                                 ? undefined
                                 : m(
                                     'span',
-                                    t('shell', 'indexingScanned', { count: job.completed }),
+                                    job.completed === 1
+                                      ? t('shell', 'indexingScannedOne')
+                                      : t('shell', 'indexingScanned', { count: job.completed }),
                                   ),
                               m('span.fm-activity-target', t('shell', 'openSemanticStatus')),
                             ],
@@ -5891,12 +5893,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   ? basketSourcePaneId() !== undefined
                   : binding.actionAvailable;
                 return m(
-                  'span.fm-function-key',
+                  'button.fm-function-key',
                   {
                     key: binding.actionId,
-                    role: 'button',
-                    tabindex: available ? 0 : -1,
-                    'aria-disabled': available ? undefined : 'true',
+                    type: 'button',
+                    disabled: !available,
                     onclick: available
                       ? () => invokeFunctionKeyShortcut(binding.shortcut)
                       : undefined,

@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use fm_application::FileManagerService;
+use fm_application::document_summary::{DocumentSummaryCapability, DocumentSummaryError};
 #[cfg(all(unix, feature = "gemma-native"))]
 use fm_application::semantic::IpcSemanticCapability;
 use fm_application::semantic::{
@@ -36,8 +37,12 @@ use fm_semantic_library::{
     GemmaMediaSelection, LibraryId, ModelIdentity, ResourceBudgets, ResourceProfile,
     ResourceProfileKind, RootId,
 };
+use fm_semantic_worker::document_summary::{
+    GeneratedSummary, PrepareDocumentSummary, PreparedDocumentSummary,
+};
 #[cfg(all(unix, feature = "gemma-native"))]
 use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeFiles};
+use fm_semantic_worker::semantic_storage::StoredDocumentSummary;
 #[cfg(all(unix, feature = "gemma-native"))]
 use fm_semantic_worker::{ManagedWorkerLaunch, ManagedWorkerResolver};
 #[cfg(unix)]
@@ -53,6 +58,37 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 const HOST: SemanticAccessContext = SemanticAccessContext::Host;
+
+struct MissingRebuildSummary(Arc<AtomicUsize>);
+
+#[async_trait]
+impl DocumentSummaryCapability for MissingRebuildSummary {
+    async fn prepare(
+        &self,
+        _request: PrepareDocumentSummary,
+        _cancellation: &CancellationToken,
+    ) -> Result<PreparedDocumentSummary, DocumentSummaryError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Err(DocumentSummaryError::NotFound)
+    }
+
+    async fn publish(
+        &self,
+        _prepared: &PreparedDocumentSummary,
+        _generated: GeneratedSummary,
+        _cancellation: &CancellationToken,
+    ) -> Result<StoredDocumentSummary, DocumentSummaryError> {
+        Err(DocumentSummaryError::NotFound)
+    }
+
+    async fn current(
+        &self,
+        _request: &PrepareDocumentSummary,
+    ) -> Result<Option<(StoredDocumentSummary, bool)>, DocumentSummaryError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Err(DocumentSummaryError::NotFound)
+    }
+}
 
 struct FailingDocumentCapability {
     inner: FakeSemanticCapability,
@@ -332,8 +368,7 @@ async fn unindexed_summary_preview_extracts_on_demand_without_enrolling_the_fold
         state.path().join("workspaces"),
         state.path().join("settings"),
     )
-    .with_semantic_library_service(library(&state))
-    .with_semantic_capability(Arc::new(FakeSemanticCapability::new()));
+    .with_semantic_library_service(library(&state));
     let target = fm_transport_dto::DocumentSummaryTargetDto {
         workspace_id: Uuid::new_v4(),
         entry_id: Uuid::new_v4(),
@@ -368,6 +403,87 @@ async fn unindexed_summary_preview_extracts_on_demand_without_enrolling_the_fold
             .expect("no persisted summary")
             .is_none()
     );
+}
+
+#[tokio::test]
+async fn enrolled_summary_preview_remains_available_during_worker_index_rebuild() {
+    let source_root = project_temp_dir("rebuilding-summary-source-");
+    let source = source_root.path().join("article.txt");
+    std::fs::write(&source, "Opening evidence for an enrolled article.").unwrap();
+    let state = project_temp_dir("rebuilding-summary-state-");
+    let library = library(&state);
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1910));
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(source_root.path()).unwrap(),
+    );
+    let missing_calls = Arc::new(AtomicUsize::new(0));
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(FakeSemanticCapability::new()))
+    .with_document_summary_capability(Arc::new(MissingRebuildSummary(Arc::clone(&missing_calls))));
+    let report = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(report.ingested_occurrences, 1);
+    let snapshot = service
+        .list_directory(fm_transport_dto::ListDirectoryRequest {
+            workspace_id: workspace_id.into(),
+            pane_id: Uuid::new_v4(),
+            request_id: Uuid::new_v4(),
+            location: Location::from_native_path(source_root.path())
+                .unwrap()
+                .into(),
+            continuation_token: None,
+            sort: Vec::new(),
+            show_hidden: false,
+            folders_first: false,
+            show_git_status: false,
+        })
+        .await
+        .unwrap();
+    let entry_id = snapshot
+        .entries
+        .iter()
+        .find(|entry| entry.name == "article.txt")
+        .unwrap()
+        .id;
+    let target = fm_transport_dto::DocumentSummaryTargetDto {
+        workspace_id: workspace_id.into(),
+        entry_id,
+        location: Location::from_native_path(&source).unwrap().into(),
+    };
+    let preview = service
+        .preview_document_summary(
+            &HOST,
+            fm_transport_dto::PreviewDocumentSummaryRequestDto {
+                target: target.clone(),
+                input_token_budget: 4_096,
+                profile_id: None,
+                include_images: false,
+            },
+        )
+        .await
+        .expect("foreground extracted text should not wait for derived vectors");
+    assert!(preview.text_preview.contains("Opening evidence"));
+    assert_eq!(missing_calls.load(Ordering::SeqCst), 1);
+    assert!(
+        service
+            .get_document_summary(
+                &HOST,
+                fm_transport_dto::GetDocumentSummaryRequestDto { target },
+            )
+            .await
+            .expect("missing derived summary is not a preview error")
+            .is_none()
+    );
+    assert_eq!(missing_calls.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]

@@ -4,6 +4,7 @@ import {
   Dialog,
   CommandPalette as MaterializedCommandPaletteFactory,
 } from 'mithril-materialized';
+import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 
 import { actionCategoryLabel, t } from '../../i18n';
 import type { ActionDescriptor, ActionInvocationContext } from '../../models';
@@ -294,6 +295,7 @@ export const CommandPalette: FactoryComponent<CommandPaletteAttrs> = () => {
                   m('label', [
                     property.title ?? name,
                     m('input', {
+                      ...(property.type === 'boolean' ? {} : technicalTextInputAttrs),
                       type:
                         property.type === 'boolean'
                           ? 'checkbox'

@@ -1494,4 +1494,51 @@ describe('createGlobalKeydownHandler clipboard paste', () => {
     expect(copy).toHaveBeenCalledWith([source], otherFolder);
     expect(duplicate).not.toHaveBeenCalled();
   });
+
+  it.each(['fm-knowledge-subjects', 'fm-knowledge-question', 'find-files-query'])(
+    'leaves native clipboard editing untouched in %s',
+    (id) => {
+      const { context, duplicate } = pasteContext(destination);
+      const macContext = { ...context, getPlatform: () => 'macos' as const };
+      const input = document.createElement(id === 'find-files-query' ? 'input' : 'textarea');
+      input.id = id;
+      document.body.append(input);
+      const handler = createGlobalKeydownHandler(macContext);
+      document.addEventListener('keydown', handler);
+      try {
+        for (const key of ['c', 'x', 'v']) {
+          const event = keydown(key, { metaKey: true });
+          input.dispatchEvent(event);
+          expect(event.defaultPrevented, `${id}: Cmd+${key}`).toBe(false);
+        }
+        expect(duplicate).not.toHaveBeenCalled();
+      } finally {
+        document.removeEventListener('keydown', handler);
+        input.remove();
+      }
+    },
+  );
+
+  it('preserves editing inside a shadow-root text field without routing paste to files', () => {
+    const { context, duplicate } = pasteContext(destination);
+    const host = document.createElement('div');
+    const shadow = host.attachShadow({ mode: 'open' });
+    const input = document.createElement('textarea');
+    shadow.append(input);
+    document.body.append(host);
+    const handler = createGlobalKeydownHandler({
+      ...context,
+      getPlatform: () => 'macos' as const,
+    });
+    document.addEventListener('keydown', handler);
+    try {
+      const event = keydown('v', { metaKey: true, composed: true });
+      input.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(duplicate).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener('keydown', handler);
+      host.remove();
+    }
+  });
 });

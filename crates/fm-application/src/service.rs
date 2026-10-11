@@ -1816,7 +1816,10 @@ impl FileManagerService {
                 .await
             {
                 Ok(preview) => Ok(preview_to_dto(preview)),
-                Err(crate::document_summary::DocumentSummaryError::Unavailable) => {
+                Err(
+                    crate::document_summary::DocumentSummaryError::Unavailable
+                    | crate::document_summary::DocumentSummaryError::NotFound,
+                ) => {
                     self.preview_ephemeral_document_summary(
                         target,
                         request.input_token_budget,
@@ -1880,7 +1883,10 @@ impl FileManagerService {
                     .await
                 {
                     Ok(summary) => return Ok(summary_to_dto(summary, false)),
-                    Err(crate::document_summary::DocumentSummaryError::Unavailable) => {}
+                    Err(
+                        crate::document_summary::DocumentSummaryError::Unavailable
+                        | crate::document_summary::DocumentSummaryError::NotFound,
+                    ) => {}
                     Err(error) => return Err(summary_error_to_application(error)),
                 }
             }
@@ -1915,7 +1921,10 @@ impl FileManagerService {
         };
         match self.document_summaries.current(&worker_request).await {
             Ok(summary) => Ok(summary.map(|(stored, stale)| summary_to_dto(stored, stale))),
-            Err(crate::document_summary::DocumentSummaryError::Unavailable) => Ok(None),
+            Err(
+                crate::document_summary::DocumentSummaryError::Unavailable
+                | crate::document_summary::DocumentSummaryError::NotFound,
+            ) => Ok(None),
             Err(error) => Err(summary_error_to_application(error)),
         }
     }
@@ -2073,14 +2082,6 @@ impl FileManagerService {
             return Err(ApplicationError::InvalidRequest(
                 "summary input token budget is outside the supported range".into(),
             ));
-        }
-        let health = self
-            .semantic
-            .health()
-            .await
-            .map_err(|_| ApplicationError::ProviderUnavailable)?;
-        if health != SemanticHealth::Serving {
-            return Err(ApplicationError::ProviderUnavailable);
         }
         let outcome = self
             .document_conversion

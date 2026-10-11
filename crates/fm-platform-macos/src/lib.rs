@@ -1490,6 +1490,7 @@ fn build_role_item(mtm: MainThreadMarker, role: fm_domain::NativeMenuRole) -> Re
         NativeMenuRole::Zoom => ("Zoom", sel!(performZoom:), "", 0),
         NativeMenuRole::BringAllToFront => ("Bring All to Front", sel!(arrangeInFront:), "", 0),
         NativeMenuRole::Copy => ("Copy", sel!(copy:), "c", MODIFIER_COMMAND_BIT),
+        NativeMenuRole::Cut => ("Cut", sel!(cut:), "x", MODIFIER_COMMAND_BIT),
         NativeMenuRole::Paste => ("Paste", sel!(paste:), "v", MODIFIER_COMMAND_BIT),
         NativeMenuRole::SelectAll => ("Select All", sel!(selectAll:), "a", MODIFIER_COMMAND_BIT),
     };

@@ -50,5 +50,6 @@ export type NativeMenuRole =
   | 'zoom'
   | 'bringAllToFront'
   | 'copy'
+  | 'cut'
   | 'paste'
   | 'selectAll';

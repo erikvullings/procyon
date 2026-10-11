@@ -240,6 +240,30 @@ describe('i18n', () => {
     it('LOCALES covers every catalogue entry', () => {
       expect(LOCALES).toEqual(['en', 'nl', 'de', 'fr', 'es', 'it', 'pt', 'pl']);
     });
+
+    it.each(LOCALES.filter((locale) => locale !== 'en'))(
+      'localises the new Knowledge, summary, and activity copy in %s',
+      (locale) => {
+        const translated = catalogues[locale];
+        expect(translated.knowledgeSearch.subjectsPlaceholder).not.toBe(
+          catalogues.en.knowledgeSearch.subjectsPlaceholder,
+        );
+        expect(translated.knowledgeSearch.includeOnlyCurrentFolder).not.toBe(
+          catalogues.en.knowledgeSearch.includeOnlyCurrentFolder,
+        );
+        for (const key of ['profileRequired', 'documentText', 'textPreviewLimit'] as const) {
+          expect(translated.documentSummary[key]).not.toBe(catalogues.en.documentSummary[key]);
+        }
+        expect(translated.shell.indexingScannedOne).not.toBe(
+          catalogues.en.shell.indexingScannedOne,
+        );
+        expect(translated.menu.cutText).not.toBe(catalogues.en.menu.cutText);
+        setLocale(locale);
+        expect(t('knowledgeSearch', 'includeOnlyCurrentFolder', { folder: 'A B' })).toContain(
+          'A B',
+        );
+      },
+    );
   });
 
   describe('component redraws on locale change', () => {

@@ -49,6 +49,8 @@ pub(crate) fn preview_to_dto(value: DocumentSummaryPreview) -> DocumentSummaryPr
         }),
         reused_selection: value.reused_selection,
         source_tokens: value.source_tokens,
+        text_preview: value.text_preview,
+        text_preview_truncated: value.text_preview_truncated,
         source_pass_count: value.source_pass_count,
         effective_context_window: value.effective_context_window,
         provider_limit_verified: value.provider_limit_verified,

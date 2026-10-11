@@ -1,4 +1,5 @@
 import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
+import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import { eyeOffIcon, linkIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
@@ -1085,6 +1086,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                             : attrs.thumbnailLoader,
                         ),
                         m('input[type=text].fm-inline-rename-input', {
+                          ...technicalTextInputAttrs,
                           value: attrs.renameValue ?? entry.name,
                           'aria-label': t('table', 'rename', { name: entry.name }),
                           'aria-invalid': attrs.renameError === undefined ? undefined : 'true',

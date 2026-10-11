@@ -1,5 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
 import { FlatButton, IconButton, ModalPanel, ToggleButton } from 'mithril-materialized';
+import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import {
   browserPlusIcon,
@@ -516,6 +517,7 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
                   m('label.fm-create-directory-field', [
                     m('span', t('search', 'chooseConcept')),
                     m('input#find-files-concept.browser-default', {
+                      ...technicalTextInputAttrs,
                       type: 'search',
                       value: conceptFilter,
                       oninput: (event: InputEvent) => {
@@ -638,6 +640,7 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
                 m('label.fm-create-directory-field', [
                   m('span', t('search', 'name')),
                   m('input#find-files-query', {
+                    ...technicalTextInputAttrs,
                     class: 'browser-default',
                     type: 'text',
                     value: filenameQuery,
@@ -675,6 +678,7 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
                   m('span', t('search', 'content')),
                   m('.fm-find-files-content-control', [
                     m('input#find-files-content-query', {
+                      ...technicalTextInputAttrs,
                       class: 'browser-default',
                       type: 'text',
                       value: contentQuery,

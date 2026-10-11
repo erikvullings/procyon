@@ -1,5 +1,6 @@
 import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
 import { IconButton, ModalPanel, toast } from 'mithril-materialized';
+import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import {
   arrowsSortIcon,
   gridDotsIcon,
@@ -1256,6 +1257,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                         },
                         [
                           m('input[type=text]', {
+                            ...technicalTextInputAttrs,
                             value: favouriteLabel,
                             placeholder: t('pane', 'favouriteName'),
                             'aria-label': t('pane', 'favouriteName'),
@@ -1531,6 +1533,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                 : editing
                   ? m('.fm-path-editor', [
                       m('input[type=text].fm-path-input', {
+                        ...technicalTextInputAttrs,
                         value: draftPath,
                         'aria-label': t('pane', 'path'),
                         oncreate: (vnode: VnodeDOM) => {
@@ -2071,6 +2074,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
             description: m('label.fm-selection-mask-field', [
               m('span', t('pane', 'fileMask')),
               m('input[type=text]', {
+                ...technicalTextInputAttrs,
                 value: selectionMask,
                 oninput: (event: InputEvent) => {
                   selectionMask = (event.currentTarget as HTMLInputElement).value;
