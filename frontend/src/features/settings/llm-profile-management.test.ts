@@ -429,6 +429,28 @@ describe('LlmProfileManagement', () => {
     expect(root.textContent).not.toContain('Available provider models');
   });
 
+  it('saves the visibly selected first discovered Ollama model without a change event', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'discoverLlmProfileDraftModels').mockResolvedValue([
+      'llama3.2:3b',
+      'qwen3:14b',
+    ]);
+    let save: (() => Promise<boolean>) | undefined;
+    await mountLoaded(client, (handler) => {
+      save = handler;
+    });
+    await vi.waitFor(() => {
+      expect(fieldInput('Model')?.value).toBe('llama3.2:3b');
+      expect(fieldInput('Model')?.classList.contains('select-dropdown')).toBe(true);
+    });
+    if (!save) throw new Error('Settings did not register profile save');
+    expect(await save()).toBe(true);
+    expect(await client.listLlmProfiles()).toEqual([
+      expect.objectContaining({ preset: 'ollama', model: 'llama3.2:3b' }),
+    ]);
+    expect((await client.getKnowledgeCapabilities()).answerGeneration).toBe(true);
+  });
+
   it('selects and discovers the first saved local profile on load', async () => {
     const client = new MockFileManagerClient();
     const profile = await client.createLlmProfile({

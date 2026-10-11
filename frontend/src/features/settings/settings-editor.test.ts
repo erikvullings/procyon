@@ -254,6 +254,32 @@ describe('SettingsEditor', () => {
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
   });
 
+  it('saves the visible first Ollama model through Settings without requiring a dropdown change', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    vi.spyOn(client, 'discoverLlmProfileDraftModels').mockResolvedValue([
+      'llama3.2:3b',
+      'qwen3:14b',
+    ]);
+    const createProfile = vi.spyOn(client, 'createLlmProfile');
+    const { onSave } = mountEditor({ client });
+    openSection('Semantic (RAG)');
+
+    await vi.waitFor(() => {
+      const model = [...root.querySelectorAll<HTMLInputElement>('.select-dropdown')].find(
+        (input) => input.value === 'llama3.2:3b',
+      );
+      expect(model).not.toBeUndefined();
+    });
+    const save = root.querySelector<HTMLButtonElement>('.fm-settings-save');
+    expect(save?.disabled).toBe(false);
+    save?.click();
+    await vi.waitFor(() => expect(createProfile).toHaveBeenCalledOnce());
+    expect(createProfile.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ preset: 'ollama', model: 'llama3.2:3b' }),
+    );
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+  });
+
   it('renders initial appearance values from the loaded settings', () => {
     mountEditor({ settings: fixtureSettings({ fontSize: 17, rowHeight: 30 }) });
 
