@@ -939,6 +939,60 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await vi.waitFor(() => expect(button?.textContent).toBe('Sluit afbeelding'));
   });
 
+  it('returns the first image to Open when a different image becomes the active preview', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          { ...first, mediaType: 'image/png', unavailable: false },
+          {
+            ...first,
+            documentId: 'second-image-document',
+            sourceId: 'second-image-source',
+            recordId: 'second-image-record',
+            title: 'second.png',
+            finalRank: 2,
+            mediaType: 'image/png',
+            unavailable: false,
+          },
+        ],
+      };
+    });
+    let displayedSourceId: string | undefined;
+    mount({
+      client,
+      initialSubject: 'retrieval',
+      onOpenSource: (evidence) => {
+        displayedSourceId = displayedSourceId === evidence.sourceId ? undefined : evidence.sourceId;
+      },
+      isSourceOpen: (evidence) => displayedSourceId === evidence.sourceId,
+    });
+    await ready();
+    await search();
+
+    const [first, second] = root.querySelectorAll<HTMLButtonElement>('.fm-knowledge-media-open');
+    expect(first?.textContent).toBe('Open image');
+    expect(second?.textContent).toBe('Open image');
+    first?.focus();
+    expect(document.activeElement).toBe(first);
+    first?.click();
+    await vi.waitFor(() => expect(first?.textContent).toBe('Close image'));
+    expect(first?.getAttribute('aria-expanded')).toBe('true');
+    second?.click();
+    await vi.waitFor(() => expect(second?.textContent).toBe('Close image'));
+    expect(first?.textContent).toBe('Open image');
+    expect(first?.getAttribute('aria-expanded')).toBe('false');
+    expect(second?.getAttribute('aria-expanded')).toBe('true');
+    second?.click();
+    await vi.waitFor(() => expect(second?.textContent).toBe('Open image'));
+    expect(second?.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('does not open unavailable media and never treats media placeholders as markdown', async () => {
     const client = new MockFileManagerClient();
     const original = client.executeKnowledgeSearch.bind(client);

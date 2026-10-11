@@ -4132,7 +4132,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     closeKnowledgeSearch: (paneId, tabId) => tabController.performCloseTab(paneId, tabId),
     openKnowledgeSource,
     isKnowledgeSourceOpen: (evidence) =>
-      [...viewerByTab.values()].some((viewer) => viewer.knowledgeSourceId === evidence.sourceId),
+      [...viewerByTab.values()].some(
+        (viewer) =>
+          viewer.knowledgeSourceId === evidence.sourceId &&
+          workspace?.panesById[viewer.paneId]?.activeTabId === viewer.tabId,
+      ),
     closeEditor,
     updateLocationSettings,
     invokeActionById: (actionId, parameters, context) =>
