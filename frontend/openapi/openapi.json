@@ -12050,12 +12050,20 @@
           "recursive",
           "available",
           "indexedGeneration",
-          "indexedSources"
+          "indexedSources",
+          "confirmedCompletedSources",
+          "unverifiedLegacySources"
         ],
         "properties": {
           "available": {
             "type": "boolean",
             "description": "Whether the indexed source is currently reachable."
+          },
+          "confirmedCompletedSources": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Document occurrences with an acknowledged worker completion in this workspace/root.",
+            "minimum": 0
           },
           "indexedGeneration": {
             "type": "integer",
@@ -12066,7 +12074,7 @@
           "indexedSources": {
             "type": "integer",
             "format": "int64",
-            "description": "Indexed sources already searchable, even before a full pass completes.",
+            "description": "Observed occurrences; not proof of completed worker ingestion.",
             "minimum": 0
           },
           "label": {
@@ -12084,6 +12092,12 @@
           "rootId": {
             "type": "string",
             "description": "Stable path-independent root identity."
+          },
+          "unverifiedLegacySources": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Pre-upgrade occurrences whose earlier worker completion cannot yet be verified.",
+            "minimum": 0
           }
         }
       },

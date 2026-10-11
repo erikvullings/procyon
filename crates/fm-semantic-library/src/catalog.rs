@@ -296,6 +296,13 @@ pub struct OccurrenceRecord {
     /// Scopes for which the worker acknowledged a completed ingestion of this content.
     #[serde(default)]
     pub(crate) completed_scopes: Vec<OccurrenceScope>,
+    /// Older catalogs cannot prove which worker ingestions completed.
+    #[serde(default = "legacy_receipts_unverified")]
+    pub(crate) legacy_receipts_unverified: bool,
+}
+
+const fn legacy_receipts_unverified() -> bool {
+    true
 }
 
 impl OccurrenceRecord {
@@ -696,6 +703,7 @@ impl SemanticCatalog {
                     occurrence.location = observation.location;
                     if occurrence.document_id != document_id {
                         occurrence.completed_scopes.clear();
+                        occurrence.legacy_receipts_unverified = false;
                     }
                     occurrence.document_id = document_id;
                     if !occurrence.scopes.contains(&observation.scope) {
@@ -712,6 +720,7 @@ impl SemanticCatalog {
                             document_id,
                             scopes: vec![observation.scope],
                             completed_scopes: Vec::new(),
+                            legacy_receipts_unverified: false,
                         },
                     );
                 }
@@ -862,6 +871,7 @@ impl SemanticCatalog {
                     document_id: occurrence.document_id,
                     scopes: occurrence.scopes.clone(),
                     completed_scopes: occurrence.completed_scopes.clone(),
+                    legacy_receipts_unverified: occurrence.legacy_receipts_unverified,
                 },
             );
             remapped.insert(*id, new_id);
@@ -942,6 +952,19 @@ impl SemanticCatalog {
             .values()
             .filter(|occurrence| {
                 occurrence.scopes.contains(&scope) && occurrence.completed_scopes.contains(&scope)
+            })
+            .count()
+    }
+
+    /// Existing worker data without receipts remains unknown, not zero.
+    #[must_use]
+    pub fn root_unverified_legacy_count(&self, scope: OccurrenceScope) -> usize {
+        self.occurrences
+            .values()
+            .filter(|occurrence| {
+                occurrence.legacy_receipts_unverified
+                    && occurrence.scopes.contains(&scope)
+                    && !occurrence.completed_scopes.contains(&scope)
             })
             .count()
     }

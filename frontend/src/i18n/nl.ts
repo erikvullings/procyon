@@ -1576,6 +1576,7 @@ export const nl = {
       1: '1 bevestigd geïndexeerd document',
       n: '{n} bevestigd geïndexeerde documenten',
     },
+    legacyVerificationPending: '{count} eerdere bronnen nog niet geverifieerd',
     scannedEntries: '{count} items gescand (niet alles is geïndexeerd)',
     lastWorkerDevice: 'Laatste workerstart: {device}',
     metal: 'Metal',

@@ -1141,7 +1141,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
 
   /** Whether an authorized source can be queried while full reconciliation continues. */
   function hasSearchableSources(attrs: KnowledgeSearchDialogAttrs): boolean {
-    const indexedRoots = roots.filter((root) => root.available && root.indexedSources > 0);
+    const indexedRoots = roots.filter(
+      (root) =>
+        root.available && (root.confirmedCompletedSources > 0 || root.unverifiedLegacySources > 0),
+    );
     if (scopeKind === 'enrolledRoots') {
       return indexedRoots.some((root) => selectedRootIds.has(root.rootId));
     }
@@ -1649,7 +1652,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
     if (result === undefined) {
       const pendingRoots = roots.filter(
-        (root) => root.available && root.indexedGeneration === 0 && root.indexedSources === 0,
+        (root) =>
+          root.available &&
+          root.indexedGeneration === 0 &&
+          root.confirmedCompletedSources === 0 &&
+          root.unverifiedLegacySources === 0,
       );
       if (
         capabilities !== undefined &&

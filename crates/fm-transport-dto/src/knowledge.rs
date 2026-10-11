@@ -228,8 +228,12 @@ pub struct KnowledgeRootDto {
     pub available: bool,
     /// Last generation committed to runtime state.
     pub indexed_generation: u64,
-    /// Worker-completed document occurrences in this workspace/root, including incomplete passes.
+    /// Observed occurrences; not proof of completed worker ingestion.
     pub indexed_sources: u64,
+    /// Document occurrences with an acknowledged worker completion in this workspace/root.
+    pub confirmed_completed_sources: u64,
+    /// Pre-upgrade occurrences whose earlier worker completion cannot yet be verified.
+    pub unverified_legacy_sources: u64,
 }
 
 /// Requests the indexed roots authorized through one workspace.

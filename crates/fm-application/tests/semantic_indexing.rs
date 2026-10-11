@@ -459,7 +459,10 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
         )
         .await
         .unwrap();
-    assert_eq!(roots[0].indexed_sources, 4, "all four modalities completed");
+    assert_eq!(
+        roots[0].confirmed_completed_sources, 4,
+        "all four modalities completed"
+    );
     #[cfg(target_os = "macos")]
     assert!(
         std::fs::read_to_string(runtime.path().join("gemma-backend"))
@@ -1038,7 +1041,7 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
         .await
         .unwrap();
     assert_eq!(
-        roots[0].indexed_sources, 1,
+        roots[0].confirmed_completed_sources, 1,
         "failed observation is not indexed"
     );
     assert_eq!(
@@ -1118,21 +1121,22 @@ async fn failed_media_is_not_counted_until_worker_completion_and_removed_on_dele
             .await
             .unwrap()
     };
-    assert_eq!(roots().await[0].indexed_sources, 0);
+    assert_eq!(roots().await[0].confirmed_completed_sources, 0);
     let failed = service
         .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
         .await
         .unwrap();
     assert_eq!(failed.observed_files, 1);
     assert_eq!(failed.failed_occurrences, 1);
-    assert_eq!(roots().await[0].indexed_sources, 0);
+    assert_eq!(roots().await[0].indexed_sources, 1);
+    assert_eq!(roots().await[0].confirmed_completed_sources, 0);
     std::fs::write(&image, "embeddable image").unwrap();
     let completed = service
         .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
         .await
         .unwrap();
     assert_eq!(completed.ingested_occurrences, 1);
-    assert_eq!(roots().await[0].indexed_sources, 1);
+    assert_eq!(roots().await[0].confirmed_completed_sources, 1);
     assert_eq!(
         crate::library_with_model(
             &state,
@@ -1157,7 +1161,7 @@ async fn failed_media_is_not_counted_until_worker_completion_and_removed_on_dele
         .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
         .await
         .unwrap();
-    assert_eq!(roots().await[0].indexed_sources, 0);
+    assert_eq!(roots().await[0].confirmed_completed_sources, 0);
 }
 
 #[cfg(unix)]
@@ -1552,7 +1556,7 @@ async fn cancelling_running_ocr_stops_worker_ingestion_and_persists_cancelled_st
             )
             .await
             .unwrap()[0]
-            .indexed_sources,
+            .confirmed_completed_sources,
         0,
         "pending ingestion must not count as indexed"
     );
@@ -1587,7 +1591,7 @@ async fn cancelling_running_ocr_stops_worker_ingestion_and_persists_cancelled_st
             )
             .await
             .unwrap()[0]
-            .indexed_sources,
+            .confirmed_completed_sources,
         0
     );
     shutdown.cancel();

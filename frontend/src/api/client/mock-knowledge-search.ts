@@ -151,6 +151,8 @@ const MOCK_KNOWLEDGE_ROOTS: readonly KnowledgeRoot[] = [
     recursive: true,
     indexedGeneration: 4,
     indexedSources: 3,
+    confirmedCompletedSources: 3,
+    unverifiedLegacySources: 0,
     available: true,
   },
   {
@@ -160,6 +162,8 @@ const MOCK_KNOWLEDGE_ROOTS: readonly KnowledgeRoot[] = [
     recursive: false,
     indexedGeneration: 2,
     indexedSources: 1,
+    confirmedCompletedSources: 1,
+    unverifiedLegacySources: 0,
     available: false,
   },
 ];

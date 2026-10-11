@@ -69,3 +69,7 @@ the evidence without flooding the pane with duplicate rows.
   remains the separate confirmed Semantic Library action.
 - 2026-09-05: Verified all 2,133 Rust tests, 1,767 frontend tests, 41 script tests, full workspace
   lint, generated API stability, and the real feature-gated Zvec suite.
+- 2026-10-11: Search readiness for newly enrolled roots now requires a worker-acknowledged
+  ingestion, not merely an observed file. Existing pre-receipt indices remain searchable while
+  their unverified older occurrences are reprocessed; Settings reports confirmed completions
+  separately from that unverified backlog.

@@ -1572,6 +1572,7 @@ export const en = {
       1: '1 confirmed indexed document',
       n: '{n} confirmed indexed documents',
     },
+    legacyVerificationPending: '{count} earlier sources not yet verified',
     scannedEntries: '{count} entries scanned (not all are indexed)',
     lastWorkerDevice: 'Last worker launch: {device}',
     metal: 'Metal',

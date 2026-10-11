@@ -449,7 +449,9 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
         location: { providerId: 'local', uri: 'file:///Users/me/OneDrive/Basisschool' },
         recursive: true,
         indexedGeneration: 0,
-        indexedSources: 0,
+        indexedSources: 2,
+        confirmedCompletedSources: 0,
+        unverifiedLegacySources: 0,
         available: true,
       },
     ]);
@@ -467,7 +469,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
   it('enables search when the first indexed source arrives without reopening the pane', async () => {
     const client = new MockFileManagerClient();
-    let indexedSources = 0;
+    const indexedSources = 1;
+    let confirmedCompletedSources = 0;
     const roots = vi.spyOn(client, 'listKnowledgeRoots').mockImplementation(async () => [
       {
         rootId: 'new-root',
@@ -476,6 +479,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
         recursive: true,
         indexedGeneration: 0,
         indexedSources,
+        confirmedCompletedSources,
+        unverifiedLegacySources: 0,
         available: true,
       },
     ]);
@@ -483,7 +488,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     mount({ client, initialSubject: 'retrieval' });
     await ready();
     expect(searchButton().disabled).toBe(true);
-    indexedSources = 1;
+    confirmedCompletedSources = 1;
     client.emit({
       eventId: 1,
       timestamp: new Date().toISOString(),
@@ -510,6 +515,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
         recursive: true,
         indexedGeneration: 0,
         indexedSources: 42,
+        confirmedCompletedSources: 42,
+        unverifiedLegacySources: 0,
         available: true,
       },
     ]);
@@ -518,6 +525,26 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await ready();
 
     expect(root.textContent).not.toContain('still being indexed');
+    expect(searchButton().disabled).toBe(false);
+  });
+
+  it('keeps search available for a pre-upgrade index without inventing completion receipts', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([
+      {
+        rootId: 'legacy-root',
+        label: 'Previously indexed',
+        location: { providerId: 'local', uri: 'file:///previously-indexed' },
+        recursive: true,
+        indexedGeneration: 1,
+        indexedSources: 3,
+        confirmedCompletedSources: 0,
+        unverifiedLegacySources: 3,
+        available: true,
+      },
+    ]);
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
     expect(searchButton().disabled).toBe(false);
   });
 
@@ -530,6 +557,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       recursive: true,
       indexedGeneration: 0,
       indexedSources: 0,
+      confirmedCompletedSources: 0,
+      unverifiedLegacySources: 0,
       available: true,
     });
     vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([

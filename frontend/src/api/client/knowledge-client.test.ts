@@ -243,6 +243,8 @@ describe('HttpFileManagerClient knowledge search', () => {
         recursive: true,
         indexedGeneration: 3,
         indexedSources: 5,
+        confirmedCompletedSources: 5,
+        unverifiedLegacySources: 0,
         available: true,
       },
     ];

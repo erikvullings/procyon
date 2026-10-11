@@ -375,7 +375,8 @@ function exclusionPlanView(
 
 function rootStatusView(
   root: SemanticRootStatus,
-  indexedSources: number | undefined,
+  confirmedCompletedSources: number | undefined,
+  unverifiedLegacySources: number | undefined,
   lastWorkerDevice: 'metal' | 'cpu' | null | undefined,
   scannedEntries: number | undefined,
   workspaceId: WorkspaceId | undefined,
@@ -421,10 +422,13 @@ function rootStatusView(
           t('semanticLibrary', 'ocrNeededCount', { count: root.ocrRequiredFiles.length }),
         )
       : undefined,
-    indexedSources === undefined
+    confirmedCompletedSources === undefined
       ? undefined
       : m('p.fm-semantic-library-indexed-count', { role: 'status' }, [
-          t('semanticLibrary', 'indexedSources', indexedSources),
+          t('semanticLibrary', 'indexedSources', confirmedCompletedSources),
+          unverifiedLegacySources === undefined || unverifiedLegacySources === 0
+            ? undefined
+            : ` · ${t('semanticLibrary', 'legacyVerificationPending', { count: unverifiedLegacySources })}`,
           scannedEntries === undefined
             ? undefined
             : ` · ${t('semanticLibrary', 'scannedEntries', { count: scannedEntries })}`,
@@ -858,7 +862,10 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
         rootStatusView(
           candidate,
           refreshError === undefined
-            ? indexedRoots.find((root) => root.rootId === candidate.id)?.indexedSources
+            ? indexedRoots.find((root) => root.rootId === candidate.id)?.confirmedCompletedSources
+            : undefined,
+          refreshError === undefined
+            ? indexedRoots.find((root) => root.rootId === candidate.id)?.unverifiedLegacySources
             : undefined,
           lastWorkerDevice,
           scannedRoots.get(candidate.id),

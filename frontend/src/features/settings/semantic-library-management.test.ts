@@ -86,6 +86,7 @@ describe('SemanticLibraryManagement', () => {
       lastWorkerDevice: 'metal',
     });
     let indexedSources = 0;
+    let unverifiedLegacySources = 0;
     const rootId = status.roots[0].id;
     vi.spyOn(client, 'listKnowledgeRoots').mockImplementation(async () => [
       {
@@ -96,6 +97,8 @@ describe('SemanticLibraryManagement', () => {
         available: true,
         indexedGeneration: 0,
         indexedSources,
+        confirmedCompletedSources: indexedSources,
+        unverifiedLegacySources,
       },
     ]);
     await client.subscribe(() => undefined);
@@ -121,6 +124,22 @@ describe('SemanticLibraryManagement', () => {
     });
     await vi.waitFor(() => expect(root.textContent).toContain('1 confirmed indexed document'));
     expect(root.textContent).toContain('4 entries scanned (not all are indexed)');
+    unverifiedLegacySources = 2;
+    client.emit({
+      eventId: 2,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: `root:${rootId}`,
+        stage: 'reconciling',
+        completed: 5,
+        total: 0,
+        errors: 0,
+      },
+    });
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain('2 earlier sources not yet verified'),
+    );
   });
 
   it('shows active-folder consent and the safe policy projection', async () => {

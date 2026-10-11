@@ -442,6 +442,8 @@ pub struct SemanticRootStatus {
     pub indexed_occurrences: u64,
     /// Worker-completed occurrences per attached workspace, including incomplete passes.
     pub completed_occurrences_by_workspace: BTreeMap<Uuid, u64>,
+    /// Older occurrences without worker-completion receipts per workspace.
+    pub unverified_legacy_occurrences_by_workspace: BTreeMap<Uuid, u64>,
     /// Explicit descendant/root exclusions.
     pub exclusions: Vec<SemanticExclusionStatus>,
 }
@@ -3457,6 +3459,19 @@ fn project_root(
                                 root.id(),
                             )),
                     )
+                    .unwrap_or(u64::MAX),
+                )
+            })
+            .collect(),
+        unverified_legacy_occurrences_by_workspace: root
+            .workspace_references()
+            .iter()
+            .map(|workspace_id| {
+                (
+                    Uuid::from(*workspace_id),
+                    u64::try_from(data.catalog.root_unverified_legacy_count(
+                        core::OccurrenceScope::new(*workspace_id, root.id()),
+                    ))
                     .unwrap_or(u64::MAX),
                 )
             })
