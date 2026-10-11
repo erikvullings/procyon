@@ -1,0 +1,775 @@
+{
+  "format": "procyon-skos-1",
+  "id": "stw-psychology",
+  "name": "Psychology (STW 9.20 excerpt)",
+  "concepts": [
+    {
+      "uri": "http://zbw.eu/stw/descriptor/10150-3",
+      "prefLabels": {
+        "en": "Altruism"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/13348-2",
+      "prefLabels": {
+        "en": "Psychotherapy"
+      },
+      "altLabels": {
+        "en": ["Mental health care"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [
+        "http://zbw.eu/stw/descriptor/15790-5",
+        "http://zbw.eu/stw/descriptor/19013-3",
+        "http://zbw.eu/stw/descriptor/30293-4"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/15410-6",
+      "prefLabels": {
+        "en": "Pattern recognition"
+      },
+      "altLabels": {
+        "en": ["Support vector machine"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/15787-1",
+      "prefLabels": {
+        "en": "Personality psychology"
+      },
+      "altLabels": {
+        "en": ["Personality test"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/15790-5", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [
+        "http://zbw.eu/stw/descriptor/29610-0",
+        "http://zbw.eu/stw/descriptor/30347-0",
+        "http://zbw.eu/stw/descriptor/30348-5",
+        "http://zbw.eu/stw/descriptor/30641-0"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/15790-5",
+      "prefLabels": {
+        "en": "Psychology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [
+        "http://zbw.eu/stw/descriptor/15787-1",
+        "http://zbw.eu/stw/descriptor/27952-3",
+        "http://zbw.eu/stw/descriptor/30069-2",
+        "http://zbw.eu/stw/descriptor/30347-0"
+      ],
+      "related": [
+        "http://zbw.eu/stw/descriptor/13348-2",
+        "http://zbw.eu/stw/descriptor/18859-1",
+        "http://zbw.eu/stw/descriptor/19013-3"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/15793-6",
+      "prefLabels": {
+        "en": "Perception"
+      },
+      "altLabels": {
+        "en": ["Attention economy"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/19601-0", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/15801-5",
+      "prefLabels": {
+        "en": "Motivation"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/27952-3"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/15821-6",
+      "prefLabels": {
+        "en": "Opinion"
+      },
+      "altLabels": {
+        "en": ["Attitude"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": ["http://zbw.eu/stw/descriptor/29811-4"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18070-3",
+      "prefLabels": {
+        "en": "Creativity"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/28213-1"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18832-0",
+      "prefLabels": {
+        "en": "Self-interest"
+      },
+      "altLabels": {
+        "en": ["Selfishness"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18859-1",
+      "prefLabels": {
+        "en": "Behavior"
+      },
+      "altLabels": {
+        "en": ["Behaviour", "Human behavior", "Human behaviour"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": ["http://zbw.eu/stw/descriptor/27842-3", "http://zbw.eu/stw/descriptor/30437-6"],
+      "related": [
+        "http://zbw.eu/stw/descriptor/15790-5",
+        "http://zbw.eu/stw/descriptor/19601-0",
+        "http://zbw.eu/stw/descriptor/27952-3",
+        "http://zbw.eu/stw/descriptor/30541-4",
+        "http://zbw.eu/stw/descriptor/30559-6"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18924-2",
+      "prefLabels": {
+        "en": "Cultural identity"
+      },
+      "altLabels": {
+        "en": ["Cultural psychology", "Ethnic identity"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/30640-2", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/30347-0"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19013-3",
+      "prefLabels": {
+        "en": "Mental illness"
+      },
+      "altLabels": {
+        "en": ["Mental disease", "Mental disorder", "Schizophrenia"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [
+        "http://zbw.eu/stw/descriptor/13348-2",
+        "http://zbw.eu/stw/descriptor/15790-5",
+        "http://zbw.eu/stw/descriptor/30070-3"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19220-5",
+      "prefLabels": {
+        "en": "Needs"
+      },
+      "altLabels": {
+        "en": ["Wants"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017", "http://zbw.eu/stw/thsys/73384"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19599-3",
+      "prefLabels": {
+        "en": "Emotion"
+      },
+      "altLabels": {
+        "en": ["Emotionality", "Empathy", "Love", "Sentiment"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [
+        "http://zbw.eu/stw/descriptor/19771-3",
+        "http://zbw.eu/stw/descriptor/19772-1",
+        "http://zbw.eu/stw/descriptor/27853-5",
+        "http://zbw.eu/stw/descriptor/30605-4"
+      ],
+      "related": ["http://zbw.eu/stw/descriptor/28213-1"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19600-2",
+      "prefLabels": {
+        "en": "Humor"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/29610-0"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19601-0",
+      "prefLabels": {
+        "en": "Cognition"
+      },
+      "altLabels": {
+        "en": ["Cognitive skills"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": ["http://zbw.eu/stw/descriptor/15793-6"],
+      "related": [
+        "http://zbw.eu/stw/descriptor/18859-1",
+        "http://zbw.eu/stw/descriptor/26376-4",
+        "http://zbw.eu/stw/descriptor/30445-0",
+        "http://zbw.eu/stw/descriptor/30541-4",
+        "http://zbw.eu/stw/descriptor/30583-2"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19771-3",
+      "prefLabels": {
+        "en": "Anxiety"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/19599-3", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19772-1",
+      "prefLabels": {
+        "en": "Envy"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/19599-3", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/26376-4",
+      "prefLabels": {
+        "en": "Intelligence"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": ["http://zbw.eu/stw/descriptor/30605-4", "http://zbw.eu/stw/descriptor/30606-2"],
+      "related": ["http://zbw.eu/stw/descriptor/19601-0"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/27842-3",
+      "prefLabels": {
+        "en": "Coping strategy"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/18859-1", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/27853-5",
+      "prefLabels": {
+        "en": "Satisfaction"
+      },
+      "altLabels": {
+        "en": ["Happiness", "Life satisfaction"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/19599-3", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/27873-6",
+      "prefLabels": {
+        "en": "Charisma"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/27952-3",
+      "prefLabels": {
+        "en": "Motivation theory"
+      },
+      "altLabels": {
+        "en": ["Goal setting", "Theory of motivation", "Two-factor theory"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/15790-5", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/15801-5", "http://zbw.eu/stw/descriptor/18859-1"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/28213-1",
+      "prefLabels": {
+        "en": "Intuition"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/18070-3", "http://zbw.eu/stw/descriptor/19599-3"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/29610-0",
+      "prefLabels": {
+        "en": "Personality trait"
+      },
+      "altLabels": {
+        "en": ["Big Five personality traits", "Five factor model", "Trait theory"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/15787-1", "http://zbw.eu/stw/descriptor/19600-2"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/29811-4",
+      "prefLabels": {
+        "en": "Stereotype"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/15821-6", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30069-2",
+      "prefLabels": {
+        "en": "Psychoanalysis"
+      },
+      "altLabels": {
+        "en": ["Psychoanalytic perspective"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/15790-5", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/30070-3"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30070-3",
+      "prefLabels": {
+        "en": "Narcissism"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/19013-3", "http://zbw.eu/stw/descriptor/30069-2"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30071-1",
+      "prefLabels": {
+        "en": "Problem solving"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": ["http://zbw.eu/stw/descriptor/30357-4"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30293-4",
+      "prefLabels": {
+        "en": "Mental health"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "A person's condition with regard to his or her psychological and emotional well-being"
+      },
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/13348-2"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30347-0",
+      "prefLabels": {
+        "en": "Social identity"
+      },
+      "altLabels": {
+        "en": ["Collective identity", "Community identity", "Group identity"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "In the sense of a social self and in the sense of a collective self-view of a group"
+      },
+      "broader": [
+        "http://zbw.eu/stw/descriptor/15790-5",
+        "http://zbw.eu/stw/descriptor/30640-2",
+        "http://zbw.eu/stw/thsys/70017"
+      ],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/15787-1", "http://zbw.eu/stw/descriptor/18924-2"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30348-5",
+      "prefLabels": {
+        "en": "Self-management"
+      },
+      "altLabels": {
+        "en": ["Self-management of individuals", "Selfmanagement"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Competence to make a personal and professional development largely independent of external influences"
+      },
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/15787-1"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30357-4",
+      "prefLabels": {
+        "en": "Design thinking"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Problem-solving approach inspired by the work of designers and architects"
+      },
+      "broader": ["http://zbw.eu/stw/descriptor/30071-1", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30437-6",
+      "prefLabels": {
+        "en": "Health behavior"
+      },
+      "altLabels": {
+        "en": ["Health behaviour", "Health habits"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Includes behaviors of both healthy and ill people that are considered significant in maintaining health."
+      },
+      "broader": ["http://zbw.eu/stw/descriptor/18859-1", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30445-0",
+      "prefLabels": {
+        "en": "Critical thinking"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Represents rational reflective thinking."
+      },
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/19601-0"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30541-4",
+      "prefLabels": {
+        "en": "Consciousness"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/18859-1", "http://zbw.eu/stw/descriptor/19601-0"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30559-6",
+      "prefLabels": {
+        "en": "Behavioral science"
+      },
+      "altLabels": {
+        "en": ["Behavioral theory", "Behavioural science", "Behavioural theory"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Collective term for the sciences that deal with various aspects of human behavior."
+      },
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/18859-1"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30583-2",
+      "prefLabels": {
+        "en": "Neurodiversity"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Stands for a concept in which neurobiological differences are viewed and respected as a human disposition among others."
+      },
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/19601-0"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30605-4",
+      "prefLabels": {
+        "en": "Emotional intelligence"
+      },
+      "altLabels": {
+        "en": ["Emotional competence"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Stads for the ability to perceive, understand, describe and deal with one`s own and others` feelings."
+      },
+      "broader": [
+        "http://zbw.eu/stw/descriptor/19599-3",
+        "http://zbw.eu/stw/descriptor/26376-4",
+        "http://zbw.eu/stw/thsys/70017"
+      ],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30606-2",
+      "prefLabels": {
+        "en": "Collective intelligence"
+      },
+      "altLabels": {
+        "en": ["Swarm intelligence"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Stands for the assumption that groups of individuals can make intelligent decisions by working together."
+      },
+      "broader": ["http://zbw.eu/stw/descriptor/26376-4", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30640-2",
+      "prefLabels": {
+        "en": "Identity"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [
+        "http://zbw.eu/stw/descriptor/18924-2",
+        "http://zbw.eu/stw/descriptor/30347-0",
+        "http://zbw.eu/stw/descriptor/30641-0"
+      ],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30641-0",
+      "prefLabels": {
+        "en": "Gender identity"
+      },
+      "altLabels": {
+        "en": ["Sex identity", "Sexual identity"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Stands for the emotional and cognitive self-concept in relation to one`s own gender."
+      },
+      "broader": ["http://zbw.eu/stw/descriptor/30640-2", "http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/15787-1"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/thsys/70017",
+      "prefLabels": {
+        "en": "N.07  Psychology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://zbw.eu/stw/descriptor/10150-3",
+        "http://zbw.eu/stw/descriptor/13348-2",
+        "http://zbw.eu/stw/descriptor/15410-6",
+        "http://zbw.eu/stw/descriptor/15787-1",
+        "http://zbw.eu/stw/descriptor/15790-5",
+        "http://zbw.eu/stw/descriptor/15793-6",
+        "http://zbw.eu/stw/descriptor/15801-5",
+        "http://zbw.eu/stw/descriptor/15821-6",
+        "http://zbw.eu/stw/descriptor/18070-3",
+        "http://zbw.eu/stw/descriptor/18832-0",
+        "http://zbw.eu/stw/descriptor/18859-1",
+        "http://zbw.eu/stw/descriptor/18924-2",
+        "http://zbw.eu/stw/descriptor/19013-3",
+        "http://zbw.eu/stw/descriptor/19220-5",
+        "http://zbw.eu/stw/descriptor/19599-3",
+        "http://zbw.eu/stw/descriptor/19600-2",
+        "http://zbw.eu/stw/descriptor/19601-0",
+        "http://zbw.eu/stw/descriptor/19771-3",
+        "http://zbw.eu/stw/descriptor/19772-1",
+        "http://zbw.eu/stw/descriptor/26376-4",
+        "http://zbw.eu/stw/descriptor/27842-3",
+        "http://zbw.eu/stw/descriptor/27853-5",
+        "http://zbw.eu/stw/descriptor/27873-6",
+        "http://zbw.eu/stw/descriptor/27952-3",
+        "http://zbw.eu/stw/descriptor/28213-1",
+        "http://zbw.eu/stw/descriptor/29610-0",
+        "http://zbw.eu/stw/descriptor/29811-4",
+        "http://zbw.eu/stw/descriptor/30069-2",
+        "http://zbw.eu/stw/descriptor/30070-3",
+        "http://zbw.eu/stw/descriptor/30071-1",
+        "http://zbw.eu/stw/descriptor/30293-4",
+        "http://zbw.eu/stw/descriptor/30347-0",
+        "http://zbw.eu/stw/descriptor/30348-5",
+        "http://zbw.eu/stw/descriptor/30357-4",
+        "http://zbw.eu/stw/descriptor/30437-6",
+        "http://zbw.eu/stw/descriptor/30445-0",
+        "http://zbw.eu/stw/descriptor/30541-4",
+        "http://zbw.eu/stw/descriptor/30559-6",
+        "http://zbw.eu/stw/descriptor/30583-2",
+        "http://zbw.eu/stw/descriptor/30605-4",
+        "http://zbw.eu/stw/descriptor/30606-2",
+        "http://zbw.eu/stw/descriptor/30640-2",
+        "http://zbw.eu/stw/descriptor/30641-0",
+        "http://zbw.eu/stw/thsys/73384",
+        "http://zbw.eu/stw/thsys/73385"
+      ],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/thsys/73384",
+      "prefLabels": {
+        "en": "N.07.02  Consumer behaviour"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": ["http://zbw.eu/stw/descriptor/19220-5"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/thsys/73385",
+      "prefLabels": {
+        "en": "N.07.01  Occupational and organizational psychology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70017"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    }
+  ],
+  "extensions": {
+    "https://procyon.app/ns/skos-starter/source": "https://zbw.eu/stw/version/9.20/download/stw.rdf.zip",
+    "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by/4.0/",
+    "https://procyon.app/ns/skos-starter/selection": ["thsys/70017"]
+  }
+}

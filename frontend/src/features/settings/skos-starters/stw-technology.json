@@ -1,0 +1,881 @@
+{
+  "format": "procyon-skos-1",
+  "id": "stw-technology",
+  "name": "Technology (STW 9.20 excerpt)",
+  "concepts": [
+    {
+      "uri": "http://zbw.eu/stw/descriptor/10455-2",
+      "prefLabels": {
+        "en": "Electronics"
+      },
+      "altLabels": {
+        "en": ["Microelectronics"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Use for electronics R&amp;D only; use more specific descriptors whenever possible."
+      },
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/19797-6", "http://zbw.eu/stw/descriptor/19798-4"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/10463-3",
+      "prefLabels": {
+        "en": "Rationalization"
+      },
+      "altLabels": {
+        "en": ["Rationalisation"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/10466-4", "http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/10464-1",
+      "prefLabels": {
+        "en": "High technology"
+      },
+      "altLabels": {
+        "en": ["High tech", "High-tech industry"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/10470-6", "http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/30536-4", "http://zbw.eu/stw/descriptor/30537-2"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/10465-6",
+      "prefLabels": {
+        "en": "History of technology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/10466-4", "http://zbw.eu/stw/descriptor/10470-6"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/10466-4",
+      "prefLabels": {
+        "en": "Technological change"
+      },
+      "altLabels": {
+        "en": ["Mechanization"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": [
+        "http://zbw.eu/stw/descriptor/10463-3",
+        "http://zbw.eu/stw/descriptor/30171-4",
+        "http://zbw.eu/stw/descriptor/30177-6",
+        "http://zbw.eu/stw/descriptor/30315-6",
+        "http://zbw.eu/stw/descriptor/30566-2"
+      ],
+      "related": [
+        "http://zbw.eu/stw/descriptor/10465-6",
+        "http://zbw.eu/stw/descriptor/10470-6",
+        "http://zbw.eu/stw/descriptor/16695-1"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/10470-6",
+      "prefLabels": {
+        "en": "Technology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": [
+        "http://zbw.eu/stw/descriptor/10464-1",
+        "http://zbw.eu/stw/descriptor/10487-3",
+        "http://zbw.eu/stw/descriptor/12702-1",
+        "http://zbw.eu/stw/descriptor/29850-1",
+        "http://zbw.eu/stw/descriptor/30173-0",
+        "http://zbw.eu/stw/descriptor/30587-1"
+      ],
+      "related": [
+        "http://zbw.eu/stw/descriptor/10465-6",
+        "http://zbw.eu/stw/descriptor/10466-4",
+        "http://zbw.eu/stw/descriptor/10471-4",
+        "http://zbw.eu/stw/descriptor/16695-1",
+        "http://zbw.eu/stw/descriptor/19795-3"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/10471-4",
+      "prefLabels": {
+        "en": "Technology foresight"
+      },
+      "altLabels": {
+        "en": ["Technology forecasting", "Technology roadmap"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/10470-6"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/10487-3",
+      "prefLabels": {
+        "en": "Appropriate technology"
+      },
+      "altLabels": {
+        "en": ["Intermediate technology"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/10470-6", "http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/29850-1"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/12649-0",
+      "prefLabels": {
+        "en": "Materials"
+      },
+      "altLabels": {
+        "en": ["New materials"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": ["http://zbw.eu/stw/descriptor/14285-2", "http://zbw.eu/stw/descriptor/18279-5"],
+      "related": ["http://zbw.eu/stw/descriptor/18783-1"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/12702-1",
+      "prefLabels": {
+        "en": "Design engineering"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/10470-6", "http://zbw.eu/stw/thsys/73345"],
+      "narrower": ["http://zbw.eu/stw/descriptor/12733-4"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/12711-0",
+      "prefLabels": {
+        "en": "Manufacturing technology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/12733-4",
+      "prefLabels": {
+        "en": "Computer-aided design"
+      },
+      "altLabels": {
+        "en": ["3D-CAD"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/12702-1"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/13575-5",
+      "prefLabels": {
+        "en": "Aerospace engineering"
+      },
+      "altLabels": {
+        "en": ["Aeronautics engineering"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/13578-6"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/13576-3",
+      "prefLabels": {
+        "en": "Marine engineering"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/13577-1",
+      "prefLabels": {
+        "en": "Traffic engineering"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/13578-6",
+      "prefLabels": {
+        "en": "Space technology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/13575-5"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/13964-1",
+      "prefLabels": {
+        "en": "Engineering management"
+      },
+      "altLabels": {
+        "en": ["Business engineering", "Engineering economics"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/19795-3", "http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/14285-2",
+      "prefLabels": {
+        "en": "Steel"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/12649-0"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/15635-3",
+      "prefLabels": {
+        "en": "Biotechnology"
+      },
+      "altLabels": {
+        "en": ["Bioinformatics", "Bionics"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": ["http://zbw.eu/stw/descriptor/18289-2"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/15891-6",
+      "prefLabels": {
+        "en": "Oceanography"
+      },
+      "altLabels": {
+        "en": ["Marine science"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/16695-1",
+      "prefLabels": {
+        "en": "Sociology of technology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": [
+        "http://zbw.eu/stw/descriptor/10466-4",
+        "http://zbw.eu/stw/descriptor/10470-6",
+        "http://zbw.eu/stw/descriptor/16696-6"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/16696-6",
+      "prefLabels": {
+        "en": "Technology assessment"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/16695-1"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/16757-5",
+      "prefLabels": {
+        "en": "Information technology"
+      },
+      "altLabels": {
+        "en": [
+          "ICT (Information and communication technologies)",
+          "Information and communication technologies"
+        ]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18030-1",
+      "prefLabels": {
+        "en": "Industrial accident"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18251-6",
+      "prefLabels": {
+        "en": "Optoelectronics"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18252-4",
+      "prefLabels": {
+        "en": "Medical technology"
+      },
+      "altLabels": {
+        "en": ["Health care technology"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18279-5",
+      "prefLabels": {
+        "en": "Composite materials"
+      },
+      "altLabels": {
+        "en": ["Fibre-reinforced plastics"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/12649-0", "http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18289-2",
+      "prefLabels": {
+        "en": "Genetic engineering"
+      },
+      "altLabels": {
+        "en": ["Cloning"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/15635-3", "http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18353-5",
+      "prefLabels": {
+        "en": "Energy technology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": ["http://zbw.eu/stw/descriptor/30230-0", "http://zbw.eu/stw/descriptor/30231-5"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18402-4",
+      "prefLabels": {
+        "en": "Metallurgy"
+      },
+      "altLabels": {
+        "en": ["Metal science"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/18783-1", "http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18783-1",
+      "prefLabels": {
+        "en": "Materials science"
+      },
+      "altLabels": {
+        "en": ["Materials engineering", "Materials research", "Materials technology"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": ["http://zbw.eu/stw/descriptor/18402-4"],
+      "related": ["http://zbw.eu/stw/descriptor/12649-0"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19034-2",
+      "prefLabels": {
+        "en": "Standardization"
+      },
+      "altLabels": {
+        "en": ["Standardisation"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19795-3",
+      "prefLabels": {
+        "en": "Engineering"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": ["http://zbw.eu/stw/descriptor/13964-1", "http://zbw.eu/stw/descriptor/30250-1"],
+      "related": ["http://zbw.eu/stw/descriptor/10470-6"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19796-1",
+      "prefLabels": {
+        "en": "Unit of measurement"
+      },
+      "altLabels": {
+        "en": ["Weights and measures"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "For all kinds of measure."
+      },
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19797-6",
+      "prefLabels": {
+        "en": "Nanotechnology"
+      },
+      "altLabels": {
+        "en": ["Nanomaterials"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/10455-2", "http://zbw.eu/stw/descriptor/19798-4"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19798-4",
+      "prefLabels": {
+        "en": "Microsystems"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": [
+        "http://zbw.eu/stw/descriptor/10455-2",
+        "http://zbw.eu/stw/descriptor/19797-6",
+        "http://zbw.eu/stw/descriptor/29161-3"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/29161-3",
+      "prefLabels": {
+        "en": "Mechatronics"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/19798-4"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/29850-1",
+      "prefLabels": {
+        "en": "Low tech"
+      },
+      "altLabels": {
+        "en": ["Low and medium technology industries", "Low-tech industry"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/10470-6", "http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/10487-3"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30171-4",
+      "prefLabels": {
+        "en": "Digitization"
+      },
+      "altLabels": {
+        "en": [
+          "Digital revolution",
+          "Digital transformation",
+          "Digital transition",
+          "Digitalisation",
+          "Digitalization",
+          "Digitisation",
+          "Electronic revolution",
+          "Third industrial revolution"
+        ]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Includes changes in the working environment as well as social changes due to more recent developments in information technology."
+      },
+      "broader": ["http://zbw.eu/stw/descriptor/10466-4"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/30177-6", "http://zbw.eu/stw/descriptor/30315-6"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30173-0",
+      "prefLabels": {
+        "en": "Financial technology"
+      },
+      "altLabels": {
+        "en": ["FinTech"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Refers to companies which offer specialized financial services using modern technology."
+      },
+      "broader": ["http://zbw.eu/stw/descriptor/10470-6", "http://zbw.eu/stw/thsys/73345"],
+      "narrower": ["http://zbw.eu/stw/descriptor/30580-1"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30177-6",
+      "prefLabels": {
+        "en": "Industry 4.0"
+      },
+      "altLabels": {
+        "en": ["Fourth industrial revolution"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Used for digitization and interconnectedness of value-added chains of industrial processes."
+      },
+      "broader": ["http://zbw.eu/stw/descriptor/10466-4"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/30171-4", "http://zbw.eu/stw/descriptor/30566-2"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30230-0",
+      "prefLabels": {
+        "en": "Energy storage"
+      },
+      "altLabels": {
+        "en": ["Storage of energy"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/18353-5", "http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30231-5",
+      "prefLabels": {
+        "en": "Energy conversion"
+      },
+      "altLabels": {
+        "en": ["Energy transformation"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/18353-5", "http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30235-4",
+      "prefLabels": {
+        "en": "Climate engineering"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Collective term for interventions with technical means in geochemical or biogeochemical cycles of the earth."
+      },
+      "broader": ["http://zbw.eu/stw/thsys/73344"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30250-1",
+      "prefLabels": {
+        "en": "STEM fields"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Collective term for teaching and study subjects as well as professions in the fields of science, technology, engineering and mathematics."
+      },
+      "broader": ["http://zbw.eu/stw/descriptor/19795-3"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30315-6",
+      "prefLabels": {
+        "en": "Digital economy"
+      },
+      "altLabels": {
+        "en": ["Digital market", "Electronic economy"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Refers to the entirety of economic sectors associated with digitization"
+      },
+      "broader": ["http://zbw.eu/stw/descriptor/10466-4"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/30171-4"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30536-4",
+      "prefLabels": {
+        "en": "Technology company"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Companies whose business purpose is predominantly or exclusively the product development of technology-oriented products."
+      },
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": ["http://zbw.eu/stw/descriptor/30537-2"],
+      "related": ["http://zbw.eu/stw/descriptor/10464-1"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30537-2",
+      "prefLabels": {
+        "en": "Big Tech"
+      },
+      "altLabels": {
+        "en": ["Tech giants"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Stands for the largest IT companies in the world."
+      },
+      "broader": ["http://zbw.eu/stw/descriptor/30536-4", "http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/10464-1"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30566-2",
+      "prefLabels": {
+        "en": "Industry 5.0"
+      },
+      "altLabels": {
+        "en": ["5IR", "Fifth industrial revolution"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Stands for a new emerging phase of industrialization in which people work with new technologies to improve work processes, such as AI-controlled robots, and in which employee orientation and sustainability are emphasized."
+      },
+      "broader": ["http://zbw.eu/stw/descriptor/10466-4"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/30177-6"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30580-1",
+      "prefLabels": {
+        "en": "Robo advice"
+      },
+      "altLabels": {
+        "en": ["Robo advisor", "WealthTech"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Stands for financial and investment advice based on algorithmic recommendation systems."
+      },
+      "broader": ["http://zbw.eu/stw/descriptor/30173-0", "http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/30587-1",
+      "prefLabels": {
+        "en": "Insurance technology"
+      },
+      "altLabels": {
+        "en": ["InsurTech", "InsureTech"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Collective term for the use of modern technologies in the insurance industry"
+      },
+      "broader": ["http://zbw.eu/stw/descriptor/10470-6", "http://zbw.eu/stw/thsys/73345"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/thsys/73344",
+      "prefLabels": {
+        "en": "N.10.04.01  Key technologies"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/73345"],
+      "narrower": [
+        "http://zbw.eu/stw/descriptor/10455-2",
+        "http://zbw.eu/stw/descriptor/12711-0",
+        "http://zbw.eu/stw/descriptor/13575-5",
+        "http://zbw.eu/stw/descriptor/13576-3",
+        "http://zbw.eu/stw/descriptor/13577-1",
+        "http://zbw.eu/stw/descriptor/13578-6",
+        "http://zbw.eu/stw/descriptor/15635-3",
+        "http://zbw.eu/stw/descriptor/15891-6",
+        "http://zbw.eu/stw/descriptor/16757-5",
+        "http://zbw.eu/stw/descriptor/18251-6",
+        "http://zbw.eu/stw/descriptor/18252-4",
+        "http://zbw.eu/stw/descriptor/18289-2",
+        "http://zbw.eu/stw/descriptor/18353-5",
+        "http://zbw.eu/stw/descriptor/19797-6",
+        "http://zbw.eu/stw/descriptor/19798-4",
+        "http://zbw.eu/stw/descriptor/30230-0",
+        "http://zbw.eu/stw/descriptor/30231-5",
+        "http://zbw.eu/stw/descriptor/30235-4"
+      ],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/thsys/73345",
+      "prefLabels": {
+        "en": "N.10.04  Technology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://zbw.eu/stw/descriptor/10463-3",
+        "http://zbw.eu/stw/descriptor/10464-1",
+        "http://zbw.eu/stw/descriptor/10465-6",
+        "http://zbw.eu/stw/descriptor/10466-4",
+        "http://zbw.eu/stw/descriptor/10470-6",
+        "http://zbw.eu/stw/descriptor/10471-4",
+        "http://zbw.eu/stw/descriptor/10487-3",
+        "http://zbw.eu/stw/descriptor/12649-0",
+        "http://zbw.eu/stw/descriptor/12702-1",
+        "http://zbw.eu/stw/descriptor/13964-1",
+        "http://zbw.eu/stw/descriptor/16695-1",
+        "http://zbw.eu/stw/descriptor/16696-6",
+        "http://zbw.eu/stw/descriptor/18030-1",
+        "http://zbw.eu/stw/descriptor/18279-5",
+        "http://zbw.eu/stw/descriptor/18402-4",
+        "http://zbw.eu/stw/descriptor/18783-1",
+        "http://zbw.eu/stw/descriptor/19034-2",
+        "http://zbw.eu/stw/descriptor/19795-3",
+        "http://zbw.eu/stw/descriptor/19796-1",
+        "http://zbw.eu/stw/descriptor/29161-3",
+        "http://zbw.eu/stw/descriptor/29850-1",
+        "http://zbw.eu/stw/descriptor/30173-0",
+        "http://zbw.eu/stw/descriptor/30536-4",
+        "http://zbw.eu/stw/descriptor/30537-2",
+        "http://zbw.eu/stw/descriptor/30580-1",
+        "http://zbw.eu/stw/descriptor/30587-1",
+        "http://zbw.eu/stw/thsys/73344"
+      ],
+      "related": [],
+      "extensions": {}
+    }
+  ],
+  "extensions": {
+    "https://procyon.app/ns/skos-starter/source": "https://zbw.eu/stw/version/9.20/download/stw.rdf.zip",
+    "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by/4.0/",
+    "https://procyon.app/ns/skos-starter/selection": ["thsys/73345"]
+  }
+}

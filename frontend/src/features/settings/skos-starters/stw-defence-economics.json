@@ -1,0 +1,240 @@
+{
+  "format": "procyon-skos-1",
+  "id": "stw-defence-economics",
+  "name": "Defence economics (STW 9.20 excerpt)",
+  "concepts": [
+    {
+      "uri": "http://zbw.eu/stw/descriptor/11560-0",
+      "prefLabels": {
+        "en": "Military expenditure"
+      },
+      "altLabels": {
+        "en": ["Defence expenditure", "Military spending", "War finance"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70865"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/11582-4"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/11582-4",
+      "prefLabels": {
+        "en": "Military contract"
+      },
+      "altLabels": {
+        "en": ["Defence contract", "Defence procurement", "Military procurement"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70865"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/11560-0", "http://zbw.eu/stw/descriptor/19724-5"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/13412-5",
+      "prefLabels": {
+        "en": "Armed forces"
+      },
+      "altLabels": {
+        "en": ["Army", "Military"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70865"],
+      "narrower": ["http://zbw.eu/stw/descriptor/16252-0"],
+      "related": ["http://zbw.eu/stw/descriptor/19720-6"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/15005-1",
+      "prefLabels": {
+        "en": "Military goods"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70865"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/18366-3"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/16252-0",
+      "prefLabels": {
+        "en": "Military leadership"
+      },
+      "altLabels": {
+        "en": ["Army officers"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/13412-5", "http://zbw.eu/stw/thsys/70865"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/18815-0", "http://zbw.eu/stw/descriptor/29725-4"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/16271-3",
+      "prefLabels": {
+        "en": "Military-industrial complex"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70865"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/16460-0"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/16460-0",
+      "prefLabels": {
+        "en": "Arms policy"
+      },
+      "altLabels": {
+        "en": ["Arms race", "Defence industrial policy", "Military power"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/descriptor/19720-6", "http://zbw.eu/stw/thsys/70865"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/16271-3"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18366-3",
+      "prefLabels": {
+        "en": "Military technology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70865"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/15005-1"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18815-0",
+      "prefLabels": {
+        "en": "Defence economics"
+      },
+      "altLabels": {
+        "en": ["Defense economics", "Economics of alliances", "Peace economics"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70865"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/16252-0", "http://zbw.eu/stw/descriptor/29725-4"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/18816-5",
+      "prefLabels": {
+        "en": "Military base"
+      },
+      "altLabels": {
+        "en": ["Military base conversion"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70865"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19720-6",
+      "prefLabels": {
+        "en": "Military policy"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70865"],
+      "narrower": ["http://zbw.eu/stw/descriptor/16460-0"],
+      "related": ["http://zbw.eu/stw/descriptor/13412-5"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19723-0",
+      "prefLabels": {
+        "en": "Military aid"
+      },
+      "altLabels": {
+        "en": ["Military assistance"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70865"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/19724-5",
+      "prefLabels": {
+        "en": "Military logistics"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70865"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/11582-4"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/descriptor/29725-4",
+      "prefLabels": {
+        "en": "Defence management"
+      },
+      "altLabels": {
+        "en": ["Military management"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://zbw.eu/stw/thsys/70865"],
+      "narrower": [],
+      "related": ["http://zbw.eu/stw/descriptor/16252-0", "http://zbw.eu/stw/descriptor/18815-0"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://zbw.eu/stw/thsys/70865",
+      "prefLabels": {
+        "en": "V.09.06.02  Defence economics"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://zbw.eu/stw/descriptor/11560-0",
+        "http://zbw.eu/stw/descriptor/11582-4",
+        "http://zbw.eu/stw/descriptor/13412-5",
+        "http://zbw.eu/stw/descriptor/15005-1",
+        "http://zbw.eu/stw/descriptor/16252-0",
+        "http://zbw.eu/stw/descriptor/16271-3",
+        "http://zbw.eu/stw/descriptor/16460-0",
+        "http://zbw.eu/stw/descriptor/18366-3",
+        "http://zbw.eu/stw/descriptor/18815-0",
+        "http://zbw.eu/stw/descriptor/18816-5",
+        "http://zbw.eu/stw/descriptor/19720-6",
+        "http://zbw.eu/stw/descriptor/19723-0",
+        "http://zbw.eu/stw/descriptor/19724-5",
+        "http://zbw.eu/stw/descriptor/29725-4"
+      ],
+      "related": [],
+      "extensions": {}
+    }
+  ],
+  "extensions": {
+    "https://procyon.app/ns/skos-starter/source": "https://zbw.eu/stw/version/9.20/download/stw.rdf.zip",
+    "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by/4.0/",
+    "https://procyon.app/ns/skos-starter/selection": ["thsys/70865"]
+  }
+}

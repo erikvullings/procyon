@@ -148,6 +148,7 @@ semantic components are not installed.
 - [x] 0227 Multiformat summary visual evidence *(needs 0180, 0184, 0185, 0192)*
 - [ ] 0239 Optional EmbeddingGemma 2 semantic package *(needs 0195, 0196;
   separately installed alongside default E5, with measured qualification)*
+- [x] 0242 Curated SKOS starter vocabularies *(needs 0187; opt-in, independent of release gates)*
 
 ## Structured knowledge search
 

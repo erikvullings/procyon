@@ -1648,6 +1648,14 @@ export const en = {
     title: 'Concept vocabularies',
     description:
       'Import curated SKOS vocabularies, attach them to this workspace, review local suggestions, and create stable concept folders.',
+    starterLabel: 'Starter vocabulary',
+    starterPlaceholder: 'Choose a starter vocabulary',
+    starterSource: '{publisher} · {version} · {concepts} English concepts (selected excerpt)',
+    starterSourceLink: 'Original SKOS source',
+    starterDisclosure:
+      'Starters are selected excerpts, not complete thesauri. Importing is optional and does not attach a vocabulary to a workspace; locally suggested terms still require review.',
+    starterImportAction: 'Import selected starter',
+    starterAlreadyImported: 'Already imported — attach below',
     importLabel: 'SKOS JSON',
     importPlaceholder: 'Paste a procyon-skos-1 document',
     importAction: 'Import vocabulary',

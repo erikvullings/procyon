@@ -323,6 +323,33 @@ unreadable path, symbolic link, stale capture, or evidence change fails the targ
 Remote LLM requests always show their profile, locality, scope, minimized metadata, and exact
 content preview before transmission. The semantic worker itself has no network authority.
 
+## Optional SKOS starter vocabularies
+
+**Settings > Semantic > Concept vocabularies** offers four opt-in English-language excerpts:
+**Climate and renewable energy** from GEMET 4.2.3, and **Technology**, **Psychology**, and
+**Defence economics** from STW 9.20. They are selections of real SKOS concepts, not complete
+copies of either thesaurus or generic taxonomies. Each concept retains its original stable URI;
+only links between included concepts are retained. The chooser shows the source, version, concept
+count, and license before import. Import creates a named device-local vocabulary but **does not
+attach it** to any workspace or root. Users can reuse and attach an imported starter from the
+same list, or paste their own `procyon-skos-1` JSON. Locally extracted terms enter the review queue
+of an existing vocabulary; they do not create a SKOS source or become authoritative automatically.
+
+The [GEMET 4.2.3 RDF export](https://www.eionet.europa.eu/gemet/en/exports/rdf/4.2.3)
+is © European Environment Agency (EEA), licensed
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+The [STW 9.20 RDF export](https://zbw.eu/stw/version/9.20/download/about.en.html)
+is © ZBW - Leibniz Information Centre for Economics, licensed CC BY 4.0.
+Both are adapted into English-only, bounded `procyon-skos-1` excerpts by
+`scripts/generate-skos-starters.py`: technology uses two narrower levels from STW `thsys/73345`,
+psychology one from `thsys/70017`, defence economics one from `thsys/70865`, and climate and
+renewable energy two from GEMET `concept/1471` and `concept/15271`. The build script verifies
+the SHA-256 of each versioned official download and supports `--check` to compare the bundled
+JSON content to that source (format generated JSON with Biome before committing). Original RDF
+downloads are not bundled; the attributed excerpts are bundled
+locally and require no network access at runtime. No starter for a general military or full science
+taxonomy is claimed.
+
 ## Backup and recovery
 
 Ordinary backup includes enrolment policy/exclusions, exact model manifest identity, profile

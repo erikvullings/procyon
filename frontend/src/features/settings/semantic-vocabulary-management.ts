@@ -3,6 +3,7 @@ import m, { type FactoryComponent } from 'mithril';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type { SemanticVocabulary, WorkspaceId } from '../../models';
+import { skosStarters } from './skos-starters';
 
 export interface SemanticVocabularyManagementAttrs {
   readonly client: FileManagerClient;
@@ -19,6 +20,7 @@ export const SemanticVocabularyManagement: FactoryComponent<
 > = () => {
   let vocabularies: readonly SemanticVocabulary[] = [];
   let source = '';
+  let selectedStarter = '';
   let loading = true;
   let busy = false;
   let error: string | undefined;
@@ -37,11 +39,93 @@ export const SemanticVocabularyManagement: FactoryComponent<
     }
   };
 
+  const importVocabulary = async (
+    client: FileManagerClient,
+    skosJson: string,
+  ): Promise<boolean> => {
+    busy = true;
+    error = undefined;
+    try {
+      const imported = await client.importSemanticVocabulary(skosJson);
+      vocabularies = [...vocabularies, imported];
+      return true;
+    } catch (cause) {
+      error = message(cause);
+      return false;
+    } finally {
+      busy = false;
+      m.redraw();
+    }
+  };
+
   return {
     oninit: ({ attrs }) => void load(attrs.client),
-    view: ({ attrs }) =>
-      m('section.fm-semantic-vocabularies.col.s12', { 'aria-busy': loading || busy }, [
+    view: ({ attrs }) => {
+      const starter = skosStarters.find(({ document }) => document.id === selectedStarter);
+      const alreadyImported =
+        starter !== undefined && vocabularies.some(({ id }) => id === starter.document.id);
+      return m('section.fm-semantic-vocabularies.col.s12', { 'aria-busy': loading || busy }, [
         m('p', t('semanticVocabulary', 'description')),
+        m('label', { for: 'semantic-vocabulary-starter' }, t('semanticVocabulary', 'starterLabel')),
+        m(
+          'select#semantic-vocabulary-starter.browser-default',
+          {
+            value: selectedStarter,
+            disabled: busy || loading,
+            onchange: (event: Event) => {
+              selectedStarter = (event.currentTarget as HTMLSelectElement).value;
+            },
+          },
+          [
+            m('option', { value: '' }, t('semanticVocabulary', 'starterPlaceholder')),
+            ...skosStarters.map(({ document }) =>
+              m('option', { value: document.id }, document.name),
+            ),
+          ],
+        ),
+        starter
+          ? m('p', [
+              t('semanticVocabulary', 'starterSource', {
+                publisher: starter.publisher,
+                version: starter.version,
+                concepts: starter.document.concepts.length,
+              }),
+              ' ',
+              m(
+                'a',
+                { href: starter.sourceUrl, target: '_blank', rel: 'noopener noreferrer' },
+                t('semanticVocabulary', 'starterSourceLink'),
+              ),
+              ' · ',
+              m(
+                'a',
+                {
+                  href: 'https://creativecommons.org/licenses/by/4.0/',
+                  target: '_blank',
+                  rel: 'noopener noreferrer',
+                },
+                'CC BY 4.0',
+              ),
+            ])
+          : undefined,
+        m('p', t('semanticVocabulary', 'starterDisclosure')),
+        m(
+          'button.btn',
+          {
+            type: 'button',
+            disabled: busy || loading || starter === undefined || alreadyImported,
+            onclick: async () => {
+              if (starter === undefined) return;
+              if (await importVocabulary(attrs.client, JSON.stringify(starter.document))) {
+                selectedStarter = '';
+                m.redraw();
+              }
+            },
+          },
+          alreadyImported
+            ? t('semanticVocabulary', 'starterAlreadyImported')
+            : t('semanticVocabulary', 'starterImportAction'),
+        ),
         m('label', { for: 'semantic-vocabulary-source' }, t('semanticVocabulary', 'importLabel')),
         m('textarea#semantic-vocabulary-source.materialize-textarea', {
           value: source,
@@ -55,18 +139,10 @@ export const SemanticVocabularyManagement: FactoryComponent<
           'button.btn',
           {
             type: 'button',
-            disabled: busy || source.trim().length === 0,
+            disabled: busy || loading || source.trim().length === 0,
             onclick: async () => {
-              busy = true;
-              error = undefined;
-              try {
-                await attrs.client.importSemanticVocabulary(source);
+              if (await importVocabulary(attrs.client, source)) {
                 source = '';
-                vocabularies = await attrs.client.listSemanticVocabularies();
-              } catch (cause) {
-                error = message(cause);
-              } finally {
-                busy = false;
                 m.redraw();
               }
             },
@@ -218,6 +294,7 @@ export const SemanticVocabularyManagement: FactoryComponent<
                     ),
                 ]),
               ),
-      ]),
+      ]);
+    },
   };
 };

@@ -1652,6 +1652,14 @@ export const nl = {
     title: 'Conceptwoordenlijsten',
     description:
       'Importeer beheerde SKOS-woordenlijsten, koppel ze aan deze werkruimte, beoordeel lokale suggesties en maak stabiele conceptmappen.',
+    starterLabel: 'Startwoordenlijst',
+    starterPlaceholder: 'Kies een startwoordenlijst',
+    starterSource: '{publisher} · {version} · {concepts} Engelse concepten (selectie)',
+    starterSourceLink: 'Originele SKOS-bron',
+    starterDisclosure:
+      'Startwoordenlijsten zijn selecties, geen volledige thesauri. Importeren is optioneel en koppelt niets aan een werkruimte; lokale suggesties moeten nog beoordeeld worden.',
+    starterImportAction: 'Gekozen startwoordenlijst importeren',
+    starterAlreadyImported: 'Al geïmporteerd — koppel hieronder',
     importLabel: 'SKOS-JSON',
     importPlaceholder: 'Plak een procyon-skos-1-document',
     importAction: 'Woordenlijst importeren',

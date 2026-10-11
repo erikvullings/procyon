@@ -947,6 +947,34 @@ mod tests {
     }
 
     #[test]
+    fn pinned_starter_excerpts_import_without_attachments() {
+        let starters = [
+            include_str!(
+                "../../../frontend/src/features/settings/skos-starters/gemet-climate-energy.json"
+            ),
+            include_str!(
+                "../../../frontend/src/features/settings/skos-starters/stw-technology.json"
+            ),
+            include_str!(
+                "../../../frontend/src/features/settings/skos-starters/stw-psychology.json"
+            ),
+            include_str!(
+                "../../../frontend/src/features/settings/skos-starters/stw-defence-economics.json"
+            ),
+        ];
+        for source in starters {
+            let vocabulary = import_skos_json(source).expect("starter must satisfy SKOS subset");
+            assert!(!vocabulary.concepts.is_empty());
+            assert!(vocabulary.root_ids.is_empty());
+            assert!(vocabulary.workspace_ids.is_empty());
+            assert_eq!(
+                vocabulary.extensions["https://procyon.app/ns/skos-starter/license"],
+                "https://creativecommons.org/licenses/by/4.0/"
+            );
+        }
+    }
+
+    #[test]
     fn invalid_identities_missing_links_and_hierarchy_cycles_are_actionable() {
         let duplicate = VALID_VOCABULARY.replace(
             "\"https://example.test/concepts/ml\",\n          \"prefLabels\"",
