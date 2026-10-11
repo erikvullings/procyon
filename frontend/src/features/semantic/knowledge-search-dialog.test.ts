@@ -819,6 +819,46 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     },
   );
 
+  it('keeps a file-primary image result compact without hiding its relevance or action', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            title: 'page_019.png',
+            mediaType: 'image/png',
+            modifiedAtMs: Date.parse('2026-05-04T17:14:00.000Z'),
+            excerpt: 'image: page_019.png (file-level evidence)',
+            sectionPath: [],
+            provenance: '',
+          },
+        ],
+      };
+    });
+    mount({ client, initialSubject: 'retrieval', onOpenSource: vi.fn() });
+    await ready();
+    await search();
+
+    const heading = root.querySelector('.fm-knowledge-document-heading');
+    expect(heading?.textContent).toContain('page_019.png');
+    expect(heading?.querySelector('.fm-knowledge-relevance-indicator')).not.toBeNull();
+    expect(
+      heading?.querySelector('.fm-knowledge-relevance-indicator')?.getAttribute('aria-label'),
+    ).toContain('relevance');
+    expect(root.querySelector('.fm-knowledge-group-compact-media')).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-section-heading')).toBeNull();
+    const summary = root.querySelector('.fm-knowledge-media-summary');
+    expect(summary?.textContent).toContain('Modified');
+    expect(summary?.querySelector('.fm-knowledge-media-open')?.textContent).toBe('Open image');
+    expect(root.querySelector('.fm-knowledge-media-evidence p')).toBeNull();
+  });
+
   it('does not open unavailable media and never treats media placeholders as markdown', async () => {
     const client = new MockFileManagerClient();
     const original = client.executeKnowledgeSearch.bind(client);

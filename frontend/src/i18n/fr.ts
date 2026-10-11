@@ -72,6 +72,7 @@ export const fr = {
     activitySingle: '1 activité en arrière-plan',
     indexingActivity: 'Indexation sémantique',
     indexingFailed: 'Échec de l’indexation sémantique',
+    indexingFailures: { 1: '1 source non indexée', n: '{n} sources non indexées' },
     indexingScanned: '{count} éléments analysés',
     showActivity: 'Afficher les activités en arrière-plan',
     openOperation: "Ouvrir l'opération",

@@ -72,6 +72,7 @@ export const es = {
     activitySingle: '1 actividad en segundo plano',
     indexingActivity: 'Indexación semántica',
     indexingFailed: 'Error de indexación semántica',
+    indexingFailures: { 1: 'No se pudo indexar 1 fuente', n: 'No se pudieron indexar {n} fuentes' },
     indexingScanned: '{count} elementos analizados',
     showActivity: 'Mostrar actividades en segundo plano',
     openOperation: 'Abrir operación',

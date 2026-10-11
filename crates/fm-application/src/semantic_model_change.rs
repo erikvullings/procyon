@@ -56,7 +56,7 @@ impl SemanticModelChangeReindexReport {
     /// Returns whether every step of the pass succeeded.
     #[must_use]
     pub fn is_complete(&self) -> bool {
-        self.restart_failure.is_none() && self.failures.is_empty()
+        self.restart_failure.is_none() && self.failures.is_empty() && self.failed_occurrences == 0
     }
 }
 
@@ -174,4 +174,18 @@ pub(crate) async fn reconcile_enrolled_roots(
         }
     }
     report
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SemanticModelChangeReindexReport;
+
+    #[test]
+    fn failed_ingestion_keeps_model_reindex_pending() {
+        let report = SemanticModelChangeReindexReport {
+            failed_occurrences: 1,
+            ..Default::default()
+        };
+        assert!(!report.is_complete());
+    }
 }

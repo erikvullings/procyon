@@ -5202,7 +5202,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                               m(
                                 'span',
                                 job.stage === 'failed'
-                                  ? t('shell', 'indexingFailed')
+                                  ? job.errors > 0
+                                    ? t('shell', 'indexingFailures', job.errors)
+                                    : t('shell', 'indexingFailed')
                                   : t('shell', 'indexingActivity'),
                               ),
                               job.stage === 'failed'
@@ -5231,7 +5233,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     'aria-label': semanticInstallation.message,
                     onclick: () => openSettingsDialog('semantic'),
                   },
-                  semanticInstallation.message,
+                  activityIcon({ size: 16 }),
                 ),
             m('.fm-toolbar-separator', {
               role: 'separator',

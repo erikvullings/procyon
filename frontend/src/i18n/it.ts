@@ -72,6 +72,7 @@ export const it = {
     activitySingle: '1 attività in background',
     indexingActivity: 'Indicizzazione semantica',
     indexingFailed: 'Indicizzazione semantica non riuscita',
+    indexingFailures: { 1: '1 origine non indicizzata', n: '{n} origini non indicizzate' },
     indexingScanned: '{count} elementi analizzati',
     showActivity: 'Mostra attività in background',
     openOperation: "Apri l'operazione",

@@ -30,6 +30,7 @@ use fm_application::semantic_ocr::{
     OcrRemediationTarget, SemanticOcrError, SemanticOcrService,
 };
 use fm_domain::{Location, WorkspaceId};
+use fm_events::{BackendEventPayload, SessionId, SubscriptionEvent};
 use fm_semantic_library::{
     DeviceLibraryIdentity, EligibilityOverride, EligibilityReason, EligibilityReasonCounts,
     GemmaMediaSelection, LibraryId, ModelIdentity, ResourceBudgets, ResourceProfile,
@@ -1005,6 +1006,9 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
     .with_semantic_capability(Arc::new(FailingDocumentCapability {
         inner: FakeSemanticCapability::new(),
     }));
+    let mut events = service
+        .event_bus()
+        .subscribe(SessionId::new("partial-root"), [], Some(0));
 
     let report = service
         .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
@@ -1014,6 +1018,22 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
     assert_eq!(report.observed_files, 2);
     assert_eq!(report.ingested_occurrences, 1);
     assert_eq!(report.failed_occurrences, 1);
+    let failed_count = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let SubscriptionEvent::Event(envelope) = events.recv().await.unwrap() else {
+                continue;
+            };
+            if let BackendEventPayload::SemanticIngestionProgress { stage, errors, .. } =
+                envelope.payload
+                && stage == "failed"
+            {
+                break errors;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(failed_count, 1);
     assert_eq!(
         report
             .skipped_reason_counts

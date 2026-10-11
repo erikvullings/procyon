@@ -54,7 +54,7 @@ function button(label: string): HTMLButtonElement {
 }
 
 describe('SemanticLibraryManagement', () => {
-  it('shows authoritative indexed counts and an honest compute policy while indexing', async () => {
+  it('distinguishes observed sources from searchable documents while indexing', async () => {
     const preview = await client.previewSemanticEnrolment({
       workspaceId: workspace.id,
       location,
@@ -83,6 +83,7 @@ describe('SemanticLibraryManagement', () => {
       images: true,
       audio: true,
       video: true,
+      lastWorkerDevice: 'metal',
     });
     let indexedSources = 0;
     const rootId = status.roots[0].id;
@@ -100,11 +101,11 @@ describe('SemanticLibraryManagement', () => {
     await client.subscribe(() => undefined);
     mountComponent(client);
     await waitForLoaded();
-    expect(root.textContent).toContain('0 indexed documents searchable');
+    expect(root.textContent).toContain('0 sources found; indexing may still be in progress');
     const details = root.querySelector<HTMLDetailsElement>('.fm-semantic-library-root details');
-    expect(details?.textContent).toContain(
-      'Metal on supported macOS workers when available; CPU fallback (current worker device not reported here)',
-    );
+    expect(details?.textContent).not.toContain('Reconciliation generation');
+    expect(details?.textContent).not.toContain('Indexing compute policy');
+    expect(details?.textContent).toContain('Last worker launch: Metal');
     indexedSources = 1;
     client.emit({
       eventId: 1,
@@ -118,7 +119,9 @@ describe('SemanticLibraryManagement', () => {
         errors: 0,
       },
     });
-    await vi.waitFor(() => expect(root.textContent).toContain('1 indexed document searchable'));
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain('1 source found; indexing may still be in progress'),
+    );
     expect(root.textContent).toContain('4 entries scanned (not all are indexed)');
   });
 

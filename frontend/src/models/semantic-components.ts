@@ -62,4 +62,6 @@ export interface InitializeGemmaLibraryRequest {
   readonly confirmFreshIndex: boolean;
 }
 
-export type GemmaLibrarySetup = Omit<InitializeGemmaLibraryRequest, 'confirmFreshIndex'>;
+export type GemmaLibrarySetup = Omit<InitializeGemmaLibraryRequest, 'confirmFreshIndex'> & {
+  readonly lastWorkerDevice?: 'metal' | 'cpu' | null;
+};

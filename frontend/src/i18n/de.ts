@@ -73,6 +73,10 @@ export const de = {
     activitySingle: '1 Hintergrundaktivität',
     indexingActivity: 'Semantische Indizierung',
     indexingFailed: 'Semantische Indizierung fehlgeschlagen',
+    indexingFailures: {
+      1: '1 Quelle konnte nicht indiziert werden',
+      n: '{n} Quellen konnten nicht indiziert werden',
+    },
     indexingScanned: '{count} Einträge durchsucht',
     showActivity: 'Hintergrundaktivitäten anzeigen',
     openOperation: 'Vorgang öffnen',

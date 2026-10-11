@@ -2114,10 +2114,10 @@ describe('AppShell', () => {
       },
     });
     await vi.waitFor(() => expect(root.querySelector('.fm-activity-failed')).not.toBeNull());
-    root.querySelector<HTMLButtonElement>('.fm-activity-count')?.click();
+    root.querySelector<HTMLButtonElement>('.fm-activity-failed')?.click();
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-activity-popover')?.textContent).toContain(
-        'Semantic indexing failed',
+        '1 source failed to index',
       ),
     );
     root.querySelector<HTMLButtonElement>('.fm-activity-item')?.click();
@@ -4748,7 +4748,10 @@ describe('AppShell', () => {
       m.redraw.sync();
       expect(root.querySelector<HTMLDetailsElement>('.fm-settings-disclosure')?.open).toBe(false);
       expect(root.querySelector('.fm-semantic-management')).toBeNull();
-      expect(root.querySelector('.fm-semantic-install-status')?.textContent).toBe('Installing…');
+      expect(root.querySelector('.fm-semantic-install-status')?.getAttribute('aria-label')).toBe(
+        'Installing…',
+      );
+      expect(root.querySelector('.fm-semantic-install-status svg')).not.toBeNull();
       const status = root.querySelector<HTMLButtonElement>('.fm-semantic-install-status');
       status?.click();
       m.redraw.sync();
@@ -4762,9 +4765,9 @@ describe('AppShell', () => {
       const selector = `.fm-semantic-install-${outcome}`;
       await vi.waitFor(() => expect(root.querySelector(selector)).not.toBeNull());
       expect(install).toHaveBeenCalledOnce();
-      expect(root.querySelector('.fm-semantic-install-status')?.textContent).toContain(
-        failure === undefined ? 'Installed and enabled' : 'Installation failed',
-      );
+      expect(
+        root.querySelector('.fm-semantic-install-status')?.getAttribute('aria-label'),
+      ).toContain(failure === undefined ? 'Installed and enabled' : 'Installation failed');
       expect(document.querySelector(`.toast${selector}`)?.textContent).toContain(
         failure === undefined ? 'Installed and enabled' : 'Download rejected <script>',
       );

@@ -603,10 +603,11 @@ main.fm-workspace {
 }
 
 .fm-semantic-install-status {
-  max-width: min(22rem, 30vw);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 2rem;
+  min-width: 2rem;
   border: 1px solid currentColor;
   border-radius: var(--fm-radius);
   background: var(--fm-surface);
@@ -789,9 +790,24 @@ main.fm-workspace {
 
 .fm-semantic-library-override {
   align-items: center;
-  display: flex;
-  gap: 0.75rem;
-  justify-content: space-between;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(13rem, 1fr) minmax(7rem, 1fr);
+}
+
+.fm-semantic-library-override span {
+  white-space: nowrap;
+}
+
+.fm-semantic-library-override select {
+  min-width: 0;
+  width: 100%;
+}
+
+@media (max-width: 600px) {
+  .fm-semantic-library-override {
+    grid-template-columns: 1fr;
+  }
 }
 
 .fm-semantic-library-source-unavailable,
@@ -3067,6 +3083,14 @@ input[type="text"].fm-shortcuts-help-capture-input {
   gap: 0.5rem;
 }
 
+.fm-knowledge-group-compact-media {
+  gap: 0.15rem;
+}
+
+.fm-knowledge-group-compact-media .fm-knowledge-result-heading {
+  margin-block: 0;
+}
+
 .fm-knowledge-sections {
   display: grid;
   min-width: 0;
@@ -3208,7 +3232,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .fm-knowledge-media-summary {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
@@ -3218,6 +3241,13 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-knowledge-media-open {
   margin-inline-start: auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .fm-knowledge-media-summary {
+    flex-wrap: wrap;
+  }
 }
 
 .fm-knowledge-media-evidence p {

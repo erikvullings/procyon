@@ -1443,13 +1443,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
   }
 
-  function evidenceSection(
-    attrs: KnowledgeSearchDialogAttrs,
-    row: KnowledgeEvidence,
-    key: string,
-  ): m.Vnode {
-    const position = knowledgeProvenanceLabel(row.provenance);
-    const indexedTitle = row.sectionPath.join(' / ');
+  function relevanceIndicator(row: KnowledgeEvidence): m.Children {
     const relevanceStrength = row.finalRank <= 3 ? 'high' : row.finalRank <= 10 ? 'medium' : 'low';
     const relevanceKey =
       relevanceStrength === 'high'
@@ -1458,9 +1452,34 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           ? 'resultRelevanceMedium'
           : 'resultRelevanceLow';
     const relevance = t('knowledgeSearch', relevanceKey);
+    return tooltip(
+      relevance,
+      m('span.fm-knowledge-relevance-indicator', {
+        role: 'img',
+        tabindex: 0,
+        'aria-label': relevance,
+        'data-strength': relevanceStrength,
+      }),
+      { 'data-tooltip-placement': 'above' },
+    );
+  }
+
+  function evidenceSection(
+    attrs: KnowledgeSearchDialogAttrs,
+    row: KnowledgeEvidence,
+    key: string,
+    fileTitle?: string,
+  ): m.Vnode {
+    const position = knowledgeProvenanceLabel(row.provenance);
+    const indexedTitle = row.sectionPath.join(' / ');
     const openable = !row.unavailable && attrs.onOpenSource !== undefined;
     const kind = mediaKind(row.mediaType);
     const modifiedLabel = mediaModifiedLabel(row.modifiedAtMs);
+    const description = kind === undefined ? undefined : mediaDescription(row.excerpt);
+    const redundantImageDescription =
+      kind === 'image' &&
+      fileTitle !== undefined &&
+      description === `image: ${fileTitle} (file-level evidence)`;
     const states = [
       row.adjacent ? t('knowledgeSearch', 'adjacentEvidence') : undefined,
       row.generated ? t('knowledgeSearch', 'generatedEvidence') : undefined,
@@ -1472,33 +1491,26 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         : t('knowledgeSearch', 'duplicateSources', { count: row.duplicateSourceIds.length }),
     ].filter((value): value is string => value !== undefined);
     return m('section.fm-knowledge-result', { key }, [
-      m('.fm-knowledge-section-heading', [
-        indexedTitle === '' ? undefined : m('span.fm-knowledge-section-title', indexedTitle),
-        m('.fm-knowledge-section-metadata', [
-          position === ''
-            ? undefined
-            : m(
-                'button.fm-knowledge-page-link',
-                {
-                  type: 'button',
-                  disabled: !openable,
-                  'aria-label': t('knowledgeSearch', 'openSection', { section: position }),
-                  onclick: () => void openSource(attrs, row),
-                },
-                position,
-              ),
-          tooltip(
-            relevance,
-            m('span.fm-knowledge-relevance-indicator', {
-              role: 'img',
-              tabindex: 0,
-              'aria-label': relevance,
-              'data-strength': relevanceStrength,
-            }),
-            { 'data-tooltip-placement': 'above' },
-          ),
-        ]),
-      ]),
+      fileTitle !== undefined
+        ? undefined
+        : m('.fm-knowledge-section-heading', [
+            indexedTitle === '' ? undefined : m('span.fm-knowledge-section-title', indexedTitle),
+            m('.fm-knowledge-section-metadata', [
+              position === ''
+                ? undefined
+                : m(
+                    'button.fm-knowledge-page-link',
+                    {
+                      type: 'button',
+                      disabled: !openable,
+                      'aria-label': t('knowledgeSearch', 'openSection', { section: position }),
+                      onclick: () => void openSource(attrs, row),
+                    },
+                    position,
+                  ),
+              relevanceIndicator(row),
+            ]),
+          ]),
       kind === undefined
         ? m(
             '.fm-knowledge-result-markdown',
@@ -1522,7 +1534,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 t('search', 'openMedia', { type: mediaLabel(kind).toLowerCase() }),
               ),
             ]),
-            m('p', mediaDescription(row.excerpt)),
+            redundantImageDescription ? undefined : m('p', description),
           ]),
       states.length === 0
         ? undefined
@@ -1539,33 +1551,50 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     index: number,
   ): m.Vnode {
     const openable = !group.openEvidence.unavailable && attrs.onOpenSource !== undefined;
+    const firstRow = group.rows[0];
+    const compactFileMedia =
+      group.rows.length === 1 &&
+      firstRow !== undefined &&
+      mediaKind(firstRow.mediaType) !== undefined &&
+      firstRow.sectionPath.length === 0 &&
+      knowledgeProvenanceLabel(firstRow.provenance) === '';
     return m(
       'li.fm-knowledge-document-item',
       { key: `document-${group.documentId}`, value: index + 1 },
-      m('article.fm-knowledge-group', [
-        m('.fm-knowledge-document-heading', [
-          m('span.fm-knowledge-document-number', { 'aria-hidden': 'true' }, `${index + 1}.`),
-          m('h4.fm-knowledge-result-heading', [
-            m(
-              'button.fm-knowledge-source-link',
-              {
-                type: 'button',
-                disabled: !openable,
-                'aria-label': t('knowledgeSearch', 'openSource', { title: group.title }),
-                title: group.title,
-                onclick: () => void openSource(attrs, group.openEvidence),
-              },
-              [externalLinkIcon({ size: 14 }), m('span', group.title)],
-            ),
+      m(
+        'article.fm-knowledge-group',
+        { className: compactFileMedia ? 'fm-knowledge-group-compact-media' : '' },
+        [
+          m('.fm-knowledge-document-heading', [
+            m('span.fm-knowledge-document-number', { 'aria-hidden': 'true' }, `${index + 1}.`),
+            m('h4.fm-knowledge-result-heading', [
+              m(
+                'button.fm-knowledge-source-link',
+                {
+                  type: 'button',
+                  disabled: !openable,
+                  'aria-label': t('knowledgeSearch', 'openSource', { title: group.title }),
+                  title: group.title,
+                  onclick: () => void openSource(attrs, group.openEvidence),
+                },
+                [externalLinkIcon({ size: 14 }), m('span', group.title)],
+              ),
+              compactFileMedia && firstRow !== undefined ? relevanceIndicator(firstRow) : undefined,
+            ]),
           ]),
-        ]),
-        m(
-          '.fm-knowledge-sections',
-          group.rows.map((row) =>
-            evidenceSection(attrs, row, `${group.documentId}-${row.recordId}`),
+          m(
+            '.fm-knowledge-sections',
+            group.rows.map((row) =>
+              evidenceSection(
+                attrs,
+                row,
+                `${group.documentId}-${row.recordId}`,
+                compactFileMedia ? group.title : undefined,
+              ),
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 

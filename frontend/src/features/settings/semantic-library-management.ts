@@ -376,7 +376,7 @@ function exclusionPlanView(
 function rootStatusView(
   root: SemanticRootStatus,
   indexedSources: number | undefined,
-  computeMode: string | undefined,
+  lastWorkerDevice: 'metal' | 'cpu' | null | undefined,
   scannedEntries: number | undefined,
   workspaceId: WorkspaceId | undefined,
   busy: BusyAction | undefined,
@@ -431,24 +431,16 @@ function rootStatusView(
         ]),
     m('details.fm-semantic-library-details', [
       m('summary', t('semanticLibrary', 'folderDetails')),
-      computeMode === undefined
+      lastWorkerDevice == null
         ? undefined
-        : m('p', `${t('semanticLibrary', 'computeMode')}: ${computeMode}`),
-      m('dl.fm-semantic-library-values', [
-        m('dt', t('semanticLibrary', 'stableIdentity')),
-        m(
-          'dd',
-          root.stableIdentityVerified
-            ? t('semanticLibrary', 'verified')
-            : t('semanticLibrary', 'unverified'),
-        ),
-        m('dt', t('semanticLibrary', 'reconciliationGeneration')),
-        m('dd', String(root.reconciliationGeneration)),
-        m('dt', t('semanticLibrary', 'indexedGeneration')),
-        m('dd', String(root.indexedGeneration)),
-      ]),
+        : m(
+            'p.fm-semantic-library-device',
+            t('semanticLibrary', 'lastWorkerDevice', {
+              device: t('semanticLibrary', lastWorkerDevice),
+            }),
+          ),
       root.attachedVocabularyIds.length === 0
-        ? m('p', t('semanticLibrary', 'noVocabularies'))
+        ? undefined
         : m('p', [
             `${t('semanticLibrary', 'attachedVocabularies')}: `,
             root.attachedVocabularyIds.join(', '),
@@ -580,7 +572,8 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
   let capabilities: SemanticLibraryCapabilities | undefined;
   let status: SemanticLibraryStatus | undefined;
   let indexedRoots: readonly KnowledgeRoot[] = [];
-  let computeMode: string | undefined;
+  let gemmaActive = false;
+  let lastWorkerDevice: 'metal' | 'cpu' | null | undefined;
   const scannedRoots = new Map<string, number>();
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
   let refreshInFlight = false;
@@ -621,19 +614,11 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
         attrs.workspaceId === undefined || !nextStatus.available
           ? []
           : await attrs.client.listKnowledgeRoots({ workspaceId: attrs.workspaceId });
-      computeMode = undefined;
-      try {
-        const component = await attrs.client.getSemanticComponentStatus();
-        if (component.activeModel?.profile === 'embeddingGemma2') {
-          const setup = await attrs.client.getGemmaLibrarySetup();
-          computeMode =
-            setup === null
-              ? t('semanticLibrary', 'computeUnknown')
-              : t('semanticLibrary', 'computeAutomatic');
-        }
-      } catch (cause) {
-        computeMode = `${t('semanticLibrary', 'computeUnknown')}: ${errorMessage(cause)}`;
-      }
+      const component = await attrs.client.getSemanticComponentStatus();
+      gemmaActive = component.activeModel?.profile === 'embeddingGemma2';
+      lastWorkerDevice = gemmaActive
+        ? (await attrs.client.getGemmaLibrarySetup())?.lastWorkerDevice
+        : undefined;
       folder =
         attrs.workspaceId === undefined || attrs.location === undefined || !nextStatus.available
           ? undefined
@@ -660,13 +645,15 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
     refreshInFlight = true;
     const refreshKey = contextKey;
     try {
-      const [nextStatus, nextRoots] = await Promise.all([
+      const [nextStatus, nextRoots, nextSetup] = await Promise.all([
         attrs.client.getSemanticLibraryStatus(),
         attrs.client.listKnowledgeRoots({ workspaceId: attrs.workspaceId }),
+        gemmaActive ? attrs.client.getGemmaLibrarySetup() : Promise.resolve(null),
       ]);
       if (removed || busy !== undefined || refreshKey !== contextKey) return;
       status = nextStatus;
       indexedRoots = nextRoots;
+      if (gemmaActive) lastWorkerDevice = nextSetup?.lastWorkerDevice;
       refreshError = undefined;
       m.redraw();
     } catch (cause) {
@@ -873,7 +860,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
           refreshError === undefined
             ? indexedRoots.find((root) => root.rootId === candidate.id)?.indexedSources
             : undefined,
-          computeMode,
+          lastWorkerDevice,
           scannedRoots.get(candidate.id),
           attrs.workspaceId,
           busy,

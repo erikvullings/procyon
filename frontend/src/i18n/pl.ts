@@ -72,6 +72,7 @@ export const pl = {
     activitySingle: '1 aktywność w tle',
     indexingActivity: 'Indeksowanie semantyczne',
     indexingFailed: 'Indeksowanie semantyczne nie powiodło się',
+    indexingFailures: { 1: 'Nie zindeksowano 1 źródła', n: 'Nie zindeksowano {n} źródeł' },
     indexingScanned: '{count} przeskanowanych elementów',
     showActivity: 'Pokaż aktywności w tle',
     openOperation: 'Otwórz operację',

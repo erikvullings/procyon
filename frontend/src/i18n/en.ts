@@ -88,6 +88,10 @@ export const en = {
     activitySingle: '1 background activity',
     indexingActivity: 'Semantic indexing',
     indexingFailed: 'Semantic indexing failed',
+    indexingFailures: {
+      1: '1 source failed to index',
+      n: '{n} sources failed to index',
+    },
     indexingScanned: '{count} entries scanned',
     showActivity: 'Show background activity',
     openOperation: 'Open operation',
@@ -1565,10 +1569,13 @@ export const en = {
     removeFolder: 'Remove',
     folderDetails: 'Indexing details',
     indexedSources: {
-      1: '1 indexed document searchable',
-      n: '{n} indexed documents searchable',
+      1: '1 source found; indexing may still be in progress',
+      n: '{n} sources found; indexing may still be in progress',
     },
     scannedEntries: '{count} entries scanned (not all are indexed)',
+    lastWorkerDevice: 'Last worker launch: {device}',
+    metal: 'Metal',
+    cpu: 'CPU',
     computeMode: 'Indexing compute policy',
     computeAutomatic:
       'Metal on supported macOS workers when available; CPU fallback (current worker device not reported here)',

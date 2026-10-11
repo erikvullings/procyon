@@ -72,6 +72,10 @@ export const nl = {
     activitySingle: '1 achtergrondactiviteit',
     indexingActivity: 'Semantisch indexeren',
     indexingFailed: 'Semantisch indexeren mislukt',
+    indexingFailures: {
+      1: '1 bron niet geïndexeerd',
+      n: '{n} bronnen niet geïndexeerd',
+    },
     indexingScanned: '{count} items gescand',
     showActivity: 'Achtergrondactiviteiten tonen',
     openOperation: 'Bewerking openen',
@@ -1569,10 +1573,13 @@ export const nl = {
     removeFolder: 'Verwijderen',
     folderDetails: 'Indexeringsdetails',
     indexedSources: {
-      1: '1 geïndexeerd document doorzoekbaar',
-      n: '{n} geïndexeerde documenten doorzoekbaar',
+      1: '1 bron gevonden; indexeren kan nog bezig zijn',
+      n: '{n} bronnen gevonden; indexeren kan nog bezig zijn',
     },
     scannedEntries: '{count} items gescand (niet alles is geïndexeerd)',
+    lastWorkerDevice: 'Laatste workerstart: {device}',
+    metal: 'Metal',
+    cpu: 'CPU',
     computeMode: 'Rekenbeleid voor indexeren',
     computeAutomatic:
       'Metal op ondersteunde macOS-workers indien beschikbaar; anders CPU (actief apparaat wordt hier niet gemeld)',

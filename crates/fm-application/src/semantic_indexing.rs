@@ -208,12 +208,16 @@ impl SemanticIndexingService {
         self.publish_progress(
             &job_id,
             match &result {
+                Ok(report) if report.failed_occurrences > 0 => "failed",
                 Ok(_) => "complete",
                 Err(SemanticIndexingError::Cancelled) => "cancelled",
                 Err(_) => "failed",
             },
             self.scanned_entries.load(Ordering::Relaxed),
-            u64::from(result.is_err()),
+            match &result {
+                Ok(report) => report.failed_occurrences,
+                Err(_) => 1,
+            },
         );
         result
     }
