@@ -1748,7 +1748,8 @@ mod tests {
             .expect("profile presets command must succeed")
             .deserialize::<Vec<fm_transport_dto::LlmProfilePresetDto>>()
             .expect("presets response must deserialize");
-        assert_eq!(presets.len(), 7);
+        assert_eq!(presets.len(), 8);
+        assert_eq!(presets[5].preset, fm_transport_dto::LlmPresetDto::MlxServe);
 
         let created = invoke!(
             "create_llm_profile",
