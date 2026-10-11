@@ -300,6 +300,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
   it('offers one-way inclusion for an unindexed current folder', async () => {
     const currentFolder = { providerId: 'local', uri: 'file:///documents' };
+    let displayedFolder = currentFolder;
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'getSemanticFolderStatus').mockResolvedValue({
       consent: 'notIncluded',
@@ -309,18 +310,24 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       sourceAvailable: true,
       unavailableReason: null,
     });
-    mount({ client, currentFolder });
+    mount({ client, currentFolder: () => displayedFolder });
 
     await ready();
 
     const include = root.querySelector<HTMLButtonElement>('.fm-knowledge-include-folder-action');
     expect(include?.textContent).toBe('Include folder for semantic search');
     const confirm = vi.spyOn(client, 'confirmSemanticEnrolment');
+    const preview = vi.spyOn(client, 'previewSemanticEnrolment');
     include?.focus();
     expect(document.activeElement).toBe(include);
     expect(confirm).not.toHaveBeenCalled();
+    displayedFolder = { providerId: 'local', uri: 'file:///other' };
+    m.redraw.sync();
     include?.click();
     await vi.waitFor(() => expect(root.querySelector('.fm-semantic-folder-prompt')).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(preview).toHaveBeenCalledWith(expect.objectContaining({ location: currentFolder })),
+    );
     expect(confirm).not.toHaveBeenCalled();
   });
 

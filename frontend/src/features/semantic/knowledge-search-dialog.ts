@@ -2725,7 +2725,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     }),
                   ),
                 ]),
-            !currentFolderIndexed && attrs.currentFolder !== undefined && busy !== 'loading'
+            !currentFolderIndexed && openingFolder !== undefined && busy !== 'loading'
               ? m(
                   'button.fm-knowledge-include-folder-action',
                   {
@@ -2737,7 +2737,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                   t('knowledgeSearch', 'includeFolder'),
                 )
               : undefined,
-            attrs.currentFolder === undefined
+            openingFolder === undefined
               ? undefined
               : m(ModalPanel, {
                   className: 'fm-dense-modal fm-semantic-enrolment-modal',
@@ -2751,7 +2751,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     ? m(SemanticFolderEnrolmentPrompt, {
                         client: attrs.client,
                         workspaceId: attrs.workspaceId,
-                        location: attrs.currentFolder,
+                        location: openingFolder,
                         onEnrolled: () => {
                           currentFolderIndexed = true;
                           scopeKind = 'enrolledRoots';
@@ -2759,8 +2759,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                           void refreshRoots(attrs).then(() => {
                             const included = roots.find(
                               (root) =>
-                                root.location.providerId === attrs.currentFolder?.providerId &&
-                                root.location.uri === attrs.currentFolder.uri,
+                                root.location.providerId === openingFolder?.providerId &&
+                                root.location.uri === openingFolder.uri,
                             );
                             if (included !== undefined) selectedRootIds.add(included.rootId);
                           });
