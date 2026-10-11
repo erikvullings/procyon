@@ -4,6 +4,9 @@ import { FlatButton, IconButton, ModalPanel } from 'mithril-materialized';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import {
   brainIcon,
+  checkIcon,
+  chevronDownIcon,
+  chevronUpIcon,
   closeIcon,
   cloudIcon,
   copyIcon,
@@ -11,6 +14,7 @@ import {
   dotsIcon,
   externalLinkIcon,
   filterIcon,
+  photoIcon,
   sparklesIcon,
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
@@ -41,7 +45,7 @@ import type {
 import { defaultKnowledgeSearchOptions } from '../../models';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { lastPathSegment } from '../navigation/navigation';
-import { copyText } from '../preview/clipboard';
+import { copyImageDataUri, copyText } from '../preview/clipboard';
 import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
 import { decodeEvidenceTitle } from './evidence-title';
 import { mediaDescription, mediaKind, mediaLabel, mediaModifiedLabel } from './media-evidence';
@@ -89,6 +93,289 @@ const SCOPE_KINDS: readonly KnowledgeScopeKind[] = [
 ];
 
 const PREFERENCES_STORAGE_KEY = 'procyon.knowledgeSearch.preferences.v1';
+
+interface KnowledgeImagePreviewAttrs {
+  readonly client: FileManagerClient;
+  readonly workspaceId: string;
+  readonly evidence: KnowledgeEvidence;
+  readonly title: string;
+}
+
+const KnowledgeImagePreview: FactoryComponent<KnowledgeImagePreviewAttrs> = () => {
+  let observer: IntersectionObserver | undefined;
+  let controller: AbortController | undefined;
+  let started = false;
+  let dataUri: string | undefined;
+  let unavailable = false;
+  let removed = false;
+
+  async function load(attrs: KnowledgeImagePreviewAttrs): Promise<void> {
+    if (started || removed) return;
+    started = true;
+    controller = new AbortController();
+    const signal = controller.signal;
+    try {
+      const source = await attrs.client.resolveKnowledgeSource(
+        { workspaceId: attrs.workspaceId, sourceId: attrs.evidence.sourceId },
+        signal,
+      );
+      // PDF page thumbnails are not the indexed embedded image; never present
+      // one as a preview of that image.
+      if (!source.available || !/\.(?:jpe?g|png|gif|webp|ico)$/iu.test(source.location.uri)) {
+        unavailable = true;
+        return;
+      }
+      const bytes = await attrs.client.getThumbnail(source.location.uri, 'small', signal);
+      if (bytes === undefined || bytes.length === 0 || bytes.length > 128 * 1024) {
+        unavailable = true;
+        return;
+      }
+      let binary = '';
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      dataUri = `data:image/jpeg;base64,${btoa(binary)}`;
+    } catch {
+      if (!signal.aborted) unavailable = true;
+    } finally {
+      if (!signal.aborted) m.redraw();
+    }
+  }
+
+  return {
+    oncreate: ({ dom, attrs }) => {
+      if (typeof IntersectionObserver === 'undefined') {
+        void load(attrs);
+        return;
+      }
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (!entries.some((entry) => entry.isIntersecting)) return;
+          observer?.disconnect();
+          void load(attrs);
+        },
+        { rootMargin: '96px' },
+      );
+      observer.observe(dom);
+    },
+    onremove: () => {
+      removed = true;
+      observer?.disconnect();
+      controller?.abort();
+    },
+    view: ({ attrs }) =>
+      m(
+        'span.fm-knowledge-image-preview',
+        dataUri === undefined
+          ? m(
+              'span.fm-knowledge-image-placeholder',
+              {
+                role: 'img',
+                'aria-label': t(
+                  'knowledgeSearch',
+                  unavailable ? 'imagePreviewUnavailable' : 'imagePreviewLoading',
+                ),
+              },
+              photoIcon(),
+            )
+          : m('img', {
+              src: dataUri,
+              alt: t('knowledgeSearch', 'imagePreviewAlt', { title: attrs.title }),
+              loading: 'lazy',
+              decoding: 'async',
+              onerror: () => {
+                dataUri = undefined;
+                unavailable = true;
+                m.redraw();
+              },
+            }),
+      ),
+  };
+};
+
+const KnowledgeChunkCopy: FactoryComponent<{
+  readonly evidence: KnowledgeEvidence;
+  readonly title: string;
+}> = () => {
+  let copied = false;
+  let failed = false;
+  let resetTimer: number | undefined;
+
+  return {
+    onremove: () => {
+      if (resetTimer !== undefined) clearTimeout(resetTimer);
+    },
+    view: ({ attrs }) =>
+      m('span.fm-knowledge-chunk-copy', [
+        m(
+          'button.fm-knowledge-chunk-copy-button',
+          {
+            type: 'button',
+            'aria-label': t('knowledgeSearch', 'copyChunk'),
+            onclick: (event: MouseEvent) => {
+              const section = (event.currentTarget as Element).closest('.fm-knowledge-result');
+              const content = section
+                ?.querySelector('.fm-knowledge-chunk-content')
+                ?.textContent?.trim();
+              if (content === undefined || content === '') return;
+              const position = knowledgeProvenanceLabel(attrs.evidence.provenance);
+              const source = t('knowledgeSearch', 'chunkSource', {
+                title: `${attrs.title}${position === '' ? '' : `, ${position}`}`,
+              });
+              void (async () => {
+                try {
+                  await copyText(`${content}\n\n${source}`);
+                  copied = true;
+                  failed = false;
+                  if (resetTimer !== undefined) clearTimeout(resetTimer);
+                  resetTimer = window.setTimeout(() => {
+                    copied = false;
+                    m.redraw();
+                  }, 1500);
+                } catch {
+                  copied = false;
+                  failed = true;
+                }
+                m.redraw();
+              })();
+            },
+          },
+          copied ? checkIcon({ size: 14 }) : copyIcon({ size: 14 }),
+        ),
+        copied
+          ? m('span.fm-visually-hidden', { role: 'status' }, t('knowledgeSearch', 'chunkCopied'))
+          : undefined,
+        failed
+          ? m('span.fm-knowledge-error', { role: 'alert' }, t('knowledgeSearch', 'copyChunkFailed'))
+          : undefined,
+      ]),
+  };
+};
+
+const KNOWLEDGE_COPY_IMAGE_LIMIT = 8 * 1024 * 1024;
+const KNOWLEDGE_COPY_READ_LENGTH = 1024 * 1024;
+
+const KnowledgeMediaCopy: FactoryComponent<{
+  readonly client: FileManagerClient;
+  readonly workspaceId: string;
+  readonly evidence: KnowledgeEvidence;
+  readonly title: string;
+  readonly description: string;
+}> = () => {
+  let copied = false;
+  let error: string | undefined;
+  let resetTimer: number | undefined;
+  let controller: AbortController | undefined;
+  let busy = false;
+
+  async function copy(attrs: {
+    readonly client: FileManagerClient;
+    readonly workspaceId: string;
+    readonly evidence: KnowledgeEvidence;
+    readonly title: string;
+    readonly description: string;
+  }): Promise<void> {
+    if (busy) return;
+    busy = true;
+    controller = new AbortController();
+    const signal = controller.signal;
+    const kind = mediaKind(attrs.evidence.mediaType);
+    try {
+      const source = await attrs.client.resolveKnowledgeSource(
+        { workspaceId: attrs.workspaceId, sourceId: attrs.evidence.sourceId },
+        signal,
+      );
+      if (!source.available) throw new Error(t('knowledgeSearch', 'copySourceUnavailable'));
+      if (kind === 'image') {
+        if (!/\.(?:jpe?g|png|gif|webp|ico)$/iu.test(source.location.uri)) {
+          throw new Error(t('knowledgeSearch', 'copyEmbeddedImageUnavailable'));
+        }
+        const bytes = new Uint8Array(KNOWLEDGE_COPY_IMAGE_LIMIT);
+        let offset = 0;
+        let eof = false;
+        while (!eof && offset < KNOWLEDGE_COPY_IMAGE_LIMIT) {
+          const part = await attrs.client.readFileRange(
+            { location: source.location, offset, length: KNOWLEDGE_COPY_READ_LENGTH },
+            signal,
+          );
+          if (part.offset !== offset || part.length === 0 || part.length !== part.data.length) {
+            throw new Error(t('knowledgeSearch', 'copyMediaFailed'));
+          }
+          if (offset + part.length > KNOWLEDGE_COPY_IMAGE_LIMIT) {
+            throw new Error(t('knowledgeSearch', 'copyImageTooLarge'));
+          }
+          bytes.set(part.data, offset);
+          offset += part.length;
+          eof = part.eof;
+        }
+        if (!eof || offset === 0) {
+          throw new Error(t('knowledgeSearch', 'copyImageTooLarge'));
+        }
+        const png =
+          bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+        const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+        if (!png && !jpeg) throw new Error(t('knowledgeSearch', 'copyImageUnsupported'));
+        let binary = '';
+        for (const byte of bytes.subarray(0, offset)) binary += String.fromCharCode(byte);
+        if (signal.aborted) return;
+        await copyImageDataUri(`data:image/${png ? 'png' : 'jpeg'};base64,${btoa(binary)}`);
+      } else {
+        const uri = source.location.uri;
+        if (source.location.providerId !== 'local' || !uri.startsWith('file:///')) {
+          throw new Error(t('knowledgeSearch', 'copyLocalLinkUnavailable'));
+        }
+        if (signal.aborted) return;
+        await copyText(
+          `${decodeEvidenceText(attrs.description)}\n\n${t('knowledgeSearch', 'chunkSource', { title: attrs.title })}\n${uri}`,
+        );
+      }
+      if (signal.aborted) return;
+      error = undefined;
+      copied = true;
+      if (resetTimer !== undefined) clearTimeout(resetTimer);
+      resetTimer = window.setTimeout(() => {
+        copied = false;
+        m.redraw();
+      }, 1500);
+    } catch (cause) {
+      if (!signal.aborted) {
+        copied = false;
+        error = cause instanceof Error ? cause.message : t('knowledgeSearch', 'copyMediaFailed');
+      }
+    } finally {
+      busy = false;
+      if (!signal.aborted) m.redraw();
+    }
+  }
+
+  return {
+    onremove: () => {
+      controller?.abort();
+      if (resetTimer !== undefined) clearTimeout(resetTimer);
+    },
+    view: ({ attrs }) => {
+      const image = mediaKind(attrs.evidence.mediaType) === 'image';
+      return m('span.fm-knowledge-media-copy', [
+        m(
+          'button.fm-knowledge-media-copy-button',
+          {
+            type: 'button',
+            disabled: busy || attrs.evidence.unavailable || attrs.evidence.stale === true,
+            'aria-label': t('knowledgeSearch', image ? 'copyImage' : 'copyMediaDetails'),
+            onclick: () => void copy(attrs),
+          },
+          copied ? checkIcon({ size: 14 }) : copyIcon({ size: 14 }),
+        ),
+        copied
+          ? m(
+              'span.fm-visually-hidden',
+              { role: 'status' },
+              t('knowledgeSearch', image ? 'imageCopied' : 'mediaDetailsCopied'),
+            )
+          : undefined,
+        error === undefined ? undefined : m('span.fm-knowledge-error', { role: 'alert' }, error),
+      ]);
+    },
+  };
+};
 
 function decodeEvidenceText(text: string): string {
   const textarea = document.createElement('textarea');
@@ -804,6 +1091,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   let answerProfilesFailed = false;
   let loadedProfileRevision = 0;
   let answerCopied = false;
+  let answerCopyError: string | undefined;
+  let answerCopyResetTimer: number | undefined;
   /** Grounded-only by default; the opt-in is explicit and labelled. */
   let allowModelKnowledge = false;
   let answer: KnowledgeAnswer | undefined;
@@ -914,6 +1203,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    * nothing of it behind - not even a response still on its way.
    */
   function resetAnswer(): void {
+    if (answerCopyResetTimer !== undefined) clearTimeout(answerCopyResetTimer);
+    answerCopyResetTimer = undefined;
+    answerCopied = false;
+    answerCopyError = undefined;
     answerAbortController?.abort();
     answerAbortController = undefined;
     answerSequence += 1;
@@ -1619,16 +1912,44 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 void openExternalEvidence(attrs, url);
               },
             },
-            row.mediaType === 'application/pdf'
-              ? m('p', evidenceTextWithLinks(decodeEvidenceText(row.content)))
-              : m.trust(safeMarkdownHtml(row.content)),
+            [
+              m(KnowledgeChunkCopy, {
+                evidence: row,
+                title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
+              }),
+              m(
+                '.fm-knowledge-chunk-content',
+                row.mediaType === 'application/pdf'
+                  ? m('p', evidenceTextWithLinks(decodeEvidenceText(row.content)))
+                  : m.trust(safeMarkdownHtml(row.content)),
+              ),
+            ],
           )
         : m('.fm-knowledge-media-evidence', [
+            kind === 'image' &&
+            !row.unavailable &&
+            row.stale !== true &&
+            row.sectionPath.length === 0 &&
+            row.provenance === ''
+              ? m(KnowledgeImagePreview, {
+                  client: attrs.client,
+                  workspaceId: attrs.workspaceId,
+                  evidence: row,
+                  title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
+                })
+              : undefined,
             m('.fm-knowledge-media-summary', [
               m('strong', mediaLabel(kind)),
               modifiedLabel === undefined
                 ? undefined
                 : m('small.fm-knowledge-media-modified', modifiedLabel),
+              m(KnowledgeMediaCopy, {
+                client: attrs.client,
+                workspaceId: attrs.workspaceId,
+                evidence: row,
+                title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
+                description: description ?? '',
+              }),
               m(
                 'button.fm-knowledge-media-open',
                 {
@@ -1984,15 +2305,25 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       (reference) => `[${reference.number}] ${reference.title}`,
     );
     const heading = t('knowledgeSearch', 'answerCitations', { count: sources.length });
-    await copyText(
-      sources.length === 0
-        ? numbered.text
-        : `${numbered.text}\n\n${heading}\n${sources.join('\n')}`,
-    );
+    try {
+      await copyText(
+        sources.length === 0
+          ? numbered.text
+          : `${numbered.text}\n\n${heading}\n${sources.join('\n')}`,
+      );
+    } catch {
+      answerCopied = false;
+      answerCopyError = t('knowledgeSearch', 'copyFailed');
+      m.redraw();
+      return;
+    }
+    if (answerCopyResetTimer !== undefined) clearTimeout(answerCopyResetTimer);
+    answerCopyError = undefined;
     answerCopied = true;
     m.redraw();
-    window.setTimeout(() => {
+    answerCopyResetTimer = window.setTimeout(() => {
       answerCopied = false;
+      answerCopyResetTimer = undefined;
       m.redraw();
     }, 1500);
   }
@@ -2068,24 +2399,31 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                         : t('knowledgeSearch', 'copyAnswer'),
                       onclick: () => void copyAnswer(),
                     },
-                    copyIcon({ size: 14 }),
+                    answerCopied ? checkIcon({ size: 14 }) : copyIcon({ size: 14 }),
                   ),
                 ),
             m(
               'button.fm-knowledge-answer-collapse',
               {
                 type: 'button',
+                'aria-label': answerCollapsed
+                  ? t('knowledgeSearch', 'showAnswer')
+                  : t('knowledgeSearch', 'hideAnswer'),
                 'aria-expanded': answerCollapsed ? 'false' : 'true',
                 'aria-controls': 'fm-knowledge-answer-body',
                 onclick: () => {
                   answerCollapsed = !answerCollapsed;
                 },
               },
-              answerCollapsed
-                ? t('knowledgeSearch', 'showAnswer')
-                : t('knowledgeSearch', 'hideAnswer'),
+              answerCollapsed ? chevronDownIcon({ size: 16 }) : chevronUpIcon({ size: 16 }),
             ),
           ]),
+          answerCopied
+            ? m('span.fm-visually-hidden', { role: 'status' }, t('knowledgeSearch', 'answerCopied'))
+            : undefined,
+          answerCopyError === undefined
+            ? undefined
+            : m('p.fm-knowledge-error', { role: 'alert' }, answerCopyError),
           answerError === undefined
             ? undefined
             : m('p.fm-knowledge-error', { role: 'alert' }, answerError),
@@ -2240,6 +2578,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     onremove: () => {
       removed = true;
       if (rootRefreshTimer !== undefined) clearInterval(rootRefreshTimer);
+      if (answerCopyResetTimer !== undefined) clearTimeout(answerCopyResetTimer);
       rootRefreshUnsubscribe?.();
       abortController?.abort();
     },

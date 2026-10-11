@@ -269,6 +269,9 @@ export const chevronDownIcon = trustedStrokeIcon(
   'fm-icon-chevron-down',
 );
 
+/** "chevron-up" — expanded answer disclosure. */
+export const chevronUpIcon = trustedStrokeIcon('<path d="M6 15l6 -6l6 6" />', 'fm-icon-chevron-up');
+
 /** "eye-off" — hidden-entry indicator in the directory table's name column. */
 export const eyeOffIcon = trustedStrokeIcon(
   '<path d="M10.585 10.587a2 2 0 0 0 2.829 2.828" />' +
@@ -326,6 +329,9 @@ export const copyIcon = trustedStrokeIcon(
     '<path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2" />',
   'fm-icon-copy',
 );
+
+/** "check" — transient successful copy feedback. */
+export const checkIcon = trustedStrokeIcon('<path d="M5 12l4 4l10 -10" />', 'fm-icon-check');
 
 /** "pencil" — rename a workspace. */
 export const pencilIcon = trustedStrokeIcon(

@@ -120,6 +120,7 @@ afterEach(() => {
   m.mount(root, null);
   root.remove();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('numberKnowledgeAnswer', () => {
@@ -875,6 +876,63 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     );
   });
 
+  it('copies a displayed PDF chunk as decoded text with a source reference, never markup', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            title: 'content.pdf',
+            mediaType: 'application/pdf',
+            provenance:
+              '{"kind":"exact","value":{"kind":"pdfBlock","page_number":1,"block_index":0}}',
+            sectionPath: [],
+            content: 'Child Abuse &amp; Neglect &le; 3 https://doi.org/10.1234/example',
+          },
+        ],
+      };
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+    const oldClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: write },
+    });
+    try {
+      mount({ client, initialSubject: 'retrieval' });
+      await ready();
+      await search();
+      const copy = button('Copy text chunk');
+      copy.click();
+      await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+      expect(write).toHaveBeenCalledWith(
+        'Child Abuse & Neglect ≤ 3 https://doi.org/10.1234/example\n\nSource: content.pdf, Page 1',
+      );
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-knowledge-chunk-copy [role="status"]')?.textContent).toBe(
+          'Text chunk copied',
+        ),
+      );
+      setLocale('nl');
+      m.redraw.sync();
+      button('Tekstfragment kopiëren').click();
+      await vi.waitFor(() =>
+        expect(write).toHaveBeenLastCalledWith(
+          'Child Abuse & Neglect ≤ 3 https://doi.org/10.1234/example\n\nBron: content.pdf, Pagina 1',
+        ),
+      );
+    } finally {
+      if (oldClipboard === undefined) Reflect.deleteProperty(navigator, 'clipboard');
+      else Object.defineProperty(navigator, 'clipboard', oldClipboard);
+    }
+  });
+
   it('repairs an already-indexed split Elsevier DOI without joining unrelated prose', async () => {
     const client = new MockFileManagerClient();
     const original = client.executeKnowledgeSearch.bind(client);
@@ -995,6 +1053,269 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(summary?.textContent).toContain('Modified');
     expect(summary?.querySelector('.fm-knowledge-media-open')?.textContent).toBe('Open image');
     expect(root.querySelector('.fm-knowledge-media-evidence p')).toBeNull();
+  });
+
+  it('copies authorized image bytes, not its preview, only after a successful clipboard write', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            title: 'garden.png',
+            mediaType: 'image/png',
+            sectionPath: [],
+            provenance: '',
+            unavailable: false,
+            stale: false,
+          },
+        ],
+      };
+    });
+    vi.spyOn(client, 'resolveKnowledgeSource').mockResolvedValue({
+      available: true,
+      entryId: 'garden',
+      location: { providerId: 'local', uri: 'file:///garden.png' },
+    });
+    const data = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    const read = vi.spyOn(client, 'readFileRange').mockResolvedValue({
+      data,
+      offset: 0,
+      length: data.length,
+      eof: true,
+      probablyBinary: true,
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+    class ClipboardItemStub {
+      constructor(readonly items: Record<string, Blob>) {}
+    }
+    vi.stubGlobal('ClipboardItem', ClipboardItemStub);
+    const oldClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { write } });
+    try {
+      mount({ client, initialSubject: 'retrieval' });
+      await ready();
+      await search();
+      button('Copy image').click();
+      await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+      expect(read).toHaveBeenCalledWith(
+        {
+          location: { providerId: 'local', uri: 'file:///garden.png' },
+          offset: 0,
+          length: 1048576,
+        },
+        expect.any(AbortSignal),
+      );
+      const item = write.mock.calls[0]?.[0]?.[0] as ClipboardItemStub;
+      const blob = item.items['image/png'];
+      if (blob === undefined) throw new Error('missing image/png clipboard payload');
+      expect([...new Uint8Array(await blob.arrayBuffer())]).toEqual(data);
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-knowledge-media-copy [role="status"]')?.textContent).toBe(
+          'Image copied',
+        ),
+      );
+    } finally {
+      if (oldClipboard === undefined) Reflect.deleteProperty(navigator, 'clipboard');
+      else Object.defineProperty(navigator, 'clipboard', oldClipboard);
+    }
+  });
+
+  it('copies audio details with a local link, but never treats a remote URI as portable', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            title: 'birds.mp3',
+            mediaType: 'audio/mpeg',
+            excerpt: 'Birds &amp; wind',
+            sectionPath: [],
+            provenance: '',
+            unavailable: false,
+            stale: false,
+          },
+        ],
+      };
+    });
+    const resolve = vi.spyOn(client, 'resolveKnowledgeSource').mockResolvedValue({
+      available: true,
+      entryId: 'birds',
+      location: { providerId: 'local', uri: 'file:///birds.mp3' },
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+    const oldClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: write },
+    });
+    try {
+      mount({ client, initialSubject: 'retrieval' });
+      await ready();
+      await search();
+      button('Copy details and local source link').click();
+      await vi.waitFor(() =>
+        expect(write).toHaveBeenCalledWith('Birds & wind\n\nSource: birds.mp3\nfile:///birds.mp3'),
+      );
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-knowledge-media-copy [role="status"]')?.textContent).toBe(
+          'Details and local source link copied',
+        ),
+      );
+      resolve.mockResolvedValue({
+        available: true,
+        entryId: 'remote-birds',
+        location: { providerId: 'sftp', uri: 'sftp://private/birds.mp3' },
+      });
+      button('Copy details and local source link').click();
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-knowledge-media-copy [role="alert"]')?.textContent).toBe(
+          'A portable source link is unavailable for this remote file.',
+        ),
+      );
+      expect(write).toHaveBeenCalledOnce();
+      expect(root.querySelector('.fm-knowledge-media-copy [role="status"]')).toBeNull();
+    } finally {
+      if (oldClipboard === undefined) Reflect.deleteProperty(navigator, 'clipboard');
+      else Object.defineProperty(navigator, 'clipboard', oldClipboard);
+    }
+  });
+
+  it('lazily resolves authorized image sources and shows a bounded preview in both locales', async () => {
+    let intersect: ((entries: IntersectionObserverEntry[]) => void) | undefined;
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: (entries: IntersectionObserverEntry[]) => void) {
+          intersect = callback;
+        }
+        observe(): void {}
+        disconnect(): void {
+          disconnect();
+        }
+      },
+    );
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            title: 'garden.png',
+            mediaType: 'image/png',
+            provenance: '',
+            sectionPath: [],
+            unavailable: false,
+            stale: false,
+          },
+        ],
+      };
+    });
+    const resolve = vi.spyOn(client, 'resolveKnowledgeSource').mockResolvedValue({
+      available: true,
+      entryId: 'garden',
+      location: { providerId: 'local', uri: 'file:///garden.png' },
+    });
+    const thumbnail = vi
+      .spyOn(client, 'getThumbnail')
+      .mockResolvedValue(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]));
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
+    await search();
+    expect(resolve).not.toHaveBeenCalled();
+    expect(root.querySelector('.fm-knowledge-image-placeholder')?.getAttribute('aria-label')).toBe(
+      'Loading image preview',
+    );
+
+    intersect?.([{ isIntersecting: true } as IntersectionObserverEntry]);
+    await vi.waitFor(() =>
+      expect(thumbnail).toHaveBeenCalledWith(
+        'file:///garden.png',
+        'small',
+        expect.any(AbortSignal),
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLImageElement>('.fm-knowledge-image-preview img')?.alt).toBe(
+        'Preview of garden.png',
+      ),
+    );
+    expect(resolve).toHaveBeenCalledWith(
+      { workspaceId, sourceId: expect.any(String) },
+      expect.any(AbortSignal),
+    );
+    expect(root.querySelector<HTMLImageElement>('.fm-knowledge-image-preview img')?.src).toContain(
+      'data:image/jpeg;base64,',
+    );
+    m.mount(root, null);
+    expect(disconnect).toHaveBeenCalled();
+
+    setLocale('nl');
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
+    await search();
+    intersect?.([{ isIntersecting: true } as IntersectionObserverEntry]);
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLImageElement>('.fm-knowledge-image-preview img')?.alt).toBe(
+        'Voorbeeld van garden.png',
+      ),
+    );
+  });
+
+  it('does not substitute a PDF source thumbnail for an indexed image', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            mediaType: 'image/jpeg',
+            title: 'scanned.pdf',
+            provenance: '',
+            sectionPath: [],
+            unavailable: false,
+            stale: false,
+          },
+        ],
+      };
+    });
+    vi.spyOn(client, 'resolveKnowledgeSource').mockResolvedValue({
+      available: true,
+      entryId: 'pdf',
+      location: { providerId: 'local', uri: 'file:///scanned.pdf' },
+    });
+    const thumbnail = vi.spyOn(client, 'getThumbnail');
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
+    await search();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector('.fm-knowledge-image-placeholder')?.getAttribute('aria-label'),
+      ).toBe('Image preview unavailable'),
+    );
+    expect(thumbnail).not.toHaveBeenCalled();
   });
 
   it('reflects the actual image viewer state in the action label and expanded state', async () => {
@@ -2838,16 +3159,55 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     expect(references?.querySelector('.fm-knowledge-reference-number')?.textContent).toBe('[1]');
 
     const body = root.querySelector<HTMLElement>('.fm-knowledge-answer-body');
+    expect(button('Hide answer').getAttribute('aria-expanded')).toBe('true');
+    expect(button('Hide answer').querySelector('.fm-icon-chevron-up')).not.toBeNull();
     button('Hide answer').click();
     m.redraw.sync();
     expect(body?.hidden).toBe(true);
+    expect(button('Show answer').getAttribute('aria-expanded')).toBe('false');
+    expect(button('Show answer').querySelector('.fm-icon-chevron-down')).not.toBeNull();
     button('Show answer').click();
     m.redraw.sync();
     expect(body?.hidden).toBe(false);
 
     button('Copy answer').click();
     await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(button('Copied').querySelector('.fm-icon-check')).not.toBeNull());
+    expect(root.querySelector('.fm-knowledge-answer [role="status"]')?.textContent).toBe('Copied');
     expect(write.mock.calls[0]?.[0]).toMatch(/\n\nSources \(\d+\)\n\[1\] /u);
+  });
+
+  it('does not claim an answer was copied when both clipboard methods fail', async () => {
+    const client = new MockFileManagerClient();
+    await configureProfile(client);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error('clipboard denied')) },
+    });
+    const previousCopyCommand = Object.getOwnPropertyDescriptor(document, 'execCommand');
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn(() => false),
+    });
+    try {
+      mount({ client, initialSubject: 'retrieval' });
+      await answersReady();
+      await search();
+      openAsk();
+      await generateAnswer();
+
+      button('Copy answer').click();
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-knowledge-answer [role="alert"]')?.textContent).toContain(
+          'The answer could not be copied.',
+        ),
+      );
+      expect(button('Copy answer').querySelector('.fm-icon-copy')).not.toBeNull();
+      expect(root.querySelector('.fm-knowledge-answer .fm-icon-check')).toBeNull();
+    } finally {
+      if (previousCopyCommand === undefined) Reflect.deleteProperty(document, 'execCommand');
+      else Object.defineProperty(document, 'execCommand', previousCopyCommand);
+    }
   });
 
   it('opens a citation from the answer text itself', async () => {
