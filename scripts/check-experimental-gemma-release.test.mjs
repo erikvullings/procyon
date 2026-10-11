@@ -197,7 +197,7 @@ test('missing Gemma originals or a different model revision fail closed', (conte
   );
 });
 
-test('the integrated lock remains blocked and the historical pre-Metal source cannot publish', (context) => {
+test('the mixed-media Metal candidate lock remains blocked and the pre-integration source cannot publish', (context) => {
   const lock = JSON.parse(
     readFileSync(
       fileURLToPath(
@@ -207,7 +207,7 @@ test('the integrated lock remains blocked and the historical pre-Metal source ca
     ),
   );
   assert.equal(lock.decision, 'noGo');
-  assert.equal(lock.sourceRevision, 'c6c7a94058950bf2704aca484f9c4b77c6dd2dcf');
+  assert.equal(lock.sourceRevision, '021e8ab9a40fa98591ba997d700ad501693b8e2b');
   assert.equal(lock.experimentalGemma.approval, 'blocked-pending-release-owner-review');
   const { assets, candidateRoot } = fixture(context);
   assert.throws(

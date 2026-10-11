@@ -17,9 +17,10 @@ CPU with an explicit backend report; failed individual GEMM dispatches fall
 back to CPU. The standard E5 production bundle recipe still builds without `gemma-metal`.
 The separately requested Gemma candidate now compiles `gemma-metal` only on
 macOS ARM; its Linux and Windows workers remain CPU-only. Default E5
-libraries are unchanged. This is candidate preparation, not approval to
-publish: signed production Metal artifacts from the changed source have not
-yet been qualified.
+libraries are unchanged. The exact signed four-target candidate and installed
+qualification have now passed (see
+[`embeddinggemma-experimental-release-2026-10-10.md`](embeddinggemma-experimental-release-2026-10-10.md));
+this is not approval to publish.
 
 ## Mixed-media CPU/Metal qualification (2026-10-11)
 
@@ -51,11 +52,16 @@ baselines used the same media selection. Metal ingest took
 the pinned Python reference (cosine > 0.99999). Worker sampled peak RSS
 was 3.94-4.01 GB for Metal and 3.60-3.95 GB for CPU, below the test's
 4 GiB worker bound, but closer to it than the earlier image-only run.
-This installed check ingested **images only** in the mixed-media setup;
-the direct checkpoint test above covers all modalities, and an exact
-four-target signed candidate/installed check is still needed.
-The running review app and older candidate retain their CPU mixed-media
-worker; neither is changed by this source update.
+This installed development check ingested **images only** in the mixed-media
+setup; the direct checkpoint test above covers all modalities. The subsequent
+exact signed four-target candidate [38129345964](https://github.com/erikvullings/procyon/actions/runs/38129345964)
+and installed [38132893406](https://github.com/erikvullings/procyon/actions/runs/38132893406)
+checks passed. The signed macOS worker reported FP32 Metal with all media
+enabled at all four widths; Linux and Windows reported CPU. These installed
+checks are synthetic lifecycle/resource evidence, not a CPU/Metal paired
+benchmark on the CI runner or representative retrieval-quality evidence.
+The running review app and the older candidate retain their CPU mixed-media
+worker; neither is changed by the signed qualification.
 
 Reproduce the model-level comparison with:
 
@@ -87,12 +93,11 @@ PROCYON_GEMMA_PROBE_MODEL_DIR="$PWD/target/embeddinggemma-probe/google--embeddin
 `/usr/bin/time -l` reports process peak resident bytes. Run once to compile,
 then execute the built test binary directly for an inference-process reading.
 This is one PNG on one machine; dispatch counts alone do not establish a
-speedup or memory limits across supported targets. Do not enable GPU in
-production workers for users until the integrated signed candidate's
-resource and CPU-fallback qualification is complete.
+speedup or memory limits across supported targets. Do not publish the integrated signed candidate for users until its remaining
+manual checks and release-owner review are dispositioned.
 The image-only measurements below preserve the original probe's status at
-the time they ran; the mixed-media change above has not inherited their
-signed-worker qualification.
+the time they ran; the mixed-media signed qualification is separately
+identified above and does not inherit their image-only measurements.
 
 ## Installed development worker (feature-gated automatic selection)
 
@@ -127,7 +132,7 @@ other and the checked-in pinned Python reference. Run against a built signed
 development bundle:
 
 ```sh
-PROCYON_GEMMA_DEVELOPER_BUNDLE="$PWD/target/semantic-developer-bundle/darwin-arm64-gemma-metal" \
+PROCYON_GEMMA_DEVELOPER_BUNDLE="$PWD/target/semantic-developer-bundle/darwin-arm64-gemma-mixed-metal-qual" \
 PROCYON_GEMMA_METAL_INTEGRATION=1 \
   cargo test -p fm-desktop --features semantic-gemma --lib \
   installed_development_gemma_resolves_verified_original_files -- --ignored --nocapture
