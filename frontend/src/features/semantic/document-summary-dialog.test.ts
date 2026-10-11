@@ -77,6 +77,17 @@ describe('DocumentSummaryDialog', () => {
       capabilities: ['chatCompletions'],
       redactFilenames: true,
     });
+    const originalGenerate = client.generateDocumentSummary.bind(client);
+    vi.spyOn(client, 'generateDocumentSummary').mockImplementation(async (request, signal) => ({
+      ...(await originalGenerate(request, signal)),
+      title: {
+        value: 'Evidence review',
+        source: 'aiExtracted',
+        supportingChunkId: 'mock-chunk',
+        provenance: '{"kind":"exact","value":{"kind":"pdfBlock","page_number":2,"block_index":1}}',
+      },
+      authors: [],
+    }));
     m.mount(root, {
       view: () =>
         m(DocumentSummaryDialog, {
@@ -89,6 +100,7 @@ describe('DocumentSummaryDialog', () => {
     });
 
     await vi.waitFor(() => expect(root.textContent).toContain('whole extracted document'));
+    expect(root.textContent).toContain('provider did not report a limit');
     expect(root.textContent).toContain('Cloud profile · summary-model · Cloud');
     expect(root.querySelector('.fm-document-summary-image-mode')).toBeNull();
     expect(preview).toHaveBeenLastCalledWith(expect.objectContaining({ inputTokenBudget: 6_144 }));
@@ -97,6 +109,8 @@ describe('DocumentSummaryDialog', () => {
     );
     generate?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('A concise document summary.'));
+    expect(root.textContent).toContain('Evidence review · AI-extracted · page 2');
+    expect(root.textContent).toContain('AuthorsUnavailable');
     expect(root.textContent).toContain('Full summary');
   });
 
@@ -159,7 +173,7 @@ describe('DocumentSummaryDialog', () => {
     expect(root.textContent).toContain('A concise document summary.');
   });
 
-  it('allows representative passages to be selected explicitly', async () => {
+  it('uses the whole source with a visible multi-pass warning instead of a representative-only switch', async () => {
     const client = new MockFileManagerClient();
     await client.createLlmProfile({
       name: 'Local profile',
@@ -187,16 +201,17 @@ describe('DocumentSummaryDialog', () => {
           open: true,
           client,
           workspaceId: '22222222-2222-4222-8222-222222222222',
-          entry,
+          entry: {
+            ...entry,
+            location: { providerId: 'local', uri: 'file:///documents/large-report.txt' },
+          },
           onClose: vi.fn(),
         }),
     });
 
-    await vi.waitFor(() => expect(root.textContent).toContain('whole extracted document'));
-    root.querySelector<HTMLInputElement>('.fm-document-summary-input-mode input')?.click();
-
-    await vi.waitFor(() => expect(root.textContent).toContain('representative document passages'));
-    expect(preview).toHaveBeenLastCalledWith(expect.objectContaining({ inputTokenBudget: 4_096 }));
+    await vi.waitFor(() => expect(root.textContent).toContain('2 bounded source-reading passes'));
+    expect(root.querySelector('.fm-document-summary-input-mode')).toBeNull();
+    expect(preview).toHaveBeenLastCalledWith(expect.objectContaining({ inputTokenBudget: 6_144 }));
   });
 
   it('offers images only for a vision-capable document and keeps them off by default', async () => {

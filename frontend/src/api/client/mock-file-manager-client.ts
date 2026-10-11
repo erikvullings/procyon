@@ -4492,7 +4492,14 @@ export class MockFileManagerClient implements FileManagerClient {
       return {
         selectionFingerprint: `mock-summary-${request.target.entryId}`,
         representativeTokens: Math.min(request.inputTokenBudget, 72),
-        selectionMode: request.inputTokenBudget > 4_096 ? 'fullDocument' : 'representativePassages',
+        sourceTokens: request.target.location.uri.includes('large-report') ? 12_288 : 72,
+        selectionMode:
+          request.inputTokenBudget > 4_096 && !request.target.location.uri.includes('large-report')
+            ? 'fullDocument'
+            : 'representativePassages',
+        sourcePassCount: request.target.location.uri.includes('large-report') ? 2 : 1,
+        effectiveContextWindow: profile?.advanced.contextWindow ?? null,
+        providerLimitVerified: profile?.preset === 'ollama',
         imageInputAvailable,
         includedImageCount: request.includeImages && imageInputAvailable ? visualCount : 0,
         omittedImageCount: 0,

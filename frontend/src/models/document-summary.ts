@@ -5,6 +5,7 @@ export type {
   GenerateDocumentSummaryRequestDto as GenerateDocumentSummaryRequest,
   GetDocumentSummaryRequestDto as GetDocumentSummaryRequest,
   PreviewDocumentSummaryRequestDto as PreviewDocumentSummaryRequest,
+  SummaryAttributionDto as SummaryAttribution,
   SummaryKeyPassageDto as SummaryKeyPassage,
   SummaryProfileDisclosureDto as SummaryProfileDisclosure,
 } from '../api/generated/models';

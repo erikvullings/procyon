@@ -927,6 +927,7 @@ impl IngestionCoordinator {
             library_id: document.library_id.clone(),
             document_id: document.document_id.clone(),
             content_hash,
+            source_complete: !converted.is_partial() && excluded_chunks == 0,
             generation,
             occurrences: vec![occurrence],
             records: staged_records,
@@ -1056,6 +1057,7 @@ impl IngestionCoordinator {
             library_id: document.library_id.clone(),
             document_id: document.document_id.clone(),
             content_hash,
+            source_complete: false,
             generation,
             occurrences: vec![occurrence],
             records: vec![StagedRecord {

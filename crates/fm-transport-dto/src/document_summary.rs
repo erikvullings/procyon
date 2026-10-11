@@ -88,6 +88,8 @@ pub struct DocumentSummaryPreviewDto {
     pub selection_fingerprint: String,
     /// Conservative selected-input token estimate.
     pub representative_tokens: u32,
+    /// Estimated tokens across the entire extracted text, including passages not previewed.
+    pub source_tokens: u32,
     /// Whether the preview contains the complete extracted text or selected passages.
     pub selection_mode: DocumentSummarySelectionModeDto,
     /// Whether the selected model and document support bounded image input.
@@ -102,6 +104,15 @@ pub struct DocumentSummaryPreviewDto {
     pub profile: Option<SummaryProfileDisclosureDto>,
     /// Whether persisted support metadata was reused.
     pub reused_selection: bool,
+    /// Number of bounded generation passes over complete source evidence.
+    #[serde(default)]
+    pub source_pass_count: u32,
+    /// Context window used for summary budgeting; may be trusted from the saved profile.
+    #[serde(default)]
+    pub effective_context_window: Option<u32>,
+    /// Whether the provider's context limit was verified.
+    #[serde(default)]
+    pub provider_limit_verified: bool,
 }
 
 /// Confirms generation against the exact representative-selection preview.
@@ -129,6 +140,32 @@ pub struct GetDocumentSummaryRequestDto {
     pub target: DocumentSummaryTargetDto,
 }
 
+/// Origin of a document title or author name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SummaryAttributionSourceDto {
+    /// Explicit document metadata.
+    Metadata,
+    /// Explicit document byline.
+    Byline,
+    /// Model-extracted name grounded in source text.
+    AiExtracted,
+}
+
+/// Source-backed title or author name, with optional passage identity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SummaryAttributionDto {
+    /// Exact document title or person name.
+    pub value: String,
+    /// Explicit or AI-extracted origin.
+    pub source: SummaryAttributionSourceDto,
+    /// Extracted passage identity when sourced from document text.
+    pub supporting_chunk_id: Option<String>,
+    /// Structured source position of that passage.
+    pub provenance: Option<String>,
+}
+
 /// Persisted generated summary with source-evidence identities.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -151,6 +188,79 @@ pub struct DocumentSummaryDto {
     pub brief: String,
     /// Full summary grounded in the selected document evidence.
     pub full: String,
+    /// Optional verified title (not inferred from the file name).
+    #[serde(default)]
+    pub title: Option<SummaryAttributionDto>,
+    /// Explicit or evidence-backed author names.
+    #[serde(default)]
+    pub authors: Vec<SummaryAttributionDto>,
     /// Whether the indexed source changed after generation.
     pub stale: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_summary_without_attribution_deserializes() {
+        let legacy = serde_json::json!({
+            "recordId": "summary-1",
+            "sourceGeneration": 1,
+            "profileId": "profile",
+            "modelId": "model",
+            "supportingChunkIds": ["chunk-1"],
+            "supportingWeights": [1.0],
+            "createdAtMs": 1000,
+            "brief": "Brief",
+            "full": "Full",
+            "stale": false
+        });
+        let summary: DocumentSummaryDto = serde_json::from_value(legacy).unwrap();
+        assert_eq!(summary.title, None);
+        assert!(summary.authors.is_empty());
+        let encoded = serde_json::to_value(summary).unwrap();
+        assert!(encoded.get("title").is_some());
+        assert_eq!(encoded["authors"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn attribution_source_and_passage_identity_round_trip() {
+        let attribution = SummaryAttributionDto {
+            value: "Ada Lovelace".into(),
+            source: SummaryAttributionSourceDto::Byline,
+            supporting_chunk_id: Some("chunk-1".into()),
+            provenance: Some(r#"{"kind":"textLines","start_line":1}"#.into()),
+        };
+        let json = serde_json::to_value(&attribution).unwrap();
+        assert_eq!(json["source"], "byline");
+        assert_eq!(json["supportingChunkId"], "chunk-1");
+        assert_eq!(
+            serde_json::from_value::<SummaryAttributionDto>(json).unwrap(),
+            attribution
+        );
+        assert_eq!(
+            serde_json::to_value(SummaryAttributionSourceDto::AiExtracted).unwrap(),
+            "aiExtracted"
+        );
+    }
+
+    #[test]
+    fn legacy_preview_defaults_multi_pass_disclosure() {
+        let preview = serde_json::json!({
+            "selectionFingerprint": "fingerprint",
+            "representativeTokens": 20,
+            "selectionMode": "representativePassages",
+            "imageInputAvailable": false,
+            "includedImageCount": 0,
+            "omittedImageCount": 0,
+            "keyPassages": [],
+            "profile": null,
+            "reusedSelection": false
+        });
+        let parsed: DocumentSummaryPreviewDto = serde_json::from_value(preview).unwrap();
+        assert_eq!(parsed.source_pass_count, 0);
+        assert_eq!(parsed.effective_context_window, None);
+        assert!(!parsed.provider_limit_verified);
+    }
 }

@@ -842,7 +842,6 @@ export const nl = {
     generationFailed: 'De samenvatting kon niet worden gegenereerd.',
     keyPassagesOnly: 'Er is geen generatieprofiel ingesteld. Alleen kernpassages worden getoond.',
     profile: 'Generatieprofiel',
-    representativeOnly: 'Representatieve passages gebruiken in plaats van het hele document',
     includeImages: 'Afbeeldingen opnemen (alleen vision-modellen, max. 1024 px)',
     imagesIncluded: '{count} ingesloten afbeelding(en) worden ook verzonden.',
     imagesIncludedWithOmissions:
@@ -853,15 +852,20 @@ export const nl = {
       'Het volledig geëxtraheerde document ({tokens} geschatte tokens) wordt naar deze cloudendpoint verzonden.',
     localFullDisclosure:
       'Het volledig geëxtraheerde document ({tokens} geschatte tokens) wordt naar deze lokale endpoint verzonden.',
-    cloudRepresentativeDisclosure:
-      '{tokens} geschatte tokens met representatieve documentpassages worden naar deze cloudendpoint verzonden.',
-    localRepresentativeDisclosure:
-      '{tokens} geschatte tokens met representatieve documentpassages worden naar deze lokale endpoint verzonden.',
-    cloudFallbackDisclosure:
-      'Het hele document is groter dan de ingestelde contextlimiet. Procyon heeft automatisch {tokens} geschatte tokens met representatieve passages geselecteerd voor deze cloudendpoint.',
-    localFallbackDisclosure:
-      'Het hele document is groter dan de ingestelde contextlimiet. Procyon heeft automatisch {tokens} geschatte tokens met representatieve passages geselecteerd voor deze lokale endpoint.',
+    cloudMultiPassDisclosure:
+      'Het volledig geëxtraheerde document vergt minstens {count} begrensde leesrondes naar deze cloudendpoint. De deelsamenvattingen worden in extra rondes samengevoegd; er worden niet bewust passages overgeslagen.',
+    localMultiPassDisclosure:
+      'Het volledig geëxtraheerde document vergt minstens {count} begrensde leesrondes naar deze lokale endpoint. De deelsamenvattingen worden in extra rondes samengevoegd; er worden niet bewust passages overgeslagen.',
+    unverifiedContextWarning:
+      'Het opgeslagen contextvenster van {tokens} tokens wordt gebruikt. Deze aanbieder meldt geen limiet en kan een kleiner venster hanteren. Genereren mislukt dan in plaats van stilzwijgend passages weg te laten.',
     stale: 'De bron is gewijzigd sinds deze samenvatting is gegenereerd.',
+    extractedTitle: 'Titel',
+    extractedAuthors: 'Auteurs',
+    unavailable: 'Niet beschikbaar',
+    aiExtracted: 'Door AI geëxtraheerd',
+    fromMetadata: 'Documentmetadata',
+    fromByline: 'Bij het document vermelde auteur',
+    sourcePage: 'pagina {page}',
     brief: 'Kort',
     full: 'Volledige samenvatting',
     keyPassages: 'Kernpassages',

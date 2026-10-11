@@ -9,6 +9,7 @@ import type {
   DocumentSummaryTarget,
   EntrySummary,
   LlmProfile,
+  SummaryAttribution,
   WorkspaceId,
 } from '../../models';
 
@@ -24,8 +25,8 @@ const REPRESENTATIVE_TOKEN_BUDGET = 4_096;
 const MAX_SUMMARY_INPUT_TOKENS = 131_072;
 const PROMPT_TOKEN_RESERVE = 1_024;
 
-function inputTokenBudget(profile: LlmProfile | undefined, representativeOnly: boolean): number {
-  if (representativeOnly || profile === undefined) return REPRESENTATIVE_TOKEN_BUDGET;
+function inputTokenBudget(profile: LlmProfile | undefined): number {
+  if (profile === undefined) return REPRESENTATIVE_TOKEN_BUDGET;
   return Math.min(
     MAX_SUMMARY_INPUT_TOKENS,
     Math.max(
@@ -68,6 +69,39 @@ function passageBody(passage: DocumentSummaryPreview['keyPassages'][number]): st
     : passage.content;
 }
 
+function attributionOrigin(attribution: SummaryAttribution): string {
+  switch (attribution.source) {
+    case 'metadata':
+      return t('documentSummary', 'fromMetadata');
+    case 'byline':
+      return t('documentSummary', 'fromByline');
+    case 'aiExtracted':
+      return t('documentSummary', 'aiExtracted');
+  }
+}
+
+function attributionLocation(attribution: SummaryAttribution): string | undefined {
+  if (!attribution.provenance) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(attribution.provenance);
+    if (typeof parsed !== 'object' || parsed === null || !('kind' in parsed)) return undefined;
+    const exact = parsed.kind === 'exact' && 'value' in parsed ? parsed.value : parsed;
+    if (typeof exact !== 'object' || exact === null) return undefined;
+    if ('kind' in exact && exact.kind === 'pdfBlock' && 'page_number' in exact) {
+      const page = exact.page_number;
+      if (typeof page === 'number') return t('documentSummary', 'sourcePage', { page });
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function attributionText(attribution: SummaryAttribution): string {
+  const location = attributionLocation(attribution);
+  return `${attribution.value} · ${attributionOrigin(attribution)}${location ? ` · ${location}` : ''}`;
+}
+
 export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs> = () => {
   let wasOpen = false;
   let busy = false;
@@ -75,7 +109,6 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
   let error: string | undefined;
   let profiles: readonly LlmProfile[] = [];
   let selectedProfileId: string | undefined;
-  let representativeOnly = false;
   let includeImages = false;
   let preview: DocumentSummaryPreview | undefined;
   let summary: DocumentSummary | null = null;
@@ -92,7 +125,7 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
       [preview, summary] = await Promise.all([
         attrs.client.previewDocumentSummary({
           target: requestTarget,
-          inputTokenBudget: inputTokenBudget(selectedProfile, representativeOnly),
+          inputTokenBudget: inputTokenBudget(selectedProfile),
           profileId: selectedProfileId ?? null,
           includeImages,
         }),
@@ -115,7 +148,7 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
     try {
       preview = await attrs.client.previewDocumentSummary({
         target: requestTarget,
-        inputTokenBudget: inputTokenBudget(selectedProfile, representativeOnly),
+        inputTokenBudget: inputTokenBudget(selectedProfile),
         profileId: selectedProfileId ?? null,
         includeImages,
       });
@@ -135,14 +168,6 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
     await refreshPreview(attrs);
   }
 
-  async function changeInputMode(
-    attrs: DocumentSummaryDialogAttrs,
-    useRepresentativePassages: boolean,
-  ): Promise<void> {
-    representativeOnly = useRepresentativePassages;
-    await refreshPreview(attrs);
-  }
-
   async function generate(attrs: DocumentSummaryDialogAttrs): Promise<void> {
     const requestTarget = target(attrs);
     if (requestTarget === undefined || selectedProfileId === undefined || preview === undefined)
@@ -154,7 +179,7 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
       const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId);
       summary = await attrs.client.generateDocumentSummary({
         target: requestTarget,
-        inputTokenBudget: inputTokenBudget(selectedProfile, representativeOnly),
+        inputTokenBudget: inputTokenBudget(selectedProfile),
         expectedSelectionFingerprint: preview.selectionFingerprint,
         profileId: selectedProfileId,
         includeImages,
@@ -203,18 +228,6 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
                       : t('llmProfiles', 'cloud')
                   }`,
                 ]),
-          profiles.length === 0
-            ? undefined
-            : m('label.fm-document-summary-input-mode', [
-                m('input', {
-                  type: 'checkbox',
-                  checked: representativeOnly,
-                  disabled: busy,
-                  onchange: (event: Event) =>
-                    void changeInputMode(attrs, (event.currentTarget as HTMLInputElement).checked),
-                }),
-                m('span', t('documentSummary', 'representativeOnly')),
-              ]),
           preview?.imageInputAvailable !== true
             ? undefined
             : m('label.fm-document-summary-image-mode', [
@@ -233,19 +246,26 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
                 'p.fm-document-summary-disclosure',
                 t(
                   'documentSummary',
-                  preview.selectionMode === 'fullDocument'
+                  (preview.sourcePassCount ?? 1) > 1
                     ? preview.profile.locality === 'cloud'
+                      ? 'cloudMultiPassDisclosure'
+                      : 'localMultiPassDisclosure'
+                    : preview.profile.locality === 'cloud'
                       ? 'cloudFullDisclosure'
-                      : 'localFullDisclosure'
-                    : representativeOnly
-                      ? preview.profile.locality === 'cloud'
-                        ? 'cloudRepresentativeDisclosure'
-                        : 'localRepresentativeDisclosure'
-                      : preview.profile.locality === 'cloud'
-                        ? 'cloudFallbackDisclosure'
-                        : 'localFallbackDisclosure',
-                  { tokens: preview.representativeTokens },
+                      : 'localFullDisclosure',
+                  {
+                    tokens: preview.sourceTokens,
+                    count: preview.sourcePassCount ?? 1,
+                  },
                 ),
+              ),
+          preview?.profile == null || preview.providerLimitVerified
+            ? undefined
+            : m(
+                'p.fm-document-summary-disclosure',
+                t('documentSummary', 'unverifiedContextWarning', {
+                  tokens: preview.effectiveContextWindow ?? 0,
+                }),
               ),
           preview === undefined || !includeImages
             ? undefined
@@ -268,6 +288,20 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
                 summary.stale
                   ? m('p.fm-document-summary-stale', t('documentSummary', 'stale'))
                   : undefined,
+                m('h4', t('documentSummary', 'extractedTitle')),
+                m(
+                  'p',
+                  summary.title
+                    ? attributionText(summary.title)
+                    : t('documentSummary', 'unavailable'),
+                ),
+                m('h4', t('documentSummary', 'extractedAuthors')),
+                summary.authors?.length
+                  ? m(
+                      'ul',
+                      summary.authors.map((author) => m('li', attributionText(author))),
+                    )
+                  : m('p', t('documentSummary', 'unavailable')),
                 m('h4', t('documentSummary', 'brief')),
                 m('p', summary.brief),
                 m('h4', t('documentSummary', 'full')),

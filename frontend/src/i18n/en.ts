@@ -849,7 +849,6 @@ export const en = {
     generationFailed: 'The summary could not be generated.',
     keyPassagesOnly: 'No generation profile is configured. Showing key passages only.',
     profile: 'Generation profile',
-    representativeOnly: 'Use representative passages instead of the whole document',
     includeImages: 'Include images (vision models only, resized to max. 1024 px)',
     imagesIncluded: '{count} embedded image(s) will also be sent.',
     imagesIncludedWithOmissions:
@@ -859,15 +858,20 @@ export const en = {
       'The whole extracted document ({tokens} estimated tokens) will be sent to this cloud endpoint.',
     localFullDisclosure:
       'The whole extracted document ({tokens} estimated tokens) will be sent to this local endpoint.',
-    cloudRepresentativeDisclosure:
-      '{tokens} estimated tokens of representative document passages will be sent to this cloud endpoint.',
-    localRepresentativeDisclosure:
-      '{tokens} estimated tokens of representative document passages will be sent to this local endpoint.',
-    cloudFallbackDisclosure:
-      'The whole document exceeds the configured context limit. Procyon automatically selected {tokens} estimated tokens of representative passages for this cloud endpoint.',
-    localFallbackDisclosure:
-      'The whole document exceeds the configured context limit. Procyon automatically selected {tokens} estimated tokens of representative passages for this local endpoint.',
+    cloudMultiPassDisclosure:
+      'The whole extracted document requires at least {count} bounded source-reading passes to this cloud endpoint. Partial summaries are combined in further passes; no document passages are intentionally skipped.',
+    localMultiPassDisclosure:
+      'The whole extracted document requires at least {count} bounded source-reading passes to this local endpoint. Partial summaries are combined in further passes; no document passages are intentionally skipped.',
+    unverifiedContextWarning:
+      'Using the saved {tokens}-token context window; this provider did not report a limit and may enforce a smaller one. Generation will fail rather than silently drop passages.',
     stale: 'The source has changed since this summary was generated.',
+    extractedTitle: 'Title',
+    extractedAuthors: 'Authors',
+    unavailable: 'Unavailable',
+    aiExtracted: 'AI-extracted',
+    fromMetadata: 'Document metadata',
+    fromByline: 'Document byline',
+    sourcePage: 'page {page}',
     brief: 'Brief',
     full: 'Full summary',
     keyPassages: 'Key passages',

@@ -1932,7 +1932,14 @@ impl FileManagerService {
             .prepare_ephemeral_document_summary(target, input_token_budget, cancellation)
             .await?;
         self.document_summaries
-            .preview_ephemeral(&prepared, profile_id, &self.llm_profiles, image_evidence)
+            .preview_ephemeral(
+                &prepared,
+                profile_id,
+                &self.llm_profiles,
+                image_evidence,
+                cancellation,
+            )
+            .await
             .map(preview_to_dto)
             .map_err(summary_error_to_application)
     }
@@ -1967,20 +1974,25 @@ impl FileManagerService {
             profile_id: generated.profile_id,
             model_id: generated.model_id,
             supporting_chunk_ids: prepared
-                .selection
-                .representatives
+                .source_chunks
                 .iter()
-                .map(|representative| representative.source.chunk_id.clone())
+                .map(|source| source.chunk_id.clone())
                 .collect(),
-            supporting_weights: prepared
-                .selection
-                .representatives
-                .iter()
-                .map(|representative| representative.cluster_weight)
-                .collect(),
+            supporting_weights: vec![
+                1.0 / prepared.source_chunks.len() as f32;
+                prepared.source_chunks.len()
+            ],
             created_at_ms: generated.created_at_ms,
             brief: generated.brief_text,
             full: generated.full_text,
+            title: generated
+                .title
+                .map(crate::document_summary_mapping::attribution_to_dto),
+            authors: generated
+                .authors
+                .into_iter()
+                .map(crate::document_summary_mapping::attribution_to_dto)
+                .collect(),
             stale: false,
         })
     }

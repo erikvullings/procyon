@@ -11,6 +11,12 @@ import type { SummaryProfileDisclosureDto } from './summaryProfileDisclosureDto.
  * deliberately labelled as key passages rather than a generated summary.
  */
 export interface DocumentSummaryPreviewDto {
+  /**
+     * Context window used for summary budgeting; may be trusted from the saved profile.
+     * @minimum 0
+     * @nullable
+     */
+  effectiveContextWindow?: number | null;
   /** Whether the selected model and document support bounded image input. */
   imageInputAvailable: boolean;
   /**
@@ -26,6 +32,8 @@ export interface DocumentSummaryPreviewDto {
      */
   omittedImageCount: number;
   profile?: null | SummaryProfileDisclosureDto;
+  /** Whether the provider's context limit was verified. */
+  providerLimitVerified?: boolean;
   /**
      * Conservative selected-input token estimate.
      * @minimum 0
@@ -37,4 +45,14 @@ export interface DocumentSummaryPreviewDto {
   selectionFingerprint: string;
   /** Whether the preview contains the complete extracted text or selected passages. */
   selectionMode: DocumentSummarySelectionModeDto;
+  /**
+     * Number of bounded generation passes over complete source evidence.
+     * @minimum 0
+     */
+  sourcePassCount?: number;
+  /**
+     * Estimated tokens across the entire extracted text, including passages not previewed.
+     * @minimum 0
+     */
+  sourceTokens: number;
 }

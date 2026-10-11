@@ -446,6 +446,8 @@ export * from './structuredViewFormatDto.ts';
 export * from './structuredViewKindDto.ts';
 export * from './structuredViewSessionRequestDto.ts';
 export * from './structuredViewStatusDto.ts';
+export * from './summaryAttributionDto.ts';
+export * from './summaryAttributionSourceDto.ts';
 export * from './summaryKeyPassageDto.ts';
 export * from './summaryProfileDisclosureDto.ts';
 export * from './symlinkPolicyDto.ts';

@@ -9707,6 +9707,13 @@
           "stale"
         ],
         "properties": {
+          "authors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SummaryAttributionDto"
+            },
+            "description": "Explicit or evidence-backed author names."
+          },
           "brief": {
             "type": "string",
             "description": "Concise overview."
@@ -9756,6 +9763,17 @@
               "format": "float"
             },
             "description": "Population weights aligned with supporting chunks."
+          },
+          "title": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SummaryAttributionDto",
+                "description": "Optional verified title (not inferred from the file name)."
+              }
+            ]
           }
         }
       },
@@ -9765,6 +9783,7 @@
         "required": [
           "selectionFingerprint",
           "representativeTokens",
+          "sourceTokens",
           "selectionMode",
           "imageInputAvailable",
           "includedImageCount",
@@ -9773,6 +9792,15 @@
           "reusedSelection"
         ],
         "properties": {
+          "effectiveContextWindow": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Context window used for summary budgeting; may be trusted from the saved profile.",
+            "minimum": 0
+          },
           "imageInputAvailable": {
             "type": "boolean",
             "description": "Whether the selected model and document support bounded image input."
@@ -9807,6 +9835,10 @@
               }
             ]
           },
+          "providerLimitVerified": {
+            "type": "boolean",
+            "description": "Whether the provider's context limit was verified."
+          },
           "representativeTokens": {
             "type": "integer",
             "format": "int32",
@@ -9824,6 +9856,18 @@
           "selectionMode": {
             "$ref": "#/components/schemas/DocumentSummarySelectionModeDto",
             "description": "Whether the preview contains the complete extracted text or selected passages."
+          },
+          "sourcePassCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of bounded generation passes over complete source evidence.",
+            "minimum": 0
+          },
+          "sourceTokens": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Estimated tokens across the entire extracted text, including passages not previewed.",
+            "minimum": 0
           }
         }
       },
@@ -20466,6 +20510,47 @@
             "description": "Explicit provider or format limitation shown to the user."
           }
         }
+      },
+      "SummaryAttributionDto": {
+        "type": "object",
+        "description": "Source-backed title or author name, with optional passage identity.",
+        "required": [
+          "value",
+          "source"
+        ],
+        "properties": {
+          "provenance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Structured source position of that passage."
+          },
+          "source": {
+            "$ref": "#/components/schemas/SummaryAttributionSourceDto",
+            "description": "Explicit or AI-extracted origin."
+          },
+          "supportingChunkId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Extracted passage identity when sourced from document text."
+          },
+          "value": {
+            "type": "string",
+            "description": "Exact document title or person name."
+          }
+        }
+      },
+      "SummaryAttributionSourceDto": {
+        "type": "string",
+        "description": "Origin of a document title or author name.",
+        "enum": [
+          "metadata",
+          "byline",
+          "aiExtracted"
+        ]
       },
       "SummaryKeyPassageDto": {
         "type": "object",

@@ -215,7 +215,7 @@ struct NormalizedEndpoint {
     locality: EndpointLocality,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct LlmProbeRequest {
     pub url: String,
     pub ollama_generation_url: Option<String>,
@@ -224,6 +224,21 @@ pub struct LlmProbeRequest {
     pub api_key_header: &'static str,
     pub headers: BTreeMap<String, String>,
     pub timeout: Duration,
+}
+
+impl std::fmt::Debug for LlmProbeRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LlmProbeRequest")
+            .field("url", &self.url)
+            .field("ollama_generation_url", &self.ollama_generation_url)
+            .field("model", &self.model)
+            .field("api_key", &self.api_key.as_ref().map(|_| "[redacted]"))
+            .field("api_key_header", &self.api_key_header)
+            .field("headers", &self.headers.keys().collect::<Vec<_>>())
+            .field("timeout", &self.timeout)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -261,6 +276,8 @@ pub struct LlmChatGeneration {
     pub images: Vec<LlmImageAttachment>,
     /// Maximum generated tokens, further bounded by the saved profile.
     pub maximum_tokens: u32,
+    /// Explicit runtime context request, used only after summary capacity is verified.
+    pub context_window: Option<u32>,
     /// Sampling temperature, further bounded by the saved profile.
     pub temperature: f32,
 }
@@ -1104,6 +1121,36 @@ impl LlmProfileService {
         Ok(profile)
     }
 
+    pub(crate) async fn summary_context_window(
+        &self,
+        id: Uuid,
+        cancellation: &CancellationToken,
+    ) -> Result<(u32, bool), LlmProfileError> {
+        let profile = self.generation_profile(id)?;
+        let endpoint = normalize_endpoint(&profile.base_url)?;
+        self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
+        if endpoint.locality == EndpointLocality::Cloud
+            && profile.consented_host.as_deref() != Some(endpoint.base_url.as_str())
+        {
+            return Err(LlmProfileError::ConsentRequired(endpoint.host));
+        }
+        let request = self.probe_request(&profile).await?;
+        let reported = self
+            .transport
+            .discover_model_limits(&request, cancellation)
+            .await?
+            .context_window;
+        if profile.preset == LlmPreset::Ollama && reported.is_none() {
+            return Err(LlmProfileError::InvalidConfiguration);
+        }
+        Ok((
+            reported.map_or(profile.advanced.context_window, |limit| {
+                profile.advanced.context_window.min(limit)
+            }),
+            reported.is_some(),
+        ))
+    }
+
     async fn store_api_key(
         &self,
         name: &str,
@@ -1357,6 +1404,13 @@ fn ollama_generation_body(request: &LlmProbeRequest, generation: &LlmChatGenerat
         .iter()
         .map(|image| base64::engine::general_purpose::STANDARD.encode(&image.data))
         .collect::<Vec<_>>();
+    let mut options = json!({
+        "num_predict": generation.maximum_tokens,
+        "temperature": generation.temperature
+    });
+    if let Some(context_window) = generation.context_window {
+        options["num_ctx"] = Value::from(context_window);
+    }
     json!({
         "model": request.model,
         "messages": [
@@ -1366,10 +1420,7 @@ fn ollama_generation_body(request: &LlmProbeRequest, generation: &LlmChatGenerat
         "stream": false,
         "think": false,
         "format": "json",
-        "options": {
-            "num_predict": generation.maximum_tokens,
-            "temperature": generation.temperature
-        }
+        "options": options
     })
 }
 
@@ -1646,6 +1697,7 @@ mod tests {
         models: Option<Vec<String>>,
         response: LlmProbeResponse,
         captured: Mutex<Vec<LlmProbeRequest>>,
+        limits: Mutex<LlmModelLimits>,
     }
 
     #[async_trait]
@@ -1656,10 +1708,7 @@ mod tests {
             _cancellation: &CancellationToken,
         ) -> Result<LlmModelLimits, LlmProfileError> {
             self.captured.lock().unwrap().push(request.clone());
-            Ok(LlmModelLimits {
-                context_window: Some(128_000),
-                maximum_answer_tokens: Some(32_000),
-            })
+            Ok(*self.limits.lock().unwrap())
         }
 
         async fn discover_models(
@@ -1713,6 +1762,10 @@ mod tests {
                 body: b"data: {\"choices\":[{\"delta\":{\"content\":\"OK\"},\"finish_reason\":null}]}\n\ndata: [DONE]\n\n".to_vec(),
             },
             captured: Mutex::new(Vec::new()),
+            limits: Mutex::new(LlmModelLimits {
+                context_window: Some(128_000),
+                maximum_answer_tokens: Some(32_000),
+            }),
         });
         (
             LlmProfileService::new(
@@ -1942,6 +1995,7 @@ mod tests {
         let request = service.probe_request(&profile).await.unwrap();
         assert_eq!(request.api_key_header, "authorization");
         assert_eq!(request.api_key.as_deref(), Some("Bearer super-secret-key"));
+        assert!(!format!("{request:?}").contains("super-secret-key"));
     }
 
     #[test]
@@ -2049,12 +2103,14 @@ mod tests {
                     data: vec![1, 2, 3],
                 }],
                 maximum_tokens: 512,
+                context_window: Some(8_192),
                 temperature: 0.1,
             },
         );
 
         assert_eq!(body["messages"][1]["images"][0], "AQID");
         assert_eq!(body["format"], "json");
+        assert_eq!(body["options"]["num_ctx"], 8_192);
     }
 
     #[tokio::test]
@@ -2345,6 +2401,7 @@ mod tests {
                 user_prompt: "Question".into(),
                 images: Vec::new(),
                 maximum_tokens: 1_024,
+                context_window: None,
                 temperature: 0.2,
             },
         );
@@ -2363,6 +2420,43 @@ mod tests {
         assert_eq!(
             classify_http_status(500).unwrap_err().category(),
             LlmTestErrorCategory::Transport
+        );
+    }
+
+    #[tokio::test]
+    async fn summary_context_respects_advertised_caps_and_requires_ollama_report() {
+        let (service, _, transport) = service(LlmHostPolicy::desktop());
+        let mut ollama_draft = draft(LlmPreset::Ollama, "http://localhost:11434");
+        ollama_draft.advanced.context_window = 8_192;
+        let profile = service.create(ollama_draft).await.unwrap();
+        let cancellation = CancellationToken::new();
+        transport.limits.lock().unwrap().context_window = Some(4_096);
+        assert_eq!(
+            service
+                .summary_context_window(profile.id, &cancellation)
+                .await
+                .unwrap(),
+            (4_096, true)
+        );
+        transport.limits.lock().unwrap().context_window = None;
+        assert!(matches!(
+            service
+                .summary_context_window(profile.id, &cancellation)
+                .await,
+            Err(LlmProfileError::InvalidConfiguration)
+        ));
+
+        let remote = service
+            .create(draft(LlmPreset::OpenAiCompatible, "https://models.example"))
+            .await
+            .unwrap();
+        service.activate(remote.id, true).unwrap();
+        assert_eq!(
+            service
+                .summary_context_window(remote.id, &cancellation)
+                .await
+                .unwrap(),
+            (remote.advanced.context_window, false)
         );
     }
 
@@ -2405,6 +2499,7 @@ mod tests {
             user_prompt: "Evidence".into(),
             images: Vec::new(),
             maximum_tokens: 512,
+            context_window: None,
             temperature: 0.1,
         };
         assert!(matches!(

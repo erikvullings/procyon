@@ -1,5 +1,8 @@
 use fm_semantic_worker::representative_selection::RepresentativeSelectionMode;
-use fm_semantic_worker::semantic_storage::StoredDocumentSummary;
+use fm_semantic_worker::semantic_storage::{
+    StoredDocumentSummary, SummaryAttribution, SummaryAttributionSource,
+};
+use fm_transport_dto::document_summary::{SummaryAttributionDto, SummaryAttributionSourceDto};
 use fm_transport_dto::{
     DocumentSummaryDto, DocumentSummaryPreviewDto, DocumentSummarySelectionModeDto,
     SummaryKeyPassageDto, SummaryProfileDisclosureDto,
@@ -45,6 +48,10 @@ pub(crate) fn preview_to_dto(value: DocumentSummaryPreview) -> DocumentSummaryPr
             locality: locality_to_dto(profile.locality),
         }),
         reused_selection: value.reused_selection,
+        source_tokens: value.source_tokens,
+        source_pass_count: value.source_pass_count,
+        effective_context_window: value.effective_context_window,
+        provider_limit_verified: value.provider_limit_verified,
     }
 }
 
@@ -59,7 +66,22 @@ pub(crate) fn summary_to_dto(value: StoredDocumentSummary, stale: bool) -> Docum
         created_at_ms: value.created_at_ms,
         brief: value.brief_text,
         full: value.full_text,
+        title: value.title.map(attribution_to_dto),
+        authors: value.authors.into_iter().map(attribution_to_dto).collect(),
         stale,
+    }
+}
+
+pub(crate) fn attribution_to_dto(value: SummaryAttribution) -> SummaryAttributionDto {
+    SummaryAttributionDto {
+        value: value.value,
+        source: match value.source {
+            SummaryAttributionSource::Metadata => SummaryAttributionSourceDto::Metadata,
+            SummaryAttributionSource::Byline => SummaryAttributionSourceDto::Byline,
+            SummaryAttributionSource::AiExtracted => SummaryAttributionSourceDto::AiExtracted,
+        },
+        supporting_chunk_id: value.supporting_chunk_id,
+        provenance: value.provenance,
     }
 }
 
@@ -73,7 +95,11 @@ pub(crate) fn summary_error_to_application(error: DocumentSummaryError) -> Appli
         DocumentSummaryError::StaleConfirmation => {
             ApplicationError::InvalidRequest("document summary confirmation is stale".into())
         }
-        DocumentSummaryError::InvalidRequest | DocumentSummaryError::InvalidGeneration => {
+        DocumentSummaryError::InvalidRequest
+        | DocumentSummaryError::ContextUnavailable
+        | DocumentSummaryError::SourceBudgetExceeded
+        | DocumentSummaryError::SourceIncomplete
+        | DocumentSummaryError::InvalidGeneration => {
             ApplicationError::InvalidRequest(error.to_string())
         }
         DocumentSummaryError::Unavailable | DocumentSummaryError::GenerationFailed => {

@@ -1537,6 +1537,7 @@ mod tests {
                 library_id: "library-a".into(),
                 document_id: document_id.into(),
                 content_hash: format!("hash-{document_id}"),
+                source_complete: true,
                 generation: 1,
                 occurrences,
                 records,

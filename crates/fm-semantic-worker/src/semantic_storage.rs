@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::embedding::{EmbeddingCacheKey, VectorNormalization};
 
-const CATALOG_SCHEMA_VERSION: i64 = 5;
+const CATALOG_SCHEMA_VERSION: i64 = 7;
 /// Maximum untrusted derived-index candidates re-authorized in one call.
 const MAX_VISIBILITY_CANDIDATES: usize = 4_096;
 
@@ -230,6 +230,34 @@ pub struct SummarySourceSet {
     pub modified_at_ms: i64,
     /// Extracted non-generated source chunks.
     pub chunks: Vec<StoredSourceChunk>,
+    /// Whether conversion retained all source text and no unreadable chunks were discarded.
+    pub source_complete: bool,
+}
+
+/// Durable generated-summary metadata and provenance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SummaryAttributionSource {
+    /// Explicit document metadata, not inferred by a model.
+    Metadata,
+    /// An explicit byline in the extracted document.
+    Byline,
+    /// A name extracted from document evidence by a model.
+    AiExtracted,
+}
+
+/// One title or author name with its source identity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SummaryAttribution {
+    /// Exact document title or person name.
+    pub value: String,
+    /// Explicit or AI-extracted origin.
+    pub source: SummaryAttributionSource,
+    /// Source passage identity, required for bylines and AI extraction.
+    pub supporting_chunk_id: Option<String>,
+    /// Structured source position of that passage.
+    pub provenance: Option<String>,
 }
 
 /// Durable generated-summary metadata and provenance.
@@ -253,6 +281,9 @@ pub struct StoredDocumentSummary {
     pub selection_fingerprint: String,
     /// Supporting extracted chunk identities.
     pub supporting_chunk_ids: Vec<String>,
+    /// Representative identities used for selection reuse, independent of consumed evidence.
+    #[serde(default)]
+    pub selection_chunk_ids: Option<Vec<String>>,
     /// Population weights aligned with `supporting_chunk_ids`.
     pub supporting_weights: Vec<f32>,
     /// Creation time in Unix milliseconds.
@@ -261,6 +292,12 @@ pub struct StoredDocumentSummary {
     pub brief_text: String,
     /// Full generated structured summary.
     pub full_text: String,
+    /// Optional source-backed title; absent rather than invented.
+    #[serde(default)]
+    pub title: Option<SummaryAttribution>,
+    /// Source-backed author names; empty when no author is established.
+    #[serde(default)]
+    pub authors: Vec<SummaryAttribution>,
 }
 
 /// Complete summary publication using a local embedding.
@@ -310,6 +347,8 @@ pub struct StagedGeneration {
     pub document_id: String,
     /// Streamed source-content digest.
     pub content_hash: String,
+    /// Old or partially converted documents must never be presented as whole-source summaries.
+    pub source_complete: bool,
     /// Monotonically increasing generation.
     pub generation: u64,
     /// Current source occurrences represented by this generation.
@@ -708,15 +747,17 @@ impl SemanticCatalog {
         )?;
         transaction.execute(
             "INSERT INTO generations
-             (tenant_id, library_id, document_id, generation, state)
-             VALUES (?1, ?2, ?3, ?4, 'staging')
+             (tenant_id, library_id, document_id, generation, state, source_complete)
+             VALUES (?1, ?2, ?3, ?4, 'staging', ?5)
              ON CONFLICT(tenant_id, library_id, document_id, generation)
-             DO NOTHING",
+             DO UPDATE SET source_complete = excluded.source_complete
+               WHERE generations.state = 'staging'",
             params![
                 staged.tenant_id,
                 staged.library_id,
                 staged.document_id,
-                i64_generation(staged.generation)?
+                i64_generation(staged.generation)?,
+                staged.source_complete
             ],
         )?;
 
@@ -908,7 +949,7 @@ impl SemanticCatalog {
         let header = connection
             .query_row(
                 "SELECT d.content_hash, g.generation, o.occurrence_id, o.root_id,
-                        o.workspace_id, o.media_type, o.modified_at_ms
+                        o.workspace_id, o.media_type, o.modified_at_ms, g.source_complete
                  FROM generations g
                  JOIN documents d ON d.document_id = g.document_id
                  JOIN occurrences o
@@ -930,6 +971,7 @@ impl SemanticCatalog {
                         row.get::<_, Option<String>>(4)?,
                         row.get::<_, String>(5)?,
                         row.get::<_, i64>(6)?,
+                        row.get::<_, bool>(7)?,
                     ))
                 },
             )
@@ -998,6 +1040,7 @@ impl SemanticCatalog {
             media_type: header.5,
             modified_at_ms: header.6,
             chunks,
+            source_complete: header.7,
         })
     }
 
@@ -1031,8 +1074,10 @@ impl SemanticCatalog {
             || publication.summary.brief_text.len() > 16 * 1024
             || publication.summary.full_text.len() > 256 * 1024
             || publication.summary.supporting_chunk_ids.is_empty()
+            || publication.summary.supporting_chunk_ids.len() > 16_384
             || publication.summary.supporting_chunk_ids.len()
                 != publication.summary.supporting_weights.len()
+            || publication.summary.authors.len() > 32
             || publication
                 .summary
                 .supporting_weights
@@ -1081,6 +1126,46 @@ impl SemanticCatalog {
             )?;
             if !exists {
                 return Err(StorageError::InvalidSummary);
+            }
+        }
+        for attribution in publication
+            .summary
+            .title
+            .iter()
+            .chain(&publication.summary.authors)
+        {
+            if attribution.value.trim().is_empty()
+                || attribution.value.len() > 512
+                || attribution
+                    .provenance
+                    .as_ref()
+                    .is_some_and(|value| value.len() > 4_096)
+                || attribution.supporting_chunk_id.is_some() != attribution.provenance.is_some()
+                || (attribution.source != SummaryAttributionSource::Metadata
+                    && attribution.supporting_chunk_id.is_none())
+            {
+                return Err(StorageError::InvalidSummary);
+            }
+            if let (Some(chunk_id), Some(provenance)) =
+                (&attribution.supporting_chunk_id, &attribution.provenance)
+            {
+                let source_passage = transaction
+                    .query_row(
+                        "SELECT provenance, content FROM records
+                         WHERE record_id = ?1 AND tenant_id = ?2 AND library_id = ?3
+                           AND document_id = ?4 AND generation = ?5
+                           AND record_kind = 'chunk' AND generated = 0",
+                        params![chunk_id, tenant_id, library_id, document_id, current.1],
+                        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                    )
+                    .optional()?;
+                if !source_passage.as_ref().is_some_and(|(actual, content)| {
+                    actual == provenance
+                        && (attribution.source == SummaryAttributionSource::Metadata
+                            || content.contains(attribution.value.trim()))
+                }) {
+                    return Err(StorageError::InvalidSummary);
+                }
             }
         }
         let old = transaction
@@ -1156,9 +1241,10 @@ impl SemanticCatalog {
              (tenant_id, library_id, document_id, record_id, source_generation,
               source_content_hash, profile_id, model_id, algorithm_version,
               prompt_version, selection_fingerprint, supporting_chunk_ids_json,
-              supporting_weights_json, created_at_ms, brief_text, full_text)
+              supporting_weights_json, created_at_ms, brief_text, full_text,
+              title_json, authors_json, selection_chunk_ids_json)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-                     ?13, ?14, ?15, ?16)",
+                     ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
             params![
                 tenant_id,
                 library_id,
@@ -1176,6 +1262,19 @@ impl SemanticCatalog {
                 publication.summary.created_at_ms,
                 publication.summary.brief_text,
                 publication.summary.full_text,
+                publication
+                    .summary
+                    .title
+                    .as_ref()
+                    .map(serde_json::to_string)
+                    .transpose()?,
+                serde_json::to_string(&publication.summary.authors)?,
+                publication
+                    .summary
+                    .selection_chunk_ids
+                    .as_ref()
+                    .map(serde_json::to_string)
+                    .transpose()?,
             ],
         )?;
         transaction.execute("DELETE FROM vectors WHERE reference_count <= 0", [])?;
@@ -1204,6 +1303,9 @@ impl SemanticCatalog {
             created_at_ms: i64,
             brief_text: String,
             full_text: String,
+            title_json: Option<String>,
+            authors_json: String,
+            selection_chunk_ids_json: Option<String>,
         }
         let connection = self.connection()?;
         connection
@@ -1211,7 +1313,8 @@ impl SemanticCatalog {
                 "SELECT record_id, source_generation, source_content_hash,
                         profile_id, model_id, algorithm_version, prompt_version,
                         selection_fingerprint, supporting_chunk_ids_json,
-                        supporting_weights_json, created_at_ms, brief_text, full_text
+                        supporting_weights_json, created_at_ms, brief_text, full_text,
+                        title_json, authors_json, selection_chunk_ids_json
                  FROM document_summaries
                  WHERE tenant_id = ?1 AND library_id = ?2 AND document_id = ?3",
                 params![tenant_id, library_id, document_id],
@@ -1230,6 +1333,9 @@ impl SemanticCatalog {
                         created_at_ms: row.get(10)?,
                         brief_text: row.get(11)?,
                         full_text: row.get(12)?,
+                        title_json: row.get(13)?,
+                        authors_json: row.get(14)?,
+                        selection_chunk_ids_json: row.get(15)?,
                     })
                 },
             )
@@ -1250,6 +1356,17 @@ impl SemanticCatalog {
                     created_at_ms: raw.created_at_ms,
                     brief_text: raw.brief_text,
                     full_text: raw.full_text,
+                    title: raw
+                        .title_json
+                        .as_deref()
+                        .map(serde_json::from_str)
+                        .transpose()?,
+                    authors: serde_json::from_str(&raw.authors_json)?,
+                    selection_chunk_ids: raw
+                        .selection_chunk_ids_json
+                        .as_deref()
+                        .map(serde_json::from_str)
+                        .transpose()?,
                 })
             })
             .transpose()
@@ -2202,7 +2319,7 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
            schema_version INTEGER NOT NULL
          );
          INSERT INTO catalog_meta (schema_version)
-           SELECT 5 WHERE NOT EXISTS (SELECT 1 FROM catalog_meta);
+           SELECT 6 WHERE NOT EXISTS (SELECT 1 FROM catalog_meta);
          CREATE TABLE IF NOT EXISTS libraries (
            tenant_id TEXT NOT NULL,
            library_id TEXT NOT NULL,
@@ -2290,6 +2407,9 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
            created_at_ms INTEGER NOT NULL,
            brief_text TEXT NOT NULL,
            full_text TEXT NOT NULL,
+           title_json TEXT,
+           authors_json TEXT NOT NULL DEFAULT '[]',
+           selection_chunk_ids_json TEXT,
            PRIMARY KEY (tenant_id, library_id, document_id),
            FOREIGN KEY (record_id) REFERENCES records (record_id) ON DELETE CASCADE
          );
@@ -2397,6 +2517,26 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
              COMMIT;",
         )?;
         version = 5;
+    }
+    if version == 5 {
+        connection.execute_batch(
+            "BEGIN IMMEDIATE;
+             ALTER TABLE document_summaries ADD COLUMN title_json TEXT;
+             ALTER TABLE document_summaries ADD COLUMN authors_json TEXT NOT NULL DEFAULT '[]';
+             ALTER TABLE document_summaries ADD COLUMN selection_chunk_ids_json TEXT;
+             UPDATE catalog_meta SET schema_version = 6;
+             COMMIT;",
+        )?;
+        version = 6;
+    }
+    if version == 6 {
+        connection.execute_batch(
+            "BEGIN IMMEDIATE;
+             ALTER TABLE generations ADD COLUMN source_complete INTEGER NOT NULL DEFAULT 0;
+             UPDATE catalog_meta SET schema_version = 7;
+             COMMIT;",
+        )?;
+        version = 7;
     }
     if version != CATALOG_SCHEMA_VERSION {
         return Err(StorageError::MigrationRequired {
@@ -2705,6 +2845,7 @@ mod tests {
             library_id: library.into(),
             document_id: document.into(),
             content_hash: format!("hash-{generation}"),
+            source_complete: true,
             generation,
             occurrences,
             records,
@@ -2856,6 +2997,7 @@ mod tests {
             .execute_batch(
                 "CREATE TABLE catalog_meta (schema_version INTEGER NOT NULL);
                  INSERT INTO catalog_meta VALUES (3);
+                 CREATE TABLE document_summaries (record_id TEXT PRIMARY KEY);
                  CREATE TABLE records (
                    record_id TEXT PRIMARY KEY,
                    tenant_id TEXT NOT NULL,
@@ -2882,7 +3024,7 @@ mod tests {
                 row.get(0)
             })
             .expect("schema version");
-        assert_eq!(version, 5);
+        assert_eq!(version, 7);
         let mut statement = connection
             .prepare("PRAGMA table_info(records)")
             .expect("record columns");
@@ -3342,6 +3484,7 @@ mod tests {
 
         assert_eq!(source.content_hash, "hash-1");
         assert_eq!(source.generation, 1);
+        assert!(source.source_complete);
         assert_eq!(source.occurrence_id, "occurrence-a");
         assert_eq!(source.chunks.len(), 1);
         assert_eq!(source.chunks[0].content, "complete source content");
@@ -3350,8 +3493,35 @@ mod tests {
     }
 
     #[test]
-    fn generated_summary_retains_supporting_provenance_across_stale_rollover_and_deletion() {
+    fn partial_source_is_not_attested_as_complete_for_summary() {
         let (_directory, catalog) = catalog();
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .expect("register");
+        let mut staged = generation(
+            "tenant-a",
+            "library-a",
+            "document-a",
+            1,
+            vec![occurrence("occurrence-a", "root-a")],
+            "visible source fragment",
+        );
+        staged.source_complete = false;
+        catalog.stage_generation(&staged).expect("stage");
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-a", 1)
+            .expect("publish");
+        assert!(
+            !catalog
+                .summary_source_chunks("tenant-a", "library-a", "document-a")
+                .expect("summary source")
+                .source_complete
+        );
+    }
+
+    #[test]
+    fn generated_summary_retains_supporting_provenance_across_stale_rollover_and_deletion() {
+        let (directory, catalog) = catalog();
         catalog
             .register_library("tenant-a", "library-a", &manifest())
             .expect("register");
@@ -3378,10 +3548,13 @@ mod tests {
             prompt_version: "document-summary/1".into(),
             selection_fingerprint: "selection-a".into(),
             supporting_chunk_ids: vec![supporting_id],
+            selection_chunk_ids: None,
             supporting_weights: vec![1.0],
             created_at_ms: 1_000,
             brief_text: "Brief.".into(),
             full_text: "Full summary.".into(),
+            title: None,
+            authors: vec![],
         };
         catalog
             .publish_summary(
@@ -3403,6 +3576,24 @@ mod tests {
                 .expect("summary"),
             Some(summary.clone())
         );
+        let legacy = Connection::open(directory.path().join("catalog.sqlite")).unwrap();
+        legacy
+            .execute_batch(
+                "ALTER TABLE document_summaries DROP COLUMN title_json;
+                 ALTER TABLE document_summaries DROP COLUMN authors_json;
+                 ALTER TABLE document_summaries DROP COLUMN selection_chunk_ids_json;
+                 ALTER TABLE generations DROP COLUMN source_complete;
+                 UPDATE catalog_meta SET schema_version = 5;",
+            )
+            .unwrap();
+        drop(legacy);
+        let migrated = SemanticCatalog::open(directory.path().join("catalog.sqlite")).unwrap();
+        assert_eq!(
+            migrated
+                .document_summary("tenant-a", "library-a", "document-a")
+                .unwrap(),
+            Some(summary.clone())
+        );
 
         let second = generation(
             "tenant-a",
@@ -3410,7 +3601,7 @@ mod tests {
             "document-a",
             2,
             vec![occurrence("occurrence-a", "root-a")],
-            "changed body",
+            "Ada Lovelace",
         );
         catalog.stage_generation(&second).expect("stage second");
         catalog
@@ -3436,6 +3627,57 @@ mod tests {
                 .unwrap()
                 .source_generation,
             1
+        );
+
+        let mut attributed = summary.clone();
+        attributed.record_id = "summary-document-a-v2".into();
+        attributed.source_generation = 2;
+        attributed.source_content_hash = "hash-2".into();
+        attributed.supporting_chunk_ids = vec![second.records[0].record_id.clone()];
+        attributed.title = Some(SummaryAttribution {
+            value: "Document title".into(),
+            source: SummaryAttributionSource::Metadata,
+            supporting_chunk_id: None,
+            provenance: None,
+        });
+        attributed.authors = vec![SummaryAttribution {
+            value: "Ada Lovelace".into(),
+            source: SummaryAttributionSource::Byline,
+            supporting_chunk_id: Some(second.records[0].record_id.clone()),
+            provenance: Some(second.records[0].provenance.clone()),
+        }];
+        let publication = SummaryPublication {
+            summary: attributed.clone(),
+            occurrence_id: "occurrence-a".into(),
+            cache_key: key("Full summary."),
+            vector: vec![0.0, 0.6, 0.8],
+            provenance: second.records[0].provenance.clone(),
+        };
+        let mut unsupported = publication.clone();
+        unsupported.summary.authors[0].supporting_chunk_id = Some("missing".into());
+        assert!(matches!(
+            catalog.publish_summary("tenant-a", "library-a", "document-a", &unsupported),
+            Err(StorageError::InvalidSummary)
+        ));
+        let mut invented = publication.clone();
+        invented.summary.authors[0].value = " ".into();
+        assert!(matches!(
+            catalog.publish_summary("tenant-a", "library-a", "document-a", &invented),
+            Err(StorageError::InvalidSummary)
+        ));
+        invented.summary.authors[0].value = "Invented Author".into();
+        assert!(matches!(
+            catalog.publish_summary("tenant-a", "library-a", "document-a", &invented),
+            Err(StorageError::InvalidSummary)
+        ));
+        catalog
+            .publish_summary("tenant-a", "library-a", "document-a", &publication)
+            .expect("publish attributed summary");
+        assert_eq!(
+            catalog
+                .document_summary("tenant-a", "library-a", "document-a")
+                .unwrap(),
+            Some(attributed)
         );
 
         catalog
