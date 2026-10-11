@@ -1665,6 +1665,8 @@ export const en = {
     summary: '{concepts} concepts; {pending} suggestions awaiting review',
     attachWorkspace: 'Attach to workspace',
     createFolder: 'Create concept folder',
+    folderNeedsLocation: 'Open a folder before creating a concept folder.',
+    folderNeedsLibrary: 'Set up a semantic library before creating a concept folder.',
     candidateEvidence: '{confidence}% confidence across {frequency} occurrences',
     accept: 'Accept',
     reject: 'Reject',

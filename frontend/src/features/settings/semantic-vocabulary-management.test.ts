@@ -88,6 +88,8 @@ describe('SemanticVocabularyManagement', () => {
 
   it('shows curated concepts, review evidence, and stable-folder action', async () => {
     const onCreateConceptFolder = vi.fn();
+    const attached = { ...vocabulary, workspaceIds: ['workspace-a'] };
+    vi.mocked(client.listSemanticVocabularies).mockResolvedValue([attached]);
     m.mount(root, {
       view: () =>
         m(SemanticVocabularyManagement, {
@@ -102,8 +104,50 @@ describe('SemanticVocabularyManagement', () => {
     const create = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
       ({ textContent }) => textContent === 'Create concept folder',
     );
+    expect(create?.disabled).toBe(false);
     create?.click();
-    expect(onCreateConceptFolder).toHaveBeenCalledWith(vocabulary, 'https://example.test/ml');
+    expect(onCreateConceptFolder).toHaveBeenCalledWith(attached, 'https://example.test/ml');
+  });
+
+  it('requires an attachment and reports folder creation failures', async () => {
+    const attached = { ...vocabulary, workspaceIds: ['workspace-a'] };
+    const onCreateConceptFolder = vi.fn().mockRejectedValue(new Error('Library unavailable'));
+    m.mount(root, {
+      view: () =>
+        m(SemanticVocabularyManagement, {
+          client,
+          workspaceId: 'workspace-a',
+          onCreateConceptFolder,
+        }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('Machine learning'));
+    const create = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      ({ textContent }) => textContent === 'Create concept folder',
+    );
+    expect(create?.disabled).toBe(true);
+    vi.mocked(client.listSemanticVocabularies).mockResolvedValue([attached]);
+    m.mount(root, null);
+    m.mount(root, {
+      view: () =>
+        m(SemanticVocabularyManagement, {
+          client,
+          workspaceId: 'workspace-a',
+          onCreateConceptFolder,
+        }),
+    });
+    await vi.waitFor(() =>
+      expect(
+        [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+          ({ textContent }) => textContent === 'Create concept folder',
+        )?.disabled,
+      ).toBe(false),
+    );
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find(({ textContent }) => textContent === 'Create concept folder')
+      ?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('[role="alert"]')?.textContent).toBe('Library unavailable'),
+    );
   });
 
   it('imports an attributed starter only on request, without attaching it', async () => {

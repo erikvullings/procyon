@@ -1669,6 +1669,8 @@ export const nl = {
     summary: '{concepts} concepten; {pending} suggesties wachten op beoordeling',
     attachWorkspace: 'Aan werkruimte koppelen',
     createFolder: 'Conceptmap maken',
+    folderNeedsLocation: 'Open een map voordat u een conceptmap maakt.',
+    folderNeedsLibrary: 'Stel eerst een semantische bibliotheek in om een conceptmap te maken.',
     candidateEvidence: '{confidence}% zekerheid in {frequency} voorkomens',
     accept: 'Accepteren',
     reject: 'Afwijzen',

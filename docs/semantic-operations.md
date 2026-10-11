@@ -336,6 +336,10 @@ Import creates a named device-local vocabulary but **does not
 attach it** to any workspace or root. Users can reuse and attach an imported starter from the
 same list, or paste their own `procyon-skos-1` JSON. Locally extracted terms enter the review queue
 of an existing vocabulary; they do not create a SKOS source or become authoritative automatically.
+After attachment to the active workspace, **Create concept folder** saves an exact-concept search
+rooted at the currently open folder, using the configured semantic library ID. Save Settings to
+persist it. This is a virtual search, not an on-disk directory, and it only returns documents
+that already have matching concept annotations; importing a starter does not itself label files.
 
 The [GEMET 4.2.3 RDF export](https://www.eionet.europa.eu/gemet/en/exports/rdf/4.2.3)
 is © European Environment Agency (EEA), licensed

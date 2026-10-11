@@ -64,3 +64,6 @@ a prerequisite for the EmbeddingGemma experimental release.
   tests, 117 script tests and a serial full Rust run (2,818 pass). Initial -j 2 Rust run
   had one unrelated intermittent OCR child-process timing assertion; isolated and serial
   reruns passed.
+- 2026-10-11: Corrected concept-folder creation to use the configured semantic library identity
+  rather than an empty ID, and require the vocabulary to be attached to the active workspace.
+  Creation errors surface in Settings; importing a starter alone does not classify documents.

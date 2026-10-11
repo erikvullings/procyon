@@ -8,7 +8,10 @@ import { skosStarters } from './skos-starters';
 export interface SemanticVocabularyManagementAttrs {
   readonly client: FileManagerClient;
   readonly workspaceId?: WorkspaceId;
-  readonly onCreateConceptFolder: (vocabulary: SemanticVocabulary, conceptUri: string) => void;
+  readonly onCreateConceptFolder: (
+    vocabulary: SemanticVocabulary,
+    conceptUri: string,
+  ) => Promise<void>;
 }
 
 function message(error: unknown): string {
@@ -242,7 +245,22 @@ export const SemanticVocabularyManagement: FactoryComponent<
                           'button.btn-flat',
                           {
                             type: 'button',
-                            onclick: () => attrs.onCreateConceptFolder(vocabulary, concept.uri),
+                            disabled:
+                              busy ||
+                              attrs.workspaceId === undefined ||
+                              !vocabulary.workspaceIds.includes(attrs.workspaceId),
+                            onclick: async () => {
+                              busy = true;
+                              error = undefined;
+                              try {
+                                await attrs.onCreateConceptFolder(vocabulary, concept.uri);
+                              } catch (cause) {
+                                error = message(cause);
+                              } finally {
+                                busy = false;
+                                m.redraw();
+                              }
+                            },
                           },
                           t('semanticVocabulary', 'createFolder'),
                         ),

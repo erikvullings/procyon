@@ -213,6 +213,74 @@ describe('SettingsEditor', () => {
     expect(root.textContent).toContain('Generation profiles');
   });
 
+  it('saves concept folders with the configured semantic library identity', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    const workspaceId = 'workspace-a';
+    const location = { providerId: 'local', uri: 'file:///Documents' };
+    await client.importSemanticVocabulary(
+      JSON.stringify({
+        format: 'procyon-skos-1',
+        id: 'topics',
+        name: 'Topics',
+        concepts: [{ uri: 'https://example.test/ml', prefLabels: { en: 'Machine learning' } }],
+      }),
+    );
+    await client.attachSemanticVocabulary({ vocabularyId: 'topics', workspaceId });
+    const { onPreview } = mountEditor({
+      client,
+      activeWorkspaceId: workspaceId,
+      activeLocation: location,
+    });
+    openSection('Semantic');
+    await vi.waitFor(() => expect(root.textContent).toContain('Machine learning'));
+    const create = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      ({ textContent }) => textContent === 'Create concept folder',
+    );
+    create?.click();
+    await vi.waitFor(() => expect(onPreview).toHaveBeenCalled());
+    const saved = onPreview.mock.lastCall?.[0].savedSearches[0];
+    expect(saved?.query).toMatchObject({
+      mode: 'concept',
+      scope: { locations: [location] },
+      concept: {
+        vocabularyId: 'topics',
+        conceptUri: 'https://example.test/ml',
+        libraryId: (await client.getSemanticLibraryStatus()).library?.libraryId,
+      },
+    });
+  });
+
+  it('does not save a concept folder without a semantic library', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await client.importSemanticVocabulary(
+      JSON.stringify({
+        format: 'procyon-skos-1',
+        id: 'topics',
+        name: 'Topics',
+        concepts: [{ uri: 'https://example.test/ml', prefLabels: { en: 'Machine learning' } }],
+      }),
+    );
+    await client.attachSemanticVocabulary({ vocabularyId: 'topics', workspaceId: 'workspace-a' });
+    const status = await client.getSemanticLibraryStatus();
+    vi.spyOn(client, 'getSemanticLibraryStatus').mockResolvedValue({ ...status, library: null });
+    const { onPreview } = mountEditor({
+      client,
+      activeWorkspaceId: 'workspace-a',
+      activeLocation: { providerId: 'local', uri: 'file:///Documents' },
+    });
+    openSection('Semantic');
+    await vi.waitFor(() => expect(root.textContent).toContain('Machine learning'));
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find(({ textContent }) => textContent === 'Create concept folder')
+      ?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-semantic-vocabularies [role="alert"]')?.textContent).toBe(
+        'Set up a semantic library before creating a concept folder.',
+      ),
+    );
+    expect(onPreview).not.toHaveBeenCalled();
+  });
+
   it('saves a changed generation profile through the main settings action', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     const createProfile = vi.spyOn(client, 'createLlmProfile');

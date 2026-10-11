@@ -640,11 +640,18 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                                 ...(current.activeWorkspaceId === undefined
                                   ? {}
                                   : { workspaceId: current.activeWorkspaceId }),
-                                onCreateConceptFolder: (
+                                onCreateConceptFolder: async (
                                   vocabulary: SemanticVocabulary,
                                   conceptUri: string,
-                                ): void => {
+                                ): Promise<void> => {
                                   if (draft === undefined) return;
+                                  if (current.activeLocation === undefined) {
+                                    throw new Error(t('semanticVocabulary', 'folderNeedsLocation'));
+                                  }
+                                  const status = await current.client.getSemanticLibraryStatus();
+                                  if (!status.library?.libraryId) {
+                                    throw new Error(t('semanticVocabulary', 'folderNeedsLibrary'));
+                                  }
                                   const concept = vocabulary.concepts.find(
                                     ({ uri }) => uri === conceptUri,
                                   );
@@ -663,10 +670,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                                           schemaVersion: 3,
                                           mode: 'concept',
                                           scope: {
-                                            locations:
-                                              current.activeLocation === undefined
-                                                ? []
-                                                : [current.activeLocation],
+                                            locations: [current.activeLocation],
                                             recurse: true,
                                             showHidden: false,
                                           },
@@ -676,7 +680,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                                             vocabularyId: vocabulary.id,
                                             conceptUri,
                                             hierarchy: 'exact',
-                                            libraryId: '',
+                                            libraryId: status.library.libraryId,
                                             enrolledRootIds: [],
                                           },
                                           gitStatuses: [],
