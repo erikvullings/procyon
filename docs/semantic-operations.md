@@ -514,12 +514,15 @@ ranking weight these navigational hits at one quarter of their normal score, **n
 contents entry can still guide a search when no stronger body passage is available. Previously
 indexed PDF evidence is also cleaned and deprioritized at retrieval, but its stored vectors retain
 their original text until that PDF is reindexed. An open Knowledge tab refreshes answer/profile
-availability after Settings closes, so selecting a local Ollama profile reveals Ask without
-discarding inspected search results; removing generation availability disables Ask without hiding
-Search. The docked Ask location remains discoverable when there is no saved profile, with a
-Settings action explaining why generation cannot yet run. PDF excerpts render as selectable text,
+availability after Settings closes, so saving a local Ollama generation profile reveals Ask without
+discarding inspected search results; merely selecting its preset in the Settings editor does not
+activate generation. Removing generation availability disables Ask without hiding Search. The
+docked Ask location remains discoverable when there is no saved profile, with a Settings action
+explaining that a model must be chosen and its profile saved. PDF excerpts render as selectable text,
 decode HTML entities without interpreting markup, and open validated web links using the host's
-external-browser adapter.
+external-browser adapter. Already-indexed PDF excerpts repair a narrowly identified space in
+Elsevier DOI links for display; newly derived embeddings use that repair only after the updated
+converter is installed and the PDF is reindexed.
 
 Local embedding work is checkpointed in small durable batches. Interrupted ingestion reuses those
 vectors without exposing them to search until the complete document generation is published.

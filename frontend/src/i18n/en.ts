@@ -1086,7 +1086,7 @@ export const en = {
     answerNotGenerated:
       'Search never generates an answer. Answer generation is unavailable and not required.',
     answerRegion: 'Optional knowledge answer',
-    answerProfileNeeded: 'Ask needs an available generation profile. Check Settings.',
+    answerProfileNeeded: 'To use Ask, choose a model and save a generation profile in Settings.',
     answerProfilesFailed: 'Generation profiles could not be loaded. Check Settings.',
     configureAnswers: 'Configure Ask',
     answerHeading: 'Answer',

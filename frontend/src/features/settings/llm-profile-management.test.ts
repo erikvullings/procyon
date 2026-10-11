@@ -52,6 +52,8 @@ describe('LlmProfileManagement', () => {
       }),
     );
     expect(root.querySelector('[aria-label="AI summaries and answers"]')).not.toBeNull();
+    expect(root.textContent).toContain('No generation profiles configured.');
+    expect(await client.listLlmProfiles()).toEqual([]);
     expect(
       [...root.querySelectorAll<HTMLInputElement>('input')].some(
         (input) => input.value === 'Ollama',

@@ -2398,7 +2398,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
 
     const bar = root.querySelector('.fm-knowledge-ask-unavailable');
     expect(bar?.textContent).toContain(
-      'Ask needs an available generation profile. Check Settings.',
+      'To use Ask, choose a model and save a generation profile in Settings.',
     );
     expect(root.querySelector('#fm-knowledge-question')).toBeNull();
     bar?.querySelector<HTMLButtonElement>('.fm-knowledge-configure-answers')?.click();
@@ -2406,7 +2406,9 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
 
     setLocale('nl');
     m.redraw.sync();
-    expect(bar?.textContent).toContain('Ask heeft een beschikbaar generatieprofiel nodig');
+    expect(bar?.textContent).toContain(
+      'Kies een model en sla een generatieprofiel op in Instellingen om Ask te gebruiken.',
+    );
   });
 
   it('searches with the question first when asked before any search', async () => {

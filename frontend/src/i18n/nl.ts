@@ -1084,7 +1084,7 @@ export const nl = {
       'Zoeken genereert nooit een antwoord. Antwoordgeneratie is niet beschikbaar en ook niet nodig.',
     answerRegion: 'Optioneel kennisantwoord',
     answerProfileNeeded:
-      'Ask heeft een beschikbaar generatieprofiel nodig. Controleer Instellingen.',
+      'Kies een model en sla een generatieprofiel op in Instellingen om Ask te gebruiken.',
     answerProfilesFailed: 'Generatieprofielen konden niet worden geladen. Controleer Instellingen.',
     configureAnswers: 'Ask instellen',
     answerHeading: 'Antwoord',
