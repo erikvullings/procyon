@@ -458,11 +458,46 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await ready();
 
     expect(root.textContent).toContain(
-      'The folder “Basisschool” is included and still being indexed. You can search documents that are already available.',
+      'The folder “Basisschool” is included and still being indexed. Search becomes available after the first document is indexed.',
     );
     expect(root.textContent).not.toContain('/Users/me/OneDrive/Basisschool is included');
     expect(root.textContent).not.toContain('No indexed documents are available in this scope.');
-    expect(searchButton().disabled).toBe(false);
+    expect(searchButton().disabled).toBe(true);
+  });
+
+  it('enables search when the first indexed source arrives without reopening the pane', async () => {
+    const client = new MockFileManagerClient();
+    let indexedSources = 0;
+    const roots = vi.spyOn(client, 'listKnowledgeRoots').mockImplementation(async () => [
+      {
+        rootId: 'new-root',
+        label: 'New folder',
+        location: { providerId: 'local', uri: 'file:///new-folder' },
+        recursive: true,
+        indexedGeneration: 0,
+        indexedSources,
+        available: true,
+      },
+    ]);
+    await client.subscribe(() => undefined);
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
+    expect(searchButton().disabled).toBe(true);
+    indexedSources = 1;
+    client.emit({
+      eventId: 1,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: 'root:new-root',
+        stage: 'reconciling',
+        completed: 4,
+        total: 0,
+        errors: 0,
+      },
+    });
+    await vi.waitFor(() => expect(roots).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(searchButton().disabled).toBe(false));
   });
 
   it('does not call a root pending once it already has searchable documents', async () => {
@@ -506,7 +541,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await ready();
 
     expect(root.textContent).toContain(
-      'The folders “semantic”, “Research notes” are included and still being indexed.',
+      'The folders “semantic”, “Research notes” are included and still being indexed. Search becomes available after the first document is indexed.',
     );
   });
 

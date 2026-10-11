@@ -316,7 +316,7 @@ export const linkIcon = trustedStrokeIcon(
 
 /** "activity" — diagnostics / system health indicator. */
 export const activityIcon = trustedStrokeIcon(
-  '<path d="M3 12h3l3 -8l3 16l3 -8h3" />',
+  '<path d="M3 12h4l3 8l4 -16l3 8h4" />',
   'fm-icon-activity',
 );
 

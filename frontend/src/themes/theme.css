@@ -4901,6 +4901,9 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-activity-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   padding: 1px 4px;

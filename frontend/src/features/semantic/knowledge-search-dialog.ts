@@ -702,8 +702,14 @@ export function knowledgeSearchErrorMessage(error: unknown): string {
 
 export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> = () => {
   let wasOpen = false;
+  let currentAttrs: KnowledgeSearchDialogAttrs;
+  let rootRefreshTimer: ReturnType<typeof setInterval> | undefined;
+  let rootRefreshInFlight = false;
+  let rootRefreshUnsubscribe: (() => void) | undefined;
+  let removed = false;
   let busy: 'loading' | 'planning' | 'searching' | undefined;
   let error: string | undefined;
+  let rootRefreshError: string | undefined;
   let notice: string | undefined;
   let capabilities: KnowledgeCapabilities | undefined;
   let roots: readonly KnowledgeRoot[] = [];
@@ -974,6 +980,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     pendingParse = undefined;
     busy = 'loading';
     error = undefined;
+    rootRefreshError = undefined;
     notice = undefined;
     resetResults();
     interpretation = undefined;
@@ -1074,6 +1081,28 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
   }
 
+  async function refreshRoots(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
+    if (removed || !attrs.open || rootRefreshInFlight || busy === 'loading') return;
+    rootRefreshInFlight = true;
+    const openGeneration = generation;
+    try {
+      const availableRoots = await attrs.client.listKnowledgeRoots({
+        workspaceId: attrs.workspaceId,
+      });
+      if (removed || openGeneration !== generation || !attrs.open) return;
+      roots = availableRoots;
+      rootRefreshError = undefined;
+      m.redraw();
+    } catch {
+      if (!removed && openGeneration === generation && attrs.open) {
+        rootRefreshError = t('knowledgeSearch', 'loadFailed');
+        m.redraw();
+      }
+    } finally {
+      rootRefreshInFlight = false;
+    }
+  }
+
   async function previewPlan(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
     // `busy` is shared, and the plan disclosure's summary cannot be disabled:
     // clearing it here would hide Cancel and re-enable Search mid-search.
@@ -1112,7 +1141,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
 
   /** Whether an authorized source can be queried while full reconciliation continues. */
   function hasSearchableSources(attrs: KnowledgeSearchDialogAttrs): boolean {
-    return attrs.semanticSourceIds.length > 0 || roots.some((root) => root.available);
+    const indexedRoots = roots.filter((root) => root.available && root.indexedSources > 0);
+    if (scopeKind === 'enrolledRoots') {
+      return indexedRoots.some((root) => selectedRootIds.has(root.rootId));
+    }
+    return attrs.semanticSourceIds.length > 0 || indexedRoots.length > 0;
   }
 
   /** Whether a search can run: searchable sources, a subject, and no unusable scope selector. */
@@ -1586,13 +1619,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       return m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'searching'));
     }
     if (result === undefined) {
-      if (capabilities !== undefined && !hasSearchableSources(attrs)) {
-        return m(
-          'p.fm-knowledge-warning',
-          { role: 'status' },
-          t('knowledgeSearch', 'searchNoSources'),
-        );
-      }
       const pendingRoots = roots.filter(
         (root) => root.available && root.indexedGeneration === 0 && root.indexedSources === 0,
       );
@@ -1608,8 +1634,23 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           'p.fm-knowledge-warning',
           { role: 'status' },
           pendingRoots.length === 1
-            ? t('knowledgeSearch', 'searchIndexPending', { folder: folders })
-            : t('knowledgeSearch', 'searchIndexPendingMany', { folders }),
+            ? t(
+                'knowledgeSearch',
+                hasSearchableSources(attrs) ? 'searchIndexPending' : 'searchIndexStarting',
+                { folder: folders },
+              )
+            : t(
+                'knowledgeSearch',
+                hasSearchableSources(attrs) ? 'searchIndexPendingMany' : 'searchIndexStartingMany',
+                { folders },
+              ),
+        );
+      }
+      if (capabilities !== undefined && !hasSearchableSources(attrs)) {
+        return m(
+          'p.fm-knowledge-warning',
+          { role: 'status' },
+          t('knowledgeSearch', 'searchNoSources'),
         );
       }
       return m('p.fm-knowledge-status', { role: 'status' }, notice ?? t('knowledgeSearch', 'idle'));
@@ -1969,10 +2010,31 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
 
   return {
     oninit: ({ attrs }) => {
+      currentAttrs = attrs;
       wasOpen = attrs.open;
       if (attrs.open) void load(attrs);
+      rootRefreshTimer = setInterval(() => void refreshRoots(currentAttrs), 3_000);
+      if (attrs.client.connection.get() !== 'closed') {
+        void attrs.client
+          .subscribe((event) => {
+            if (event.payload.type === 'semantic.ingestionProgress' && !removed) {
+              void refreshRoots(currentAttrs);
+            }
+          })
+          .then((unsubscribe) => {
+            if (removed) unsubscribe();
+            else rootRefreshUnsubscribe = unsubscribe;
+          })
+          .catch(() => {
+            if (!removed) {
+              rootRefreshError = t('knowledgeSearch', 'loadFailed');
+              m.redraw();
+            }
+          });
+      }
     },
     onupdate: ({ attrs }) => {
+      currentAttrs = attrs;
       if (attrs.open && !wasOpen) void load(attrs);
       wasOpen = attrs.open;
       // The modal keeps its content mounted while closed, so the subject
@@ -1987,7 +2049,12 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         }
       }
     },
-    onremove: () => abortController?.abort(),
+    onremove: () => {
+      removed = true;
+      if (rootRefreshTimer !== undefined) clearInterval(rootRefreshTimer);
+      rootRefreshUnsubscribe?.();
+      abortController?.abort();
+    },
     view: ({ attrs }) => {
       const offline = attrs.client.connection.get() === 'closed';
       const searchable = canSearch(attrs);
@@ -2137,6 +2204,14 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                           currentFolderIndexed = true;
                           scopeKind = 'currentFolder';
                           enrolmentOpen = false;
+                          void refreshRoots(attrs).then(() => {
+                            const included = roots.find(
+                              (root) =>
+                                root.location.providerId === attrs.currentFolder?.providerId &&
+                                root.location.uri === attrs.currentFolder.uri,
+                            );
+                            if (included !== undefined) selectedRootIds.add(included.rootId);
+                          });
                           m.redraw();
                         },
                         onCancel: () => {
@@ -2501,6 +2576,9 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
             }),
           ]),
           error === undefined ? undefined : m('p.fm-knowledge-error', { role: 'alert' }, error),
+          rootRefreshError === undefined
+            ? undefined
+            : m('p.fm-knowledge-error', { role: 'alert' }, rootRefreshError),
           offline
             ? m('p.fm-knowledge-warning', { role: 'status' }, t('knowledgeSearch', 'offline'))
             : undefined,

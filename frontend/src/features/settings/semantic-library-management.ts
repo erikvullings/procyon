@@ -3,6 +3,7 @@ import m, { type FactoryComponent, type Vnode } from 'mithril';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type {
+  KnowledgeRoot,
   Location,
   SemanticDeletionCategory,
   SemanticEligibilityOverride,
@@ -374,6 +375,9 @@ function exclusionPlanView(
 
 function rootStatusView(
   root: SemanticRootStatus,
+  indexedSources: number | undefined,
+  computeMode: string | undefined,
+  scannedEntries: number | undefined,
   workspaceId: WorkspaceId | undefined,
   busy: BusyAction | undefined,
   canRemove: boolean,
@@ -417,8 +421,19 @@ function rootStatusView(
           t('semanticLibrary', 'ocrNeededCount', { count: root.ocrRequiredFiles.length }),
         )
       : undefined,
+    indexedSources === undefined
+      ? undefined
+      : m('p.fm-semantic-library-indexed-count', { role: 'status' }, [
+          t('semanticLibrary', 'indexedSources', indexedSources),
+          scannedEntries === undefined
+            ? undefined
+            : ` · ${t('semanticLibrary', 'scannedEntries', { count: scannedEntries })}`,
+        ]),
     m('details.fm-semantic-library-details', [
       m('summary', t('semanticLibrary', 'folderDetails')),
+      computeMode === undefined
+        ? undefined
+        : m('p', `${t('semanticLibrary', 'computeMode')}: ${computeMode}`),
       m('dl.fm-semantic-library-values', [
         m('dt', t('semanticLibrary', 'stableIdentity')),
         m(
@@ -564,6 +579,15 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
   let loadState: LoadState = 'loading';
   let capabilities: SemanticLibraryCapabilities | undefined;
   let status: SemanticLibraryStatus | undefined;
+  let indexedRoots: readonly KnowledgeRoot[] = [];
+  let computeMode: string | undefined;
+  const scannedRoots = new Map<string, number>();
+  let refreshTimer: ReturnType<typeof setInterval> | undefined;
+  let refreshInFlight = false;
+  let removed = false;
+  let unsubscribe: (() => void) | undefined;
+  let refreshError: string | undefined;
+  let currentAttrs = initial.attrs;
   let folder: SemanticFolderStatus | undefined;
   let preview: SemanticEnrolmentPreview | undefined;
   let exclusionPlan: SemanticExclusionPlan | undefined;
@@ -593,6 +617,27 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
       }
       const nextStatus = await attrs.client.getSemanticLibraryStatus();
       status = nextStatus;
+      indexedRoots =
+        attrs.workspaceId === undefined || !nextStatus.available
+          ? []
+          : await attrs.client.listKnowledgeRoots({ workspaceId: attrs.workspaceId });
+      computeMode = undefined;
+      try {
+        const component = await attrs.client.getSemanticComponentStatus();
+        if (component.activeModel?.profile === 'embeddingGemma2') {
+          const setup = await attrs.client.getGemmaLibrarySetup();
+          computeMode =
+            setup === null
+              ? t('semanticLibrary', 'computeUnknown')
+              : setup.audio || setup.video
+                ? t('semanticLibrary', 'computeMixedCpu')
+                : setup.images
+                  ? t('semanticLibrary', 'computeImageAutomatic')
+                  : t('semanticLibrary', 'computeCpu');
+        }
+      } catch (cause) {
+        computeMode = `${t('semanticLibrary', 'computeUnknown')}: ${errorMessage(cause)}`;
+      }
       folder =
         attrs.workspaceId === undefined || attrs.location === undefined || !nextStatus.available
           ? undefined
@@ -606,6 +651,37 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
       loadState = 'error';
     }
     m.redraw();
+  }
+
+  async function refreshIndexing(attrs: SemanticLibraryManagementAttrs): Promise<void> {
+    if (
+      refreshInFlight ||
+      busy !== undefined ||
+      loadState !== 'loaded' ||
+      attrs.workspaceId === undefined
+    )
+      return;
+    refreshInFlight = true;
+    const refreshKey = contextKey;
+    try {
+      const [nextStatus, nextRoots] = await Promise.all([
+        attrs.client.getSemanticLibraryStatus(),
+        attrs.client.listKnowledgeRoots({ workspaceId: attrs.workspaceId }),
+      ]);
+      if (removed || busy !== undefined || refreshKey !== contextKey) return;
+      status = nextStatus;
+      indexedRoots = nextRoots;
+      refreshError = undefined;
+      m.redraw();
+    } catch (cause) {
+      if (!removed && refreshKey === contextKey) {
+        indexedRoots = [];
+        refreshError = errorMessage(cause);
+        m.redraw();
+      }
+    } finally {
+      refreshInFlight = false;
+    }
   }
 
   async function refreshFolder(attrs: SemanticLibraryManagementAttrs): Promise<void> {
@@ -713,7 +789,42 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
   contextKey = key(initial.attrs);
 
   return {
+    oncreate: () => {
+      refreshTimer = setInterval(() => void refreshIndexing(currentAttrs), 3_000);
+      if (currentAttrs.client.connection.get() !== 'closed')
+        void currentAttrs.client
+          .subscribe((event) => {
+            if (event.payload.type !== 'semantic.ingestionProgress') return;
+            const rootId = event.payload.jobId.startsWith('root:')
+              ? event.payload.jobId.slice(5)
+              : undefined;
+            if (rootId === undefined || removed) return;
+            if (['complete', 'cancelled', 'failed', 'skipped'].includes(event.payload.stage)) {
+              scannedRoots.delete(rootId);
+            } else {
+              scannedRoots.set(rootId, event.payload.completed);
+            }
+            void refreshIndexing(currentAttrs);
+            m.redraw();
+          })
+          .then((stop) => {
+            if (removed) stop();
+            else unsubscribe = stop;
+          })
+          .catch((cause: unknown) => {
+            if (!removed) {
+              refreshError = errorMessage(cause);
+              m.redraw();
+            }
+          });
+    },
+    onremove: () => {
+      removed = true;
+      if (refreshTimer !== undefined) clearInterval(refreshTimer);
+      unsubscribe?.();
+    },
     onbeforeupdate: ({ attrs }) => {
+      currentAttrs = attrs;
       const nextKey = key(attrs);
       if (nextKey !== contextKey) {
         contextKey = nextKey;
@@ -763,6 +874,11 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
       const rootView = (candidate: SemanticRootStatus): Vnode =>
         rootStatusView(
           candidate,
+          refreshError === undefined
+            ? indexedRoots.find((root) => root.rootId === candidate.id)?.indexedSources
+            : undefined,
+          computeMode,
+          scannedRoots.get(candidate.id),
           attrs.workspaceId,
           busy,
           has('planExclusion'),
@@ -781,6 +897,9 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
         'section.fm-semantic-library-management',
         { 'aria-label': t('semanticLibrary', 'title') },
         [
+          refreshError === undefined
+            ? undefined
+            : m('p.fm-semantic-library-error', { role: 'alert' }, refreshError),
           capabilities.authority === 'administratorProvisioned'
             ? m('p.fm-semantic-library-authority', t('semanticLibrary', 'administratorManaged'))
             : undefined,

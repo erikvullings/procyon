@@ -1575,7 +1575,7 @@ describe('AppShell', () => {
     const toolbar = root.querySelector('.fm-workspace-toolbar');
     expect(toolbar).not.toBeNull();
     expect(root.querySelector('.fm-navigation-controls')).not.toBeNull();
-    expect(toolbar?.querySelectorAll('.fm-toolbar-separator')).toHaveLength(4);
+    expect(toolbar?.querySelectorAll('.fm-toolbar-separator')).toHaveLength(5);
     expect(toolbar?.querySelector('.fm-search-controls')).not.toBeNull();
     expect(toolbar?.querySelector('.fm-toolbar-spacer')).not.toBeNull();
     expect(
@@ -2026,6 +2026,18 @@ describe('AppShell', () => {
     await vi.waitFor(() =>
       expect(root.querySelector<HTMLButtonElement>('.fm-activity-count')?.textContent).toBe('1'),
     );
+    expect(root.querySelector('.fm-activity-count .fm-icon-activity')).not.toBeNull();
+    expect(root.querySelector('.fm-activity-count')?.getAttribute('title')).toContain(
+      'Show background activity',
+    );
+    const lastSeparator = [...root.querySelectorAll('.fm-toolbar-separator')].at(-1);
+    const settingsButton = root.querySelector('.fm-settings-button');
+    if (lastSeparator === undefined || settingsButton === null) {
+      throw new Error('Missing activity separator or Settings button');
+    }
+    expect(
+      lastSeparator.compareDocumentPosition(settingsButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     root.querySelector<HTMLButtonElement>('.fm-activity-count')?.click();
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-activity-popover')?.textContent).toContain(

@@ -1000,6 +1000,10 @@ export const nl = {
       'De map {folder} is toegevoegd en wordt nog geïndexeerd. U kunt documenten doorzoeken die al beschikbaar zijn.',
     searchIndexPendingMany:
       'De mappen {folders} zijn toegevoegd en worden nog geïndexeerd. U kunt documenten doorzoeken die al beschikbaar zijn.',
+    searchIndexStarting:
+      'De map {folder} is toegevoegd en wordt nog geïndexeerd. Zoeken wordt beschikbaar zodra het eerste document is geïndexeerd.',
+    searchIndexStartingMany:
+      'De mappen {folders} zijn toegevoegd en worden nog geïndexeerd. Zoeken wordt beschikbaar zodra het eerste document is geïndexeerd.',
     searchUnavailable:
       'Semantisch zoeken is niet beschikbaar. Controleer de instellingen voor semantisch zoeken en probeer het opnieuw.',
     searchDenied:
@@ -1564,6 +1568,17 @@ export const nl = {
     removedFolders: 'Verwijderde mappen',
     removeFolder: 'Verwijderen',
     folderDetails: 'Indexeringsdetails',
+    indexedSources: {
+      1: '1 geïndexeerd document doorzoekbaar',
+      n: '{n} geïndexeerde documenten doorzoekbaar',
+    },
+    scannedEntries: '{count} items gescand (niet alles is geïndexeerd)',
+    computeMode: 'Rekenapparaat voor indexeren',
+    computeMixedCpu: 'CPU (deze Gemma-worker voor gemengde media gebruikt geen Metal)',
+    computeImageAutomatic:
+      'Metal voor afbeeldingen indien beschikbaar; anders CPU (actief apparaat niet gemeld)',
+    computeCpu: 'CPU',
+    computeUnknown: 'Apparaat niet gemeld door de worker',
     libraryDetails: 'Bibliotheekdetails',
     pdfTools: "Gescande pdf's doorzoekbaar maken",
     ocrNeededCount: '{count} gescande pdf(s) hebben tekstherkenning nodig; zie indexeringsdetails.',

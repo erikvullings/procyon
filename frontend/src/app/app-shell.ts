@@ -7,6 +7,7 @@ import packageJson from '../../package.json' with { type: 'json' };
 
 import type { FileManagerClient } from '../api/client/file-manager-client';
 import {
+  activityIcon,
   arrowLeftIcon,
   arrowRightIcon,
   basketIcon,
@@ -5143,12 +5144,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                         'aria-label': activityStatusLabel,
                         'aria-expanded': String(activityOpen),
                         'aria-controls': 'fm-activity-popover',
-                        title: activityStatusLabel,
+                        title: `${t('shell', 'showActivity')}: ${activityStatusLabel}`,
                         onclick: () => {
                           activityOpen = !activityOpen;
                         },
                       },
-                      activityCount,
+                      [activityIcon({ size: 16 }), m('span', activityCount)],
                     )
                   : undefined,
                 activityOpen && activityCount > 0
@@ -5232,6 +5233,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   },
                   semanticInstallation.message,
                 ),
+            m('.fm-toolbar-separator', {
+              role: 'separator',
+              'aria-orientation': 'vertical',
+            }),
             tooltip(
               labelWithShortcut(
                 t('shell', 'openSettings'),

@@ -54,6 +54,74 @@ function button(label: string): HTMLButtonElement {
 }
 
 describe('SemanticLibraryManagement', () => {
+  it('shows authoritative indexed counts and mixed-media CPU selection while indexing', async () => {
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    await client.confirmSemanticEnrolment({
+      confirmationId: preview.confirmationId,
+      policyRevision: preview.policyRevision,
+      workspaceId: workspace.id,
+      location,
+    });
+    const status = await client.getSemanticLibraryStatus();
+    const component = await client.getSemanticComponentStatus();
+    if (status.roots[0] === undefined) {
+      throw new Error('Missing included root in mock');
+    }
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...component,
+      activeModel: {
+        profile: 'embeddingGemma2',
+        identity: { modelId: 'gemma', revision: 'test' },
+      },
+    });
+    vi.spyOn(client, 'getGemmaLibrarySetup').mockResolvedValue({
+      dimensions: 512,
+      images: true,
+      audio: true,
+      video: true,
+    });
+    let indexedSources = 0;
+    const rootId = status.roots[0].id;
+    vi.spyOn(client, 'listKnowledgeRoots').mockImplementation(async () => [
+      {
+        rootId,
+        label: 'mock',
+        location,
+        recursive: true,
+        available: true,
+        indexedGeneration: 0,
+        indexedSources,
+      },
+    ]);
+    await client.subscribe(() => undefined);
+    mountComponent(client);
+    await waitForLoaded();
+    expect(root.textContent).toContain('0 indexed documents searchable');
+    const details = root.querySelector<HTMLDetailsElement>('.fm-semantic-library-root details');
+    expect(details?.textContent).toContain(
+      'CPU (this mixed-media Gemma worker does not use Metal)',
+    );
+    indexedSources = 1;
+    client.emit({
+      eventId: 1,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: `root:${rootId}`,
+        stage: 'reconciling',
+        completed: 4,
+        total: 0,
+        errors: 0,
+      },
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('1 indexed document searchable'));
+    expect(root.textContent).toContain('4 entries scanned (not all are indexed)');
+  });
+
   it('shows active-folder consent and the safe policy projection', async () => {
     mountComponent(client);
     await waitForLoaded();

@@ -1052,6 +1052,10 @@ export const en = {
       'The folder {folder} is included and still being indexed. You can search documents that are already available.',
     searchIndexPendingMany:
       'The folders {folders} are included and still being indexed. You can search documents that are already available.',
+    searchIndexStarting:
+      'The folder {folder} is included and still being indexed. Search becomes available after the first document is indexed.',
+    searchIndexStartingMany:
+      'The folders {folders} are included and still being indexed. Search becomes available after the first document is indexed.',
     searchUnavailable:
       'Semantic search is unavailable. Check Semantic Search settings and try again.',
     searchDenied: 'This search scope is no longer authorized. Choose another scope and try again.',
@@ -1560,6 +1564,17 @@ export const en = {
     removedFolders: 'Removed folders',
     removeFolder: 'Remove',
     folderDetails: 'Indexing details',
+    indexedSources: {
+      1: '1 indexed document searchable',
+      n: '{n} indexed documents searchable',
+    },
+    scannedEntries: '{count} entries scanned (not all are indexed)',
+    computeMode: 'Indexing compute',
+    computeMixedCpu: 'CPU (this mixed-media Gemma worker does not use Metal)',
+    computeImageAutomatic:
+      'Metal for images when available; CPU fallback (live device not reported)',
+    computeCpu: 'CPU',
+    computeUnknown: 'Device not reported by the worker',
     libraryDetails: 'Library details',
     pdfTools: 'Make scanned PDFs searchable',
     ocrNeededCount: '{count} scanned PDF(s) need text recognition; see indexing details.',
