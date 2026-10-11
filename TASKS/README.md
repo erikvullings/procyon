@@ -153,6 +153,8 @@ semantic components are not installed.
 - [x] 0243 Generation profile UX and model limits *(needs 0184; independent follow-up)*
 - [ ] 0244 Bounded large-PDF text and Gemma page vision *(needs 0177, 0179, 0180, 0182, 0183,
   0192, 0194, 0195, 0227; release prerequisite of 0239)*
+- [ ] 0245 PDF footnote reading order and separation *(needs 0180, 0192; tracked follow-up,
+  not an experimental release gate)*
 
 ## Structured knowledge search
 
