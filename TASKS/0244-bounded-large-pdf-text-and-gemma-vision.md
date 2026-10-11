@@ -157,3 +157,8 @@ optional Docling ML/PDFium pack is qualified on those targets.
   comment claims pure-Rust page rendering; resolve that discrepancy against exact upstream
   source/release before choosing an integration path. Availability and licensing alone do not
   qualify a renderer or the four-target release.
+- 2026-10-11 Copilot: Added a separate three-page synthetic `mixed` fixture: one full-page
+  reusable JPEG, a text-bearing page with the same embedded JPEG as a figure, and a scanned
+  page with a non-reusable Flate XObject. The repeatable fixture and its six generator tests
+  establish inputs for future provenance, opt-in, deduplication, and renderer checks; they do
+  not establish that any of those three image pages is embedded or searchable yet.

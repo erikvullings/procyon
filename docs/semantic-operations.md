@@ -229,7 +229,11 @@ SHA-256 prefix; development IDs and the public developer key are never accepted 
 The production identity contract pins `intfloat/multilingual-e5-small` at revision
 `614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
 `xlm-roberta-sentencepiece.614241f6`, converter
-`docling-pdf/1036000+baseline/2`, chunker `structural/3`, worker protocol 1, and index schema 2.
+`docling-pdf/1036001+baseline/3`, chunker `structural/3`, worker protocol 1, and index schema 2.
+This converter revision repairs a narrowly identified PDF text-layout gap inside Elsevier DOI
+links; it invalidates derived PDF vectors and requires a new signed, measured qualification.
+The previously recorded `docling-pdf/1036000+baseline/2` evaluation remains historical evidence,
+not approval for this revision.
 Manual dispatches of `.github/workflows/release-semantic-components.yml` qualify components against
 their final `semantic-v*` public URLs without publishing them. The run emits a reviewable lock with
 the exact run ID, source revision, evaluation fingerprint, catalog revisions, and
@@ -347,9 +351,11 @@ attachment. Attachment remains available for the separate annotation and review 
 Locally extracted terms enter the review queue of an existing vocabulary; they do not create a
 SKOS source or become authoritative automatically. The Find by concept tab is visible only when
 semantic components are enabled and the active workspace has an indexed document in an available
-root. Type a label and select a bundled or imported concept (recent selections appear before
-typing). This runs a similarity search of indexed document chunks across the active workspace;
-**Current folder only** is optional. Results are *related to* the concept, not authoritative
+root. The vocabulary selector defaults to **All vocabularies**; choose one to filter the concept
+choices without importing or attaching it. Type a label and select a bundled or imported concept
+(recent selections appear before typing). This runs a similarity search of indexed document chunks
+across the active workspace regardless of which vocabulary supplied the query concept;
+**Current folder only** is an optional checkbox. Results are *related to* the concept, not authoritative
 concept assignments. **Save as smart folder** pins this similarity search in Smart folders using
 the selected label and definition as a snapshot; it does not assign labels to files. Recreate
 the saved search if the concept's text changes. Only indexed/authorized documents can appear.
@@ -509,8 +515,11 @@ contents entry can still guide a search when no stronger body passage is availab
 indexed PDF evidence is also cleaned and deprioritized at retrieval, but its stored vectors retain
 their original text until that PDF is reindexed. An open Knowledge tab refreshes answer/profile
 availability after Settings closes, so selecting a local Ollama profile reveals Ask without
-discarding inspected search results; removing generation availability hides Ask without hiding
-Search.
+discarding inspected search results; removing generation availability disables Ask without hiding
+Search. The docked Ask location remains discoverable when there is no saved profile, with a
+Settings action explaining why generation cannot yet run. PDF excerpts render as selectable text,
+decode HTML entities without interpreting markup, and open validated web links using the host's
+external-browser adapter.
 
 Local embedding work is checkpointed in small durable batches. Interrupted ingestion reuses those
 vectors without exposing them to search until the complete document generation is published.

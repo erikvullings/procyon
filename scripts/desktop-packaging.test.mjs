@@ -13,6 +13,17 @@ import { generateUpdaterManifest } from './generate-updater-manifest.mjs';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
+test('native web links allow only HTTP and HTTPS in the system browser', () => {
+  const capability = JSON.parse(
+    read('apps', 'fm-desktop', 'src-tauri', 'capabilities', 'default.json'),
+  );
+  const opener = capability.permissions.find(
+    (permission) => permission.identifier === 'opener:allow-open-url',
+  );
+  assert.deepEqual(opener?.allow, [{ url: 'https://*' }, { url: 'http://*' }]);
+  assert.ok(!capability.permissions.includes('opener:default'));
+});
+
 function read(...segments) {
   return readFileSync(join(repoRoot, ...segments), 'utf8');
 }

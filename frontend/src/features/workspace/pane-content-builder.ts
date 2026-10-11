@@ -211,6 +211,7 @@ export interface PaneContentContext {
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
   /** Opens search-only knowledge search defaulted to the visible result set (task 0206). */
   openKnowledgeSearch?(): void;
+  openKnowledgeAnswerSettings?(): void;
   closeKnowledgeSearch(paneId: PaneId, tabId: TabId): void;
   openKnowledgeSource(paneId: PaneId, evidence: KnowledgeEvidence): Promise<void>;
   isKnowledgeSourceOpen(evidence: KnowledgeEvidence): boolean;
@@ -989,6 +990,9 @@ export function createPaneContentBuilder(
                       semanticSourceIds: knowledgeSearch.semanticSourceIds,
                       initialSubject: knowledgeSearch.initialSubject,
                       profileRevision: context.getKnowledgeAnswerRevision(),
+                      ...(context.openKnowledgeAnswerSettings === undefined
+                        ? {}
+                        : { onConfigureAnswers: context.openKnowledgeAnswerSettings }),
                       onClose: () => context.closeKnowledgeSearch(paneId, knowledgeSearch.tabId),
                       onOpenSource: (evidence) => context.openKnowledgeSource(paneId, evidence),
                       isSourceOpen: context.isKnowledgeSourceOpen,

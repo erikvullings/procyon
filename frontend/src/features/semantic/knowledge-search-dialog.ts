@@ -62,6 +62,7 @@ export interface KnowledgeSearchDialogAttrs {
   readonly onClose: () => void;
   readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
   readonly isSourceOpen?: (evidence: KnowledgeEvidence) => boolean;
+  readonly onConfigureAnswers?: () => void;
 }
 
 /** Canonical need order, matching the backend enum declaration order. */
@@ -88,6 +89,60 @@ const SCOPE_KINDS: readonly KnowledgeScopeKind[] = [
 ];
 
 const PREFERENCES_STORAGE_KEY = 'procyon.knowledgeSearch.preferences.v1';
+
+function decodeEvidenceText(text: string): string {
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = text.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  return textarea.value.replace(
+    /(https?:\/\/doi\.org\/10\.1016\/j\.)\s+([a-z]+\.\d{4}\.)/giu,
+    '$1$2',
+  );
+}
+
+function externalEvidenceUrl(value: string): string | undefined {
+  if (!/^https?:\/\//iu.test(value)) return undefined;
+  try {
+    const parsed = new URL(value);
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      parsed.hostname !== '' &&
+      parsed.username === '' &&
+      parsed.password === ''
+      ? parsed.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function evidenceTextWithLinks(text: string): m.Children {
+  const nodes: m.Children[] = [];
+  const urlPattern = /https?:\/\/[^\s<>"']+/giu;
+  let last = 0;
+  for (const match of text.matchAll(urlPattern)) {
+    const start = match.index;
+    const raw = match[0];
+    let end = raw.length;
+    while (
+      end > 0 &&
+      (/[.,;:!?]/u.test(raw[end - 1] ?? '') ||
+        (raw[end - 1] === ')' &&
+          (raw.slice(0, end).match(/\)/gu)?.length ?? 0) >
+            (raw.slice(0, end).match(/\(/gu)?.length ?? 0)))
+    ) {
+      end--;
+    }
+    const label = raw.slice(0, end);
+    const href = externalEvidenceUrl(label);
+    if (href === undefined) continue;
+    nodes.push(
+      text.slice(last, start),
+      m('a', { href, target: '_blank', rel: 'noopener noreferrer' }, label),
+    );
+    last = start + end;
+  }
+  nodes.push(text.slice(last));
+  return nodes;
+}
 
 function loadPreferredNeeds(): KnowledgeNeed[] {
   try {
@@ -1415,6 +1470,19 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
   }
 
+  async function openExternalEvidence(
+    attrs: KnowledgeSearchDialogAttrs,
+    url: string,
+  ): Promise<void> {
+    error = undefined;
+    try {
+      await attrs.client.openExternalUrl(url);
+    } catch {
+      error = t('knowledgeSearch', 'openExternalFailed');
+      m.redraw();
+    }
+  }
+
   function diagnosticText(diagnostic: KnowledgeDiagnostic): string {
     const suggestion =
       diagnostic.suggestion == null
@@ -1497,6 +1565,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     row: KnowledgeEvidence,
     key: string,
     fileTitle?: string,
+    positionInHeader = false,
   ): m.Vnode {
     const position = knowledgeProvenanceLabel(row.provenance);
     const indexedTitle = row.sectionPath.join(' / ');
@@ -1520,7 +1589,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         : t('knowledgeSearch', 'duplicateSources', { count: row.duplicateSourceIds.length }),
     ].filter((value): value is string => value !== undefined);
     return m('section.fm-knowledge-result', { key }, [
-      fileTitle !== undefined
+      fileTitle !== undefined || positionInHeader
         ? undefined
         : m('.fm-knowledge-section-heading', [
             indexedTitle === '' ? undefined : m('span.fm-knowledge-section-title', indexedTitle),
@@ -1543,8 +1612,19 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       kind === undefined
         ? m(
             '.fm-knowledge-result-markdown',
+            {
+              onclick: (event: MouseEvent) => {
+                if (!(event.target instanceof Element)) return;
+                const anchor = event.target.closest<HTMLAnchorElement>('a[href]');
+                if (anchor === null) return;
+                event.preventDefault();
+                const url = externalEvidenceUrl(anchor.getAttribute('href') ?? '');
+                if (url === undefined || document.getSelection()?.toString()) return;
+                void openExternalEvidence(attrs, url);
+              },
+            },
             row.mediaType === 'application/pdf'
-              ? m('p', row.content)
+              ? m('p', evidenceTextWithLinks(decodeEvidenceText(row.content)))
               : m.trust(safeMarkdownHtml(row.content)),
           )
         : m('.fm-knowledge-media-evidence', [
@@ -1584,6 +1664,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   ): m.Vnode {
     const openable = !group.openEvidence.unavailable && attrs.onOpenSource !== undefined;
     const firstRow = group.rows[0];
+    const firstPosition =
+      firstRow !== undefined && firstRow.sectionPath.length === 0
+        ? knowledgeProvenanceLabel(firstRow.provenance)
+        : '';
     const compactFileMedia =
       group.rows.length === 1 &&
       firstRow !== undefined &&
@@ -1611,17 +1695,33 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 },
                 [externalLinkIcon({ size: 14 }), m('span', group.title)],
               ),
+              firstRow !== undefined && firstPosition !== ''
+                ? m(
+                    'button.fm-knowledge-page-link',
+                    {
+                      type: 'button',
+                      disabled: firstRow.unavailable || attrs.onOpenSource === undefined,
+                      'aria-label': t('knowledgeSearch', 'openSection', { section: firstPosition }),
+                      onclick: () => void openSource(attrs, firstRow),
+                    },
+                    firstPosition,
+                  )
+                : undefined,
+              firstRow !== undefined && firstPosition !== ''
+                ? relevanceIndicator(firstRow)
+                : undefined,
               compactFileMedia && firstRow !== undefined ? relevanceIndicator(firstRow) : undefined,
             ]),
           ]),
           m(
             '.fm-knowledge-sections',
-            group.rows.map((row) =>
+            group.rows.map((row, rowIndex) =>
               evidenceSection(
                 attrs,
                 row,
                 `${group.documentId}-${row.recordId}`,
                 compactFileMedia ? group.title : undefined,
+                rowIndex === 0 && firstPosition !== '',
               ),
             ),
           ),
@@ -1905,13 +2005,41 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   /**
    * The optional ask bar, docked below the results it is about.
    *
-   * It exists only while a successful result whose own capabilities report
-   * `answerGeneration` is on screen, so a search-only host renders nothing here
-   * and search stays complete without it. The answer opens in a collapsible
-   * panel directly above the bar.
+   * Search remains available independently of generation; a host with Settings
+   * exposes the reason Ask cannot run rather than silently removing its bar.
    */
   function answerView(attrs: KnowledgeSearchDialogAttrs): m.Children {
-    if (!answerAvailable()) return undefined;
+    if (!answerAvailable()) {
+      if (
+        attrs.onConfigureAnswers === undefined ||
+        capabilities === undefined ||
+        (!capabilities.fullText && !capabilities.semantic)
+      )
+        return undefined;
+      return m(
+        'section.fm-knowledge-answer',
+        { 'aria-label': t('knowledgeSearch', 'answerRegion') },
+        m('.fm-knowledge-ask-bar.fm-knowledge-ask-unavailable', [
+          sparklesIcon({ className: 'fm-knowledge-ask-icon', size: 15 }),
+          m(
+            'span',
+            { role: 'status' },
+            t(
+              'knowledgeSearch',
+              answerProfilesFailed ? 'answerProfilesFailed' : 'answerProfileNeeded',
+            ),
+          ),
+          m(
+            'button.fm-knowledge-configure-answers',
+            {
+              type: 'button',
+              onclick: attrs.onConfigureAnswers,
+            },
+            t('knowledgeSearch', 'configureAnswers'),
+          ),
+        ]),
+      );
+    }
     const displayed = displayedEvidence();
     const profile = answerProfile();
     const hasOutput =

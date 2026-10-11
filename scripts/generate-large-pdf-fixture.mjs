@@ -20,8 +20,8 @@ for (let index = 0; index < args.length; index += 2) {
 }
 const output = options.get('--output');
 const variant = options.get('--variant');
-if (!output || !['scanned', 'text', 'malformed', 'bomb'].includes(variant)) {
-  throw new Error('Supply --output and --variant scanned|text|malformed|bomb');
+if (!output || !['scanned', 'text', 'malformed', 'bomb', 'mixed'].includes(variant)) {
+  throw new Error('Supply --output and --variant scanned|text|malformed|bomb|mixed');
 }
 function dimension(name, fallback, maximum) {
   const value = options.get(name) ?? String(fallback);
@@ -30,7 +30,10 @@ function dimension(name, fallback, maximum) {
   }
   return Number(value);
 }
-const pages = dimension('--pages', 354, 4096);
+const pages = dimension('--pages', variant === 'mixed' ? 3 : 354, 4096);
+if (variant === 'mixed' && pages !== 3) {
+  throw new Error('The mixed vision fixture has exactly three distinct pages');
+}
 const editPage = options.has('--edit-page') ? dimension('--edit-page', 1, pages) : undefined;
 if (editPage !== undefined && variant !== 'text') {
   throw new Error('--edit-page requires --variant text');
@@ -40,6 +43,23 @@ const height = dimension('--height', variant === 'text' ? 332 : 320, 2048);
 if (pages * width * height * 3 + pages * 4096 > maxSourceBytes) {
   throw new Error('Estimated fixture exceeds the fixed 200 MiB source bound');
 }
+
+const syntheticJpeg = Buffer.from(
+  [
+    '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwg',
+    'JC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIy',
+    'MjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAIAAgDASIAAhEBAxEB/8QAHwAAAQUB',
+    'AQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1Fh',
+    'ByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWm',
+    'NkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8j',
+    'JytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQF',
+    'BgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAV',
+    'YnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6go',
+    'OEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5eb',
+    'n6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDN8O+Avufuv0ooorejN8pWS5vi/qsfeP/Z',
+  ].join(''),
+  'base64',
+);
 
 const fd = openSync(output, 'wx', 0o600);
 let offset = 0;
@@ -91,19 +111,24 @@ try {
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /XObject << /Im ${id + 2} 0 R >> /Font << /F1 3 0 R >> >> /Contents ${id + 1} 0 R >>`,
     );
     const label =
-      variant === 'text'
+      variant === 'text' || (variant === 'mixed' && page === 2)
         ? `BT /F1 12 Tf 12 12 Td (${page === editPage ? 'Edited synthetic' : 'Synthetic'} search marker on page ${page}) Tj ET\n`
         : '';
-    const content = Buffer.from(`q ${width} 0 0 ${height} 0 0 cm /Im Do Q\n${label}`, 'ascii');
+    const draw =
+      variant === 'mixed' && page === 2
+        ? 'q 8 0 0 8 12 12 cm /Im Do Q'
+        : `q ${width} 0 0 ${height} 0 0 cm /Im Do Q`;
+    const content = Buffer.from(`${draw}\n${label}`, 'ascii');
     if (variant === 'bomb' && page === 1) {
       stream(id + 1, '/Filter /FlateDecode', deflateSync(Buffer.alloc(17 * 1024 * 1024, 0x20)));
     } else {
       stream(id + 1, '', content);
     }
-    const compressed = image(page);
+    const reusableJpeg = variant === 'mixed' && page < 3;
+    const compressed = reusableJpeg ? syntheticJpeg : image(page);
     stream(
       id + 2,
-      `/Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode`,
+      `/Type /XObject /Subtype /Image /Width ${reusableJpeg ? 8 : width} /Height ${reusableJpeg ? 8 : height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /${reusableJpeg ? 'DCTDecode' : 'FlateDecode'}`,
       compressed,
     );
   }

@@ -17,7 +17,7 @@ use lopdf::Document;
 use crate::budget::Stop;
 use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
 use crate::model::{Provenance, TopLevelBoundary, UnitKind, VisualProvenance};
-use crate::pdf_toc::clean_pdf_toc_text;
+use crate::pdf_toc::{clean_pdf_toc_text, repair_spaced_elsevier_doi};
 
 /// Maximum decompressed content bytes per page.
 const MAX_PAGE_CONTENT_BYTES: usize = 16 * 1024 * 1024;
@@ -111,7 +111,7 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
             if builder.is_saturated() {
                 break;
             }
-            let (text, navigation) = clean_pdf_toc_text(&block);
+            let (text, navigation) = clean_pdf_toc_text(&repair_spaced_elsevier_doi(&block));
             let pushed = builder
                 .push(UnitDraft {
                     kind: if navigation {
@@ -269,6 +269,18 @@ pub(crate) mod tests {
                 .any(|unit| unit.kind == UnitKind::Paragraph
                     && unit.text.contains("prose... retains"))
         );
+    }
+
+    #[test]
+    fn baseline_pdf_repairs_spaced_elsevier_doi_without_joining_prose() {
+        let pdf = text_pdf(&[&[
+            "Child Abuse & Neglect. https://doi.org/10.1016/j. chiabu.2011.01.002.",
+            "Another sentence: j. chiabu.2011.01.002 is not a DOI.",
+        ]]);
+        let document = convert_pdf(&pdf).expect("convert PDF");
+        let text = &document.units()[0].text;
+        assert!(text.contains("https://doi.org/10.1016/j.chiabu.2011.01.002."));
+        assert!(text.contains("j. chiabu.2011.01.002 is not a DOI."));
     }
 
     fn convert_pdf(bytes: &[u8]) -> Result<ConvertedDocument, PdfError> {

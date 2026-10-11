@@ -25,6 +25,7 @@ interface MountOptions {
   readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
   readonly isSourceOpen?: (evidence: KnowledgeEvidence) => boolean;
   readonly profileRevision?: () => number;
+  readonly onConfigureAnswers?: () => void;
 }
 
 function mount(options: MountOptions = {}): MockFileManagerClient {
@@ -42,6 +43,9 @@ function mount(options: MountOptions = {}): MockFileManagerClient {
         onClose: options.onClose ?? vi.fn(),
         ...(options.onOpenSource === undefined ? {} : { onOpenSource: options.onOpenSource }),
         ...(options.isSourceOpen === undefined ? {} : { isSourceOpen: options.isSourceOpen }),
+        ...(options.onConfigureAnswers === undefined
+          ? {}
+          : { onConfigureAnswers: options.onConfigureAnswers }),
       }),
   });
   m.redraw.sync();
@@ -802,6 +806,107 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
         provenance: expect.stringContaining('"page_number":167'),
       }),
     );
+  });
+
+  it('decodes PDF entities as selectable text and opens only valid web links externally', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    const openExternal = vi.spyOn(client, 'openExternalUrl').mockResolvedValue();
+    const openSource = vi.fn();
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            title: 'content.pdf',
+            mediaType: 'application/pdf',
+            unavailable: false,
+            sectionPath: [],
+            provenance:
+              '{"kind":"exact","value":{"kind":"pdfBlock","page_number":1,"block_index":0}}',
+            content:
+              'Child Abuse &amp; Neglect &le; 3 &#x2264; 4 &lt; 5 <img src=x> https://doi.org/10.1234/example?q=1&amp;page=2. javascript:alert(1)',
+          },
+        ],
+      };
+    });
+    mount({ client, initialSubject: 'retrieval', onOpenSource: openSource });
+    await ready();
+    await search();
+
+    const excerpt = root.querySelector<HTMLElement>('.fm-knowledge-result-markdown');
+    expect(excerpt?.textContent).toContain('Child Abuse & Neglect ≤ 3 ≤ 4 < 5 <img src=x>');
+    expect(excerpt?.querySelector('img')).toBeNull();
+    const page = root.querySelector<HTMLButtonElement>(
+      '.fm-knowledge-document-heading .fm-knowledge-page-link',
+    );
+    expect(page?.textContent).toBe('Page 1');
+    expect(page?.closest('.fm-knowledge-document-heading')?.textContent).toContain('content.pdf');
+    expect(root.querySelector('.fm-knowledge-section-heading')).toBeNull();
+    const link = excerpt?.querySelector<HTMLAnchorElement>('a');
+    expect(link?.textContent).toBe('https://doi.org/10.1234/example?q=1&page=2');
+    expect(link?.href).toBe('https://doi.org/10.1234/example?q=1&page=2');
+    expect(excerpt?.querySelectorAll('a')).toHaveLength(1);
+    expect(excerpt?.textContent).toContain('page=2. javascript:alert(1)');
+
+    const selection = vi.spyOn(document, 'getSelection').mockReturnValue({
+      toString: () => 'Child Abuse',
+    } as Selection);
+    link?.click();
+    expect(openExternal).not.toHaveBeenCalled();
+    selection.mockReturnValue(null);
+    link?.click();
+    expect(openExternal).toHaveBeenCalledOnce();
+    expect(openExternal).toHaveBeenCalledWith('https://doi.org/10.1234/example?q=1&page=2');
+    expect(openSource).not.toHaveBeenCalled();
+    page?.click();
+    expect(openSource).toHaveBeenCalledWith(expect.objectContaining({ title: 'content.pdf' }));
+
+    openExternal.mockRejectedValueOnce(new Error('No browser available'));
+    link?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('[role="alert"]')?.textContent).toContain(
+        'The link could not be opened in your default browser.',
+      ),
+    );
+  });
+
+  it('repairs an already-indexed split Elsevier DOI without joining unrelated prose', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    const openExternal = vi.spyOn(client, 'openExternalUrl').mockResolvedValue();
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (!first) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            mediaType: 'application/pdf',
+            content:
+              'https://doi.org/10.1016/j. chiabu.2011.01.002. Another sentence: j. chiabu.2011.01.002 is not a DOI. https://doi.org/10.1016/j.chiabu.2018.07.034.',
+          },
+        ],
+      };
+    });
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
+    await search();
+    const excerpt = root.querySelector('.fm-knowledge-result-markdown');
+    const links = [...(excerpt?.querySelectorAll<HTMLAnchorElement>('a') ?? [])];
+    expect(links.map((link) => link.href)).toEqual([
+      'https://doi.org/10.1016/j.chiabu.2011.01.002',
+      'https://doi.org/10.1016/j.chiabu.2018.07.034',
+    ]);
+    expect(excerpt?.textContent).toContain('j. chiabu.2011.01.002 is not a DOI');
+    links[0]?.click();
+    expect(openExternal).toHaveBeenCalledWith('https://doi.org/10.1016/j.chiabu.2011.01.002');
   });
 
   it.each([
@@ -2282,6 +2387,26 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     expect(root.querySelector('#fm-knowledge-question')).toBeNull();
     expect(() => button('Ask')).toThrow();
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+  });
+
+  it('explains a missing saved Ollama profile in the docked Ask bar and opens Settings', async () => {
+    const client = new MockFileManagerClient();
+    const configure = vi.fn();
+    mount({ client, initialSubject: 'retrieval', onConfigureAnswers: configure });
+    await ready();
+    await search();
+
+    const bar = root.querySelector('.fm-knowledge-ask-unavailable');
+    expect(bar?.textContent).toContain(
+      'Ask needs an available generation profile. Check Settings.',
+    );
+    expect(root.querySelector('#fm-knowledge-question')).toBeNull();
+    bar?.querySelector<HTMLButtonElement>('.fm-knowledge-configure-answers')?.click();
+    expect(configure).toHaveBeenCalledOnce();
+
+    setLocale('nl');
+    m.redraw.sync();
+    expect(bar?.textContent).toContain('Ask heeft een beschikbaar generatieprofiel nodig');
   });
 
   it('searches with the question first when asked before any search', async () => {

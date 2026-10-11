@@ -5035,7 +5035,14 @@ describe('AppShell', () => {
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     (await toolbarButton('Semantic Search…')).click();
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-workspace')).not.toBeNull());
-    expect(root.querySelector('.fm-knowledge-ask-bar')).toBeNull();
+    const configure = await vi.waitFor(() => {
+      const candidate = root.querySelector<HTMLButtonElement>('.fm-knowledge-configure-answers');
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLButtonElement;
+    });
+    expect(root.querySelector('#fm-knowledge-question')).toBeNull();
+    configure.click();
+    expect(root.querySelector('.fm-settings-editor')?.getAttribute('role')).toBe('dialog');
 
     const profile = await client.createLlmProfile({
       name: 'Local Ollama',
@@ -5059,10 +5066,10 @@ describe('AppShell', () => {
     await client.activateLlmProfile(profile.id, false);
     root.querySelector<HTMLButtonElement>('.fm-settings-button')?.click();
     m.redraw.sync();
-    root.querySelector<HTMLButtonElement>('.fm-settings-button')?.click();
-    m.redraw.sync();
 
-    await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-ask-bar')).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-knowledge-ask-bar #fm-knowledge-question')).not.toBeNull(),
+    );
     expect(root.querySelectorAll('.fm-knowledge-workspace')).toHaveLength(1);
     expect(await toolbarButton('Semantic search & Ask')).not.toBeNull();
   });

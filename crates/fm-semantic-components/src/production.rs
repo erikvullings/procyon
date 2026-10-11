@@ -18,7 +18,7 @@ pub const PRODUCTION_SIGNING_KEY_FILE_ENV: &str = "PROCYON_SEMANTIC_CATALOG_SIGN
 /// Compile-time variable containing the trusted public key as 64 lowercase hex digits.
 pub const PRODUCTION_VERIFYING_KEY_HEX_ENV: &str = "PROCYON_SEMANTIC_CATALOG_VERIFYING_KEY_HEX";
 /// Converter pipeline compiled into the production semantic worker.
-pub const PRODUCTION_CONVERTER_IDENTITY: &str = "docling-pdf/1036000+baseline/2";
+pub const PRODUCTION_CONVERTER_IDENTITY: &str = "docling-pdf/1036001+baseline/3";
 /// Structural chunker compiled into the production semantic worker.
 pub const PRODUCTION_CHUNKER_IDENTITY: &str = "structural/3";
 /// Unicode normalization applied symmetrically before production embeddings.

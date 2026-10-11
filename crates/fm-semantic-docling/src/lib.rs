@@ -24,7 +24,7 @@ use fm_semantic_conversion::{
     ConversionWarning, ConvertedDocument, DocumentConverter, DocumentMetadata, FormatKind,
     Omission, OptionalConverter, Provenance, ProvenancePrecision, SourceContent, SourceMap,
     StructuralUnit, TopLevelBoundary, UnitKind, clean_pdf_toc_text, instruction_like_excerpt,
-    is_pdf_toc_section, sanitize,
+    is_pdf_toc_section, repair_spaced_elsevier_doi, sanitize,
 };
 
 const OCR_REQUIRED_GUIDANCE: &str = "This PDF has no searchable text layer and was excluded from \
@@ -33,7 +33,7 @@ const OCR_REQUIRED_GUIDANCE: &str = "This PDF has no searchable text layer and w
 
 /// Version of the Docling extraction and Procyon structural mapping behavior.
 pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
-    ComponentVersion::new("docling-pdf", 1_036_000);
+    ComponentVersion::new("docling-pdf", 1_036_001);
 /// Stable identity of the production conversion pipeline.
 ///
 /// This changes whenever the preferred converter or fallback behaviour can
@@ -41,10 +41,10 @@ pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
 /// included: enabling it retries only previously textless PDFs, while
 /// disabling it makes reconciliation remove their OCR-derived occurrences.
 /// OCR-derived documents carry [`OCRMYPDF_CONVERTER_VERSION`] themselves.
-pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/1036000+baseline/2";
+pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/1036001+baseline/3";
 /// Version of the optional OCRmyPDF plus deterministic Docling composition.
 pub const OCRMYPDF_CONVERTER_VERSION: ComponentVersion =
-    ComponentVersion::new("ocrmypdf-docling", 1);
+    ComponentVersion::new("ocrmypdf-docling", 2);
 /// Explicit environment opt-in read by the local semantic worker.
 pub const OCRMYPDF_ENABLED_ENV: &str = "PROCYON_SEMANTIC_OCRMYPDF";
 /// Optional trusted executable override for non-standard installations.
@@ -1448,7 +1448,8 @@ impl<'a> Mapper<'a> {
             return false;
         }
         let order = self.units.len() as u32;
-        let (mut text, has_leader) = clean_pdf_toc_text(&sanitized.text);
+        let (mut text, has_leader) =
+            clean_pdf_toc_text(&repair_spaced_elsevier_doi(&sanitized.text));
         let kind = if kind != UnitKind::Heading && (has_leader || is_pdf_toc_section(&section_path))
         {
             UnitKind::Navigation
@@ -1796,6 +1797,35 @@ mod tests {
                 .iter()
                 .all(|unit| !unit.text.contains("Repeated footer"))
         );
+    }
+
+    #[test]
+    fn docling_pdf_repairs_spaced_doi_before_chunking() {
+        let document = DoclingDocument {
+            name: "fixture".into(),
+            nodes: vec![
+                Node::PageInfo {
+                    page_no: 1,
+                    width: 612.0,
+                    height: 792.0,
+                },
+                Node::Paragraph {
+                    text: "https://doi.org/10.1016/j. chiabu.2011.01.002 and j. chiabu.2011.01.002"
+                        .into(),
+                },
+            ],
+            strict_markdown: false,
+            compact_tables: false,
+            links: Vec::new(),
+            confidence: None,
+        };
+        let context = ConversionContext::new();
+        let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 1, 1, None);
+        mapper.map_document(document);
+        let converted = mapper.finish();
+        let text = &converted.document().expect("converted").units()[0].text;
+        assert!(text.contains("https://doi.org/10.1016/j.chiabu.2011.01.002"));
+        assert!(text.contains("j. chiabu.2011.01.002"));
     }
 
     #[test]

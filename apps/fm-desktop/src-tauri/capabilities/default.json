@@ -21,7 +21,10 @@
       "identifier": "opener:allow-open-url",
       "allow": [
         {
-          "url": "https://login.microsoftonline.com/*"
+          "url": "https://*"
+        },
+        {
+          "url": "http://*"
         }
       ]
     }

@@ -76,6 +76,33 @@ test('makes a five-page text-layer PDF with a known searchable page marker', () 
   assert.equal([...pdf.toString('latin1').matchAll(/\/Subtype \/Image\b/g)].length, 5);
 });
 
+test('creates page-local reusable JPEG, text-plus-figure, and non-reusable image evidence', () => {
+  const pdf = generate('mixed.pdf', 'mixed', 3);
+  assertPdfXref(pdf);
+  const source = pdf.toString('latin1');
+  assert.equal([...source.matchAll(/\/Filter \/DCTDecode\b/g)].length, 2);
+  assert.equal([...source.matchAll(/\/Filter \/FlateDecode\b/g)].length, 1);
+  assert.equal([...source.matchAll(/Synthetic search marker on page 2/g)].length, 1);
+  assert.ok(!source.includes('Synthetic search marker on page 1'));
+  assert.ok(!source.includes('Synthetic search marker on page 3'));
+  assert.equal([...pdf.toString('hex').matchAll(/ffd8ffe0/g)].length, 2);
+  assert.deepEqual(pdf, generate('mixed-again.pdf', 'mixed', 3));
+  const invalid = spawnSync(process.execPath, [
+    script,
+    '--output',
+    join(directory, 'mixed-four.pdf'),
+    '--variant',
+    'mixed',
+    '--pages',
+    '4',
+    '--width',
+    '32',
+    '--height',
+    '24',
+  ]);
+  assert.notEqual(invalid.status, 0);
+});
+
 test('an edit changes only the selected page marker, not its neighbors', () => {
   const original = generate('original.pdf', 'text', 5);
   const edited = generate('edited.pdf', 'text', 5, 32, 24, ['--edit-page', '3']);

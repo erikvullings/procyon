@@ -203,6 +203,7 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
   let wasOpen = false;
   let conceptMode = false;
   let conceptFilter = '';
+  let selectedVocabularyId = '';
   let selectedConcept: { vocabulary: ConceptSource; uri: string } | undefined;
   let vocabularies: readonly ConceptSource[] = [];
   let conceptLibraryId: string | undefined;
@@ -424,6 +425,7 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
         loadedWorkspace = attrs.workspaceId;
         selectedConcept = undefined;
         conceptFilter = '';
+        selectedVocabularyId = '';
         vocabularies = [];
         conceptLibraryId = undefined;
         conceptAvailable = false;
@@ -474,6 +476,7 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
                       loadedWorkspace = attrs.workspaceId;
                       selectedConcept = undefined;
                       conceptFilter = '';
+                      selectedVocabularyId = '';
                       vocabularies = [];
                       void loadConcepts(attrs);
                       savedName = '';
@@ -489,21 +492,42 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
             : undefined,
           conceptMode
             ? m('.fm-find-concept', [
-                m('p', t('search', 'conceptSearchExplanation')),
-                m('label.fm-create-directory-field', [
-                  m('span', t('search', 'chooseConcept')),
-                  m('input#find-files-concept.browser-default', {
-                    type: 'search',
-                    value: conceptFilter,
-                    oninput: (event: InputEvent) => {
-                      conceptFilter = (event.currentTarget as HTMLInputElement).value;
-                      selectedConcept = undefined;
-                    },
-                    onkeydown: (event: KeyboardEvent) => {
-                      event.stopPropagation();
-                      if (event.key === 'Escape') cancel(attrs);
-                    },
-                  }),
+                m('.fm-find-concept-search-row', [
+                  m('label.fm-find-concept-vocabulary', [
+                    m('span', t('search', 'vocabulary')),
+                    m(
+                      'select.browser-default',
+                      {
+                        name: 'concept-vocabulary',
+                        value: selectedVocabularyId,
+                        onchange: (event: Event) => {
+                          selectedVocabularyId = (event.currentTarget as HTMLSelectElement).value;
+                          selectedConcept = undefined;
+                        },
+                      },
+                      [
+                        m('option', { value: '' }, t('search', 'allVocabularies')),
+                        ...vocabularies.map((vocabulary) =>
+                          m('option', { value: vocabulary.id }, vocabulary.name),
+                        ),
+                      ],
+                    ),
+                  ]),
+                  m('label.fm-create-directory-field', [
+                    m('span', t('search', 'chooseConcept')),
+                    m('input#find-files-concept.browser-default', {
+                      type: 'search',
+                      value: conceptFilter,
+                      oninput: (event: InputEvent) => {
+                        conceptFilter = (event.currentTarget as HTMLInputElement).value;
+                        selectedConcept = undefined;
+                      },
+                      onkeydown: (event: KeyboardEvent) => {
+                        event.stopPropagation();
+                        if (event.key === 'Escape') cancel(attrs);
+                      },
+                    }),
+                  ]),
                 ]),
                 conceptsLoading
                   ? m('p', { role: 'status' }, t('search', 'conceptLoading'))
@@ -513,9 +537,14 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
                   ? m('p', t('search', 'noConceptSources'))
                   : undefined,
                 (() => {
-                  const candidates = vocabularies.flatMap((vocabulary) =>
-                    vocabulary.concepts.map((concept) => ({ vocabulary, concept })),
-                  );
+                  const candidates = vocabularies
+                    .filter(
+                      (vocabulary) =>
+                        !selectedVocabularyId || vocabulary.id === selectedVocabularyId,
+                    )
+                    .flatMap((vocabulary) =>
+                      vocabulary.concepts.map((concept) => ({ vocabulary, concept })),
+                    );
                   const term = conceptFilter.trim().toLocaleLowerCase();
                   const recent = recentConcepts.flatMap((item) => {
                     const candidate = candidates.find(
@@ -533,11 +562,14 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
                         ].some((text) => text.toLocaleLowerCase().includes(term)),
                       )
                     : recent;
-                  return matches.length === 0 && vocabularies.length > 0
-                    ? m('p', t('search', term ? 'noConceptMatches' : 'conceptHint'))
-                    : m(
-                        'ul.fm-find-concept-list',
-                        matches.slice(0, 20).map(({ vocabulary, concept }) =>
+                  return m(
+                    'ul.fm-find-concept-list',
+                    matches.length === 0
+                      ? m(
+                          'li.fm-find-concept-empty',
+                          t('search', term ? 'noConceptMatches' : 'conceptHint'),
+                        )
+                      : matches.slice(0, 20).map(({ vocabulary, concept }) =>
                           m('li', { key: `${vocabulary.id}:${concept.uri}` }, [
                             m(
                               'button.btn-flat.fm-find-concept-choice',
@@ -588,19 +620,18 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
                             })(),
                           ]),
                         ),
-                      );
+                  );
                 })(),
-                m(
-                  'button.btn-flat.fm-find-concept-scope',
-                  {
-                    type: 'button',
-                    'aria-pressed': String(currentFolderOnly),
-                    onclick: () => {
-                      currentFolderOnly = !currentFolderOnly;
+                m('label.fm-find-concept-scope', [
+                  m('input.browser-default', {
+                    type: 'checkbox',
+                    checked: currentFolderOnly,
+                    onchange: (event: Event) => {
+                      currentFolderOnly = (event.currentTarget as HTMLInputElement).checked;
                     },
-                  },
-                  t('search', 'conceptCurrentFolder'),
-                ),
+                  }),
+                  m('span', t('search', 'conceptCurrentFolder')),
+                ]),
               ])
             : [
                 m('.fm-find-files-scope', t('search', 'searchIn', { location: attrs.scopeLabel })),

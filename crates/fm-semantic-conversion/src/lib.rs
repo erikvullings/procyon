@@ -63,7 +63,7 @@ pub use model::{
     MAX_VISUAL_PIXELS, MediaType, Omission, Provenance, SkipReason, StructuralUnit,
     TopLevelBoundary, UnitKind, VisualAttachment, VisualOmission, VisualProvenance,
 };
-pub use pdf_toc::{clean_pdf_toc_text, is_pdf_toc_section};
+pub use pdf_toc::{clean_pdf_toc_text, is_pdf_toc_section, repair_spaced_elsevier_doi};
 pub use sniff::{ResolvedFormat, resolve_format};
 pub use text::{
     DecodedText, SanitizedText, SourceMap, SourceSegment, decode, instruction_like_excerpt,

@@ -810,9 +810,9 @@ export const nl = {
     savedSearches: 'Opgeslagen zoekopdrachten',
     filesMode: 'Bestanden',
     conceptMode: 'Zoeken op concept',
+    vocabulary: 'Woordenlijst',
+    allVocabularies: 'Alle woordenlijsten',
     chooseConcept: 'Concept',
-    conceptSearchExplanation:
-      'Vind verwante geïndexeerde passages in deze werkruimte. Gelijkenis is geen bevestigde concepttoewijzing.',
     relatedConcept: 'Verwant aan {concept}',
     conceptCurrentFolder: 'Alleen huidige map',
     conceptLoading: 'Woordenlijsten laden…',
@@ -1070,6 +1070,7 @@ export const nl = {
     duplicateSources: 'Ook op {count} andere geautoriseerde locatie(s)',
     openSource: '{title} openen',
     openSourceFailed: 'De bron kon niet worden geopend.',
+    openExternalFailed: 'De link kon niet in je standaardbrowser worden geopend.',
     showMore: 'Meer resultaten tonen',
     empty: 'Geen geïndexeerde bron kwam overeen met deze query.',
     emptyHint: 'Probeer minder behoeftes, een ruimer bereik of andere verwante termen.',
@@ -1082,6 +1083,10 @@ export const nl = {
     answerNotGenerated:
       'Zoeken genereert nooit een antwoord. Antwoordgeneratie is niet beschikbaar en ook niet nodig.',
     answerRegion: 'Optioneel kennisantwoord',
+    answerProfileNeeded:
+      'Ask heeft een beschikbaar generatieprofiel nodig. Controleer Instellingen.',
+    answerProfilesFailed: 'Generatieprofielen konden niet worden geladen. Controleer Instellingen.',
+    configureAnswers: 'Ask instellen',
     answerHeading: 'Antwoord',
     showAnswer: 'Antwoord tonen',
     hideAnswer: 'Antwoord verbergen',

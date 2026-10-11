@@ -22,7 +22,7 @@ use crate::text::decode;
 
 /// Version of the baseline converter. Bumping it invalidates every fingerprint
 /// derived from its output.
-pub const BASELINE_CONVERTER_VERSION: ComponentVersion = ComponentVersion::new("baseline", 2);
+pub const BASELINE_CONVERTER_VERSION: ComponentVersion = ComponentVersion::new("baseline", 3);
 
 /// Magic bytes of an OLE compound file. Encrypted OOXML documents are stored
 /// this way, as are the legacy `.doc`/`.xls`/`.ppt` binary formats.

@@ -25,7 +25,7 @@ export { nativeLibraryNames };
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const PRODUCTION_CHUNKER_IDENTITY = 'structural/3';
-export const PRODUCTION_CONVERTER_IDENTITY = 'docling-pdf/1036000+baseline/2';
+export const PRODUCTION_CONVERTER_IDENTITY = 'docling-pdf/1036001+baseline/3';
 
 export function supportedSemanticTarget(platform = process.platform, architecture = process.arch) {
   const target = zvecRuntimeTarget(platform, architecture);

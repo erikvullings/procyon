@@ -4140,6 +4140,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       m.redraw();
     },
     openKnowledgeSearch,
+    openKnowledgeAnswerSettings: () => openSettingsDialog('semantic'),
     closeKnowledgeSearch: (paneId, tabId) => tabController.performCloseTab(paneId, tabId),
     openKnowledgeSource,
     isKnowledgeSourceOpen: (evidence) =>

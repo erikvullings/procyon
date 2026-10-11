@@ -152,8 +152,8 @@ test('production bundle records the compiled structural chunker identity', () =>
   assert.equal(PRODUCTION_CHUNKER_IDENTITY, 'structural/3');
 });
 
-test('production bundle records the EPUB-capable baseline converter identity', () => {
-  assert.equal(PRODUCTION_CONVERTER_IDENTITY, 'docling-pdf/1036000+baseline/2');
+test('production bundle records the current PDF and baseline converter identity', () => {
+  assert.equal(PRODUCTION_CONVERTER_IDENTITY, 'docling-pdf/1036001+baseline/3');
 });
 
 test('model verification resolves the content-addressed developer artifact', () => {

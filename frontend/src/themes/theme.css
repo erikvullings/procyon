@@ -3140,6 +3140,10 @@ input[type="text"].fm-shortcuts-help-capture-input {
   cursor: pointer;
 }
 
+.fm-knowledge-document-heading .fm-knowledge-page-link {
+  margin-inline-start: auto;
+}
+
 .fm-knowledge-relevance-indicator {
   display: block;
   width: 0.55rem;
@@ -3225,6 +3229,12 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .fm-knowledge-result-markdown {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.fm-knowledge-result-markdown,
+.fm-knowledge-result-markdown * {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .fm-knowledge-media-evidence {
@@ -3349,6 +3359,29 @@ input[type="text"].fm-shortcuts-help-capture-input {
   padding-inline-start: 0.5rem;
   background: var(--fm-surface-elevated);
   font-size: 0.92em;
+}
+
+.fm-knowledge-ask-unavailable {
+  gap: 0.5rem;
+}
+
+.fm-knowledge-ask-unavailable > span[role="status"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-knowledge-configure-answers {
+  flex: 0 0 auto;
+  padding: 0 0.5rem;
+  border: 0;
+  background: transparent;
+  color: var(--fm-accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .fm-knowledge-answer-output:not(.is-empty) + .fm-knowledge-ask-bar {
@@ -4012,6 +4045,27 @@ input[type="text"].fm-shortcuts-help-capture-input {
   gap: 0.5rem;
 }
 
+.fm-find-concept-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fm-find-concept-vocabulary {
+  display: grid;
+  flex: 0 1 12rem;
+  min-width: 10rem;
+}
+
+.fm-find-concept-search-row .fm-create-directory-field {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+}
+
+.fm-find-concept-vocabulary select {
+  width: 100%;
+}
+
 .fm-find-concept p {
   margin: 0;
   color: var(--fm-text-muted);
@@ -4019,12 +4073,17 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-find-concept-list {
   display: grid;
+  align-content: start;
   gap: 0.125rem;
-  max-height: min(30vh, 14rem);
+  height: min(30vh, 14rem);
   margin: 0;
   padding: 0;
   overflow-y: auto;
   list-style: none;
+}
+
+.fm-find-concept-empty {
+  color: var(--fm-text-muted);
 }
 
 .fm-find-concept-choice {
@@ -4053,11 +4112,10 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-find-concept-scope {
+  display: inline-flex;
   justify-self: start;
-}
-
-.fm-find-concept-scope[aria-pressed="true"] {
-  background: var(--fm-selection);
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .fm-find-files-scope {

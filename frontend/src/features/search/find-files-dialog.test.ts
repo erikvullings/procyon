@@ -167,7 +167,9 @@ describe('FindFilesDialog', () => {
     expect(choice?.textContent).toContain('Learning from examples');
     choice?.click();
     m.redraw.sync();
-    expect(root.textContent).toContain('Similarity is not a confirmed concept assignment');
+    expect(root.querySelector<HTMLInputElement>('.fm-find-concept-scope input')?.checked).toBe(
+      false,
+    );
     [...document.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
       .find((button) => button.textContent?.trim() === 'Search')
       ?.click();
@@ -215,8 +217,11 @@ describe('FindFilesDialog', () => {
     [...document.querySelectorAll<HTMLButtonElement>('.fm-find-concept-list button')]
       .find((button) => button.textContent?.includes('Machine learning · Topics'))
       ?.click();
-    document.querySelector<HTMLButtonElement>('.fm-find-concept-scope')?.click();
+    document.querySelector<HTMLInputElement>('.fm-find-concept-scope input')?.click();
     m.redraw.sync();
+    expect(root.querySelector<HTMLInputElement>('.fm-find-concept-scope input')?.checked).toBe(
+      true,
+    );
     expect(document.querySelector('.fm-save-search-button')?.textContent).toBe(
       'Save as smart folder',
     );
@@ -268,6 +273,89 @@ describe('FindFilesDialog', () => {
       ?.click();
     expect(onSearch).toHaveBeenCalledOnce();
     expect(importSpy).not.toHaveBeenCalled();
+  });
+
+  it('filters concept choices by vocabulary and submits only a choice from that vocabulary', async () => {
+    const client = await indexedClient();
+    const onSearch = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          client,
+          workspaceId: 'workspace-a',
+          scopeLabel: '/Documents',
+          onSearch,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-files-modes')).not.toBeNull());
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelectorAll('select[name="concept-vocabulary"] option').length,
+      ).toBeGreaterThan(2),
+    );
+    const vocabulary = root.querySelector<HTMLSelectElement>('select[name="concept-vocabulary"]');
+    const filter = root.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!vocabulary || !filter) throw new Error('concept controls missing');
+    expect(vocabulary.options[0]?.textContent).toBe('All vocabularies');
+    expect(
+      vocabulary.compareDocumentPosition(filter) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    filter.value = 'energy';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    const all = [...root.querySelectorAll<HTMLButtonElement>('.fm-find-concept-choice')];
+    expect(all.length).toBeGreaterThan(1);
+    const chosen = all.find((button) => button.textContent?.includes('renewable energy'));
+    const sourceName = chosen?.querySelector('span')?.textContent?.replace(/^ · /u, '');
+    const source = [...vocabulary.options].find((option) => option.textContent === sourceName);
+    if (!chosen || !source) throw new Error('bundled energy concept missing');
+    chosen.click();
+    m.redraw.sync();
+    vocabulary.value = source.value;
+    vocabulary.dispatchEvent(new Event('change', { bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-find-concept-choice[aria-pressed="true"]')).toBeNull();
+    expect(
+      [...root.querySelectorAll('.fm-find-concept-choice')].every((choice) =>
+        choice.textContent?.includes(` · ${sourceName}`),
+      ),
+    ).toBe(true);
+    vocabulary.value = '';
+    vocabulary.dispatchEvent(new Event('change', { bubbles: true }));
+    filter.value = 'energy';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelectorAll('.fm-find-concept-choice').length).toBe(all.length);
+    vocabulary.value = source.value;
+    vocabulary.dispatchEvent(new Event('change', { bubbles: true }));
+    filter.value = 'no matching concept exists';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-find-concept-list .fm-find-concept-empty')?.textContent).toBe(
+      'No matching concept in the available vocabularies.',
+    );
+    filter.value = 'energy';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
+      .find((button) => button.textContent?.trim() === 'Search')
+      ?.click();
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'semantic',
+        conceptLabel: expect.stringContaining(`${sourceName}:`),
+        semanticScope: 'entireLibrary',
+      }),
+    );
   });
 
   it('is focused on open and submits the trimmed query with Enter', async () => {

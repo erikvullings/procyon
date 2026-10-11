@@ -1,4 +1,36 @@
-//! Conservative PDF table-of-contents detection and leader cleanup.
+//! Conservative PDF table-of-contents cleanup and extracted DOI repair.
+
+/// Repairs the line-layout gap between Elsevier's `j.` DOI stem and its
+/// journal code. Other whitespace and ordinary prose are left untouched.
+#[must_use]
+pub fn repair_spaced_elsevier_doi(text: &str) -> String {
+    const PREFIXES: [&str; 2] = ["https://doi.org/10.1016/j.", "http://doi.org/10.1016/j."];
+    let mut result = String::with_capacity(text.len());
+    let mut remaining = text;
+    while let Some((position, prefix)) = PREFIXES
+        .iter()
+        .filter_map(|prefix| remaining.find(prefix).map(|position| (position, *prefix)))
+        .min_by_key(|(position, _)| *position)
+    {
+        let boundary = position + prefix.len();
+        result.push_str(&remaining[..boundary]);
+        remaining = &remaining[boundary..];
+        let next = remaining.trim_start_matches(char::is_whitespace);
+        let journal_len = next.bytes().take_while(u8::is_ascii_alphabetic).count();
+        let suffix = next.get(journal_len..).unwrap_or_default();
+        let valid_suffix = journal_len > 0
+            && suffix.starts_with('.')
+            && suffix
+                .get(1..5)
+                .is_some_and(|year| year.bytes().all(|byte| byte.is_ascii_digit()))
+            && suffix.get(5..6) == Some(".");
+        if next.len() < remaining.len() && valid_suffix {
+            remaining = next;
+        }
+    }
+    result.push_str(remaining);
+    result
+}
 
 /// Removes dot leaders only when a run of at least four dots is separated
 /// from words by whitespace (or a line boundary). Ordinary ellipses survive.
@@ -73,6 +105,20 @@ mod tests {
         assert_eq!(
             clean_pdf_toc_text("An ordinary passage... and a sentence."),
             ("An ordinary passage... and a sentence.".into(), false)
+        );
+    }
+
+    #[test]
+    fn repairs_only_spaced_elsevier_doi_stems() {
+        assert_eq!(
+            repair_spaced_elsevier_doi(
+                "https://doi.org/10.1016/j. chiabu.2011.01.002; j. chiabu.2011.01.002; https://doi.org/10.1016/j.chiabu.2018.07.034"
+            ),
+            "https://doi.org/10.1016/j.chiabu.2011.01.002; j. chiabu.2011.01.002; https://doi.org/10.1016/j.chiabu.2018.07.034"
+        );
+        assert_eq!(
+            repair_spaced_elsevier_doi("https://doi.org/10.1016/j. Next sentence. 2011"),
+            "https://doi.org/10.1016/j. Next sentence. 2011"
         );
     }
 }
