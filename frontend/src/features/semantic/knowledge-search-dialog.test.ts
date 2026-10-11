@@ -3006,9 +3006,44 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     );
 
     openAsk();
+    question().focus();
     await generateAnswer();
 
-    expect(document.activeElement).toBe(root.querySelector('.fm-knowledge-answer-body'));
+    expect(document.activeElement).toBe(question());
+    expect(root.querySelector('.fm-knowledge-answer-body')?.hasAttribute('tabindex')).toBe(false);
+  });
+
+  it('shows an accessible circular indicator only while generating an answer', async () => {
+    const client = new MockFileManagerClient();
+    await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    openAsk();
+    const original = client.generateKnowledgeAnswer.bind(client);
+    let finish: (() => void) | undefined;
+    vi.spyOn(client, 'generateKnowledgeAnswer').mockImplementation(async (request, signal) => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return original(request, signal);
+    });
+
+    button('Ask').click();
+    m.redraw.sync();
+    expect(answerSection()?.getAttribute('aria-busy')).toBe('true');
+    const progress = root.querySelector('.fm-knowledge-answer-progress');
+    expect(progress?.getAttribute('role')).toBe('status');
+    expect(progress?.textContent).toContain('Generating');
+    expect(
+      progress?.querySelector('.fm-knowledge-search-spinner')?.getAttribute('aria-hidden'),
+    ).toBe('true');
+    expect(root.querySelector('.fm-knowledge-ask-cancel')).not.toBeNull();
+
+    finish?.();
+    await vi.waitFor(() => expect(answerSection()?.getAttribute('aria-busy')).toBe('false'));
+    expect(root.querySelector('.fm-knowledge-answer-progress')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-ask-cancel')).toBeNull();
   });
 
   it('cancels a running generation when the dialog is closed', async () => {

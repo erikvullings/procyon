@@ -188,19 +188,56 @@ describe('SettingsEditor', () => {
   });
 
   it('shows only semantic activation until components are installed', async () => {
-    const { client } = mountEditor();
+    const client = new MockFileManagerClient();
     const status = vi.spyOn(client, 'getSemanticComponentStatus');
     const library = vi.spyOn(client, 'getSemanticLibraryStatus');
+    mountEditor({ client });
 
-    expect(status).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(status).toHaveBeenCalledOnce());
     openSection('Semantic (RAG)');
 
     await vi.waitFor(() => expect(root.querySelector('.fm-semantic-management')).not.toBeNull());
     expect(root.textContent).toContain('Semantic components');
-    expect(status).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(status).toHaveBeenCalledOnce());
     expect(root.textContent).not.toContain('Semantic libraries');
     expect(root.textContent).not.toContain('Vocabularies');
     expect(library).not.toHaveBeenCalled();
+  });
+
+  it('preloads semantic settings without blocking Appearance or loading again on navigation', async () => {
+    const client = new MockFileManagerClient();
+    const originalStatus = client.getSemanticComponentStatus.bind(client);
+    let finishLoad: (() => void) | undefined;
+    const status = vi.spyOn(client, 'getSemanticComponentStatus').mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        finishLoad = resolve;
+      });
+      return originalStatus();
+    });
+
+    mountEditor({ client });
+    await vi.waitFor(() => expect(status).toHaveBeenCalledOnce());
+    expect(root.textContent).toContain('Appearance');
+    expect(numberInput('Font size (px)').value).toBe('13');
+    openSection('Semantic (RAG)');
+    expect(root.textContent).toContain('Loading');
+
+    finishLoad?.();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-management')).not.toBeNull());
+    openSection('Appearance');
+    openSection('Semantic (RAG)');
+    expect(status).toHaveBeenCalledOnce();
+  });
+
+  it('preloads the generation profiles for installed Semantic components', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    const profiles = vi.spyOn(client, 'listLlmProfiles');
+    mountEditor({ client });
+
+    await vi.waitFor(() => expect(profiles).toHaveBeenCalledOnce());
+    openSection('Semantic (RAG)');
+    await vi.waitFor(() => expect(root.textContent).toContain('Provider preset'));
+    expect(profiles).toHaveBeenCalledOnce();
   });
 
   it('reveals semantic configuration after components are enabled', async () => {

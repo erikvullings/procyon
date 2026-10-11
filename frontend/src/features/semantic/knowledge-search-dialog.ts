@@ -813,8 +813,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   let answerAbortController: AbortController | undefined;
   /** Bumped per generation, so only the newest response owns the state. */
   let answerSequence = 0;
-  /** Set when an answer arrived and its region should take focus once. */
-  let focusAnswerOnReady = false;
   /** Bumped on every open/close, so responses from a previous life are dropped. */
   let generation = 0;
   /** Bumped on every edit, so a response for an older draft is never applied. */
@@ -923,7 +921,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     answer = undefined;
     answerError = undefined;
     answerNotice = undefined;
-    focusAnswerOnReady = false;
   }
 
   /**
@@ -1430,7 +1427,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       );
       if (superseded()) return;
       answer = generated;
-      focusAnswerOnReady = true;
     } catch (cause) {
       if (superseded()) return;
       if (cause instanceof DOMException && cause.name === 'AbortError') {
@@ -1849,11 +1845,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     displayed: ReadonlyMap<string, KnowledgeEvidence>,
   ): m.Children {
     if (generatingAnswer) {
-      return m(
-        'p.fm-knowledge-status',
-        { role: 'status' },
+      return m('p.fm-knowledge-status.fm-knowledge-answer-progress', { role: 'status' }, [
+        m('span.fm-knowledge-search-spinner', { 'aria-hidden': 'true' }),
         t('knowledgeSearch', 'generatingAnswer'),
-      );
+      ]);
     }
     const current = answer;
     if (current === undefined) {
@@ -2049,7 +2044,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       answerNotice !== undefined;
     return m(
       'section.fm-knowledge-answer',
-      { 'aria-label': t('knowledgeSearch', 'answerRegion'), 'aria-busy': generatingAnswer },
+      {
+        'aria-label': t('knowledgeSearch', 'answerRegion'),
+        'aria-busy': generatingAnswer ? 'true' : 'false',
+      },
       [
         m('.fm-knowledge-answer-output', { class: hasOutput ? undefined : 'is-empty' }, [
           m('.fm-knowledge-answer-output-heading', [
@@ -2094,15 +2092,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           m(
             '.fm-knowledge-answer-body#fm-knowledge-answer-body',
             {
-              tabindex: '-1',
               'aria-live': 'polite',
               hidden: answerCollapsed,
-              onupdate: ({ dom }: m.VnodeDOM) => {
-                if (focusAnswerOnReady && answer !== undefined) {
-                  focusAnswerOnReady = false;
-                  (dom as HTMLElement).focus();
-                }
-              },
             },
             hasOutput ? answerBody(attrs, displayed) : undefined,
           ),

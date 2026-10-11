@@ -3316,6 +3316,12 @@ input[type="text"].fm-shortcuts-help-capture-input {
   display: none;
 }
 
+.fm-knowledge-answer-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .fm-knowledge-answer-output-heading {
   display: flex;
   align-items: center;

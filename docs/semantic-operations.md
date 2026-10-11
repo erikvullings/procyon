@@ -60,7 +60,10 @@ content search, and baseline document viewing available.
 - **Settings > Semantic > AI summaries and answers** connects a local or cloud generation service for
   document summaries and grounded answers; semantic search itself does not need one. Select a
   provider preset and model, then review the advanced context and answer token limits. Procyon
-  suggests model-reported limits when available; otherwise the initial limits are conservative.
+  loads Semantic Settings in the background when Settings opens. The first discovered model is
+  selected in the draft without requiring another click, but the profile must still be saved with
+  the Settings Save button before Ask becomes available. Procyon suggests model-reported limits
+  when available; otherwise the initial limits are conservative.
   The selectable values are caps, not a promise that the provider accepts a request of that size;
   Procyon itself caps context at 1,048,576 tokens and answers at 16,384 tokens, so there is no
   unlimited option. Existing saved profiles keep their configured limits until edited. The
@@ -522,7 +525,8 @@ explaining that a model must be chosen and its profile saved. PDF excerpts rende
 decode HTML entities without interpreting markup, and open validated web links using the host's
 external-browser adapter. Already-indexed PDF excerpts repair a narrowly identified space in
 Elsevier DOI links for display; newly derived embeddings use that repair only after the updated
-converter is installed and the PDF is reindexed.
+converter is installed and the PDF is reindexed. Answer generation shows a circular activity
+indicator and a cancellable status without moving keyboard focus to the answer when it completes.
 
 Local embedding work is checkpointed in small durable batches. Interrupted ingestion reuses those
 vectors without exposing them to search until the complete document generation is published.
