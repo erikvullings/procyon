@@ -65,8 +65,7 @@ function errorMessage(error: unknown): string {
   return t('semanticLibrary', 'unknownError');
 }
 
-function formatBytes(bytes: number | null | undefined): string {
-  if (bytes == null) return t('semanticLibrary', 'estimateUnavailableValue');
+function formatBytes(bytes: number): string {
   const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'] as const;
   let value = bytes;
   let unit = 0;
@@ -152,46 +151,80 @@ function estimateView(
   actionLabel: string,
 ): Vnode {
   const estimate = preview.estimate;
-  const estimateHeading =
-    estimate.completeness === 'estimated'
-      ? t('semanticLibrary', 'estimate')
-      : estimate.completeness === 'partial'
-        ? t('semanticLibrary', 'partialEstimate')
-        : t('semanticLibrary', 'estimateUnavailable');
+  const hasEstimate =
+    estimate.completeness !== 'unavailable' &&
+    [
+      estimate.estimatedFiles,
+      estimate.estimatedSourceBytes,
+      estimate.estimatedExtractedBytes,
+      estimate.estimatedVectorBytes,
+      estimate.estimatedAdditionalLocalBytes,
+      estimate.missingModelDownloadBytes,
+    ].some((value) => value != null);
+  const reportedSkips = estimate.skippedReasonCounts.filter(({ count }) => count > 0);
+  const budgetLabels = {
+    documents: t('semanticLibrary', 'estimatedFiles'),
+    sourceBytes: t('semanticLibrary', 'estimatedSourceBytes'),
+    extractedBytes: t('semanticLibrary', 'estimatedExtractedBytes'),
+    vectorBytes: t('semanticLibrary', 'estimatedVectorBytes'),
+  } satisfies Record<SemanticEnrolmentPreview['estimate']['exceededBudgets'][number], string>;
+  function estimateRow(
+    label: string,
+    value: number | null | undefined,
+    bytes = false,
+  ): Vnode[] | undefined {
+    return value == null
+      ? undefined
+      : [m('dt', label), m('dd', bytes ? formatBytes(value) : String(value))];
+  }
   return m(
     'section.fm-semantic-library-plan',
-    { 'aria-labelledby': 'semantic-enrolment-preview' },
+    { 'aria-label': t('semanticLibrary', 'previewInclusion') },
     [
-      m('h6#semantic-enrolment-preview', estimateHeading),
-      estimate.completeness === 'unavailable'
-        ? m('.fm-semantic-library-estimate-warning', [
-            m('p', t('semanticLibrary', 'estimateUnavailableGuidance')),
-            estimate.unavailableReason == null
-              ? undefined
-              : m('details', [
-                  m('summary', t('button', 'details')),
-                  m('span', estimate.unavailableReason),
-                ]),
-          ])
-        : m('dl.fm-semantic-library-values', [
-            m('dt', t('semanticLibrary', 'estimatedFiles')),
-            m('dd', String(estimate.estimatedFiles ?? 0)),
-            m('dt', t('semanticLibrary', 'estimatedSourceBytes')),
-            m('dd', formatBytes(estimate.estimatedSourceBytes)),
-            m('dt', t('semanticLibrary', 'estimatedExtractedBytes')),
-            m('dd', formatBytes(estimate.estimatedExtractedBytes)),
-            m('dt', t('semanticLibrary', 'estimatedVectorBytes')),
-            m('dd', formatBytes(estimate.estimatedVectorBytes)),
-            m('dt', t('semanticLibrary', 'estimatedLocalBytes')),
-            m('dd', formatBytes(estimate.estimatedAdditionalLocalBytes)),
-            m('dt', t('semanticLibrary', 'missingModelDownload')),
-            m('dd', formatBytes(estimate.missingModelDownloadBytes)),
-          ]),
-      estimate.skippedReasonCounts.length === 0
-        ? m('p', t('semanticLibrary', 'noSkippedCounts'))
+      hasEstimate
+        ? [
+            m(
+              'h6',
+              t(
+                'semanticLibrary',
+                estimate.completeness === 'estimated' ? 'estimate' : 'partialEstimate',
+              ),
+            ),
+            m('dl.fm-semantic-library-values', [
+              estimateRow(t('semanticLibrary', 'estimatedFiles'), estimate.estimatedFiles),
+              estimateRow(
+                t('semanticLibrary', 'estimatedSourceBytes'),
+                estimate.estimatedSourceBytes,
+                true,
+              ),
+              estimateRow(
+                t('semanticLibrary', 'estimatedExtractedBytes'),
+                estimate.estimatedExtractedBytes,
+                true,
+              ),
+              estimateRow(
+                t('semanticLibrary', 'estimatedVectorBytes'),
+                estimate.estimatedVectorBytes,
+                true,
+              ),
+              estimateRow(
+                t('semanticLibrary', 'estimatedLocalBytes'),
+                estimate.estimatedAdditionalLocalBytes,
+                true,
+              ),
+              estimateRow(
+                t('semanticLibrary', 'missingModelDownload'),
+                estimate.missingModelDownloadBytes,
+                true,
+              ),
+            ]),
+          ]
+        : undefined,
+      reportedSkips.length === 0
+        ? undefined
         : m(
             'ul.fm-semantic-library-reasons',
-            estimate.skippedReasonCounts.map((reason) =>
+            reportedSkips.map((reason) =>
               m('li', { key: reason.reason }, `${reasonLabel(reason.reason)}: ${reason.count}`),
             ),
           ),
@@ -201,7 +234,7 @@ function estimateView(
             'p',
             { role: 'alert' },
             t('semanticLibrary', 'budgetWarning', {
-              budgets: estimate.exceededBudgets.join(', '),
+              budgets: estimate.exceededBudgets.map((budget) => budgetLabels[budget]).join(', '),
             }),
           ),
       m('p.fm-semantic-library-disclosure', t('semanticLibrary', 'normalizedExcerptsDisclosure')),

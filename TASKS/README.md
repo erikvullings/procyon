@@ -148,7 +148,7 @@ semantic components are not installed.
 - [x] 0227 Multiformat summary visual evidence *(needs 0180, 0184, 0185, 0192)*
 - [ ] 0239 Optional EmbeddingGemma 2 semantic package *(needs 0195, 0196;
   separately installed alongside default E5, with measured qualification)*
-- [x] 0241 Restore Include folder in semantic search *(regression fixed; native manual preflight remains open)*
+- [x] 0241 Restore Include folder in semantic search *(consent copy simplified; native manual preflight remains open)*
 
 ## Structured knowledge search
 

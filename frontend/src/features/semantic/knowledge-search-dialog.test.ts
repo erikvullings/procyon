@@ -300,7 +300,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await ready();
 
     const include = root.querySelector<HTMLButtonElement>('.fm-knowledge-include-folder-action');
-    expect(include?.textContent).toContain('Include folder');
+    expect(include?.textContent).toBe('Include folder for semantic search');
     const confirm = vi.spyOn(client, 'confirmSemanticEnrolment');
     include?.focus();
     expect(document.activeElement).toBe(include);
@@ -325,7 +325,6 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     expect(root.querySelector('.fm-knowledge-include-folder-action')).toBeNull();
 
-    expect(root.querySelector('.fm-knowledge-include-folder')).toBeNull();
     expect(root.querySelector('.fm-knowledge-search-options')).toBeNull();
   });
 

@@ -456,6 +456,14 @@ describe('SemanticFolderEnrolmentPrompt', () => {
       estimate: {
         ...preview.estimate,
         completeness: 'unavailable',
+        estimatedFiles: null,
+        estimatedSourceBytes: null,
+        estimatedExtractedBytes: null,
+        estimatedVectorBytes: null,
+        estimatedAdditionalLocalBytes: null,
+        missingModelDownloadBytes: null,
+        skippedReasonCounts: [],
+        exceededBudgets: [],
         unavailableReason:
           'A provider-neutral recursive estimate is not available for this source.',
       },
@@ -475,9 +483,15 @@ describe('SemanticFolderEnrolmentPrompt', () => {
           onCancel,
         }),
     });
-    await vi.waitFor(() => expect(root.textContent).toContain('Size could not be estimated'));
+    await vi.waitFor(() => expect(root.textContent).toContain('OK, index folder'));
+    expect(root.textContent).toContain(location.uri);
+    expect(root.textContent).toContain('subfolders');
     expect(root.textContent).toContain('stores extracted text and embeddings locally');
-    expect(root.querySelector('details')?.open).toBe(false);
+    expect(root.textContent).not.toContain('Estimate unavailable');
+    expect(root.textContent).not.toContain('additional disk space');
+    expect(root.textContent).not.toContain('No unsupported or skipped content');
+    expect(root.textContent).not.toContain('provider-neutral');
+    expect(root.querySelector('details')).toBeNull();
     expect(root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).toHaveLength(0);
 
     button('OK, index folder').click();
@@ -485,5 +499,77 @@ describe('SemanticFolderEnrolmentPrompt', () => {
     expect(onEnrolled).not.toHaveBeenCalled();
     button('Cancel').click();
     expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('retains a real budget alert without displaying an unavailable estimate', async () => {
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    vi.spyOn(client, 'previewSemanticEnrolment').mockResolvedValue({
+      ...preview,
+      estimate: {
+        ...preview.estimate,
+        completeness: 'unavailable',
+        skippedReasonCounts: [],
+        exceededBudgets: ['sourceBytes'],
+      },
+    });
+    m.mount(root, {
+      view: () =>
+        m(SemanticFolderEnrolmentPrompt, {
+          client,
+          workspaceId: workspace.id,
+          location,
+          onEnrolled: vi.fn(),
+          onCancel: vi.fn(),
+        }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('Estimated source bytes'));
+    expect(root.querySelector('.fm-semantic-library-plan [role="alert"]')).not.toBeNull();
+    expect(root.textContent).not.toContain('Estimated files');
+    expect(root.textContent).not.toContain('Unsupported MIME type');
+  });
+
+  it('shows only measured values and positive skip counts in a partial preview', async () => {
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    vi.spyOn(client, 'previewSemanticEnrolment').mockResolvedValue({
+      ...preview,
+      estimate: {
+        ...preview.estimate,
+        completeness: 'partial',
+        estimatedFiles: 3,
+        estimatedSourceBytes: null,
+        estimatedExtractedBytes: null,
+        estimatedVectorBytes: null,
+        estimatedAdditionalLocalBytes: null,
+        missingModelDownloadBytes: null,
+        skippedReasonCounts: [
+          { reason: 'unsupportedMime', count: 2 },
+          { reason: 'hidden', count: 0 },
+        ],
+      },
+    });
+    m.mount(root, {
+      view: () =>
+        m(SemanticFolderEnrolmentPrompt, {
+          client,
+          workspaceId: workspace.id,
+          location,
+          onEnrolled: vi.fn(),
+          onCancel: vi.fn(),
+        }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('Partial estimate'));
+    expect(root.textContent).toContain('Estimated files3');
+    expect(root.textContent).toContain('Unsupported MIME type: 2');
+    expect(root.textContent).not.toContain('Hidden');
+    expect(root.textContent).not.toContain('Estimated source bytes');
+    expect(root.textContent).not.toContain('Unavailable');
   });
 });

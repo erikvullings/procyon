@@ -4980,6 +4980,9 @@ describe('AppShell', () => {
     );
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-workspace')).not.toBeNull());
     expect(root.querySelector('.fm-rag-ask-modal')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-include-folder-action')?.textContent).toBe(
+      'Include folder for semantic search',
+    );
     root.querySelector<HTMLButtonElement>('.fm-knowledge-include-folder-action')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
     [...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-enrolment-modal button')]
