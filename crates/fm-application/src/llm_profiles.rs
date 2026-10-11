@@ -575,7 +575,18 @@ impl VersionedDocument for LlmProfilesDocument {
         value["schemaVersion"] = Value::from(PROFILE_SCHEMA_VERSION);
         if let Some(profiles) = value.get_mut("profiles").and_then(Value::as_array_mut) {
             for profile in profiles {
-                profile["consentedHost"] = Value::Null;
+                let consented = profile.get("consentedHost").and_then(Value::as_str);
+                let endpoint = profile
+                    .get("baseUrl")
+                    .and_then(Value::as_str)
+                    .map(normalize_endpoint)
+                    .transpose()?;
+                let exact = endpoint.and_then(|endpoint| {
+                    (consented == Some(endpoint.host.as_str())
+                        || consented == Some(endpoint.base_url.as_str()))
+                    .then_some(endpoint.base_url)
+                });
+                profile["consentedHost"] = exact.map_or(Value::Null, Value::String);
             }
         }
         Ok(value)
@@ -2121,10 +2132,13 @@ mod tests {
     }
 
     #[test]
-    fn legacy_hostname_only_cloud_consent_is_not_carried_into_endpoint_consent() {
+    fn legacy_consent_survives_only_for_the_current_configured_host() {
         let mut profile = profile_from_draft(
             Uuid::new_v4(),
-            draft(LlmPreset::OpenAiCompatible, "https://one.example/changed"),
+            draft(
+                LlmPreset::OpenAiCompatible,
+                "https://one.example:8443/current",
+            ),
             None,
         );
         profile.consented_host = Some("one.example".into());
@@ -2138,6 +2152,16 @@ mod tests {
         let document: LlmProfilesDocument = serde_json::from_value(migrated).unwrap();
         document.validate().unwrap();
         assert_eq!(document.active_profile_id, Some(document.profiles[0].id));
+        assert_eq!(
+            document.profiles[0].consented_host.as_deref(),
+            Some("https://one.example:8443/current")
+        );
+
+        let mut value = serde_json::to_value(document).unwrap();
+        value["schemaVersion"] = Value::from(3);
+        value["profiles"][0]["consentedHost"] = Value::String("elsewhere.example".into());
+        let migrated = LlmProfilesDocument::migrate(value, 3).unwrap();
+        let document: LlmProfilesDocument = serde_json::from_value(migrated).unwrap();
         assert_eq!(document.profiles[0].consented_host, None);
     }
 
