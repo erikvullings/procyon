@@ -93,6 +93,7 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
         .map_err(PdfError::from)?;
 
     let mut extracted_any = false;
+    let mut first_unreadable = None;
     for page_number in page_numbers {
         builder.checkpoint().map_err(PdfError::from)?;
         if builder.is_saturated() {
@@ -101,9 +102,11 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
         let text = match document.extract_text_with_limit(&[page_number], MAX_PAGE_CONTENT_BYTES) {
             Ok(text) => text,
             Err(error) => {
-                builder.omit(Omission::UnreadablePart {
-                    detail: format!("page {page_number} could not be read: {error}"),
-                });
+                let detail = format!("page {page_number} could not be read: {error}");
+                if first_unreadable.is_none() {
+                    first_unreadable = Some(detail.clone());
+                }
+                builder.omit(Omission::UnreadablePart { detail });
                 continue;
             }
         };
@@ -140,6 +143,9 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
         }
     }
     if !extracted_any && !builder.has_visuals() {
+        if let Some(detail) = first_unreadable {
+            return Err(PdfError::Malformed(detail));
+        }
         return Err(PdfError::NoTextLayer(
             "the PDF pages contain no extractable text layer; an OCR pack is required".to_owned(),
         ));
@@ -315,6 +321,28 @@ pub(crate) mod tests {
     fn a_pdf_without_a_text_layer_is_reported_as_such() {
         let bytes = image_only_pdf();
         assert!(matches!(convert_pdf(&bytes), Err(PdfError::NoTextLayer(_))));
+    }
+
+    #[test]
+    fn oversized_decompressed_page_is_not_misreported_as_needing_ocr() {
+        let bytes = text_pdf(&[&[]]);
+        let mut document = Document::load_mem(&bytes).expect("load fixture");
+        let page_id = document.get_pages()[&1];
+        let content_id = document.get_page_contents(page_id)[0];
+        let stream = document
+            .get_object_mut(content_id)
+            .expect("page content")
+            .as_stream_mut()
+            .expect("content stream");
+        stream.content = vec![b' '; MAX_PAGE_CONTENT_BYTES + 1];
+        stream.compress().expect("compress content");
+        let mut bytes = Vec::new();
+        document.save_to(&mut bytes).expect("save fixture");
+
+        assert!(
+            matches!(convert_pdf(&bytes), Err(PdfError::Malformed(detail)) if detail.contains("page 1")),
+            "an unreadable page must not offer OCR guidance"
+        );
     }
 
     #[test]

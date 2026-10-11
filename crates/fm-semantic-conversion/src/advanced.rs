@@ -224,14 +224,24 @@ impl DocumentConverter for OptionalConverter {
                 }
                 return Ok(ConversionOutcome::Converted(document));
             }
-            if context.visual_evidence()
-                && matches!(advanced_outcome, ConversionOutcome::NoTextLayer { .. })
-                && let ConversionOutcome::Converted(document) =
-                    self.baseline
-                        .convert(SourceContent::Bytes(&bytes), metadata, context)?
-                && !document.visuals().is_empty()
+            if matches!(advanced_outcome, ConversionOutcome::NoTextLayer { .. })
+                && bytes.starts_with(b"%PDF-")
             {
-                return Ok(ConversionOutcome::Converted(document));
+                let baseline =
+                    self.baseline
+                        .convert(SourceContent::Bytes(&bytes), metadata, context)?;
+                match baseline {
+                    ConversionOutcome::Converted(document)
+                        if context.visual_evidence() && !document.visuals().is_empty() =>
+                    {
+                        return Ok(ConversionOutcome::Converted(document));
+                    }
+                    ConversionOutcome::Malformed { .. }
+                    | ConversionOutcome::OverBudget { .. }
+                    | ConversionOutcome::Cancelled
+                    | ConversionOutcome::Encrypted { .. } => return Ok(baseline),
+                    _ => {}
+                }
             }
             if matches!(
                 advanced_outcome,

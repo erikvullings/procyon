@@ -494,7 +494,8 @@ text-layer encodings Docling cannot yet read) before publication. Successful rem
 only those requested files from the backend's OCR-required report; failures remain visible for a
 later retry. Unsupported, encrypted, malformed, and over-budget documents remain visible as typed
 skip or omission reasons. Browser/server mode exposes OCR as unavailable and has no OCR mutation
-routes.
+routes. A PDF whose page content cannot be decompressed within the page limit reports the
+unreadable page and limit instead of incorrectly offering OCR guidance.
 
 PDF text-layer conversion removes whitespace-delimited dot leaders of at least four dots before
 embedding and labels the affected blocks (and recognized Contents sections) as navigation;
@@ -511,8 +512,10 @@ Local embedding work is checkpointed in small durable batches. Interrupted inges
 vectors without exposing them to search until the complete document generation is published.
 Publication respects Zvec's 1,024-document write limit, and one document that exceeds the
 five-minute ingestion fail-safe is recorded as failed without aborting reconciliation of the rest
-of the enrolled root. Source conversion remains bounded at 64 MiB per document. Once a replacement
-generation is published, superseded catalogue and Zvec records are reclaimed in bounded batches.
+of the enrolled root. Source conversion remains bounded at 64 MiB per document; the larger
+synthetic PDF evaluation fixture does not raise that host, IPC, or production conversion limit.
+Once a replacement generation is published, superseded catalogue and Zvec records are reclaimed
+in bounded batches.
 
 ## Optional advanced packs
 

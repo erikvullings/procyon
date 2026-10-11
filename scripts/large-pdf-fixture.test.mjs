@@ -10,7 +10,7 @@ const directory = mkdtempSync(join(tmpdir(), 'procyon-large-pdf-fixture-'));
 const script = new URL('./generate-large-pdf-fixture.mjs', import.meta.url).pathname;
 after(() => rmSync(directory, { recursive: true, force: true }));
 
-function generate(name, variant, pages = 2, width = 32, height = 24) {
+function generate(name, variant, pages = 2, width = 32, height = 24, extra = []) {
   const output = join(directory, name);
   execFileSync(process.execPath, [
     script,
@@ -24,6 +24,7 @@ function generate(name, variant, pages = 2, width = 32, height = 24) {
     String(width),
     '--height',
     String(height),
+    ...extra,
   ]);
   return readFileSync(output);
 }
@@ -73,6 +74,29 @@ test('makes a five-page text-layer PDF with a known searchable page marker', () 
   assertPdfXref(pdf);
   assert.match(pdf.toString('latin1'), /Synthetic search marker on page 5/);
   assert.equal([...pdf.toString('latin1').matchAll(/\/Subtype \/Image\b/g)].length, 5);
+});
+
+test('an edit changes only the selected page marker, not its neighbors', () => {
+  const original = generate('original.pdf', 'text', 5);
+  const edited = generate('edited.pdf', 'text', 5, 32, 24, ['--edit-page', '3']);
+  assert.match(edited.toString('latin1'), /Edited synthetic search marker on page 3/);
+  assert.doesNotMatch(edited.toString('latin1'), /Synthetic search marker on page 3\) Tj/);
+  for (const page of [1, 2, 4, 5]) {
+    assert.ok(edited.includes(`(Synthetic search marker on page ${page})`));
+    assert.ok(original.includes(`(Synthetic search marker on page ${page})`));
+  }
+  assertPdfXref(edited);
+});
+
+test('malformed xref and small-source expansion bomb remain distinct negative fixtures', () => {
+  const malformed = generate('malformed.pdf', 'malformed');
+  const declaredXref = Number(malformed.toString('latin1').match(/startxref\n(\d+)/)?.[1]);
+  assert.ok(declaredXref > malformed.length);
+
+  const bomb = generate('bomb.pdf', 'bomb', 1);
+  assertPdfXref(bomb);
+  assert.ok(bomb.length < 1024 * 1024);
+  assert.match(bomb.toString('latin1'), /\/Filter \/FlateDecode/);
 });
 
 test('refuses to overwrite or generate beyond its fixed source bound', () => {

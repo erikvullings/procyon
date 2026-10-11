@@ -117,3 +117,25 @@ optional Docling ML/PDFium pack is qualified on those targets.
   and compression-bomb negatives, cancellation/edit/delete fixtures; resource measurements,
   transport, text/vision ingestion, host parity, renderer supply-chain and signed qualification.
   Neither fixture demonstrates the actual private PDF's extraction or searchability.
+- 2026-10-11 Copilot: Extended the synthetic generator with a page-local text edit, malformed
+  cross-reference and 17 MiB decompressed-page negative; five fixture tests pass. An
+  evaluation-only `fm-semantic-docling` example accepts just the known generated fixture names
+  under `target/` and raises its **local probe context only** to 200 MiB; production host, IPC
+  and converter limits remain 64 MiB. On macOS arm64 the 189,239,712-byte text fixture converted
+  354/354 text pages with no omissions in 0.25 s and a 974,028,800-byte maximum resident set; the
+  174,224,803-byte image-only fixture returned `NoTextLayer` in 0.13 s with 898,596,864-byte
+  maximum resident set. `pdfinfo` and one-page `pdftotext` used approximately 10-11 MiB RSS, but
+  those external tools do not represent Procyon's converter, VFS, IPC or Gemma processing costs.
+  Generation took 2.61/2.78 s and 129/132 MiB peak RSS respectively; the two PDFs occupy
+  363,464,515 bytes on disk before cleanup. Fixed a measured negative: a compressed-page bomb
+  previously returned generic OCR guidance; both baseline and preferred converters now report the
+  unreadable page and decompression limit without suggesting OCR. Verified five fixture tests,
+  one evaluation-example guard test, the complete 130-test conversion and 14-test Docling library
+  suites, 132 script tests, affected crate typechecks and repository lint; these are suite totals,
+  not counts of tests newly added here. These figures cover only deterministic synthetic bytes on
+  one machine, not worst-case
+  decompression, four-target RSS, embedded-image coverage, worker memory, or a production ceiling.
+  No private PDF was opened; no production limit, package, candidate or release gate was changed.
+  Remaining release blockers include an isolated killable converter, negotiated PDF-only spool,
+  bounded renderer with audited four-target packaging, atomic text+vision staging, host/UI
+  coverage and exact signed installed qualification.

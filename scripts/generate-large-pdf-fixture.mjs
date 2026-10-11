@@ -6,18 +6,22 @@ const args = process.argv.slice(2);
 const options = new Map();
 for (let index = 0; index < args.length; index += 2) {
   if (
-    !['--output', '--variant', '--pages', '--width', '--height'].includes(args[index]) ||
+    !['--output', '--variant', '--pages', '--width', '--height', '--edit-page'].includes(
+      args[index],
+    ) ||
     !args[index + 1] ||
     options.has(args[index])
   ) {
-    throw new Error('Expected unique --output, --variant, --pages, --width, --height options');
+    throw new Error(
+      'Expected unique --output, --variant, --pages, --width, --height, --edit-page options',
+    );
   }
   options.set(args[index], args[index + 1]);
 }
 const output = options.get('--output');
 const variant = options.get('--variant');
-if (!output || !['scanned', 'text'].includes(variant)) {
-  throw new Error('Supply --output and --variant scanned|text');
+if (!output || !['scanned', 'text', 'malformed', 'bomb'].includes(variant)) {
+  throw new Error('Supply --output and --variant scanned|text|malformed|bomb');
 }
 function dimension(name, fallback, maximum) {
   const value = options.get(name) ?? String(fallback);
@@ -27,6 +31,10 @@ function dimension(name, fallback, maximum) {
   return Number(value);
 }
 const pages = dimension('--pages', 354, 4096);
+const editPage = options.has('--edit-page') ? dimension('--edit-page', 1, pages) : undefined;
+if (editPage !== undefined && variant !== 'text') {
+  throw new Error('--edit-page requires --variant text');
+}
 const width = dimension('--width', variant === 'text' ? 536 : 512, 2048);
 const height = dimension('--height', variant === 'text' ? 332 : 320, 2048);
 if (pages * width * height * 3 + pages * 4096 > maxSourceBytes) {
@@ -84,10 +92,14 @@ try {
     );
     const label =
       variant === 'text'
-        ? `BT /F1 12 Tf 12 12 Td (Synthetic search marker on page ${page}) Tj ET\n`
+        ? `BT /F1 12 Tf 12 12 Td (${page === editPage ? 'Edited synthetic' : 'Synthetic'} search marker on page ${page}) Tj ET\n`
         : '';
     const content = Buffer.from(`q ${width} 0 0 ${height} 0 0 cm /Im Do Q\n${label}`, 'ascii');
-    stream(id + 1, '', content);
+    if (variant === 'bomb' && page === 1) {
+      stream(id + 1, '/Filter /FlateDecode', deflateSync(Buffer.alloc(17 * 1024 * 1024, 0x20)));
+    } else {
+      stream(id + 1, '', content);
+    }
     const compressed = image(page);
     stream(
       id + 2,
@@ -100,7 +112,9 @@ try {
   for (const location of locations.slice(1)) {
     write(`${String(location).padStart(10, '0')} 00000 n \n`);
   }
-  write(`trailer\n<< /Size ${locations.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  write(
+    `trailer\n<< /Size ${locations.length} /Root 1 0 R >>\nstartxref\n${variant === 'malformed' ? xref + 1_000_000_000 : xref}\n%%EOF\n`,
+  );
   console.log(`Synthetic ${variant} PDF: ${pages} pages, ${offset} bytes`);
 } catch (error) {
   closeSync(fd);

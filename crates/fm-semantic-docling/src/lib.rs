@@ -1629,6 +1629,44 @@ fn is_pdf(bytes: &[u8], metadata: &DocumentMetadata) -> bool {
 mod tests {
     use super::*;
     use docling_core::Table;
+    use lopdf::{Object, Stream, dictionary};
+
+    #[test]
+    fn preferred_pdf_converter_does_not_call_an_unreadable_page_ocr_required() {
+        let mut pdf = lopdf::Document::with_version("1.5");
+        let pages_id = pdf.new_object_id();
+        let mut content = Stream::new(dictionary! {}, vec![b' '; 17 * 1024 * 1024]);
+        content.compress().expect("compress fixture");
+        let content_id = pdf.add_object(content);
+        let page_id = pdf.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "Contents" => content_id,
+            "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        });
+        pdf.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => vec![Object::Reference(page_id)],
+                "Count" => 1,
+            }),
+        );
+        let catalog_id = pdf.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+        pdf.trailer.set("Root", catalog_id);
+        let mut bytes = Vec::new();
+        pdf.save_to(&mut bytes).expect("save fixture");
+        let result = converter_with_baseline_fallback()
+            .convert(
+                SourceContent::Bytes(&bytes),
+                &DocumentMetadata::unknown().with_media_type("application/pdf"),
+                &ConversionContext::new(),
+            )
+            .expect("convert");
+        assert!(
+            matches!(result, ConversionOutcome::Malformed { detail } if detail.contains("page 1"))
+        );
+    }
 
     #[cfg(unix)]
     fn fake_version_executable(root: &Path, body: &str) -> PathBuf {
