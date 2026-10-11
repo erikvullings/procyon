@@ -3373,7 +3373,7 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     expect(root.querySelector('.fm-knowledge-answer-body')?.hasAttribute('tabindex')).toBe(false);
   });
 
-  it('shows an accessible circular indicator only while generating an answer', async () => {
+  it('shows an accessible answer skeleton only while generating', async () => {
     const client = new MockFileManagerClient();
     await configureProfile(client);
     mount({ client, initialSubject: 'retrieval' });
@@ -3395,9 +3395,13 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     const progress = root.querySelector('.fm-knowledge-answer-progress');
     expect(progress?.getAttribute('role')).toBe('status');
     expect(progress?.textContent).toContain('Generating');
+    expect(progress?.querySelectorAll('.fm-knowledge-answer-skeleton .mm-skeleton')).toHaveLength(
+      3,
+    );
     expect(
-      progress?.querySelector('.fm-knowledge-search-spinner')?.getAttribute('aria-hidden'),
+      progress?.querySelector('.fm-knowledge-answer-skeleton')?.getAttribute('aria-hidden'),
     ).toBe('true');
+    expect(progress?.querySelector('.fm-knowledge-search-spinner')).toBeNull();
     expect(root.querySelector('.fm-knowledge-ask-cancel')).not.toBeNull();
 
     finish?.();

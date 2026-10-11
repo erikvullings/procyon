@@ -844,6 +844,7 @@ export const en = {
   documentSummary: {
     title: 'Summary · {name}',
     working: 'Preparing document content…',
+    generating: 'Generating summary…',
     loadFailed: 'The summary could not be loaded.',
     generationFailed: 'The summary could not be generated.',
     keyPassagesOnly: 'No generation profile is configured. Showing key passages only.',

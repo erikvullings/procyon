@@ -837,6 +837,7 @@ export const nl = {
   documentSummary: {
     title: 'Samenvatting · {name}',
     working: 'Documentinhoud voorbereiden…',
+    generating: 'Samenvatting maken…',
     loadFailed: 'De samenvatting kon niet worden geladen.',
     generationFailed: 'De samenvatting kon niet worden gegenereerd.',
     keyPassagesOnly: 'Er is geen generatieprofiel ingesteld. Alleen kernpassages worden getoond.',

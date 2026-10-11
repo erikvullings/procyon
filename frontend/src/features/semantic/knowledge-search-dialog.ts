@@ -1,5 +1,5 @@
 import m, { type FactoryComponent } from 'mithril';
-import { FlatButton, IconButton, ModalPanel } from 'mithril-materialized';
+import { FlatButton, IconButton, ModalPanel, Skeleton } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import {
@@ -2166,9 +2166,9 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     displayed: ReadonlyMap<string, KnowledgeEvidence>,
   ): m.Children {
     if (generatingAnswer) {
-      return m('p.fm-knowledge-status.fm-knowledge-answer-progress', { role: 'status' }, [
-        m('span.fm-knowledge-search-spinner', { 'aria-hidden': 'true' }),
-        t('knowledgeSearch', 'generatingAnswer'),
+      return m('.fm-knowledge-status.fm-knowledge-answer-progress', { role: 'status' }, [
+        m('span', t('knowledgeSearch', 'generatingAnswer')),
+        m(Skeleton, { count: 3, className: 'fm-knowledge-answer-skeleton' }),
       ]);
     }
     const current = answer;

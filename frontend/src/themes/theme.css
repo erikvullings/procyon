@@ -3379,9 +3379,30 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-knowledge-answer-progress {
-  display: inline-flex;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
   gap: 0.5rem;
+  width: min(100%, 48rem);
+}
+
+.fm-knowledge-answer-skeleton .mm-skeleton:last-child,
+.fm-document-summary-skeleton .mm-skeleton:last-child {
+  width: 68%;
+}
+
+.fm-document-summary-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-block: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-knowledge-answer-skeleton .mm-skeleton,
+  .fm-document-summary-skeleton .mm-skeleton {
+    animation: none;
+    background-image: none;
+  }
 }
 
 .fm-knowledge-answer-output-heading {

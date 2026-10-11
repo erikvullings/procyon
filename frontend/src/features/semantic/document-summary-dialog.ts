@@ -1,5 +1,5 @@
 import m, { type FactoryComponent } from 'mithril';
-import { ModalPanel } from 'mithril-materialized';
+import { ModalPanel, Skeleton } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
@@ -61,6 +61,7 @@ function summaryErrorMessage(error: unknown, fallback: string): string {
 export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs> = () => {
   let wasOpen = false;
   let busy = false;
+  let generating = false;
   let error: string | undefined;
   let profiles: readonly LlmProfile[] = [];
   let selectedProfileId: string | undefined;
@@ -137,6 +138,7 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
     if (requestTarget === undefined || selectedProfileId === undefined || preview === undefined)
       return;
     busy = true;
+    generating = true;
     error = undefined;
     try {
       const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId);
@@ -151,6 +153,7 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
       error = summaryErrorMessage(cause, t('documentSummary', 'generationFailed'));
     } finally {
       busy = false;
+      generating = false;
       m.redraw();
     }
   }
@@ -170,7 +173,13 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
           if (!open) attrs.onClose();
         },
         description: m('.fm-document-summary', [
-          busy ? m('p', t('documentSummary', 'working')) : undefined,
+          busy && !generating ? m('p', t('documentSummary', 'working')) : undefined,
+          generating
+            ? m('.fm-document-summary-progress', { role: 'status', 'aria-busy': 'true' }, [
+                m('span', t('documentSummary', 'generating')),
+                m(Skeleton, { count: 4, className: 'fm-document-summary-skeleton' }),
+              ])
+            : undefined,
           error === undefined ? undefined : m('p.fm-document-summary-error', error),
           profiles.length === 0
             ? m('p', t('documentSummary', 'keyPassagesOnly'))

@@ -95,6 +95,65 @@ describe('DocumentSummaryDialog', () => {
     expect(root.textContent).toContain('Full summary');
   });
 
+  it('shows an accessible skeleton only during summary generation', async () => {
+    const client = new MockFileManagerClient();
+    await client.createLlmProfile({
+      name: 'Local profile',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'summary-model',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
+    const original = client.generateDocumentSummary.bind(client);
+    let finish: (() => void) | undefined;
+    vi.spyOn(client, 'generateDocumentSummary').mockImplementation(async (request, signal) => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return original(request, signal);
+    });
+    m.mount(root, {
+      view: () =>
+        m(DocumentSummaryDialog, {
+          open: true,
+          client,
+          workspaceId: '22222222-2222-4222-8222-222222222222',
+          entry,
+          onClose: vi.fn(),
+        }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('whole extracted document'));
+    expect(root.querySelector('.fm-document-summary-progress')).toBeNull();
+    const generate = [...root.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+      candidate.textContent?.includes('Generate summary'),
+    );
+    generate?.click();
+    m.redraw.sync();
+    const progress = root.querySelector('.fm-document-summary-progress');
+    expect(progress?.getAttribute('role')).toBe('status');
+    expect(progress?.getAttribute('aria-busy')).toBe('true');
+    expect(progress?.textContent).toContain('Generating summary');
+    expect(progress?.querySelectorAll('.fm-document-summary-skeleton .mm-skeleton')).toHaveLength(
+      4,
+    );
+    expect(progress?.querySelector('.mm-skeleton-group')?.getAttribute('aria-hidden')).toBe('true');
+    finish?.();
+    await vi.waitFor(() => expect(root.querySelector('.fm-document-summary-progress')).toBeNull());
+    expect(root.textContent).toContain('A concise document summary.');
+  });
+
   it('allows representative passages to be selected explicitly', async () => {
     const client = new MockFileManagerClient();
     await client.createLlmProfile({
