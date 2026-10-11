@@ -16,6 +16,7 @@ pub enum LlmPresetDto {
     Vllm,
     Sglang,
     Omlx,
+    MlxServe,
     OpenAiCompatible,
     AzureOpenAi,
 }
@@ -188,6 +189,17 @@ pub struct LlmProfileTestResultDto {
     pub capabilities: BTreeSet<LlmApiCapabilityDto>,
 }
 
+/// Effective model-advertised generation limits, or null when undiscoverable.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmModelLimitsDto {
+    pub context_window: Option<u32>,
+    pub maximum_answer_tokens: Option<u32>,
+    pub context_window_cap: u32,
+    pub maximum_answer_tokens_cap: u32,
+}
+
 /// Exportable non-secret profile configuration.
 #[allow(missing_docs)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -245,5 +257,20 @@ mod tests {
         assert!(encoded.contains("\"hasCredential\":true"));
         assert!(!encoded.to_ascii_lowercase().contains("credentialref"));
         assert!(!encoded.to_ascii_lowercase().contains("apikey"));
+    }
+
+    #[test]
+    fn unknown_model_limits_are_explicit_null_with_backend_caps() {
+        let value = serde_json::to_value(LlmModelLimitsDto {
+            context_window: None,
+            maximum_answer_tokens: None,
+            context_window_cap: 1_048_576,
+            maximum_answer_tokens_cap: 16_384,
+        })
+        .unwrap();
+        assert_eq!(value["contextWindow"], serde_json::Value::Null);
+        assert_eq!(value["maximumAnswerTokens"], serde_json::Value::Null);
+        assert_eq!(value["contextWindowCap"], 1_048_576);
+        assert_eq!(value["maximumAnswerTokensCap"], 16_384);
     }
 }

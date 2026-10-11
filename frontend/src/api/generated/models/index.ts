@@ -200,6 +200,7 @@ export * from './llmAdvancedSettingsDtoCustomHeaders.ts';
 export * from './llmApiCapabilityDto.ts';
 export * from './llmCredentialInputDto.ts';
 export * from './llmEndpointLocalityDto.ts';
+export * from './llmModelLimitsDto.ts';
 export * from './llmPresetDto.ts';
 export * from './llmProfileDto.ts';
 export * from './llmProfileExportDto.ts';

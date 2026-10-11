@@ -1694,6 +1694,11 @@ main.fm-workspace {
   font-size: 0.82rem;
 }
 
+.fm-llm-advanced-settings > p {
+  margin: 0.25rem 0;
+  color: var(--fm-text-muted);
+}
+
 .fm-semantic-field input,
 .fm-semantic-field select {
   box-sizing: border-box;

@@ -210,7 +210,7 @@ describe('SettingsEditor', () => {
 
     await vi.waitFor(() => expect(root.textContent).toContain('Semantic library'));
     expect(root.textContent).toContain('Concept vocabularies');
-    expect(root.textContent).toContain('Generation profiles');
+    expect(root.textContent).toContain('AI summaries and answers');
   });
 
   it('saves a changed generation profile through the main settings action', async () => {

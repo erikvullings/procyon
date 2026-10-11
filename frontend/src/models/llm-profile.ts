@@ -4,6 +4,7 @@ export type {
   LlmAdvancedSettingsDto as LlmAdvancedSettings,
   LlmApiCapabilityDto as LlmApiCapability,
   LlmEndpointLocalityDto as LlmEndpointLocality,
+  LlmModelLimitsDto as LlmModelLimits,
   LlmPresetDto as LlmPreset,
   LlmProfileDto as LlmProfile,
   LlmProfileExportDto as LlmProfileExport,

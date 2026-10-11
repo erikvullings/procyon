@@ -84,6 +84,7 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmModelLimits,
   LlmProfile,
   LlmProfileExport,
   LlmProfilePreset,
@@ -1280,6 +1281,13 @@ export class TauriFileManagerClient implements FileManagerClient {
     _signal?: AbortSignal,
   ): Promise<string[]> {
     return invoke<string[]>('discover_llm_profile_draft_models', { request });
+  }
+
+  discoverLlmProfileDraftModelLimits(
+    request: SaveLlmProfileRequest,
+    _signal?: AbortSignal,
+  ): Promise<LlmModelLimits> {
+    return invoke<LlmModelLimits>('discover_llm_profile_draft_model_limits', { request });
   }
 
   previewDocumentSummary(

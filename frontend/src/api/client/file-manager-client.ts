@@ -78,6 +78,7 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmModelLimits,
   LlmProfile,
   LlmProfileExport,
   LlmProfilePreset,
@@ -764,6 +765,10 @@ export interface FileManagerClient {
     request: SaveLlmProfileRequest,
     signal?: AbortSignal,
   ): Promise<string[]>;
+  discoverLlmProfileDraftModelLimits(
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmModelLimits>;
   previewDocumentSummary(
     request: PreviewDocumentSummaryRequest,
     signal?: AbortSignal,

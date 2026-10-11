@@ -21,6 +21,7 @@ const confirmSemanticComponentModelMigration = vi.fn();
 const checkpointSemanticComponentModelMigration = vi.fn();
 const completeSemanticComponentModelMigration = vi.fn();
 const discoverLlmProfileDraftModels = vi.fn();
+const discoverLlmProfileDraftModelLimits = vi.fn();
 const getSemanticLibraryCapabilities = vi.fn();
 const getSemanticLibraryStatus = vi.fn();
 const getSemanticFolderStatus = vi.fn();
@@ -115,6 +116,8 @@ vi.mock('../generated/file-manager-api', () => ({
   completeSemanticComponentModelMigration: (...args: unknown[]) =>
     completeSemanticComponentModelMigration(...args),
   discoverLlmProfileDraftModels: (...args: unknown[]) => discoverLlmProfileDraftModels(...args),
+  discoverLlmProfileDraftModelLimits: (...args: unknown[]) =>
+    discoverLlmProfileDraftModelLimits(...args),
   getSemanticLibraryCapabilities: (...args: unknown[]) => getSemanticLibraryCapabilities(...args),
   getSemanticLibraryStatus: (...args: unknown[]) => getSemanticLibraryStatus(...args),
   getSemanticFolderStatus: (...args: unknown[]) => getSemanticFolderStatus(...args),
@@ -219,6 +222,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   getRuntimeCapabilities.mockReset();
   getSemanticComponentCapabilities.mockReset();
+  discoverLlmProfileDraftModelLimits.mockReset();
   getSemanticComponentStatus.mockReset();
   listSemanticComponentProfiles.mockReset();
   createSemanticComponentInstallationOffer.mockReset();
@@ -290,6 +294,40 @@ afterEach(() => {
 });
 
 describe('HttpFileManagerClient', () => {
+  it('forwards a draft model-limit request and retains nullable provider limits', async () => {
+    const request = {
+      name: 'Local',
+      preset: 'mlxServe' as const,
+      baseUrl: 'http://127.0.0.1:11234',
+      deployment: null,
+      apiVersion: null,
+      model: 'model-a',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate' as const,
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions' as const, 'modelDiscovery' as const],
+      redactFilenames: false,
+    };
+    const limits = {
+      contextWindow: 131_072,
+      maximumAnswerTokens: null,
+      contextWindowCap: 1_048_576,
+      maximumAnswerTokensCap: 16_384,
+    };
+    discoverLlmProfileDraftModelLimits.mockResolvedValue({ status: 200, data: limits });
+
+    await expect(
+      new HttpFileManagerClient().discoverLlmProfileDraftModelLimits(request),
+    ).resolves.toEqual(limits);
+    expect(discoverLlmProfileDraftModelLimits).toHaveBeenCalledWith(request, undefined);
+  });
+
   it('reports OCR remediation unavailable without adding server endpoints', async () => {
     const client = new HttpFileManagerClient();
 

@@ -78,6 +78,40 @@ afterEach(() => {
 });
 
 describe('TauriFileManagerClient', () => {
+  it('sends draft model-limit discovery through the native command', async () => {
+    const request = {
+      name: 'Local',
+      preset: 'mlxServe' as const,
+      baseUrl: 'http://127.0.0.1:11234',
+      deployment: null,
+      apiVersion: null,
+      model: 'model-a',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate' as const,
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions' as const],
+      redactFilenames: false,
+    };
+    const limits = {
+      contextWindow: null,
+      maximumAnswerTokens: 8_192,
+      contextWindowCap: 1_048_576,
+      maximumAnswerTokensCap: 16_384,
+    };
+    invoke.mockResolvedValue(limits);
+
+    await expect(
+      new TauriFileManagerClient().discoverLlmProfileDraftModelLimits(request),
+    ).resolves.toEqual(limits);
+    expect(invoke).toHaveBeenCalledWith('discover_llm_profile_draft_model_limits', { request });
+  });
+
   it('passes panel placement, theme, and visibility only through trusted host commands', async () => {
     invoke.mockResolvedValue(undefined);
     const client = new TauriFileManagerClient();

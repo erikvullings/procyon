@@ -1664,9 +1664,9 @@ export const en = {
     confirmDelete: 'Confirm deletion and detach folders',
   },
   llmProfiles: {
-    title: 'Generation profiles',
+    title: 'AI summaries and answers',
     description:
-      'Configure optional local or cloud OpenAI-compatible services for summaries and grounded answers.',
+      'Connect a model to write document summaries and answer questions using your files. Save connections as profiles and choose a default. A local model runs on your device; a cloud service receives questions and excerpts. Semantic search works without a profile.',
     loading: 'Loading generation profiles…',
     unavailable: 'Generation profiles are unavailable.',
     unknownError: 'Unknown generation-profile error',
@@ -1684,6 +1684,23 @@ export const en = {
     advanced: 'Advanced settings',
     contextWindow: 'Context window',
     maximumAnswerTokens: 'Maximum answer tokens',
+    customLimit: 'Custom…',
+    currentLimit: 'Current: {tokens} tokens',
+    customContextWindow: 'Custom context tokens',
+    customAnswerTokens: 'Custom answer tokens',
+    contextLimitHint:
+      'Maximum input and output combined. Choose a token limit supported by your model; larger limits can use more memory.',
+    outputLimitHint: 'Maximum generated response. This also counts toward the context window.',
+    modelLimitsUnknown:
+      'Model limits could not be determined. These are safe starting values; check your model before increasing them.',
+    modelLimitsKnown:
+      'Reported by the model: {context} context tokens, {output} output tokens. Choose a limit at or below these values.',
+    modelContextKnown: 'The model reports {context} context tokens. Its output limit is unknown.',
+    modelOutputKnown: 'The model reports {output} output tokens. Its context limit is unknown.',
+    savedLimitAboveModel:
+      'The current value is above a reported model limit. Choose a supported cap before using this profile.',
+    savedLimitAboveBackend:
+      'The current value exceeds the Procyon limit. Choose a supported cap before editing this profile.',
     temperature: 'Temperature',
     timeout: 'Timeout (seconds)',
     tlsPolicy: 'TLS policy',

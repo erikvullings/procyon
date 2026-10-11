@@ -12,6 +12,7 @@ export const LlmPresetDto = {
   vllm: 'vllm',
   sglang: 'sglang',
   omlx: 'omlx',
+  mlxServe: 'mlxServe',
   openAiCompatible: 'openAiCompatible',
   azureOpenAi: 'azureOpenAi',
 } as const;
