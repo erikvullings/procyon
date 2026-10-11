@@ -299,13 +299,15 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     await ready();
 
-    const include = root.querySelector<HTMLInputElement>(
-      '.fm-knowledge-include-folder input[type="checkbox"]',
-    );
-    expect(include?.checked).toBe(false);
-    expect(include?.parentElement?.textContent).toContain('Include folder');
+    const include = root.querySelector<HTMLButtonElement>('.fm-knowledge-include-folder-action');
+    expect(include?.textContent).toContain('Include folder');
+    const confirm = vi.spyOn(client, 'confirmSemanticEnrolment');
+    include?.focus();
+    expect(document.activeElement).toBe(include);
+    expect(confirm).not.toHaveBeenCalled();
     include?.click();
     await vi.waitFor(() => expect(root.querySelector('.fm-semantic-folder-prompt')).not.toBeNull());
+    expect(confirm).not.toHaveBeenCalled();
   });
 
   it('does not offer folder removal when the current folder is already included', async () => {
@@ -321,7 +323,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     });
     mount({ client, currentFolder });
 
-    await ready();
+    expect(root.querySelector('.fm-knowledge-include-folder-action')).toBeNull();
 
     expect(root.querySelector('.fm-knowledge-include-folder')).toBeNull();
     expect(root.querySelector('.fm-knowledge-search-options')).toBeNull();

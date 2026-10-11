@@ -323,7 +323,7 @@ export const nl = {
     keybindingConflict: '"{shortcut}" is toegewezen aan meerdere acties: {actions}',
     unavailableInBrowser: 'Niet beschikbaar in de browser',
     plugins: 'Plug-ins',
-    semantic: 'Semantiek',
+    semantic: 'Semantiek (RAG)',
     updates: 'Updates',
     automaticUpdateChecks: 'Automatisch controleren op updates',
     automaticUpdateChecksHint:
@@ -1411,9 +1411,12 @@ export const nl = {
     acceptAndInstall: 'Accepteren en installeren',
     installing: 'Installeren…',
     installStarting:
-      'Het downloaden en installeren van de ondertekende onderdelen wordt gestart. Houd Instellingen open tot het is voltooid.',
+      'Het downloaden en installeren van de ondertekende onderdelen wordt gestart. U kunt Instellingen sluiten; het resultaat verschijnt in de werkbalk.',
     gemmaInstallStarting:
-      'Het downloaden en installeren van het ondertekende model wordt gestart. Houd Instellingen open tot het is voltooid.',
+      'Het downloaden en installeren van het ondertekende model wordt gestart. U kunt Instellingen sluiten; het resultaat verschijnt in de werkbalk.',
+    installationFailed: 'Installatie mislukt: {error}',
+    installationUnconfirmed:
+      'Installatie voltooid, maar de status kon niet worden bevestigd: {error}',
     actionsHeading: 'Acties voor onderdelen',
     pauseIndexing: 'Indexeren pauzeren',
     resumeIndexing: 'Indexeren hervatten',

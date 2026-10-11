@@ -339,7 +339,7 @@ export const en = {
     keybindingConflict: '"{shortcut}" is bound to more than one action: {actions}',
     unavailableInBrowser: 'Unavailable in the browser',
     plugins: 'Plugins',
-    semantic: 'Semantic',
+    semantic: 'Semantic (RAG)',
     updates: 'Updates',
     automaticUpdateChecks: 'Automatically check for updates',
     automaticUpdateChecksHint:
@@ -1407,9 +1407,12 @@ export const en = {
     acceptAndInstall: 'Accept and install',
     installing: 'Installing…',
     installStarting:
-      'Starting the signed component download and installation. Keep Settings open until it finishes.',
+      'Starting the signed component download and installation. You can close Settings; the result will appear in the toolbar.',
     gemmaInstallStarting:
-      'Starting the signed model download and installation. Keep Settings open until it finishes.',
+      'Starting the signed model download and installation. You can close Settings; the result will appear in the toolbar.',
+    installationFailed: 'Installation failed: {error}',
+    installationUnconfirmed:
+      'Installation finished, but its status could not be confirmed: {error}',
     actionsHeading: 'Component actions',
     pauseIndexing: 'Pause indexing',
     resumeIndexing: 'Resume indexing',

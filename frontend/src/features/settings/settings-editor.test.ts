@@ -193,7 +193,7 @@ describe('SettingsEditor', () => {
     const library = vi.spyOn(client, 'getSemanticLibraryStatus');
 
     expect(status).not.toHaveBeenCalled();
-    openSection('Semantic');
+    openSection('Semantic (RAG)');
 
     await vi.waitFor(() => expect(root.querySelector('.fm-semantic-management')).not.toBeNull());
     expect(root.textContent).toContain('Semantic components');
@@ -206,18 +206,33 @@ describe('SettingsEditor', () => {
   it('reveals semantic configuration after components are enabled', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     mountEditor({ client });
-    openSection('Semantic');
+    openSection('Semantic (RAG)');
 
     await vi.waitFor(() => expect(root.textContent).toContain('Semantic library'));
     expect(root.textContent).toContain('Concept vocabularies');
     expect(root.textContent).toContain('Generation profiles');
+    const ocr = [...root.querySelectorAll<HTMLDetailsElement>('.fm-settings-semantic-tools')].find(
+      (section) => section.querySelector('summary')?.textContent === 'Make scanned PDFs searchable',
+    );
+    if (ocr === undefined) throw new Error('OCR section missing');
+    ocr.open = true;
+    await vi.waitFor(() =>
+      expect(ocr?.querySelector('.fm-semantic-ocr-management')).not.toBeNull(),
+    );
+    expect(ocr?.querySelectorAll('h4')).toHaveLength(0);
+    expect(ocr?.querySelector('.fm-semantic-ocr-management')?.getAttribute('aria-label')).toBe(
+      'Make scanned PDFs searchable',
+    );
+    expect(
+      ocr?.querySelector('label.fm-semantic-ocr-consent input[type="checkbox"]'),
+    ).not.toBeNull();
   });
 
   it('saves a changed generation profile through the main settings action', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     const createProfile = vi.spyOn(client, 'createLlmProfile');
     const { onSave } = mountEditor({ client });
-    openSection('Semantic');
+    openSection('Semantic (RAG)');
 
     await vi.waitFor(() => expect(root.textContent).toContain('Provider preset'));
     const nameInput = [...root.querySelectorAll<HTMLInputElement>('input')].find(

@@ -2106,6 +2106,18 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 ),
               ),
             ]),
+            !currentFolderIndexed && attrs.currentFolder !== undefined && busy !== 'loading'
+              ? m(
+                  'button.fm-knowledge-include-folder-action',
+                  {
+                    type: 'button',
+                    onclick: () => {
+                      enrolmentOpen = true;
+                    },
+                  },
+                  t('knowledgeSearch', 'includeFolder'),
+                )
+              : undefined,
             attrs.currentFolder === undefined
               ? undefined
               : m(ModalPanel, {
@@ -2142,21 +2154,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 settingsOpen = open;
               },
               description: m('.fm-knowledge-settings', [
-                !currentFolderIndexed && attrs.currentFolder !== undefined
-                  ? m('label.fm-knowledge-include-folder', [
-                      m('input', {
-                        type: 'checkbox',
-                        checked: false,
-                        disabled: busy === 'loading',
-                        onchange: (event: Event) => {
-                          (event.currentTarget as HTMLInputElement).checked = false;
-                          settingsOpen = false;
-                          enrolmentOpen = true;
-                        },
-                      }),
-                      m('span', t('knowledgeSearch', 'includeFolder')),
-                    ])
-                  : undefined,
                 m('details.fm-knowledge-advanced', [
                   m('summary', t('knowledgeSearch', 'showAdvanced')),
                   m('.fm-knowledge-advanced-body', [

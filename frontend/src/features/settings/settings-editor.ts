@@ -25,7 +25,10 @@ import { PluginManagement } from '../plugin-management/plugin-management';
 import type { SelectionPlatform } from '../selection/keybindings';
 import { AppUpdateSettings } from './app-update-settings';
 import { LlmProfileManagement } from './llm-profile-management';
-import { SemanticComponentManagement } from './semantic-component-management';
+import {
+  SemanticComponentManagement,
+  type SemanticComponentManagementAttrs,
+} from './semantic-component-management';
 import { SemanticLibraryManagement } from './semantic-library-management';
 import { SemanticOcrManagement } from './semantic-ocr-management';
 import { SemanticVocabularyManagement } from './semantic-vocabulary-management';
@@ -92,6 +95,8 @@ export interface SettingsEditorAttrs {
   readonly onTogglePlugin: (pluginId: PluginId, enabled: boolean) => Promise<void>;
   readonly onRequestPluginLogs: (pluginId: PluginId) => Promise<readonly PluginLogEntry[]>;
   readonly onSemanticStatusChange?: (status: SemanticComponentStatus) => void;
+  readonly onSemanticInstallationChange?: SemanticComponentManagementAttrs['onInstallationChange'];
+  readonly semanticInstallInProgress?: boolean;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -599,6 +604,12 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                       '.row',
                       m(SemanticComponentManagement, {
                         client: current.client,
+                        ...(current.onSemanticInstallationChange === undefined
+                          ? {}
+                          : { onInstallationChange: current.onSemanticInstallationChange }),
+                        ...(current.semanticInstallInProgress === undefined
+                          ? {}
+                          : { installInProgress: current.semanticInstallInProgress }),
                         onStatusChange: (status) => {
                           semanticStatus = status;
                           current.onSemanticStatusChange?.(status);
@@ -629,7 +640,10 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                           ),
                           m('details.fm-settings-semantic-tools', [
                             m('summary', t('semanticLibrary', 'pdfTools')),
-                            m(SemanticOcrManagement, { client: current.client }),
+                            m(SemanticOcrManagement, {
+                              client: current.client,
+                              hideHeading: true,
+                            }),
                           ]),
                           m('details.fm-settings-semantic-tools', [
                             m('summary', t('semanticVocabulary', 'title')),

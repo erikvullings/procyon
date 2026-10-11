@@ -599,7 +599,32 @@ main.fm-workspace {
 }
 
 .fm-settings-semantic-tools {
-  margin: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.fm-semantic-install-status {
+  max-width: min(22rem, 30vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  cursor: pointer;
+}
+
+.fm-semantic-install-succeeded {
+  color: var(--fm-success);
+}
+
+.fm-semantic-install-failed {
+  color: var(--fm-error);
+}
+
+.toast.fm-semantic-install-succeeded,
+.toast.fm-semantic-install-failed {
+  background: var(--fm-surface);
+  border: 2px solid currentColor;
 }
 
 .fm-semantic-ocr-management {
@@ -2646,6 +2671,21 @@ input[type="text"].fm-shortcuts-help-capture-input {
   flex: 0 0 auto;
 }
 
+.fm-knowledge-include-folder-action {
+  margin: 0.25rem 0.5rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fm-accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.fm-knowledge-include-folder-action:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 2px;
+}
+
 .fm-knowledge-field {
   display: grid;
   gap: 0.25rem;
@@ -2725,15 +2765,10 @@ input[type="text"].fm-shortcuts-help-capture-input {
   margin-inline-end: 0.5rem;
 }
 
-.fm-knowledge-include-folder,
 .fm-knowledge-inline-needs label {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
-}
-
-.fm-knowledge-include-folder {
-  flex: 0 0 auto;
 }
 
 .fm-knowledge-settings {

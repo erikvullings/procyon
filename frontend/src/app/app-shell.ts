@@ -444,6 +444,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let settingsUpdateQueue = Promise.resolve();
   let settingsDisclosureElement: HTMLDetailsElement | undefined;
   let settingsDialogOpen = false;
+  let semanticInstallation:
+    | { state: 'installing' | 'succeeded' | 'failed'; message: string }
+    | undefined;
   let activityOpen = false;
   function closeActivityOnOutsidePointer(event: PointerEvent): void {
     if (!activityOpen || (event.target as Element).closest('.fm-activity-anchor')) return;
@@ -5216,6 +5219,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   : undefined,
               ],
             ),
+            semanticInstallation === undefined
+              ? undefined
+              : m(
+                  'button.fm-semantic-install-status',
+                  {
+                    type: 'button',
+                    className: `fm-semantic-install-${semanticInstallation.state}`,
+                    title: semanticInstallation.message,
+                    'aria-label': semanticInstallation.message,
+                    onclick: () => openSettingsDialog('semantic'),
+                  },
+                  semanticInstallation.message,
+                ),
             tooltip(
               labelWithShortcut(
                 t('shell', 'openSettings'),
@@ -5339,6 +5355,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                               onSemanticStatusChange: (status) => {
                                 void refreshSemanticAssistantAvailability(status);
                                 void refreshKnowledgeSearchAvailability();
+                              },
+                              semanticInstallInProgress:
+                                semanticInstallation?.state === 'installing',
+                              onSemanticInstallationChange: (state, message) => {
+                                semanticInstallation = { state, message };
+                                if (state !== 'installing') {
+                                  const text = document.createElement('span');
+                                  text.textContent = message;
+                                  toast({
+                                    html: text.outerHTML,
+                                    className: `fm-semantic-install-${state}`,
+                                  });
+                                }
+                                m.redraw();
                               },
                             })
                           : undefined,

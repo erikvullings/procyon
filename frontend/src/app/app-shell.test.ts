@@ -4631,7 +4631,7 @@ describe('AppShell', () => {
     expect(themeButton('Light')).toBeInstanceOf(HTMLButtonElement);
     expect(themeButton('Dark')).toBeInstanceOf(HTMLButtonElement);
     expect(themeButton('Auto')).toBeInstanceOf(HTMLButtonElement);
-    openSettingsSection('Semantic');
+    openSettingsSection('Semantic (RAG)');
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-semantic-management')?.textContent).toContain('Not installed'),
     );
@@ -4671,7 +4671,7 @@ describe('AppShell', () => {
     expect(root.querySelector('button[aria-label="Semantic Search…"]')).toBeNull();
 
     await openAppearanceSettings();
-    openSettingsSection('Semantic');
+    openSettingsSection('Semantic (RAG)');
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-semantic-management')?.textContent).toContain('Not installed'),
     );
@@ -4694,6 +4694,71 @@ describe('AppShell', () => {
     );
     expect(root.querySelector<HTMLDetailsElement>('.fm-settings-disclosure')?.open).toBe(true);
   });
+
+  it.each([
+    { outcome: 'succeeded', failure: undefined },
+    { outcome: 'failed', failure: new Error('Download rejected <script>') },
+  ] as const)(
+    'keeps the installation running after Settings closes and reports $outcome in the toolbar',
+    async ({ outcome, failure }) => {
+      const client = new MockFileManagerClient();
+      let finishInstall: (() => void) | undefined;
+      const install = vi.spyOn(client, 'acceptSemanticComponentInstallationOffer');
+      install.mockImplementation(
+        () =>
+          new Promise((resolve, reject) => {
+            finishInstall = () => {
+              if (failure === undefined) {
+                resolve({ installedArtifactIds: [] });
+              } else {
+                reject(failure);
+              }
+            };
+          }),
+      );
+      m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+      await openAppearanceSettings();
+      openSettingsSection('Semantic (RAG)');
+      await vi.waitFor(() => expect(root.textContent).toContain('Not installed'));
+      const semanticButton = (label: string): HTMLButtonElement => {
+        const button = [
+          ...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-management button'),
+        ].find((candidate) => candidate.textContent?.trim() === label);
+        if (button === undefined) throw new Error(`Missing semantic button: ${label}`);
+        return button;
+      };
+      semanticButton('Review installation').click();
+      await vi.waitFor(() => expect(root.textContent).toContain('Installation disclosure'));
+      semanticButton('Accept and install').click();
+      await vi.waitFor(() => expect(finishInstall).toBeTypeOf('function'));
+
+      root.querySelector<HTMLButtonElement>('.fm-settings-button')?.click();
+      m.redraw.sync();
+      expect(root.querySelector<HTMLDetailsElement>('.fm-settings-disclosure')?.open).toBe(false);
+      expect(root.querySelector('.fm-semantic-management')).toBeNull();
+      expect(root.querySelector('.fm-semantic-install-status')?.textContent).toBe('Installing…');
+      const status = root.querySelector<HTMLButtonElement>('.fm-semantic-install-status');
+      status?.click();
+      m.redraw.sync();
+      expect(root.querySelector<HTMLDetailsElement>('.fm-settings-disclosure')?.open).toBe(true);
+      expect(root.querySelector('.fm-semantic-install button')).toBeNull();
+      root.querySelector<HTMLButtonElement>('.fm-settings-button')?.click();
+      m.redraw.sync();
+      expect(root.querySelector('.fm-semantic-management')).toBeNull();
+
+      finishInstall?.();
+      const selector = `.fm-semantic-install-${outcome}`;
+      await vi.waitFor(() => expect(root.querySelector(selector)).not.toBeNull());
+      expect(install).toHaveBeenCalledOnce();
+      expect(root.querySelector('.fm-semantic-install-status')?.textContent).toContain(
+        failure === undefined ? 'Installed and enabled' : 'Installation failed',
+      );
+      expect(document.querySelector(`.toast${selector}`)?.textContent).toContain(
+        failure === undefined ? 'Installed and enabled' : 'Download rejected <script>',
+      );
+      expect(document.querySelector('.toast script')).toBeNull();
+    },
+  );
 
   it('shows one disabled search control immediately while worker availability is checked', async () => {
     const client = new MockFileManagerClient();
@@ -4915,7 +4980,7 @@ describe('AppShell', () => {
     );
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-workspace')).not.toBeNull());
     expect(root.querySelector('.fm-rag-ask-modal')).toBeNull();
-    root.querySelector<HTMLInputElement>('.fm-knowledge-include-folder input')?.click();
+    root.querySelector<HTMLButtonElement>('.fm-knowledge-include-folder-action')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
     [...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-enrolment-modal button')]
       .find((button) => button.textContent?.trim() === 'Cancel')
@@ -4925,7 +4990,7 @@ describe('AppShell', () => {
         'true',
       ),
     );
-    root.querySelector<HTMLInputElement>('.fm-knowledge-include-folder input')?.click();
+    root.querySelector<HTMLButtonElement>('.fm-knowledge-include-folder-action')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
     expect(root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')).toBeNull();
     const includeButton = await vi.waitFor(() => {
@@ -4937,7 +5002,9 @@ describe('AppShell', () => {
     });
     includeButton?.click();
 
-    await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-include-folder')).toBeNull());
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-knowledge-include-folder-action')).toBeNull(),
+    );
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-semantic-enrolment-modal')?.getAttribute('aria-hidden')).toBe(
         'true',
