@@ -813,6 +813,7 @@ mod tests {
                     ("media_type".to_owned(), "application/pdf".to_owned()),
                 ]),
                 media_type: "application/pdf".to_owned(),
+                pdf_images_consented: false,
                 content: b"multilingual semantic retrieval".to_vec(),
             })
             .await
@@ -911,6 +912,7 @@ mod tests {
                     ),
                 ]),
                 media_type: "application/pdf".to_owned(),
+                pdf_images_consented: false,
                 content: b"machine learning".to_vec(),
             })
             .await
@@ -933,6 +935,7 @@ mod tests {
                     ),
                 ]),
                 media_type: "application/pdf".to_owned(),
+                pdf_images_consented: false,
                 content: b"machine learning".to_vec(),
             })
             .await

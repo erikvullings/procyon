@@ -139,6 +139,8 @@ pub struct IngestionDocument {
     pub workspace_id: Option<String>,
     /// Trusted media type.
     pub media_type: String,
+    /// Host-authorized PDF image consent; no visual records are published yet.
+    pub pdf_images_consented: bool,
     /// Source modification time in Unix milliseconds.
     pub modified_at_ms: i64,
     /// Bounded source bytes streamed by the host.
@@ -442,6 +444,7 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
                 .filter(|value| !value.is_empty())
                 .cloned(),
             media_type: input.media_type,
+            pdf_images_consented: input.pdf_images_consented,
             modified_at_ms,
             bytes: input.content,
         };
@@ -1528,6 +1531,7 @@ mod tests {
                 root_id: "root-a".into(),
                 workspace_id: Some("workspace-a".into()),
                 media_type: "text/plain".into(),
+                pdf_images_consented: false,
                 modified_at_ms: 1_000,
                 bytes: body.as_bytes().to_vec(),
             }
@@ -2229,6 +2233,7 @@ mod tests {
                     library_id: "library-a".into(),
                     document_id: "protocol-document".into(),
                     media_type: "text/plain".into(),
+                    pdf_images_consented: false,
                     metadata: [
                         ("occurrence_id".into(), "protocol-occurrence".into()),
                         ("source_id".into(), "opaque-source".into()),

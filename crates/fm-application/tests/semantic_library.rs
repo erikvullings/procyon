@@ -1132,6 +1132,7 @@ fn the_worker_feed_applies_the_curated_eligibility_policy_and_stops_while_paused
         "the host's 64 MiB read limit must apply before the broader library quota"
     );
     assert_eq!(plan.decisions.len(), 1, "one consented occurrence is fed");
+    assert!(!plan.pdf_images_consented, "E5 has no PDF image consent");
 
     let revision = service.status(&HOST).unwrap().revision;
     service.pause(&HOST, revision).unwrap();
@@ -1186,12 +1187,44 @@ fn a_gemma_library_feeds_only_media_selected_at_creation() {
             ],
         )
         .unwrap();
+    assert!(plan.pdf_images_consented);
     assert_eq!(
         plan.eligible_locations,
         [
             location("file:///docs/photo.png"),
             location("file:///docs/clip.mp4")
         ]
+    );
+}
+
+#[test]
+fn pdf_image_consent_stays_off_for_a_text_only_gemma_library() {
+    let directory = project_temp_dir("gemma-text-only-pdf-feed-");
+    let config = SemanticLibraryConfiguration::embeddinggemma_2(
+        directory.path().join("config"),
+        directory.path().join("semantic-data"),
+        Uuid::new_v4(),
+        256,
+        GemmaMediaSelection {
+            images: false,
+            audio: false,
+            video: false,
+        },
+    )
+    .unwrap();
+    let service = SemanticLibraryService::desktop_managed(
+        config,
+        Arc::new(FixedSemanticEnrolmentEstimator::new(estimate())),
+    )
+    .unwrap();
+    let context = SemanticFolderContext::new(workspace(10), location("file:///docs"));
+    enrol(&service, &context);
+
+    assert!(
+        !service
+            .worker_feed_plan(&HOST, &[])
+            .unwrap()
+            .pdf_images_consented
     );
 }
 

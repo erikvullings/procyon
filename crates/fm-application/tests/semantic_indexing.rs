@@ -66,6 +66,7 @@ struct RemediatingDocumentCapability {
     cancel_count: AtomicUsize,
     remediated_contents: Mutex<Vec<Vec<u8>>>,
     ingested_titles: Mutex<Vec<String>>,
+    ingested_pdf_consents: Mutex<Vec<(String, bool)>>,
 }
 
 impl RemediatingDocumentCapability {
@@ -78,6 +79,7 @@ impl RemediatingDocumentCapability {
             cancel_count: AtomicUsize::new(0),
             remediated_contents: Mutex::new(Vec::new()),
             ingested_titles: Mutex::new(Vec::new()),
+            ingested_pdf_consents: Mutex::new(Vec::new()),
         }
     }
 
@@ -96,6 +98,10 @@ impl SemanticCapability for RemediatingDocumentCapability {
     }
 
     async fn ingest(&self, ingestion: DocumentIngestion) -> Result<SemanticJobId, SemanticError> {
+        self.ingested_pdf_consents.lock().unwrap().push((
+            ingestion.metadata.get("title").cloned().unwrap_or_default(),
+            ingestion.pdf_images_consented,
+        ));
         self.ingested_titles.lock().unwrap().push(
             ingestion
                 .metadata
@@ -353,6 +359,49 @@ async fn reconciliation_feeds_only_media_enabled_for_the_gemma_library() {
         .unwrap();
     assert_eq!(report.observed_files, 2);
     assert_eq!(report.ingested_occurrences, 2);
+}
+
+#[tokio::test]
+async fn reconciliation_scopes_pdf_image_consent_to_the_selected_gemma_library() {
+    for images in [false, true] {
+        let root = project_temp_dir("pdf-consent-root-");
+        std::fs::write(root.path().join("report.pdf"), b"%PDF-1.7 synthetic").unwrap();
+        std::fs::write(root.path().join("notes.txt"), b"Text-only notes").unwrap();
+        let state = project_temp_dir("pdf-consent-state-");
+        let library = library_with_model(
+            &state,
+            ModelIdentity::embeddinggemma_2(
+                256,
+                GemmaMediaSelection {
+                    images,
+                    audio: false,
+                    video: false,
+                },
+            )
+            .unwrap(),
+        );
+        let root_id = enrol(
+            &library,
+            WorkspaceId::from(Uuid::from_u128(0x1912)),
+            Location::from_native_path(root.path()).unwrap(),
+        );
+        let capability = Arc::new(RemediatingDocumentCapability::new());
+        let service = FileManagerService::new(
+            RuntimeKindDto::Tauri,
+            state.path().join("workspaces"),
+            state.path().join("settings"),
+        )
+        .with_semantic_library_service(library)
+        .with_semantic_capability(capability.clone());
+
+        service
+            .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+            .await
+            .unwrap();
+        let captured = capability.ingested_pdf_consents.lock().unwrap();
+        assert!(captured.contains(&("report.pdf".to_owned(), images)));
+        assert!(captured.contains(&("notes.txt".to_owned(), false)));
+    }
 }
 
 #[cfg(all(unix, feature = "gemma-native"))]

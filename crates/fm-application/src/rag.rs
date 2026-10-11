@@ -1778,6 +1778,7 @@ mod tests {
                 document_id: DocumentId::new("document-a"),
                 metadata: BTreeMap::from([("source_id".to_owned(), "source-a".to_owned())]),
                 media_type: "text/plain".to_owned(),
+                pdf_images_consented: false,
                 content: b"The best introduction to SU-fields is this practical article.".to_vec(),
             })
             .await

@@ -539,6 +539,7 @@ impl SemanticIndexingService {
                 candidate: eligibility_candidate(entry.clone()),
             }],
         )?;
+        let pdf_images_consented = feed.pdf_images_consented;
         let decision = feed
             .decisions
             .into_iter()
@@ -577,6 +578,7 @@ impl SemanticIndexingService {
                     root_id: context.root_id,
                     workspace_id: *workspace_id,
                     media_type: media_type(entry).ok_or(SemanticLibraryError::InvalidRequest)?,
+                    pdf_images_consented,
                     modified_at_ms: entry
                         .modified_at
                         .map_or(0, |value| value.timestamp_millis()),
@@ -924,6 +926,7 @@ struct FeedDocument<'content> {
     root_id: RootId,
     workspace_id: WorkspaceId,
     media_type: &'content str,
+    pdf_images_consented: bool,
     modified_at_ms: i64,
     content: Vec<u8>,
 }
@@ -969,6 +972,8 @@ async fn ingest_and_wait(
             document_id: DocumentId::new(decision.document_id().to_string()),
             metadata,
             media_type: document.media_type.to_owned(),
+            pdf_images_consented: document.pdf_images_consented
+                && document.media_type == "application/pdf",
             content: document.content,
         })
         .await?;

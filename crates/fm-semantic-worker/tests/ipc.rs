@@ -14,9 +14,9 @@ use fm_semantic_protocol::{
     write_frame,
 };
 use fm_semantic_worker::{
-    ClientError, ConceptFolderQuery, Endpoint, IngestionScope, IngestionState, LaunchSecret,
-    ManagedWorkerLaunch, ManagedWorkerResolver, SearchResult, WorkerClient, WorkerConfig,
-    WorkerConnector, WorkerHealth, WorkerIngestionBackend, WorkerIngestionInput,
+    ClientError, ConceptFolderQuery, Endpoint, IngestionMedia, IngestionScope, IngestionState,
+    LaunchSecret, ManagedWorkerLaunch, ManagedWorkerResolver, SearchResult, WorkerClient,
+    WorkerConfig, WorkerConnector, WorkerHealth, WorkerIngestionBackend, WorkerIngestionInput,
     WorkerIngestionJob, WorkerQueryBackend, WorkerQueryInput, WorkerServer,
 };
 use tokio_util::sync::CancellationToken;
@@ -43,6 +43,32 @@ impl WorkerQueryBackend for CapturingQueryBackend {
 }
 
 struct SkippingIngestionBackend;
+
+#[derive(Default)]
+struct CapturingIngestionBackend {
+    input: Mutex<Option<WorkerIngestionInput>>,
+}
+
+impl WorkerIngestionBackend for CapturingIngestionBackend {
+    fn enqueue(
+        &self,
+        input: WorkerIngestionInput,
+        _cancellation: CancellationToken,
+    ) -> Result<String, String> {
+        let job_id = input.job_id.clone();
+        *self.input.lock().expect("ingestion capture lock") = Some(input);
+        Ok(job_id)
+    }
+
+    fn job(
+        &self,
+        _tenant_id: &str,
+        _library_id: &str,
+        _job_id: &str,
+    ) -> Result<Option<WorkerIngestionJob>, String> {
+        Ok(None)
+    }
+}
 
 impl WorkerIngestionBackend for SkippingIngestionBackend {
     fn enqueue(
@@ -398,6 +424,64 @@ async fn accepts_an_owner_only_socket_served_by_the_same_effective_user() {
 
     let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
     assert_eq!(client.health().await.unwrap(), WorkerHealth::Serving);
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn pdf_image_consent_crosses_ipc_only_for_pdfs() {
+    let directory = test_directory("pdf-image-consent");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::generate();
+    let backend = Arc::new(CapturingIngestionBackend::default());
+    let task = tokio::spawn(
+        WorkerServer::with_ingestion_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone()),
+            backend.clone(),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    client
+        .ingest_with_pdf_images(
+            "pdf-consent",
+            IngestionScope::new("tenant", "library"),
+            "document",
+            BTreeMap::new(),
+            IngestionMedia {
+                media_type: "application/pdf",
+                pdf_images_consented: true,
+            },
+            b"%PDF-1.7".to_vec(),
+        )
+        .await
+        .unwrap();
+    {
+        let captured = backend.input.lock().unwrap();
+        assert!(captured.as_ref().unwrap().pdf_images_consented);
+    }
+
+    let rejected = client
+        .ingest_with_pdf_images(
+            "not-a-pdf",
+            IngestionScope::new("tenant", "library"),
+            "image",
+            BTreeMap::new(),
+            IngestionMedia {
+                media_type: "image/png",
+                pdf_images_consented: true,
+            },
+            b"\x89PNG".to_vec(),
+        )
+        .await;
+    assert!(matches!(
+        rejected,
+        Err(ClientError::Remote {
+            code: v1::ErrorCode::InvalidRequest,
+            ..
+        })
+    ));
     client.shutdown(Duration::from_millis(100)).await.unwrap();
     task.await.unwrap().unwrap();
 }
@@ -1456,6 +1540,7 @@ async fn pending_ingestion_expires_without_another_chunk_and_releases_capacity()
                     metadata: Vec::new(),
                     media_type: "text/plain".to_owned(),
                     expected_content_bytes: 1,
+                    pdf_images_consented: false,
                 })),
             })),
         },
@@ -1550,6 +1635,7 @@ async fn ingestion_operation_can_be_cancelled_before_content_arrives() {
                     metadata: Vec::new(),
                     media_type: "text/plain".to_owned(),
                     expected_content_bytes: 1,
+                    pdf_images_consented: false,
                 })),
             })),
         },
@@ -2214,6 +2300,7 @@ async fn malformed_frame_disconnect_cancels_connection_owned_ingestion() {
                     metadata: Vec::new(),
                     media_type: "text/plain".to_owned(),
                     expected_content_bytes: 6,
+                    pdf_images_consented: false,
                 })),
             })),
         },
@@ -2970,6 +3057,7 @@ async fn write_ingestion_start(
                     metadata: Vec::new(),
                     media_type: "text/plain".to_owned(),
                     expected_content_bytes,
+                    pdf_images_consented: false,
                 })),
             })),
         },

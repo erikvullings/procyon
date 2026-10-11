@@ -184,6 +184,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     document_id: DocumentId::new(document.id.clone()),
                     metadata: metadata.clone(),
                     media_type: document.media_type.clone(),
+                    pdf_images_consented: false,
                     content: source_bytes(previous_source)?,
                 })
                 .await?;
@@ -197,6 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 document_id: DocumentId::new(document.id.clone()),
                 metadata,
                 media_type: document.media_type.clone(),
+                pdf_images_consented: false,
                 content,
             })
             .await?;

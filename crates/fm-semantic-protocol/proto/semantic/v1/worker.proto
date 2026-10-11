@@ -118,6 +118,8 @@ message IngestionStart {
   string media_type = 3;
   // Declared total content bytes.
   uint64 expected_content_bytes = 4;
+  // Host-authorized PDF image consent from the immutable library policy.
+  bool pdf_images_consented = 5;
 }
 
 // One ordered segment of document content.

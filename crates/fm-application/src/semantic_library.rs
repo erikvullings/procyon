@@ -1956,6 +1956,12 @@ impl SemanticLibraryService {
         };
         Ok(SemanticWorkerFeedPlan {
             paused,
+            pdf_images_consented: data
+                .policy
+                .library()
+                .model()
+                .gemma_media()
+                .is_some_and(|media| media.images),
             decisions: worker_decisions,
             eligible_locations: eligible,
             skipped_reason_counts: reason_counts(&core::EligibilityReasonCounts::from_decisions(
@@ -2457,6 +2463,8 @@ pub(crate) struct SemanticIndexingObservation {
 pub struct SemanticWorkerFeedPlan {
     /// Whether ingestion is paused; queries still use existing generations.
     pub paused: bool,
+    /// Immutable library image consent for PDF visual ingestion; false for E5.
+    pub pdf_images_consented: bool,
     /// Path-free decisions the host may send to the isolated worker.
     pub decisions: Vec<core::WorkerFeedDecision>,
     /// Candidate locations the curated policy admitted, retained by the host.

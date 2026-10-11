@@ -217,6 +217,8 @@ pub struct DocumentIngestion {
     pub metadata: BTreeMap<String, String>,
     /// IANA media type of the byte stream.
     pub media_type: String,
+    /// Host-authorized PDF image consent from the immutable library policy.
+    pub pdf_images_consented: bool,
     /// Provider-supplied document bytes.
     pub content: Vec<u8>,
 }
@@ -701,12 +703,13 @@ impl SemanticCapability for IpcSemanticCapability {
             document_id,
             metadata,
             media_type,
+            pdf_images_consented,
             content,
         } = ingestion;
         let client = self.worker_client().await?;
         self.adapt_result(
             client
-                .ingest(
+                .ingest_with_pdf_images(
                     operation_id.as_str(),
                     fm_semantic_worker::IngestionScope::new(
                         scope.tenant_id.as_str(),
@@ -714,7 +717,10 @@ impl SemanticCapability for IpcSemanticCapability {
                     ),
                     document_id.as_str(),
                     metadata,
-                    &media_type,
+                    fm_semantic_worker::IngestionMedia {
+                        media_type: &media_type,
+                        pdf_images_consented,
+                    },
                     content,
                 )
                 .await,

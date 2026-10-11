@@ -1740,10 +1740,21 @@ pub struct WorkerIngestionInput {
     pub document_id: String,
     /// Trusted media type.
     pub media_type: String,
+    /// Host-authorized consent for PDF image embeddings.
+    pub pdf_images_consented: bool,
     /// Structured host metadata.
     pub metadata: BTreeMap<String, String>,
     /// Bounded source bytes.
     pub content: Vec<u8>,
+}
+
+/// Trusted media type and host-authorized PDF image choice for one ingestion.
+#[derive(Debug, Clone, Copy)]
+pub struct IngestionMedia<'a> {
+    /// IANA media type.
+    pub media_type: &'a str,
+    /// Immutable library image choice for PDF content.
+    pub pdf_images_consented: bool,
 }
 
 /// Durable worker-job snapshot returned through the protocol.
@@ -2186,6 +2197,34 @@ impl WorkerClient {
         media_type: &str,
         content: Vec<u8>,
     ) -> Result<String, ClientError> {
+        self.ingest_with_pdf_images(
+            request_id,
+            scope,
+            document_id,
+            metadata,
+            IngestionMedia {
+                media_type,
+                pdf_images_consented: false,
+            },
+            content,
+        )
+        .await
+    }
+
+    /// Streams a document with its host-authorized PDF image consent.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed transport, authentication, cancellation, or limit error.
+    pub async fn ingest_with_pdf_images(
+        &self,
+        request_id: &str,
+        scope: IngestionScope,
+        document_id: &str,
+        metadata: BTreeMap<String, String>,
+        media: IngestionMedia<'_>,
+        content: Vec<u8>,
+    ) -> Result<String, ClientError> {
         if u64::try_from(content.len()).unwrap_or(u64::MAX) > self.inner.limits().max_stream_bytes()
         {
             return Err(ClientError::Remote {
@@ -2219,8 +2258,9 @@ impl WorkerClient {
                         .into_iter()
                         .map(|(key, value)| v1::MetadataEntry { key, value })
                         .collect(),
-                    media_type: media_type.to_owned(),
+                    media_type: media.media_type.to_owned(),
                     expected_content_bytes: u64::try_from(content.len()).unwrap_or(u64::MAX),
+                    pdf_images_consented: media.pdf_images_consented,
                 })),
             }),
             deadline,
@@ -3526,6 +3566,19 @@ async fn handle_frame(
                         .await;
                         return;
                     }
+                    if start.pdf_images_consented && start.media_type != "application/pdf" {
+                        send_error(
+                            &writer,
+                            correlation_id,
+                            protocol_error(
+                                v1::ErrorCode::InvalidRequest,
+                                "PDF image consent requires PDF content",
+                            ),
+                            state.config.limits,
+                        )
+                        .await;
+                        return;
+                    }
                     let Ok(permit) = Arc::clone(&state.concurrency).try_acquire_owned() else {
                         send_error(
                             &writer,
@@ -4562,6 +4615,7 @@ async fn complete_ingestion(
             library_id: pending.scope.library_id,
             document_id,
             media_type: pending.start.media_type,
+            pdf_images_consented: pending.start.pdf_images_consented,
             metadata,
             content: pending.content,
         };

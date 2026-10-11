@@ -80,6 +80,7 @@ async fn semantic_fake_filters_interleaved_unsorted_documents_before_returning_r
             document_id: DocumentId::new(document_id),
             metadata: BTreeMap::from([("kind".to_owned(), "note".to_owned())]),
             media_type: "text/plain".to_owned(),
+            pdf_images_consented: false,
             content: b"contains needle".to_vec(),
         })
         .await
@@ -124,6 +125,7 @@ async fn semantic_injected_fake_ingestion_and_query_flow_through_the_facade() {
             document_id: DocumentId::new("document"),
             metadata: BTreeMap::new(),
             media_type: "text/plain".to_owned(),
+            pdf_images_consented: false,
             content: b"searchable content".to_vec(),
         })
         .await
@@ -159,6 +161,7 @@ async fn semantic_facade_delegates_fake_job_events_cancellation_and_shutdown_lif
             document_id: DocumentId::new("document"),
             metadata: BTreeMap::new(),
             media_type: "text/plain".to_owned(),
+            pdf_images_consented: false,
             content: b"content".to_vec(),
         })
         .await
@@ -322,6 +325,7 @@ async fn semantic_ipc_capability_adapts_worker_operations_to_application_types()
             document_id: DocumentId::new("document"),
             metadata: BTreeMap::from([("kind".to_owned(), "note".to_owned())]),
             media_type: "text/plain".to_owned(),
+            pdf_images_consented: false,
             content: b"semantic bytes".to_vec(),
         })
         .await
@@ -567,6 +571,7 @@ async fn semantic_cancel_targets_an_ingestion_operation_while_it_is_in_flight() 
                 document_id: DocumentId::new("cancelled-document"),
                 metadata: BTreeMap::new(),
                 media_type: "text/plain".to_owned(),
+                pdf_images_consented: false,
                 content: b"must not be committed".to_vec(),
             })
             .await

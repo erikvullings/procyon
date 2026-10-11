@@ -152,6 +152,12 @@ optional Docling ML/PDFium pack is qualified on those targets.
   retained JPEG images with page provenance and explicitly reports the third page's non-JPEG
   omission; one text-bearing page is extracted. This verifies bounded XObject reuse, not PDF
   image embeddings or scanned-page rendering.
+- 2026-10-11 Copilot: The host now snapshots immutable Gemma image consent under the same
+  authorized worker-feed decision, restricts it to PDF entries, and carries the typed flag across
+  authenticated IPC into the ingestion input. E5 and image-off Gemma stay false; non-PDF requests
+  with a true flag are rejected. Deterministic library, host reconciliation, protocol and IPC
+  regressions cover the boundary. The worker still does not enable visual conversion or publish
+  PDF image vectors: consent propagation alone does not qualify this release prerequisite.
 - 2026-10-11 Copilot: Read-only renderer research confirmed the normal build excludes
   `pdfium-render` (`docling-pdf`'s `ml` feature is off) and that the wrapper does not supply
   native PDFium. The upstream `bblanchon/pdfium-binaries` `chromium/8086` release provides
