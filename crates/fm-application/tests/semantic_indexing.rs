@@ -388,6 +388,10 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
             "clip.mp4",
             include_bytes!("../../fm-semantic-worker/tests/fixtures/gemma-video-2s.mp4").to_vec(),
         ),
+        (
+            "notes.txt",
+            b"Searchable notes about the enrolled media.".to_vec(),
+        ),
     ] {
         std::fs::write(root.path().join(name), bytes).unwrap();
     }
@@ -441,10 +445,17 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
         .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
         .await
         .unwrap();
-    assert_eq!(report.observed_files, 3);
-    assert_eq!(report.ingested_occurrences, 3, "{report:?}");
+    assert_eq!(report.observed_files, 4);
+    assert_eq!(report.ingested_occurrences, 4, "{report:?}");
     assert_eq!(report.failed_occurrences, 0, "{report:?}");
     assert_eq!(report.excluded_occurrences, 0, "{report:?}");
+    #[cfg(target_os = "macos")]
+    assert!(
+        std::fs::read_to_string(runtime.path().join("gemma-backend"))
+            .unwrap()
+            .contains("FP32 Metal"),
+        "the signed macOS worker did not select Metal for the mixed-media library"
+    );
     let results = service
         .semantic_query(SemanticQuery {
             scope: SemanticScope::new(
@@ -463,6 +474,7 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
         ("photo.png", "image/png"),
         ("sound.mp3", "audio/mpeg"),
         ("clip.mp4", "video/mp4"),
+        ("notes.txt", "text/plain"),
     ] {
         let result = results
             .iter()
@@ -510,7 +522,7 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
         .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
         .await
         .unwrap();
-    assert_eq!(after_deletion.observed_files, 2);
+    assert_eq!(after_deletion.observed_files, 3);
     assert!(matches!(
         service
             .resolve_rag_citation(
@@ -568,8 +580,8 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
         .unwrap();
     assert_eq!(
         remaining.semantic_results.len(),
-        2,
-        "the audio and video should remain visible after image deletion: {remaining:?}"
+        3,
+        "the audio, video, and text should remain visible after image deletion: {remaining:?}"
     );
     assert!(
         remaining

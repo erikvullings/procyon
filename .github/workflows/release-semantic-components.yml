@@ -568,7 +568,7 @@ jobs:
             "$RUNNER_TEMP/semantic-catalog.pub" \
             "$RUNNER_TEMP/gemma-installed-lifecycle" \
             "$RUNNER_TEMP/gemma-installed-report.json"
-      - name: Record runner hardware and bounded CPU measurements
+      - name: Record runner hardware and bounded installed measurements
         if: inputs.measure_installed_gemma == true
         shell: bash
         env:
@@ -576,10 +576,11 @@ jobs:
           CANDIDATE_RUN_ID: ${{ inputs.installed_candidate_run_id }}
           CANDIDATE_SOURCE_REVISION: ${{ inputs.installed_candidate_source_revision }}
         run: |
-          node -e '
-            const fs = require("node:fs");
-            const os = require("node:os");
-            const path = require("node:path");
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import os from "node:os";
+            import path from "node:path";
+            import { gemmaInstalledLimitations } from "./scripts/gemma-installed-limitations.mjs";
             const root = path.join(process.env.RUNNER_TEMP, "gemma-cpu");
             const dimensions = [128, 256, 512, 768].map((size) =>
               JSON.parse(fs.readFileSync(path.join(root, `${size}.json`), "utf8")));
@@ -612,7 +613,7 @@ jobs:
                 osRelease: os.release(),
               },
               dimensions,
-              limitations: "Single synthetic asset per modality and three text queries; fresh process and index per dimension; CPU runner class is virtualized; wall includes IPC and queueing; no quality labels, GPU measurements, sustained throughput, or user workload. macOS peak is sampled, not a kernel high-water mark.",
+              limitations: gemmaInstalledLimitations(dimensions),
             }, null, 2));
           '
       - uses: actions/upload-artifact@v7
