@@ -291,9 +291,45 @@ describe('LlmProfileManagement', () => {
 
     expect(root.textContent).toContain('Cloud');
     expect(root.textContent).toContain('llm.example.test');
-    expect(root.textContent).toContain('questions, conversation history, and retrieved excerpts');
+    expect(root.textContent).toContain('https://llm.example.test');
+    expect(root.textContent).toContain('documents you choose to summarize');
     expect(root.textContent).not.toContain('never-render-this');
     expect(profile.hasCredential).toBe(true);
+  });
+
+  it('invalidates consent if a saved cloud endpoint path changes on the same host', async () => {
+    const client = new MockFileManagerClient();
+    const draft = {
+      name: 'Cloud profile',
+      preset: 'openAiCompatible' as const,
+      baseUrl: 'https://llm.example.test:8443/first',
+      deployment: null,
+      apiVersion: null,
+      model: 'model-a',
+      credential: null,
+      advanced: {
+        contextWindow: 8192,
+        maximumAnswerTokens: 1024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireHttps' as const,
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions' as const],
+      redactFilenames: true,
+    };
+    const profile = await client.createLlmProfile(draft);
+    expect((await client.activateLlmProfile(profile.id, true)).consentedHost).toBe(
+      'https://llm.example.test:8443/first',
+    );
+    const changed = await client.updateLlmProfile(profile.id, {
+      ...draft,
+      baseUrl: 'https://llm.example.test:8443/second',
+    });
+    expect(changed.consentedHost).toBeNull();
+    await expect(client.activateLlmProfile(profile.id, false)).rejects.toThrow(
+      'Cloud consent is required',
+    );
   });
 
   it('integrates models discovered by a saved provider into the model field', async () => {

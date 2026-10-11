@@ -1782,8 +1782,8 @@ export const en = {
     cloud: 'Cloud',
     credentialStored: 'Credential stored',
     cloudDisclosure:
-      'Activating this profile allows questions, conversation history, and retrieved excerpts to leave this device for {host}.',
-    confirmConsent: 'I understand and consent to sending this data to this host.',
+      'Activating this profile allows questions, conversation history, retrieved excerpts, and documents you choose to summarize to leave this device for {host}.',
+    confirmConsent: 'I consent to sending this content to this endpoint.',
     test: 'Test',
     activate: 'Use as default',
     defaultProfile: 'Default profile',

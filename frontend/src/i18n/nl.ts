@@ -1792,8 +1792,8 @@ export const nl = {
     cloud: 'Cloud',
     credentialStored: 'Referentie opgeslagen',
     cloudDisclosure:
-      'Activering staat toe dat vragen, gespreksgeschiedenis en opgehaalde fragmenten dit apparaat verlaten naar {host}.',
-    confirmConsent: 'Ik begrijp dit en geef toestemming om deze gegevens naar deze host te sturen.',
+      'Activering staat toe dat vragen, gespreksgeschiedenis, opgehaalde fragmenten en documenten die je laat samenvatten dit apparaat verlaten naar {host}.',
+    confirmConsent: 'Ik geef toestemming om deze inhoud naar deze endpoint te sturen.',
     test: 'Testen',
     activate: 'Als standaard gebruiken',
     defaultProfile: 'Standaardprofiel',

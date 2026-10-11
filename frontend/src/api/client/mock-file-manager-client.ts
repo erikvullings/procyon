@@ -4343,14 +4343,15 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('updateLlmProfile', signal, () => {
       const current = this.requireLlmProfile(profileId);
       const host = new URL(request.baseUrl).hostname.toLowerCase();
-      const oldHost = new URL(current.baseUrl).hostname.toLowerCase();
+      const endpoint = new URL(request.baseUrl).href.replace(/\/$/u, '');
+      const oldEndpoint = new URL(current.baseUrl).href.replace(/\/$/u, '');
       const profile: LlmProfile = {
         ...structuredClone(request),
         id: profileId,
         hasCredential: request.credential != null || current.hasCredential,
         locality:
           host === 'localhost' || host === '127.0.0.1' || host === '::1' ? 'loopback' : 'cloud',
-        consentedHost: host === oldHost ? (current.consentedHost ?? null) : null,
+        consentedHost: endpoint === oldEndpoint ? (current.consentedHost ?? null) : null,
       };
       this.llmProfiles.set(profileId, profile);
       return structuredClone(profile);
@@ -4411,13 +4412,13 @@ export class MockFileManagerClient implements FileManagerClient {
   ): Promise<LlmProfile> {
     return this.perform('activateLlmProfile', signal, () => {
       const profile = this.requireLlmProfile(profileId);
-      if (profile.locality === 'cloud' && !consent && profile.consentedHost == null) {
+      const endpoint = new URL(profile.baseUrl).href.replace(/\/$/u, '');
+      if (profile.locality === 'cloud' && !consent && profile.consentedHost !== endpoint) {
         throw new MockClientError('invalidRequest', 'Cloud consent is required');
       }
       const activated: LlmProfile = {
         ...profile,
-        consentedHost:
-          profile.locality === 'cloud' ? new URL(profile.baseUrl).hostname.toLowerCase() : null,
+        consentedHost: profile.locality === 'cloud' ? endpoint : null,
       };
       this.llmProfiles.set(profileId, activated);
       this.activeLlmProfileId = profileId;

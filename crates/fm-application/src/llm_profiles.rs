@@ -22,7 +22,7 @@ use tokio_util::sync::CancellationToken;
 use url::{Host, Url};
 use uuid::Uuid;
 
-const PROFILE_SCHEMA_VERSION: u32 = 3;
+const PROFILE_SCHEMA_VERSION: u32 = 4;
 const TEST_PROMPT: &str = "Reply with OK.";
 const MAX_STREAM_BYTES: usize = 256 * 1024;
 /// Hard application bounds, independent of editable profile or provider metadata.
@@ -110,6 +110,7 @@ pub struct LlmProfile {
     pub credential_ref: Option<CredentialRef>,
     pub advanced: LlmAdvancedSettings,
     pub capabilities: BTreeSet<LlmApiCapability>,
+    /// Historical field name; stores the exact normalized endpoint in schema 4.
     pub consented_host: Option<String>,
     pub redact_filenames: bool,
 }
@@ -556,25 +557,28 @@ impl VersionedDocument for LlmProfilesDocument {
     fn migrate(mut value: Value, version: u32) -> Result<Value, Self::MigrationError> {
         match version {
             1 => {
-                value["schemaVersion"] = Value::from(PROFILE_SCHEMA_VERSION);
                 value["activeProfileId"] = Value::Null;
                 if let Some(profiles) = value.get_mut("profiles").and_then(Value::as_array_mut) {
                     for profile in profiles {
                         profile["capabilities"] = json!(["chatCompletions", "modelDiscovery"]);
                         profile["redactFilenames"] = Value::Bool(false);
-                        profile["consentedHost"] = Value::Null;
                     }
                 }
-                Ok(value)
             }
             2 => {
-                value["schemaVersion"] = Value::from(PROFILE_SCHEMA_VERSION);
                 value["activeProfileId"] = Value::Null;
-                Ok(value)
             }
-            PROFILE_SCHEMA_VERSION => Ok(value),
-            _ => Err(LlmProfileError::InvalidConfiguration),
+            3 => {}
+            PROFILE_SCHEMA_VERSION => return Ok(value),
+            _ => return Err(LlmProfileError::InvalidConfiguration),
         }
+        value["schemaVersion"] = Value::from(PROFILE_SCHEMA_VERSION);
+        if let Some(profiles) = value.get_mut("profiles").and_then(Value::as_array_mut) {
+            for profile in profiles {
+                profile["consentedHost"] = Value::Null;
+            }
+        }
+        Ok(value)
     }
 
     fn validate(&self) -> Result<(), Self::MigrationError> {
@@ -729,9 +733,9 @@ impl LlmProfileService {
             .ok_or(LlmProfileError::NotFound)?;
         let api_key = draft.api_key.take();
         let mut profile = profile_from_draft(id, draft, old.credential_ref);
-        let old_host = normalize_endpoint(&old.base_url)?.host;
-        let new_host = normalize_endpoint(&profile.base_url)?.host;
-        profile.consented_host = (old_host == new_host)
+        let old_endpoint = normalize_endpoint(&old.base_url)?.base_url;
+        let new_endpoint = normalize_endpoint(&profile.base_url)?.base_url;
+        profile.consented_host = (old_endpoint == new_endpoint)
             .then_some(old.consented_host)
             .flatten();
         validate_profile(&profile)?;
@@ -849,12 +853,12 @@ impl LlmProfileService {
             let endpoint = normalize_endpoint(&profile.base_url)?;
             self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
             if endpoint.locality == EndpointLocality::Cloud
-                && profile.consented_host.as_deref() != Some(endpoint.host.as_str())
+                && profile.consented_host.as_deref() != Some(endpoint.base_url.as_str())
             {
                 if !consent {
                     return Err(LlmProfileError::ConsentRequired(endpoint.host));
                 }
-                profile.consented_host = Some(endpoint.host);
+                profile.consented_host = Some(endpoint.base_url);
             }
             profile.clone()
         };
@@ -1026,7 +1030,7 @@ impl LlmProfileService {
         let endpoint = normalize_endpoint(&profile.base_url)?;
         self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
         if endpoint.locality == EndpointLocality::Cloud
-            && profile.consented_host.as_deref() != Some(endpoint.host.as_str())
+            && profile.consented_host.as_deref() != Some(endpoint.base_url.as_str())
         {
             return Err(LlmProfileError::ConsentRequired(endpoint.host));
         }
@@ -2062,7 +2066,7 @@ mod tests {
                 .unwrap()
                 .consented_host
                 .as_deref(),
-            Some("one.example")
+            Some("https://one.example")
         );
         let changed = service
             .update(
@@ -2072,6 +2076,69 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(changed.consented_host, None);
+    }
+
+    #[tokio::test]
+    async fn changing_a_cloud_endpoint_path_or_port_invalidates_consent() {
+        let (service, _, _) = service(LlmHostPolicy::server(["one.example".to_owned()]));
+        let profile = service
+            .create(draft(
+                LlmPreset::OpenAiCompatible,
+                "https://one.example:8443/first",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            service
+                .activate(profile.id, true)
+                .unwrap()
+                .consented_host
+                .as_deref(),
+            Some("https://one.example:8443/first")
+        );
+        let changed_path = service
+            .update(
+                profile.id,
+                draft(
+                    LlmPreset::OpenAiCompatible,
+                    "https://one.example:8443/second",
+                ),
+            )
+            .await
+            .unwrap();
+        assert_eq!(changed_path.consented_host, None);
+        let changed_port = service
+            .update(
+                profile.id,
+                draft(
+                    LlmPreset::OpenAiCompatible,
+                    "https://one.example:9443/second",
+                ),
+            )
+            .await
+            .unwrap();
+        assert_eq!(changed_port.consented_host, None);
+    }
+
+    #[test]
+    fn legacy_hostname_only_cloud_consent_is_not_carried_into_endpoint_consent() {
+        let mut profile = profile_from_draft(
+            Uuid::new_v4(),
+            draft(LlmPreset::OpenAiCompatible, "https://one.example/changed"),
+            None,
+        );
+        profile.consented_host = Some("one.example".into());
+        let value = serde_json::to_value(LlmProfilesDocument {
+            schema_version: 3,
+            active_profile_id: Some(profile.id),
+            profiles: vec![profile],
+        })
+        .unwrap();
+        let migrated = LlmProfilesDocument::migrate(value, 3).unwrap();
+        let document: LlmProfilesDocument = serde_json::from_value(migrated).unwrap();
+        document.validate().unwrap();
+        assert_eq!(document.active_profile_id, Some(document.profiles[0].id));
+        assert_eq!(document.profiles[0].consented_host, None);
     }
 
     #[tokio::test]

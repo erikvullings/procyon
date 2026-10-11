@@ -690,7 +690,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
           : undefined,
         active?.locality === 'cloud'
           ? m('.fm-llm-consent', [
-              m('p', t('llmProfiles', 'cloudDisclosure', { host: new URL(active.baseUrl).host })),
+              m('p', t('llmProfiles', 'cloudDisclosure', { host: active.baseUrl })),
               m(Switch, {
                 label: t('llmProfiles', 'confirmConsent'),
                 checked: consent || active.consentedHost != null,
