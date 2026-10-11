@@ -146,3 +146,14 @@ optional Docling ML/PDFium pack is qualified on those targets.
   worker ingestion regression confirms a failed PDF replacement retains the previous complete
   searchable generation and records a failed job. These checks do not establish full coverage for
   pages with empty or unextractable text, nor remove the production 64 MiB source cap.
+- 2026-10-11 Copilot: Read-only renderer research confirmed the normal build excludes
+  `pdfium-render` (`docling-pdf`'s `ml` feature is off) and that the wrapper does not supply
+  native PDFium. The upstream `bblanchon/pdfium-binaries` `chromium/8086` release provides
+  all four required non-V8 targets, a Sigstore/SLSA attestation with per-asset SHA-256 digests,
+  and bundled PDFium/third-party notices. PDFium and its Rust wrapper use permissive
+  redistribution licenses; Procyon has not pinned or verified those assets, carried their
+  notices, packaged/signed the library, or measured renderer isolation and memory. The pinned
+  Docling 1.36.0 source calls PDFium for rendering under `ml`, but a current upstream installer
+  comment claims pure-Rust page rendering; resolve that discrepancy against exact upstream
+  source/release before choosing an integration path. Availability and licensing alone do not
+  qualify a renderer or the four-target release.
