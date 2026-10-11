@@ -764,6 +764,7 @@ export const de = {
     mediaModified: 'Geändert {date}',
     mediaInspectSource: 'Quelle öffnen, um dieses Medium anzusehen.',
     openMedia: '{type} öffnen',
+    closeMedia: '{type} schließen',
     unableToStart: 'Suche kann nicht gestartet werden',
     refresh: 'Suche aktualisieren',
     filterLimitations: 'Einige Filter konnten nicht ausgewertet werden ({message}).',

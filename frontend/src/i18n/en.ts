@@ -811,6 +811,7 @@ export const en = {
     mediaModified: 'Modified {date}',
     mediaInspectSource: 'Open the source to inspect this media.',
     openMedia: 'Open {type}',
+    closeMedia: 'Close {type}',
     relevant: 'Relevant',
     notRelevant: 'Not relevant',
     exportEvaluation: 'Export evaluation',

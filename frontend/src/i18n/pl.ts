@@ -756,6 +756,7 @@ export const pl = {
     mediaModified: 'Zmieniono {date}',
     mediaInspectSource: 'Otwórz źródło, aby obejrzeć te multimedia.',
     openMedia: 'Otwórz {type}',
+    closeMedia: 'Zamknij {type}',
     unableToStart: 'Nie można rozpocząć wyszukiwania',
     refresh: 'Odśwież wyszukiwanie',
     filterLimitations: 'Nie udało się ocenić niektórych filtrów ({message}).',

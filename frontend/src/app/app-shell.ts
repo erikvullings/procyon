@@ -884,6 +884,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       readonly paneId: PaneId;
       readonly tabId: TabId;
       readonly controller: FileViewerController;
+      readonly knowledgeSourceId?: string;
       state: FileViewerState;
     }
   >();
@@ -1295,6 +1296,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     },
     openMetadata?: boolean,
     initialPage?: number,
+    knowledgeSourceId?: string,
   ): void {
     if (entry.kind === 'symlink') {
       // View what the link points at: the target's kind and extension pick the viewer.
@@ -1328,7 +1330,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             );
             return;
           }
-          openViewer(client, paneId, resolved, initialSearch, openMetadata, initialPage);
+          openViewer(
+            client,
+            paneId,
+            resolved,
+            initialSearch,
+            openMetadata,
+            initialPage,
+            knowledgeSourceId,
+          );
         })
         .catch(unavailable);
       return;
@@ -1365,6 +1375,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         paneId: viewer.paneId,
         tabId: viewer.tabId,
         controller,
+        ...(knowledgeSourceId === undefined ? {} : { knowledgeSourceId }),
         state: { status: 'loading', entry },
       });
       tabController.activateTab(viewer.paneId, viewer.tabId);
@@ -1407,6 +1418,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           paneId,
           tabId,
           controller,
+          ...(knowledgeSourceId === undefined ? {} : { knowledgeSourceId }),
           state: { status: 'loading', entry },
         });
         m.redraw();
@@ -2310,6 +2322,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       undefined,
       false,
       knowledgeEvidencePage(evidence.provenance),
+      evidence.sourceId,
     );
   }
 
@@ -4118,6 +4131,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openKnowledgeSearch,
     closeKnowledgeSearch: (paneId, tabId) => tabController.performCloseTab(paneId, tabId),
     openKnowledgeSource,
+    isKnowledgeSourceOpen: (evidence) =>
+      [...viewerByTab.values()].some((viewer) => viewer.knowledgeSourceId === evidence.sourceId),
     closeEditor,
     updateLocationSettings,
     invokeActionById: (actionId, parameters, context) =>

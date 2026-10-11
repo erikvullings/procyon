@@ -759,6 +759,7 @@ export const pt = {
     mediaModified: 'Alterado em {date}',
     mediaInspectSource: 'Abra a origem para ver este conteúdo.',
     openMedia: 'Abrir {type}',
+    closeMedia: 'Fechar {type}',
     unableToStart: 'Não é possível iniciar a pesquisa',
     refresh: 'Atualizar pesquisa',
     filterLimitations: 'Não foi possível avaliar alguns filtros ({message}).',

@@ -758,6 +758,7 @@ export const es = {
     mediaModified: 'Modificado el {date}',
     mediaInspectSource: 'Abre el archivo de origen para ver este contenido.',
     openMedia: 'Abrir {type}',
+    closeMedia: 'Cerrar {type}',
     unableToStart: 'No se puede iniciar la búsqueda',
     refresh: 'Actualizar búsqueda',
     filterLimitations: 'Algunos filtros no se pudieron evaluar ({message}).',

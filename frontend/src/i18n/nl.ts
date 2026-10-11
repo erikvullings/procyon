@@ -803,6 +803,7 @@ export const nl = {
     mediaModified: 'Gewijzigd {date}',
     mediaInspectSource: 'Open de bron om dit mediabestand te bekijken.',
     openMedia: 'Open {type}',
+    closeMedia: 'Sluit {type}',
     relevant: 'Relevant',
     notRelevant: 'Niet relevant',
     exportEvaluation: 'Evaluatie exporteren',

@@ -23,6 +23,7 @@ interface MountOptions {
   readonly initialSubject?: string;
   readonly onClose?: () => void;
   readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
+  readonly isSourceOpen?: (evidence: KnowledgeEvidence) => boolean;
 }
 
 function mount(options: MountOptions = {}): MockFileManagerClient {
@@ -38,6 +39,7 @@ function mount(options: MountOptions = {}): MockFileManagerClient {
         initialSubject: options.initialSubject,
         onClose: options.onClose ?? vi.fn(),
         ...(options.onOpenSource === undefined ? {} : { onOpenSource: options.onOpenSource }),
+        ...(options.isSourceOpen === undefined ? {} : { isSourceOpen: options.isSourceOpen }),
       }),
   });
   m.redraw.sync();
@@ -886,6 +888,55 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(summary?.textContent).toContain('Modified');
     expect(summary?.querySelector('.fm-knowledge-media-open')?.textContent).toBe('Open image');
     expect(root.querySelector('.fm-knowledge-media-evidence p')).toBeNull();
+  });
+
+  it('reflects the actual image viewer state in the action label and expanded state', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [{ ...first, mediaType: 'image/png', unavailable: false }],
+      };
+    });
+    let openSourceId: string | undefined;
+    const onOpenSource = vi.fn((evidence: KnowledgeEvidence) => {
+      openSourceId = openSourceId === evidence.sourceId ? undefined : evidence.sourceId;
+    });
+    mount({
+      client,
+      initialSubject: 'retrieval',
+      onOpenSource,
+      isSourceOpen: (evidence) => openSourceId === evidence.sourceId,
+    });
+    await ready();
+    await search();
+
+    const button = root.querySelector<HTMLButtonElement>('.fm-knowledge-media-open');
+    expect(button?.textContent).toBe('Open image');
+    expect(button?.getAttribute('aria-expanded')).toBe('false');
+    button?.focus();
+    expect(document.activeElement).toBe(button);
+    button?.click();
+    await vi.waitFor(() => expect(button?.textContent).toBe('Close image'));
+    expect(button?.getAttribute('aria-expanded')).toBe('true');
+    button?.click();
+    await vi.waitFor(() => expect(button?.textContent).toBe('Open image'));
+    expect(button?.getAttribute('aria-expanded')).toBe('false');
+    expect(onOpenSource).toHaveBeenCalledTimes(2);
+
+    openSourceId = 'unrelated-source';
+    m.redraw.sync();
+    expect(button?.textContent).toBe('Open image');
+    expect(button?.getAttribute('aria-expanded')).toBe('false');
+    setLocale('nl');
+    m.redraw.sync();
+    expect(button?.textContent).toBe('Open afbeelding');
+    button?.click();
+    await vi.waitFor(() => expect(button?.textContent).toBe('Sluit afbeelding'));
   });
 
   it('does not open unavailable media and never treats media placeholders as markdown', async () => {

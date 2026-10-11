@@ -59,6 +59,7 @@ export interface KnowledgeSearchDialogAttrs {
   readonly initialSubject?: string | undefined;
   readonly onClose: () => void;
   readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
+  readonly isSourceOpen?: (evidence: KnowledgeEvidence) => boolean;
 }
 
 /** Canonical need order, matching the backend enum declaration order. */
@@ -1384,6 +1385,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     error = undefined;
     try {
       await attrs.onOpenSource(evidence);
+      m.redraw();
     } catch {
       error = t('knowledgeSearch', 'openSourceFailed');
       m.redraw();
@@ -1477,6 +1479,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     const indexedTitle = row.sectionPath.join(' / ');
     const openable = !row.unavailable && attrs.onOpenSource !== undefined;
     const kind = mediaKind(row.mediaType);
+    const sourceOpen = attrs.isSourceOpen?.(row) === true;
     const modifiedLabel = mediaModifiedLabel(row.modifiedAtMs);
     const description = kind === undefined ? undefined : mediaDescription(row.excerpt);
     const redundantImageDescription =
@@ -1532,9 +1535,12 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 {
                   type: 'button',
                   disabled: !openable,
+                  'aria-expanded': sourceOpen ? 'true' : 'false',
                   onclick: () => void openSource(attrs, row),
                 },
-                t('search', 'openMedia', { type: mediaLabel(kind).toLowerCase() }),
+                t('search', sourceOpen ? 'closeMedia' : 'openMedia', {
+                  type: mediaLabel(kind).toLowerCase(),
+                }),
               ),
             ]),
             redundantImageDescription ? undefined : m('p', description),

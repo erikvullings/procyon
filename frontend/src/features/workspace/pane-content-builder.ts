@@ -212,6 +212,7 @@ export interface PaneContentContext {
   openKnowledgeSearch?(): void;
   closeKnowledgeSearch(paneId: PaneId, tabId: TabId): void;
   openKnowledgeSource(paneId: PaneId, evidence: KnowledgeEvidence): Promise<void>;
+  isKnowledgeSourceOpen(evidence: KnowledgeEvidence): boolean;
   closeEditor(paneId: PaneId): void;
   updateLocationSettings(
     client: FileManagerClient,
@@ -988,6 +989,7 @@ export function createPaneContentBuilder(
                       initialSubject: knowledgeSearch.initialSubject,
                       onClose: () => context.closeKnowledgeSearch(paneId, knowledgeSearch.tabId),
                       onOpenSource: (evidence) => context.openKnowledgeSource(paneId, evidence),
+                      isSourceOpen: context.isKnowledgeSourceOpen,
                     });
                   }
                   const viewer = context.getViewerByTab().get(key);
