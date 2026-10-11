@@ -8,6 +8,7 @@
   --fm-text-muted: #667085;
   --fm-border: #c8ced8;
   --fm-accent: #075ea8;
+  --fm-default-folder-icon: #946112;
   --fm-selection: #c9e2ff;
   --fm-editor-selection: #edf6ff;
   --fm-selection-inactive: #e2e8f0;
@@ -98,6 +99,7 @@
   --fm-text-muted: #98a3b0;
   --fm-border: #485463;
   --fm-accent: #79b8ff;
+  --fm-default-folder-icon: #e5b864;
   --fm-selection: #244f78;
   --fm-editor-selection: #203851;
   --fm-selection-inactive: #343e4b;
@@ -176,6 +178,7 @@
     --fm-text-muted: #98a3b0;
     --fm-border: #485463;
     --fm-accent: #79b8ff;
+    --fm-default-folder-icon: #e5b864;
     --fm-selection: #244f78;
     --fm-editor-selection: #203851;
     --fm-selection-inactive: #343e4b;
@@ -3587,6 +3590,10 @@ input[type="text"].fm-shortcuts-help-capture-input {
  * for command routing. In that case the pane below falls through to the outline-only rule
  * further down, which is unconditional on focus - the same "not focused, but still showing
  * where the cursor is" treatment used for the grid view's cursor tile. */
+.fm-icon.fm-default-folder-icon {
+  color: var(--fm-default-folder-icon);
+}
+
 /* Marked rows: the name turns amber in both panes (details stay neutral); the focused active
    pane adds the selection wash. Inactive panes use coloured text only - fills are reserved for
    the pane that receives keystrokes. */

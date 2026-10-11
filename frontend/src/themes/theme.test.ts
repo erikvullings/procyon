@@ -11,6 +11,10 @@ const directoryTableCss = readFileSync(
   join(process.cwd(), 'src/features/directory-table/directory-table.css'),
   'utf8',
 );
+const directoryGridCss = readFileSync(
+  join(process.cwd(), 'src/features/directory-table/directory-grid.css'),
+  'utf8',
+);
 const paneCss = readFileSync(join(process.cwd(), 'src/features/panes/pane.css'), 'utf8');
 const fileViewerCss = readFileSync(
   join(process.cwd(), 'src/features/preview/file-viewer.css'),
@@ -37,6 +41,7 @@ const REQUIRED_TOKENS = [
   '--fm-text-muted',
   '--fm-border',
   '--fm-accent',
+  '--fm-default-folder-icon',
   '--fm-selection',
   '--fm-selection-inactive',
   '--fm-hover',
@@ -318,6 +323,27 @@ describe('theme stylesheet', () => {
         expect(contrastRatio(text, tokenValue(theme, backgroundToken))).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+
+  it('keeps the default folder glyph distinct and readable in light, dark, and system-dark states', () => {
+    const light = themeBlock(/:root,\s*\[data-theme=["']light["']\]\s*\{([^}]*)\}/);
+    const dark = themeBlock(/\[data-theme=["']dark["']\]\s*\{([^}]*)\}/);
+    const systemDark = themeBlock(/:root:not\(\[data-theme\]\)\s*\{([^}]*)\}/);
+    expect(tokenValue(systemDark, '--fm-default-folder-icon')).toBe(
+      tokenValue(dark, '--fm-default-folder-icon'),
+    );
+    for (const theme of [light, dark]) {
+      const folder = tokenValue(theme, '--fm-default-folder-icon');
+      expect(folder).not.toBe(tokenValue(theme, '--fm-text-muted'));
+      for (const background of ['--fm-surface', '--fm-hover', '--fm-selection']) {
+        expect(contrastRatio(folder, tokenValue(theme, background))).toBeGreaterThanOrEqual(3);
+      }
+    }
+    expect(themeCss).toMatch(
+      /\.fm-icon\.fm-default-folder-icon\s*\{\s*color:\s*var\(--fm-default-folder-icon\)/,
+    );
+    expect(directoryTableCss).not.toMatch(/\.fm-icon-folder\s*\{/);
+    expect(directoryGridCss).not.toMatch(/\.fm-icon-folder\s*\{/);
   });
 
   it('keeps the cursor row label readable on its dark-blue highlight', () => {

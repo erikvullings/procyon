@@ -45,6 +45,29 @@ afterEach(() => {
 });
 
 describe('DirectoryTable states', () => {
+  it('tints only the default folder glyph, not native icon images', () => {
+    const folder = entry({ kind: 'directory', name: 'Project' });
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource([folder, entry()]),
+      viewportHeight: 120,
+    });
+    expect(root.querySelectorAll('svg.fm-entry-icon.fm-default-folder-icon')).toHaveLength(1);
+    expect(root.querySelectorAll('svg.fm-entry-icon:not(.fm-default-folder-icon)')).toHaveLength(1);
+
+    const nativeIconLoader = {
+      iconDataUri: vi.fn().mockReturnValue('data:image/png;base64,iVBORw=='),
+    } as unknown as NativeIconLoader;
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource([folder]),
+      viewportHeight: 120,
+      nativeIconLoader,
+    });
+    expect(root.querySelector('img.fm-native-entry-icon')).not.toBeNull();
+    expect(root.querySelector('.fm-default-folder-icon')).toBeNull();
+  });
+
   it('marks an active source directory without removing it from cursor navigation', () => {
     const directory = entry({
       id: 'folder',

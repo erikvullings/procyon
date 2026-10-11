@@ -9,7 +9,7 @@ export interface IconAttrs {
 function icon(viewBox: string, path: string, extraClass: string, attrs: IconAttrs | undefined) {
   const size = attrs?.size ?? 16;
   return m(
-    `svg.fm-icon.${extraClass}${attrs?.className === undefined ? '' : `.${attrs.className}`}`,
+    `svg.fm-icon.${extraClass}${attrs?.className === undefined ? '' : `.${attrs.className.split(' ').join('.')}`}`,
     {
       'aria-hidden': 'true',
       viewBox,
