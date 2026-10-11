@@ -123,7 +123,7 @@ export function searchQueryFromParams(
       : {
           semantic: {
             query: params.semanticQuery,
-            libraryId: existing?.semantic?.libraryId ?? 'active',
+            libraryId: params.semanticLibraryId ?? existing?.semantic?.libraryId ?? 'active',
             scope: params.semanticScope ?? 'currentFolder',
             enrolledRootIds: existing?.semantic?.enrolledRootIds ?? [],
           },
@@ -306,6 +306,12 @@ export function createFindFilesController(
         ),
         params,
         'currentPane',
+        undefined,
+        params.conceptLabel === undefined
+          ? undefined
+          : t('search', 'relatedConcept', {
+              concept: params.conceptLabel,
+            }),
       );
     },
 
@@ -330,6 +336,7 @@ export function createFindFilesController(
             ? {}
             : {
                 semanticQuery: saved.query.semantic.query,
+                semanticLibraryId: saved.query.semantic.libraryId,
                 semanticScope: saved.query.semantic.scope,
               }),
           ...(saved.query.minSizeBytes === undefined

@@ -3,15 +3,10 @@ import m, { type FactoryComponent } from 'mithril';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type { SemanticVocabulary, WorkspaceId } from '../../models';
-import { skosStarters } from './skos-starters';
 
 export interface SemanticVocabularyManagementAttrs {
   readonly client: FileManagerClient;
   readonly workspaceId?: WorkspaceId;
-  readonly onCreateConceptFolder: (
-    vocabulary: SemanticVocabulary,
-    conceptUri: string,
-  ) => Promise<void>;
 }
 
 function message(error: unknown): string {
@@ -23,7 +18,6 @@ export const SemanticVocabularyManagement: FactoryComponent<
 > = () => {
   let vocabularies: readonly SemanticVocabulary[] = [];
   let source = '';
-  let selectedStarter = '';
   let loading = true;
   let busy = false;
   let error: string | undefined;
@@ -63,72 +57,9 @@ export const SemanticVocabularyManagement: FactoryComponent<
 
   return {
     oninit: ({ attrs }) => void load(attrs.client),
-    view: ({ attrs }) => {
-      const starter = skosStarters.find(({ document }) => document.id === selectedStarter);
-      const alreadyImported =
-        starter !== undefined && vocabularies.some(({ id }) => id === starter.document.id);
-      return m('section.fm-semantic-vocabularies.col.s12', { 'aria-busy': loading || busy }, [
+    view: ({ attrs }) =>
+      m('section.fm-semantic-vocabularies.col.s12', { 'aria-busy': loading || busy }, [
         m('p', t('semanticVocabulary', 'description')),
-        m('label', { for: 'semantic-vocabulary-starter' }, t('semanticVocabulary', 'starterLabel')),
-        m(
-          'select#semantic-vocabulary-starter.browser-default',
-          {
-            value: selectedStarter,
-            disabled: busy || loading,
-            onchange: (event: Event) => {
-              selectedStarter = (event.currentTarget as HTMLSelectElement).value;
-            },
-          },
-          [
-            m('option', { value: '' }, t('semanticVocabulary', 'starterPlaceholder')),
-            ...skosStarters.map(({ document }) =>
-              m('option', { value: document.id }, document.name),
-            ),
-          ],
-        ),
-        starter
-          ? m('p', [
-              t('semanticVocabulary', 'starterSource', {
-                publisher: starter.publisher,
-                version: starter.version,
-                concepts: starter.document.concepts.length,
-              }),
-              ' ',
-              m(
-                'a',
-                { href: starter.sourceUrl, target: '_blank', rel: 'noopener noreferrer' },
-                t('semanticVocabulary', 'starterSourceLink'),
-              ),
-              ' · ',
-              m(
-                'a',
-                {
-                  href: starter.licenseUrl,
-                  target: '_blank',
-                  rel: 'noopener noreferrer',
-                },
-                starter.license,
-              ),
-            ])
-          : undefined,
-        m('p', t('semanticVocabulary', 'starterDisclosure')),
-        m(
-          'button.btn',
-          {
-            type: 'button',
-            disabled: busy || loading || starter === undefined || alreadyImported,
-            onclick: async () => {
-              if (starter === undefined) return;
-              if (await importVocabulary(attrs.client, JSON.stringify(starter.document))) {
-                selectedStarter = '';
-                m.redraw();
-              }
-            },
-          },
-          alreadyImported
-            ? t('semanticVocabulary', 'starterAlreadyImported')
-            : t('semanticVocabulary', 'starterImportAction'),
-        ),
         m('label', { for: 'semantic-vocabulary-source' }, t('semanticVocabulary', 'importLabel')),
         m('textarea#semantic-vocabulary-source.materialize-textarea', {
           value: source,
@@ -233,38 +164,14 @@ export const SemanticVocabularyManagement: FactoryComponent<
                   m(
                     'ul.fm-semantic-concept-list',
                     vocabulary.concepts.map((concept) =>
-                      m('li', { key: concept.uri }, [
-                        m(
-                          'span',
-                          concept.prefLabels.en ??
-                            concept.prefLabels.nl ??
-                            Object.values(concept.prefLabels)[0] ??
-                            concept.uri,
-                        ),
-                        m(
-                          'button.btn-flat',
-                          {
-                            type: 'button',
-                            disabled:
-                              busy ||
-                              attrs.workspaceId === undefined ||
-                              !vocabulary.workspaceIds.includes(attrs.workspaceId),
-                            onclick: async () => {
-                              busy = true;
-                              error = undefined;
-                              try {
-                                await attrs.onCreateConceptFolder(vocabulary, concept.uri);
-                              } catch (cause) {
-                                error = message(cause);
-                              } finally {
-                                busy = false;
-                                m.redraw();
-                              }
-                            },
-                          },
-                          t('semanticVocabulary', 'createFolder'),
-                        ),
-                      ]),
+                      m(
+                        'li',
+                        { key: concept.uri },
+                        concept.prefLabels.en ??
+                          concept.prefLabels.nl ??
+                          Object.values(concept.prefLabels)[0] ??
+                          concept.uri,
+                      ),
                     ),
                   ),
                   vocabulary.reviewQueue
@@ -312,7 +219,6 @@ export const SemanticVocabularyManagement: FactoryComponent<
                     ),
                 ]),
               ),
-      ]);
-    },
+      ]),
   };
 };

@@ -5,7 +5,6 @@ import { MockFileManagerClient } from '../../api/client/mock-file-manager-client
 import { setLocale } from '../../i18n';
 import type { SemanticVocabulary } from '../../models';
 import { SemanticVocabularyManagement } from './semantic-vocabulary-management';
-import { skosStarters } from './skos-starters';
 
 let root: HTMLElement;
 let client: MockFileManagerClient;
@@ -62,32 +61,11 @@ describe('SemanticVocabularyManagement', () => {
         m(SemanticVocabularyManagement, {
           client,
           workspaceId: 'workspace-a',
-          onCreateConceptFolder: vi.fn(),
         }),
     });
   };
 
-  const chooseStarter = async (id: string) => {
-    await vi.waitFor(() =>
-      expect(root.querySelector<HTMLSelectElement>('select')?.disabled).toBe(false),
-    );
-    const select = root.querySelector<HTMLSelectElement>('select');
-    if (!select) throw new Error('Missing starter chooser');
-    select.value = id;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-    m.redraw.sync();
-  };
-
-  const importStarter = () => {
-    const button = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
-      ({ textContent }) => textContent === 'Import selected starter',
-    );
-    if (!button) throw new Error('Missing starter import button');
-    button.click();
-  };
-
-  it('shows curated concepts, review evidence, and stable-folder action', async () => {
-    const onCreateConceptFolder = vi.fn();
+  it('shows imported concepts and review evidence without offering exact folders', async () => {
     const attached = { ...vocabulary, workspaceIds: ['workspace-a'] };
     vi.mocked(client.listSemanticVocabularies).mockResolvedValue([attached]);
     m.mount(root, {
@@ -95,115 +73,59 @@ describe('SemanticVocabularyManagement', () => {
         m(SemanticVocabularyManagement, {
           client,
           workspaceId: 'workspace-a',
-          onCreateConceptFolder,
         }),
     });
     await vi.waitFor(() => expect(root.textContent).toContain('Machine learning'));
     expect(root.textContent).toContain('81% confidence across 5 occurrences');
 
-    const create = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
-      ({ textContent }) => textContent === 'Create concept folder',
-    );
-    expect(create?.disabled).toBe(false);
-    create?.click();
-    expect(onCreateConceptFolder).toHaveBeenCalledWith(attached, 'https://example.test/ml');
+    expect(root.textContent).not.toContain('Create concept folder');
+    expect(root.querySelector('#semantic-vocabulary-starter')).toBeNull();
   });
 
-  it('requires an attachment and reports folder creation failures', async () => {
-    const attached = { ...vocabulary, workspaceIds: ['workspace-a'] };
-    const onCreateConceptFolder = vi.fn().mockRejectedValue(new Error('Library unavailable'));
-    m.mount(root, {
-      view: () =>
-        m(SemanticVocabularyManagement, {
-          client,
-          workspaceId: 'workspace-a',
-          onCreateConceptFolder,
-        }),
-    });
-    await vi.waitFor(() => expect(root.textContent).toContain('Machine learning'));
-    const create = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
-      ({ textContent }) => textContent === 'Create concept folder',
-    );
-    expect(create?.disabled).toBe(true);
-    vi.mocked(client.listSemanticVocabularies).mockResolvedValue([attached]);
-    m.mount(root, null);
-    m.mount(root, {
-      view: () =>
-        m(SemanticVocabularyManagement, {
-          client,
-          workspaceId: 'workspace-a',
-          onCreateConceptFolder,
-        }),
-    });
-    await vi.waitFor(() =>
-      expect(
-        [...root.querySelectorAll<HTMLButtonElement>('button')].find(
-          ({ textContent }) => textContent === 'Create concept folder',
-        )?.disabled,
-      ).toBe(false),
-    );
-    [...root.querySelectorAll<HTMLButtonElement>('button')]
-      .find(({ textContent }) => textContent === 'Create concept folder')
-      ?.click();
-    await vi.waitFor(() =>
-      expect(root.querySelector('[role="alert"]')?.textContent).toBe('Library unavailable'),
-    );
-  });
-
-  it('imports an attributed starter only on request, without attaching it', async () => {
+  it('imports a user vocabulary without attaching it', async () => {
     const importSpy = vi.spyOn(client, 'importSemanticVocabulary');
     const attachSpy = vi.spyOn(client, 'attachSemanticVocabulary');
     mount();
-    await chooseStarter('unesco-information-technology');
+    await vi.waitFor(() => expect(root.querySelector('textarea')?.disabled).toBeFalsy());
     expect(importSpy).not.toHaveBeenCalled();
-    expect(root.textContent).toContain('UNESCO');
-    expect(root.textContent).toContain('CC BY-SA 3.0 IGO');
-    expect(root.querySelector<HTMLAnchorElement>('a[href*="unesco-thesaurus.rdf"]')?.href).toBe(
-      skosStarters[2].sourceUrl,
-    );
-    expect(root.querySelector<HTMLAnchorElement>('a[href*="by-sa/3.0/igo"]')?.href).toBe(
-      skosStarters[2].licenseUrl,
-    );
-
-    importStarter();
+    const input = root.querySelector<HTMLTextAreaElement>('textarea');
+    if (!input) throw new Error('Missing import input');
+    input.value = JSON.stringify({
+      format: 'procyon-skos-1',
+      id: 'custom',
+      name: 'Custom',
+      concepts: [{ uri: 'urn:test:custom', prefLabels: { en: 'Custom' } }],
+    });
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find(({ textContent }) => textContent === 'Import vocabulary')
+      ?.click();
     await vi.waitFor(() => expect(importSpy).toHaveBeenCalledOnce());
     const imported = JSON.parse(importSpy.mock.calls[0]?.[0] ?? '{}');
-    expect(imported.id).toBe('unesco-information-technology');
-    expect(imported.concepts).toHaveLength(98);
-    expect(imported.extensions['https://procyon.app/ns/skos-starter/source']).toBe(
-      skosStarters[2].sourceUrl,
-    );
-    await vi.waitFor(() => expect(root.textContent).toContain(imported.name));
+    expect(imported.id).toBe('custom');
+    await vi.waitFor(() => expect(root.textContent).toContain('Custom'));
     expect(root.textContent).toContain('Attach to workspace');
     expect(attachSpy).not.toHaveBeenCalled();
     expect(client.listSemanticVocabularies).toHaveBeenCalledOnce();
-    await vi.waitFor(() => expect(root.querySelector<HTMLSelectElement>('select')?.value).toBe(''));
   });
 
-  it('does not reimport an existing starter and surfaces import failures', async () => {
+  it('surfaces import failures', async () => {
     const importSpy = vi.spyOn(client, 'importSemanticVocabulary');
     mount();
-    await chooseStarter('unesco-psychology');
+    await vi.waitFor(() => expect(root.textContent).toContain('Machine learning'));
+    const input = root.querySelector<HTMLTextAreaElement>('textarea');
+    if (!input) throw new Error('Missing import input');
+    input.value = '{}';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
     importSpy.mockRejectedValueOnce(new Error('Import denied'));
-    importStarter();
+    m.redraw.sync();
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find(({ textContent }) => textContent === 'Import vocabulary')
+      ?.click();
     await vi.waitFor(() =>
       expect(root.querySelector('[role="alert"]')?.textContent).toBe('Import denied'),
     );
-    expect(root.querySelector<HTMLSelectElement>('select')?.value).toBe('unesco-psychology');
-
-    importStarter();
-    await vi.waitFor(() =>
-      expect(root.textContent).toContain(
-        'Psychology (UNESCO Thesaurus 2026-08-31 snapshot excerpt)',
-      ),
-    );
-    await chooseStarter('unesco-psychology');
-    expect(root.textContent).toContain('Already imported');
-    expect(
-      [...root.querySelectorAll<HTMLButtonElement>('button')].find(({ textContent }) =>
-        textContent?.includes('Already imported'),
-      )?.disabled,
-    ).toBe(true);
-    expect(importSpy).toHaveBeenCalledTimes(2);
+    expect(input.value).toBe('{}');
   });
 });

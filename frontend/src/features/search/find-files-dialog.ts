@@ -1,5 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
 import { FlatButton, IconButton, ModalPanel, ToggleButton } from 'mithril-materialized';
+import type { FileManagerClient } from '../../api/client/file-manager-client';
 import {
   browserPlusIcon,
   chevronRightIcon,
@@ -19,7 +20,9 @@ import type {
   SearchGitStatus,
   SearchMode,
   SemanticSearchScope,
+  SemanticVocabulary,
 } from '../../models';
+import { skosStarters } from '../settings/skos-starters';
 import type { SavedSearchOpenTarget } from './find-files-controller';
 
 /** Parameters passed to the search callback by the find-files dialog (task 0089). */
@@ -40,6 +43,8 @@ export interface FindFilesSearchParams {
   readonly semanticQuery?: string | undefined;
   /** Visible semantic scope; search never changes enrolment. */
   readonly semanticScope?: SemanticSearchScope | undefined;
+  readonly semanticLibraryId?: string;
+  readonly conceptLabel?: string;
   /** Search recursively into subdirectories. */
   readonly recurse: boolean;
   readonly entryKinds?: readonly SearchEntryKind[];
@@ -56,6 +61,8 @@ export interface FindFilesSearchParams {
 /** The F7/Alt+F7 search dialog's props (task 0089). */
 export interface FindFilesDialogAttrs {
   readonly open: boolean;
+  readonly client?: FileManagerClient;
+  readonly workspaceId?: string | undefined;
   /** Read-only context shown above the query field, e.g. the active directory's path. */
   readonly scopeLabel: string;
   readonly error?: string;
@@ -66,6 +73,47 @@ export interface FindFilesDialogAttrs {
   readonly onDeleteSaved?: (id: string) => void;
   readonly onToggleSavedPin?: (id: string) => void;
   readonly onOpenSaved?: (saved: SavedSearch, target: SavedSearchOpenTarget) => void;
+}
+
+const RECENT_CONCEPTS_KEY = 'procyon.recentConceptSearches.v1';
+type RecentConcept = { workspaceId: string; vocabularyId: string; conceptUri: string };
+type ConceptSource = Pick<SemanticVocabulary, 'id' | 'name' | 'concepts'>;
+
+function readRecentConcepts(): RecentConcept[] {
+  const stored = localStorage.getItem(RECENT_CONCEPTS_KEY);
+  if (stored === null) return [];
+  const parsed: unknown = JSON.parse(stored);
+  if (
+    !Array.isArray(parsed) ||
+    !parsed.every(
+      (item) =>
+        typeof item === 'object' &&
+        item !== null &&
+        typeof item.workspaceId === 'string' &&
+        typeof item.vocabularyId === 'string' &&
+        typeof item.conceptUri === 'string',
+    )
+  ) {
+    throw new Error('Invalid recent concept searches');
+  }
+  return (parsed as RecentConcept[]).slice(0, 8);
+}
+
+function rememberConcept(recent: RecentConcept): void {
+  localStorage.setItem(
+    RECENT_CONCEPTS_KEY,
+    JSON.stringify(
+      [
+        recent,
+        ...readRecentConcepts().filter(
+          (item) =>
+            item.workspaceId !== recent.workspaceId ||
+            item.vocabularyId !== recent.vocabularyId ||
+            item.conceptUri !== recent.conceptUri,
+        ),
+      ].slice(0, 8),
+    ),
+  );
 }
 
 /**
@@ -153,9 +201,105 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
   let savedName = '';
   let editingSavedId: string | undefined;
   let wasOpen = false;
+  let conceptMode = false;
+  let conceptFilter = '';
+  let selectedConcept: { vocabulary: ConceptSource; uri: string } | undefined;
+  let vocabularies: readonly ConceptSource[] = [];
+  let conceptLibraryId: string | undefined;
+  let conceptAvailable = false;
+  let conceptsLoading = false;
+  let conceptError: string | undefined;
+  let availabilityError: string | undefined;
+  let currentFolderOnly = false;
+  let recentConcepts: RecentConcept[] = [];
+  let loadedWorkspace: string | undefined;
+  let loadGeneration = 0;
+
+  async function checkConceptAvailability(attrs: FindFilesDialogAttrs): Promise<void> {
+    if (attrs.client === undefined || attrs.workspaceId === undefined) return;
+    const workspaceId = attrs.workspaceId;
+    const generation = ++loadGeneration;
+    conceptAvailable = false;
+    availabilityError = undefined;
+    try {
+      const [component, library, roots] = await Promise.all([
+        attrs.client.getSemanticComponentStatus(),
+        attrs.client.getSemanticLibraryStatus(),
+        attrs.client.listKnowledgeRoots({ workspaceId }),
+      ]);
+      if (loadedWorkspace !== workspaceId || generation !== loadGeneration) return;
+      conceptLibraryId = library.library?.libraryId;
+      conceptAvailable =
+        (component.lifecycle.state === 'installedEnabled' ||
+          component.lifecycle.state === 'updateFailedRolledBack') &&
+        library.available &&
+        !library.paused &&
+        conceptLibraryId !== undefined &&
+        library.roots.some(
+          (root) =>
+            root.workspaceReferences.includes(workspaceId) &&
+            roots.some(
+              (indexed) =>
+                indexed.rootId === root.id &&
+                indexed.available &&
+                indexed.indexedGeneration > 0 &&
+                indexed.indexedSources > 0,
+            ),
+        );
+      if (!conceptAvailable) conceptMode = false;
+    } catch (cause) {
+      if (loadedWorkspace === workspaceId && generation === loadGeneration) {
+        availabilityError =
+          cause instanceof Error ? cause.message : t('search', 'conceptAvailabilityError');
+      }
+    } finally {
+      if (loadedWorkspace === workspaceId && generation === loadGeneration) m.redraw();
+    }
+  }
+
+  async function loadConcepts(attrs: FindFilesDialogAttrs): Promise<void> {
+    if (attrs.client === undefined || attrs.workspaceId === undefined || !conceptAvailable) return;
+    const workspaceId = attrs.workspaceId;
+    const generation = loadGeneration;
+    conceptsLoading = true;
+    conceptError = undefined;
+    vocabularies = skosStarters.map(({ document }) => document);
+    try {
+      recentConcepts = readRecentConcepts().filter((item) => item.workspaceId === workspaceId);
+      const listed = await attrs.client.listSemanticVocabularies();
+      if (loadedWorkspace !== workspaceId || generation !== loadGeneration) return;
+      vocabularies = [
+        ...listed,
+        ...skosStarters
+          .map(({ document }) => document)
+          .filter((starter) => !listed.some((vocabulary) => vocabulary.id === starter.id)),
+      ];
+    } catch (cause) {
+      if (loadedWorkspace === workspaceId && generation === loadGeneration) {
+        conceptError = cause instanceof Error ? cause.message : t('search', 'conceptLoadError');
+      }
+    } finally {
+      if (loadedWorkspace === workspaceId && generation === loadGeneration) {
+        conceptsLoading = false;
+        m.redraw();
+      }
+    }
+  }
+
+  function conceptLabel(vocabulary: ConceptSource, uri: string): string {
+    const concept = vocabulary.concepts.find((item) => item.uri === uri);
+    return concept?.prefLabels.en ?? Object.values(concept?.prefLabels ?? {})[0] ?? uri;
+  }
+
+  function selectConcept(vocabulary: ConceptSource, uri: string): void {
+    selectedConcept = { vocabulary, uri };
+    conceptFilter = conceptLabel(vocabulary, uri);
+    savedName = t('search', 'relatedConcept', { concept: `${vocabulary.name}: ${conceptFilter}` });
+  }
 
   function hasPredicates(searchParams: FindFilesSearchParams): boolean {
     return (
+      (searchParams.mode === 'semantic' && searchParams.semanticQuery !== undefined) ||
       searchParams.filenameQuery.length > 0 ||
       searchParams.contentQuery !== undefined ||
       (searchParams.mimeTypes?.length ?? 0) > 0 ||
@@ -170,11 +314,63 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
   function search(attrs: FindFilesDialogAttrs): void {
     const searchParams = params();
     if (!hasPredicates(searchParams)) return;
+    rememberSelection(attrs);
     blurActive();
     attrs.onSearch(searchParams);
   }
 
+  function rememberSelection(attrs: FindFilesDialogAttrs): void {
+    if (conceptMode && selectedConcept !== undefined && attrs.workspaceId !== undefined) {
+      try {
+        rememberConcept({
+          workspaceId: attrs.workspaceId,
+          vocabularyId: selectedConcept.vocabulary.id,
+          conceptUri: selectedConcept.uri,
+        });
+        recentConcepts = readRecentConcepts().filter(
+          (item) => item.workspaceId === attrs.workspaceId,
+        );
+      } catch (cause) {
+        conceptError = cause instanceof Error ? cause.message : t('search', 'conceptLoadError');
+      }
+    }
+  }
+
   function params(): FindFilesSearchParams {
+    if (
+      conceptMode &&
+      selectedConcept !== undefined &&
+      conceptAvailable &&
+      conceptLibraryId !== undefined
+    ) {
+      const concept = selectedConcept.vocabulary.concepts.find(
+        (item) => item.uri === selectedConcept?.uri,
+      );
+      const label = conceptLabel(selectedConcept.vocabulary, selectedConcept.uri);
+      const definition = concept?.definitions?.en;
+      return {
+        mode: 'semantic',
+        filenameQuery: '',
+        semanticQuery: definition ? `${label}. ${definition}` : label,
+        conceptLabel: `${selectedConcept.vocabulary.name}: ${label}`,
+        semanticLibraryId: conceptLibraryId,
+        semanticScope: currentFolderOnly ? 'currentFolder' : 'entireLibrary',
+        contentRegex: false,
+        contentCaseSensitive: false,
+        contentWholeWord: false,
+        recurse: true,
+      };
+    }
+    if (conceptMode) {
+      return {
+        mode: 'semantic',
+        filenameQuery: '',
+        contentRegex: false,
+        contentCaseSensitive: false,
+        contentWholeWord: false,
+        recurse: true,
+      };
+    }
     const trimmedFilename = filenameQuery.trim();
     const trimmedContent = contentQuery.trim();
     const bytesOrUndefined = (value: string, unit: SizeUnit): number | undefined => {
@@ -223,11 +419,24 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
 
   return {
     onupdate: ({ attrs }) => {
+      if (!attrs.open && wasOpen) loadGeneration++;
+      if (attrs.open && (!wasOpen || attrs.workspaceId !== loadedWorkspace)) {
+        loadedWorkspace = attrs.workspaceId;
+        selectedConcept = undefined;
+        conceptFilter = '';
+        vocabularies = [];
+        conceptLibraryId = undefined;
+        conceptAvailable = false;
+        if (!wasOpen) conceptMode = false;
+        void checkConceptAvailability(attrs);
+      }
       if (attrs.open && !wasOpen) {
         if (editingSavedId === undefined && savedName.length === 0) {
           savedName = filenameQuery.trim();
         }
-        const input = document.getElementById('find-files-query');
+        const input = document.getElementById(
+          conceptMode ? 'find-files-concept' : 'find-files-query',
+        );
         if (input instanceof HTMLInputElement) {
           input.focus();
           input.select();
@@ -241,228 +450,390 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
         title: t('search', 'title'),
         className: 'fm-find-files-modal',
         description: m('.fm-find-files-body', [
-          m('.fm-find-files-scope', t('search', 'searchIn', { location: attrs.scopeLabel })),
-          m('label.fm-create-directory-field', [
-            m('span', t('search', 'name')),
-            m('input#find-files-query', {
-              class: 'browser-default',
-              type: 'text',
-              value: filenameQuery,
-              placeholder: t('search', 'filenamePlaceholder'),
-              // No oncreate-focus here: ModalPanel keeps this input permanently mounted
-              // and only toggles CSS visibility, so an oncreate-focus would only ever
-              // fire once at app boot (before the dialog is ever shown) - and doing so
-              // poisons ModalPanel's own focus-restore-on-close logic, which captures
-              // whatever is focused when the dialog opens and refocuses it when the
-              // dialog closes. The onupdate hook below focuses on the real open
-              // transition instead.
-              oninput: (event: InputEvent) => {
-                const value = (event.currentTarget as HTMLInputElement).value;
-                const previousQuery = filenameQuery.trim();
-                filenameQuery = value;
-                if (
-                  editingSavedId === undefined &&
-                  (savedName.length === 0 || savedName === previousQuery)
-                ) {
-                  savedName = value.trim();
-                }
-              },
-              onkeydown: (event: KeyboardEvent) => {
-                event.stopPropagation();
-                if (event.key === 'Escape') {
-                  cancel(attrs);
-                } else if (event.key === 'Enter') {
-                  event.preventDefault();
-                  search(attrs);
-                }
-              },
-            }),
-          ]),
-          m('label.fm-create-directory-field.fm-find-files-content-field', [
-            m('span', t('search', 'content')),
-            m('.fm-find-files-content-control', [
-              m('input#find-files-content-query', {
-                class: 'browser-default',
-                type: 'text',
-                value: contentQuery,
-                placeholder: t('search', 'contentPlaceholder'),
-                oninput: (event: InputEvent) => {
-                  contentQuery = (event.currentTarget as HTMLInputElement).value;
-                },
-                onkeydown: (event: KeyboardEvent) => {
-                  event.stopPropagation();
-                  if (event.key === 'Escape') {
-                    cancel(attrs);
-                  } else if (event.key === 'Enter') {
-                    event.preventDefault();
-                    search(attrs);
-                  }
-                },
-              }),
-              m(
-                'button.fm-file-viewer-search-toggle.fm-find-files-content-toggle',
-                {
-                  type: 'button',
-                  title: t('viewer', 'matchCase'),
-                  'aria-pressed': contentCaseSensitive ? 'true' : 'false',
-                  onclick: () => {
-                    contentCaseSensitive = !contentCaseSensitive;
+          conceptAvailable && attrs.client && attrs.workspaceId
+            ? m('.fm-find-files-modes', [
+                m(
+                  'button.btn-flat',
+                  {
+                    type: 'button',
+                    'aria-pressed': String(!conceptMode),
+                    onclick: () => {
+                      conceptMode = false;
+                      savedName = filenameQuery.trim();
+                    },
                   },
-                },
-                'Aa',
-              ),
-              m(
-                'button.fm-file-viewer-search-toggle.fm-find-files-content-toggle',
-                {
-                  type: 'button',
-                  title: t('viewer', 'matchWholeWord'),
-                  'aria-pressed': contentWholeWord ? 'true' : 'false',
-                  onclick: () => {
-                    contentWholeWord = !contentWholeWord;
-                  },
-                },
-                'Ab',
-              ),
-              m(
-                'button.fm-file-viewer-search-toggle.fm-find-files-content-toggle',
-                {
-                  type: 'button',
-                  title: t('viewer', 'useRegex'),
-                  'aria-pressed': contentRegex ? 'true' : 'false',
-                  onclick: () => {
-                    contentRegex = !contentRegex;
-                  },
-                },
-                '.*',
-              ),
-            ]),
-          ]),
-          m('.fm-find-files-advanced-section', [
-            m('details.fm-find-files-advanced', [
-              m('summary', [
-                chevronRightIcon({ size: 12, className: 'fm-find-files-advanced-caret' }),
-                m('span', t('search', 'advancedFilters')),
-              ]),
-              m('label', [
-                m('span', t('search', 'mimeTypes')),
-                m('input', {
-                  class: 'browser-default',
-                  value: mimeTypes,
-                  placeholder: 'text/*, image/*, application/pdf',
-                  oninput: (event: InputEvent) => {
-                    mimeTypes = (event.currentTarget as HTMLInputElement).value;
-                  },
-                }),
-              ]),
-              m('.fm-find-files-paired-fields', [
-                sizeField(
-                  'find-files-min-size',
-                  t('search', 'minimumBytes'),
-                  minSize,
-                  minSizeUnit,
-                  (value) => {
-                    minSize = value;
-                  },
-                  (unit) => {
-                    minSizeUnit = unit;
-                  },
+                  t('search', 'filesMode'),
                 ),
-                sizeField(
-                  'find-files-max-size',
-                  t('search', 'maximumBytes'),
-                  maxSize,
-                  maxSizeUnit,
-                  (value) => {
-                    maxSize = value;
+                m(
+                  'button.btn-flat',
+                  {
+                    type: 'button',
+                    'aria-pressed': String(conceptMode),
+                    onclick: () => {
+                      conceptMode = true;
+                      loadedWorkspace = attrs.workspaceId;
+                      selectedConcept = undefined;
+                      conceptFilter = '';
+                      vocabularies = [];
+                      void loadConcepts(attrs);
+                      savedName = '';
+                      queueMicrotask(() => document.getElementById('find-files-concept')?.focus());
+                    },
                   },
-                  (unit) => {
-                    maxSizeUnit = unit;
-                  },
+                  t('search', 'conceptMode'),
                 ),
-              ]),
-              m('.fm-find-files-paired-fields', [
-                m('.fm-find-files-date-field.fm-find-files-filter-field', [
-                  m('label', { for: 'find-files-modified-after' }, t('search', 'modifiedAfter')),
-                  m('.fm-find-files-date-control', [
-                    m('input#find-files-modified-after.browser-default', {
-                      type: 'date',
-                      value: modifiedAfter,
+              ])
+            : undefined,
+          availabilityError
+            ? m('p.fm-field-error', { role: 'alert' }, availabilityError)
+            : undefined,
+          conceptMode
+            ? m('.fm-find-concept', [
+                m('p', t('search', 'conceptSearchExplanation')),
+                m('label.fm-create-directory-field', [
+                  m('span', t('search', 'chooseConcept')),
+                  m('input#find-files-concept.browser-default', {
+                    type: 'search',
+                    value: conceptFilter,
+                    oninput: (event: InputEvent) => {
+                      conceptFilter = (event.currentTarget as HTMLInputElement).value;
+                      selectedConcept = undefined;
+                    },
+                    onkeydown: (event: KeyboardEvent) => {
+                      event.stopPropagation();
+                      if (event.key === 'Escape') cancel(attrs);
+                    },
+                  }),
+                ]),
+                conceptsLoading
+                  ? m('p', { role: 'status' }, t('search', 'conceptLoading'))
+                  : undefined,
+                conceptError ? m('p.fm-field-error', { role: 'alert' }, conceptError) : undefined,
+                !conceptsLoading && vocabularies.length === 0 && !conceptError
+                  ? m('p', t('search', 'noConceptSources'))
+                  : undefined,
+                (() => {
+                  const candidates = vocabularies.flatMap((vocabulary) =>
+                    vocabulary.concepts.map((concept) => ({ vocabulary, concept })),
+                  );
+                  const term = conceptFilter.trim().toLocaleLowerCase();
+                  const recent = recentConcepts.flatMap((item) => {
+                    const candidate = candidates.find(
+                      ({ vocabulary, concept }) =>
+                        vocabulary.id === item.vocabularyId && concept.uri === item.conceptUri,
+                    );
+                    return candidate === undefined ? [] : [candidate];
+                  });
+                  const matches = term
+                    ? candidates.filter(({ vocabulary, concept }) =>
+                        [
+                          vocabulary.name,
+                          ...Object.values(concept.prefLabels),
+                          ...Object.values(concept.altLabels ?? {}).flat(),
+                        ].some((text) => text.toLocaleLowerCase().includes(term)),
+                      )
+                    : recent;
+                  return matches.length === 0 && vocabularies.length > 0
+                    ? m('p', t('search', term ? 'noConceptMatches' : 'conceptHint'))
+                    : m(
+                        'ul.fm-find-concept-list',
+                        matches.slice(0, 20).map(({ vocabulary, concept }) =>
+                          m('li', { key: `${vocabulary.id}:${concept.uri}` }, [
+                            m(
+                              'button.btn-flat.fm-find-concept-choice',
+                              {
+                                type: 'button',
+                                'aria-pressed': String(
+                                  selectedConcept?.vocabulary.id === vocabulary.id &&
+                                    selectedConcept.uri === concept.uri,
+                                ),
+                                onclick: () => selectConcept(vocabulary, concept.uri),
+                              },
+                              [
+                                m('strong', conceptLabel(vocabulary, concept.uri)),
+                                m('span', ` · ${vocabulary.name}`),
+                                concept.definitions?.en
+                                  ? m('small.fm-find-concept-definition', concept.definitions.en)
+                                  : undefined,
+                              ],
+                            ),
+                            (() => {
+                              const starter = skosStarters.find(
+                                ({ document }) => document === vocabulary,
+                              );
+                              return starter
+                                ? m('small.fm-find-concept-source', [
+                                    `${starter.publisher} · ${starter.version} · `,
+                                    m(
+                                      'a',
+                                      {
+                                        href: starter.sourceUrl,
+                                        target: '_blank',
+                                        rel: 'noopener noreferrer',
+                                      },
+                                      t('semanticVocabulary', 'starterSourceLink'),
+                                    ),
+                                    ' · ',
+                                    m(
+                                      'a',
+                                      {
+                                        href: starter.licenseUrl,
+                                        target: '_blank',
+                                        rel: 'noopener noreferrer',
+                                      },
+                                      starter.license,
+                                    ),
+                                  ])
+                                : undefined;
+                            })(),
+                          ]),
+                        ),
+                      );
+                })(),
+                m(
+                  'button.btn-flat.fm-find-concept-scope',
+                  {
+                    type: 'button',
+                    'aria-pressed': String(currentFolderOnly),
+                    onclick: () => {
+                      currentFolderOnly = !currentFolderOnly;
+                    },
+                  },
+                  t('search', 'conceptCurrentFolder'),
+                ),
+              ])
+            : [
+                m('.fm-find-files-scope', t('search', 'searchIn', { location: attrs.scopeLabel })),
+                m('label.fm-create-directory-field', [
+                  m('span', t('search', 'name')),
+                  m('input#find-files-query', {
+                    class: 'browser-default',
+                    type: 'text',
+                    value: filenameQuery,
+                    placeholder: t('search', 'filenamePlaceholder'),
+                    // No oncreate-focus here: ModalPanel keeps this input permanently mounted
+                    // and only toggles CSS visibility, so an oncreate-focus would only ever
+                    // fire once at app boot (before the dialog is ever shown) - and doing so
+                    // poisons ModalPanel's own focus-restore-on-close logic, which captures
+                    // whatever is focused when the dialog opens and refocuses it when the
+                    // dialog closes. The onupdate hook below focuses on the real open
+                    // transition instead.
+                    oninput: (event: InputEvent) => {
+                      const value = (event.currentTarget as HTMLInputElement).value;
+                      const previousQuery = filenameQuery.trim();
+                      filenameQuery = value;
+                      if (
+                        editingSavedId === undefined &&
+                        (savedName.length === 0 || savedName === previousQuery)
+                      ) {
+                        savedName = value.trim();
+                      }
+                    },
+                    onkeydown: (event: KeyboardEvent) => {
+                      event.stopPropagation();
+                      if (event.key === 'Escape') {
+                        cancel(attrs);
+                      } else if (event.key === 'Enter') {
+                        event.preventDefault();
+                        search(attrs);
+                      }
+                    },
+                  }),
+                ]),
+                m('label.fm-create-directory-field.fm-find-files-content-field', [
+                  m('span', t('search', 'content')),
+                  m('.fm-find-files-content-control', [
+                    m('input#find-files-content-query', {
+                      class: 'browser-default',
+                      type: 'text',
+                      value: contentQuery,
+                      placeholder: t('search', 'contentPlaceholder'),
                       oninput: (event: InputEvent) => {
-                        modifiedAfter = (event.currentTarget as HTMLInputElement).value;
+                        contentQuery = (event.currentTarget as HTMLInputElement).value;
+                      },
+                      onkeydown: (event: KeyboardEvent) => {
+                        event.stopPropagation();
+                        if (event.key === 'Escape') {
+                          cancel(attrs);
+                        } else if (event.key === 'Enter') {
+                          event.preventDefault();
+                          search(attrs);
+                        }
                       },
                     }),
-                    modifiedAfter.length === 0
-                      ? undefined
-                      : m(
-                          'button.fm-find-files-clear-date',
-                          {
-                            type: 'button',
-                            'aria-label': t('search', 'clearModifiedAfter'),
-                            title: t('search', 'clearModifiedAfter'),
-                            onclick: (event: MouseEvent) => {
-                              event.preventDefault();
-                              modifiedAfter = '';
-                            },
-                          },
-                          closeIcon({ size: 12 }),
-                        ),
-                  ]),
-                ]),
-                m('.fm-find-files-date-field.fm-find-files-filter-field', [
-                  m('label', { for: 'find-files-modified-before' }, t('search', 'modifiedBefore')),
-                  m('.fm-find-files-date-control', [
-                    m('input#find-files-modified-before.browser-default', {
-                      type: 'date',
-                      value: modifiedBefore,
-                      oninput: (event: InputEvent) => {
-                        modifiedBefore = (event.currentTarget as HTMLInputElement).value;
+                    m(
+                      'button.fm-file-viewer-search-toggle.fm-find-files-content-toggle',
+                      {
+                        type: 'button',
+                        title: t('viewer', 'matchCase'),
+                        'aria-pressed': contentCaseSensitive ? 'true' : 'false',
+                        onclick: () => {
+                          contentCaseSensitive = !contentCaseSensitive;
+                        },
                       },
-                    }),
-                    modifiedBefore.length === 0
-                      ? undefined
-                      : m(
-                          'button.fm-find-files-clear-date',
-                          {
-                            type: 'button',
-                            'aria-label': t('search', 'clearModifiedBefore'),
-                            title: t('search', 'clearModifiedBefore'),
-                            onclick: (event: MouseEvent) => {
-                              event.preventDefault();
-                              modifiedBefore = '';
-                            },
-                          },
-                          closeIcon({ size: 12 }),
-                        ),
+                      'Aa',
+                    ),
+                    m(
+                      'button.fm-file-viewer-search-toggle.fm-find-files-content-toggle',
+                      {
+                        type: 'button',
+                        title: t('viewer', 'matchWholeWord'),
+                        'aria-pressed': contentWholeWord ? 'true' : 'false',
+                        onclick: () => {
+                          contentWholeWord = !contentWholeWord;
+                        },
+                      },
+                      'Ab',
+                    ),
+                    m(
+                      'button.fm-file-viewer-search-toggle.fm-find-files-content-toggle',
+                      {
+                        type: 'button',
+                        title: t('viewer', 'useRegex'),
+                        'aria-pressed': contentRegex ? 'true' : 'false',
+                        onclick: () => {
+                          contentRegex = !contentRegex;
+                        },
+                      },
+                      '.*',
+                    ),
                   ]),
                 ]),
-              ]),
-              m('label', [
-                m('span', t('search', 'tags')),
-                m('input', {
-                  class: 'browser-default',
-                  value: tags,
-                  oninput: (event: InputEvent) => {
-                    tags = (event.currentTarget as HTMLInputElement).value;
-                  },
-                }),
-              ]),
-            ]),
-            m(
-              'button.fm-find-files-recurse-toggle',
-              {
-                type: 'button',
-                title: t('search', 'recurseSubdirectories'),
-                'aria-label': t('search', 'includeSubdirectoriesState', {
-                  state: recurse ? t('settings', 'on') : t('settings', 'off'),
-                }),
-                'aria-pressed': recurse ? 'true' : 'false',
-                onclick: () => {
-                  recurse = !recurse;
-                },
-              },
-              directoryTreeIcon({ size: 14 }),
-            ),
-          ]),
+                m('.fm-find-files-advanced-section', [
+                  m('details.fm-find-files-advanced', [
+                    m('summary', [
+                      chevronRightIcon({ size: 12, className: 'fm-find-files-advanced-caret' }),
+                      m('span', t('search', 'advancedFilters')),
+                    ]),
+                    m('label', [
+                      m('span', t('search', 'mimeTypes')),
+                      m('input', {
+                        class: 'browser-default',
+                        value: mimeTypes,
+                        placeholder: 'text/*, image/*, application/pdf',
+                        oninput: (event: InputEvent) => {
+                          mimeTypes = (event.currentTarget as HTMLInputElement).value;
+                        },
+                      }),
+                    ]),
+                    m('.fm-find-files-paired-fields', [
+                      sizeField(
+                        'find-files-min-size',
+                        t('search', 'minimumBytes'),
+                        minSize,
+                        minSizeUnit,
+                        (value) => {
+                          minSize = value;
+                        },
+                        (unit) => {
+                          minSizeUnit = unit;
+                        },
+                      ),
+                      sizeField(
+                        'find-files-max-size',
+                        t('search', 'maximumBytes'),
+                        maxSize,
+                        maxSizeUnit,
+                        (value) => {
+                          maxSize = value;
+                        },
+                        (unit) => {
+                          maxSizeUnit = unit;
+                        },
+                      ),
+                    ]),
+                    m('.fm-find-files-paired-fields', [
+                      m('.fm-find-files-date-field.fm-find-files-filter-field', [
+                        m(
+                          'label',
+                          { for: 'find-files-modified-after' },
+                          t('search', 'modifiedAfter'),
+                        ),
+                        m('.fm-find-files-date-control', [
+                          m('input#find-files-modified-after.browser-default', {
+                            type: 'date',
+                            value: modifiedAfter,
+                            oninput: (event: InputEvent) => {
+                              modifiedAfter = (event.currentTarget as HTMLInputElement).value;
+                            },
+                          }),
+                          modifiedAfter.length === 0
+                            ? undefined
+                            : m(
+                                'button.fm-find-files-clear-date',
+                                {
+                                  type: 'button',
+                                  'aria-label': t('search', 'clearModifiedAfter'),
+                                  title: t('search', 'clearModifiedAfter'),
+                                  onclick: (event: MouseEvent) => {
+                                    event.preventDefault();
+                                    modifiedAfter = '';
+                                  },
+                                },
+                                closeIcon({ size: 12 }),
+                              ),
+                        ]),
+                      ]),
+                      m('.fm-find-files-date-field.fm-find-files-filter-field', [
+                        m(
+                          'label',
+                          { for: 'find-files-modified-before' },
+                          t('search', 'modifiedBefore'),
+                        ),
+                        m('.fm-find-files-date-control', [
+                          m('input#find-files-modified-before.browser-default', {
+                            type: 'date',
+                            value: modifiedBefore,
+                            oninput: (event: InputEvent) => {
+                              modifiedBefore = (event.currentTarget as HTMLInputElement).value;
+                            },
+                          }),
+                          modifiedBefore.length === 0
+                            ? undefined
+                            : m(
+                                'button.fm-find-files-clear-date',
+                                {
+                                  type: 'button',
+                                  'aria-label': t('search', 'clearModifiedBefore'),
+                                  title: t('search', 'clearModifiedBefore'),
+                                  onclick: (event: MouseEvent) => {
+                                    event.preventDefault();
+                                    modifiedBefore = '';
+                                  },
+                                },
+                                closeIcon({ size: 12 }),
+                              ),
+                        ]),
+                      ]),
+                    ]),
+                    m('label', [
+                      m('span', t('search', 'tags')),
+                      m('input', {
+                        class: 'browser-default',
+                        value: tags,
+                        oninput: (event: InputEvent) => {
+                          tags = (event.currentTarget as HTMLInputElement).value;
+                        },
+                      }),
+                    ]),
+                  ]),
+                  m(
+                    'button.fm-find-files-recurse-toggle',
+                    {
+                      type: 'button',
+                      title: t('search', 'recurseSubdirectories'),
+                      'aria-label': t('search', 'includeSubdirectoriesState', {
+                        state: recurse ? t('settings', 'on') : t('settings', 'off'),
+                      }),
+                      'aria-pressed': recurse ? 'true' : 'false',
+                      onclick: () => {
+                        recurse = !recurse;
+                      },
+                    },
+                    directoryTreeIcon({ size: 14 }),
+                  ),
+                ]),
+              ],
           attrs.savedSearches === undefined
             ? undefined
             : m('.fm-saved-searches', [
@@ -573,20 +944,24 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
                     FlatButton,
                     {
                       className: 'fm-save-search-button',
-                      disabled: savedName.trim().length === 0,
+                      disabled: savedName.trim().length === 0 || !hasPredicates(params()),
                       onclick: () => {
+                        rememberSelection(attrs);
                         attrs.onSave?.(savedName, params(), editingSavedId);
                         savedName = '';
                         editingSavedId = undefined;
                       },
                     },
                     editingSavedId === undefined
-                      ? t('search', 'saveSearch')
+                      ? t('search', conceptMode ? 'saveConceptFolder' : 'saveSearch')
                       : t('search', 'updateSearch'),
                   ),
                 ]),
               ]),
           attrs.error === undefined ? undefined : m('.fm-field-error', attrs.error),
+          availabilityError === undefined
+            ? undefined
+            : m('.fm-field-error', { role: 'alert' }, availabilityError),
         ]),
         isOpen: attrs.open,
         closeOnEsc: true,

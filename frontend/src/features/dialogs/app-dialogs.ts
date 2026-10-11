@@ -104,6 +104,7 @@ export interface AppDialogsContext {
   navigateActiveLocation(location: Location, preferredCursorName?: string): Promise<void>;
   getFocusPane(): ((paneId: PaneId) => void) | undefined;
   getSettings(): Settings | undefined;
+  getWorkspaceId(): string | undefined;
   updateSettings(update: (settings: Settings) => Settings): Promise<void>;
   includeCurrentSemanticFolder(workspaceId: string, location: Location): void;
   /** Opens the just-created file (Shift+F4) in the active pane's editor. */
@@ -424,6 +425,8 @@ export function renderAppDialogs(
         const findFilesError = ctx.getFindFilesError();
         return {
           open: ctx.getFindFilesOpen(),
+          client,
+          ...(ctx.getWorkspaceId() === undefined ? {} : { workspaceId: ctx.getWorkspaceId() }),
           scopeLabel: findFilesRoot === undefined ? '' : pathFromUri(findFilesRoot.uri),
           ...(findFilesError === undefined ? {} : { error: findFilesError }),
           savedSearches: ctx.getSettings()?.savedSearches ?? [],
@@ -437,7 +440,7 @@ export function renderAppDialogs(
             const saved = {
               id: id ?? crypto.randomUUID(),
               name: name.trim(),
-              pinned: existing?.pinned ?? false,
+              pinned: existing?.pinned ?? params.conceptLabel !== undefined,
               query: searchQueryFromParams(
                 root,
                 params,

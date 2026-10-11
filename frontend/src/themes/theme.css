@@ -3896,6 +3896,69 @@ input[type="text"].fm-shortcuts-help-capture-input {
   gap: 0.5rem;
 }
 
+.fm-find-files-modes {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--fm-border);
+}
+
+.fm-find-files-modes button[aria-pressed="true"] {
+  border-bottom: 2px solid var(--fm-accent);
+}
+
+.fm-find-concept {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.fm-find-concept p {
+  margin: 0;
+  color: var(--fm-text-muted);
+}
+
+.fm-find-concept-list {
+  display: grid;
+  gap: 0.125rem;
+  max-height: min(30vh, 14rem);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.fm-find-concept-choice {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+.fm-find-concept-choice[aria-pressed="true"] {
+  background: var(--fm-selection);
+}
+
+.fm-find-concept-definition {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--fm-text-muted);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
+.fm-find-concept-source {
+  display: block;
+  padding: 0 0.75rem 0.35rem;
+  color: var(--fm-text-muted);
+}
+
+.fm-find-concept-scope {
+  justify-self: start;
+}
+
+.fm-find-concept-scope[aria-pressed="true"] {
+  background: var(--fm-selection);
+}
+
 .fm-find-files-scope {
   overflow: hidden;
   color: var(--fm-text-muted);

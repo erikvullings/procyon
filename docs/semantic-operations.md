@@ -325,21 +325,27 @@ content preview before transmission. The semantic worker itself has no network a
 
 ## Optional SKOS starter vocabularies
 
-**Settings > Semantic > Concept vocabularies** offers five opt-in English-language excerpts:
+**Find Files > Find by concept** offers five opt-in English-language excerpts:
 **Climate and renewable energy** from GEMET 4.2.3; **Natural sciences**, **Information technology**,
 **Psychology**, and **Defence and military engineering** from the UNESCO Thesaurus. These are
 selections of real SKOS concepts, not complete copies of either thesaurus or generic taxonomies.
 The defence excerpt is limited to those UNESCO subjects, not a military-wide vocabulary.
 Each concept retains its original stable URI; only links between included concepts are retained.
-The chooser shows the source, snapshot/version, concept count, and license before import.
-Import creates a named device-local vocabulary but **does not
-attach it** to any workspace or root. Users can reuse and attach an imported starter from the
-same list, or paste their own `procyon-skos-1` JSON. Locally extracted terms enter the review queue
-of an existing vocabulary; they do not create a SKOS source or become authoritative automatically.
-After attachment to the active workspace, **Create concept folder** saves an exact-concept search
-rooted at the currently open folder, using the configured semantic library ID. Save Settings to
-persist it. This is a virtual search, not an on-disk directory, and it only returns documents
-that already have matching concept annotations; importing a starter does not itself label files.
+The picker shows source, snapshot/version and license; selecting one does not import or attach it.
+**Settings > Semantic > Concept vocabularies** is for importing your own `procyon-skos-1` JSON
+and managing imported vocabularies. Imported vocabularies also appear in the picker without
+attachment. Attachment remains available for the separate annotation and review workflows.
+Locally extracted terms enter the review queue of an existing vocabulary; they do not create a
+SKOS source or become authoritative automatically. The Find by concept tab is visible only when
+semantic components are enabled and the active workspace has an indexed document in an available
+root. Type a label and select a bundled or imported concept (recent selections appear before
+typing). This runs a similarity search of indexed document chunks across the active workspace;
+**Current folder only** is optional. Results are *related to* the concept, not authoritative
+concept assignments. **Save as smart folder** pins this similarity search in Smart folders using
+the selected label and definition as a snapshot; it does not assign labels to files. Recreate
+the saved search if the concept's text changes. Only indexed/authorized documents can appear.
+Previously saved exact-concept folders remain readable, but are not created by this discovery
+flow; they require separately published concept annotations to return documents.
 
 The [GEMET 4.2.3 RDF export](https://www.eionet.europa.eu/gemet/en/exports/rdf/4.2.3)
 is © European Environment Agency (EEA), licensed

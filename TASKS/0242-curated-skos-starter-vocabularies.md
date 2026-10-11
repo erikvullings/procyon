@@ -14,14 +14,14 @@ a prerequisite for the EmbeddingGemma experimental release.
 
 ## Acceptance Criteria
 
-- Settings offers a useful opt-in choice of version-pinned, attributed starter SKOS vocabularies
+- Find by concept offers a useful opt-in choice of version-pinned, attributed starter SKOS vocabularies
   backed by verifiable redistribution terms. Do not invent concepts or claim a partial extract
   is the full source.
-- A chosen starter imports through the existing vocabulary API and remains unattached until
-  the user explicitly attaches it to a workspace or root. Existing vocabularies remain reusable.
-- Errors and duplicate imports are clear; import and attachment behave in mock, HTTP, and Tauri
-  hosts. Source identity and license are documented and visible.
-- Tests cover importing a starter, leaving it unattached, and handling a failed import.
+- A chosen starter is searched without import or attachment. Imported vocabularies remain reusable
+  and selectable without attachment; user SKOS import and attachment remain available in Settings.
+- Search requires enabled semantic components and indexed documents in the active workspace.
+  Source identity and license are documented and visible.
+- Tests cover bundled and imported selection, import failures, and the availability gate.
 
 ## Implementation Notes
 
@@ -69,3 +69,13 @@ a prerequisite for the EmbeddingGemma experimental release.
   Creation errors surface in Settings; importing a starter alone does not classify documents.
 - 2026-10-11: Scoped concept-folder results to the saved location when one is set; otherwise
   a concept match elsewhere in the workspace could appear in a folder-specific saved search.
+- 2026-10-11: Added on-demand concept discovery in Find Files: attached-vocabulary picker with
+  recent choices, live similarity over indexed chunks across the active workspace by default,
+  optional current-folder scope, and optional pinned saved search. This is explicitly labelled
+  *related to* the concept; it is not automatic concept assignment or authoritative annotation.
+- 2026-10-11: Revised the chooser to use bundled and imported vocabularies directly without
+  importing or attaching for exploratory search. Moved starter discovery out of Settings, kept
+  own-SKOS import and annotation management there, and gated the tab on enabled components and
+  an indexed document in an active-workspace root. Exact-concept folder creation is no longer
+  offered in Settings; existing saved exact-concept searches remain supported. Workspace lint,
+  frontend production build, and 2,368 frontend tests passed.

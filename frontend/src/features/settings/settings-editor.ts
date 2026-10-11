@@ -16,7 +16,6 @@ import type {
   PluginId,
   PluginLogEntry,
   SemanticComponentStatus,
-  SemanticVocabulary,
   Settings,
   WorkspaceId,
 } from '../../models';
@@ -640,57 +639,6 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                                 ...(current.activeWorkspaceId === undefined
                                   ? {}
                                   : { workspaceId: current.activeWorkspaceId }),
-                                onCreateConceptFolder: async (
-                                  vocabulary: SemanticVocabulary,
-                                  conceptUri: string,
-                                ): Promise<void> => {
-                                  if (draft === undefined) return;
-                                  if (current.activeLocation === undefined) {
-                                    throw new Error(t('semanticVocabulary', 'folderNeedsLocation'));
-                                  }
-                                  const status = await current.client.getSemanticLibraryStatus();
-                                  if (!status.library?.libraryId) {
-                                    throw new Error(t('semanticVocabulary', 'folderNeedsLibrary'));
-                                  }
-                                  const concept = vocabulary.concepts.find(
-                                    ({ uri }) => uri === conceptUri,
-                                  );
-                                  const label =
-                                    concept?.prefLabels.en ??
-                                    (concept ? Object.values(concept.prefLabels)[0] : undefined) ??
-                                    conceptUri;
-                                  update(current, {
-                                    savedSearches: [
-                                      ...draft.savedSearches,
-                                      {
-                                        id: crypto.randomUUID(),
-                                        name: `${vocabulary.name}: ${label}`,
-                                        pinned: false,
-                                        query: {
-                                          schemaVersion: 3,
-                                          mode: 'concept',
-                                          scope: {
-                                            locations: [current.activeLocation],
-                                            recurse: true,
-                                            showHidden: false,
-                                          },
-                                          entryKinds: ['file'],
-                                          mimeTypes: [],
-                                          concept: {
-                                            vocabularyId: vocabulary.id,
-                                            conceptUri,
-                                            hierarchy: 'exact',
-                                            libraryId: status.library.libraryId,
-                                            enrolledRootIds: [],
-                                          },
-                                          gitStatuses: [],
-                                          tags: [],
-                                          metadata: {},
-                                        },
-                                      },
-                                    ],
-                                  });
-                                },
                               }),
                             ),
                           ]),
