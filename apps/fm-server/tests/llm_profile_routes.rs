@@ -41,7 +41,20 @@ async fn profile_crud_clone_export_and_test_never_echo_secret_material() {
         .json()
         .await
         .unwrap();
-    assert_eq!(presets.as_array().unwrap().len(), 7);
+    assert_eq!(presets.as_array().unwrap().len(), 8);
+    assert_eq!(presets[5]["preset"], "mlxServe");
+    assert_eq!(presets[5]["baseUrl"], "http://127.0.0.1:11234");
+
+    let limits_response = client
+        .post(format!(
+            "{}/api/v1/llm-profiles/discover-model-limits",
+            server.base_url
+        ))
+        .json(&profile_request(None))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(limits_response.status(), reqwest::StatusCode::FORBIDDEN);
 
     let response = client
         .post(format!("{}/api/v1/llm-profiles", server.base_url))

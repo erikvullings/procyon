@@ -86,6 +86,7 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmModelLimits,
   LlmProfile,
   LlmProfileExport,
   LlmProfilePreset,
@@ -386,6 +387,7 @@ export type MockClientMethod =
   | 'testLlmProfile'
   | 'discoverLlmProfileModels'
   | 'discoverLlmProfileDraftModels'
+  | 'discoverLlmProfileDraftModelLimits'
   | 'previewDocumentSummary'
   | 'generateDocumentSummary'
   | 'getDocumentSummary'
@@ -4279,6 +4281,13 @@ export class MockFileManagerClient implements FileManagerClient {
         },
         {
           ...defaults,
+          name: 'mlx-serve',
+          preset: 'mlxServe',
+          baseUrl: 'http://127.0.0.1:11234',
+          redactFilenames: false,
+        },
+        {
+          ...defaults,
           name: 'OpenAI-compatible',
           preset: 'openAiCompatible',
           baseUrl: 'https://api.openai.com',
@@ -4456,6 +4465,18 @@ export class MockFileManagerClient implements FileManagerClient {
         ? ['model-a', 'model-b']
         : [],
     );
+  }
+
+  discoverLlmProfileDraftModelLimits(
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmModelLimits> {
+    return this.perform('discoverLlmProfileDraftModelLimits', signal, () => ({
+      contextWindow: request.model === 'model-a' ? 131_072 : null,
+      maximumAnswerTokens: request.model === 'model-a' ? 8_192 : null,
+      contextWindowCap: 1_048_576,
+      maximumAnswerTokensCap: 16_384,
+    }));
   }
 
   previewDocumentSummary(

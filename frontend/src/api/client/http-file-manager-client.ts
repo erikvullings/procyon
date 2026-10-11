@@ -77,6 +77,7 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmModelLimits,
   LlmProfile,
   LlmProfileExport,
   LlmProfilePreset,
@@ -255,6 +256,7 @@ import {
   createLlmProfile as requestLlmProfileCreation,
   deleteLlmProfile as requestLlmProfileDeletion,
   discoverLlmProfileDraftModels as requestLlmProfileDraftModelDiscovery,
+  discoverLlmProfileDraftModelLimits as requestLlmProfileDraftModelLimits,
   exportLlmProfile as requestLlmProfileExport,
   discoverLlmProfileModels as requestLlmProfileModelDiscovery,
   listLlmProfilePresets as requestLlmProfilePresets,
@@ -2235,6 +2237,21 @@ export class HttpFileManagerClient implements FileManagerClient {
     if (response.status !== 200)
       throw new Error(
         `Unexpected discoverLlmProfileDraftModels response status: ${response.status}`,
+      );
+    return response.data;
+  }
+
+  async discoverLlmProfileDraftModelLimits(
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmModelLimits> {
+    const response = await requestLlmProfileDraftModelLimits(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(
+        `Unexpected discoverLlmProfileDraftModelLimits response status: ${response.status}`,
       );
     return response.data;
   }

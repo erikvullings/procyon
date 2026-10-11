@@ -131,8 +131,8 @@ pub use knowledge::{
 };
 pub use llm_profile::{
     ActivateLlmProfileRequestDto, DeleteLlmProfileRequestDto, LlmAdvancedSettingsDto,
-    LlmApiCapabilityDto, LlmCredentialInputDto, LlmEndpointLocalityDto, LlmPresetDto,
-    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
+    LlmApiCapabilityDto, LlmCredentialInputDto, LlmEndpointLocalityDto, LlmModelLimitsDto,
+    LlmPresetDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
     LlmTestErrorCategoryDto, LlmTlsPolicyDto, OrphanLlmCredentialDispositionDto,
     SaveLlmProfileRequestDto,
 };

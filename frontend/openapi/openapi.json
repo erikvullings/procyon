@@ -3094,6 +3094,53 @@
         }
       }
     },
+    "/api/v1/llm-profiles/discover-model-limits": {
+      "post": {
+        "operationId": "discoverLlmProfileDraftModelLimits",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveLlmProfileRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded advertised limits for the selected model; null fields are unknown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmModelLimitsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid provider configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Host denied by administrator policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/llm-profiles/discover-models": {
       "post": {
         "operationId": "discoverLlmProfileDraftModels",
@@ -12849,6 +12896,42 @@
           "cloud"
         ]
       },
+      "LlmModelLimitsDto": {
+        "type": "object",
+        "description": "Effective model-advertised generation limits, or null when undiscoverable.",
+        "required": [
+          "contextWindowCap",
+          "maximumAnswerTokensCap"
+        ],
+        "properties": {
+          "contextWindow": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "contextWindowCap": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "maximumAnswerTokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "maximumAnswerTokensCap": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "LlmPresetDto": {
         "type": "string",
         "enum": [
@@ -12857,6 +12940,7 @@
           "vllm",
           "sglang",
           "omlx",
+          "mlxServe",
           "openAiCompatible",
           "azureOpenAi"
         ]

@@ -57,6 +57,15 @@ content search, and baseline document viewing available.
   provenance. Ollama profiles use its native generation endpoint with hidden reasoning disabled so
   reasoning-capable models spend the configured answer allowance on visible output; any response
   that still reaches its length limit is rejected rather than presented as a complete answer.
+- **Settings > Semantic > AI summaries and answers** connects a local or cloud generation service for
+  document summaries and grounded answers; semantic search itself does not need one. Select a
+  provider preset and model, then review the advanced context and answer token limits. Procyon
+  suggests model-reported limits when available; otherwise the initial limits are conservative.
+  The selectable values are caps, not a promise that the provider accepts a request of that size;
+  Procyon itself caps context at 1,048,576 tokens and answers at 16,384 tokens, so there is no
+  unlimited option. Existing saved profiles keep their configured limits until edited. The
+  **mlx-serve** preset uses its OpenAI-compatible API at `http://127.0.0.1:11234`. A cloud profile
+  requires consent for its destination host before activation.
 - Local enrolments persist an opaque device/inode identity on Unix or volume/file identity on
   Windows. This lets Procyon distinguish a moved root from a different folder at the old path.
   Desktop startup safely fills this identity for legacy reachable local roots that lack it, without

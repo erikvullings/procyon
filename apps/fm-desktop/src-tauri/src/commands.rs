@@ -41,8 +41,8 @@ use fm_transport_dto::{
     GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, GetSemanticFolderStatusRequestDto,
     HostKeyProbeDto, ImportSemanticLocalModelRequestDto, ImportSemanticVocabularyRequestDto,
     InstallSemanticWorkerPatchRequestDto, InvokeActionRequestDto, LinkOptionsDto,
-    LinkOptionsRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest, LlmProfileDto,
-    LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LocationDto,
+    LinkOptionsRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest, LlmModelLimitsDto,
+    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LocationDto,
     MoveSemanticDataRequestDto, NavigateRequest, OneDriveAuthorizationAttemptDto,
     OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto,
     OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
@@ -2701,6 +2701,19 @@ pub(crate) async fn discover_llm_profile_draft_models(
     state
         .service
         .discover_llm_profile_draft_models(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Discovers bounded advertised limits for the selected model in a draft.
+#[tauri::command]
+pub(crate) async fn discover_llm_profile_draft_model_limits(
+    state: State<'_, AppState>,
+    request: SaveLlmProfileRequestDto,
+) -> Result<LlmModelLimitsDto, ApplicationErrorDto> {
+    state
+        .service
+        .discover_llm_profile_draft_model_limits(request)
         .await
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }

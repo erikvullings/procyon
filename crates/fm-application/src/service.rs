@@ -34,12 +34,13 @@ use fm_transport_dto::{
     FinderTagsDto, GenerateRagAnswerRequestDto, GenerateRagAnswerResponseDto,
     GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
     InvokeActionRequestDto, LinkOptionsDto, LinkOptionsRequestDto, ListDirectoryRequest,
-    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
-    NavigateRequest, OperationDto, PluginDescriptorDto, PluginLogEntryDto, PreviewRagRequestDto,
-    RagPreviewDto, RagScopeDto, RagScopeKindDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    RemoveApplicationDockIconRequestDto, RemoveApplicationDockIconResponseDto,
-    RenderChecksumFileRequestDto, ResolveOperationConflictRequestDto, ResolveRagCitationRequestDto,
-    ResolvedRagCitationDto, RuntimeCapabilitiesDto, RuntimeKindDto, SaveLlmProfileRequestDto,
+    LlmModelLimitsDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
+    LlmProfileTestResultDto, NavigateRequest, OperationDto, PluginDescriptorDto, PluginLogEntryDto,
+    PreviewRagRequestDto, RagPreviewDto, RagScopeDto, RagScopeKindDto, ReadFileRangeRequestDto,
+    ReadFileRangeResponseDto, RemoveApplicationDockIconRequestDto,
+    RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
+    ResolveOperationConflictRequestDto, ResolveRagCitationRequestDto, ResolvedRagCitationDto,
+    RuntimeCapabilitiesDto, RuntimeKindDto, SaveLlmProfileRequestDto,
     SaveRagConversationRequestDto, SavedRagConversationDto, SearchInFileRequestDto,
     SearchInFileResponseDto, SetPaneActivityRequest, SettingsDto, SpotlightCommentDto,
     StartChecksumRequestDto, StartChecksumResponseDto, StartComparisonRequestDto,
@@ -76,8 +77,8 @@ use crate::knowledge_search::{
 };
 use crate::knowledge_service::KnowledgeService;
 use crate::llm_profile_mapping::{
-    disposition_from_dto, draft_from_dto, preset_to_profile_dto, profile_to_dto,
-    profile_to_export_dto, test_result_to_dto,
+    disposition_from_dto, draft_from_dto, model_limits_to_dto, preset_to_profile_dto,
+    profile_to_dto, profile_to_export_dto, test_result_to_dto,
 };
 use crate::llm_profiles::{
     LlmHostPolicy, LlmImageAttachment, LlmProfileService, ReqwestLlmProbeTransport,
@@ -3852,6 +3853,19 @@ impl FileManagerService {
             .llm_profiles
             .discover_draft_models(draft_from_dto(request), &cancellation)
             .await?)
+    }
+
+    /// Discovers bounded advertised limits for an unsaved draft's selected model.
+    pub async fn discover_llm_profile_draft_model_limits(
+        &self,
+        request: SaveLlmProfileRequestDto,
+    ) -> Result<LlmModelLimitsDto, ApplicationError> {
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        Ok(model_limits_to_dto(
+            self.llm_profiles
+                .discover_draft_model_limits(draft_from_dto(request), &cancellation)
+                .await?,
+        ))
     }
 
     /// Lists every stored connection profile with its current runtime status

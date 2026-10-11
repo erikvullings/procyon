@@ -1687,9 +1687,9 @@ export const nl = {
     confirmDelete: 'Verwijderen en mappen loskoppelen bevestigen',
   },
   llmProfiles: {
-    title: 'Generatieprofielen',
+    title: 'AI-samenvattingen en antwoorden',
     description:
-      'Configureer optionele lokale of cloudgebaseerde OpenAI-compatibele diensten voor samenvattingen en onderbouwde antwoorden.',
+      'Verbind een model dat documentsamenvattingen schrijft en vragen beantwoordt met informatie uit je bestanden. Bewaar verbindingen als profielen en kies een standaardprofiel. Een lokaal model werkt op je apparaat; een clouddienst ontvangt vragen en fragmenten. Semantisch zoeken werkt ook zonder profiel.',
     loading: 'Generatieprofielen laden…',
     unavailable: 'Generatieprofielen zijn niet beschikbaar.',
     unknownError: 'Onbekende fout in generatieprofiel',
@@ -1707,6 +1707,26 @@ export const nl = {
     advanced: 'Geavanceerde instellingen',
     contextWindow: 'Contextvenster',
     maximumAnswerTokens: 'Maximum aantal antwoordtokens',
+    customLimit: 'Aangepast…',
+    currentLimit: 'Huidig: {tokens} tokens',
+    customContextWindow: 'Aangepast aantal contexttokens',
+    customAnswerTokens: 'Aangepast aantal antwoordtokens',
+    contextLimitHint:
+      'Maximaal aantal invoer- en uitvoertokens samen. Kies een limiet die je model ondersteunt; hogere limieten kunnen meer geheugen gebruiken.',
+    outputLimitHint:
+      'Maximale lengte van het gegenereerde antwoord. Dit telt ook mee voor het contextvenster.',
+    modelLimitsUnknown:
+      'De modellimieten konden niet worden bepaald. Dit zijn veilige startwaarden; controleer je model voordat je ze verhoogt.',
+    modelLimitsKnown:
+      'Volgens het model: {context} contexttokens, {output} uitvoertokens. Kies een limiet die niet hoger is.',
+    modelContextKnown:
+      'Volgens het model zijn er {context} contexttokens beschikbaar. De uitvoerlimiet is onbekend.',
+    modelOutputKnown:
+      'Volgens het model zijn er {output} uitvoertokens beschikbaar. De contextlimiet is onbekend.',
+    savedLimitAboveModel:
+      'De huidige waarde ligt boven een gemelde modellimiet. Kies een ondersteunde limiet voordat je dit profiel gebruikt.',
+    savedLimitAboveBackend:
+      'De huidige waarde overschrijdt het maximum van Procyon. Kies een ondersteunde limiet voordat je dit profiel bewerkt.',
     temperature: 'Temperatuur',
     timeout: 'Time-out (seconden)',
     tlsPolicy: 'TLS-beleid',

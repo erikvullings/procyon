@@ -25,6 +25,9 @@ use uuid::Uuid;
 const PROFILE_SCHEMA_VERSION: u32 = 3;
 const TEST_PROMPT: &str = "Reply with OK.";
 const MAX_STREAM_BYTES: usize = 256 * 1024;
+/// Hard application bounds, independent of editable profile or provider metadata.
+pub const MAX_GENERATION_CONTEXT_WINDOW: u32 = 1_048_576;
+pub const MAX_GENERATION_ANSWER_TOKENS: u32 = 16_384;
 const ALLOWED_CUSTOM_HEADERS: &[&str] =
     &["openai-organization", "openai-project", "x-request-source"];
 
@@ -37,6 +40,7 @@ pub enum LlmPreset {
     Vllm,
     Sglang,
     Omlx,
+    MlxServe,
     OpenAiCompatible,
     AzureOpenAi,
 }
@@ -232,6 +236,13 @@ pub struct LlmModelCapabilities {
     pub vision: bool,
 }
 
+/// Effective advertised limits; absent fields mean the provider did not disclose them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LlmModelLimits {
+    pub context_window: Option<u32>,
+    pub maximum_answer_tokens: Option<u32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LlmImageAttachment {
     pub media_type: String,
@@ -255,6 +266,14 @@ pub struct LlmChatGeneration {
 
 #[async_trait]
 pub trait LlmProbeTransport: Send + Sync {
+    async fn discover_model_limits(
+        &self,
+        _request: &LlmProbeRequest,
+        _cancellation: &CancellationToken,
+    ) -> Result<LlmModelLimits, LlmProfileError> {
+        Ok(LlmModelLimits::default())
+    }
+
     async fn model_capabilities(
         &self,
         _request: &LlmProbeRequest,
@@ -322,6 +341,44 @@ impl Default for ReqwestLlmProbeTransport {
 
 #[async_trait]
 impl LlmProbeTransport for ReqwestLlmProbeTransport {
+    async fn discover_model_limits(
+        &self,
+        request: &LlmProbeRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<LlmModelLimits, LlmProfileError> {
+        let (url, method) = if let Some(chat_url) = &request.ollama_generation_url {
+            let base = chat_url
+                .strip_suffix("/api/chat")
+                .ok_or(LlmProfileError::InvalidConfiguration)?;
+            (format!("{base}/api/show"), reqwest::Method::POST)
+        } else {
+            let Some(url) = models_url(&request.url) else {
+                return Ok(LlmModelLimits::default());
+            };
+            (url, reqwest::Method::GET)
+        };
+        let mut builder = self.request(method.clone(), request, &url);
+        if method == reqwest::Method::POST {
+            builder = builder.json(&json!({ "model": request.model }));
+        }
+        let response = tokio::select! {
+            () = cancellation.cancelled() => return Err(LlmProfileError::Cancelled),
+            response = builder.send() => response.map_err(map_reqwest)?
+        };
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(LlmModelLimits::default());
+        }
+        classify_http_status(response.status().as_u16())?;
+        let body = read_bounded_body(response, cancellation).await?;
+        let value: Value =
+            serde_json::from_slice(&body).map_err(|_| LlmProfileError::MalformedResponse)?;
+        Ok(if method == reqwest::Method::POST {
+            parse_ollama_model_limits(&value)
+        } else {
+            parse_openai_model_limits(&value, &request.model)
+        })
+    }
+
     async fn model_capabilities(
         &self,
         request: &LlmProbeRequest,
@@ -598,6 +655,7 @@ impl LlmProfileService {
             (LlmPreset::Vllm, "vLLM", "http://127.0.0.1:8000"),
             (LlmPreset::Sglang, "SGLang", "http://127.0.0.1:30000"),
             (LlmPreset::Omlx, "OMLX", "http://127.0.0.1:8080"),
+            (LlmPreset::MlxServe, "mlx-serve", "http://127.0.0.1:11234"),
             (
                 LlmPreset::OpenAiCompatible,
                 "OpenAI-compatible",
@@ -928,6 +986,35 @@ impl LlmProfileService {
         ))
     }
 
+    /// Discovers limits for the selected model in an unsaved draft, without
+    /// persisting values or sending prompts.
+    pub async fn discover_draft_model_limits(
+        &self,
+        mut draft: LlmProfileDraft,
+        cancellation: &CancellationToken,
+    ) -> Result<LlmModelLimits, LlmProfileError> {
+        let api_key = draft.api_key.take();
+        let profile = profile_from_draft(Uuid::new_v4(), draft, None);
+        validate_profile(&profile)?;
+        if !profile
+            .capabilities
+            .contains(&LlmApiCapability::ModelDiscovery)
+        {
+            return Err(LlmProfileError::InvalidConfiguration);
+        }
+        let endpoint = normalize_endpoint(&profile.base_url)?;
+        self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
+        if profile.preset == LlmPreset::AzureOpenAi {
+            return Ok(LlmModelLimits::default());
+        }
+        let mut request = self.probe_request(&profile).await?;
+        request.api_key = api_key.map(|key| ["Bearer ", key.as_str()].concat());
+        self.transport
+            .discover_model_limits(&request, cancellation)
+            .await
+            .map(cap_model_limits)
+    }
+
     /// Generates bounded text through a saved profile after policy and consent checks.
     pub async fn generate(
         &self,
@@ -954,7 +1041,8 @@ impl LlmProfileService {
         let bounded = LlmChatGeneration {
             maximum_tokens: generation
                 .maximum_tokens
-                .min(profile.advanced.maximum_answer_tokens),
+                .min(profile.advanced.maximum_answer_tokens)
+                .min(MAX_GENERATION_ANSWER_TOKENS),
             temperature: generation
                 .temperature
                 .clamp(0.0, profile.advanced.temperature),
@@ -989,7 +1077,16 @@ impl LlmProfileService {
     }
 
     pub(crate) fn generation_profile(&self, id: Uuid) -> Result<LlmProfile, LlmProfileError> {
-        self.profile(id)
+        let mut profile = self.profile(id)?;
+        profile.advanced.context_window = profile
+            .advanced
+            .context_window
+            .min(MAX_GENERATION_CONTEXT_WINDOW);
+        profile.advanced.maximum_answer_tokens = profile
+            .advanced
+            .maximum_answer_tokens
+            .min(MAX_GENERATION_ANSWER_TOKENS);
+        Ok(profile)
     }
 
     async fn store_api_key(
@@ -1126,6 +1223,8 @@ fn validate_profile(profile: &LlmProfile) -> Result<(), LlmProfileError> {
         || profile.advanced.context_window == 0
         || profile.advanced.maximum_answer_tokens == 0
         || profile.advanced.maximum_answer_tokens > profile.advanced.context_window
+        || profile.advanced.context_window > MAX_GENERATION_CONTEXT_WINDOW
+        || profile.advanced.maximum_answer_tokens > MAX_GENERATION_ANSWER_TOKENS
         || !profile.advanced.temperature.is_finite()
         || !(0.0..=2.0).contains(&profile.advanced.temperature)
         || profile.advanced.timeout_seconds == 0
@@ -1271,6 +1370,77 @@ fn parse_ollama_model_capabilities(body: &[u8]) -> Result<LlmModelCapabilities, 
             .iter()
             .any(|value| value.as_str() == Some("vision")),
     })
+}
+
+fn positive_limit(value: &Value, keys: &[&str]) -> Option<u32> {
+    keys.iter().find_map(|key| {
+        value
+            .get(*key)
+            .and_then(Value::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+            .filter(|value| *value > 0)
+    })
+}
+
+fn cap_model_limits(limits: LlmModelLimits) -> LlmModelLimits {
+    LlmModelLimits {
+        context_window: limits
+            .context_window
+            .map(|value| value.min(MAX_GENERATION_CONTEXT_WINDOW)),
+        maximum_answer_tokens: limits
+            .maximum_answer_tokens
+            .map(|value| value.min(MAX_GENERATION_ANSWER_TOKENS)),
+    }
+}
+
+fn parse_openai_model_limits(value: &Value, model_id: &str) -> LlmModelLimits {
+    let model = value
+        .get("data")
+        .and_then(Value::as_array)
+        .and_then(|models| {
+            models
+                .iter()
+                .find(|model| model.get("id").and_then(Value::as_str) == Some(model_id))
+        });
+    let Some(model) = model else {
+        return LlmModelLimits::default();
+    };
+    LlmModelLimits {
+        context_window: positive_limit(
+            model,
+            &[
+                "context_length",
+                "max_context_length",
+                "context_window",
+                "max_model_len",
+            ],
+        ),
+        maximum_answer_tokens: positive_limit(
+            model,
+            &["max_output_tokens", "max_completion_tokens", "max_tokens"],
+        ),
+    }
+}
+
+fn parse_ollama_model_limits(value: &Value) -> LlmModelLimits {
+    let context_window = value
+        .get("model_info")
+        .and_then(Value::as_object)
+        .and_then(|info| {
+            info.get("general.context_length")
+                .and_then(Value::as_u64)
+                .or_else(|| {
+                    info.iter()
+                        .find(|(key, _)| key.ends_with(".context_length"))
+                        .and_then(|(_, value)| value.as_u64())
+                })
+        })
+        .and_then(|value| u32::try_from(value).ok())
+        .filter(|value| *value > 0);
+    LlmModelLimits {
+        context_window,
+        maximum_answer_tokens: None,
+    }
 }
 
 fn validate_streaming_chat(bytes: &[u8]) -> Result<(), LlmProfileError> {
@@ -1465,6 +1635,18 @@ mod tests {
 
     #[async_trait]
     impl LlmProbeTransport for FakeTransport {
+        async fn discover_model_limits(
+            &self,
+            request: &LlmProbeRequest,
+            _cancellation: &CancellationToken,
+        ) -> Result<LlmModelLimits, LlmProfileError> {
+            self.captured.lock().unwrap().push(request.clone());
+            Ok(LlmModelLimits {
+                context_window: Some(128_000),
+                maximum_answer_tokens: Some(32_000),
+            })
+        }
+
         async fn discover_models(
             &self,
             request: &LlmProbeRequest,
@@ -1539,14 +1721,142 @@ mod tests {
     #[test]
     fn every_preset_has_safe_explicit_defaults() {
         let presets = LlmProfileService::presets();
-        assert_eq!(presets.len(), 7);
+        assert_eq!(presets.len(), 8);
         assert_eq!(presets[0].base_url, "http://127.0.0.1:11434");
         assert_eq!(presets[1].base_url, "http://127.0.0.1:1234");
         assert_eq!(presets[2].base_url, "http://127.0.0.1:8000");
         assert_eq!(presets[3].base_url, "http://127.0.0.1:30000");
         assert_eq!(presets[4].base_url, "http://127.0.0.1:8080");
-        assert!(presets[5].redact_filenames);
-        assert_eq!(presets[6].api_version.as_deref(), Some("2024-10-21"));
+        assert_eq!(presets[5].preset, LlmPreset::MlxServe);
+        assert_eq!(presets[5].base_url, "http://127.0.0.1:11234");
+        assert!(
+            presets[5]
+                .capabilities
+                .contains(&LlmApiCapability::ModelDiscovery)
+        );
+        assert!(presets[6].redact_filenames);
+        assert_eq!(presets[7].api_version.as_deref(), Some("2024-10-21"));
+    }
+
+    #[test]
+    fn provider_model_limits_are_model_specific_and_bounded() {
+        let value = json!({"data": [
+            {"id": "other", "context_length": 64, "max_output_tokens": 32},
+            {"id": "selected", "max_model_len": 2_000_000, "max_completion_tokens": 50_000}
+        ]});
+        assert_eq!(
+            cap_model_limits(parse_openai_model_limits(&value, "selected")),
+            LlmModelLimits {
+                context_window: Some(MAX_GENERATION_CONTEXT_WINDOW),
+                maximum_answer_tokens: Some(MAX_GENERATION_ANSWER_TOKENS),
+            }
+        );
+        assert_eq!(
+            parse_openai_model_limits(&value, "missing"),
+            LlmModelLimits::default()
+        );
+        assert_eq!(
+            parse_openai_model_limits(
+                &json!({"data": [{"id": "selected", "context_length": 0, "max_tokens": -1}]}),
+                "selected"
+            ),
+            LlmModelLimits::default()
+        );
+    }
+
+    #[test]
+    fn ollama_model_info_reports_context_but_not_unadvertised_output() {
+        let value = json!({"model_info": {"llama.context_length": 131072, "general.parameter_count": 7_000_000_000u64}});
+        assert_eq!(
+            parse_ollama_model_limits(&value),
+            LlmModelLimits {
+                context_window: Some(131_072),
+                maximum_answer_tokens: None,
+            }
+        );
+    }
+
+    #[test]
+    fn configured_generation_limits_have_hard_caps() {
+        let mut profile = profile_from_draft(
+            Uuid::nil(),
+            draft(LlmPreset::Ollama, "http://127.0.0.1:11434"),
+            None,
+        );
+        profile.advanced.context_window = MAX_GENERATION_CONTEXT_WINDOW;
+        profile.advanced.maximum_answer_tokens = MAX_GENERATION_ANSWER_TOKENS;
+        assert!(validate_profile(&profile).is_ok());
+        profile.advanced.context_window += 1;
+        assert!(matches!(
+            validate_profile(&profile),
+            Err(LlmProfileError::InvalidConfiguration)
+        ));
+        profile.advanced.context_window = MAX_GENERATION_CONTEXT_WINDOW;
+        profile.advanced.maximum_answer_tokens += 1;
+        assert!(matches!(
+            validate_profile(&profile),
+            Err(LlmProfileError::InvalidConfiguration)
+        ));
+    }
+
+    #[tokio::test]
+    async fn draft_limit_discovery_uses_selected_model_without_persisting_it() {
+        let (service, _credentials, transport) = service(LlmHostPolicy::desktop());
+        let mut profile = draft(LlmPreset::MlxServe, "http://127.0.0.1:11234");
+        profile.model = "selected".to_owned();
+        profile.api_key = Some("draft-test-key".to_owned());
+        let limits = service
+            .discover_draft_model_limits(profile, &CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(limits.context_window, Some(128_000));
+        assert_eq!(
+            limits.maximum_answer_tokens,
+            Some(MAX_GENERATION_ANSWER_TOKENS)
+        );
+        let captured = transport.captured.lock().unwrap();
+        assert_eq!(captured[0].model, "selected");
+        assert_eq!(
+            captured[0].api_key.as_deref(),
+            Some("Bearer draft-test-key")
+        );
+        assert_eq!(captured[0].api_key_header, "authorization");
+        let models_request = ReqwestLlmProbeTransport::new()
+            .request(
+                reqwest::Method::GET,
+                &captured[0],
+                &models_url(&captured[0].url).unwrap(),
+            )
+            .build()
+            .unwrap();
+        assert_eq!(models_request.url().path(), "/v1/models");
+        assert_eq!(
+            models_request
+                .headers()
+                .get(reqwest::header::AUTHORIZATION)
+                .unwrap(),
+            "Bearer draft-test-key"
+        );
+        drop(captured);
+        let response =
+            serde_json::to_string(&crate::llm_profile_mapping::model_limits_to_dto(limits))
+                .unwrap();
+        assert!(!response.contains("draft-test-key"));
+        assert!(service.list().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn draft_limit_discovery_rejects_denied_host_before_using_credential() {
+        let (service, _credentials, transport) = service(LlmHostPolicy::server([]));
+        let mut profile = draft(LlmPreset::MlxServe, "http://127.0.0.1:11234");
+        profile.api_key = Some("draft-test-key".to_owned());
+        assert!(matches!(
+            service
+                .discover_draft_model_limits(profile, &CancellationToken::new())
+                .await,
+            Err(LlmProfileError::PolicyDenied)
+        ));
+        assert!(transport.captured.lock().unwrap().is_empty());
     }
 
     #[test]
