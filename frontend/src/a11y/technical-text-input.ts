@@ -3,5 +3,5 @@ export const technicalTextInputAttrs = {
   autocomplete: 'off',
   autocapitalize: 'off',
   autocorrect: 'off',
-  spellcheck: 'false',
+  spellcheck: false,
 } as const;

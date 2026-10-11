@@ -1700,7 +1700,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(input?.getAttribute('autocomplete')).toBe('off');
     expect(input?.getAttribute('autocorrect')).toBe('off');
     expect(input?.getAttribute('autocapitalize')).toBe('off');
-    expect(input?.getAttribute('spellcheck')).toBe('false');
+    expect(input?.getAttribute('spellcheck')).toBeNull();
   });
 
   it('uses a distinct Dutch search placeholder while keeping a programmatic label', async () => {
