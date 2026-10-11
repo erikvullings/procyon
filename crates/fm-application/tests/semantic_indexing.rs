@@ -450,6 +450,16 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
     assert_eq!(report.ingested_occurrences, 4, "{report:?}");
     assert_eq!(report.failed_occurrences, 0, "{report:?}");
     assert_eq!(report.excluded_occurrences, 0, "{report:?}");
+    let roots = service
+        .list_knowledge_roots(
+            &HOST,
+            fm_transport_dto::ListKnowledgeRootsRequestDto {
+                workspace_id: workspace_id.into_inner(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(roots[0].indexed_sources, 4, "all four modalities completed");
     #[cfg(target_os = "macos")]
     assert!(
         std::fs::read_to_string(runtime.path().join("gemma-backend"))
@@ -1018,6 +1028,25 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
     assert_eq!(report.observed_files, 2);
     assert_eq!(report.ingested_occurrences, 1);
     assert_eq!(report.failed_occurrences, 1);
+    let roots = service
+        .list_knowledge_roots(
+            &HOST,
+            fm_transport_dto::ListKnowledgeRootsRequestDto {
+                workspace_id: workspace_id.into_inner(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        roots[0].indexed_sources, 1,
+        "failed observation is not indexed"
+    );
+    assert_eq!(
+        crate::library(&state).status(&HOST).unwrap().roots[0].completed_occurrences_by_workspace
+            [&workspace_id.into_inner()],
+        1,
+        "completion receipt survives reopening the library"
+    );
     let failed_count = tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             let SubscriptionEvent::Event(envelope) = events.recv().await.unwrap() else {
@@ -1043,6 +1072,92 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
         Some(1)
     );
     assert_eq!(report.reconciliation_generation, 1);
+}
+
+#[tokio::test]
+async fn failed_media_is_not_counted_until_worker_completion_and_removed_on_deletion() {
+    let root = project_temp_dir("media-count-root-");
+    let image = root.path().join("photo.png");
+    std::fs::write(&image, "conversion fails").unwrap();
+    let state = project_temp_dir("media-count-state-");
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1904));
+    let library = library_with_model(
+        &state,
+        ModelIdentity::embeddinggemma_2(
+            128,
+            GemmaMediaSelection {
+                images: true,
+                audio: true,
+                video: true,
+            },
+        )
+        .unwrap(),
+    );
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(FailingDocumentCapability {
+        inner: FakeSemanticCapability::new(),
+    }));
+    let roots = || async {
+        service
+            .list_knowledge_roots(
+                &HOST,
+                fm_transport_dto::ListKnowledgeRootsRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                },
+            )
+            .await
+            .unwrap()
+    };
+    assert_eq!(roots().await[0].indexed_sources, 0);
+    let failed = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(failed.observed_files, 1);
+    assert_eq!(failed.failed_occurrences, 1);
+    assert_eq!(roots().await[0].indexed_sources, 0);
+    std::fs::write(&image, "embeddable image").unwrap();
+    let completed = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(completed.ingested_occurrences, 1);
+    assert_eq!(roots().await[0].indexed_sources, 1);
+    assert_eq!(
+        crate::library_with_model(
+            &state,
+            ModelIdentity::embeddinggemma_2(
+                128,
+                GemmaMediaSelection {
+                    images: true,
+                    audio: true,
+                    video: true,
+                },
+            )
+            .unwrap()
+        )
+        .status(&HOST)
+        .unwrap()
+        .roots[0]
+            .completed_occurrences_by_workspace[&workspace_id.into_inner()],
+        1
+    );
+    std::fs::remove_file(&image).unwrap();
+    service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(roots().await[0].indexed_sources, 0);
 }
 
 #[cfg(unix)]
@@ -1427,6 +1542,20 @@ async fn cancelling_running_ocr_stops_worker_ingestion_and_persists_cancelled_st
     .await
     .expect("job started");
 
+    assert_eq!(
+        service
+            .list_knowledge_roots(
+                &HOST,
+                fm_transport_dto::ListKnowledgeRootsRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                },
+            )
+            .await
+            .unwrap()[0]
+            .indexed_sources,
+        0,
+        "pending ingestion must not count as indexed"
+    );
     service.cancel_semantic_ocr_remediation(&job.id).unwrap();
     tokio::time::timeout(Duration::from_secs(2), async {
         loop {
@@ -1447,6 +1576,19 @@ async fn cancelling_running_ocr_stops_worker_ingestion_and_persists_cancelled_st
             .unwrap()
             .state,
         OcrRemediationState::Cancelled
+    );
+    assert_eq!(
+        service
+            .list_knowledge_roots(
+                &HOST,
+                fm_transport_dto::ListKnowledgeRootsRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                },
+            )
+            .await
+            .unwrap()[0]
+            .indexed_sources,
+        0
     );
     shutdown.cancel();
     runner.await.unwrap();

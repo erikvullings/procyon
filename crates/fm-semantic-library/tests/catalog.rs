@@ -77,6 +77,55 @@ fn artifacts(seed: u128) -> DocumentArtifacts {
 }
 
 #[test]
+fn completed_count_requires_current_content_and_authorized_scope() {
+    let (policy, root_id, _) = policy_with_overlapping_roots();
+    let mut catalog = SemanticCatalog::new(policy.library().id());
+    let entry = EntryId::from(Uuid::from_u128(350));
+    let source = location("file:///docs/photo.png");
+    let first = ContentFingerprint::new("sha256:image-one").unwrap();
+    let changed = ContentFingerprint::new("sha256:image-two").unwrap();
+    let owner = OccurrenceScope::new(workspace(20), root_id);
+    let other = OccurrenceScope::new(workspace(21), root_id);
+    let observe = |fingerprint: ContentFingerprint, scope| {
+        CatalogObservation::new(
+            entry,
+            source.clone(),
+            fingerprint,
+            scope,
+            DocumentArtifacts::default(),
+            measurement(),
+        )
+    };
+    catalog
+        .upsert_observations(
+            &policy,
+            &active(&policy),
+            [observe(first.clone(), owner), observe(first.clone(), other)],
+        )
+        .unwrap();
+    let occurrence_id = catalog.occurrence_at(entry, &source).unwrap().id();
+    assert_eq!(catalog.root_occurrence_count(root_id), 1);
+    assert_eq!(catalog.root_completed_count(owner), 0);
+    assert!(catalog.confirm_indexed(occurrence_id, &first, owner));
+    assert!(catalog.confirm_indexed(occurrence_id, &first, owner));
+    assert_eq!(catalog.root_completed_count(owner), 1);
+    assert_eq!(catalog.root_completed_count(other), 0);
+
+    catalog
+        .upsert_observations(&policy, &active(&policy), [observe(first.clone(), owner)])
+        .unwrap();
+    assert_eq!(catalog.root_completed_count(owner), 1);
+    catalog
+        .upsert_observations(&policy, &active(&policy), [observe(changed.clone(), owner)])
+        .unwrap();
+    assert_eq!(catalog.root_completed_count(owner), 0);
+    assert!(!catalog.confirm_indexed(occurrence_id, &first, owner));
+    assert!(catalog.confirm_indexed(occurrence_id, &changed, owner));
+    catalog.remove_workspace_scopes(workspace(20));
+    assert_eq!(catalog.root_completed_count(owner), 0);
+}
+
+#[test]
 fn unsorted_interleaved_overlapping_roots_deduplicate_content_and_preserve_scopes() {
     let (policy, parent, nested) = policy_with_overlapping_roots();
     let mut catalog = SemanticCatalog::new(policy.library().id());

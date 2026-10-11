@@ -1573,8 +1573,8 @@ export const nl = {
     removeFolder: 'Verwijderen',
     folderDetails: 'Indexeringsdetails',
     indexedSources: {
-      1: '1 bron gevonden; indexeren kan nog bezig zijn',
-      n: '{n} bronnen gevonden; indexeren kan nog bezig zijn',
+      1: '1 bevestigd geïndexeerd document',
+      n: '{n} bevestigd geïndexeerde documenten',
     },
     scannedEntries: '{count} items gescand (niet alles is geïndexeerd)',
     lastWorkerDevice: 'Laatste workerstart: {device}',

@@ -228,7 +228,7 @@ pub struct KnowledgeRootDto {
     pub available: bool,
     /// Last generation committed to runtime state.
     pub indexed_generation: u64,
-    /// Indexed sources already searchable, even before a full pass completes.
+    /// Worker-completed document occurrences in this workspace/root, including incomplete passes.
     pub indexed_sources: u64,
 }
 

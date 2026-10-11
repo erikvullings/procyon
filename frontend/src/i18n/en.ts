@@ -1569,8 +1569,8 @@ export const en = {
     removeFolder: 'Remove',
     folderDetails: 'Indexing details',
     indexedSources: {
-      1: '1 source found; indexing may still be in progress',
-      n: '{n} sources found; indexing may still be in progress',
+      1: '1 confirmed indexed document',
+      n: '{n} confirmed indexed documents',
     },
     scannedEntries: '{count} entries scanned (not all are indexed)',
     lastWorkerDevice: 'Last worker launch: {device}',

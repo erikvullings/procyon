@@ -101,7 +101,7 @@ describe('SemanticLibraryManagement', () => {
     await client.subscribe(() => undefined);
     mountComponent(client);
     await waitForLoaded();
-    expect(root.textContent).toContain('0 sources found; indexing may still be in progress');
+    expect(root.textContent).toContain('0 confirmed indexed documents');
     const details = root.querySelector<HTMLDetailsElement>('.fm-semantic-library-root details');
     expect(details?.textContent).not.toContain('Reconciliation generation');
     expect(details?.textContent).not.toContain('Indexing compute policy');
@@ -119,9 +119,7 @@ describe('SemanticLibraryManagement', () => {
         errors: 0,
       },
     });
-    await vi.waitFor(() =>
-      expect(root.textContent).toContain('1 source found; indexing may still be in progress'),
-    );
+    await vi.waitFor(() => expect(root.textContent).toContain('1 confirmed indexed document'));
     expect(root.textContent).toContain('4 entries scanned (not all are indexed)');
   });
 

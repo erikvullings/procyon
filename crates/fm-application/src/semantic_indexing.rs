@@ -14,7 +14,7 @@ use fm_domain::{EntryKind, EntrySummary, GitFileStatus, Location, LocationError,
 use fm_events::{BackendEventPayload, EventAudience, EventBus};
 use fm_semantic_library::{
     ContentFingerprint, EligibilityCandidate, EligibilityEntryKind, EligibilityReason,
-    OccurrenceId, RootId,
+    OccurrenceId, OccurrenceScope, RootId,
 };
 use fm_vcs_status::{GitIgnoreError, ignored_entries};
 use fm_vfs::{
@@ -524,7 +524,7 @@ impl SemanticIndexingService {
             SemanticIndexingObservation {
                 entry_id: entry.id,
                 location: entry.location.clone(),
-                content_fingerprint: fingerprint,
+                content_fingerprint: fingerprint.clone(),
                 root_id: context.root_id,
                 workspace_ids: context.workspace_ids.clone(),
                 source_bytes: u64::try_from(bytes.len())
@@ -586,7 +586,15 @@ impl SemanticIndexingService {
             )
             .await?
             {
-                IngestionOutcome::Completed => report.ingested = report.ingested.saturating_add(1),
+                IngestionOutcome::Completed => {
+                    library.confirm_indexed_observation(
+                        access,
+                        occurrence_id,
+                        &fingerprint,
+                        OccurrenceScope::new(*workspace_id, context.root_id),
+                    )?;
+                    report.ingested = report.ingested.saturating_add(1);
+                }
                 IngestionOutcome::Failed => report.failed = report.failed.saturating_add(1),
                 IngestionOutcome::Excluded(detail) => {
                     report.excluded = report.excluded.saturating_add(1);

@@ -438,9 +438,10 @@ pub struct SemanticRootStatus {
     pub reconciliation_generation: u64,
     /// Last generation committed to runtime state.
     pub indexed_generation: u64,
-    /// Indexed occurrences already searchable through this root, including
-    /// those recorded by a still-incomplete enumeration.
+    /// Observed occurrences, which may not yet have completed worker ingestion.
     pub indexed_occurrences: u64,
+    /// Worker-completed occurrences per attached workspace, including incomplete passes.
+    pub completed_occurrences_by_workspace: BTreeMap<Uuid, u64>,
     /// Explicit descendant/root exclusions.
     pub exclusions: Vec<SemanticExclusionStatus>,
 }
@@ -2006,6 +2007,33 @@ impl SemanticLibraryService {
         Ok(occurrence_id)
     }
 
+    /// Persists a scope-bound receipt after the worker confirms ingestion.
+    pub(crate) fn confirm_indexed_observation(
+        &self,
+        access: &SemanticAccessContext,
+        occurrence_id: core::OccurrenceId,
+        fingerprint: &core::ContentFingerprint,
+        scope: core::OccurrenceScope,
+    ) -> Result<(), SemanticLibraryError> {
+        let managed = self.managed_backend()?;
+        managed.authorize(access)?;
+        let mut locked = managed.lock()?;
+        let mut next = locked.data()?.clone();
+        if next
+            .catalog
+            .authorized_occurrence(&next.policy, scope.workspace_id(), occurrence_id)
+            .map_err(|_| SemanticLibraryError::InvalidRequest)?
+            .is_none()
+            || !next
+                .catalog
+                .confirm_indexed(occurrence_id, fingerprint, scope)
+        {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
+        locked.commit(next, core::LibraryOperation::Reconciliation)?;
+        Ok(())
+    }
+
     /// Resolves one path-free worker source against the current host catalog.
     ///
     /// Authorization and consent are rechecked at activation time so a stale
@@ -3416,6 +3444,23 @@ fn project_root(
         indexed_generation: data.state.indexed_generation(root.id()),
         indexed_occurrences: u64::try_from(data.catalog.root_occurrence_count(root.id()))
             .unwrap_or(u64::MAX),
+        completed_occurrences_by_workspace: root
+            .workspace_references()
+            .iter()
+            .map(|workspace_id| {
+                (
+                    Uuid::from(*workspace_id),
+                    u64::try_from(
+                        data.catalog
+                            .root_completed_count(core::OccurrenceScope::new(
+                                *workspace_id,
+                                root.id(),
+                            )),
+                    )
+                    .unwrap_or(u64::MAX),
+                )
+            })
+            .collect(),
         exclusions: root
             .exclusions()
             .iter()

@@ -220,7 +220,11 @@ impl KnowledgeService {
                 recursive: root.recursive,
                 available: matches!(root.availability, SemanticRootAvailability::Available),
                 indexed_generation: root.indexed_generation,
-                indexed_sources: root.indexed_occurrences,
+                indexed_sources: root
+                    .completed_occurrences_by_workspace
+                    .get(&workspace_id)
+                    .copied()
+                    .unwrap_or(0),
             })
             .collect())
     }
@@ -1630,7 +1634,7 @@ mod tests {
         assert_eq!(roots[0].root_id, fixture.root_id);
         assert_eq!(roots[0].label, "indexed-library");
         assert_eq!(roots[0].indexed_generation, 0);
-        assert_eq!(roots[0].indexed_sources, 1);
+        assert_eq!(roots[0].indexed_sources, 0);
 
         let interpretation = fixture
             .service
