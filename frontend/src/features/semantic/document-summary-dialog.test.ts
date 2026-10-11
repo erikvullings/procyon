@@ -50,6 +50,9 @@ describe('DocumentSummaryDialog', () => {
     expect(root.textContent).toContain('Key passages');
     expect(root.textContent).toContain('Overview');
     expect(root.textContent).not.toContain('S1');
+    expect(root.querySelector('.fm-document-summary-passages li p')?.textContent).toBe(
+      'A representative passage from the selected document.',
+    );
   });
 
   it('discloses cloud transfer and generates a persisted summary', async () => {

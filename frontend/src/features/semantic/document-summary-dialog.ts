@@ -58,6 +58,16 @@ function summaryErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function passageBody(passage: DocumentSummaryPreview['keyPassages'][number]): string {
+  const heading = passage.sectionPath.join(' > ');
+  if (heading.length === 0) return passage.content;
+  if (passage.content === heading) return '';
+  const prefix = `${heading}\n\n`;
+  return passage.content.startsWith(prefix)
+    ? passage.content.slice(prefix.length)
+    : passage.content;
+}
+
 export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs> = () => {
   let wasOpen = false;
   let busy = false;
@@ -272,14 +282,15 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
           ),
           m(
             'ol.fm-document-summary-passages',
-            preview?.keyPassages.map((passage) =>
-              m('li', { key: passage.chunkId }, [
+            preview?.keyPassages.map((passage) => {
+              const body = passageBody(passage);
+              return m('li', { key: passage.chunkId }, [
                 passage.sectionPath.length > 0
                   ? m('strong', passage.sectionPath.join(' / '))
                   : undefined,
-                m('p', passage.content),
-              ]),
-            ),
+                body ? m('p', body) : undefined,
+              ]);
+            }),
           ),
         ]),
         buttons: [

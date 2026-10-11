@@ -4500,7 +4500,7 @@ export class MockFileManagerClient implements FileManagerClient {
           {
             label: 'S1',
             chunkId: `mock-chunk-${request.target.entryId}`,
-            content: 'A representative passage from the selected document.',
+            content: 'Overview\n\nA representative passage from the selected document.',
             sectionPath: ['Overview'],
             provenance: '{"kind":"textLines","start_line":1,"end_line":3}',
             clusterPopulation: 1,
