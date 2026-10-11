@@ -629,11 +629,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
           computeMode =
             setup === null
               ? t('semanticLibrary', 'computeUnknown')
-              : setup.audio || setup.video
-                ? t('semanticLibrary', 'computeMixedCpu')
-                : setup.images
-                  ? t('semanticLibrary', 'computeImageAutomatic')
-                  : t('semanticLibrary', 'computeCpu');
+              : t('semanticLibrary', 'computeAutomatic');
         }
       } catch (cause) {
         computeMode = `${t('semanticLibrary', 'computeUnknown')}: ${errorMessage(cause)}`;

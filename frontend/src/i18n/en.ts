@@ -1569,11 +1569,9 @@ export const en = {
       n: '{n} indexed documents searchable',
     },
     scannedEntries: '{count} entries scanned (not all are indexed)',
-    computeMode: 'Indexing compute',
-    computeMixedCpu: 'CPU (this mixed-media Gemma worker does not use Metal)',
-    computeImageAutomatic:
-      'Metal for images when available; CPU fallback (live device not reported)',
-    computeCpu: 'CPU',
+    computeMode: 'Indexing compute policy',
+    computeAutomatic:
+      'Metal on supported macOS workers when available; CPU fallback (current worker device not reported here)',
     computeUnknown: 'Device not reported by the worker',
     libraryDetails: 'Library details',
     pdfTools: 'Make scanned PDFs searchable',

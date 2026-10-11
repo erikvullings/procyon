@@ -78,7 +78,7 @@ export async function buildSemanticDeveloperBundle() {
   const gemma = process.argv.includes('--gemma');
   const metalImages = process.argv.includes('--metal-images');
   if (metalImages && (!gemma || process.platform !== 'darwin' || process.arch !== 'arm64')) {
-    throw new Error('Metal images require --gemma on macOS arm64');
+    throw new Error('Gemma Metal requires --gemma on macOS arm64');
   }
   const profile = process.argv.includes('--release') || gemma ? 'release' : 'debug';
   // Fetched and verified before the long compile so a bad or missing download

@@ -548,8 +548,8 @@ mod tests {
         let metal_integration = std::env::var_os("PROCYON_GEMMA_METAL_INTEGRATION").is_some();
         let media = GemmaMediaSelection {
             images: true,
-            audio: !metal_integration,
-            video: !metal_integration,
+            audio: true,
+            video: true,
         };
         let model = LibraryModelIdentity::embeddinggemma_2(128, media).expect("Gemma model");
         let policy = SemanticLibraryPolicy::new(
@@ -763,7 +763,7 @@ mod tests {
                     let backend = fs::read_to_string(runtime.join("gemma-backend"))
                         .expect("installed worker reports its backend");
                     if metal {
-                        assert!(backend.contains("FP32 Metal images"), "{backend}");
+                        assert!(backend.contains("FP32 Metal"), "{backend}");
                     } else {
                         assert!(backend.contains("development CPU baseline"), "{backend}");
                     }

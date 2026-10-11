@@ -54,7 +54,7 @@ function button(label: string): HTMLButtonElement {
 }
 
 describe('SemanticLibraryManagement', () => {
-  it('shows authoritative indexed counts and mixed-media CPU selection while indexing', async () => {
+  it('shows authoritative indexed counts and an honest compute policy while indexing', async () => {
     const preview = await client.previewSemanticEnrolment({
       workspaceId: workspace.id,
       location,
@@ -103,7 +103,7 @@ describe('SemanticLibraryManagement', () => {
     expect(root.textContent).toContain('0 indexed documents searchable');
     const details = root.querySelector<HTMLDetailsElement>('.fm-semantic-library-root details');
     expect(details?.textContent).toContain(
-      'CPU (this mixed-media Gemma worker does not use Metal)',
+      'Metal on supported macOS workers when available; CPU fallback (current worker device not reported here)',
     );
     indexedSources = 1;
     client.emit({

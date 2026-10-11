@@ -1573,11 +1573,9 @@ export const nl = {
       n: '{n} geïndexeerde documenten doorzoekbaar',
     },
     scannedEntries: '{count} items gescand (niet alles is geïndexeerd)',
-    computeMode: 'Rekenapparaat voor indexeren',
-    computeMixedCpu: 'CPU (deze Gemma-worker voor gemengde media gebruikt geen Metal)',
-    computeImageAutomatic:
-      'Metal voor afbeeldingen indien beschikbaar; anders CPU (actief apparaat niet gemeld)',
-    computeCpu: 'CPU',
+    computeMode: 'Rekenbeleid voor indexeren',
+    computeAutomatic:
+      'Metal op ondersteunde macOS-workers indien beschikbaar; anders CPU (actief apparaat wordt hier niet gemeld)',
     computeUnknown: 'Apparaat niet gemeld door de worker',
     libraryDetails: 'Bibliotheekdetails',
     pdfTools: "Gescande pdf's doorzoekbaar maken",

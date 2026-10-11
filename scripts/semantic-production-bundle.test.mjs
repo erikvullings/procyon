@@ -103,7 +103,7 @@ test('Gemma original files require an explicit release builder input', () => {
   );
 });
 
-test('signed Gemma workers compile Metal only for macOS ARM images', () => {
+test('signed Gemma workers compile Metal only for macOS ARM', () => {
   for (const [platform, arch] of [
     ['darwin', 'arm64'],
     ['win32', 'x64'],

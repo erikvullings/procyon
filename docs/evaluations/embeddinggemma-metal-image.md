@@ -1,22 +1,71 @@
-# Experimental EmbeddingGemma 2 Metal image probe
+# Experimental EmbeddingGemma 2 Metal compute probe
 
 The optional `gemma-metal` feature offloads FP32 matrix multiplications in the
-native vision tower, vision-to-language projection, and soft-token language
-fusion using the pinned Lattice Metal GEMM primitive. Vision attention's
+native shared text/fusion encoder, vision tower, and vision-to-language
+projection using the pinned Lattice Metal GEMM primitive. Vision attention's
 query/key and probability/value products also run through that primitive;
-bicubic preprocessing, attention softmax, normalization, pooling, and fusion
-attention remain on CPU. BF16 checkpoint weights are decoded to FP32; there
-is no FP16 inference.
+bicubic preprocessing, audio feature extraction and tower, video decoding,
+attention softmax, normalization, and pooling remain on CPU. Audio and video
+embeddings dispatch their shared language/fusion work to Metal; they are not
+wholly GPU-resident. BF16 checkpoint weights are decoded to FP32; there is no
+FP16 inference.
 Small matrices below Lattice's dispatch threshold use its CPU GEMM. In a
-macOS worker built with the optional `gemma-metal` feature, a consented,
-image-only Gemma library selects Metal automatically when available; an
-unavailable device or mixed image/audio/video library uses CPU with an
-explicit backend report. The standard E5 production bundle recipe still builds without `gemma-metal`.
+macOS worker built with the optional `gemma-metal` feature, a consented Gemma
+library selects Metal automatically for text, image, audio, and video when
+available, regardless of which media are enabled. An unavailable device uses
+CPU with an explicit backend report; failed individual GEMM dispatches fall
+back to CPU. The standard E5 production bundle recipe still builds without `gemma-metal`.
 The separately requested Gemma candidate now compiles `gemma-metal` only on
 macOS ARM; its Linux and Windows workers remain CPU-only. Default E5
 libraries are unchanged. This is candidate preparation, not approval to
-publish: signed production Metal artifacts from the integrated source have
-not yet been qualified. Audio and video remain on the CPU path.
+publish: signed production Metal artifacts from the changed source have not
+yet been qualified.
+
+## Mixed-media CPU/Metal qualification (2026-10-11)
+
+The pinned local checkpoint was loaded with **images, audio, and video all
+enabled** at each supported width. Each modality's complete vector was
+compared against both the CPU encoder and its pinned upstream Python
+reference (cosine > 0.99999); every modality executed GPU GEMM dispatches.
+The video fixture is one decoded frame, and audio is a 0.2-second synthetic
+440/880 Hz PCM signal. Timings exclude model loading and are from one M4 Max
+while a separate CPU indexing run was active; they do not prove general
+throughput or device coverage.
+
+| Width | Text CPU / Metal | Image CPU / Metal | Audio CPU / Metal | Video CPU / Metal | GPU dispatches (text/image/audio/video) |
+| --- | --- | --- | --- | --- | --- |
+| 128 | 50 / 99 ms | 28.52 / 6.18 s | 892 / 912 ms | 7.22 / 2.29 s | 241 / 1004 / 241 / 868 |
+| 256 | 55 / 104 ms | 28.80 / 6.15 s | 902 / 940 ms | 7.22 / 2.26 s | 241 / 1004 / 241 / 868 |
+| 512 | 48 / 73 ms | 28.33 / 5.91 s | 895 / 929 ms | 7.18 / 2.22 s | 241 / 1004 / 241 / 868 |
+| 768 | 49 / 90 ms | 28.48 / 5.95 s | 893 / 934 ms | 7.18 / 2.20 s | 241 / 1004 / 241 / 868 |
+
+**Image and video improved on these fixtures; short text and audio did not.**
+GPU availability alone is not a speed guarantee for every input. A separate
+development-key-signed bundle, built without replacing the running review
+app's bundle, installed the verified originals and ran image ingest/query
+in a library with **all three media enabled** at 128/256/512/768 dimensions.
+The worker reported FP32 Metal at all four widths; forced development CPU
+baselines used the same media selection. Metal ingest took
+6.08/6.20/6.13/6.15 seconds versus CPU
+28.57/28.49/28.54/28.49 seconds; each persisted vector matched CPU and
+the pinned Python reference (cosine > 0.99999). Worker sampled peak RSS
+was 3.94-4.01 GB for Metal and 3.60-3.95 GB for CPU, below the test's
+4 GiB worker bound, but closer to it than the earlier image-only run.
+This installed check ingested **images only** in the mixed-media setup;
+the direct checkpoint test above covers all modalities, and an exact
+four-target signed candidate/installed check is still needed.
+The running review app and older candidate retain their CPU mixed-media
+worker; neither is changed by this source update.
+
+Reproduce the model-level comparison with:
+
+```sh
+PROCYON_GEMMA_PROBE_MODEL_DIR="$PWD/target/embeddinggemma-probe/google--embeddinggemma-2/914f7f89142e33e77833254d9c9b90c3cef7303b" \
+  cargo test --release -p fm-semantic-worker --features gemma-metal \
+  --test embeddinggemma_image_parity \
+  metal_mixed_library_matches_cpu_and_upstream_for_every_modality \
+  -- --ignored --exact --nocapture
+```
 
 The real-checkpoint test `metal_image_matches_cpu_and_upstream_at_every_dimension`
 uses the pinned revision `914f7f89142e33e77833254d9c9b90c3cef7303b`
@@ -29,7 +78,7 @@ Run on Apple Silicon after fetching the verified originals:
 
 ```sh
 node scripts/fetch-embeddinggemma-probe.mjs
-PROCYON_GEMMA_PROBE_MODEL_DIR="$PWD/target/semantic-model-cache/google--embeddinggemma-2/914f7f89142e33e77833254d9c9b90c3cef7303b" \
+PROCYON_GEMMA_PROBE_MODEL_DIR="$PWD/target/embeddinggemma-probe/google--embeddinggemma-2/914f7f89142e33e77833254d9c9b90c3cef7303b" \
   /usr/bin/time -l cargo test --release -p fm-semantic-worker \
   --features gemma-metal --test embeddinggemma_image_parity \
   metal_image_matches_cpu_and_upstream_at_every_dimension -- --ignored --nocapture
@@ -41,20 +90,25 @@ This is one PNG on one machine; dispatch counts alone do not establish a
 speedup or memory limits across supported targets. Do not enable GPU in
 production workers for users until the integrated signed candidate's
 resource and CPU-fallback qualification is complete.
+The image-only measurements below preserve the original probe's status at
+the time they ran; the mixed-media change above has not inherited their
+signed-worker qualification.
 
 ## Installed development worker (feature-gated automatic selection)
 
 `pnpm dev:tauri:semantic:gemma:metal` builds a separately signed development
 bundle with `developer-bundle,gemma-native,gemma-metal`; no runtime Metal
 opt-in flag or environment variable is needed. The worker selects the backend
-from its compiled feature, device availability and immutable library media.
+from its compiled feature and device availability.
+All enabled media share that selected compute backend; there is no separate
+image-only switch.
 `pnpm dev:tauri:semantic:gemma` builds a CPU-only worker. A development-only
 `--gemma-cpu-images` launch argument provides paired CPU baseline measurements;
 production feature builds reject it. Both the selected backend and CPU
 fallback reason are printed to the host's inherited stderr and the selected
 startup backend is recorded in the owner-only worker runtime directory's
 `gemma-backend` file, refreshed on each managed launch. If the device is
-unavailable or images are mixed with audio/video, the worker uses CPU. A
+unavailable, the worker uses CPU. A
 failed checkpoint load remains an error rather than a successful-looking
 fallback. If a GPU GEMM does not dispatch during inference, it computes that
 shape on CPU and reports the first occurrence; the tested FP32 CPU and Metal
@@ -98,8 +152,8 @@ mark. CPU/Python cosine was 0.999999868 or better, and Metal/Python was
 by the launched worker; the direct parity test above separately confirmed
 1,004 successful GPU dispatches per image on this checkpoint. This is a
 development-only single-image result, **not** a release resource, device,
-fallback, or retrieval-quality qualification. CPU fallback for mixed media
-and a simulated failed dispatch are covered by focused tests; an actually
+fallback, or retrieval-quality qualification. At the time, CPU fallback for
+mixed media and a simulated failed dispatch were covered by focused tests; an actually
 unavailable Apple device cannot be exercised on this Metal-capable machine.
 The simulated unavailable-device startup and failed GEMM tests exercise both
 fallback paths; concurrent images and pre-cancelled Metal images have separate

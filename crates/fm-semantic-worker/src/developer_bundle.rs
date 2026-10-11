@@ -411,18 +411,13 @@ impl DeveloperModel {
         let encoder = if force_cpu_images {
             description.push_str(" [development CPU baseline]");
             GemmaNativeEncoder::open_files(files, dimensions, media)
-        } else if !media.images || media.audio || media.video {
-            if media.images {
-                description.push_str(" [Metal unsupported for mixed media; CPU fallback]");
-            }
-            GemmaNativeEncoder::open_files(files, dimensions, media)
         } else if !metal_available {
             description.push_str(" [Metal unavailable; CPU fallback]");
             GemmaNativeEncoder::open_files(files, dimensions, media)
         } else {
             match GemmaNativeEncoder::open_metal_files(files, dimensions, media) {
                 Ok(encoder) => {
-                    description = "google/embeddinggemma-2 (FP32 Metal images)".to_owned();
+                    description = "google/embeddinggemma-2 (FP32 Metal)".to_owned();
                     Ok(encoder)
                 }
                 Err(crate::gemma_native::GemmaNativeError::MetalUnavailable) => {
@@ -434,11 +429,9 @@ impl DeveloperModel {
         };
         #[cfg(not(all(target_os = "macos", feature = "gemma-metal")))]
         let encoder = {
-            if media.images {
-                eprintln!(
-                    "Procyon Gemma image backend: Metal is not compiled for this worker/target; using CPU"
-                );
-            }
+            eprintln!(
+                "Procyon Gemma backend: Metal is not compiled for this worker/target; using CPU"
+            );
             let _ = (force_cpu_images, metal_available);
             GemmaNativeEncoder::open_files(files, dimensions, media)
         };
@@ -1319,7 +1312,7 @@ mod tests {
         #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
         {
             let metal = DeveloperModel::resolve_gemma(&files, 128, images, false).unwrap();
-            assert!(metal.description.contains("FP32 Metal images"));
+            assert!(metal.description.contains("FP32 Metal"));
             drop(metal);
             let unavailable =
                 DeveloperModel::resolve_gemma_with_device(&files, 128, images, false, false)
@@ -1340,8 +1333,47 @@ mod tests {
                 false,
             )
             .unwrap();
-            assert!(mixed.description.contains("CPU fallback"));
+            assert!(mixed.description.contains("FP32 Metal"));
             assert_eq!(mixed.gemma.unwrap().0.metal_dispatches(), 0);
+            let unavailable_mixed = DeveloperModel::resolve_gemma_with_device(
+                &files,
+                128,
+                GemmaMedia {
+                    audio: true,
+                    video: true,
+                    ..images
+                },
+                false,
+                false,
+            )
+            .unwrap();
+            assert!(
+                unavailable_mixed
+                    .description
+                    .contains("Metal unavailable; CPU fallback")
+            );
+            assert_eq!(unavailable_mixed.gemma.unwrap().0.metal_dispatches(), 0);
+            for media in [
+                GemmaMedia {
+                    images: false,
+                    audio: false,
+                    video: false,
+                },
+                GemmaMedia {
+                    images: false,
+                    audio: true,
+                    video: false,
+                },
+            ] {
+                let selected = DeveloperModel::resolve_gemma(&files, 128, media, false).unwrap();
+                assert!(selected.description.contains("FP32 Metal"));
+                let encoder = &selected.gemma.as_ref().unwrap().0;
+                let before = encoder.metal_dispatches();
+                encoder
+                    .encode_text(crate::gemma_probe::GemmaTextTask::Search, "test", None)
+                    .unwrap();
+                assert!(encoder.metal_dispatches() > before);
+            }
         }
     }
 

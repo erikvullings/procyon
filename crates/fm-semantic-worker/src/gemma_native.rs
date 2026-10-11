@@ -165,18 +165,13 @@ impl GemmaNativeEncoder {
         )
     }
 
-    /// Load host-verified original files for a macOS Metal image worker.
+    /// Load host-verified original files for a macOS Metal worker.
     #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
     pub fn open_metal_files(
         files: &GemmaNativeFiles,
         dimensions: usize,
         media: GemmaMedia,
     ) -> Result<Self, GemmaNativeError> {
-        if !media.images || media.audio || media.video {
-            return Err(GemmaNativeError::Input(
-                "Metal probe supports standalone images only",
-            ));
-        }
         let compute = GemmaCompute::metal().ok_or(GemmaNativeError::MetalUnavailable)?;
         Self::open_files_with_compute(files, dimensions, media, compute)
     }

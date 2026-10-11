@@ -292,6 +292,9 @@ async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
         .expect("start packaged Gemma worker");
     let startup_seconds = started.elapsed().as_secs_f64();
     assert_eq!(client.health().await.unwrap(), WorkerHealth::Serving);
+    let backend = std::fs::read_to_string(runtime.path().join("gemma-backend"))
+        .expect("installed Gemma worker reports its selected compute backend");
+    eprintln!("packaged Gemma selected backend: {}", backend.trim());
 
     let image = ImageBuffer::from_fn(128, 96, |x, y| {
         Rgb([
@@ -455,6 +458,7 @@ async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
                     "workerStartupSeconds": startup_seconds,
                     "workerPeakRssBytes": peak_rss_bytes,
                     "workerPeakMethod": peak_method,
+                    "workerComputeBackend": backend.trim(),
                     "measurements": measurements,
                     "workload": "one synthetic 128x96 PNG, one 440Hz MP3, one 2s H.264 MP4, one short plain-text document; three text queries per modality; fresh worker and index per dimension",
                 }))
