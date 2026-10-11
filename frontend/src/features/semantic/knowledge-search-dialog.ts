@@ -88,7 +88,6 @@ const INTENTS: readonly KnowledgeQueryIntent[] = ['search', 'questionAnswering',
 const SCOPE_KINDS: readonly KnowledgeScopeKind[] = [
   'entireLibrary',
   'enrolledRoots',
-  'currentFolder',
   'semanticResults',
 ];
 
@@ -1068,11 +1067,14 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   let subjectsText = '';
   let mode: KnowledgeRetrievalMode = 'hybrid';
   let intent: KnowledgeQueryIntent = 'search';
-  let scopeKind: KnowledgeScopeKind = 'entireLibrary';
+  let scopeKind: KnowledgeScopeKind = 'enrolledRoots';
   let selectedRootIds = new Set<string>();
   let dslText = '';
   let includeTrace = false;
   let currentFolderIndexed = false;
+  let openingFolder: Location | undefined;
+  let pinnedFolder: Location | undefined;
+  let openedWorkspaceId: string | undefined;
   let interpretation: KnowledgeQueryInterpretation | undefined;
   /** DSL scopes that cannot be applied; search stays blocked while any exist. */
   let scopeIssues: readonly KnowledgeScopeIssue[] = [];
@@ -1158,7 +1160,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     return {
       workspaceId: attrs.workspaceId,
       kind: scopeKind,
-      folder: scopeKind === 'currentFolder' ? (attrs.currentFolder ?? null) : null,
+      folder: scopeKind === 'currentFolder' ? (pinnedFolder ?? null) : null,
       enrolledRootIds: scopeKind === 'enrolledRoots' ? [...selectedRootIds] : [],
       semanticSourceIds: scopeKind === 'semanticResults' ? [...attrs.semanticSourceIds] : [],
     };
@@ -1171,7 +1173,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       case 'enrolledRoots':
         return roots.length > 0;
       case 'currentFolder':
-        return attrs.currentFolder !== undefined && currentFolderIndexed;
+        return openingFolder !== undefined && currentFolderIndexed;
       case 'semanticResults':
         return attrs.semanticSourceIds.length > 0;
     }
@@ -1248,11 +1250,13 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     wholeLibraryDeclared = classified.wholeLibrary;
     if (classified.rootIds.length > 0) {
       scopeKind = 'enrolledRoots';
+      pinnedFolder = undefined;
       selectedRootIds = new Set(classified.rootIds);
       return;
     }
     if (classified.wholeLibrary) {
-      scopeKind = 'entireLibrary';
+      scopeKind = 'enrolledRoots';
+      pinnedFolder = undefined;
     }
   }
 
@@ -1345,13 +1349,16 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     subjectsText = attrs.initialSubject ?? '';
     dslText = '';
     currentFolderIndexed = false;
+    openingFolder = attrs.currentFolder;
+    pinnedFolder = undefined;
+    openedWorkspaceId = attrs.workspaceId;
     includeTrace = false;
     capabilities = undefined;
     roots = [];
     selectedRootIds = new Set();
     mode = 'hybrid';
     intent = 'search';
-    scopeKind = 'entireLibrary';
+    scopeKind = 'enrolledRoots';
     focusSubjectOnOpen = true;
     searchAfterLoad = false;
     answerProfiles = [];
@@ -1376,7 +1383,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
             )
           : { profiles: [], failed: false },
       );
-      const currentFolder = attrs.currentFolder;
+      const currentFolder = openingFolder;
       const folderIndexedRequest =
         currentFolder === undefined
           ? Promise.resolve(false)
@@ -1402,20 +1409,14 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         answerProfilesFailed = profileResult.failed;
       }
       roots = availableRoots;
-      selectedRootIds = new Set(
-        availableRoots.filter((root) => root.available).map((r) => r.rootId),
-      );
+      selectedRootIds = new Set(availableRoots.map((root) => root.rootId));
       mode = reportedCapabilities.semantic
         ? 'hybrid'
         : reportedCapabilities.fullText
           ? 'hybrid'
           : 'fullText';
       if (currentFolder !== undefined) currentFolderIndexed = folderIndexed;
-      scopeKind = scopeAvailable(attrs, 'currentFolder')
-        ? 'currentFolder'
-        : scopeAvailable(attrs, 'semanticResults')
-          ? 'semanticResults'
-          : 'entireLibrary';
+      scopeKind = 'enrolledRoots';
     } catch {
       if (loadGeneration !== generation) return;
       error = t('knowledgeSearch', 'loadFailed');
@@ -2557,7 +2558,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     },
     onupdate: ({ attrs }) => {
       currentAttrs = attrs;
-      if (attrs.open && !wasOpen) void load(attrs);
+      if (attrs.open && (!wasOpen || openedWorkspaceId !== attrs.workspaceId)) void load(attrs);
       wasOpen = attrs.open;
       if (attrs.open && loadedProfileRevision !== (attrs.profileRevision ?? 0)) {
         loadedProfileRevision = attrs.profileRevision ?? 0;
@@ -2700,6 +2701,30 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 ),
               ),
             ]),
+            openingFolder === undefined
+              ? undefined
+              : m('label.fm-knowledge-folder-filter', [
+                  m('input', {
+                    type: 'checkbox',
+                    checked: scopeKind === 'currentFolder',
+                    disabled: !currentFolderIndexed || busy === 'searching',
+                    onchange: (event: Event) => {
+                      const checked = (event.currentTarget as HTMLInputElement).checked;
+                      pinnedFolder = checked ? openingFolder : undefined;
+                      scopeKind = checked ? 'currentFolder' : 'enrolledRoots';
+                      edited();
+                      void reinterpret(attrs);
+                    },
+                  }),
+                  m(
+                    'span',
+                    t('knowledgeSearch', 'includeOnlyCurrentFolder', {
+                      folder:
+                        openingFolder.uri.replace(/\/+$/u, '').split('/').at(-1) ||
+                        openingFolder.uri,
+                    }),
+                  ),
+                ]),
             !currentFolderIndexed && attrs.currentFolder !== undefined && busy !== 'loading'
               ? m(
                   'button.fm-knowledge-include-folder-action',
@@ -2729,7 +2754,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                         location: attrs.currentFolder,
                         onEnrolled: () => {
                           currentFolderIndexed = true;
-                          scopeKind = 'currentFolder';
+                          scopeKind = 'enrolledRoots';
                           enrolmentOpen = false;
                           void refreshRoots(attrs).then(() => {
                             const included = roots.find(
@@ -2779,30 +2804,36 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                       ),
                     ]),
                     m('.fm-knowledge-row', [
-                      m('label.fm-knowledge-field', [
-                        m('span', t('knowledgeSearch', 'scope')),
-                        m(
-                          'select#fm-knowledge-scope.browser-default',
-                          {
-                            name: 'knowledge-scope',
-                            value: scopeKind,
-                            disabled: busy === 'searching',
-                            onchange: (event: Event) => {
-                              scopeKind = (event.currentTarget as HTMLSelectElement)
-                                .value as KnowledgeScopeKind;
-                              edited();
-                              void reinterpret(attrs);
-                            },
-                          },
-                          SCOPE_KINDS.map((kind) =>
+                      scopeKind === 'currentFolder'
+                        ? undefined
+                        : m('label.fm-knowledge-field', [
+                            m('span', t('knowledgeSearch', 'scope')),
                             m(
-                              'option',
-                              { key: kind, value: kind, disabled: !scopeAvailable(attrs, kind) },
-                              scopeKindLabel(kind),
+                              'select#fm-knowledge-scope.browser-default',
+                              {
+                                name: 'knowledge-scope',
+                                value: scopeKind,
+                                disabled: busy === 'searching',
+                                onchange: (event: Event) => {
+                                  scopeKind = (event.currentTarget as HTMLSelectElement)
+                                    .value as KnowledgeScopeKind;
+                                  edited();
+                                  void reinterpret(attrs);
+                                },
+                              },
+                              SCOPE_KINDS.map((kind) =>
+                                m(
+                                  'option',
+                                  {
+                                    key: kind,
+                                    value: kind,
+                                    disabled: !scopeAvailable(attrs, kind),
+                                  },
+                                  scopeKindLabel(kind),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      ]),
+                          ]),
                       m('fieldset.fm-knowledge-modes', [
                         m('legend', t('knowledgeSearch', 'mode')),
                         MODES.map((candidate) =>

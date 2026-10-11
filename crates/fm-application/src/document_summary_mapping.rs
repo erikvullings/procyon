@@ -82,6 +82,7 @@ pub(crate) fn attribution_to_dto(value: SummaryAttribution) -> SummaryAttributio
         },
         supporting_chunk_id: value.supporting_chunk_id,
         provenance: value.provenance,
+        quote: value.quote,
     }
 }
 

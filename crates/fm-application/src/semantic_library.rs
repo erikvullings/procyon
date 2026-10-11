@@ -2181,20 +2181,16 @@ impl SemanticLibraryService {
     /// Resolves a user-visible Structured Knowledge scope into current
     /// authorization.
     ///
-    /// A desktop whole-library search spans every workspace tenant that still
-    /// owns indexed occurrences. The device library outlives individual
-    /// workspaces, so replacing a workspace must not orphan its indexed roots.
-    /// Server callers remain confined to their authenticated tenant.
+    /// Knowledge search stays within the requested workspace, including an
+    /// explicit whole-library selection; roots in other workspaces remain
+    /// available to those workspaces without joining this search.
     pub(crate) fn resolve_knowledge_scope(
         &self,
         access: &SemanticAccessContext,
         workspace_id: WorkspaceId,
         selection: &RagScopeSelection,
     ) -> Result<ResolvedKnowledgeScope, SemanticLibraryError> {
-        let cross_workspace = matches!(access, SemanticAccessContext::Host)
-            && matches!(selection, RagScopeSelection::EntireLibrary);
-        let sources =
-            self.resolve_scope_sources(access, workspace_id, selection, cross_workspace)?;
+        let sources = self.resolve_scope_sources(access, workspace_id, selection, false)?;
         Ok(ResolvedKnowledgeScope {
             filters: QueryFilters {
                 tenant_id: sources.tenant_id,
@@ -2205,7 +2201,7 @@ impl SemanticLibraryService {
                 // are written per ingesting workspace, so a workspace filter
                 // there could hide evidence that is authorized through a later
                 // co-enrolment; the exact source restriction covers that case.
-                workspace_id: (matches!(access, SemanticAccessContext::Host) && !cross_workspace)
+                workspace_id: matches!(access, SemanticAccessContext::Host)
                     .then(|| workspace_id.to_string()),
                 include_unavailable: true,
                 ..QueryFilters::default()
@@ -2635,7 +2631,7 @@ mod tenant_tests {
     }
 
     #[test]
-    fn desktop_entire_library_knowledge_scope_survives_workspace_replacement() {
+    fn desktop_knowledge_scopes_exclude_other_workspaces() {
         let service = SemanticLibraryService::deterministic_mock();
         let enrolled_workspace = WorkspaceId::new();
         let other_workspace = WorkspaceId::new();
@@ -2708,9 +2704,8 @@ mod tenant_tests {
         assert!(authorized.unavailable_source_ids.is_empty());
         assert_eq!(authorized.eligible, 1);
 
-        // The device library outlives individual workspaces. Replacing the
-        // workspace must not orphan already indexed roots from a host-wide
-        // "entire library" search.
+        // Even an explicit whole-library Knowledge scope cannot search a root
+        // that belongs only to another workspace.
         let foreign = service
             .resolve_knowledge_scope(
                 &SemanticAccessContext::Host,
@@ -2718,12 +2713,25 @@ mod tenant_tests {
                 &RagScopeSelection::EntireLibrary,
             )
             .unwrap();
-        assert_eq!(foreign.filters.tenant_id, enrolled_workspace.to_string());
-        assert_eq!(foreign.filters.workspace_id, None);
-        assert!(foreign.additional_tenant_ids.is_empty());
+        assert_eq!(foreign.filters.tenant_id, other_workspace.to_string());
         assert_eq!(
-            foreign.allowed_source_ids,
-            BTreeSet::from([occurrence_id.to_string()])
+            foreign.filters.workspace_id,
+            Some(other_workspace.to_string())
+        );
+        assert!(foreign.additional_tenant_ids.is_empty());
+        assert!(foreign.allowed_source_ids.is_empty());
+        assert_eq!(foreign.eligible, 0);
+        let own_library = service
+            .resolve_knowledge_scope(
+                &SemanticAccessContext::Host,
+                enrolled_workspace,
+                &RagScopeSelection::EntireLibrary,
+            )
+            .unwrap();
+        assert!(
+            own_library
+                .allowed_source_ids
+                .contains(&occurrence_id.to_string())
         );
         let opened = service
             .resolve_occurrence(

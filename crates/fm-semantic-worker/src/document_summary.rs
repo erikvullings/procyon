@@ -22,7 +22,7 @@ use crate::semantic_storage::{
 };
 
 /// Versioned prompt contract persisted beside every generated summary.
-pub const SUMMARY_PROMPT_VERSION: &str = "document-summary/1";
+pub const SUMMARY_PROMPT_VERSION: &str = "document-summary/2";
 
 /// One document whose representative evidence should be prepared.
 #[derive(Debug, Clone, PartialEq, Eq)]

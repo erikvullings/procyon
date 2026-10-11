@@ -13,6 +13,11 @@ export interface SummaryAttributionDto {
      * @nullable
      */
   provenance?: string | null;
+  /**
+     * Exact supplied source excerpt establishing an AI-extracted value.
+     * @nullable
+     */
+  quote?: string | null;
   /** Explicit or AI-extracted origin. */
   source: SummaryAttributionSourceDto;
   /**

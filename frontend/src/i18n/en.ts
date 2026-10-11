@@ -844,7 +844,7 @@ export const en = {
   documentSummary: {
     title: 'Summary · {name}',
     working: 'Preparing document content…',
-    generating: 'Generating summary…',
+    generatingUsingProfile: 'Generating summary using {name} · {model}…',
     loadFailed: 'The summary could not be loaded.',
     generationFailed: 'The summary could not be generated.',
     keyPassagesOnly: 'No generation profile is configured. Showing key passages only.',
@@ -854,16 +854,9 @@ export const en = {
     imagesIncludedWithOmissions:
       '{count} embedded image(s) will be sent; {omitted} image(s) were omitted by safety limits.',
     imagesOmitted: 'No eligible embedded images were found within the image safety limits.',
-    cloudFullDisclosure:
-      'The whole extracted document ({tokens} estimated tokens) will be sent to this cloud endpoint.',
-    localFullDisclosure:
-      'The whole extracted document ({tokens} estimated tokens) will be sent to this local endpoint.',
-    cloudMultiPassDisclosure:
-      'The whole extracted document requires at least {count} bounded source-reading passes to this cloud endpoint. Partial summaries are combined in further passes; no document passages are intentionally skipped.',
-    localMultiPassDisclosure:
-      'The whole extracted document requires at least {count} bounded source-reading passes to this local endpoint. Partial summaries are combined in further passes; no document passages are intentionally skipped.',
-    unverifiedContextWarning:
-      'Using the saved {tokens}-token context window; this provider did not report a limit and may enforce a smaller one. Generation will fail rather than silently drop passages.',
+    cloudDisclosure: 'Document text will be sent to the selected cloud provider.',
+    summarizingInParts: 'Summarizing in parts…',
+    invalidPreview: 'Summary data is incomplete. Restart or update the app before generating.',
     stale: 'The source has changed since this summary was generated.',
     extractedTitle: 'Title',
     extractedAuthors: 'Authors',
@@ -872,6 +865,7 @@ export const en = {
     fromMetadata: 'Document metadata',
     fromByline: 'Document byline',
     sourcePage: 'page {page}',
+    sourceExcerpt: 'Source excerpt',
     brief: 'Brief',
     full: 'Full summary',
     keyPassages: 'Key passages',
@@ -898,7 +892,7 @@ export const en = {
     citationFailed: 'The cited source could not be opened.',
     profile: 'Generation profile',
     scope: 'Evidence scope',
-    scopeEntireLibrary: 'Entire indexed library',
+    scopeEntireLibrary: 'All indexed folders in this workspace',
     scopeSelectedFiles: 'Selected files',
     scopeCurrentFolder: 'Current folder recursively',
     scopeSemanticResults: 'Current semantic result set',
@@ -974,9 +968,10 @@ export const en = {
     related: 'Related terms',
     relatedHint: 'Optional lower-priority expansions, separated by commas.',
     scope: 'Search in',
-    scopeEntireLibrary: 'Entire authorized library',
+    scopeEntireLibrary: 'All indexed folders in this workspace',
     scopeEnrolledRoots: 'Selected indexed roots',
     scopeCurrentFolder: 'Current indexed folder',
+    includeOnlyCurrentFolder: 'Include only current folder {folder}',
     scopeSemanticResults: 'Current semantic result set',
     roots: 'Indexed roots',
     rootUnavailable: 'unavailable',

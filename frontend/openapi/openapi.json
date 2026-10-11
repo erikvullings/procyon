@@ -9789,7 +9789,8 @@
           "includedImageCount",
           "omittedImageCount",
           "keyPassages",
-          "reusedSelection"
+          "reusedSelection",
+          "sourcePassCount"
         ],
         "properties": {
           "effectiveContextWindow": {
@@ -20525,6 +20526,13 @@
               "null"
             ],
             "description": "Structured source position of that passage."
+          },
+          "quote": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Exact supplied source excerpt establishing an AI-extracted value."
           },
           "source": {
             "$ref": "#/components/schemas/SummaryAttributionSourceDto",

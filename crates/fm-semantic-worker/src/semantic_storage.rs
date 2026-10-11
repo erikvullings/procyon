@@ -258,6 +258,9 @@ pub struct SummaryAttribution {
     pub supporting_chunk_id: Option<String>,
     /// Structured source position of that passage.
     pub provenance: Option<String>,
+    /// Exact supplied source span establishing an AI-extracted name.
+    #[serde(default)]
+    pub quote: Option<String>,
 }
 
 /// Durable generated-summary metadata and provenance.
@@ -1141,6 +1144,12 @@ impl SemanticCatalog {
                     .as_ref()
                     .is_some_and(|value| value.len() > 4_096)
                 || attribution.supporting_chunk_id.is_some() != attribution.provenance.is_some()
+                || attribution
+                    .quote
+                    .as_ref()
+                    .is_some_and(|quote| quote.len() > 512 || !quote.contains(&attribution.value))
+                || (attribution.source == SummaryAttributionSource::AiExtracted
+                    && attribution.quote.is_none())
                 || (attribution.source != SummaryAttributionSource::Metadata
                     && attribution.supporting_chunk_id.is_none())
             {
@@ -1162,7 +1171,12 @@ impl SemanticCatalog {
                 if !source_passage.as_ref().is_some_and(|(actual, content)| {
                     actual == provenance
                         && (attribution.source == SummaryAttributionSource::Metadata
-                            || content.contains(attribution.value.trim()))
+                            || content.contains(
+                                attribution
+                                    .quote
+                                    .as_deref()
+                                    .unwrap_or(attribution.value.trim()),
+                            ))
                 }) {
                     return Err(StorageError::InvalidSummary);
                 }
@@ -3639,12 +3653,14 @@ mod tests {
             source: SummaryAttributionSource::Metadata,
             supporting_chunk_id: None,
             provenance: None,
+            quote: None,
         });
         attributed.authors = vec![SummaryAttribution {
             value: "Ada Lovelace".into(),
             source: SummaryAttributionSource::Byline,
             supporting_chunk_id: Some(second.records[0].record_id.clone()),
             provenance: Some(second.records[0].provenance.clone()),
+            quote: None,
         }];
         let publication = SummaryPublication {
             summary: attributed.clone(),
@@ -3670,6 +3686,31 @@ mod tests {
             catalog.publish_summary("tenant-a", "library-a", "document-a", &invented),
             Err(StorageError::InvalidSummary)
         ));
+        let mut extracted = publication.clone();
+        extracted.summary.authors[0].source = SummaryAttributionSource::AiExtracted;
+        assert!(matches!(
+            catalog.publish_summary("tenant-a", "library-a", "document-a", &extracted),
+            Err(StorageError::InvalidSummary)
+        ));
+        extracted.summary.authors[0].quote = Some("Invented Author".into());
+        assert!(matches!(
+            catalog.publish_summary("tenant-a", "library-a", "document-a", &extracted),
+            Err(StorageError::InvalidSummary)
+        ));
+        extracted.summary.authors[0].quote = Some("Ada Lovelace".into());
+        catalog
+            .publish_summary("tenant-a", "library-a", "document-a", &extracted)
+            .expect("publish supported AI extraction");
+        assert_eq!(
+            catalog
+                .document_summary("tenant-a", "library-a", "document-a")
+                .unwrap()
+                .unwrap()
+                .authors[0]
+                .quote
+                .as_deref(),
+            Some("Ada Lovelace")
+        );
         catalog
             .publish_summary("tenant-a", "library-a", "document-a", &publication)
             .expect("publish attributed summary");

@@ -322,6 +322,55 @@ fn library_with_model(directory: &TempDir, model: ModelIdentity) -> SemanticLibr
 }
 
 #[tokio::test]
+async fn unindexed_summary_preview_extracts_on_demand_without_enrolling_the_folder() {
+    let source_root = project_temp_dir("summary-source-");
+    let source = source_root.path().join("unindexed-summary.txt");
+    std::fs::write(&source, "Opening passage for an unenrolled document.").unwrap();
+    let state = project_temp_dir("summary-state-");
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library(&state))
+    .with_semantic_capability(Arc::new(FakeSemanticCapability::new()));
+    let target = fm_transport_dto::DocumentSummaryTargetDto {
+        workspace_id: Uuid::new_v4(),
+        entry_id: Uuid::new_v4(),
+        location: Location::from_native_path(&source).unwrap().into(),
+    };
+    let preview = service
+        .preview_document_summary(
+            &HOST,
+            fm_transport_dto::PreviewDocumentSummaryRequestDto {
+                target: target.clone(),
+                input_token_budget: 4_096,
+                profile_id: None,
+                include_images: false,
+            },
+        )
+        .await
+        .expect("on-demand conversion of an unenrolled source");
+    assert_eq!(
+        preview.selection_mode,
+        fm_transport_dto::DocumentSummarySelectionModeDto::FullDocument
+    );
+    assert_eq!(preview.key_passages.len(), 1);
+    assert!(preview.key_passages[0].content.contains("Opening passage"));
+    assert!(preview.source_tokens > 0);
+    assert!(
+        service
+            .get_document_summary(
+                &HOST,
+                fm_transport_dto::GetDocumentSummaryRequestDto { target },
+            )
+            .await
+            .expect("no persisted summary")
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn reconciliation_feeds_only_media_enabled_for_the_gemma_library() {
     let root = project_temp_dir("media-root-");
     for name in ["image.png", "sound.wav", "clip.mp4"] {

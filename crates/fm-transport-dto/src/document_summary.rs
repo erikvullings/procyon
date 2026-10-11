@@ -105,7 +105,6 @@ pub struct DocumentSummaryPreviewDto {
     /// Whether persisted support metadata was reused.
     pub reused_selection: bool,
     /// Number of bounded generation passes over complete source evidence.
-    #[serde(default)]
     pub source_pass_count: u32,
     /// Context window used for summary budgeting; may be trusted from the saved profile.
     #[serde(default)]
@@ -164,6 +163,8 @@ pub struct SummaryAttributionDto {
     pub supporting_chunk_id: Option<String>,
     /// Structured source position of that passage.
     pub provenance: Option<String>,
+    /// Exact supplied source excerpt establishing an AI-extracted value.
+    pub quote: Option<String>,
 }
 
 /// Persisted generated summary with source-evidence identities.
@@ -231,6 +232,7 @@ mod tests {
             source: SummaryAttributionSourceDto::Byline,
             supporting_chunk_id: Some("chunk-1".into()),
             provenance: Some(r#"{"kind":"textLines","start_line":1}"#.into()),
+            quote: None,
         };
         let json = serde_json::to_value(&attribution).unwrap();
         assert_eq!(json["source"], "byline");

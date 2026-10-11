@@ -59,6 +59,24 @@ function summaryErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function validatedPreview(
+  preview: DocumentSummaryPreview,
+  profileId: string | undefined,
+): DocumentSummaryPreview {
+  if (
+    profileId !== undefined &&
+    (!Number.isSafeInteger(preview.sourceTokens) ||
+      preview.sourceTokens <= 0 ||
+      !Number.isSafeInteger(preview.sourcePassCount) ||
+      preview.sourcePassCount <= 0 ||
+      !Number.isSafeInteger(preview.effectiveContextWindow) ||
+      (preview.effectiveContextWindow ?? 0) <= 0)
+  ) {
+    throw new Error(t('documentSummary', 'invalidPreview'));
+  }
+  return preview;
+}
+
 function passageBody(passage: DocumentSummaryPreview['keyPassages'][number]): string {
   const heading = passage.sectionPath.join(' > ');
   if (heading.length === 0) return passage.content;
@@ -102,6 +120,15 @@ function attributionText(attribution: SummaryAttribution): string {
   return `${attribution.value} · ${attributionOrigin(attribution)}${location ? ` · ${location}` : ''}`;
 }
 
+function attributionQuote(attribution: SummaryAttribution): m.Children {
+  return attribution.quote
+    ? m('details.fm-document-summary-source', [
+        m('summary', t('documentSummary', 'sourceExcerpt')),
+        m('blockquote', attribution.quote),
+      ])
+    : undefined;
+}
+
 export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs> = () => {
   let wasOpen = false;
   let busy = false;
@@ -122,7 +149,7 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
       profiles = await attrs.client.listLlmProfiles();
       selectedProfileId = profiles[0]?.id;
       const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId);
-      [preview, summary] = await Promise.all([
+      const [loadedPreview, loadedSummary] = await Promise.all([
         attrs.client.previewDocumentSummary({
           target: requestTarget,
           inputTokenBudget: inputTokenBudget(selectedProfile),
@@ -131,7 +158,10 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
         }),
         attrs.client.getDocumentSummary({ target: requestTarget }),
       ]);
+      preview = validatedPreview(loadedPreview, selectedProfileId);
+      summary = loadedSummary;
     } catch (cause) {
+      preview = undefined;
       error = summaryErrorMessage(cause, t('documentSummary', 'loadFailed'));
     } finally {
       busy = false;
@@ -146,13 +176,17 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
     busy = true;
     error = undefined;
     try {
-      preview = await attrs.client.previewDocumentSummary({
-        target: requestTarget,
-        inputTokenBudget: inputTokenBudget(selectedProfile),
-        profileId: selectedProfileId ?? null,
-        includeImages,
-      });
+      preview = validatedPreview(
+        await attrs.client.previewDocumentSummary({
+          target: requestTarget,
+          inputTokenBudget: inputTokenBudget(selectedProfile),
+          profileId: selectedProfileId ?? null,
+          includeImages,
+        }),
+        selectedProfileId,
+      );
     } catch (cause) {
+      preview = undefined;
       error = summaryErrorMessage(cause, t('documentSummary', 'loadFailed'));
     } finally {
       busy = false;
@@ -211,23 +245,18 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
           busy && !generating ? m('p', t('documentSummary', 'working')) : undefined,
           generating
             ? m('.fm-document-summary-progress', { role: 'status', 'aria-busy': 'true' }, [
-                m('span', t('documentSummary', 'generating')),
+                m(
+                  'span',
+                  t('documentSummary', 'generatingUsingProfile', {
+                    name: preview?.profile?.profileName ?? '',
+                    model: preview?.profile?.modelId ?? '',
+                  }),
+                ),
                 m(Skeleton, { count: 4, className: 'fm-document-summary-skeleton' }),
               ])
             : undefined,
           error === undefined ? undefined : m('p.fm-document-summary-error', error),
-          profiles.length === 0
-            ? m('p', t('documentSummary', 'keyPassagesOnly'))
-            : preview?.profile == null
-              ? undefined
-              : m('p.fm-document-summary-profile', [
-                  m('strong', `${t('documentSummary', 'profile')}: `),
-                  `${preview.profile.profileName} · ${preview.profile.modelId} · ${
-                    preview.profile.locality === 'loopback'
-                      ? t('llmProfiles', 'local')
-                      : t('llmProfiles', 'cloud')
-                  }`,
-                ]),
+          profiles.length === 0 ? m('p', t('documentSummary', 'keyPassagesOnly')) : undefined,
           preview?.imageInputAvailable !== true
             ? undefined
             : m('label.fm-document-summary-image-mode', [
@@ -240,33 +269,12 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
                 }),
                 m('span', t('documentSummary', 'includeImages')),
               ]),
-          preview?.profile == null
-            ? undefined
-            : m(
-                'p.fm-document-summary-disclosure',
-                t(
-                  'documentSummary',
-                  (preview.sourcePassCount ?? 1) > 1
-                    ? preview.profile.locality === 'cloud'
-                      ? 'cloudMultiPassDisclosure'
-                      : 'localMultiPassDisclosure'
-                    : preview.profile.locality === 'cloud'
-                      ? 'cloudFullDisclosure'
-                      : 'localFullDisclosure',
-                  {
-                    tokens: preview.sourceTokens,
-                    count: preview.sourcePassCount ?? 1,
-                  },
-                ),
-              ),
-          preview?.profile == null || preview.providerLimitVerified
-            ? undefined
-            : m(
-                'p.fm-document-summary-disclosure',
-                t('documentSummary', 'unverifiedContextWarning', {
-                  tokens: preview.effectiveContextWindow ?? 0,
-                }),
-              ),
+          preview?.profile?.locality === 'cloud'
+            ? m('p.fm-document-summary-disclosure', t('documentSummary', 'cloudDisclosure'))
+            : undefined,
+          generating && preview !== undefined && preview.sourcePassCount > 1
+            ? m('p.fm-document-summary-disclosure', t('documentSummary', 'summarizingInParts'))
+            : undefined,
           preview === undefined || !includeImages
             ? undefined
             : m(
@@ -289,17 +297,19 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
                   ? m('p.fm-document-summary-stale', t('documentSummary', 'stale'))
                   : undefined,
                 m('h4', t('documentSummary', 'extractedTitle')),
-                m(
-                  'p',
-                  summary.title
-                    ? attributionText(summary.title)
-                    : t('documentSummary', 'unavailable'),
-                ),
+                summary.title
+                  ? m('div', [
+                      m('p', attributionText(summary.title)),
+                      attributionQuote(summary.title),
+                    ])
+                  : m('p', t('documentSummary', 'unavailable')),
                 m('h4', t('documentSummary', 'extractedAuthors')),
                 summary.authors?.length
                   ? m(
                       'ul',
-                      summary.authors.map((author) => m('li', attributionText(author))),
+                      summary.authors.map((author) =>
+                        m('li', [attributionText(author), attributionQuote(author)]),
+                      ),
                     )
                   : m('p', t('documentSummary', 'unavailable')),
                 m('h4', t('documentSummary', 'brief')),

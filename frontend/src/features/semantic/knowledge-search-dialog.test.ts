@@ -18,7 +18,9 @@ const preferencesStorageKey = 'procyon.knowledgeSearch.preferences.v1';
 
 interface MountOptions {
   readonly client?: MockFileManagerClient;
-  readonly currentFolder?: { providerId: string; uri: string };
+  readonly currentFolder?:
+    | { providerId: string; uri: string }
+    | (() => { providerId: string; uri: string });
   readonly semanticSourceIds?: readonly string[];
   readonly initialSubject?: string;
   readonly onClose?: () => void;
@@ -36,7 +38,10 @@ function mount(options: MountOptions = {}): MockFileManagerClient {
         open: true,
         client,
         workspaceId,
-        currentFolder: options.currentFolder,
+        currentFolder:
+          typeof options.currentFolder === 'function'
+            ? options.currentFolder()
+            : options.currentFolder,
         semanticSourceIds: options.semanticSourceIds ?? [],
         initialSubject: options.initialSubject,
         profileRevision: options.profileRevision?.() ?? 0,
@@ -593,7 +598,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.querySelector('.fm-rag-answer')).toBeNull();
   });
 
-  it('offers every knowledge need and every scope', async () => {
+  it('offers every knowledge need and keeps current folder as a separate filter', async () => {
     mount();
 
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-needs')).not.toBeNull());
@@ -613,9 +618,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     ]);
     const scope = root.querySelector<HTMLSelectElement>('#fm-knowledge-scope');
     expect([...(scope?.options ?? [])].map((option) => option.text)).toEqual([
-      'Entire authorized library',
+      'All indexed folders in this workspace',
       'Selected indexed roots',
-      'Current indexed folder',
       'Current semantic result set',
     ]);
   });
@@ -695,7 +699,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(searches?.textContent).toContain('subject');
     expect(searches?.textContent).toContain('Need: Definition');
     expect(root.textContent).toContain('Planner structured-knowledge-planner/1');
-    expect(root.textContent).toContain('Entire indexed library');
+    expect(root.textContent).toContain('Scope: 2 indexed root(s)');
   });
 
   it('runs a complete search with no language model as ranked documents', async () => {
@@ -1667,22 +1671,90 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     }
   });
 
-  it('defaults the scope to the current semantic result set when no indexed folder is active', async () => {
+  it('defaults to enrolled workspace roots even with semantic results available', async () => {
     mount({ semanticSourceIds: ['mock-knowledge-source-onboarding'] });
     await ready();
 
     expect(root.querySelector<HTMLSelectElement>('#fm-knowledge-scope')?.value).toBe(
-      'semanticResults',
+      'enrolledRoots',
     );
   });
 
-  it('falls back to the entire authorized library with no other scope', async () => {
+  it('defaults to enrolled workspace roots without a displayed folder', async () => {
     mount();
     await ready();
 
     expect(root.querySelector<HTMLSelectElement>('#fm-knowledge-scope')?.value).toBe(
-      'entireLibrary',
+      'enrolledRoots',
     );
+  });
+
+  it('searches enrolled roots across navigation and pins the optional folder filter', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getSemanticFolderStatus').mockResolvedValue({
+      consent: 'includedHere',
+      rootId: 'mock-knowledge-root-handbook',
+      exclusionId: null,
+      workspaceReferenced: true,
+      sourceAvailable: true,
+      unavailableReason: null,
+    });
+    const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+    let displayedFolder = { providerId: 'local', uri: 'file:///documents/first' };
+    mount({
+      client,
+      initialSubject: 'retrieval',
+      currentFolder: () => displayedFolder,
+    });
+    await ready();
+    const folderFilter = () =>
+      root.querySelector<HTMLInputElement>('.fm-knowledge-folder-filter input');
+    expect(folderFilter()?.checked).toBe(false);
+    expect(folderFilter()?.closest('label')?.textContent).toContain('first');
+
+    submitSearch();
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+    expect(execute.mock.lastCall?.[0].scope).toMatchObject({
+      workspaceId,
+      kind: 'enrolledRoots',
+      folder: null,
+    });
+    await vi.waitFor(() => expect(searchButton().disabled).toBe(false));
+    displayedFolder = { providerId: 'local', uri: 'file:///documents/second' };
+    m.redraw.sync();
+    expect(folderFilter()?.closest('label')?.textContent).toContain('first');
+    submitSearch();
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
+    expect(execute.mock.lastCall?.[0].scope).toMatchObject({
+      workspaceId,
+      kind: 'enrolledRoots',
+      folder: null,
+    });
+    await vi.waitFor(() => expect(searchButton().disabled).toBe(false));
+
+    folderFilter()?.click();
+    m.redraw.sync();
+    expect(folderFilter()?.checked).toBe(true);
+    expect(root.querySelector('#fm-knowledge-scope')).toBeNull();
+    submitSearch();
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(3));
+    expect(execute.mock.lastCall?.[0].scope).toMatchObject({
+      workspaceId,
+      kind: 'currentFolder',
+      folder: { uri: 'file:///documents/first' },
+    });
+    await vi.waitFor(() => expect(searchButton().disabled).toBe(false));
+
+    folderFilter()?.click();
+    m.redraw.sync();
+    expect(folderFilter()?.checked).toBe(false);
+    submitSearch();
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(4));
+    expect(execute.mock.lastCall?.[0].scope).toMatchObject({
+      workspaceId,
+      kind: 'enrolledRoots',
+      folder: null,
+    });
   });
 
   it('lists selectable indexed roots and marks the unavailable one', async () => {
@@ -1869,7 +1941,10 @@ function mountLifecycle(options: MountOptions = {}): {
         open: isOpen,
         client,
         workspaceId,
-        currentFolder: options.currentFolder,
+        currentFolder:
+          typeof options.currentFolder === 'function'
+            ? options.currentFolder()
+            : options.currentFolder,
         semanticSourceIds: options.semanticSourceIds ?? [],
         initialSubject: options.initialSubject,
         onClose: options.onClose ?? vi.fn(),
@@ -2068,7 +2143,13 @@ describe('KnowledgeSearchDialog DSL scopes (task 0206)', () => {
 
     type(dsl(), 'about: retrieval scope: root:mock-knowledge-root-handbook');
 
-    await vi.waitFor(() => expect(scopeSelect().value).toBe('enrolledRoots'));
+    await vi.waitFor(() =>
+      expect(
+        [...root.querySelectorAll<HTMLInputElement>('.fm-knowledge-roots input')].map(
+          (input) => input.checked,
+        ),
+      ).toEqual([true, false]),
+    );
     const checked = [...root.querySelectorAll<HTMLInputElement>('.fm-knowledge-roots input')].map(
       (input) => input.checked,
     );
@@ -2088,7 +2169,8 @@ describe('KnowledgeSearchDialog DSL scopes (task 0206)', () => {
 
     type(dsl(), 'about: retrieval scope: library');
     await vi.waitFor(() => expect(subjects().value).toBe('retrieval'));
-    expect(scopeSelect().value).toBe('entireLibrary');
+    await vi.waitFor(() => expect(dsl().value).toContain('scope: library'));
+    expect(scopeSelect().value).toBe('enrolledRoots');
 
     type(subjects(), 'retrieval\nfusion');
 

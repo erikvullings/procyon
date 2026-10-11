@@ -49,7 +49,7 @@ export interface DocumentSummaryPreviewDto {
      * Number of bounded generation passes over complete source evidence.
      * @minimum 0
      */
-  sourcePassCount?: number;
+  sourcePassCount: number;
   /**
      * Estimated tokens across the entire extracted text, including passages not previewed.
      * @minimum 0

@@ -837,7 +837,7 @@ export const nl = {
   documentSummary: {
     title: 'Samenvatting · {name}',
     working: 'Documentinhoud voorbereiden…',
-    generating: 'Samenvatting maken…',
+    generatingUsingProfile: 'Samenvatting maken met {name} · {model}…',
     loadFailed: 'De samenvatting kon niet worden geladen.',
     generationFailed: 'De samenvatting kon niet worden gegenereerd.',
     keyPassagesOnly: 'Er is geen generatieprofiel ingesteld. Alleen kernpassages worden getoond.',
@@ -848,16 +848,10 @@ export const nl = {
       '{count} ingesloten afbeelding(en) worden verzonden; {omitted} afbeelding(en) zijn weggelaten vanwege de veiligheidslimieten.',
     imagesOmitted:
       'Er zijn geen geschikte ingesloten afbeeldingen gevonden binnen de afbeeldingslimieten.',
-    cloudFullDisclosure:
-      'Het volledig geëxtraheerde document ({tokens} geschatte tokens) wordt naar deze cloudendpoint verzonden.',
-    localFullDisclosure:
-      'Het volledig geëxtraheerde document ({tokens} geschatte tokens) wordt naar deze lokale endpoint verzonden.',
-    cloudMultiPassDisclosure:
-      'Het volledig geëxtraheerde document vergt minstens {count} begrensde leesrondes naar deze cloudendpoint. De deelsamenvattingen worden in extra rondes samengevoegd; er worden niet bewust passages overgeslagen.',
-    localMultiPassDisclosure:
-      'Het volledig geëxtraheerde document vergt minstens {count} begrensde leesrondes naar deze lokale endpoint. De deelsamenvattingen worden in extra rondes samengevoegd; er worden niet bewust passages overgeslagen.',
-    unverifiedContextWarning:
-      'Het opgeslagen contextvenster van {tokens} tokens wordt gebruikt. Deze aanbieder meldt geen limiet en kan een kleiner venster hanteren. Genereren mislukt dan in plaats van stilzwijgend passages weg te laten.',
+    cloudDisclosure: 'Documenttekst wordt naar de gekozen cloudprovider verzonden.',
+    summarizingInParts: 'Samenvatting in delen maken…',
+    invalidPreview:
+      'Samenvattingsgegevens ontbreken. Herstart of werk de app bij voordat je genereert.',
     stale: 'De bron is gewijzigd sinds deze samenvatting is gegenereerd.',
     extractedTitle: 'Titel',
     extractedAuthors: 'Auteurs',
@@ -866,6 +860,7 @@ export const nl = {
     fromMetadata: 'Documentmetadata',
     fromByline: 'Bij het document vermelde auteur',
     sourcePage: 'pagina {page}',
+    sourceExcerpt: 'Bronfragment',
     brief: 'Kort',
     full: 'Volledige samenvatting',
     keyPassages: 'Kernpassages',
@@ -892,7 +887,7 @@ export const nl = {
     citationFailed: 'De geciteerde bron kon niet worden geopend.',
     profile: 'Generatieprofiel',
     scope: 'Bewijsbereik',
-    scopeEntireLibrary: 'Volledige geïndexeerde bibliotheek',
+    scopeEntireLibrary: 'Alle geïndexeerde mappen in deze werkruimte',
     scopeSelectedFiles: 'Geselecteerde bestanden',
     scopeCurrentFolder: 'Huidige map recursief',
     scopeSemanticResults: 'Huidige semantische resultaten',
@@ -968,9 +963,10 @@ export const nl = {
     related: 'Verwante termen',
     relatedHint: 'Optionele uitbreidingen met lagere prioriteit, gescheiden door komma’s.',
     scope: 'Zoeken in',
-    scopeEntireLibrary: 'Volledige geautoriseerde bibliotheek',
+    scopeEntireLibrary: 'Alle geïndexeerde mappen in deze werkruimte',
     scopeEnrolledRoots: 'Geselecteerde geïndexeerde bronmappen',
     scopeCurrentFolder: 'Huidige geïndexeerde map',
+    includeOnlyCurrentFolder: 'Alleen huidige map {folder} meenemen',
     scopeSemanticResults: 'Huidige semantische resultatenset',
     roots: 'Geïndexeerde bronmappen',
     rootUnavailable: 'niet beschikbaar',
