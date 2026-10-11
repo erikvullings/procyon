@@ -67,3 +67,5 @@ a prerequisite for the EmbeddingGemma experimental release.
 - 2026-10-11: Corrected concept-folder creation to use the configured semantic library identity
   rather than an empty ID, and require the vocabulary to be attached to the active workspace.
   Creation errors surface in Settings; importing a starter alone does not classify documents.
+- 2026-10-11: Scoped concept-folder results to the saved location when one is set; otherwise
+  a concept match elsewhere in the workspace could appear in a folder-specific saved search.
