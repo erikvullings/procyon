@@ -91,10 +91,8 @@ pub struct DocumentSummaryPreviewDto {
     /// Estimated tokens across the entire extracted text, including passages not previewed.
     pub source_tokens: u32,
     /// First bounded characters of extracted text in source order, not representative chunks.
-    #[serde(default)]
     pub text_preview: String,
     /// Whether the source contains more extracted text than the visible preview.
-    #[serde(default)]
     pub text_preview_truncated: bool,
     /// Whether the preview contains the complete extracted text or selected passages.
     pub selection_mode: DocumentSummarySelectionModeDto,
@@ -111,7 +109,6 @@ pub struct DocumentSummaryPreviewDto {
     /// Whether persisted support metadata was reused.
     pub reused_selection: bool,
     /// Number of bounded generation passes over complete source evidence.
-    #[serde(default)]
     pub source_pass_count: u32,
     /// Context window used for summary budgeting; may be trusted from the saved profile.
     #[serde(default)]
@@ -255,11 +252,14 @@ mod tests {
     }
 
     #[test]
-    fn legacy_preview_defaults_multi_pass_disclosure() {
+    fn preview_defaults_optional_provider_disclosure() {
         let preview = serde_json::json!({
             "selectionFingerprint": "fingerprint",
             "representativeTokens": 20,
             "sourceTokens": 20,
+            "textPreview": "",
+            "textPreviewTruncated": false,
+            "sourcePassCount": 0,
             "selectionMode": "representativePassages",
             "imageInputAvailable": false,
             "includedImageCount": 0,
