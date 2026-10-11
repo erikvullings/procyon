@@ -991,6 +991,16 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     second?.click();
     await vi.waitFor(() => expect(second?.textContent).toBe('Open image'));
     expect(second?.getAttribute('aria-expanded')).toBe('false');
+    first?.click();
+    await vi.waitFor(() => expect(first?.textContent).toBe('Close image'));
+    const firstSourceId = displayedSourceId;
+    displayedSourceId = undefined;
+    m.redraw.sync();
+    expect(first?.textContent).toBe('Open image');
+    displayedSourceId = firstSourceId;
+    m.redraw.sync();
+    expect(first?.textContent).toBe('Close image');
+    expect(second?.textContent).toBe('Open image');
   });
 
   it('does not open unavailable media and never treats media placeholders as markdown', async () => {
