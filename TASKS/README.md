@@ -151,6 +151,8 @@ semantic components are not installed.
 - [x] 0241 Restore Include folder in semantic search *(consent copy simplified; native manual preflight remains open)*
 - [x] 0242 Curated SKOS starter vocabularies *(needs 0187; opt-in, independent of release gates)*
 - [x] 0243 Generation profile UX and model limits *(needs 0184; independent follow-up)*
+- [ ] 0244 Bounded large-PDF text and Gemma page vision *(needs 0177, 0179, 0180, 0182, 0183,
+  0192, 0194, 0195, 0227; release prerequisite of 0239)*
 
 ## Structured knowledge search
 
