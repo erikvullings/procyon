@@ -157,10 +157,32 @@ fn pre_receipt_catalog_remains_unverified_until_worker_completion() {
         .unwrap();
     occurrence.remove("completedScopes");
     occurrence.remove("legacyReceiptsUnverified");
+    occurrence.remove("legacyUnverifiedScopes");
     let mut reopened: SemanticCatalog = serde_json::from_value(legacy).unwrap();
     assert_eq!(reopened.root_occurrence_count(root_id), 1);
     assert_eq!(reopened.root_completed_count(scope), 0);
     assert_eq!(reopened.root_unverified_legacy_count(scope), 1);
+    let new_scope = OccurrenceScope::new(workspace(21), root_id);
+    reopened
+        .upsert_observations(
+            &policy,
+            &active(&policy),
+            [CatalogObservation::new(
+                entry,
+                source.clone(),
+                fingerprint.clone(),
+                new_scope,
+                DocumentArtifacts::default(),
+                measurement(),
+            )],
+        )
+        .unwrap();
+    assert_eq!(reopened.root_unverified_legacy_count(scope), 1);
+    assert_eq!(
+        reopened.root_unverified_legacy_count(new_scope),
+        0,
+        "a newly attached workspace has no pre-upgrade worker vectors"
+    );
     let id = reopened.occurrence_at(entry, &source).unwrap().id();
     assert!(reopened.confirm_indexed(id, &fingerprint, scope));
     assert_eq!(reopened.root_completed_count(scope), 1);
