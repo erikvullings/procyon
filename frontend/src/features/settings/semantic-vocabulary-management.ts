@@ -100,11 +100,11 @@ export const SemanticVocabularyManagement: FactoryComponent<
               m(
                 'a',
                 {
-                  href: 'https://creativecommons.org/licenses/by/4.0/',
+                  href: starter.licenseUrl,
                   target: '_blank',
                   rel: 'noopener noreferrer',
                 },
-                'CC BY 4.0',
+                starter.license,
               ),
             ])
           : undefined,

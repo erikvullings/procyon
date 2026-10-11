@@ -1,0 +1,1707 @@
+{
+  "format": "procyon-skos-1",
+  "id": "unesco-information-technology",
+  "name": "Information technology (UNESCO Thesaurus 2026-08-31 snapshot excerpt)",
+  "concepts": [
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept10103",
+      "prefLabels": {
+        "en": "Microform equipment"
+      },
+      "altLabels": {
+        "en": ["Microfilm cameras", "Microfilm readers"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept537"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept1132",
+      "prefLabels": {
+        "en": "Random access"
+      },
+      "altLabels": {
+        "en": ["Direct access"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept6082"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept12608",
+      "prefLabels": {
+        "en": "Telephone engineering"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept527"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept12747"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept12747",
+      "prefLabels": {
+        "en": "Telephone"
+      },
+      "altLabels": {
+        "en": ["Videotelephone"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept539"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17086"],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept12608"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept12870",
+      "prefLabels": {
+        "en": "Telex"
+      },
+      "altLabels": {
+        "en": ["Telegraph"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept539"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept1361",
+      "prefLabels": {
+        "en": "Office management"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept524"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept4455"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept1557",
+      "prefLabels": {
+        "en": "Remote sensing"
+      },
+      "altLabels": {
+        "en": ["Sensors", "Telemetry"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "An advanced system of information gathering to monitor and forecast developments on the surface of the earth and identify an area's natural resources by looking at the world from aircraft, balloons, or satellites and evaluating the data gathered."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept5530"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept4954",
+        "http://vocabularies.unesco.org/thesaurus/concept527"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept16358",
+      "prefLabels": {
+        "en": "Transistors"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept9546"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept17067",
+      "prefLabels": {
+        "en": "Internet"
+      },
+      "altLabels": {
+        "en": ["Intranet", "LANs", "Local area networks", "WANs", "Wide area networks"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept6019"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17138"],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept6661"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept17086",
+      "prefLabels": {
+        "en": "Mobile phones"
+      },
+      "altLabels": {
+        "en": ["Cell phones", "Cellphones", "Cellular phones", "Smartphones"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept12747"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept5782"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept17094",
+      "prefLabels": {
+        "en": "Open source software"
+      },
+      "altLabels": {
+        "en": ["FOSS", "Free and open source software"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept6081"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept17138",
+      "prefLabels": {
+        "en": "Internet universality"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Advocates for an Internet that is based on human Rights, that is Open and Accessible to all, and nurtured by Multistakeholder participation (ROAM principles)."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept17067"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2074",
+      "prefLabels": {
+        "en": "Allocation of frequencies"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept4364"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2091",
+      "prefLabels": {
+        "en": "High definition TV"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept4365"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept4363",
+        "http://vocabularies.unesco.org/thesaurus/concept4493",
+        "http://vocabularies.unesco.org/thesaurus/concept5469"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2214",
+      "prefLabels": {
+        "en": "Data analysis"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept522"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept5530",
+        "http://vocabularies.unesco.org/thesaurus/concept7387"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2258",
+      "prefLabels": {
+        "en": "Analogue computers"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2488",
+      "prefLabels": {
+        "en": "Antennas"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept4338"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2727",
+      "prefLabels": {
+        "en": "Archive automation"
+      },
+      "altLabels": {
+        "en": ["Machine readable archives"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept2730"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2730",
+      "prefLabels": {
+        "en": "Library automation"
+      },
+      "altLabels": {
+        "en": ["Computerized documentation", "Computerized libraries"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept2727"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3052",
+      "prefLabels": {
+        "en": "Artificial intelligence"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Capability of a device to perform functions normally associated with human intelligence."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept3053",
+        "http://vocabularies.unesco.org/thesaurus/concept3054",
+        "http://vocabularies.unesco.org/thesaurus/concept3055"
+      ],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept534"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3053",
+      "prefLabels": {
+        "en": "Expert systems"
+      },
+      "altLabels": {
+        "en": ["Knowledge based systems"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Computer system based on a data base created by human authorities on a particular subject."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept3052"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept521"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3054",
+      "prefLabels": {
+        "en": "Pattern recognition"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept3052"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3055",
+      "prefLabels": {
+        "en": "Robotics"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "An area of artificial intelligence applied to the industrial use of robots for performance of repetitive tasks."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept3052"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept534"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3343",
+      "prefLabels": {
+        "en": "Projectors"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept537"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3410",
+      "prefLabels": {
+        "en": "Automatic translation"
+      },
+      "altLabels": {
+        "en": ["Machine translation"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept3411"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3411",
+      "prefLabels": {
+        "en": "Computational linguistics"
+      },
+      "altLabels": {
+        "en": ["Computer linguistics"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept3410"],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept6007"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3565",
+      "prefLabels": {
+        "en": "Magnetic tapes"
+      },
+      "altLabels": {
+        "en": ["Cassettes (computer)", "DAT"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept6072"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4333",
+      "prefLabels": {
+        "en": "Satellite broadcasting"
+      },
+      "altLabels": {
+        "en": ["Direct broadcasting"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept519"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4338",
+      "prefLabels": {
+        "en": "TV/radio equipment"
+      },
+      "altLabels": {
+        "en": [
+          "Radio receivers",
+          "Radio transmitters",
+          "Television cameras",
+          "Television receivers",
+          "Television transmitters"
+        ]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept531"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept2488"],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept4364",
+        "http://vocabularies.unesco.org/thesaurus/concept4365"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4363",
+      "prefLabels": {
+        "en": "Cable television"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept519"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept2091",
+        "http://vocabularies.unesco.org/thesaurus/concept4365",
+        "http://vocabularies.unesco.org/thesaurus/concept4493"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4364",
+      "prefLabels": {
+        "en": "Radio engineering"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept519"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept2074"],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept4338",
+        "http://vocabularies.unesco.org/thesaurus/concept4365",
+        "http://vocabularies.unesco.org/thesaurus/concept527",
+        "http://vocabularies.unesco.org/thesaurus/concept5840"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4365",
+      "prefLabels": {
+        "en": "Television engineering"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept519"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept2091",
+        "http://vocabularies.unesco.org/thesaurus/concept4493",
+        "http://vocabularies.unesco.org/thesaurus/concept5469"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept4338",
+        "http://vocabularies.unesco.org/thesaurus/concept4363",
+        "http://vocabularies.unesco.org/thesaurus/concept4364",
+        "http://vocabularies.unesco.org/thesaurus/concept527",
+        "http://vocabularies.unesco.org/thesaurus/concept5840"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4455",
+      "prefLabels": {
+        "en": "Office automation"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept7414"],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept1361",
+        "http://vocabularies.unesco.org/thesaurus/concept536",
+        "http://vocabularies.unesco.org/thesaurus/concept5824",
+        "http://vocabularies.unesco.org/thesaurus/concept6123"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4493",
+      "prefLabels": {
+        "en": "Closed circuit television"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept4365"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept2091",
+        "http://vocabularies.unesco.org/thesaurus/concept4363",
+        "http://vocabularies.unesco.org/thesaurus/concept5469"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4516",
+      "prefLabels": {
+        "en": "Digital computers"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4557",
+      "prefLabels": {
+        "en": "Film cameras"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept537"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4954",
+      "prefLabels": {
+        "en": "Character recognition"
+      },
+      "altLabels": {
+        "en": ["OCR", "Optical character recognition"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept5530"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept1557"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept519",
+      "prefLabels": {
+        "en": "Broadcasting technology"
+      },
+      "altLabels": {
+        "en": ["Broadcasting engineering"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept4333",
+        "http://vocabularies.unesco.org/thesaurus/concept4363",
+        "http://vocabularies.unesco.org/thesaurus/concept4364",
+        "http://vocabularies.unesco.org/thesaurus/concept4365"
+      ],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept531"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept520",
+      "prefLabels": {
+        "en": "Computer applications"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Use more specific term if appropriate."
+      },
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept2727",
+        "http://vocabularies.unesco.org/thesaurus/concept2730",
+        "http://vocabularies.unesco.org/thesaurus/concept3052",
+        "http://vocabularies.unesco.org/thesaurus/concept3411",
+        "http://vocabularies.unesco.org/thesaurus/concept4455",
+        "http://vocabularies.unesco.org/thesaurus/concept6009",
+        "http://vocabularies.unesco.org/thesaurus/concept6011",
+        "http://vocabularies.unesco.org/thesaurus/concept6012",
+        "http://vocabularies.unesco.org/thesaurus/concept6017"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept534",
+        "http://vocabularies.unesco.org/thesaurus/concept5824",
+        "http://vocabularies.unesco.org/thesaurus/concept6019"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept521",
+      "prefLabels": {
+        "en": "Computer programming"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept6007",
+        "http://vocabularies.unesco.org/thesaurus/concept6081",
+        "http://vocabularies.unesco.org/thesaurus/concept6082",
+        "http://vocabularies.unesco.org/thesaurus/concept6083",
+        "http://vocabularies.unesco.org/thesaurus/concept6084"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept3053",
+        "http://vocabularies.unesco.org/thesaurus/concept534",
+        "http://vocabularies.unesco.org/thesaurus/concept6086"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept522",
+      "prefLabels": {
+        "en": "Data processing"
+      },
+      "altLabels": {
+        "en": [
+          "Data handling",
+          "EDP",
+          "Electronic data processing",
+          "Remote data processing",
+          "Signal processing and detection",
+          "Teleprocessing"
+        ]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Systematic handling, manipulation, and computation of data, always involving the use of computers. Do not confuse with \"information processing\"."
+      },
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept2214",
+        "http://vocabularies.unesco.org/thesaurus/concept5530",
+        "http://vocabularies.unesco.org/thesaurus/concept7387",
+        "http://vocabularies.unesco.org/thesaurus/concept7396",
+        "http://vocabularies.unesco.org/thesaurus/concept7411"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept534",
+        "http://vocabularies.unesco.org/thesaurus/concept7413",
+        "http://vocabularies.unesco.org/thesaurus/concept7414"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept523",
+      "prefLabels": {
+        "en": "Information technology"
+      },
+      "altLabels": {
+        "en": ["ICT"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Includes technology for data base management systems, as well as for information distribution, such as teleprocessing systems, networks of terminals, videotex systems, micrography, etc."
+      },
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept5824",
+        "http://vocabularies.unesco.org/thesaurus/concept5840"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept527",
+        "http://vocabularies.unesco.org/thesaurus/concept539"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept524",
+      "prefLabels": {
+        "en": "Office services"
+      },
+      "altLabels": {
+        "en": ["Secretarial work", "Typing"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept1361"],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept526",
+        "http://vocabularies.unesco.org/thesaurus/concept536"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5242",
+      "prefLabels": {
+        "en": "Electronic circuits"
+      },
+      "altLabels": {
+        "en": ["Circuits", "Computer circuits", "Digital circuits", "Logic and switching circuits"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept535"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept5244"],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept5746",
+        "http://vocabularies.unesco.org/thesaurus/concept6127",
+        "http://vocabularies.unesco.org/thesaurus/concept9546"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5244",
+      "prefLabels": {
+        "en": "Integrated circuits"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept5242"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept9546"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept526",
+      "prefLabels": {
+        "en": "Reprography"
+      },
+      "altLabels": {
+        "en": ["Document reproduction", "Photocopying"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept524"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept527",
+      "prefLabels": {
+        "en": "Telecommunications"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept12608",
+        "http://vocabularies.unesco.org/thesaurus/concept5782",
+        "http://vocabularies.unesco.org/thesaurus/concept5823",
+        "http://vocabularies.unesco.org/thesaurus/concept6062",
+        "http://vocabularies.unesco.org/thesaurus/concept7413"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept1557",
+        "http://vocabularies.unesco.org/thesaurus/concept4364",
+        "http://vocabularies.unesco.org/thesaurus/concept4365",
+        "http://vocabularies.unesco.org/thesaurus/concept523",
+        "http://vocabularies.unesco.org/thesaurus/concept5824",
+        "http://vocabularies.unesco.org/thesaurus/concept5840",
+        "http://vocabularies.unesco.org/thesaurus/concept6019",
+        "http://vocabularies.unesco.org/thesaurus/concept6086"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept528",
+      "prefLabels": {
+        "en": "Telecommunications applications"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept6086",
+        "http://vocabularies.unesco.org/thesaurus/concept6661"
+      ],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept531",
+      "prefLabels": {
+        "en": "Broadcasting equipment"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept4338"],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept519"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept532",
+      "prefLabels": {
+        "en": "Communication equipment"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept5744"],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept5746"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept533",
+      "prefLabels": {
+        "en": "Computer systems"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept6019"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept534",
+      "prefLabels": {
+        "en": "Computers"
+      },
+      "altLabels": {
+        "en": ["Calculating machines", "Computer hardware"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept2258",
+        "http://vocabularies.unesco.org/thesaurus/concept4516",
+        "http://vocabularies.unesco.org/thesaurus/concept6061",
+        "http://vocabularies.unesco.org/thesaurus/concept6069",
+        "http://vocabularies.unesco.org/thesaurus/concept6072",
+        "http://vocabularies.unesco.org/thesaurus/concept6123",
+        "http://vocabularies.unesco.org/thesaurus/concept6124"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept3052",
+        "http://vocabularies.unesco.org/thesaurus/concept3055",
+        "http://vocabularies.unesco.org/thesaurus/concept520",
+        "http://vocabularies.unesco.org/thesaurus/concept521",
+        "http://vocabularies.unesco.org/thesaurus/concept522",
+        "http://vocabularies.unesco.org/thesaurus/concept5824",
+        "http://vocabularies.unesco.org/thesaurus/concept6019",
+        "http://vocabularies.unesco.org/thesaurus/concept6081",
+        "http://vocabularies.unesco.org/thesaurus/concept6127"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept535",
+      "prefLabels": {
+        "en": "Electronic equipment"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept5242",
+        "http://vocabularies.unesco.org/thesaurus/concept5746",
+        "http://vocabularies.unesco.org/thesaurus/concept6127",
+        "http://vocabularies.unesco.org/thesaurus/concept9546"
+      ],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept536",
+      "prefLabels": {
+        "en": "Office equipment"
+      },
+      "altLabels": {
+        "en": ["Office machines", "Photocopying equipment"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept4455",
+        "http://vocabularies.unesco.org/thesaurus/concept524",
+        "http://vocabularies.unesco.org/thesaurus/concept7414"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept537",
+      "prefLabels": {
+        "en": "Photographic equipment"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept10103",
+        "http://vocabularies.unesco.org/thesaurus/concept3343",
+        "http://vocabularies.unesco.org/thesaurus/concept4557"
+      ],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept538",
+      "prefLabels": {
+        "en": "Printing equipment"
+      },
+      "altLabels": {
+        "en": ["Printing machines"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept539",
+      "prefLabels": {
+        "en": "Telecommunications equipment"
+      },
+      "altLabels": {
+        "en": ["Data communication equipment", "Modems"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept12747",
+        "http://vocabularies.unesco.org/thesaurus/concept12870",
+        "http://vocabularies.unesco.org/thesaurus/concept7421"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept523",
+        "http://vocabularies.unesco.org/thesaurus/concept6039",
+        "http://vocabularies.unesco.org/thesaurus/concept6061",
+        "http://vocabularies.unesco.org/thesaurus/concept7413"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5469",
+      "prefLabels": {
+        "en": "Colour television"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept4365"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept2091",
+        "http://vocabularies.unesco.org/thesaurus/concept4493"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5530",
+      "prefLabels": {
+        "en": "Encoding"
+      },
+      "altLabels": {
+        "en": ["Data capture", "Keyboarding"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "\"Data transformation\" or representation applying a \"code\"."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept522"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept1557",
+        "http://vocabularies.unesco.org/thesaurus/concept4954"
+      ],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept2214"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5744",
+      "prefLabels": {
+        "en": "Recording equipment"
+      },
+      "altLabels": {
+        "en": ["Tape recorders", "Video recorders"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept532"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5746",
+      "prefLabels": {
+        "en": "Lasers"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept535"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept5242",
+        "http://vocabularies.unesco.org/thesaurus/concept532",
+        "http://vocabularies.unesco.org/thesaurus/concept6127",
+        "http://vocabularies.unesco.org/thesaurus/concept9546"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5782",
+      "prefLabels": {
+        "en": "Mobile communication"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept527"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept17086"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5823",
+      "prefLabels": {
+        "en": "Space communication"
+      },
+      "altLabels": {
+        "en": ["Interstellar communication"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept527"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5824",
+      "prefLabels": {
+        "en": "Telematics"
+      },
+      "altLabels": {
+        "en": ["Teleinformatics"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Data transfer services via telecommunication systems."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept523"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept4455",
+        "http://vocabularies.unesco.org/thesaurus/concept520",
+        "http://vocabularies.unesco.org/thesaurus/concept527",
+        "http://vocabularies.unesco.org/thesaurus/concept534",
+        "http://vocabularies.unesco.org/thesaurus/concept5840",
+        "http://vocabularies.unesco.org/thesaurus/concept6061",
+        "http://vocabularies.unesco.org/thesaurus/concept6661",
+        "http://vocabularies.unesco.org/thesaurus/concept7421"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5840",
+      "prefLabels": {
+        "en": "Communication technology"
+      },
+      "altLabels": {
+        "en": [
+          "Communication engineering",
+          "Telecommunications engineering",
+          "Telecommunications technology"
+        ]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept523"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept4364",
+        "http://vocabularies.unesco.org/thesaurus/concept4365",
+        "http://vocabularies.unesco.org/thesaurus/concept527",
+        "http://vocabularies.unesco.org/thesaurus/concept5824"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6007",
+      "prefLabels": {
+        "en": "Computer languages"
+      },
+      "altLabels": {
+        "en": ["Programming languages"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept521"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept3411"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6009",
+      "prefLabels": {
+        "en": "Computer aided design"
+      },
+      "altLabels": {
+        "en": ["CAD"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept6011",
+        "http://vocabularies.unesco.org/thesaurus/concept6012"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6011",
+      "prefLabels": {
+        "en": "Computer aided manufacturing"
+      },
+      "altLabels": {
+        "en": ["CAM"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept6009"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6012",
+      "prefLabels": {
+        "en": "Computer graphics"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept6009"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6017",
+      "prefLabels": {
+        "en": "Video games"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6019",
+      "prefLabels": {
+        "en": "Computer networks"
+      },
+      "altLabels": {
+        "en": ["Computer communications", "Data networks", "Electronic networking"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept533"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept17067",
+        "http://vocabularies.unesco.org/thesaurus/concept6039"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept520",
+        "http://vocabularies.unesco.org/thesaurus/concept527",
+        "http://vocabularies.unesco.org/thesaurus/concept534",
+        "http://vocabularies.unesco.org/thesaurus/concept6061",
+        "http://vocabularies.unesco.org/thesaurus/concept6062"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6039",
+      "prefLabels": {
+        "en": "Computer interfaces"
+      },
+      "altLabels": {
+        "en": ["Computer links"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept6019"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept539"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6061",
+      "prefLabels": {
+        "en": "Computer terminals"
+      },
+      "altLabels": {
+        "en": ["Keyboards", "Screens (computer)"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept539",
+        "http://vocabularies.unesco.org/thesaurus/concept5824",
+        "http://vocabularies.unesco.org/thesaurus/concept6019",
+        "http://vocabularies.unesco.org/thesaurus/concept6069",
+        "http://vocabularies.unesco.org/thesaurus/concept6072"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6062",
+      "prefLabels": {
+        "en": "Telecommunications networks"
+      },
+      "altLabels": {
+        "en": [
+          "Communication networks (IT)",
+          "Communication systems (IT)",
+          "Telecommunications links"
+        ]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept527"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept6019"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6064",
+      "prefLabels": {
+        "en": "Computer output microforms"
+      },
+      "altLabels": {
+        "en": ["COM"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept6069"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept6066"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6066",
+      "prefLabels": {
+        "en": "Computer printers"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept6069"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept6064"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6069",
+      "prefLabels": {
+        "en": "Computer peripheral equipment"
+      },
+      "altLabels": {
+        "en": ["Input output media"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept6064",
+        "http://vocabularies.unesco.org/thesaurus/concept6066"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept6061",
+        "http://vocabularies.unesco.org/thesaurus/concept6072"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6072",
+      "prefLabels": {
+        "en": "Computer storage devices"
+      },
+      "altLabels": {
+        "en": ["Computer memories", "Storage devices"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept3565",
+        "http://vocabularies.unesco.org/thesaurus/concept6104",
+        "http://vocabularies.unesco.org/thesaurus/concept6105"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept6061",
+        "http://vocabularies.unesco.org/thesaurus/concept6069",
+        "http://vocabularies.unesco.org/thesaurus/concept6082"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6081",
+      "prefLabels": {
+        "en": "Computer software"
+      },
+      "altLabels": {
+        "en": [
+          "Application software",
+          "Basic software",
+          "Computer programs",
+          "Operating systems",
+          "Software packages"
+        ]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept521"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17094"],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept534"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6082",
+      "prefLabels": {
+        "en": "File organization"
+      },
+      "altLabels": {
+        "en": ["Computer storage organization"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept521"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept1132",
+        "http://vocabularies.unesco.org/thesaurus/concept7398"
+      ],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept6072"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6083",
+      "prefLabels": {
+        "en": "Multiuser systems"
+      },
+      "altLabels": {
+        "en": ["Timesharing systems"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept521"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6084",
+      "prefLabels": {
+        "en": "Online systems"
+      },
+      "altLabels": {
+        "en": ["Interactive online systems", "Realtime systems"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept521"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6086",
+      "prefLabels": {
+        "en": "Teleconferencing"
+      },
+      "altLabels": {
+        "en": ["Computer conferencing", "Videoconferencing", "Virtual conferencing"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Conducting conferences simultaneously at dispersed locations using video, telephone or related media."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept528"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept521",
+        "http://vocabularies.unesco.org/thesaurus/concept527"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6104",
+      "prefLabels": {
+        "en": "Magnetic discs"
+      },
+      "altLabels": {
+        "en": ["Diskettes", "Floppy disks"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept6072"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6105",
+      "prefLabels": {
+        "en": "Optical discs"
+      },
+      "altLabels": {
+        "en": ["CD-ROM", "DVD", "Digital optical disks", "Digital versatile disks"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept6072"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6123",
+      "prefLabels": {
+        "en": "Microcomputers"
+      },
+      "altLabels": {
+        "en": ["Laptop computers", "PCs", "Personal computers"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept4455",
+        "http://vocabularies.unesco.org/thesaurus/concept7414"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6124",
+      "prefLabels": {
+        "en": "Minicomputers"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6127",
+      "prefLabels": {
+        "en": "Microprocessors"
+      },
+      "altLabels": {
+        "en": ["Chip"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "The computer's central processing unit."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept535"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept5242",
+        "http://vocabularies.unesco.org/thesaurus/concept534",
+        "http://vocabularies.unesco.org/thesaurus/concept5746",
+        "http://vocabularies.unesco.org/thesaurus/concept9546"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6661",
+      "prefLabels": {
+        "en": "Electronic mail"
+      },
+      "altLabels": {
+        "en": ["E-mail", "Electronic messaging", "Messaging systems"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Includes message creation, electronic mail and electronic filing."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept528"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept17067",
+        "http://vocabularies.unesco.org/thesaurus/concept5824",
+        "http://vocabularies.unesco.org/thesaurus/concept7414"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept7387",
+      "prefLabels": {
+        "en": "Data collection"
+      },
+      "altLabels": {
+        "en": ["Data acquisition", "Data compilation"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept522"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept2214"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept7396",
+      "prefLabels": {
+        "en": "Data exchange"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept522"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept7398",
+        "http://vocabularies.unesco.org/thesaurus/concept7399"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept7398",
+      "prefLabels": {
+        "en": "Data formats"
+      },
+      "altLabels": {
+        "en": ["Data layout"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept6082"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept7396"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept7399",
+      "prefLabels": {
+        "en": "Transnational data flow"
+      },
+      "altLabels": {
+        "en": ["Transborder data flow"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept7413"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept7396"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept7411",
+      "prefLabels": {
+        "en": "Digitization"
+      },
+      "altLabels": {
+        "en": ["Digital technology"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Conversion of paper image or any other traditional document support into electronic image."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept522"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept7413",
+      "prefLabels": {
+        "en": "Data transmission"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept527"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept7399"],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept522",
+        "http://vocabularies.unesco.org/thesaurus/concept539",
+        "http://vocabularies.unesco.org/thesaurus/concept7421"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept7414",
+      "prefLabels": {
+        "en": "Word processing"
+      },
+      "altLabels": {
+        "en": ["Electronic text processing"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept4455"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept522",
+        "http://vocabularies.unesco.org/thesaurus/concept536",
+        "http://vocabularies.unesco.org/thesaurus/concept6123",
+        "http://vocabularies.unesco.org/thesaurus/concept6661"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept7421",
+      "prefLabels": {
+        "en": "Fax"
+      },
+      "altLabels": {
+        "en": ["Facsimile transmitters"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept539"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept5824",
+        "http://vocabularies.unesco.org/thesaurus/concept7413"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept9546",
+      "prefLabels": {
+        "en": "Semiconductors"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept535"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept16358"],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept5242",
+        "http://vocabularies.unesco.org/thesaurus/concept5244",
+        "http://vocabularies.unesco.org/thesaurus/concept5746",
+        "http://vocabularies.unesco.org/thesaurus/concept6127"
+      ],
+      "extensions": {}
+    }
+  ],
+  "extensions": {
+    "https://procyon.app/ns/skos-starter/source": "https://vocabularies.unesco.org/exports/thesaurus/latest/unesco-thesaurus.rdf",
+    "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by-sa/3.0/igo/",
+    "https://procyon.app/ns/skos-starter/selection": ["mt5.40", "mt5.45"]
+  }
+}

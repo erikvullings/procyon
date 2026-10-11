@@ -3,13 +3,11 @@
 
 import gzip
 import hashlib
-import io
 import json
 from pathlib import Path
 import sys
 import urllib.request
 import xml.etree.ElementTree as ET
-import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "frontend/src/features/settings/skos-starters"
@@ -17,28 +15,36 @@ RDF = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
 SKOS = "{http://www.w3.org/2004/02/skos/core#}"
 LANG = "{http://www.w3.org/XML/1998/namespace}lang"
 BASE = "{http://www.w3.org/XML/1998/namespace}base"
+CC_BY = "https://creativecommons.org/licenses/by/4.0/"
+CC_BY_SA_IGO = "https://creativecommons.org/licenses/by-sa/3.0/igo/"
 SOURCES = {
     "gemet": (
         "https://www.eionet.europa.eu/gemet/4.2.3/gemet.rdf.gz",
         "96002bb7cd1f89bccb05ee174fb834a04dd7342bdd1428f32105cd47fd6b73b6",
         "GEMET 4.2.3",
+        CC_BY,
     ),
-    "stw": (
-        "https://zbw.eu/stw/version/9.20/download/stw.rdf.zip",
-        "6f0466006b14c8429843b7778991a51d3b4cabf13c0ca13790288251b4d60b73",
-        "STW 9.20",
+    "unesco": (
+        "https://vocabularies.unesco.org/exports/thesaurus/latest/unesco-thesaurus.rdf",
+        "977399deca61fd6e15a96990c916ddb860692d4558451df3e3bc8cbd18727f81",
+        "UNESCO Thesaurus 2026-08-31 snapshot",
+        CC_BY_SA_IGO,
     ),
 }
 STARTERS = (
-    ("gemet-climate-energy", "Climate and renewable energy", "gemet", ("concept/1471", "concept/15271"), 2),
-    ("stw-technology", "Technology", "stw", ("thsys/73345",), 2),
-    ("stw-psychology", "Psychology", "stw", ("thsys/70017",), 1),
-    ("stw-defence-economics", "Defence economics", "stw", ("thsys/70865",), 1),
+    ("gemet-climate-energy", "Climate and renewable energy", "gemet",
+     ("concept/1471", "concept/15271"), 2),
+    ("unesco-natural-sciences", "Natural sciences", "unesco", ("mt2.75",), 0),
+    ("unesco-information-technology", "Information technology", "unesco",
+     ("mt5.40", "mt5.45"), 0),
+    ("unesco-psychology", "Psychology", "unesco", ("mt4.10",), 0),
+    ("unesco-defence", "Defence and military engineering", "unesco",
+     ("concept2877", "concept613", "concept652"), 2),
 )
 
 
 def load_source(key):
-    url, digest, _ = SOURCES[key]
+    url, digest, _, _ = SOURCES[key]
     with urllib.request.urlopen(url, timeout=60) as response:
         data = response.read()
     actual = hashlib.sha256(data).hexdigest()
@@ -46,15 +52,13 @@ def load_source(key):
         raise ValueError(f"{url}: SHA-256 mismatch (expected {digest}, got {actual})")
     if key == "gemet":
         data = gzip.decompress(data)
-    else:
-        with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            data = archive.read("stw.rdf")
     root = ET.fromstring(data)
-    base = root.attrib[BASE]
+    base = root.attrib.get(BASE, "http://vocabularies.unesco.org/thesaurus/")
     subjects = {}
     for item in root:
         uri = item.attrib.get(RDF + "about")
         if uri is not None:
+            uri = uri if uri.startswith(("http://", "https://")) else base + uri
             fields = subjects.setdefault(uri, {})
             for field in item:
                 if field.tag.startswith(SKOS):
@@ -65,11 +69,17 @@ def load_source(key):
 def make_document(starter, source):
     identifier, title, key, roots, depth = starter
     base, subjects = source
-    selected = set(roots)
-    frontier = set(roots)
+    def resolve(uri):
+        return uri if uri.startswith(("http://", "https://")) else base + uri
+
+    selected = {resolve(member.attrib[RDF + "resource"])
+                for uri in roots
+                for member in subjects[resolve(uri)].get("member", ())}
+    selected.update(resolve(uri) for uri in roots if not subjects[resolve(uri)].get("member"))
+    frontier = set(selected)
     for _ in range(depth):
         frontier = {
-            child.attrib[RDF + "resource"]
+            resolve(child.attrib[RDF + "resource"])
             for uri in frontier
             for child in subjects[uri].get("narrower", ())
         } - selected
@@ -88,11 +98,12 @@ def make_document(starter, source):
             raise ValueError(f"{key} {uri}: expected one English preferred label")
 
         def links(field):
-            return sorted(base + item.attrib[RDF + "resource"] for item in fields.get(field, ())
-                          if item.attrib.get(RDF + "resource") in selected)
+            return sorted(resolve(item.attrib[RDF + "resource"])
+                          for item in fields.get(field, ())
+                          if resolve(item.attrib[RDF + "resource"]) in selected)
 
         concepts.append({
-            "uri": base + uri,
+            "uri": uri,
             "prefLabels": {"en": preferred[0]},
             "altLabels": {"en": sorted(set(labels("altLabel")))} if labels("altLabel") else {},
             "definitions": {"en": labels("definition")[0]} if labels("definition") else {},
@@ -118,7 +129,7 @@ def make_document(starter, source):
         "concepts": concepts,
         "extensions": {
             "https://procyon.app/ns/skos-starter/source": SOURCES[key][0],
-            "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by/4.0/",
+            "https://procyon.app/ns/skos-starter/license": SOURCES[key][3],
             "https://procyon.app/ns/skos-starter/selection": list(roots),
         },
     }

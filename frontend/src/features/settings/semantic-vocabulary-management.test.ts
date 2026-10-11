@@ -110,21 +110,24 @@ describe('SemanticVocabularyManagement', () => {
     const importSpy = vi.spyOn(client, 'importSemanticVocabulary');
     const attachSpy = vi.spyOn(client, 'attachSemanticVocabulary');
     mount();
-    await chooseStarter('stw-technology');
+    await chooseStarter('unesco-information-technology');
     expect(importSpy).not.toHaveBeenCalled();
-    expect(root.textContent).toContain('STW 9.20');
-    expect(root.textContent).toContain('CC BY 4.0');
-    expect(root.querySelector<HTMLAnchorElement>('a[href*="stw.rdf.zip"]')?.href).toBe(
-      skosStarters[1].sourceUrl,
+    expect(root.textContent).toContain('UNESCO');
+    expect(root.textContent).toContain('CC BY-SA 3.0 IGO');
+    expect(root.querySelector<HTMLAnchorElement>('a[href*="unesco-thesaurus.rdf"]')?.href).toBe(
+      skosStarters[2].sourceUrl,
+    );
+    expect(root.querySelector<HTMLAnchorElement>('a[href*="by-sa/3.0/igo"]')?.href).toBe(
+      skosStarters[2].licenseUrl,
     );
 
     importStarter();
     await vi.waitFor(() => expect(importSpy).toHaveBeenCalledOnce());
     const imported = JSON.parse(importSpy.mock.calls[0]?.[0] ?? '{}');
-    expect(imported.id).toBe('stw-technology');
-    expect(imported.concepts).toHaveLength(53);
+    expect(imported.id).toBe('unesco-information-technology');
+    expect(imported.concepts).toHaveLength(98);
     expect(imported.extensions['https://procyon.app/ns/skos-starter/source']).toBe(
-      skosStarters[1].sourceUrl,
+      skosStarters[2].sourceUrl,
     );
     await vi.waitFor(() => expect(root.textContent).toContain(imported.name));
     expect(root.textContent).toContain('Attach to workspace');
@@ -136,17 +139,21 @@ describe('SemanticVocabularyManagement', () => {
   it('does not reimport an existing starter and surfaces import failures', async () => {
     const importSpy = vi.spyOn(client, 'importSemanticVocabulary');
     mount();
-    await chooseStarter('stw-psychology');
+    await chooseStarter('unesco-psychology');
     importSpy.mockRejectedValueOnce(new Error('Import denied'));
     importStarter();
     await vi.waitFor(() =>
       expect(root.querySelector('[role="alert"]')?.textContent).toBe('Import denied'),
     );
-    expect(root.querySelector<HTMLSelectElement>('select')?.value).toBe('stw-psychology');
+    expect(root.querySelector<HTMLSelectElement>('select')?.value).toBe('unesco-psychology');
 
     importStarter();
-    await vi.waitFor(() => expect(root.textContent).toContain('Psychology (STW 9.20 excerpt)'));
-    await chooseStarter('stw-psychology');
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain(
+        'Psychology (UNESCO Thesaurus 2026-08-31 snapshot excerpt)',
+      ),
+    );
+    await chooseStarter('unesco-psychology');
     expect(root.textContent).toContain('Already imported');
     expect(
       [...root.querySelectorAll<HTMLButtonElement>('button')].find(({ textContent }) =>

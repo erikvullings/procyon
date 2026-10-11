@@ -953,13 +953,16 @@ mod tests {
                 "../../../frontend/src/features/settings/skos-starters/gemet-climate-energy.json"
             ),
             include_str!(
-                "../../../frontend/src/features/settings/skos-starters/stw-technology.json"
+                "../../../frontend/src/features/settings/skos-starters/unesco-natural-sciences.json"
             ),
             include_str!(
-                "../../../frontend/src/features/settings/skos-starters/stw-psychology.json"
+                "../../../frontend/src/features/settings/skos-starters/unesco-information-technology.json"
             ),
             include_str!(
-                "../../../frontend/src/features/settings/skos-starters/stw-defence-economics.json"
+                "../../../frontend/src/features/settings/skos-starters/unesco-psychology.json"
+            ),
+            include_str!(
+                "../../../frontend/src/features/settings/skos-starters/unesco-defence.json"
             ),
         ];
         for source in starters {
@@ -967,9 +970,14 @@ mod tests {
             assert!(!vocabulary.concepts.is_empty());
             assert!(vocabulary.root_ids.is_empty());
             assert!(vocabulary.workspace_ids.is_empty());
+            let expected_license = if vocabulary.id.as_str().starts_with("unesco-") {
+                "https://creativecommons.org/licenses/by-sa/3.0/igo/"
+            } else {
+                "https://creativecommons.org/licenses/by/4.0/"
+            };
             assert_eq!(
                 vocabulary.extensions["https://procyon.app/ns/skos-starter/license"],
-                "https://creativecommons.org/licenses/by/4.0/"
+                expected_license
             );
         }
     }

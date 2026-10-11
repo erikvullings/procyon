@@ -46,3 +46,21 @@ a prerequisite for the EmbeddingGemma experimental release.
   failure. Workspace lint, full Rust suite (with bounded concurrency), frontend/scripts suites,
   doctests and frontend build passed. The first default-concurrency full Rust run hit two unrelated
   OCR descendant timing assertions; both passed isolated and in the bounded full rerun.
+- 2026-10-11: User correctly challenged STW's economics-centric scope for technology,
+  psychology and defence. Replaced all STW excerpts with more appropriate UNESCO Thesaurus
+  subject collections and a narrowly named defence selection, and added natural sciences.
+  UNESCO's official RDF snapshot (scheme modified 2026-08-31) is hash-pinned; its `/latest/`
+  URL is mutable, so regeneration intentionally fails on upstream changes. Adapted UNESCO
+  JSON assets remain under CC BY-SA 3.0 IGO with attribution and adaptation disclosure.
+- 2026-10-11: Checked the linked `erikvullings/rag` session's worktree and its task 0103:
+  that project derives a project-specific SKOS-like vocabulary from indexed chunks with TF-IDF,
+  synonym clustering and optional hierarchy. It contains no bundled `.ttl`, `.rdf` or `.skos`
+  starter dataset, nor a GitHub library that supplies a generic SKOS source. Its older task 0026
+  lists hand-curated extraction **predicates**, not SKOS concepts. Do not present those as
+  third-party reusable vocabularies. Further popular sources (EuroVoc, AGROVOC, LCSH) need
+  independently verifiable versioned source bytes and redistribution terms before bundling.
+- 2026-10-11: Revalidated the updated five-choice UI and all five JSON assets: pinned
+  upstream-data check, Rust SKOS import test, workspace lint, frontend build, 2,360 frontend
+  tests, 117 script tests and a serial full Rust run (2,818 pass). Initial -j 2 Rust run
+  had one unrelated intermittent OCR child-process timing assertion; isolated and serial
+  reruns passed.
