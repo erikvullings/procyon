@@ -21,12 +21,12 @@ export function recordPdfVisionQualification(measured, lifecycle, candidate, ide
     measured.elapsedSeconds <= 0 ||
     !Number.isSafeInteger(measured.workerPeakRssBytes) ||
     measured.workerPeakRssBytes <= 0 ||
-    !Number.isSafeInteger(measured.temporaryDiskPeakBytes) ||
-    measured.temporaryDiskPeakBytes <= 0 ||
+    !Number.isSafeInteger(measured.workerDataDiskPeakBytes) ||
+    measured.workerDataDiskPeakBytes <= 0 ||
     typeof measured.workerPeakMethod !== 'string' ||
     !measured.workerPeakMethod ||
-    typeof measured.temporaryDiskPeakMethod !== 'string' ||
-    !measured.temporaryDiskPeakMethod ||
+    typeof measured.workerDataDiskPeakMethod !== 'string' ||
+    !measured.workerDataDiskPeakMethod ||
     typeof measured.backend !== 'string' ||
     !measured.backend.startsWith('google/embeddinggemma-2 (')
   ) {
@@ -52,10 +52,11 @@ export function recordPdfVisionQualification(measured, lifecycle, candidate, ide
     hostPeakRssBytes: null,
     workerPeakRssBytes: measured.workerPeakRssBytes,
     workerPeakMethod: measured.workerPeakMethod,
-    temporaryDiskPeakBytes: measured.temporaryDiskPeakBytes,
-    temporaryDiskPeakMethod: measured.temporaryDiskPeakMethod,
+    workerDataDiskPeakBytes: measured.workerDataDiskPeakBytes,
+    workerDataDiskPeakMethod: measured.workerDataDiskPeakMethod,
+    temporaryDiskPeakBytes: null,
     limitations:
-      'Signed installed worker/IPC synthetic fixture only; sampled worker RSS and isolated worker-data disk are not host/VFS or absolute resource ceilings. No host memory, CPU fallback, or query-quality approval.',
+      'Signed installed worker/IPC synthetic fixture only; linked worker-data sampling excludes anonymous PDF spools and transient disk peaks. No host memory, total temporary disk ceiling, CPU fallback, or query-quality approval.',
   };
 }
 

@@ -251,7 +251,7 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
         .await
         .expect("authenticated PDF stream");
     let mut last_progress = 0;
-    let mut peak_disk_bytes = 0;
+    let mut worker_data_disk_peak_bytes = 0;
     loop {
         let job = client
             .ingestion_job("qualification-tenant", "qualification-library", &job_id)
@@ -262,7 +262,8 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
         assert!(job.completed_units >= last_progress || job.state == IngestionState::Completed);
         last_progress = job.completed_units;
         if report_path.is_some() {
-            peak_disk_bytes = peak_disk_bytes.max(owned_disk_bytes(data.path()));
+            worker_data_disk_peak_bytes =
+                worker_data_disk_peak_bytes.max(owned_disk_bytes(data.path()));
         }
         if job.state == IngestionState::Completed {
             assert_eq!(job.completed_units, 354);
@@ -334,7 +335,10 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
             worker_peak_rss_bytes > 0,
             "worker peak RSS was not observed"
         );
-        assert!(peak_disk_bytes > 0, "worker disk use was not observed");
+        assert!(
+            worker_data_disk_peak_bytes > 0,
+            "worker data disk use was not observed"
+        );
         let backend = std::fs::read_to_string(runtime.path().join("gemma-backend")).unwrap();
         std::fs::write(
             report,
@@ -347,8 +351,8 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
                 "elapsedSeconds": started.elapsed().as_secs_f64(),
                 "workerPeakRssBytes": worker_peak_rss_bytes,
                 "workerPeakMethod": worker_peak_method,
-                "temporaryDiskPeakBytes": peak_disk_bytes,
-                "temporaryDiskPeakMethod": "1s worker-data directory samples; transient peaks may be missed",
+                "workerDataDiskPeakBytes": worker_data_disk_peak_bytes,
+                "workerDataDiskPeakMethod": "1s linked worker-data directory samples; anonymous PDF spools and transient peaks are excluded",
             }))
             .unwrap(),
         )

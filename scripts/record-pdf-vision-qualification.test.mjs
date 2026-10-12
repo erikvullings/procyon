@@ -14,8 +14,9 @@ const measured = {
   elapsedSeconds: 12_345,
   workerPeakRssBytes: 1_234_567_890,
   workerPeakMethod: 'kernel VmHWM for worker process',
-  temporaryDiskPeakBytes: 234_567_890,
-  temporaryDiskPeakMethod: '1s worker-data directory samples; transient peaks may be missed',
+  workerDataDiskPeakBytes: 234_567_890,
+  workerDataDiskPeakMethod:
+    '1s linked worker-data directory samples; anonymous PDF spools and transient peaks are excluded',
 };
 const lifecycle = { target: 'linux-aarch64', catalogSha256 };
 const candidate = {
@@ -38,7 +39,8 @@ test('a complete installed synthetic report stays no-go without measured resourc
   assert.equal(report.pageCount, 354);
   assert.equal(report.resourceCeilingQualified, false);
   assert.equal(report.workerPeakRssBytes, measured.workerPeakRssBytes);
-  assert.equal(report.temporaryDiskPeakBytes, measured.temporaryDiskPeakBytes);
+  assert.equal(report.workerDataDiskPeakBytes, measured.workerDataDiskPeakBytes);
+  assert.equal(report.temporaryDiskPeakBytes, null);
   assert.equal(report.hostPeakRssBytes, null);
 });
 
@@ -73,6 +75,16 @@ test('installed evidence cannot be bound to a different source, target or incomp
     () =>
       recordPdfVisionQualification(
         { ...measured, workerPeakRssBytes: 0 },
+        lifecycle,
+        candidate,
+        identity,
+      ),
+    /exact signed installed candidate/u,
+  );
+  assert.throws(
+    () =>
+      recordPdfVisionQualification(
+        { ...measured, workerDataDiskPeakBytes: 0 },
         lifecycle,
         candidate,
         identity,
