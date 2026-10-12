@@ -81,3 +81,7 @@ the evidence without flooding the pane with duplicate rows.
   breadcrumb. File icons align with folder labels; folder chevrons animate without changing row
   geometry or virtualization. The virtual result table omits indexing coverage above its
   column header; indexing health remains available in Knowledge/library surfaces.
+- 2026-10-12: Existing semantic occurrence/index records have no byte-size field. Materialized
+  semantic and exact-concept hits obtain missing sizes through bounded, concurrent VFS provider
+  lookups before publishing the usual search result event; unavailable provider data remains
+  unknown rather than fabricating bytes or requiring a user-data reindex.

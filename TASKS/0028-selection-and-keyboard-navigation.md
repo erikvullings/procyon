@@ -66,3 +66,6 @@ keyboard navigation are named frontend test targets). Selection is independent o
   contiguous-range behavior. The attempted direction is preserved at the first/last match so a
   final Shift+Arrow selects that boundary item without moving the cursor. Space appends to an active
   typeahead prefix; without an active prefix it retains its selection-toggle command.
+- 2026-10-12: Right-clicking an unmarked file leaves existing marks intact while context actions
+  target only the clicked file. Right-clicking within a marked group retains group actions;
+  keyboard and background context menus keep their existing targets in list/search panes.

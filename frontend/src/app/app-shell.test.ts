@@ -6265,6 +6265,80 @@ describe('AppShell', () => {
     );
   });
 
+  it('targets a right-clicked unmarked file for Copy, Open, and Delete without clearing marks', async () => {
+    const client = new MockFileManagerClient();
+    const invokeAction = vi.spyOn(client, 'invokeAction');
+    const startOperation = vi.spyOn(client, 'startOperation');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    try {
+      m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+      await vi.waitFor(() => expect(directoryRowNamed(root, '日本語.txt')).toBeDefined());
+      const marked = directoryRowNamed(root, '日本語.txt');
+      marked?.click();
+      marked
+        ?.closest<HTMLElement>('.fm-pane')
+        ?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      m.redraw.sync();
+      expect(directoryRowNamed(root, '日本語.txt')?.classList).toContain('fm-selected-row');
+
+      const rightClickTarget = (): void => {
+        directoryRowNamed(root, 'report.pdf')?.dispatchEvent(
+          new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }),
+        );
+        m.redraw.sync();
+        expect(directoryRowNamed(root, '日本語.txt')?.classList).toContain('fm-selected-row');
+        expect(directoryRowNamed(root, 'report.pdf')?.classList).not.toContain('fm-selected-row');
+      };
+      const menuAction = (label: string): HTMLButtonElement | undefined =>
+        [...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu-item')].find(
+          (button) => button.querySelector('.fm-context-menu-label')?.textContent === label,
+        );
+
+      rightClickTarget();
+      menuAction('Copy Full Path')?.click();
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('/Documents/report.pdf'));
+
+      rightClickTarget();
+      menuAction('Open')?.click();
+      await vi.waitFor(() =>
+        expect(invokeAction).toHaveBeenCalledWith(
+          expect.objectContaining({
+            actionId: 'core.open',
+            parameters: { uri: 'mock:///Documents/report.pdf' },
+          }),
+        ),
+      );
+
+      rightClickTarget();
+      menuAction('Delete')?.click();
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-permanent-delete-modal.active')).not.toBeNull(),
+      );
+      expect(root.querySelector('.fm-permanent-delete-modal.active')?.textContent).toContain(
+        'report.pdf',
+      );
+      expect(root.querySelector('.fm-permanent-delete-modal.active')?.textContent).not.toContain(
+        '日本語.txt',
+      );
+      root.querySelector<HTMLButtonElement>('.fm-permanent-delete-confirm')?.click();
+      await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
+      expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
+        sources: [{ uri: 'mock:///Documents/report.pdf' }],
+      });
+    } finally {
+      if (clipboard !== undefined) {
+        Object.defineProperty(navigator, 'clipboard', clipboard);
+      } else {
+        Reflect.deleteProperty(navigator, 'clipboard');
+      }
+    }
+  });
+
   it('opens the macOS Services submenu from the existing selection context menu', async () => {
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({

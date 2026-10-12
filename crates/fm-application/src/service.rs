@@ -563,6 +563,7 @@ impl FileManagerService {
             comparison_store,
             events.clone(),
             semantic.clone(),
+            providers.clone(),
         );
         let checksum_store = Arc::new(ChecksumResultsStore::new());
         let duplicate_store = Arc::new(DuplicateResultsStore::new());

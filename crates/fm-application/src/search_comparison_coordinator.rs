@@ -1,6 +1,7 @@
 //! Search and directory-comparison coordination (task 0119).
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use fm_comparison::{ComparisonEngine, ComparisonResultsStore, SyncAction, generate_sync_plan};
 use fm_domain::{EntryId, EntryKind, EntrySummary, Location, OperationId, ProviderId};
@@ -18,6 +19,10 @@ use fm_transport_dto::{
     StartComparisonRequestDto, StartComparisonResponseDto, StartSearchRequestDto,
     StartSearchResponseDto, SyncPlanDto,
 };
+use fm_vfs::{EntryRef, ProviderRegistry};
+use futures::{StreamExt, stream};
+use tokio::time::{Instant, timeout_at};
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::comparison_mapping::{
@@ -37,6 +42,7 @@ pub(crate) struct SearchComparisonCoordinator {
     comparison_store: Arc<ComparisonResultsStore>,
     events: EventBus,
     semantic: SemanticService,
+    providers: ProviderRegistry,
 }
 
 impl SearchComparisonCoordinator {
@@ -46,6 +52,7 @@ impl SearchComparisonCoordinator {
         comparison_store: Arc<ComparisonResultsStore>,
         events: EventBus,
         semantic: SemanticService,
+        providers: ProviderRegistry,
     ) -> Self {
         Self {
             search,
@@ -53,6 +60,7 @@ impl SearchComparisonCoordinator {
             comparison_store,
             events,
             semantic,
+            providers,
         }
     }
 
@@ -327,6 +335,7 @@ impl SearchComparisonCoordinator {
                 entries.push(entry);
             }
         }
+        self.fill_missing_sizes(&mut entries).await;
         let started = self.search.start_materialized(
             search_id,
             entries,
@@ -426,6 +435,7 @@ impl SearchComparisonCoordinator {
                 entries.push(entry);
             }
         }
+        self.fill_missing_sizes(&mut entries).await;
         let started = self.search.start_materialized(
             search_id,
             entries,
@@ -439,6 +449,67 @@ impl SearchComparisonCoordinator {
             semantic_results: Vec::new(),
             semantic_coverage: None,
         })
+    }
+
+    async fn fill_missing_sizes(&self, entries: &mut [EntrySummary]) {
+        let missing: Vec<_> = entries
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| entry.kind == EntryKind::File && entry.size.is_none())
+            .map(|(index, entry)| {
+                (
+                    index,
+                    EntryRef {
+                        id: entry.id,
+                        location: entry.location.clone(),
+                    },
+                )
+            })
+            .collect();
+        if missing.is_empty() {
+            return;
+        }
+        let total = missing.len();
+        let providers = &self.providers;
+        let cancellation = CancellationToken::new();
+        let mut pending = stream::iter(missing.into_iter().map(|(index, reference)| {
+            let cancellation = cancellation.child_token();
+            async move {
+                let result = match providers.resolve(&reference.location) {
+                    Ok(provider) => provider.file_size(&reference, cancellation).await,
+                    Err(error) => Err(error),
+                };
+                (index, result)
+            }
+        }))
+        .buffer_unordered(16);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut resolved = 0_usize;
+        let mut unavailable = 0_usize;
+        loop {
+            match timeout_at(deadline, pending.next()).await {
+                Ok(Some((index, Ok(size)))) => {
+                    entries[index].size = Some(size);
+                    resolved += 1;
+                }
+                Ok(Some((_, Err(_)))) => unavailable += 1,
+                Ok(None) => break,
+                Err(_) => {
+                    cancellation.cancel();
+                    tracing::warn!(
+                        unresolved = total - resolved - unavailable,
+                        "semantic result file-size lookup timed out"
+                    );
+                    break;
+                }
+            }
+        }
+        if unavailable > 0 {
+            tracing::debug!(
+                unavailable,
+                "semantic result file sizes unavailable from providers"
+            );
+        }
     }
 
     pub(crate) fn cancel_search(&self, search_id: Uuid) -> Result<(), ApplicationError> {
@@ -779,6 +850,7 @@ mod tests {
     use std::sync::Arc;
 
     use fm_comparison::{ComparisonEngine, ComparisonResultsStore};
+    use fm_domain::{Location, ProviderId};
     use fm_events::{BackendEventPayload, EventBus, SessionId, SubscriptionEvent};
     use fm_search::{SearchEngine, SearchResultsStore};
     use fm_transport_dto::{
@@ -787,6 +859,7 @@ mod tests {
         StartSearchRequestDto,
     };
     use fm_vfs::ProviderRegistry;
+    use fm_vfs_local::LocalFileSystemProvider;
     use uuid::Uuid;
 
     use super::SearchComparisonCoordinator;
@@ -803,16 +876,27 @@ mod tests {
         let comparison_store = Arc::new(ComparisonResultsStore::new());
         SearchComparisonCoordinator::new(
             SearchEngine::new(search_store, events.clone(), providers.clone()),
-            ComparisonEngine::new(Arc::clone(&comparison_store), events.clone(), providers),
+            ComparisonEngine::new(
+                Arc::clone(&comparison_store),
+                events.clone(),
+                providers.clone(),
+            ),
             comparison_store,
             events,
             crate::semantic::SemanticService::unavailable(),
+            providers,
         )
     }
 
     #[tokio::test]
     async fn semantic_mode_uses_the_existing_paged_virtual_location() {
-        let providers = ProviderRegistry::new();
+        let directory = tempfile::tempdir().expect("temporary search root");
+        let png = directory.path().join("page_000.png");
+        std::fs::write(&png, vec![42_u8; 1_029]).expect("write synthetic PNG bytes");
+        let file_location = Location::from_native_path(&png).expect("PNG location");
+        let root_location = Location::from_native_path(directory.path()).expect("root location");
+        let mut providers = ProviderRegistry::new();
+        providers.register(Arc::new(LocalFileSystemProvider));
         let events = EventBus::default();
         let search_store = Arc::new(SearchResultsStore::new());
         let comparison_store = Arc::new(ComparisonResultsStore::new());
@@ -829,7 +913,7 @@ mod tests {
                 document_id: DocumentId::new("document-1"),
                 metadata: BTreeMap::from([
                     ("provider_id".to_owned(), "local".to_owned()),
-                    ("uri".to_owned(), "file:///library/page_000.png".to_owned()),
+                    ("uri".to_owned(), file_location.uri.clone()),
                     ("name".to_owned(), "page_000.png".to_owned()),
                     ("media_type".to_owned(), "image/png".to_owned()),
                 ]),
@@ -842,10 +926,15 @@ mod tests {
         let mut subscription = events.subscribe_all_workspaces(SessionId::new("test"), None);
         let coordinator = SearchComparisonCoordinator::new(
             SearchEngine::new(Arc::clone(&search_store), events.clone(), providers.clone()),
-            ComparisonEngine::new(Arc::clone(&comparison_store), events.clone(), providers),
+            ComparisonEngine::new(
+                Arc::clone(&comparison_store),
+                events.clone(),
+                providers.clone(),
+            ),
             comparison_store,
             events,
             SemanticService::new(capability),
+            providers,
         );
         let response = coordinator
             .start_search(
@@ -853,7 +942,7 @@ mod tests {
                     workspace_id,
                     roots: vec![fm_transport_dto::LocationDto {
                         provider_id: "local".to_owned(),
-                        uri: "file:///library".to_owned(),
+                        uri: root_location.uri.clone(),
                     }],
                     query: String::new(),
                     content_query: None,
@@ -868,7 +957,7 @@ mod tests {
                         scope: SearchScopeDto {
                             locations: vec![fm_transport_dto::LocationDto {
                                 provider_id: "local".to_owned(),
-                                uri: "file:///library".to_owned(),
+                                uri: root_location.uri.clone(),
                             }],
                             recurse: true,
                             show_hidden: false,
@@ -907,6 +996,7 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].name, "page_000.png");
         assert_eq!(entries[0].extension.as_deref(), Some("png"));
+        assert_eq!(entries[0].size, Some(1_029));
         assert!(!more);
         let SubscriptionEvent::Event(event) = subscription.recv().await.expect("search batch")
         else {
@@ -920,7 +1010,7 @@ mod tests {
                 is_complete: true,
                 execution_mode: fm_events::SearchExecutionModePayload::Semantic,
                 ..
-            } if search_id == response.search_id && entries.len() == 1
+            } if search_id == response.search_id && entries.len() == 1 && entries[0].size == Some(1_029)
         ));
         assert!(
             tokio::time::timeout(std::time::Duration::from_millis(30), subscription.recv())
@@ -928,11 +1018,25 @@ mod tests {
                 .is_err(),
             "one materialized search must emit only one complete batch"
         );
+        let mut unavailable = entries;
+        unavailable[0].location = Location::new(
+            ProviderId::new("sftp"),
+            "sftp://unavailable.example/page_000.png",
+        );
+        unavailable[0].size = None;
+        coordinator.fill_missing_sizes(&mut unavailable).await;
+        assert_eq!(unavailable[0].size, None);
     }
 
     #[tokio::test]
     async fn concept_mode_authorizes_attachment_and_expands_hierarchy() {
-        let providers = ProviderRegistry::new();
+        let files = tempfile::tempdir().expect("temporary concept root");
+        let pdf = files.path().join("ml.pdf");
+        std::fs::write(&pdf, vec![42_u8; 2_053]).expect("write synthetic PDF bytes");
+        let file_location = Location::from_native_path(&pdf).expect("PDF location");
+        let root_location = Location::from_native_path(files.path()).expect("root location");
+        let mut providers = ProviderRegistry::new();
+        providers.register(Arc::new(LocalFileSystemProvider));
         let events = EventBus::default();
         let search_store = Arc::new(SearchResultsStore::new());
         let comparison_store = Arc::new(ComparisonResultsStore::new());
@@ -948,7 +1052,7 @@ mod tests {
                 document_id: DocumentId::new("document-1"),
                 metadata: BTreeMap::from([
                     ("provider_id".to_owned(), "local".to_owned()),
-                    ("uri".to_owned(), "file:///library/ml.pdf".to_owned()),
+                    ("uri".to_owned(), file_location.uri.clone()),
                     ("name".to_owned(), "ml.pdf".to_owned()),
                     (
                         "concept_uri".to_owned(),
@@ -986,10 +1090,15 @@ mod tests {
             .expect("ingest out-of-scope fixture");
         let coordinator = SearchComparisonCoordinator::new(
             SearchEngine::new(Arc::clone(&search_store), events.clone(), providers.clone()),
-            ComparisonEngine::new(Arc::clone(&comparison_store), events.clone(), providers),
+            ComparisonEngine::new(
+                Arc::clone(&comparison_store),
+                events.clone(),
+                providers.clone(),
+            ),
             comparison_store,
             events,
             SemanticService::new(capability),
+            providers,
         );
         let directory = tempfile::tempdir().expect("temporary vocabulary store");
         let store = crate::semantic_vocabulary::VocabularyStore::open(
@@ -1020,7 +1129,7 @@ mod tests {
             workspace_id,
             roots: vec![fm_transport_dto::LocationDto {
                 provider_id: "local".to_owned(),
-                uri: "file:///library".to_owned(),
+                uri: root_location.uri.clone(),
             }],
             query: String::new(),
             content_query: None,
@@ -1035,7 +1144,7 @@ mod tests {
                 scope: SearchScopeDto {
                     locations: vec![fm_transport_dto::LocationDto {
                         provider_id: "local".to_owned(),
-                        uri: "file:///library".to_owned(),
+                        uri: root_location.uri.clone(),
                     }],
                     recurse: true,
                     show_hidden: false,
@@ -1077,6 +1186,7 @@ mod tests {
             .expect("materialized concept search");
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].name, "ml.pdf");
+        assert_eq!(entries[0].size, Some(2_053));
         assert!(!more);
     }
 

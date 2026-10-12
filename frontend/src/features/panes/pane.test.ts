@@ -476,6 +476,71 @@ describe('Pane inline rename', () => {
   });
 
   describe('Pane context menu', () => {
+    it.each([
+      ['directory table', '/home/erik', 'table', '.fm-directory-row'],
+      ['directory grid', '/home/erik', 'grid', '.fm-grid-tile'],
+      ['search results', 'search://local/synthetic', 'table', '.fm-directory-row'],
+    ] as const)(
+      'keeps the selection when right-clicking a different file in %s',
+      (_label, path, viewMode, rowSelector) => {
+        const onContextMenu = vi.fn();
+        const onSelectionAction = vi.fn();
+        const selected = new Set<EntryId>(['one' as EntryId]);
+        const paneAttrs = attrs({
+          path,
+          viewMode,
+          selectedEntryIds: selected,
+          onContextMenu,
+          onSelectionAction,
+        });
+        const rerender = mountUpdating(paneAttrs);
+        const row = root.querySelector<HTMLElement>(`${rowSelector}[data-entry-index="1"]`);
+        row?.dispatchEvent(
+          new MouseEvent('contextmenu', { bubbles: true, clientX: 12, clientY: 24 }),
+        );
+        expect(onSelectionAction).not.toHaveBeenCalled();
+        expect(selected).toEqual(new Set(['one']));
+        expect(onContextMenu).toHaveBeenLastCalledWith([entries[1]], 12, 24);
+        expect(root.querySelector(`${rowSelector}[data-entry-index="0"]`)?.className).toContain(
+          viewMode === 'grid' ? 'fm-selected-tile' : 'fm-selected-row',
+        );
+
+        rerender({
+          ...paneAttrs,
+          selectedEntryIds: new Set<EntryId>(['one' as EntryId, 'two' as EntryId]),
+        });
+        root
+          .querySelector<HTMLElement>(`${rowSelector}[data-entry-index="1"]`)
+          ?.dispatchEvent(
+            new MouseEvent('contextmenu', { bubbles: true, clientX: 12, clientY: 24 }),
+          );
+        expect(onContextMenu).toHaveBeenLastCalledWith(entries, 12, 24);
+      },
+    );
+
+    it('uses the cursor for a keyboard context menu and leaves background selection alone', () => {
+      const onContextMenu = vi.fn();
+      const onSelectionAction = vi.fn();
+      const selected = new Set<EntryId>(['one' as EntryId]);
+      mount(
+        attrs({
+          cursorIndex: 1,
+          selectedEntryIds: selected,
+          onContextMenu,
+          onSelectionAction,
+        }),
+      );
+      const viewport = root.querySelector<HTMLElement>('.fm-directory-viewport');
+      viewport?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true }));
+      expect(onContextMenu).toHaveBeenLastCalledWith([entries[1]], 12, 12);
+      viewport?.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 6 }),
+      );
+      expect(onContextMenu).toHaveBeenLastCalledWith([], 5, 6);
+      expect(selected).toEqual(new Set(['one']));
+      expect(onSelectionAction).not.toHaveBeenCalled();
+    });
+
     it('passes the synthetic parent row to its restricted context menu', () => {
       const parent: EntrySummary = {
         id: 'fm:parent:/home/erik' as EntryId,
@@ -778,6 +843,39 @@ describe('searchResultTitle', () => {
 });
 
 describe('Pane search breadcrumb rendering', () => {
+  it('uses the selected Size column and format for a grouped search file with known bytes', () => {
+    const first = entries[0];
+    if (first === undefined) throw new Error('missing entry fixture');
+    const paneAttrs = attrs({
+      path: 'search://local/synthetic-size',
+      entries: [
+        {
+          ...first,
+          name: 'page_000.png',
+          location: { providerId: 'local', uri: 'file:///library/page_000.png' },
+          size: 1_029,
+        },
+      ],
+    });
+    mount({
+      ...paneAttrs,
+      tableConfig: {
+        ...paneAttrs.tableConfig,
+        visibleColumnIds: new Set(['core.size']),
+        columnWidths: [{ columnId: 'core.name', width: 310 }],
+      },
+    });
+    expect(
+      [...root.querySelectorAll('.fm-directory-header button')].map((column) =>
+        column.textContent?.trim(),
+      ),
+    ).toEqual(['Name', 'Size']);
+    expect(root.querySelector('.fm-grouped-entry .fm-directory-size')?.textContent).toBe('1 K');
+    expect(
+      root.querySelector<HTMLElement>('.fm-grouped-entry')?.style.gridTemplateColumns,
+    ).toContain('310px');
+  });
+
   it('omits indexing coverage above virtual results while keeping the normal table header', () => {
     const syntheticResults = entries.map((entry) => ({
       ...entry,
