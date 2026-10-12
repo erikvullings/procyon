@@ -5,8 +5,8 @@
 use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
 
-use fm_semantic_conversion::Provenance;
-use fm_semantic_worker::pdf_text_child::convert_spool;
+use fm_semantic_conversion::{Provenance, VisualProvenance};
+use fm_semantic_worker::pdf_text_child::{convert_spool, convert_spool_visual_page};
 use lopdf::{Document, Object, Stream, dictionary};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
@@ -53,6 +53,60 @@ fn synthetic_pdf() -> Vec<u8> {
     bytes
 }
 
+fn synthetic_visual_pdf() -> Vec<u8> {
+    let mut pdf = Document::load_mem(&synthetic_pdf()).expect("load visual fixture");
+    let page = pdf.get_pages()[&2];
+    let parent = pdf
+        .get_object(page)
+        .expect("page")
+        .as_dict()
+        .expect("page dictionary")
+        .get(b"Parent")
+        .expect("parent")
+        .as_reference()
+        .expect("parent reference");
+    let resources = pdf
+        .get_object(parent)
+        .expect("parent")
+        .as_dict()
+        .expect("parent dictionary")
+        .get(b"Resources")
+        .expect("resources")
+        .as_reference()
+        .expect("resources reference");
+    let page_resources = pdf.add_object(pdf.get_object(resources).expect("resources").clone());
+    pdf.get_object_mut(page)
+        .expect("page")
+        .as_dict_mut()
+        .expect("page dictionary")
+        .set("Resources", page_resources);
+    let jpeg = vec![
+        0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 1, 0, 2, 3, 1, 0x11, 0, 2, 0x11, 0, 3, 0x11, 0, 0xff,
+        0xd9,
+    ];
+    let image = pdf.add_object(Stream::new(
+        dictionary! {
+            "Type" => "XObject", "Subtype" => "Image", "Width" => 2,
+            "Height" => 1, "ColorSpace" => "DeviceRGB",
+            "BitsPerComponent" => 8, "Filter" => "DCTDecode",
+        },
+        jpeg.clone(),
+    ));
+    pdf.add_xobject(page, b"Figure", image).expect("add figure");
+    let content_id = pdf.get_page_contents(page)[0];
+    let content = pdf
+        .get_object_mut(content_id)
+        .expect("page content")
+        .as_stream_mut()
+        .expect("content stream");
+    let mut drawing = content.get_plain_content().expect("page content bytes");
+    drawing.extend_from_slice(b"q /Figure Do Q\n");
+    content.set_plain_content(drawing);
+    let mut result = Vec::new();
+    pdf.save_to(&mut result).expect("save visual fixture");
+    result
+}
+
 #[test]
 fn anonymous_pdf_spool_child_round_trips_page_text_and_rejects_wrong_digest() {
     let bytes = synthetic_pdf();
@@ -93,6 +147,75 @@ fn anonymous_pdf_spool_child_round_trips_page_text_and_rejects_wrong_digest() {
     let cancelled = CancellationToken::new();
     cancelled.cancel();
     assert!(convert_spool(worker, &spool, &digest, &cancelled).is_err());
+}
+
+#[test]
+fn anonymous_pdf_spool_child_returns_one_bounded_cited_image_page() {
+    let bytes = synthetic_visual_pdf();
+    let mut spool = tempfile::tempfile().unwrap();
+    spool.write_all(&bytes).unwrap();
+    let digest = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let worker = Path::new(env!("CARGO_BIN_EXE_fm-semantic-worker"));
+    let image = convert_spool_visual_page(worker, &spool, &digest, 2, &CancellationToken::new())
+        .expect("page image");
+    assert_eq!(
+        image.provenance,
+        VisualProvenance::PdfImage {
+            page_number: 2,
+            image_index: 0,
+        }
+    );
+    assert_eq!(image.media_type.as_str(), "image/jpeg");
+    assert_eq!(image.data.len(), 23);
+    assert!(
+        convert_spool_visual_page(
+            worker,
+            &spool,
+            &"0".repeat(64),
+            2,
+            &CancellationToken::new()
+        )
+        .is_err()
+    );
+    assert!(
+        convert_spool_visual_page(worker, &spool, &digest, 1, &CancellationToken::new()).is_err()
+    );
+    let cancelled = CancellationToken::new();
+    cancelled.cancel();
+    assert!(convert_spool_visual_page(worker, &spool, &digest, 2, &cancelled).is_err());
+}
+
+#[test]
+#[ignore = "requires the generated 174.2 MB synthetic scanned fixture"]
+fn anonymous_spool_extracts_the_final_synthetic_scan_page() {
+    let path = std::env::var_os("PROCYON_SYNTHETIC_SCAN_PDF")
+        .map(std::path::PathBuf::from)
+        .expect("set PROCYON_SYNTHETIC_SCAN_PDF to the generated scanned fixture");
+    assert_eq!(path.file_name().unwrap(), "synthetic-354-page-scan.pdf");
+    let mut source = std::fs::File::open(&path).unwrap();
+    assert_eq!(source.metadata().unwrap().len(), 174_224_803);
+    let mut spool = tempfile::tempfile().unwrap();
+    std::io::copy(&mut source, &mut spool).unwrap();
+    let image = convert_spool_visual_page(
+        Path::new(env!("CARGO_BIN_EXE_fm-semantic-worker")),
+        &spool,
+        "d85243b5afaeb10f44e9f73f87424c656c53147d706e4a4643e2268c3bcb2e3e",
+        354,
+        &CancellationToken::new(),
+    )
+    .unwrap();
+    assert_eq!(image.media_type.as_str(), "image/png");
+    assert_eq!(
+        image.provenance,
+        VisualProvenance::PdfImage {
+            page_number: 354,
+            image_index: 0,
+        }
+    );
+    assert_eq!((image.width, image.height), (512, 320));
 }
 
 #[test]

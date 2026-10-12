@@ -9,8 +9,10 @@ use std::time::{Duration, Instant};
 
 use fm_semantic_conversion::{
     BaselineConverter, ConversionBudgets, ConversionContext, ConversionOutcome, DocumentConverter,
-    DocumentMetadata, PdfPageWindow, PdfTextReport, SourceContent, merge_pdf_text_windows,
+    DocumentMetadata, MAX_VISUAL_BYTES, MAX_VISUAL_PIXELS, MediaType, PdfPageWindow, PdfTextReport,
+    SourceContent, VisualAttachment, VisualProvenance, merge_pdf_text_windows,
 };
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use tokio_util::sync::CancellationToken;
@@ -19,12 +21,25 @@ use crate::ingestion::PdfTextSource;
 
 const MAX_SOURCE_BYTES: u64 = 200 * 1024 * 1024;
 const MAX_REPORT_BYTES: usize = 8 * 1024 * 1024;
+const MAX_IMAGE_REPORT_BYTES: usize = MAX_VISUAL_BYTES + 4096;
 const MAX_ERROR_BYTES: u64 = 16 * 1024;
 // Experimental ceiling pending four-target installed qualification.
 const MAX_SAMPLED_RSS: u64 = 512 * 1024 * 1024;
 const CHILD_DEADLINE: Duration = Duration::from_secs(120);
 
 struct KillOnDrop(Child);
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PageImageHeader {
+    page_number: u32,
+    image_index: u32,
+    media_type: String,
+    width: u32,
+    height: u32,
+    id: String,
+    byte_length: usize,
+}
 
 impl Drop for KillOnDrop {
     fn drop(&mut self) {
@@ -45,6 +60,93 @@ pub fn convert_spool(
     expected_sha256: &str,
     cancellation: &CancellationToken,
 ) -> io::Result<fm_semantic_conversion::ConvertedDocument> {
+    let bytes = run_spool_child(
+        executable,
+        spool,
+        expected_sha256,
+        &["--pdf-text-child"],
+        MAX_REPORT_BYTES,
+        cancellation,
+    )?;
+    let report: PdfTextReport = serde_json::from_slice(&bytes)
+        .map_err(|_| io::Error::other("PDF converter output was invalid"))?;
+    report
+        .into_document(&ConversionBudgets {
+            max_source_bytes: MAX_SOURCE_BYTES,
+            ..ConversionBudgets::default()
+        })
+        .map_err(io::Error::other)
+}
+
+/// Extracts one bounded image from one verified page in the killable child.
+///
+/// This is not a publication path; multi-image pages and unsupported encodings
+/// fail explicitly until a complete page-coverage pipeline can account for them.
+pub fn convert_spool_visual_page(
+    executable: &Path,
+    spool: &File,
+    expected_sha256: &str,
+    page_number: u32,
+    cancellation: &CancellationToken,
+) -> io::Result<VisualAttachment> {
+    if page_number == 0 {
+        return Err(io::Error::other("PDF page number must be positive"));
+    }
+    let page = page_number.to_string();
+    let mut bytes = run_spool_child(
+        executable,
+        spool,
+        expected_sha256,
+        &["--pdf-visual-child", &page],
+        MAX_IMAGE_REPORT_BYTES,
+        cancellation,
+    )?;
+    let header_length = bytes
+        .get(..4)
+        .and_then(|prefix| <[u8; 4]>::try_from(prefix).ok())
+        .map(u32::from_be_bytes)
+        .ok_or_else(|| io::Error::other("PDF image report has no header length"))?
+        as usize;
+    if header_length == 0 || header_length > 4092 || bytes.len() < 4 + header_length {
+        return Err(io::Error::other("PDF image report header is invalid"));
+    }
+    let header: PageImageHeader = serde_json::from_slice(&bytes[4..4 + header_length])
+        .map_err(|_| io::Error::other("PDF image report metadata is invalid"))?;
+    let data = bytes.split_off(4 + header_length);
+    if header.page_number != page_number
+        || header.byte_length == 0
+        || header.byte_length > MAX_VISUAL_BYTES
+        || data.len() != header.byte_length
+        || header.width == 0
+        || header.height == 0
+        || u64::from(header.width) * u64::from(header.height) > MAX_VISUAL_PIXELS
+        || !matches!(header.media_type.as_str(), "image/jpeg" | "image/png")
+        || blake3::hash(&data).to_hex().as_str() != header.id
+    {
+        return Err(io::Error::other("PDF image report failed validation"));
+    }
+    Ok(VisualAttachment {
+        id: header.id,
+        media_type: MediaType::parse(&header.media_type),
+        data,
+        width: header.width,
+        height: header.height,
+        provenance: VisualProvenance::PdfImage {
+            page_number,
+            image_index: header.image_index,
+        },
+        caption: None,
+    })
+}
+
+fn run_spool_child(
+    executable: &Path,
+    spool: &File,
+    expected_sha256: &str,
+    arguments: &[&str],
+    maximum_output_bytes: usize,
+    cancellation: &CancellationToken,
+) -> io::Result<Vec<u8>> {
     let length = spool.metadata()?.len();
     if length == 0 || length > MAX_SOURCE_BYTES {
         return Err(io::Error::other("PDF spool exceeds child source limit"));
@@ -77,7 +179,7 @@ pub fn convert_spool(
     input.seek(SeekFrom::Start(0))?;
     let mut child = KillOnDrop(
         Command::new(executable)
-            .arg("--pdf-text-child")
+            .args(arguments)
             .arg(expected_sha256)
             .stdin(input)
             .stdout(Stdio::piped())
@@ -93,7 +195,7 @@ pub fn convert_spool(
         let mut bytes = Vec::new();
         stdout
             .by_ref()
-            .take(MAX_REPORT_BYTES as u64 + 1)
+            .take(maximum_output_bytes as u64 + 1)
             .read_to_end(&mut bytes)?;
         Ok::<_, io::Error>(bytes)
     });
@@ -148,19 +250,12 @@ pub fn convert_spool(
             errors
                 .join()
                 .map_err(|_| io::Error::other("PDF converter error reader failed"))??;
-            if bytes.len() > MAX_REPORT_BYTES {
+            if bytes.len() > maximum_output_bytes {
                 return Err(io::Error::other(
                     "PDF converter output exceeded its byte limit",
                 ));
             }
-            let report: PdfTextReport = serde_json::from_slice(&bytes)
-                .map_err(|_| io::Error::other("PDF converter output was invalid"))?;
-            return report
-                .into_document(&ConversionBudgets {
-                    max_source_bytes: MAX_SOURCE_BYTES,
-                    ..ConversionBudgets::default()
-                })
-                .map_err(io::Error::other);
+            return Ok(bytes);
         }
         if started.elapsed() >= CHILD_DEADLINE {
             return Err(io::Error::other("PDF converter child exceeded deadline"));
@@ -220,8 +315,7 @@ pub async fn convert_spool_in_worker(
     })
 }
 
-/// Converts a path-free stdin PDF and emits one validated, complete text result.
-pub fn run(expected_sha256: &str) -> io::Result<()> {
+fn read_verified_source(expected_sha256: &str) -> io::Result<Vec<u8>> {
     if expected_sha256.len() != 64 || !expected_sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
     {
         return Err(io::Error::other("invalid PDF source digest"));
@@ -242,6 +336,12 @@ pub fn run(expected_sha256: &str) -> io::Result<()> {
             "PDF source digest does not match the stream",
         ));
     }
+    Ok(source)
+}
+
+/// Converts a path-free stdin PDF and emits one validated, complete text result.
+pub fn run(expected_sha256: &str) -> io::Result<()> {
+    let source = read_verified_source(expected_sha256)?;
     let budgets = ConversionBudgets {
         max_source_bytes: MAX_SOURCE_BYTES,
         ..ConversionBudgets::default()
@@ -298,4 +398,68 @@ pub fn run(expected_sha256: &str) -> io::Result<()> {
         ));
     }
     io::stdout().write_all(&payload)
+}
+
+/// Extracts one drawn raster from an authenticated PDF page, never a partial page.
+pub fn run_visual_page(expected_sha256: &str, page_number: u32) -> io::Result<()> {
+    if page_number == 0 {
+        return Err(io::Error::other("PDF page number must be positive"));
+    }
+    let source = read_verified_source(expected_sha256)?;
+    let window = PdfPageWindow::new(page_number, page_number).map_err(io::Error::other)?;
+    let outcome = BaselineConverter::new()
+        .convert(
+            SourceContent::Bytes(&source),
+            &DocumentMetadata::unknown().with_media_type("application/pdf"),
+            &ConversionContext::new()
+                .with_budgets(ConversionBudgets {
+                    max_source_bytes: MAX_SOURCE_BYTES,
+                    ..ConversionBudgets::default()
+                })
+                .with_pdf_page_window(window)
+                .with_visual_evidence(true),
+        )
+        .map_err(io::Error::other)?;
+    let ConversionOutcome::Converted(document) = outcome else {
+        return Err(io::Error::other(format!(
+            "PDF page {page_number} has no usable visual evidence: {outcome:?}"
+        )));
+    };
+    if document.visuals().len() != 1 || !document.visual_omissions().is_empty() {
+        return Err(io::Error::other(format!(
+            "PDF page {page_number} has missing or multiple image candidates"
+        )));
+    }
+    let visual = &document.visuals()[0];
+    let VisualProvenance::PdfImage {
+        page_number: cited_page,
+        image_index,
+    } = visual.provenance
+    else {
+        return Err(io::Error::other("PDF image has no page citation"));
+    };
+    if cited_page != page_number {
+        return Err(io::Error::other("PDF image cites another page"));
+    }
+    let header = PageImageHeader {
+        page_number,
+        image_index,
+        media_type: visual.media_type.as_str().to_owned(),
+        width: visual.width,
+        height: visual.height,
+        id: visual.id.clone(),
+        byte_length: visual.data.len(),
+    };
+    let encoded = serde_json::to_vec(&header).map_err(io::Error::other)?;
+    if encoded.len() > 4092 || visual.data.len() > MAX_VISUAL_BYTES {
+        return Err(io::Error::other("PDF image report exceeds its byte limit"));
+    }
+    let mut output = io::stdout().lock();
+    output.write_all(
+        &u32::try_from(encoded.len())
+            .map_err(io::Error::other)?
+            .to_be_bytes(),
+    )?;
+    output.write_all(&encoded)?;
+    output.write_all(&visual.data)
 }

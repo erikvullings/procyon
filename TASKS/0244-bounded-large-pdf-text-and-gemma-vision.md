@@ -98,6 +98,16 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: The opt-in converter child now has a separate
+  path-free **one-page** image extraction command. The parent rechecks the
+  anonymous spool's SHA-256, supervises child memory/cancellation/deadline,
+  caps the binary image report at one existing 4 MiB attachment, and validates
+  its page citation, pixel bound and content fingerprint. A synthetic JPEG
+  page passes; the actual 174,224,803-byte scanned fixture's final page
+  yields a cited PNG through the killable child. Missing image, wrong digest
+  and pre-cancelled requests fail. It intentionally rejects multi-image or
+  omitted pages; there is **no** 354-image spool, Gemma embedding, atomic
+  text+image publication, renderer, or production feature enablement yet.
 - 2026-10-12 Copilot: A synthetic-only ignored conversion probe now checks
   the 174,224,803-byte, 354-page scanned fixture in one-page windows.
   With visual evidence enabled, every page yields one distinct bounded

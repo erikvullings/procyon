@@ -30,6 +30,7 @@ gemma-metal = ["gemma-probe", "lattice-inference/metal-gpu"]
 experimental-large-pdf = ["dep:lopdf", "dep:sysinfo"]
 
 [dependencies]
+blake3.workspace = true
 caseless.workspace = true
 fm-semantic-components = {workspace = true, optional = true}
 fm-semantic-conversion.workspace = true

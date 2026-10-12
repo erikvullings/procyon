@@ -3301,6 +3301,7 @@ dependencies = [
 name = "fm-semantic-worker"
 version = "0.5.0"
 dependencies = [
+ "blake3",
  "caseless",
  "fm-metadata",
  "fm-semantic-components",
