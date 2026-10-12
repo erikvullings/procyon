@@ -936,10 +936,10 @@ impl IngestionCoordinator {
                 continue;
             }
             let key = EmbeddingCacheKey::calculate(
-                &format!("pdf-jpeg/1:{}:{}", visual.media_type.as_str(), visual.id),
+                &format!("pdf-image/2:{}:{}", visual.media_type.as_str(), visual.id),
                 identity,
                 self.embedder.preprocessing_version(),
-                &format!("pdf-visual/1:{}", converted.converter()),
+                &format!("pdf-visual/2:{}", converted.converter()),
             );
             let vector = if let Some(vector) = self.catalog.cached_vector(key)? {
                 vector
@@ -1535,7 +1535,7 @@ mod tests {
             _bytes: &[u8],
             _cancellation: &CancellationToken,
         ) -> Result<MediaEmbedding, EmbeddingError> {
-            assert_eq!(media_type, "image/jpeg");
+            assert!(matches!(media_type, "image/jpeg" | "image/png"));
             *self.media_calls.lock().expect("media calls") += 1;
             if self.fail_media.load(Ordering::Acquire) {
                 return Err(EmbeddingError::Backend("injected image failure".into()));
@@ -2156,6 +2156,7 @@ mod tests {
                 .unwrap()
                 .set("Contents", drawing_id);
         }
+
         pdf.get_object_mut(pdf.get_page_contents(pdf.get_pages()[&3])[0])
             .unwrap()
             .as_stream_mut()
@@ -2188,6 +2189,100 @@ mod tests {
         assert!(
             detail.contains("page 3") && detail.contains("rendering is unsupported"),
             "{detail}"
+        );
+    }
+
+    #[test]
+    fn consented_flate_pdf_scan_is_indexed_with_page_provenance() {
+        let fixture = Fixture::with_model(healthy_resources(), "google-embeddinggemma-2");
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        document.pdf_images_consented = true;
+        let mut pdf = Document::load_mem(&pdf_with_images()).expect("load PDF");
+        let page_id = pdf.get_pages()[&3];
+        let image_id = {
+            let (direct, inherited) = pdf.get_page_resources(page_id).expect("page resources");
+            let resources = if let Some(direct) = direct {
+                direct
+            } else {
+                pdf.get_dictionary(*inherited.first().expect("inherited resources"))
+                    .expect("resource dictionary")
+            };
+            pdf.get_dict_in_dict(resources, b"XObject")
+                .expect("XObjects")
+                .get(b"Scan")
+                .expect("scan")
+                .as_reference()
+                .expect("image reference")
+        };
+        let image = pdf
+            .get_object_mut(image_id)
+            .expect("scan")
+            .as_stream_mut()
+            .expect("image stream");
+        image.dict.remove(b"Filter");
+        image.dict.set("Height", 1_000);
+        image.set_plain_content([255, 0, 0, 0, 255, 0].repeat(1_000));
+        image.compress().expect("compress scan");
+        let mut bytes = Vec::new();
+        pdf.save_to(&mut bytes).expect("save PDF");
+        document.bytes = bytes;
+
+        let receipt = fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("consented scan");
+        assert_eq!(receipt.chunks, 5);
+        let record_ids = fixture
+            .index
+            .records
+            .lock()
+            .expect("index")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        let evidence = fixture
+            .catalog
+            .begin_read()
+            .expect("read catalog")
+            .filter_visible_candidates(
+                &record_ids,
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .expect("visible evidence");
+        assert!(evidence.iter().any(|record| {
+            record.record_kind == "pdf_image"
+                && record.media_type == "application/pdf"
+                && record.provenance.contains("\"page_number\":3")
+                && record.provenance.contains("\"image_index\":1")
+        }));
+        assert!(
+            fixture
+                .catalog
+                .job(&document.job_id)
+                .unwrap()
+                .unwrap()
+                .detail
+                .is_none()
+        );
+
+        let e5 = Fixture::new(healthy_resources());
+        let mut text_only = e5.document("");
+        text_only.media_type = "application/pdf".into();
+        text_only.bytes = document.bytes;
+        e5.coordinator
+            .ingest(&text_only, &CancellationToken::new())
+            .expect("default E5 PDF text");
+        assert!(
+            e5.index
+                .records
+                .lock()
+                .expect("E5 index")
+                .values()
+                .all(|record| record.excerpt != "PDF page 3, image 1")
         );
     }
 

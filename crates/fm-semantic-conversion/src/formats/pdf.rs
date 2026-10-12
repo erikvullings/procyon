@@ -13,7 +13,9 @@
 //! document is reported as encrypted rather than parsed as garbage.
 
 use std::collections::HashSet;
+use std::io::{self, Write};
 
+use image::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
 use lopdf::{Dictionary, Document, LoadOptions, Object, content::Content};
 
 use crate::MAX_PDF_STRUCTURAL_STREAM_BYTES;
@@ -24,6 +26,7 @@ use crate::pdf_toc::{clean_pdf_toc_text, repair_spaced_elsevier_doi};
 
 /// Maximum decompressed content bytes per page.
 const MAX_PAGE_CONTENT_BYTES: usize = 16 * 1024 * 1024;
+const MAX_PDF_FLATE_RASTER_BYTES: usize = 4 * 1024 * 1024;
 
 /// Why a PDF could not be converted.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -161,7 +164,7 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
     if !extracted_any && !builder.has_visuals() {
         return Err(PdfError::NoTextLayer(if builder.visuals_enabled() {
             format!(
-                "the PDF has no extractable text or reusable JPEG images; {uncovered_pages} pages omitted (first: page {}); page rendering is unsupported and an OCR pack is required",
+                "the PDF has no extractable text or reusable image rasters; {uncovered_pages} pages omitted (first: page {}); page rendering is unsupported and an OCR pack is required",
                 first_uncovered_page.unwrap_or(1)
             )
         } else {
@@ -228,6 +231,9 @@ fn extract_page_images(
             page_number,
             image_index: image_index as u32,
         };
+        if builder.omit_if_visual_capacity_exhausted(provenance.clone()) {
+            continue;
+        }
         let image = (|| -> lopdf::Result<&lopdf::Stream> {
             let id = image_ref.as_reference()?;
             document.get_object(id)?.as_stream()
@@ -253,37 +259,118 @@ fn extract_page_images(
                 continue;
             }
         }
-        let jpeg = match image.dict.get(b"Filter") {
-            Ok(Object::Name(filter)) => filter == b"DCTDecode",
-            Ok(Object::Array(filters)) if filters.len() == 1 => {
-                filters[0].as_name().is_ok_and(|name| name == b"DCTDecode")
-            }
-            _ => false,
+        let filter = match image.dict.get(b"Filter") {
+            Ok(Object::Name(filter)) => Some(filter.as_slice()),
+            Ok(Object::Array(filters)) if filters.len() == 1 => filters[0].as_name().ok(),
+            _ => None,
         };
-        if !jpeg {
-            builder.omit_visual(
-                Some(provenance),
-                "PDF image encoding is not a reusable JPEG raster",
-            );
-            continue;
-        }
-        if image.content.len() > MAX_VISUAL_BYTES {
-            builder.omit_visual(
-                Some(provenance),
-                format!("PDF image exceeds {MAX_VISUAL_BYTES} retained bytes"),
-            );
-            continue;
-        }
+        let (media_type, data) = match filter {
+            Some(b"DCTDecode") if image.content.len() <= MAX_VISUAL_BYTES => {
+                ("image/jpeg", image.content.clone())
+            }
+            Some(b"DCTDecode") => {
+                builder.omit_visual(
+                    Some(provenance),
+                    format!("PDF image exceeds {MAX_VISUAL_BYTES} retained bytes"),
+                );
+                continue;
+            }
+            Some(b"FlateDecode") => match png_from_flate_image(image) {
+                Ok(png) => ("image/png", png),
+                Err(reason) => {
+                    builder.omit_visual(Some(provenance), reason);
+                    continue;
+                }
+            },
+            _ => {
+                builder.omit_visual(
+                    Some(provenance),
+                    "PDF image encoding is not a reusable JPEG or simple Flate raster",
+                );
+                continue;
+            }
+        };
         retained |= builder
             .push_visual(VisualDraft {
-                media_type: "image/jpeg",
-                data: image.content.clone(),
+                media_type,
+                data,
                 provenance,
                 caption: None,
             })
             .map_err(PdfError::from)?;
     }
     Ok(retained)
+}
+
+struct BoundedPngWriter(Vec<u8>);
+
+impl Write for BoundedPngWriter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if bytes.len() > MAX_VISUAL_BYTES.saturating_sub(self.0.len()) {
+            return Err(io::Error::other(
+                "encoded PDF image exceeds visual byte limit",
+            ));
+        }
+        self.0.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+fn png_from_flate_image(image: &lopdf::Stream) -> Result<Vec<u8>, &'static str> {
+    if [
+        b"DecodeParms".as_slice(),
+        b"Decode",
+        b"Mask",
+        b"SMask",
+        b"ImageMask",
+    ]
+    .iter()
+    .any(|key| image.dict.has(key))
+    {
+        return Err("PDF Flate image has unsupported predictor, palette, mask or decode mapping");
+    }
+    let channels = match image.dict.get(b"ColorSpace").and_then(Object::as_name) {
+        Ok(b"DeviceRGB") => 3_usize,
+        Ok(b"DeviceGray") => 1,
+        _ => return Err("PDF Flate image color space is unsupported"),
+    };
+    if !matches!(
+        image.dict.get(b"BitsPerComponent").and_then(Object::as_i64),
+        Ok(8)
+    ) {
+        return Err("PDF Flate image must have 8 bits per component");
+    }
+    let size = (|| {
+        let width = u32::try_from(image.dict.get(b"Width").ok()?.as_i64().ok()?).ok()?;
+        let height = u32::try_from(image.dict.get(b"Height").ok()?.as_i64().ok()?).ok()?;
+        let bytes = (width as usize)
+            .checked_mul(height as usize)?
+            .checked_mul(channels)?;
+        (width > 0 && height > 0 && bytes <= MAX_PDF_FLATE_RASTER_BYTES)
+            .then_some((width, height, bytes))
+    })()
+    .ok_or("PDF Flate image dimensions or decoded bytes exceed the raster limit")?;
+    let (width, height, expected_bytes) = size;
+    let pixels = image
+        .decompressed_content_with_limit(expected_bytes)
+        .map_err(|_| "PDF Flate image could not be decompressed within its raster limit")?;
+    if pixels.len() != expected_bytes {
+        return Err("PDF Flate image decoded byte length does not match its dimensions");
+    }
+    let mut encoded = BoundedPngWriter(Vec::new());
+    let color = if channels == 3 {
+        ExtendedColorType::Rgb8
+    } else {
+        ExtendedColorType::L8
+    };
+    PngEncoder::new(&mut encoded)
+        .write_image(&pixels, width, height, color)
+        .map_err(|_| "PDF Flate image could not be encoded within the visual byte limit")?;
+    Ok(encoded.0)
 }
 
 fn page_xobjects(
@@ -619,6 +706,233 @@ pub(crate) mod tests {
         let converted = convert_pdf_with_visuals(&bytes, true).expect("conversion");
         assert!(converted.visuals().is_empty());
         assert!(converted.visual_omissions().is_empty());
+    }
+
+    #[test]
+    fn drawn_flate_rgb_scan_is_retained_as_page_cited_png_only_with_visuals() {
+        let bytes = text_pdf(&[&["Searchable first page"], &[]]);
+        let mut document = Document::load_mem(&bytes).expect("load fixture");
+        let page_id = document.get_pages()[&2];
+        let content_id = document.get_page_contents(page_id)[0];
+        document
+            .get_object_mut(content_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .set_plain_content(b"q /Im1 Do Q\n".to_vec());
+        let pixels = [255, 0, 0, 0, 255, 0].repeat(1_000);
+        let mut image = Stream::new(
+            dictionary! {
+                "Type" => "XObject",
+                "Subtype" => "Image",
+                "Width" => 2,
+                "Height" => 1000,
+                "ColorSpace" => "DeviceRGB",
+                "BitsPerComponent" => 8,
+            },
+            pixels.clone(),
+        );
+        image.compress().expect("compress pixels");
+        assert!(image.dict.has(b"Filter"));
+        let image_id = document.add_object(image);
+        let resources_id = document.get_page_resources(page_id).unwrap().1[0];
+        document
+            .get_dictionary_mut(resources_id)
+            .unwrap()
+            .set("XObject", dictionary! { "Im1" => image_id });
+        let mut bytes = Vec::new();
+        document.save_to(&mut bytes).expect("save scan");
+
+        assert!(
+            convert_pdf(&bytes)
+                .expect("text-only conversion")
+                .visuals()
+                .is_empty()
+        );
+        let converted = convert_pdf_with_visuals(&bytes, true).expect("consented conversion");
+        assert_eq!(
+            converted.visuals().len(),
+            1,
+            "{:?}",
+            converted.visual_omissions()
+        );
+        assert_eq!(converted.visuals()[0].media_type.as_str(), "image/png");
+        assert_eq!(
+            converted.visuals()[0].provenance,
+            VisualProvenance::PdfImage {
+                page_number: 2,
+                image_index: 0
+            }
+        );
+        assert_eq!(
+            image::load_from_memory(&converted.visuals()[0].data)
+                .expect("valid PNG")
+                .to_rgb8()
+                .into_raw(),
+            pixels
+        );
+
+        let mut scan_only = Document::load_mem(&bytes).expect("load scan");
+        scan_only
+            .get_object_mut(scan_only.get_pages()[&1])
+            .unwrap()
+            .as_dict_mut()
+            .unwrap()
+            .remove(b"Contents");
+        let mut scan_bytes = Vec::new();
+        scan_only
+            .save_to(&mut scan_bytes)
+            .expect("save image-only PDF");
+        assert!(matches!(
+            convert_pdf(&scan_bytes),
+            Err(PdfError::NoTextLayer(_))
+        ));
+        let scan = convert_pdf_with_visuals(&scan_bytes, true).expect("consented image-only scan");
+        assert_eq!(scan.visuals().len(), 1);
+        assert_eq!(
+            scan.visuals()[0].provenance,
+            converted.visuals()[0].provenance
+        );
+    }
+
+    #[test]
+    fn flate_image_with_predictor_is_omitted_instead_of_misdecoded() {
+        let bytes = text_pdf(&[&["Visible text"]]);
+        let mut document = Document::load_mem(&bytes).expect("load fixture");
+        let page_id = document.get_pages()[&1];
+        let content_id = document.get_page_contents(page_id)[0];
+        document
+            .get_object_mut(content_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .set_plain_content(b"q /Im1 Do Q\nBT /F1 12 Tf (Visible text) Tj ET\n".to_vec());
+        let mut image = Stream::new(
+            dictionary! {
+                "Type" => "XObject",
+                "Subtype" => "Image",
+                "Width" => 2,
+                "Height" => 1000,
+                "ColorSpace" => "DeviceRGB",
+                "BitsPerComponent" => 8,
+                "DecodeParms" => dictionary! { "Predictor" => 12 },
+            },
+            [255, 0, 0, 0, 255, 0].repeat(1_000),
+        );
+        image.compress().expect("compress pixels");
+        let image_id = document.add_object(image);
+        let resources_id = document.get_page_resources(page_id).unwrap().1[0];
+        document
+            .get_dictionary_mut(resources_id)
+            .unwrap()
+            .set("XObject", dictionary! { "Im1" => image_id });
+        let mut bytes = Vec::new();
+        document.save_to(&mut bytes).expect("save fixture");
+
+        let converted = convert_pdf_with_visuals(&bytes, true).expect("convert text");
+        assert!(converted.visuals().is_empty());
+        assert!(converted.visual_omissions().iter().any(|omission| {
+            omission.detail.contains("predictor")
+                && omission.provenance
+                    == Some(VisualProvenance::PdfImage {
+                        page_number: 1,
+                        image_index: 0,
+                    })
+        }));
+
+        let mut document = Document::load_mem(&bytes).expect("load compressed fixture");
+        let resources_id = document
+            .get_page_resources(document.get_pages()[&1])
+            .unwrap()
+            .1[0];
+        let image_id = document
+            .get_dict_in_dict(document.get_dictionary(resources_id).unwrap(), b"XObject")
+            .unwrap()
+            .get(b"Im1")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let image = document
+            .get_object_mut(image_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap();
+        image.dict.remove(b"DecodeParms");
+        image.dict.set("Height", 1);
+        let mut bytes = Vec::new();
+        document.save_to(&mut bytes).expect("save bounded fixture");
+        let converted = convert_pdf_with_visuals(&bytes, true).expect("convert text");
+        assert!(converted.visuals().is_empty());
+        assert!(
+            converted
+                .visual_omissions()
+                .iter()
+                .any(|omission| omission.detail.contains("raster limit"))
+        );
+    }
+
+    #[test]
+    fn scan_pages_past_attachment_capacity_keep_page_omissions() {
+        let page_count = crate::model::MAX_VISUAL_ATTACHMENTS + 1;
+        let empty_page: &[&str] = &[];
+        let pages = vec![empty_page; page_count];
+        let bytes = text_pdf(&pages);
+        let mut document = Document::load_mem(&bytes).expect("load fixture");
+        let jpeg = vec![
+            0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 1, 0, 2, 3, 1, 0x11, 0, 2, 0x11, 0, 3, 0x11, 0,
+            0xff, 0xd9,
+        ];
+        let image_id = document.add_object(Stream::new(
+            dictionary! {
+                "Type" => "XObject",
+                "Subtype" => "Image",
+                "Width" => 2,
+                "Height" => 1,
+                "ColorSpace" => "DeviceRGB",
+                "BitsPerComponent" => 8,
+                "Filter" => "DCTDecode",
+            },
+            jpeg,
+        ));
+        for page_id in document.get_pages().values().copied().collect::<Vec<_>>() {
+            let content_id = document.get_page_contents(page_id)[0];
+            document
+                .get_object_mut(content_id)
+                .unwrap()
+                .as_stream_mut()
+                .unwrap()
+                .set_plain_content(b"q /Im1 Do Q\n".to_vec());
+        }
+        let resources_id = document
+            .get_page_resources(document.get_pages()[&1])
+            .unwrap()
+            .1[0];
+        document
+            .get_dictionary_mut(resources_id)
+            .unwrap()
+            .set("XObject", dictionary! { "Im1" => image_id });
+        let mut bytes = Vec::new();
+        document.save_to(&mut bytes).expect("save fixture");
+
+        let converted = convert_pdf_with_visuals(&bytes, true).expect("convert PDF");
+        assert_eq!(
+            converted.visuals().len(),
+            crate::model::MAX_VISUAL_ATTACHMENTS
+        );
+        assert!(converted.visual_omissions().iter().any(|omission| {
+            omission.provenance
+                == Some(VisualProvenance::PdfImage {
+                    page_number: page_count as u32,
+                    image_index: 0,
+                })
+                && omission.detail.contains("count exceeds")
+        }));
+        assert!(converted.visual_omissions().iter().any(|omission| {
+            omission.provenance
+                == Some(VisualProvenance::PdfPage {
+                    page_number: page_count as u32,
+                })
+        }));
     }
 
     #[test]

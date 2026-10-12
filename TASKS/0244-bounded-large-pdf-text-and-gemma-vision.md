@@ -98,6 +98,17 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Added an opt-in, pure-Rust path for simple directly drawn
+  8-bit Flate RGB/gray PDF XObjects: decode at most 4 MiB of exact-size pixels,
+  encode a bounded PNG, and retain `PdfImage` page provenance for Gemma's
+  existing consent-gated embedding path. Unsupported predictors, color
+  spaces, masks, encodings and raster sizes remain explicit omissions. Tests
+  cover image-off, image-only and mixed-page conversion, pixel fidelity,
+  malformed lengths and the worker's consented PNG record. This reconstructs
+  a supported embedded raster; it does not render a PDF page, run OCR, support
+  forms, or qualify the native PDFium supply chain. The existing 32-attachment
+  and 32-MiB/document retention caps still prevent full 354-page scan
+  coverage; >64 MiB ingestion and release remain no-go.
 - 2026-10-12 Copilot: Baseline and Docling's initial PDF parse now cap eager
   decompression of each structural object/xref stream at 16 MiB. A synthetic
   sub-MiB PDF with an over-16-MiB compressed page object must fail as malformed,

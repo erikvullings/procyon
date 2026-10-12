@@ -117,17 +117,35 @@ impl<'a, 'b> DocumentBuilder<'a, 'b> {
         }
     }
 
+    pub(crate) fn omit_if_visual_capacity_exhausted(
+        &mut self,
+        provenance: VisualProvenance,
+    ) -> bool {
+        let reason = if self.visuals.len() >= MAX_VISUAL_ATTACHMENTS {
+            Some(format!(
+                "visual attachment count exceeds {MAX_VISUAL_ATTACHMENTS}"
+            ))
+        } else if self.visual_bytes >= MAX_TOTAL_VISUAL_BYTES {
+            Some(format!(
+                "visual attachments exceed {MAX_TOTAL_VISUAL_BYTES} bytes"
+            ))
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            self.omit_visual(Some(provenance), reason);
+            return true;
+        }
+        false
+    }
+
     /// Validates and retains one supported raster attachment.
     pub(crate) fn push_visual(&mut self, draft: VisualDraft) -> Result<bool, Stop> {
         self.checkpoint()?;
         if !self.visuals_enabled {
             return Ok(false);
         }
-        if self.visuals.len() >= MAX_VISUAL_ATTACHMENTS {
-            self.omit_visual(
-                Some(draft.provenance),
-                format!("visual attachment count exceeds {MAX_VISUAL_ATTACHMENTS}"),
-            );
+        if self.omit_if_visual_capacity_exhausted(draft.provenance.clone()) {
             return Ok(false);
         }
         if draft.data.len() > MAX_VISUAL_BYTES {
