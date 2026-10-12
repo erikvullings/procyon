@@ -229,8 +229,10 @@ export async function preparePinnedPdfium(descriptor, cacheRoot) {
         throw new Error(`cached PDFium notice ${name} differs from pinned archive`);
       }
     }
+
     return result;
   }
+
   const staging = fs.mkdtempSync(path.join(root, 'pdfium-extract-'));
   try {
     fs.writeFileSync(path.join(staging, descriptor.loader.name), loader);
@@ -244,4 +246,21 @@ export async function preparePinnedPdfium(descriptor, cacheRoot) {
   } finally {
     if (fs.existsSync(staging)) fs.rmSync(staging, { recursive: true, force: true });
   }
+}
+
+export function writePdfiumNotices(prepared, destination) {
+  const entries = [
+    ['LICENSE', prepared.license],
+    ...noticeNames.map((name) => [`licenses/${name}`, path.join(prepared.notices, name)]),
+  ];
+  const content = [];
+  for (const [name, source] of entries) {
+    const bytes = fs.readFileSync(source);
+    if (bytes.length === 0 || bytes.length > 1024 * 1024) {
+      throw new Error(`PDFium notice ${name} is empty or exceeds the notice budget`);
+    }
+    content.push(Buffer.from(`\n===== ${name} =====\n`), bytes, Buffer.from('\n'));
+  }
+  fs.writeFileSync(destination, Buffer.concat(content));
+  return destination;
 }

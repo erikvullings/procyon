@@ -553,9 +553,14 @@ whole-page JPEG. Its provenance distinguishes a rendered page from an embedded
 image; the resulting vector still requires immutable Gemma image consent. For
 ordinary small-PDF ingestion, an inline figure on a text page is reported as
 missing visual evidence without mislabeling its searchable text as absent.
-Neither development feature is built into the production worker; PDFium is
-not installed in the signed semantic catalog, and four-target resource and
-packaging qualification remain outstanding. No release is approved.
+The default production worker still excludes both experimental PDF features.
+An explicit Gemma-only PDF-render qualification recipe can now build a worker
+with the features, sign a target-specific PDFium loader and its separate
+complete license-notices artifact into the semantic catalog, and assemble the
+verified payloads beside the worker. On macOS the loader joins the Developer ID
+signing and notarization submission. This is **not** installed or release-qualified
+on all four targets; resource ceilings, installed real-Gemma behavior, host
+navigation, rollback, and review remain outstanding. No release is approved.
 
 Once a replacement generation is published, superseded catalogue and Zvec records are reclaimed
 in bounded batches.

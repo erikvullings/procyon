@@ -29,6 +29,10 @@ pub const PRODUCTION_WORKER_COMPONENT_ID: &str = "procyon.semantic.worker";
 pub const PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID: &str = "procyon.semantic.zvec-runtime";
 /// Logical component identity of the production ONNX Runtime loader.
 pub const PRODUCTION_ONNX_RUNTIME_COMPONENT_ID: &str = "procyon.semantic.onnx-runtime";
+/// Logical component identity of the optional, experimental PDFium loader.
+pub const PRODUCTION_PDFIUM_RUNTIME_COMPONENT_ID: &str = "procyon.semantic.pdfium-runtime";
+/// Logical component identity of its complete target-specific license notices.
+pub const PRODUCTION_PDFIUM_NOTICES_COMPONENT_ID: &str = "procyon.semantic.pdfium-notices";
 /// Logical component identity of the production multilingual model package.
 pub const PRODUCTION_MODEL_COMPONENT_ID: &str = "procyon.semantic.model.multilingual-e5-small";
 /// Exact upstream model identity selected for the first production profile.

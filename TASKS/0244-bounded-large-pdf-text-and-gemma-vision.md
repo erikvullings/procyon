@@ -98,6 +98,18 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Added an explicit Gemma-only
+  `--experimental-pdf-render true` production-bundle preparation path,
+  still **off by default**. The unsigned catalog input includes separate
+  content-addressed PDFium loader and complete target-specific notices
+  artifacts, binds the worker to the loader and both payloads to the exact
+  source, and the desktop selects/verifies/installs both together beside
+  the worker. The read-only four-target qualification workflow accepts a
+  separate `qualify_pdf_render` input, and macOS signing/notarization now
+  includes the PDFium dylib when present. Synthetic signed-catalog and
+  assembled-launch tests passed; the package has **not** yet been built,
+  notarized, installed or exercised with real Gemma across four targets.
+  This recipe is not release GO and no new candidate was dispatched.
 - 2026-10-12 Copilot: Added a separately callable pinned PDFium input
   preparation helper for the four supported targets. It checks the exact
   `chromium/8086` archive before decoding and verifies loader bytes and

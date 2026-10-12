@@ -17,6 +17,11 @@ on:
         required: false
         default: false
         type: boolean
+      qualify_pdf_render:
+        description: Include experimental signed PDFium page renderer with Gemma (qualification only)
+        required: false
+        default: false
+        type: boolean
       qualify_installed_gemma:
         description: Read-only installed lifecycle against a retained signed candidate
         required: false
@@ -157,17 +162,24 @@ jobs:
           PROCYON_REQUIRE_CLEAN_SOURCE: "1"
           PROCYON_REQUIRE_PLATFORM_SIGNING: "1"
           RELEASE_TAG: ${{ inputs.release_tag }}
+          QUALIFY_PDF_RENDER: ${{ inputs.qualify_pdf_render }}
         run: |
           gemma_args=()
           if [[ -n "${GEMMA_ORIGINAL_FILES:-}" ]]; then
             gemma_args=(--gemma-original-files "$GEMMA_ORIGINAL_FILES")
+          fi
+          pdf_args=()
+          if [[ "${QUALIFY_PDF_RENDER}" == "true" ]]; then
+            test -n "${GEMMA_ORIGINAL_FILES:-}"
+            pdf_args=(--experimental-pdf-render true)
           fi
           pnpm semantic:bundle:production -- \
             --output "target/semantic-production-release/${{ matrix.target }}" \
             --release-base-url \
             "https://github.com/${{ github.repository }}/releases/download/$RELEASE_TAG" \
             --source-revision "${{ github.sha }}" \
-            "${gemma_args[@]}"
+            "${gemma_args[@]}" \
+            "${pdf_args[@]}"
       - name: Notarize and verify macOS semantic executables
         if: matrix.target == 'macos-aarch64'
         shell: bash
@@ -178,13 +190,20 @@ jobs:
           ARTIFACTS="target/semantic-production-release/${{ matrix.target }}/artifacts"
           WORKER="$(find "$ARTIFACTS" -maxdepth 1 -type f -name 'procyon.semantic.worker.*' -print -quit)"
           RUNTIME="$(find "$ARTIFACTS" -maxdepth 1 -type f -name 'procyon.semantic.zvec-runtime.*' -print -quit)"
+          PDFIUM="$(find "$ARTIFACTS" -maxdepth 1 -type f -name 'procyon.semantic.pdfium-runtime.*' -print -quit)"
           test -n "$WORKER"
           test -n "$RUNTIME"
           codesign --verify --strict --verbose=2 "$WORKER"
           codesign --verify --strict --verbose=2 "$RUNTIME"
+          if [[ -n "$PDFIUM" ]]; then
+            codesign --verify --strict --verbose=2 "$PDFIUM"
+          fi
           NOTARY_DIRECTORY="$RUNNER_TEMP/semantic-notary"
           mkdir -p "$NOTARY_DIRECTORY"
           cp "$WORKER" "$RUNTIME" "$NOTARY_DIRECTORY/"
+          if [[ -n "$PDFIUM" ]]; then
+            cp "$PDFIUM" "$NOTARY_DIRECTORY/"
+          fi
           ditto -c -k --keepParent "$NOTARY_DIRECTORY" "$RUNNER_TEMP/semantic-notary.zip"
           xcrun notarytool submit "$RUNNER_TEMP/semantic-notary.zip" \
             --key "$APPLE_API_KEY_PATH" \

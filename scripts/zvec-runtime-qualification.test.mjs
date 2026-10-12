@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -12,6 +13,7 @@ import {
 import {
   archivePathForTar,
   nativeLibraryNames,
+  notarizedArtifactEvidence,
   parseNativeDependencies,
   recordAcceptedMacNotarization,
   tarExtractionArgs,
@@ -294,6 +296,25 @@ test('release qualification proof rejects workflow inputs interpolated into shel
   fs.rmSync(directory, { recursive: true, force: true });
 });
 
+test('PDF vision qualification cannot become a default or skip Gemma originals', () => {
+  const directory = fs.mkdtempSync(path.join(tmpdir(), 'unsafe-pdf-render-'));
+  try {
+    const workflow = path.join(directory, 'release.yml');
+    const original = fs.readFileSync(
+      path.resolve('.github/workflows/release-semantic-components.yml'),
+      'utf8',
+    );
+    const enabled = original.replace(/(qualify_pdf_render:[\s\S]*?default: )false/u, '$1true');
+    assert.notEqual(enabled, original);
+    fs.writeFileSync(workflow, enabled);
+    assert.throws(() => checkSemanticQualificationWorkflow(workflow), /PDF rendering/u);
+    fs.writeFileSync(workflow, original.replace(/test -n "\$\{GEMMA_ORIGINAL_FILES:-\}"/u, 'true'));
+    assert.throws(() => checkSemanticQualificationWorkflow(workflow), /PDF rendering/u);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('a bare accepted status cannot fabricate Apple notarization evidence', () => {
   const directory = fs.mkdtempSync(path.join(tmpdir(), 'notary-result-'));
   const result = path.join(directory, 'result.json');
@@ -303,4 +324,31 @@ test('a bare accepted status cannot fabricate Apple notarization evidence', () =
     /accepted submission with an identifier/u,
   );
   fs.rmSync(directory, { recursive: true, force: true });
+});
+
+test('Apple notarization binds an optional PDFium dylib to the signed catalog inputs', () => {
+  const directory = fs.mkdtempSync(path.join(tmpdir(), 'pdfium-notary-'));
+  try {
+    fs.mkdirSync(path.join(directory, 'artifacts'));
+    const artifacts = [
+      'procyon.semantic.worker',
+      'procyon.semantic.zvec-runtime',
+      'procyon.semantic.pdfium-runtime',
+    ].map((componentId, index) => {
+      const bytes = Buffer.from(`fixture payload ${index}`);
+      const id = `artifact-${index}`;
+      fs.writeFileSync(path.join(directory, 'artifacts', id), bytes);
+      return {
+        id,
+        component_id: componentId,
+        resources: { download_bytes: bytes.length },
+        checksum: [...createHash('sha256').update(bytes).digest()],
+      };
+    });
+    assert.equal(notarizedArtifactEvidence(directory, { catalog: { artifacts } }).length, 3);
+    artifacts.pop();
+    assert.equal(notarizedArtifactEvidence(directory, { catalog: { artifacts } }).length, 2);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });

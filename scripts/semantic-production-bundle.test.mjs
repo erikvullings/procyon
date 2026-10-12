@@ -119,6 +119,44 @@ test('signed Gemma workers compile Metal only for macOS ARM', () => {
   }
 });
 
+test('PDF rendering requires explicit Gemma opt-in and is never in default workers', () => {
+  const args = [
+    '--output',
+    'bundle',
+    '--release-base-url',
+    'https://qualification.invalid/revision',
+    '--source-revision',
+    'a'.repeat(40),
+  ];
+  assert.throws(
+    () => parseProductionBundleArguments([...args, '--experimental-pdf-render', 'true']),
+    /requires.*Gemma/u,
+  );
+  const values = parseProductionBundleArguments([
+    ...args,
+    '--gemma-original-files',
+    'model-cache',
+    '--experimental-pdf-render',
+    'true',
+  ]);
+  assert.equal(values.get('--experimental-pdf-render'), 'true');
+  for (const [os, arch] of [
+    ['darwin', 'arm64'],
+    ['win32', 'x64'],
+    ['linux', 'x64'],
+    ['linux', 'arm64'],
+  ]) {
+    const target = supportedSemanticTarget(os, arch);
+    assert.equal(productionWorkerFeatures(target, undefined, false), 'semantic-runtime');
+    assert.equal(
+      productionWorkerFeatures(target, 'model-cache', true),
+      os === 'darwin'
+        ? 'gemma-native,gemma-metal,experimental-pdf-render'
+        : 'gemma-native,experimental-pdf-render',
+    );
+  }
+});
+
 test('Zvec native library names are platform-specific', () => {
   assert.deepEqual(nativeLibraryNames('darwin'), ['libzvec_c_api.dylib']);
   assert.deepEqual(nativeLibraryNames('win32'), ['zvec_c_api.dll']);

@@ -55,6 +55,14 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
       'qualification must build against the final tag and retain smoke/privacy evidence',
     );
   }
+  if (
+    workflow.on.workflow_dispatch.inputs.qualify_pdf_render?.default !== false ||
+    !payloadConfiguration.includes('inputs.qualify_pdf_render') ||
+    !/test -n "\$\{GEMMA_ORIGINAL_FILES:-\}"/u.test(payloadCommands) ||
+    !payloadCommands.includes('--experimental-pdf-render true')
+  ) {
+    failures.push('PDF rendering qualification must be opt-in and require Gemma originals');
+  }
 
   const collect = workflow.jobs?.['semantic-collect'];
   if (

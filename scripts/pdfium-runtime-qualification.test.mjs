@@ -8,6 +8,7 @@ import {
   preparePinnedPdfium,
   verifyPdfiumArchive,
   verifyPdfiumMembers,
+  writePdfiumNotices,
 } from './pdfium-runtime-qualification.mjs';
 import { sha256Of } from './zvec-runtime-qualification.mjs';
 
@@ -80,6 +81,11 @@ test('verifies pinned local four-target archives and preserves target-specific n
     assert.equal(fs.readdirSync(prepared.notices).length, 17);
     assert.ok(fs.statSync(prepared.license).size > 0);
     assert.equal(prepared.archiveSha256, descriptor.archive.sha256);
+    const packed = path.join(directory, descriptor.archive.name.replace(/\.tgz$/u, '-notices.txt'));
+    writePdfiumNotices(prepared, packed);
+    const text = fs.readFileSync(packed, 'utf8');
+    assert.equal((text.match(/^===== (LICENSE|licenses\/.+) =====$/gmu) ?? []).length, 18);
+    fs.rmSync(packed);
   }
 });
 
