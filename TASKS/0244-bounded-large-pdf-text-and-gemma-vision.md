@@ -98,6 +98,20 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Behind the off-by-default
+  `fm-semantic-worker/experimental-large-pdf` feature, the real worker
+  executable now has a path-free PDF text child and a supervisor that
+  streams an anonymous spool, checks its SHA-256 on both sides, samples
+  child RSS, kills/reaps on cancellation/deadline or excessive RSS, and
+  validates a capped typed text report. The 188,870,838-byte synthetic
+  fixture passed through that executable, producing text with citations
+  for all 354 pages; `/usr/bin/time -l` reported 1.76 s and 402,096,128
+  bytes maximum RSS for the test process group on this Apple Silicon host.
+  The provisional 512-MiB RSS threshold is **sampled**, not OS-enforced
+  and not four-target qualified. The production IPC completion still
+  rejects >64 MiB; ingestion, atomic publication, image windows and
+  release packaging do not enable this experimental child. No source
+  PDFs are retained after the synthetic test.
 - 2026-10-12 Copilot: `merge_pdf_text_windows` now accepts only adjacent,
   ordered PDF text windows covering every declared page, with the exact
   expected per-window `ItemsDropped` omission and no other truncation or
