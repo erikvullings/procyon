@@ -763,6 +763,7 @@ export const pt = {
     openMedia: 'Abrir {type}',
     closeMedia: 'Fechar {type}',
     unableToStart: 'Não é possível iniciar a pesquisa',
+    startingSearch: 'A iniciar pesquisa…',
     refresh: 'Atualizar pesquisa',
     filterLimitations: 'Não foi possível avaliar alguns filtros ({message}).',
     title: 'Localizar ficheiros',

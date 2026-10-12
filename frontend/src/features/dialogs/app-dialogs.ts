@@ -87,6 +87,7 @@ export interface AppDialogsContext {
   getFindFilesOpen(): boolean;
   getFindFilesRoot(): Location | undefined;
   getFindFilesError(): string | undefined;
+  getFindFilesSearchPending(): boolean;
   getCloseTabConfirmation(): { readonly paneId: PaneId; readonly tabId: TabId } | undefined;
   setCloseTabConfirmation(conf?: { readonly paneId: PaneId; readonly tabId: TabId }): void;
   getOperationConfirmation(): OperationConfirmationRequest | undefined;
@@ -429,6 +430,7 @@ export function renderAppDialogs(
           ...(ctx.getWorkspaceId() === undefined ? {} : { workspaceId: ctx.getWorkspaceId() }),
           scopeLabel: findFilesRoot === undefined ? '' : pathFromUri(findFilesRoot.uri),
           ...(findFilesError === undefined ? {} : { error: findFilesError }),
+          searchPending: ctx.getFindFilesSearchPending(),
           savedSearches: ctx.getSettings()?.savedSearches ?? [],
           onSearch: (params: FindFilesSearchParams) =>
             ctx.getFindFilesController().startFindFilesSearch(params),

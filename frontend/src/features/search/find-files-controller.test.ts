@@ -36,6 +36,67 @@ describe('searchQueryFromParams', () => {
     expect(query.scope.locations).toEqual([root]);
   });
 
+  it('preserves the selected concept identity as semantic-query provenance', () => {
+    const query = searchQueryFromParams(
+      { providerId: 'local', uri: 'file:///current' },
+      {
+        mode: 'semantic',
+        filenameQuery: '',
+        semanticQuery: 'Mental stress',
+        semanticLibraryId: 'library-1',
+        semanticScope: 'entireLibrary',
+        selectedConcept: {
+          vocabularyId: 'unesco-psychology',
+          conceptUri: 'http://vocabularies.unesco.org/thesaurus/concept13013',
+        },
+        contentRegex: false,
+        contentCaseSensitive: false,
+        contentWholeWord: false,
+        recurse: true,
+      },
+      false,
+    );
+    expect(query.mode).toBe('semantic');
+    expect(query.semantic?.selectedConcept).toEqual({
+      vocabularyId: 'unesco-psychology',
+      conceptUri: 'http://vocabularies.unesco.org/thesaurus/concept13013',
+    });
+    expect(query.concept).toBeUndefined();
+  });
+
+  it('retains concept provenance only while the saved similarity text is unchanged', () => {
+    const root = { providerId: 'local', uri: 'file:///current' };
+    const params = {
+      mode: 'semantic' as const,
+      filenameQuery: '',
+      semanticQuery: 'Mental stress',
+      semanticLibraryId: 'library-1',
+      semanticScope: 'entireLibrary' as const,
+      contentRegex: false,
+      contentCaseSensitive: false,
+      contentWholeWord: false,
+      recurse: true,
+    };
+    const existing = searchQueryFromParams(
+      root,
+      {
+        ...params,
+        selectedConcept: {
+          vocabularyId: 'unesco-psychology',
+          conceptUri: 'http://vocabularies.unesco.org/thesaurus/concept13013',
+        },
+      },
+      false,
+    );
+    expect(searchQueryFromParams(root, params, false, existing).semantic?.selectedConcept).toEqual(
+      existing.semantic?.selectedConcept,
+    );
+    expect(
+      searchQueryFromParams(root, { ...params, semanticQuery: 'different text' }, false, existing)
+        .semantic?.selectedConcept,
+    ).toBeUndefined();
+  });
+
   it('preserves unexposed query semantics and scope while editing', () => {
     const existing: SearchQuery = {
       schemaVersion: 1,

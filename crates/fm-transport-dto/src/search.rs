@@ -41,6 +41,16 @@ pub struct SearchSemanticPredicateDto {
     pub scope: SemanticSearchScopeDto,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub enrolled_root_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_concept: Option<SearchSemanticConceptSourceDto>,
+}
+
+/// Identity of the concept used to compose an exploratory similarity query.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchSemanticConceptSourceDto {
+    pub vocabulary_id: String,
+    pub concept_uri: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, Default)]

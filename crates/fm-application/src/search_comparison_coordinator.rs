@@ -864,6 +864,7 @@ mod tests {
                             library_id: library_id.to_owned(),
                             scope: SemanticSearchScopeDto::CurrentFolder,
                             enrolled_root_ids: Vec::new(),
+                            selected_concept: None,
                         }),
                         concept: None,
                         git_statuses: Vec::new(),

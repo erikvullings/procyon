@@ -16991,6 +16991,22 @@
           }
         }
       },
+      "SearchSemanticConceptSourceDto": {
+        "type": "object",
+        "description": "Identity of the concept used to compose an exploratory similarity query.",
+        "required": [
+          "vocabularyId",
+          "conceptUri"
+        ],
+        "properties": {
+          "conceptUri": {
+            "type": "string"
+          },
+          "vocabularyId": {
+            "type": "string"
+          }
+        }
+      },
       "SearchSemanticPredicateDto": {
         "type": "object",
         "required": [
@@ -17013,6 +17029,16 @@
           },
           "scope": {
             "$ref": "#/components/schemas/SemanticSearchScopeDto"
+          },
+          "selectedConcept": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SearchSemanticConceptSourceDto"
+              }
+            ]
           }
         }
       },

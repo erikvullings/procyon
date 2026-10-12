@@ -46,6 +46,7 @@ export interface FindFilesSearchParams {
   readonly semanticScope?: SemanticSearchScope | undefined;
   readonly semanticLibraryId?: string;
   readonly conceptLabel?: string;
+  readonly selectedConcept?: { readonly vocabularyId: string; readonly conceptUri: string };
   /** Search recursively into subdirectories. */
   readonly recurse: boolean;
   readonly entryKinds?: readonly SearchEntryKind[];
@@ -67,6 +68,7 @@ export interface FindFilesDialogAttrs {
   /** Read-only context shown above the query field, e.g. the active directory's path. */
   readonly scopeLabel: string;
   readonly error?: string;
+  readonly searchPending?: boolean;
   readonly onSearch: (params: FindFilesSearchParams) => void;
   readonly onCancel: () => void;
   readonly savedSearches?: readonly SavedSearch[];
@@ -293,10 +295,16 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
     return concept?.prefLabels.en ?? Object.values(concept?.prefLabels ?? {})[0] ?? uri;
   }
 
+  function selectedConceptName(vocabulary: ConceptSource, uri: string): string {
+    const starter = skosStarters.find(({ document }) => document.id === vocabulary.id);
+    const label = conceptLabel(vocabulary, uri);
+    return `${label} (${starter?.shortName ?? vocabulary.name})`;
+  }
+
   function selectConcept(vocabulary: ConceptSource, uri: string): void {
     selectedConcept = { vocabulary, uri };
     conceptFilter = conceptLabel(vocabulary, uri);
-    savedName = t('search', 'relatedConcept', { concept: `${vocabulary.name}: ${conceptFilter}` });
+    savedName = selectedConceptName(vocabulary, uri);
   }
 
   function hasPredicates(searchParams: FindFilesSearchParams): boolean {
@@ -354,7 +362,11 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
         mode: 'semantic',
         filenameQuery: '',
         semanticQuery: definition ? `${label}. ${definition}` : label,
-        conceptLabel: `${selectedConcept.vocabulary.name}: ${label}`,
+        conceptLabel: selectedConceptName(selectedConcept.vocabulary, selectedConcept.uri),
+        selectedConcept: {
+          vocabularyId: selectedConcept.vocabulary.id,
+          conceptUri: selectedConcept.uri,
+        },
         semanticLibraryId: conceptLibraryId,
         semanticScope: currentFolderOnly ? 'currentFolder' : 'entireLibrary',
         contentRegex: false,
@@ -491,6 +503,10 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
           availabilityError
             ? m('p.fm-field-error', { role: 'alert' }, availabilityError)
             : undefined,
+          attrs.searchPending
+            ? m('p', { role: 'status' }, t('search', 'startingSearch'))
+            : undefined,
+          attrs.error ? m('p.fm-field-error', { role: 'alert' }, attrs.error) : undefined,
           conceptMode
             ? m('.fm-find-concept', [
                 m('.fm-find-concept-search-row', [
@@ -993,7 +1009,6 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
                   ),
                 ]),
               ]),
-          attrs.error === undefined ? undefined : m('.fm-field-error', attrs.error),
           availabilityError === undefined
             ? undefined
             : m('.fm-field-error', { role: 'alert' }, availabilityError),
@@ -1007,7 +1022,7 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
           { label: t('button', 'cancel'), onclick: () => cancel(attrs) },
           {
             label: t('search', 'search'),
-            disabled: !hasPredicates(params()),
+            disabled: attrs.searchPending || !hasPredicates(params()),
             onclick: () => search(attrs),
           },
         ],

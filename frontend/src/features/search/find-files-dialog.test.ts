@@ -227,7 +227,7 @@ describe('FindFilesDialog', () => {
     );
     document.querySelector<HTMLButtonElement>('.fm-save-search-button')?.click();
     expect(onSave).toHaveBeenCalledWith(
-      'Related to Topics: Machine learning',
+      'Machine learning (Topics)',
       expect.objectContaining({ semanticScope: 'currentFolder' }),
       undefined,
     );
@@ -273,6 +273,70 @@ describe('FindFilesDialog', () => {
       ?.click();
     expect(onSearch).toHaveBeenCalledOnce();
     expect(importSpy).not.toHaveBeenCalled();
+  });
+
+  it('names the selected UNESCO concept concisely without losing its identity', async () => {
+    const client = await indexedClient();
+    const onSearch = vi.fn();
+    const onSave = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          client,
+          workspaceId: 'workspace-a',
+          scopeLabel: '/Documents',
+          savedSearches: [],
+          onSearch,
+          onSave,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-files-modes')).not.toBeNull());
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    m.redraw.sync();
+    const filter = root.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!filter) throw new Error('Concept filter missing');
+    filter.value = 'Mental stress';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-concept-choice')?.textContent).toContain(
+        'Mental stress · Psychology (UNESCO',
+      ),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
+    m.redraw.sync();
+    expect(root.querySelector<HTMLInputElement>('.fm-saved-search-save input')?.value).toBe(
+      'Mental stress (UNESCO)',
+    );
+    root.querySelector<HTMLButtonElement>('.fm-save-search-button')?.click();
+    expect(onSave).toHaveBeenCalledWith(
+      'Mental stress (UNESCO)',
+      expect.objectContaining({
+        conceptLabel: 'Mental stress (UNESCO)',
+        selectedConcept: {
+          vocabularyId: 'unesco-psychology',
+          conceptUri: 'http://vocabularies.unesco.org/thesaurus/concept13013',
+        },
+      }),
+      undefined,
+    );
+    [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
+      .find((button) => button.textContent?.trim() === 'Search')
+      ?.click();
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conceptLabel: 'Mental stress (UNESCO)',
+        selectedConcept: {
+          vocabularyId: 'unesco-psychology',
+          conceptUri: 'http://vocabularies.unesco.org/thesaurus/concept13013',
+        },
+      }),
+    );
   });
 
   it('filters concept choices by vocabulary and submits only a choice from that vocabulary', async () => {
@@ -352,7 +416,7 @@ describe('FindFilesDialog', () => {
     expect(onSearch).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: 'semantic',
-        conceptLabel: expect.stringContaining(`${sourceName}:`),
+        conceptLabel: expect.stringMatching(/\(GEMET\)$/u),
         semanticScope: 'entireLibrary',
       }),
     );

@@ -3903,6 +3903,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     setFindFilesSearchStartPending: (pending) => {
       pendingFindFilesStarts = Math.max(0, pendingFindFilesStarts + (pending ? 1 : -1));
       if (pendingFindFilesStarts === 0) deferredSearchResultBatches.clear();
+      m.redraw();
     },
     getFindFilesError: () => findFilesError,
     setFindFilesError: (error) => {
@@ -4363,6 +4364,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getFindFilesOpen: () => findFilesOpen,
     getFindFilesRoot: () => findFilesRoot,
     getFindFilesError: () => findFilesError,
+    getFindFilesSearchPending: () => pendingFindFilesStarts > 0,
     getCloseTabConfirmation: () => closeTabConfirmation,
     setCloseTabConfirmation: (conf) => {
       closeTabConfirmation = conf;

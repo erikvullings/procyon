@@ -760,6 +760,7 @@ export const pl = {
     openMedia: 'Otwórz {type}',
     closeMedia: 'Zamknij {type}',
     unableToStart: 'Nie można rozpocząć wyszukiwania',
+    startingSearch: 'Uruchamianie wyszukiwania…',
     refresh: 'Odśwież wyszukiwanie',
     filterLimitations: 'Nie udało się ocenić niektórych filtrów ({message}).',
     title: 'Znajdź pliki',

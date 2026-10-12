@@ -762,6 +762,7 @@ export const es = {
     openMedia: 'Abrir {type}',
     closeMedia: 'Cerrar {type}',
     unableToStart: 'No se puede iniciar la búsqueda',
+    startingSearch: 'Iniciando búsqueda…',
     refresh: 'Actualizar búsqueda',
     filterLimitations: 'Algunos filtros no se pudieron evaluar ({message}).',
     title: 'Buscar archivos',

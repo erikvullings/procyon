@@ -797,6 +797,7 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
                     library_id: after_deletion.library_id,
                     scope: SemanticSearchScopeDto::CurrentFolder,
                     enrolled_root_ids: Vec::new(),
+                    selected_concept: None,
                 }),
                 concept: None,
                 git_statuses: Vec::new(),

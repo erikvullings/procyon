@@ -3158,6 +3158,95 @@ describe('AppShell', () => {
     expect(searchInput?.value).toBe('ERROR');
   });
 
+  it('submits a selected bundled concept to the client and reports a failed start', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    const workspace = await client.startWorkspace();
+    const status = await client.getSemanticLibraryStatus();
+    const [indexed] = await client.listKnowledgeRoots({ workspaceId: workspace.id });
+    if (!indexed) throw new Error('Missing indexed mock root');
+    vi.spyOn(client, 'getSemanticLibraryStatus').mockResolvedValue({
+      ...status,
+      roots: [
+        {
+          id: indexed.rootId,
+          location: indexed.location,
+          recursive: true,
+          stableIdentityVerified: true,
+          workspaceReferences: [workspace.id],
+          eligibilityOverrides: [],
+          eligibilityReasonCounts: [],
+          ocrRequiredFiles: [],
+          availability: { state: 'available' },
+          reconciliationGeneration: 4,
+          indexedGeneration: 4,
+          exclusions: [],
+          attachedVocabularyIds: [],
+        },
+      ],
+    });
+    vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([{ ...indexed, indexedSources: 3 }]);
+    let rejectStart: ((error: Error) => void) | undefined;
+    const startSearch = vi.spyOn(client, 'startSearch').mockImplementation(
+      () =>
+        new Promise<never>((_resolve, reject) => {
+          rejectStart = reject;
+        }),
+    );
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F7', altKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-files-modes')).not.toBeNull());
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelector('#find-files-concept')).not.toBeNull());
+    const filter = root.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!filter) throw new Error('Concept filter missing');
+    filter.value = 'Mental stress';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-concept-choice')?.textContent).toContain('Mental stress'),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
+      .find((button) => button.textContent?.trim() === 'Search')
+      ?.click();
+    await vi.waitFor(() => expect(startSearch).toHaveBeenCalledOnce());
+    expect(startSearch.mock.calls[0]?.[0].structuredQuery?.semantic?.query).toContain(
+      'Mental stress',
+    );
+    expect(startSearch.mock.calls[0]?.[0].structuredQuery?.semantic?.selectedConcept).toEqual({
+      vocabularyId: 'unesco-psychology',
+      conceptUri: 'http://vocabularies.unesco.org/thesaurus/concept13013',
+    });
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-files-body [role="status"]')?.textContent).toContain(
+        'Starting search',
+      ),
+    );
+    rejectStart?.(new Error('Synthetic worker unavailable'));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-files-body [role="alert"]')?.textContent).toContain(
+        'Synthetic worker unavailable',
+      ),
+    );
+    startSearch.mockRestore();
+    const retry = vi.spyOn(client, 'startSearch');
+    [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
+      .find((button) => button.textContent?.trim() === 'Search')
+      ?.click();
+    await vi.waitFor(() =>
+      expect(document.body.textContent).toContain('No results found for this search.'),
+    );
+    expect(retry).toHaveBeenCalledOnce();
+    expect((await retry.mock.results[0]?.value)?.executionMode).toBe('semantic');
+    expect(root.querySelector('.fm-find-files-modal.active')).toBeNull();
+  });
+
   it('closes the Lister viewer via its close button', async () => {
     const client = new MockFileManagerClient();
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });

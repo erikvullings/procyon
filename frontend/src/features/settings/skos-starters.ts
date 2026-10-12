@@ -10,6 +10,7 @@ const licenseKey = 'https://procyon.app/ns/skos-starter/license';
 export const skosStarters = [
   {
     document: climateEnergy,
+    shortName: 'GEMET',
     publisher: 'European Environment Agency (EEA)',
     version: 'GEMET 4.2.3',
     sourceUrl: climateEnergy.extensions[sourceKey],
@@ -18,6 +19,7 @@ export const skosStarters = [
   },
   {
     document: science,
+    shortName: 'UNESCO',
     publisher: 'UNESCO',
     version: '2026-08-31 snapshot',
     sourceUrl: science.extensions[sourceKey],
@@ -26,6 +28,7 @@ export const skosStarters = [
   },
   {
     document: technology,
+    shortName: 'UNESCO',
     publisher: 'UNESCO',
     version: '2026-08-31 snapshot',
     sourceUrl: technology.extensions[sourceKey],
@@ -34,6 +37,7 @@ export const skosStarters = [
   },
   {
     document: psychology,
+    shortName: 'UNESCO',
     publisher: 'UNESCO',
     version: '2026-08-31 snapshot',
     sourceUrl: psychology.extensions[sourceKey],
@@ -42,6 +46,7 @@ export const skosStarters = [
   },
   {
     document: defence,
+    shortName: 'UNESCO',
     publisher: 'UNESCO',
     version: '2026-08-31 snapshot',
     sourceUrl: defence.extensions[sourceKey],

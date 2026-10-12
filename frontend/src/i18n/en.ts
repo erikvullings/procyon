@@ -768,6 +768,7 @@ export const en = {
   },
   search: {
     unableToStart: 'Unable to start search',
+    startingSearch: 'Starting search…',
     refresh: 'Refresh search',
     filterLimitations: 'Some filters could not be evaluated ({message}).',
     title: 'Find files',

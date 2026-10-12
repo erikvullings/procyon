@@ -102,6 +102,11 @@ export function searchQueryFromParams(
           caseSensitive: params.contentCaseSensitive,
           wholeWord: params.contentWholeWord,
         };
+  const selectedConcept =
+    params.selectedConcept ??
+    (params.semanticQuery === existing?.semantic?.query
+      ? existing?.semantic?.selectedConcept
+      : undefined);
 
   return {
     schemaVersion: 2,
@@ -126,6 +131,7 @@ export function searchQueryFromParams(
             libraryId: params.semanticLibraryId ?? existing?.semantic?.libraryId ?? 'active',
             scope: params.semanticScope ?? 'currentFolder',
             enrolledRootIds: existing?.semantic?.enrolledRootIds ?? [],
+            ...(selectedConcept === undefined ? {} : { selectedConcept }),
           },
         }),
     gitStatuses: params.gitStatuses ?? existing?.gitStatuses ?? [],
@@ -296,7 +302,11 @@ export function createFindFilesController(
     startFindFilesSearch(params: FindFilesSearchParams): void {
       const root = context.getFindFilesRoot();
       const workspace = context.getWorkspace();
-      if (root === undefined || workspace === undefined) return;
+      if (root === undefined || workspace === undefined) {
+        context.setFindFilesError(t('search', 'unableToStart'));
+        context.redraw();
+        return;
+      }
       const searchPaneId = context.getActiveDirectory()?.paneId ?? workspace.activePaneId;
       runSearch(
         searchQueryFromParams(
@@ -338,6 +348,9 @@ export function createFindFilesController(
                 semanticQuery: saved.query.semantic.query,
                 semanticLibraryId: saved.query.semantic.libraryId,
                 semanticScope: saved.query.semantic.scope,
+                ...(saved.query.semantic.selectedConcept === undefined
+                  ? {}
+                  : { selectedConcept: saved.query.semantic.selectedConcept }),
               }),
           ...(saved.query.minSizeBytes === undefined
             ? {}

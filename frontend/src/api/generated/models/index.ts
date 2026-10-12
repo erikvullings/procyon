@@ -331,6 +331,7 @@ export * from './searchProviderLimitationDto.ts';
 export * from './searchQueryDto.ts';
 export * from './searchQueryDtoMetadata.ts';
 export * from './searchScopeDto.ts';
+export * from './searchSemanticConceptSourceDto.ts';
 export * from './searchSemanticPredicateDto.ts';
 export * from './searchStructuredRowsRequestDto.ts';
 export * from './searchStructuredRowsResponseDto.ts';

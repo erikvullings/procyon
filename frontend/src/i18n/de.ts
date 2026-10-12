@@ -768,6 +768,7 @@ export const de = {
     openMedia: '{type} öffnen',
     closeMedia: '{type} schließen',
     unableToStart: 'Suche kann nicht gestartet werden',
+    startingSearch: 'Suche wird gestartet…',
     refresh: 'Suche aktualisieren',
     filterLimitations: 'Einige Filter konnten nicht ausgewertet werden ({message}).',
     title: 'Dateien suchen',

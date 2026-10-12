@@ -760,6 +760,7 @@ export const nl = {
   },
   search: {
     unableToStart: 'Kan zoekopdracht niet starten',
+    startingSearch: 'Zoekopdracht starten…',
     refresh: 'Zoekopdracht vernieuwen',
     filterLimitations: 'Sommige filters konden niet worden geëvalueerd ({message}).',
     title: 'Bestanden zoeken',

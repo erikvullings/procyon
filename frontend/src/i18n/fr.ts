@@ -765,6 +765,7 @@ export const fr = {
     openMedia: 'Ouvrir {type}',
     closeMedia: 'Fermer {type}',
     unableToStart: 'Impossible de démarrer la recherche',
+    startingSearch: 'Lancement de la recherche…',
     refresh: 'Actualiser la recherche',
     filterLimitations: "Certains filtres n'ont pas pu être évalués ({message}).",
     title: 'Rechercher des fichiers',

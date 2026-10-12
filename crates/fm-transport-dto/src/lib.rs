@@ -167,9 +167,9 @@ pub use search::{
     ConceptHierarchyScopeDto, SearchConceptPredicateDto, SearchContentPredicateDto,
     SearchEntryKindDto, SearchExecutionModeDto, SearchGitStatusDto, SearchModeDto,
     SearchNameModeDto, SearchNamePredicateDto, SearchPredicateKindDto, SearchProviderLimitationDto,
-    SearchQueryDto, SearchScopeDto, SearchSemanticPredicateDto, SemanticEvidenceDto,
-    SemanticSearchCoverageDto, SemanticSearchResultDto, SemanticSearchScopeDto,
-    StartSearchRequestDto, StartSearchResponseDto,
+    SearchQueryDto, SearchScopeDto, SearchSemanticConceptSourceDto, SearchSemanticPredicateDto,
+    SemanticEvidenceDto, SemanticSearchCoverageDto, SemanticSearchResultDto,
+    SemanticSearchScopeDto, StartSearchRequestDto, StartSearchResponseDto,
 };
 pub use semantic_components::*;
 pub use semantic_library::*;
