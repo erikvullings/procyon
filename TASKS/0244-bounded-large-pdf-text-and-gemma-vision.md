@@ -98,6 +98,16 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: A synthetic-only ignored conversion probe now checks
+  the 174,224,803-byte, 354-page scanned fixture in one-page windows.
+  With visual evidence enabled, every page yields one distinct bounded
+  Flate-to-PNG image with exact page/XObject provenance and no visual
+  omission; the first page with images disabled yields no text layer.
+  The direct conversion probe finished in about 51 seconds on macOS arm64.
+  It loads the fixture in the test process and does **not** exercise the
+  isolated child, IPC, consented Gemma embeddings, atomic publication,
+  unsupported encodings or a renderer for PDFs without reusable images.
+  No scanned-page search or release qualification is implied.
 - 2026-10-12 Copilot: The development-only large-PDF worker offers a
   PDF-specific 200 MiB negotiated limit, and the IPC host reads that
   offer rather than assuming 64 MiB. Default and production workers
