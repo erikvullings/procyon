@@ -126,6 +126,7 @@ export interface GlobalKeydownContext {
     entry: EntrySummary,
     initialSearch?: InitialSearch,
     openMetadata?: boolean,
+    initialPage?: number,
   ): void;
   openEditor(paneId: PaneId, entry: EntrySummary): void;
   /** Recursively sums a directory's total size and fills in its Size cell once known (task 0071's
@@ -140,6 +141,7 @@ export interface GlobalKeydownContext {
     paneId?: PaneId,
   ): CommandAvailabilityContext;
   contentSearchInitialQuery(locationUri: string, entry: EntrySummary): InitialSearch | undefined;
+  pdfImagePageForEntry?(locationUri: string, entry: EntrySummary): number | undefined;
   refetchAffectedPanes(paneId?: PaneId): void;
   platformActionParameters(
     actionId: string,
@@ -261,6 +263,7 @@ function resolveViewTarget(context: GlobalKeydownContext):
       readonly paneId: PaneId;
       readonly entry: EntrySummary;
       readonly initialSearch?: InitialSearch;
+      readonly initialPage?: number;
     }
   | undefined {
   const workspace = context.getWorkspace();
@@ -290,10 +293,15 @@ function resolveViewTarget(context: GlobalKeydownContext):
     active === undefined
       ? undefined
       : context.contentSearchInitialQuery(active.location.uri, viewEntry);
+  const initialPage =
+    active === undefined || viewEntry.mimeType !== 'application/pdf'
+      ? undefined
+      : context.pdfImagePageForEntry?.(active.location.uri, viewEntry);
   return {
     paneId: otherPaneId,
     entry: viewEntry,
     ...(initialSearch === undefined ? {} : { initialSearch }),
+    ...(initialPage === undefined ? {} : { initialPage }),
   };
 }
 
@@ -727,7 +735,17 @@ const ACTION_KEYDOWN_ROUTES = [
         const target = resolveViewTarget(context);
         if (target !== undefined) {
           event.preventDefault();
-          context.openViewer(target.paneId, target.entry, target.initialSearch, true);
+          if (target.initialPage === undefined) {
+            context.openViewer(target.paneId, target.entry, target.initialSearch, true);
+          } else {
+            context.openViewer(
+              target.paneId,
+              target.entry,
+              target.initialSearch,
+              true,
+              target.initialPage,
+            );
+          }
           return;
         }
       }
@@ -1593,7 +1611,17 @@ const ACTION_KEYDOWN_ROUTES = [
         const target = resolveViewTarget(context);
         if (target !== undefined) {
           event.preventDefault();
-          context.openViewer(target.paneId, target.entry, target.initialSearch);
+          if (target.initialPage === undefined) {
+            context.openViewer(target.paneId, target.entry, target.initialSearch);
+          } else {
+            context.openViewer(
+              target.paneId,
+              target.entry,
+              target.initialSearch,
+              undefined,
+              target.initialPage,
+            );
+          }
           return;
         }
       }

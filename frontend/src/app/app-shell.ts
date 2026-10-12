@@ -174,7 +174,10 @@ import {
   reduceSelection,
   type SelectionState,
 } from '../features/selection/selection';
-import { knowledgeEvidencePage } from '../features/semantic/evidence-provenance';
+import {
+  knowledgeEvidencePage,
+  pdfImageProvenance,
+} from '../features/semantic/evidence-provenance';
 import { AppUpdateDialog } from '../features/settings/app-update-dialog';
 import { SemanticFolderEnrolmentPrompt } from '../features/settings/semantic-library-management';
 import {
@@ -1201,6 +1204,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       caseSensitive: false,
       wholeWord: true,
     };
+  }
+
+  function pdfImagePageForEntry(locationUri: string, entry: EntrySummary): number | undefined {
+    if (!locationUri.startsWith('search://') || entry.mimeType !== 'application/pdf') {
+      return undefined;
+    }
+    const result = findFilesPresentationsByLocationUri
+      .get(locationUri)
+      ?.semanticResults?.find((candidate) => candidate.entryId === entry.id);
+    const evidence = result?.bestEvidence;
+    return evidence?.chunkKind === 'pdf_image' && evidence.available && !evidence.stale
+      ? pdfImageProvenance(evidence.provenanceJson)?.page
+      : undefined;
   }
 
   /** Recursively sums `entry`'s size (task 0071's Total Commander-style folder-size key, Ctrl+.)
@@ -3664,6 +3680,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     commandAvailabilityContext: (selectedEntries, paneId) =>
       actionCommandController.commandAvailabilityContext(selectedEntries, paneId),
     contentSearchInitialQuery,
+    pdfImagePageForEntry,
     refetchAffectedPanes,
     platformActionParameters: (actionId, selectedEntries, directoryLocation) =>
       actionCommandController.platformActionParameters(

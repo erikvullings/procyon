@@ -1438,8 +1438,44 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
       getDirectories: () =>
         new Map([['pane-a:tab', { entries: [cursorLink] } as unknown as PaneDirectoryView]]),
     });
+
     createGlobalKeydownHandler(context)(keydown('F3'));
     expect(openViewer).toHaveBeenCalledWith(PANE_B, cursorLink, undefined);
+  });
+
+  it('F3 opens a selected PDF image result on its exact indexed page', () => {
+    const openViewer = vi.fn();
+    const pdf: EntrySummary = {
+      id: 'pdf-image-result' as never,
+      location: { providerId: 'local', uri: 'file:///a/b/scanned.pdf' },
+      name: 'scanned.pdf',
+      kind: 'file',
+      mimeType: 'application/pdf',
+      hidden: false,
+      readOnly: false,
+      metadataRevision: 0,
+    };
+    const coreViewAction: ActionDescriptor = {
+      id: 'core.view',
+      title: 'View',
+      defaultShortcuts: [{ key: 'F3' }],
+      category: 'test',
+      contextRequirements: {},
+      source: { kind: 'core' },
+    };
+    const context = makeContext({
+      getRegisteredActions: () => [...ACTIONS, coreViewAction],
+      actionsWithFavourites: () => [...ACTIONS, coreViewAction],
+      getViewer: () => undefined,
+      openViewer,
+      pdfImagePageForEntry: () => 3,
+      getSelections: () =>
+        new Map([['pane-a:tab', { selectedEntryIds: [], cursorEntryId: pdf.id }]]),
+      getDirectories: () =>
+        new Map([['pane-a:tab', { entries: [pdf] } as unknown as PaneDirectoryView]]),
+    });
+    createGlobalKeydownHandler(context)(keydown('F3'));
+    expect(openViewer).toHaveBeenCalledWith(PANE_B, pdf, undefined, undefined, 3);
   });
 });
 

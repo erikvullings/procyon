@@ -104,6 +104,9 @@ optional Docling ML/PDFium pack is qualified on those targets.
   viewer at the cited page rather than searching an English image excerpt as PDF text.
   The page is derived from validated exact provenance; malformed provenance cannot
   produce a fabricated page. Knowledge and file-primary evidence remain host-neutral.
+  F3 on a selected, current PDF image result opens the opposite viewer on the same
+  indexed page; ordinary file F3 continues unchanged, and stale/unavailable matches
+  never supply an old page.
   The new file-primary regression passed; the complete 152-file frontend suite,
   frontend typecheck and workspace lint also passed.
   This UI change does not supply embedded-image preview bytes or cover scanned pages
