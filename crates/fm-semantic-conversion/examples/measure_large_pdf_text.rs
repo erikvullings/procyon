@@ -36,7 +36,9 @@ struct PageText {
 
 impl Drop for KillOnDrop {
     fn drop(&mut self) {
-        let _ = self.0.kill();
+        if matches!(self.0.try_wait(), Ok(None)) {
+            let _ = self.0.kill();
+        }
         let _ = self.0.wait();
     }
 }
