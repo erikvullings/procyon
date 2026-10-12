@@ -79,3 +79,12 @@ a prerequisite for the EmbeddingGemma experimental release.
   an indexed document in an active-workspace root. Exact-concept folder creation is no longer
   offered in Settings; existing saved exact-concept searches remain supported. Workspace lint,
   frontend production build, and 2,368 frontend tests passed.
+- 2026-10-12: Reviewed user-suggested UNESCO, EuroVoc, ESCO, MeSH, AGROVOC and APA sources.
+  Added a 23-concept FAO AGROVOC sustainability excerpt from its CC BY 4.0 core RDF export,
+  pinned by ZIP checksum and source modification time. EuroVoc has a catalogued reuse decision
+  but needs exact terms/selection review; ESCO's current export is email-gated; MeSH requires
+  NLM-specific currency disclosure; APA has no verified redistributable SKOS. For definitions
+  missing in bundled or imported concepts, Find by concept now uses sourced scope notes,
+  broader labels, and vocabulary topic in the *query*, without writing artificial definitions.
+  Regeneration `--check`, the Rust starter importer test, workspace lint, 2,371 frontend tests,
+  117 script tests, and the frontend production build passed.

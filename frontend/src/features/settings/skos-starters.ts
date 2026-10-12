@@ -1,3 +1,4 @@
+import sustainableFood from './skos-starters/agrovoc-sustainable-food.json';
 import climateEnergy from './skos-starters/gemet-climate-energy.json';
 import defence from './skos-starters/unesco-defence.json';
 import technology from './skos-starters/unesco-information-technology.json';
@@ -8,6 +9,14 @@ const sourceKey = 'https://procyon.app/ns/skos-starter/source';
 const licenseKey = 'https://procyon.app/ns/skos-starter/license';
 
 export const skosStarters = [
+  {
+    document: sustainableFood,
+    publisher: 'Food and Agriculture Organization of the United Nations (FAO)',
+    version: '2026-10-07 snapshot',
+    sourceUrl: sustainableFood.extensions[sourceKey],
+    licenseUrl: sustainableFood.extensions[licenseKey],
+    license: 'CC BY 4.0',
+  },
   {
     document: climateEnergy,
     publisher: 'European Environment Agency (EEA)',

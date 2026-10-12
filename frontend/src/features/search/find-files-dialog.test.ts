@@ -270,6 +270,137 @@ describe('FindFilesDialog', () => {
     expect(importSpy).not.toHaveBeenCalled();
   });
 
+  it('uses sourced scope notes and broader labels when a concept has no definition', async () => {
+    const client = await indexedClient();
+    const onSearch = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          client,
+          workspaceId: 'workspace-a',
+          scopeLabel: '/Documents',
+          onSearch,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-files-modes')).not.toBeNull());
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    m.redraw.sync();
+    const filter = root.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!filter) throw new Error('Concept filter missing');
+    filter.value = 'Remote sensing';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-concept-choice')?.textContent).toContain(
+        'Remote sensing',
+      ),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
+      .find((button) => button.textContent?.trim() === 'Search')
+      ?.click();
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        semanticQuery: expect.stringMatching(
+          /^Remote sensing\. An advanced system of information gathering.* Broader concept: Encoding\. Topic: Information technology$/s,
+        ),
+      }),
+    );
+  });
+
+  it('offers AGROVOC definitions and attribution without importing the excerpt', async () => {
+    const client = await indexedClient();
+    const onSearch = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          client,
+          workspaceId: 'workspace-a',
+          scopeLabel: '/Documents',
+          onSearch,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-files-modes')).not.toBeNull());
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    m.redraw.sync();
+    const filter = root.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!filter) throw new Error('Concept filter missing');
+    filter.value = 'agroecology';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-concept-choice')?.textContent).toContain(
+        'Agroecology is the science',
+      ),
+    );
+    expect(root.querySelector('.fm-find-concept-source')?.textContent).toContain('FAO');
+    expect(root.querySelector('.fm-find-concept-source')?.textContent).toContain('CC BY 4.0');
+    root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
+      .find((button) => button.textContent?.trim() === 'Search')
+      ?.click();
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        semanticQuery:
+          'agroecology. Agroecology is the science of applying ecological concepts and principles to manage interactions between plants, animals, humans and the environment for food security and nutrition.',
+      }),
+    );
+    expect(await client.listSemanticVocabularies()).toEqual([]);
+  });
+
+  it('adds source-topic context for an otherwise undescribed concept', async () => {
+    const client = await indexedClient();
+    const onSearch = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          client,
+          workspaceId: 'workspace-a',
+          scopeLabel: '/Documents',
+          onSearch,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-files-modes')).not.toBeNull());
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    m.redraw.sync();
+    const filter = root.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!filter) throw new Error('Concept filter missing');
+    filter.value = 'Urban warfare';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-concept-choice')?.textContent).toContain('Urban warfare'),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
+      .find((button) => button.textContent?.trim() === 'Search')
+      ?.click();
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        semanticQuery:
+          'Urban warfare. Broader concept: Warfare. Topic: Defence and military engineering',
+      }),
+    );
+  });
+
   it('is focused on open and submits the trimmed query with Enter', async () => {
     const onSearch = vi.fn();
     const onCancel = vi.fn();

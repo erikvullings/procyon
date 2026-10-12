@@ -3,11 +3,13 @@
 
 import gzip
 import hashlib
+import io
 import json
 from pathlib import Path
 import sys
 import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "frontend/src/features/settings/skos-starters"
@@ -15,6 +17,7 @@ RDF = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
 SKOS = "{http://www.w3.org/2004/02/skos/core#}"
 LANG = "{http://www.w3.org/XML/1998/namespace}lang"
 BASE = "{http://www.w3.org/XML/1998/namespace}base"
+SKOS_XL = "{http://www.w3.org/2008/05/skos-xl#}"
 CC_BY = "https://creativecommons.org/licenses/by/4.0/"
 CC_BY_SA_IGO = "https://creativecommons.org/licenses/by-sa/3.0/igo/"
 SOURCES = {
@@ -30,7 +33,21 @@ SOURCES = {
         "UNESCO Thesaurus 2026-08-31 snapshot",
         CC_BY_SA_IGO,
     ),
+    "agrovoc": (
+        "https://agrovoc.fao.org/latestAgrovoc/agrovoc_core.rdf.zip",
+        "5212f7b1e173a61ad14d966ee9feea4a6f9a49aa5f906ca667cedb33703f1568",
+        "AGROVOC 2026-10-07 snapshot",
+        CC_BY,
+    ),
 }
+AGROVOC_BASE = "http://aims.fao.org/aos/agrovoc/"
+AGROVOC_SELECTION = (
+    "c_33561", "c_92381", "c_98778f1a", "c_10967", "c_7d40c88b",
+    "c_8a6031d8", "c_1374567058134", "c_33949", "c_33955", "c_37977",
+    "c_331342", "c_36580", "c_fe89fcbc", "c_8315", "c_7165",
+    "c_15911", "c_207", "c_1348040570280", "c_588e022e",
+    "c_35332", "c_264f7edd", "c_bea5db85", "c_c9484b9b",
+)
 STARTERS = (
     ("gemet-climate-energy", "Climate and renewable energy", "gemet",
      ("concept/1471", "concept/15271"), 2),
@@ -40,7 +57,101 @@ STARTERS = (
     ("unesco-psychology", "Psychology", "unesco", ("mt4.10",), 0),
     ("unesco-defence", "Defence and military engineering", "unesco",
      ("concept2877", "concept613", "concept652"), 2),
+    ("agrovoc-sustainable-food", "Sustainable agriculture and food systems", "agrovoc",
+     AGROVOC_SELECTION, 0),
 )
+
+
+class AgrovocXml:
+    def __init__(self, source):
+        self.source = source
+        self.invalid_bytes = 0
+
+    def read(self, size):
+        chunk = self.source.read(size)
+        # The pinned FAO RDF has one XML-invalid control byte in a Chinese definition.
+        self.invalid_bytes += chunk.count(b"\x1b")
+        return chunk.replace(b"\x1b", b"")
+
+
+def load_agrovoc(data):
+    selected = {AGROVOC_BASE + uri for uri in AGROVOC_SELECTION}
+    links = {}
+    labels = {}
+    definitions = {}
+    modified = None
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        if archive.namelist() != ["agrovoc_core.rdf"]:
+            raise ValueError("Unexpected AGROVOC archive contents")
+        with archive.open("agrovoc_core.rdf") as source:
+            cleaned = AgrovocXml(source)
+            events = ET.iterparse(cleaned, events=("start", "end"))
+            _, root = next(events)
+            for event, item in events:
+                if event != "end" or item.tag != RDF + "Description":
+                    continue
+                uri = item.attrib.get(RDF + "about", "")
+                if uri in selected:
+                    fields = links.setdefault(uri, {})
+                    for field in item:
+                        name = field.tag[len(SKOS):] if field.tag.startswith(SKOS) else (
+                            field.tag[len(SKOS_XL):] if field.tag.startswith(SKOS_XL) else "")
+                        if name not in ("prefLabel", "altLabel", "definition",
+                                        "scopeNote", "broader", "related"):
+                            continue
+                        value = field.attrib.get(RDF + "resource") or field.text
+                        if value and (field.attrib.get(RDF + "resource") or
+                                      field.attrib.get(LANG) == "en"):
+                            fields.setdefault(name, []).append(value.strip())
+                elif uri.startswith(AGROVOC_BASE + "xl_"):
+                    for field in item:
+                        if field.tag == SKOS_XL + "literalForm" and field.attrib.get(LANG) == "en":
+                            labels[uri] = field.text.strip() if field.text else ""
+                elif uri.startswith(AGROVOC_BASE + "xDef_"):
+                    for field in item:
+                        if field.tag == RDF + "value" and field.attrib.get(LANG) == "en":
+                            definitions[uri] = field.text.strip() if field.text else ""
+                elif uri == AGROVOC_BASE.rstrip("/"):
+                    for field in item:
+                        if field.tag == "{http://purl.org/dc/terms/}modified":
+                            modified = field.text
+                root.remove(item)
+            if cleaned.invalid_bytes != 1:
+                raise ValueError("Unexpected AGROVOC XML control-byte count")
+    if modified != "2026-10-07T10:12:36Z" or set(links) != selected:
+        raise ValueError("AGROVOC snapshot or selected concepts changed")
+
+    subjects = {}
+    for uri, values in links.items():
+        fields = {}
+        for name, targets in values.items():
+            elements = []
+            for target in targets:
+                if name in ("prefLabel", "altLabel"):
+                    text = labels.get(target)
+                elif name == "definition":
+                    text = definitions.get(target)
+                elif name == "scopeNote":
+                    text = target
+                else:
+                    text = None
+                if name in ("prefLabel", "altLabel", "definition", "scopeNote"):
+                    if not text:
+                        continue
+                    element = ET.Element(SKOS + name, {LANG: "en"})
+                    element.text = text
+                else:
+                    element = ET.Element(SKOS + name, {RDF + "resource": target})
+                elements.append(element)
+            fields[name] = elements
+        subjects[uri] = fields
+    for uri, fields in subjects.items():
+        for parent in fields.get("broader", ()):
+            ancestor = subjects.get(parent.attrib[RDF + "resource"])
+            if ancestor is not None:
+                ancestor.setdefault("narrower", []).append(
+                    ET.Element(SKOS + "narrower", {RDF + "resource": uri}))
+    return AGROVOC_BASE, subjects
 
 
 def load_source(key):
@@ -50,6 +161,8 @@ def load_source(key):
     actual = hashlib.sha256(data).hexdigest()
     if actual != digest:
         raise ValueError(f"{url}: SHA-256 mismatch (expected {digest}, got {actual})")
+    if key == "agrovoc":
+        return load_agrovoc(data)
     if key == "gemet":
         data = gzip.decompress(data)
     root = ET.fromstring(data)

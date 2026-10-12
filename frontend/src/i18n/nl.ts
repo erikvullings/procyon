@@ -799,6 +799,8 @@ export const nl = {
     savedSearches: 'Opgeslagen zoekopdrachten',
     filesMode: 'Bestanden',
     conceptMode: 'Zoeken op concept',
+    conceptBroader: 'Breder concept: {concepts}',
+    conceptTopic: 'Onderwerp: {topic}',
     chooseConcept: 'Concept',
     conceptSearchExplanation:
       'Vind verwante geïndexeerde passages in deze werkruimte. Gelijkenis is geen bevestigde concepttoewijzing.',

@@ -807,6 +807,8 @@ export const en = {
     savedSearches: 'Saved searches',
     filesMode: 'Files',
     conceptMode: 'Find by concept',
+    conceptBroader: 'Broader concept: {concepts}',
+    conceptTopic: 'Topic: {topic}',
     chooseConcept: 'Concept',
     conceptSearchExplanation:
       'Find related indexed passages across this workspace. Similarity is not a confirmed concept assignment.',

@@ -325,10 +325,11 @@ content preview before transmission. The semantic worker itself has no network a
 
 ## Optional SKOS starter vocabularies
 
-**Find Files > Find by concept** offers five opt-in English-language excerpts:
+**Find Files > Find by concept** offers six opt-in English-language excerpts:
 **Climate and renewable energy** from GEMET 4.2.3; **Natural sciences**, **Information technology**,
-**Psychology**, and **Defence and military engineering** from the UNESCO Thesaurus. These are
-selections of real SKOS concepts, not complete copies of either thesaurus or generic taxonomies.
+**Psychology**, and **Defence and military engineering** from the UNESCO Thesaurus; and
+**Sustainable agriculture and food systems** from FAO's AGROVOC. These are
+selections of real SKOS concepts, not complete copies of any thesaurus or generic taxonomies.
 The defence excerpt is limited to those UNESCO subjects, not a military-wide vocabulary.
 Each concept retains its original stable URI; only links between included concepts are retained.
 The picker shows source, snapshot/version and license; selecting one does not import or attach it.
@@ -341,8 +342,12 @@ semantic components are enabled and the active workspace has an indexed document
 root. Type a label and select a bundled or imported concept (recent selections appear before
 typing). This runs a similarity search of indexed document chunks across the active workspace;
 **Current folder only** is optional. Results are *related to* the concept, not authoritative
-concept assignments. **Save as smart folder** pins this similarity search in Smart folders using
-the selected label and definition as a snapshot; it does not assign labels to files. Recreate
+concept assignments. Where the source provides an English definition, the query embeds the
+label and definition. Where it does not, the query uses the source's English scope note (if any),
+retained broader-concept labels, and the vocabulary topic as contextual search text. These
+are **not** new SKOS definitions and do not modify the imported or bundled vocabulary.
+**Save as smart folder** pins this similarity search in Smart folders using
+that contextual query as a snapshot; it does not assign labels to files. Recreate
 the saved search if the concept's text changes. Only indexed/authorized documents can appear.
 Previously saved exact-concept folders remain readable, but are not created by this discovery
 flow; they require separately published concept annotations to return documents.
@@ -350,6 +355,15 @@ flow; they require separately published concept annotations to return documents.
 The [GEMET 4.2.3 RDF export](https://www.eionet.europa.eu/gemet/en/exports/rdf/4.2.3)
 is © European Environment Agency (EEA), licensed
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+The [AGROVOC core RDF export](https://agrovoc.fao.org/latestAgrovoc/agrovoc_core.rdf.zip)
+is © Food and Agriculture Organization of the United Nations (FAO). Its
+[official catalog resource](https://data.apps.fao.org/catalog/api/3/action/package_show?id=agrovoc-release)
+specifies [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the
+[FAO database terms](https://www.fao.org/contact-us/terms/db-terms-of-use/en) also require
+attribution and prohibit implying endorsement or using FAO data to promote a commercial product.
+The adapted excerpt is attributed as: FAO. 2026. AGROVOC: AGROVOC core RDF.
+Accessed on 12 October 2026. https://agrovoc.fao.org/latestAgrovoc/agrovoc_core.rdf.zip.
+Licence: CC BY 4.0. No FAO endorsement is implied.
 The [UNESCO Thesaurus RDF export](https://vocabularies.unesco.org/exports/thesaurus/latest/unesco-thesaurus.rdf)
 is © UNESCO, licensed [CC BY-SA 3.0 IGO](https://creativecommons.org/licenses/by-sa/3.0/igo/).
 The adapted UNESCO excerpt JSON files in `frontend/src/features/settings/skos-starters/`
@@ -370,11 +384,35 @@ supports `--check` to compare bundled JSON content to pinned sources (format gen
 Biome before committing). Original RDF downloads are not bundled; the attributed excerpts work
 offline at runtime.
 
+The AGROVOC excerpt selects 23 official concept URIs in sustainable agriculture, food security,
+climate adaptation, biodiversity, water and soil stewardship, and food systems. It preserves
+English labels, 23 source definitions, available scope notes, and only relations among selected
+concepts. The official archive's metadata reports `2026-10-07T10:12:36Z` as modified; its
+`/latestAgrovoc/` URL is mutable, so `scripts/generate-skos-starters.py` pins the exact ZIP SHA-256
+(`5212f7b1e173a61ad14d966ee9feea4a6f9a49aa5f906ca667cedb33703f1568`) and fails
+on a later release until reviewed. The source RDF contains one XML-invalid control byte in a
+Chinese definition; only that byte is removed while streaming the pinned ZIP for extraction.
+The original archive is not shipped, and that unrelated definition is not included.
+
 The separate `erikvullings/rag` project's task 0103 builds project-specific SKOS-like terms
 from its indexed chunks. It does not ship an external generic SKOS dataset that can be reused
 here; its older task 0026's military/research predicate groups are extraction predicates, not a
-published SKOS thesaurus. Other possible sources such as EuroVoc, AGROVOC and LCSH are not bundled
-without verifying exact source bytes, permission to redistribute, and a compatible SKOS export.
+published SKOS thesaurus. Further evaluated sources were not bundled:
+
+- [EuroVoc](https://op.europa.eu/en/web/eu-vocabularies/dataset/-/resource?uri=http://publications.europa.eu/resource/dataset/eurovoc)
+  has a versioned SKOS export (4.24 in the EU catalog) marked `COM_REUSE`, linking to
+  [Decision 2011/833/EU](http://data.europa.eu/eli/dec/2011/833/oj). Its exact reuse notice
+  and an appropriate compact cross-domain selection need review before redistributing an excerpt;
+  the catalog's license identifier is **not** asserted here to be CC BY 4.0.
+- [ESCO](https://esco.ec.europa.eu/en/use-esco/download) offers RDF/TTL and other downloads,
+  but the current portal requires a request/email and an independently verified current
+  version and redistribution notice before a reproducible bundle can be made.
+- [MeSH](https://www.nlm.nih.gov/databases/download/mesh.html) has RDF with
+  [NLM redistribution terms](https://www.nlm.nih.gov/databases/download/terms_and_conditions.html)
+  requiring attribution and disclosure when data is not current; its bespoke terms need review
+  before shipping a fixed excerpt.
+- [APA Thesaurus of Psychological Index Terms](https://www.apa.org/pubs/databases/training/thesaurus)
+  is commercial. No officially redistributable SKOS export has been verified; it is not bundled.
 
 ## Backup and recovery
 

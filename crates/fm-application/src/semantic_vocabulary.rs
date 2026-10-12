@@ -950,6 +950,9 @@ mod tests {
     fn pinned_starter_excerpts_import_without_attachments() {
         let starters = [
             include_str!(
+                "../../../frontend/src/features/settings/skos-starters/agrovoc-sustainable-food.json"
+            ),
+            include_str!(
                 "../../../frontend/src/features/settings/skos-starters/gemet-climate-energy.json"
             ),
             include_str!(
