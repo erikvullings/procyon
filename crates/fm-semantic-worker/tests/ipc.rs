@@ -44,6 +44,7 @@ impl WorkerQueryBackend for CapturingQueryBackend {
 }
 
 struct SkippingIngestionBackend;
+struct CoverageIngestionBackend;
 
 #[derive(Default)]
 struct CapturingIngestionBackend {
@@ -308,6 +309,34 @@ impl WorkerIngestionBackend for SkippingIngestionBackend {
             completed: 0,
             total: 1,
             error: Some("Add a text layer with OCRmyPDF, then reindex the file.".into()),
+            coverage_detail: None,
+        }))
+    }
+}
+
+impl WorkerIngestionBackend for CoverageIngestionBackend {
+    fn enqueue(
+        &self,
+        input: WorkerIngestionInput,
+        _cancellation: CancellationToken,
+    ) -> Result<String, String> {
+        Ok(input.job_id)
+    }
+
+    fn job(
+        &self,
+        _tenant_id: &str,
+        _library_id: &str,
+        _job_id: &str,
+    ) -> Result<Option<WorkerIngestionJob>, String> {
+        Ok(Some(WorkerIngestionJob {
+            document_id: "scan".into(),
+            state: IngestionState::Completed,
+            phase: "complete".into(),
+            completed: 1,
+            total: 1,
+            error: None,
+            coverage_detail: Some("page 3 has no searchable image evidence".into()),
         }))
     }
 }
@@ -738,6 +767,44 @@ async fn skipped_ingestion_and_ocr_guidance_cross_the_ipc_boundary() {
         job.detail
             .as_deref()
             .is_some_and(|detail| detail.contains("OCRmyPDF"))
+    );
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn completed_image_omissions_cross_ipc_without_becoming_errors() {
+    let directory = test_directory("completed-coverage");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::generate();
+    let task = tokio::spawn(
+        WorkerServer::with_ingestion_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone()),
+            Arc::new(CoverageIngestionBackend),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    let job_id = client
+        .ingest(
+            "coverage-scan",
+            IngestionScope::new("tenant", "library"),
+            "scan",
+            BTreeMap::new(),
+            "application/pdf",
+            b"%PDF scan".to_vec(),
+        )
+        .await
+        .unwrap();
+    let job = client
+        .ingestion_job("tenant", "library", &job_id)
+        .await
+        .unwrap();
+    assert_eq!(job.state, IngestionState::Completed);
+    assert_eq!(
+        job.detail.as_deref(),
+        Some("page 3 has no searchable image evidence")
     );
     client.shutdown(Duration::from_millis(100)).await.unwrap();
     task.await.unwrap().unwrap();

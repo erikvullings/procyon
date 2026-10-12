@@ -511,6 +511,9 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
         let error = (state == IngestionState::Failed || state == IngestionState::Skipped)
             .then(|| job.detail.clone())
             .flatten();
+        let coverage_detail = (state == IngestionState::Completed)
+            .then(|| job.detail.clone())
+            .flatten();
         Ok(Some(WorkerIngestionJob {
             document_id: job.document_id.unwrap_or_default(),
             state,
@@ -518,6 +521,7 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
             completed: u64::from(state == IngestionState::Completed),
             total: 1,
             error,
+            coverage_detail,
         }))
     }
 }
@@ -2009,6 +2013,15 @@ mod tests {
         assert_eq!(*fixture.embedder.media_calls.lock().unwrap(), 0);
         document.job_id = "job-images".into();
         document.pdf_images_consented = true;
+        fixture
+            .catalog
+            .register_job(
+                &document.job_id,
+                &document.tenant_id,
+                &document.library_id,
+                &document.document_id,
+            )
+            .expect("register scoped job");
         let receipt = fixture
             .coordinator
             .ingest(&document, &CancellationToken::new())
@@ -2064,6 +2077,13 @@ mod tests {
         assert!(detail.contains("1 page without searchable evidence"));
         assert!(detail.contains("1 image/XObject omission"));
         assert!(detail.contains("page 3"));
+        let status = PipelineIngestionBackend::new(fixture.coordinator.clone())
+            .job("tenant-a", "library-a", "job-images")
+            .unwrap()
+            .unwrap();
+        assert_eq!(status.state, IngestionState::Completed);
+        assert_eq!(status.coverage_detail.as_deref(), Some(detail.as_str()));
+        assert!(status.error.is_none());
     }
 
     #[test]

@@ -181,6 +181,8 @@ message IngestionJob {
   Progress progress = 4;
   // Typed failure or exclusion detail, when present.
   ProtocolError error = 5;
+  // A completed job's bounded, non-fatal evidence-coverage omissions.
+  optional string coverage_detail = 6;
 }
 
 // Ingestion job lifecycle states.

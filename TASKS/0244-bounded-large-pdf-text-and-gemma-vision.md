@@ -98,6 +98,15 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: The worker now transports a completed PDF's retained
+  image/page omission summary as a separate optional `coverage_detail`
+  field, never as a protocol error. Scoped catalog jobs and IPC regressions
+  distinguish completed-with-omissions from failed/skipped; application
+  reconciliation exposes bounded, sanitized `coverage_details` separately
+  from `failure_details` on both desktop and browser-server hosts. This
+  preserves truthful job-level disclosure, but does not yet persist a
+  structured per-page coverage map, display an accessible frontend
+  indicator, remove the 32-image cap or admit >64 MiB source PDFs.
 - 2026-10-12 Copilot: Host reconciliation now preserves distinct worker
   failure reasons in `SemanticIndexingReport.failure_details` instead of
   reporting only a failed-occurrence count. A synthetic page-33 image-limit

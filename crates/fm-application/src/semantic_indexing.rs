@@ -73,6 +73,10 @@ pub struct SemanticIndexingReport {
     pub failure_details: Vec<String>,
     /// Additional or overlong failure reasons were not retained in this report.
     pub failure_details_truncated: bool,
+    /// Completed PDF jobs with non-fatal image/page evidence omissions.
+    pub coverage_details: Vec<String>,
+    /// Additional or overlong coverage reasons were not retained.
+    pub coverage_details_truncated: bool,
     /// Workspace-scoped occurrences intentionally excluded during conversion.
     pub excluded_occurrences: u64,
     /// Actionable, sanitized reasons for conversion-time exclusions.
@@ -264,6 +268,8 @@ impl SemanticIndexingService {
         let mut failed_occurrences = 0_u64;
         let mut failure_details = BTreeSet::new();
         let mut failure_details_truncated = false;
+        let mut coverage_details = BTreeSet::new();
+        let mut coverage_details_truncated = false;
         let mut excluded_occurrences = 0_u64;
         let mut exclusion_details = BTreeSet::new();
         let mut ocr_required_files = Vec::new();
@@ -370,6 +376,13 @@ impl SemanticIndexingService {
                                             &detail,
                                         );
                                     }
+                                    for detail in report.coverage_details {
+                                        retain_failure_detail(
+                                            &mut coverage_details,
+                                            &mut coverage_details_truncated,
+                                            &detail,
+                                        );
+                                    }
                                     excluded_occurrences =
                                         excluded_occurrences.saturating_add(report.excluded);
                                     for detail in report.exclusion_details {
@@ -423,6 +436,8 @@ impl SemanticIndexingService {
             failed_occurrences,
             failure_details: failure_details.into_iter().collect(),
             failure_details_truncated,
+            coverage_details: coverage_details.into_iter().collect(),
+            coverage_details_truncated,
             excluded_occurrences,
             exclusion_details: exclusion_details.into_iter().collect(),
             ocr_required_files,
@@ -602,6 +617,7 @@ impl SemanticIndexingService {
             ingested: 0,
             failed: 0,
             failure_details: Vec::new(),
+            coverage_details: Vec::new(),
             excluded: 0,
             exclusion_details: Vec::new(),
             requires_ocr: false,
@@ -658,7 +674,10 @@ impl SemanticIndexingService {
             )
             .await?
             {
-                IngestionOutcome::Completed => {
+                IngestionOutcome::Completed(coverage_detail) => {
+                    if let Some(detail) = coverage_detail {
+                        report.coverage_details.push(detail);
+                    }
                     library.confirm_indexed_observation(
                         access,
                         occurrence_id,
@@ -826,6 +845,7 @@ pub(crate) struct EntryIngestReport {
     pub(crate) ingested: u64,
     pub(crate) failed: u64,
     pub(crate) failure_details: Vec<String>,
+    pub(crate) coverage_details: Vec<String>,
     pub(crate) excluded: u64,
     pub(crate) exclusion_details: Vec<String>,
     pub(crate) requires_ocr: bool,
@@ -1113,7 +1133,7 @@ struct FeedDocument<'content> {
 }
 
 enum IngestionOutcome {
-    Completed,
+    Completed(Option<String>),
     Failed(String),
     Excluded(String),
 }
@@ -1218,7 +1238,9 @@ async fn ingest_and_wait(
             result = semantic.ingestion_job(scope.clone(), job_id.clone()) => result?,
         };
         match job.state {
-            SemanticIngestionState::Completed => return Ok(IngestionOutcome::Completed),
+            SemanticIngestionState::Completed => {
+                return Ok(IngestionOutcome::Completed(job.detail));
+            }
             SemanticIngestionState::Failed => {
                 return Ok(IngestionOutcome::Failed(job.detail.unwrap_or_else(|| {
                     "semantic ingestion failed without a worker reason".to_owned()

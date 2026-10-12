@@ -258,6 +258,12 @@ impl SemanticCapability for FailingDocumentCapability {
                 ingestion.document_id.as_str()
             )));
         }
+        if ingestion.content == b"coverage incomplete" {
+            return Ok(SemanticJobId::new(format!(
+                "coverage-{}",
+                ingestion.document_id.as_str()
+            )));
+        }
         self.inner.ingest(ingestion).await
     }
 
@@ -296,6 +302,16 @@ impl SemanticCapability for FailingDocumentCapability {
                 detail: Some(
                     "Add a searchable text layer with OCRmyPDF, then reindex the file.".into(),
                 ),
+            });
+        }
+        if job_id.as_str().starts_with("coverage-") {
+            return Ok(SemanticIngestionJob {
+                document_id: fm_application::semantic::DocumentId::new(
+                    job_id.as_str().trim_start_matches("coverage-"),
+                ),
+                job_id,
+                state: SemanticIngestionState::Completed,
+                detail: Some("page 3 has no searchable image evidence".into()),
             });
         }
         self.inner.ingestion_job(scope, job_id).await
@@ -1326,6 +1342,42 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
             .all(|count| count.reason != EligibilityReason::Oversized),
         "a completed reconciliation clears obsolete oversized exclusions"
     );
+}
+
+#[tokio::test]
+async fn completed_pdf_coverage_omissions_are_not_reported_as_failures_on_either_host() {
+    let root = project_temp_dir("coverage-root-");
+    std::fs::write(root.path().join("scan.pdf"), "coverage incomplete").unwrap();
+    for runtime in [RuntimeKindDto::Tauri, RuntimeKindDto::BrowserServer] {
+        let state = project_temp_dir("coverage-state-");
+        let workspace_id = WorkspaceId::from(Uuid::from_u128(0x244));
+        let library = library(&state);
+        let root_id = enrol(
+            &library,
+            workspace_id,
+            Location::from_native_path(root.path()).unwrap(),
+        );
+        let service = FileManagerService::new(
+            runtime,
+            state.path().join("workspaces"),
+            state.path().join("settings"),
+        )
+        .with_semantic_library_service(library)
+        .with_semantic_capability(Arc::new(FailingDocumentCapability {
+            inner: FakeSemanticCapability::new(),
+        }));
+        let report = service
+            .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(report.ingested_occurrences, 1);
+        assert_eq!(report.failed_occurrences, 0);
+        assert_eq!(
+            report.coverage_details,
+            ["page 3 has no searchable image evidence"]
+        );
+        assert!(!report.coverage_details_truncated);
+    }
 }
 
 #[tokio::test]

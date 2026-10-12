@@ -1069,6 +1069,7 @@ mod tests {
             ingested: 1,
             failed: 0,
             failure_details: Vec::new(),
+            coverage_details: Vec::new(),
             excluded: 0,
             exclusion_details: Vec::new(),
             requires_ocr: false,
@@ -1083,6 +1084,7 @@ mod tests {
             ingested: 0,
             failed: 0,
             failure_details: Vec::new(),
+            coverage_details: Vec::new(),
             excluded: 1,
             exclusion_details: vec![
                 "OCRmyPDF completed, but deterministic conversion still found no searchable text."
@@ -1100,6 +1102,7 @@ mod tests {
             ingested: 0,
             failed: 0,
             failure_details: Vec::new(),
+            coverage_details: Vec::new(),
             excluded: 1,
             exclusion_details: vec!["OCRmyPDF exited unsuccessfully (exit status: 2).".to_owned()],
             requires_ocr: true,
@@ -1114,6 +1117,7 @@ mod tests {
             ingested: 0,
             failed: 1,
             failure_details: vec!["PDF page 33 image 1 exceeds the visual limit".to_owned()],
+            coverage_details: Vec::new(),
             excluded: 0,
             exclusion_details: Vec::new(),
             requires_ocr: false,

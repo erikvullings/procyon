@@ -1724,7 +1724,7 @@ pub struct IngestionJobStatus {
     pub document_id: String,
     /// Current lifecycle state.
     pub state: IngestionState,
-    /// Sanitized failure or exclusion detail, when present.
+    /// Failure, exclusion, or completed-job evidence-coverage detail.
     pub detail: Option<String>,
 }
 
@@ -1773,6 +1773,8 @@ pub struct WorkerIngestionJob {
     pub total: u64,
     /// Sanitized failure, if any.
     pub error: Option<String>,
+    /// Non-fatal evidence-coverage omissions on completed jobs only.
+    pub coverage_detail: Option<String>,
 }
 
 /// Injectable durable ingestion implementation used by the local IPC server.
@@ -2617,21 +2619,34 @@ impl WorkerClient {
             ))
             .await?;
         match payload {
-            v1::server_frame::Payload::IngestionJob(job) => Ok(IngestionJobStatus {
-                job_id: job.job_id,
-                document_id: job.document_id,
-                state: match v1::JobState::try_from(job.state).unwrap_or(v1::JobState::Unspecified)
+            v1::server_frame::Payload::IngestionJob(job) => {
+                let completed = job.state == v1::JobState::Completed as i32;
+                if (completed && job.error.is_some())
+                    || (!completed && job.coverage_detail.is_some())
                 {
-                    v1::JobState::Pending => IngestionState::Pending,
-                    v1::JobState::Running => IngestionState::Running,
-                    v1::JobState::Completed => IngestionState::Completed,
-                    v1::JobState::Failed => IngestionState::Failed,
-                    v1::JobState::Cancelled => IngestionState::Cancelled,
-                    v1::JobState::Skipped => IngestionState::Skipped,
-                    v1::JobState::Unspecified => return Err(ClientError::UnexpectedResponse),
-                },
-                detail: job.error.map(|error| error.message),
-            }),
+                    return Err(ClientError::UnexpectedResponse);
+                }
+                Ok(IngestionJobStatus {
+                    job_id: job.job_id,
+                    document_id: job.document_id,
+                    state: match v1::JobState::try_from(job.state)
+                        .unwrap_or(v1::JobState::Unspecified)
+                    {
+                        v1::JobState::Pending => IngestionState::Pending,
+                        v1::JobState::Running => IngestionState::Running,
+                        v1::JobState::Completed => IngestionState::Completed,
+                        v1::JobState::Failed => IngestionState::Failed,
+                        v1::JobState::Cancelled => IngestionState::Cancelled,
+                        v1::JobState::Skipped => IngestionState::Skipped,
+                        v1::JobState::Unspecified => return Err(ClientError::UnexpectedResponse),
+                    },
+                    detail: if completed {
+                        job.coverage_detail
+                    } else {
+                        job.error.map(|error| error.message)
+                    },
+                })
+            }
             _ => Err(ClientError::UnexpectedResponse),
         }
     }
@@ -4238,6 +4253,7 @@ async fn handle_frame(
                     error: job
                         .error
                         .map(|error| protocol_error(v1::ErrorCode::Internal, error)),
+                    coverage_detail: job.coverage_detail,
                 });
                 send_payload_until(
                     &writer,
@@ -4285,6 +4301,7 @@ async fn handle_frame(
                     total_units: 1,
                 }),
                 error: None,
+                coverage_detail: None,
             })
         }
         Some(v1::client_frame::Payload::Events(request)) => {
