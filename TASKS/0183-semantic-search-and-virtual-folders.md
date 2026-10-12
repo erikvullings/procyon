@@ -78,4 +78,6 @@ the evidence without flooding the pane with duplicate rows.
   Search-only result tables group file rows under expandable parent folders while preserving
   normal pane columns, density, selection, sorting and virtualization. The non-navigable result
   header shows the selected query and saved scope rather than treating `search://` as a filesystem
-  breadcrumb.
+  breadcrumb. File icons align with folder labels; folder chevrons animate without changing row
+  geometry or virtualization. The virtual result table omits indexing coverage above its
+  column header; indexing health remains available in Knowledge/library surfaces.

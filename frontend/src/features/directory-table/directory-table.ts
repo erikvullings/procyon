@@ -1,13 +1,7 @@
 import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
 import { toast } from 'mithril-materialized';
 import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
-import {
-  chevronDownIcon,
-  chevronRightIcon,
-  copyIcon,
-  eyeOffIcon,
-  linkIcon,
-} from '../../components/tabler-icons';
+import { chevronDownIcon, copyIcon, eyeOffIcon, linkIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type {
@@ -1086,9 +1080,11 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                               }
                             },
                           },
-                          collapsedGroups.has(displayRow.key)
-                            ? chevronRightIcon({ size: 14 })
-                            : chevronDownIcon({ size: 14 }),
+                          m(
+                            'span.fm-directory-group-chevron',
+                            { 'aria-hidden': 'true' },
+                            chevronDownIcon({ size: 14 }),
+                          ),
                           m('span.fm-directory-group-label', displayRow.label),
                         ),
                         m(

@@ -778,6 +778,92 @@ describe('searchResultTitle', () => {
 });
 
 describe('Pane search breadcrumb rendering', () => {
+  it('omits indexing coverage above virtual results while keeping the normal table header', () => {
+    const syntheticResults = entries.map((entry) => ({
+      ...entry,
+      location: { providerId: 'local', uri: `file:///library/A/${entry.name}` },
+    }));
+    const searchAttrs = attrs({
+      path: 'search://local/synthetic',
+      entries: syntheticResults,
+      searchPresentation: {
+        kind: 'semantic',
+        term: 'synthetic',
+        executionMode: 'semantic',
+        semanticCoverage: {
+          eligible: 0,
+          indexed: 0,
+          excluded: 0,
+          failed: 0,
+          pending: 0,
+          skipped: 0,
+          stale: 0,
+          unavailable: 0,
+          partial: false,
+        },
+        semanticResults: [],
+      },
+    });
+    const tableConfig = {
+      ...searchAttrs.tableConfig,
+      visibleColumnIds: new Set(['core.modified']),
+      columnWidths: [{ columnId: 'core.name', width: 310 }],
+    };
+    mount({ ...searchAttrs, tableConfig });
+    const searchTable = root.querySelector('.fm-directory-table');
+    expect(root.querySelector('.fm-semantic-evidence')).toBeNull();
+    expect(searchTable?.previousElementSibling?.classList.contains('fm-breadcrumb-row')).toBe(true);
+    expect(
+      [...root.querySelectorAll('.fm-directory-header button')].map((column) =>
+        column.textContent?.trim(),
+      ),
+    ).toEqual(['Name', 'Modified']);
+    expect(
+      root.querySelector<HTMLElement>('.fm-grouped-entry')?.style.gridTemplateColumns,
+    ).toContain('310px');
+
+    mount({ ...attrs({ entries: syntheticResults }), tableConfig });
+    const normalTable = root.querySelector('.fm-directory-table');
+    expect(normalTable?.previousElementSibling?.classList.contains('fm-breadcrumb-row')).toBe(true);
+    expect(
+      [...root.querySelectorAll('.fm-directory-header button')].map((column) =>
+        column.textContent?.trim(),
+      ),
+    ).toEqual(['Name', 'Modified']);
+    expect(searchTable?.className).toBe(normalTable?.className);
+  });
+
+  it('retains the no-matches message for an empty concept result without indexing coverage', () => {
+    mount(
+      attrs({
+        path: 'search://local/empty-concept',
+        entries: [],
+        searchPresentation: {
+          kind: 'semantic',
+          term: 'Mental stress',
+          label: 'Mental stress (UNESCO)',
+          conceptSearch: true,
+          executionMode: 'semantic',
+          semanticCoverage: {
+            eligible: 0,
+            indexed: 0,
+            excluded: 0,
+            failed: 0,
+            pending: 0,
+            skipped: 0,
+            stale: 0,
+            unavailable: 0,
+            partial: false,
+          },
+          semanticResults: [],
+        },
+      }),
+    );
+    expect(root.querySelector('.fm-semantic-evidence')?.textContent).toContain('No matches');
+    expect(root.querySelector('.fm-semantic-evidence')?.textContent).not.toContain('eligible');
+    expect(root.querySelector('.fm-directory-header')).not.toBeNull();
+  });
+
   it('skips collapsed search folders with arrow keys and expands them with Right', () => {
     const onSelectionAction = vi.fn();
     const resultEntries = ['A/first.png', 'B/second.png', 'B/third.png', 'C/fourth.png'].map(
@@ -940,8 +1026,11 @@ describe('Pane search breadcrumb rendering', () => {
       }),
     );
 
-    expect(root.querySelector('.fm-semantic-evidence')?.textContent).toContain(
+    expect(root.querySelector('.fm-semantic-evidence')?.textContent).not.toContain(
       '3 of 4 eligible documents indexed',
+    );
+    expect(root.querySelector('.fm-semantic-evidence')?.textContent).toContain(
+      'Beste bewijs voor het rapport.',
     );
     root.querySelector<HTMLButtonElement>('.fm-semantic-evidence-actions button')?.click();
     expect(onOpenEntry).toHaveBeenCalledWith(selectedEntry, 'Beste bewijs voor het rapport.');

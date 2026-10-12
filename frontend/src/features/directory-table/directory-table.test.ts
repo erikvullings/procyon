@@ -707,22 +707,29 @@ describe('DirectoryTable rows', () => {
       '/library/A',
     );
     expect(root.querySelector('.fm-directory-group-row')?.textContent).toContain('/library/A');
+    const toggle = root.querySelector<HTMLButtonElement>('.fm-directory-group-toggle');
+    const chevron = toggle?.querySelector('.fm-directory-group-chevron');
+    expect(chevron?.querySelector('svg')).not.toBeNull();
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
     expect(root.querySelector('.fm-directory-row.fm-selected-row')?.textContent).toContain(
       'page_000',
     );
     expect(
       root.querySelector<HTMLElement>('.fm-directory-row.fm-grouped-entry')?.style.height,
     ).toBe('20px');
-    root.querySelector<HTMLButtonElement>('.fm-directory-group-toggle')?.click();
+    toggle?.click();
     m.redraw.sync();
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle?.querySelector('.fm-directory-group-chevron')).toBe(chevron);
     expect(root.querySelectorAll('.fm-directory-group-row')).toHaveLength(2);
     expect(root.querySelectorAll('.fm-grouped-entry')).toHaveLength(1);
     expect(root.querySelector('.fm-grouped-entry')?.textContent).toContain('report');
     expect(
       root.querySelector('.fm-directory-viewport')?.getAttribute('aria-activedescendant'),
     ).toBeNull();
-    root.querySelector<HTMLButtonElement>('.fm-directory-group-toggle')?.click();
+    toggle?.click();
     m.redraw.sync();
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
     expect(root.querySelectorAll('.fm-grouped-entry')).toHaveLength(3);
     root.querySelectorAll<HTMLElement>('.fm-grouped-entry')[1]?.click();
     expect(onCursorChange).toHaveBeenCalledWith(1, { shiftKey: false, ctrlKey: false });

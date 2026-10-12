@@ -3343,9 +3343,7 @@ describe('AppShell', () => {
           row.textContent?.includes('page_000'),
         ),
       ).toBe(true);
-      expect(resultsPane?.querySelector('.fm-semantic-evidence')?.textContent).not.toContain(
-        'No matches',
-      );
+      expect(resultsPane?.querySelector('.fm-semantic-evidence')).toBeNull();
     });
     expect(retry).toHaveBeenCalledTimes(2);
     expect(resultsPane?.querySelector('.fm-search-results-title')?.textContent).toBe(

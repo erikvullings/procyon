@@ -442,7 +442,9 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
       (entry) => attrs.selectedEntryIds.has(entry.id) && entry.id === result.entryId,
     ),
   );
-  const coverage = presentation?.semanticCoverage;
+  const coverage = (attrs.locationUri ?? attrs.path).startsWith('search://')
+    ? undefined
+    : presentation?.semanticCoverage;
   const coverageLabel =
     coverage === undefined
       ? undefined
