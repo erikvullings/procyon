@@ -142,7 +142,8 @@ mod tests {
             tokio::task::yield_now().await;
         }
         let envelope = bus.publish(EventAudience::Global, BackendEventPayload::RuntimeReady);
-        for _ in 0..20 {
+        // The callback may run after a scheduler delay when the workspace suite is busy.
+        for _ in 0..2_000 {
             if !received
                 .lock()
                 .unwrap_or_else(|error| error.into_inner())
