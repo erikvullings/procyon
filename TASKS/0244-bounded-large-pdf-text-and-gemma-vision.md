@@ -105,6 +105,11 @@ optional Docling ML/PDFium pack is qualified on those targets.
   image records across source occurrences still coalesce. A public retrieval
   regression with two interleaved image candidates and a duplicate occurrence
   failed before the change and passes after it, as does the worker library suite.
+  The same regression exposed unrelated PDF text being added as adjacent context
+  for an image only because image page numbers share the text chunk-position
+  field. PDF image evidence now has no fabricated text adjacency, and text
+  evidence cannot acquire a neighbouring image through that position collision;
+  both directions pass through the public retrieval test and full worker suite.
   This does not change the production 64 MiB cap or the release no-go.
 - 2026-10-12 Copilot: File-primary semantic results now distinguish an exact `pdf_image`
   match from source-level PDF text: the selected result shows a localized embedded-image

@@ -2872,6 +2872,7 @@ mod tests {
                 image_record("img-1", "pdf-a", 1),
                 image_record("img-2", "pdf-a", 2),
                 image_record("img-1-copy", "pdf-b", 1),
+                record("pdf-text", "pdf-a", 1),
             ],
         );
         let service = KnowledgeRetrievalService::new(
@@ -2890,6 +2891,7 @@ mod tests {
                     KnowledgeRoute::FullText,
                     KnowledgeRetrievalPolicy {
                         result_limit: 3,
+                        adjacent_chunk_radius: 1,
                         ..policy()
                     },
                 ),
@@ -2898,6 +2900,25 @@ mod tests {
             .expect("page-image evidence");
         assert_eq!(record_ids(&retrieved), ["img-1", "img-2"]);
         assert_eq!(retrieved.evidence[0].duplicate_source_ids, ["source-pdf-b"]);
+        let text_service = KnowledgeRetrievalService::new(
+            SemanticCatalog::open(&path).expect("reopen catalog"),
+            None,
+            None,
+            Some(FakeFullTextIndex::returning(vec![vec!["pdf-text"]])),
+        );
+        let text = text_service
+            .retrieve(
+                request(
+                    KnowledgeRoute::FullText,
+                    KnowledgeRetrievalPolicy {
+                        adjacent_chunk_radius: 1,
+                        ..policy()
+                    },
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("text evidence");
+        assert_eq!(record_ids(&text), ["pdf-text"]);
     }
 
     #[test]

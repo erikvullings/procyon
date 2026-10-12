@@ -2164,6 +2164,9 @@ impl CatalogReader {
         if radius > 4 {
             return Err(StorageError::InvalidIdentifier("adjacent_radius"));
         }
+        if anchor.record_kind == "pdf_image" {
+            return Ok(Vec::new());
+        }
         let lower = anchor.source_position.saturating_sub(radius);
         let upper = anchor.source_position.saturating_add(radius);
         let mut statement = self.connection.prepare(
@@ -2175,6 +2178,7 @@ impl CatalogReader {
                AND occurrence_id = ?4
                AND generation = ?5
                AND generated = 0
+               AND record_kind != 'pdf_image'
                AND source_position BETWEEN ?6 AND ?7
              ORDER BY source_position, record_id",
         )?;
