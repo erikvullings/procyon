@@ -1127,7 +1127,7 @@ impl IngestionCoordinator {
                 .collect::<Vec<_>>()
                 .join("; ");
             format!(
-                "{} PDF image/page omissions ({omitted_pages} {} without searchable evidence, {omitted_images} image/XObject {}): {examples}",
+                "{} PDF image/page omissions ({omitted_pages} {} with missing visual evidence, {omitted_images} image/XObject {}): {examples}",
                 converted.visual_omissions().len(),
                 if omitted_pages == 1 { "page" } else { "pages" },
                 if omitted_images == 1 { "omission" } else { "omissions" },
@@ -2211,7 +2211,7 @@ mod tests {
             .unwrap()
             .detail
             .unwrap();
-        assert!(detail.contains("1 page without searchable evidence"));
+        assert!(detail.contains("1 page with missing visual evidence"));
         assert!(detail.contains("1 image/XObject omission"));
         assert!(detail.contains("page 3"));
         let status = PipelineIngestionBackend::new(fixture.coordinator.clone())
@@ -2926,6 +2926,34 @@ mod tests {
         assert!(matches!(result, Err(IngestionError::Excluded(detail))
             if detail.contains("3 pages omitted") && detail.contains("page rendering is unsupported")));
         assert!(fixture.index.records.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn inline_pdf_image_reports_missing_visual_evidence_without_hiding_text() {
+        let fixture = Fixture::with_model(healthy_resources(), "google-embeddinggemma-2");
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        document.pdf_images_consented = true;
+        document.bytes = positioned_pdf(
+            "BT /F1 12 Tf 72 720 Td (Synthetic page text remains searchable alongside an unsupported inline image and this paragraph provides enough meaningful words for indexing.) Tj ET\n\
+             q BI /W 2 /H 1 /CS /RGB /BPC 8 ID abcdef EI Q",
+        );
+        fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("index text with an explicit visual omission");
+        assert!(!fixture.index.records.lock().unwrap().is_empty());
+        assert_eq!(*fixture.embedder.media_calls.lock().unwrap(), 0);
+        let detail = fixture
+            .catalog
+            .job(&document.job_id)
+            .unwrap()
+            .unwrap()
+            .detail
+            .expect("coverage detail");
+        assert!(detail.contains("1 page with missing visual evidence"));
+        assert!(detail.contains("inline image"));
+        assert!(!detail.contains("without searchable evidence"));
     }
 
     #[test]

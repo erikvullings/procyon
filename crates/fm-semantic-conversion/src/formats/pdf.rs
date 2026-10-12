@@ -319,9 +319,6 @@ fn extract_page_images(
             return Ok(false);
         }
     };
-    let Some(xobjects) = xobjects else {
-        return Ok(false);
-    };
     let content = document
         .get_page_content_with_limit(page_id, MAX_PAGE_CONTENT_BYTES)
         .and_then(|bytes| Content::decode(&bytes))
@@ -330,6 +327,19 @@ fn extract_page_images(
                 "page {page_number} images could not be located: {error}"
             ))
         })?;
+    if content
+        .operations
+        .iter()
+        .any(|operation| operation.operator == "BI")
+    {
+        builder.omit_visual(
+            Some(VisualProvenance::PdfPage { page_number }),
+            "PDF inline image cannot be extracted without a page renderer",
+        );
+    }
+    let Some(xobjects) = xobjects else {
+        return Ok(false);
+    };
     let mut drawn = HashSet::new();
     for operation in &content.operations {
         if operation.operator == "Do" {
@@ -780,6 +790,43 @@ pub(crate) mod tests {
     /// Generates a PDF whose single page has no text-drawing operators.
     pub(crate) fn image_only_pdf() -> Vec<u8> {
         text_pdf(&[&[]])
+    }
+
+    #[test]
+    fn inline_image_on_text_page_is_not_mistaken_for_image_complete() {
+        let mut pdf =
+            Document::load_mem(&text_pdf(&[&["Searchable text next to an inline figure."]]))
+                .expect("synthetic PDF");
+        let page = pdf.get_pages()[&1];
+        let content_id = pdf.get_page_contents(page)[0];
+        let stream = pdf
+            .get_object_mut(content_id)
+            .expect("page content")
+            .as_stream_mut()
+            .expect("content stream");
+        let mut content = stream.get_plain_content().expect("content bytes");
+        content.extend_from_slice(b"q BI /W 2 /H 1 /CS /RGB /BPC 8 ID abcdef EI Q\n");
+        stream.set_plain_content(content);
+        let mut bytes = Vec::new();
+        pdf.save_to(&mut bytes).expect("save inline-image PDF");
+        assert!(
+            Content::decode(
+                &pdf.get_page_content_with_limit(page, MAX_PAGE_CONTENT_BYTES)
+                    .expect("page content")
+            )
+            .expect("decoded page")
+            .operations
+            .iter()
+            .any(|operation| operation.operator == "BI")
+        );
+
+        let document = convert_pdf_with_visuals(&bytes, true).expect("text remains readable");
+        assert_eq!(document.units().len(), 1);
+        assert!(document.visuals().is_empty());
+        assert!(document.visual_omissions().iter().any(|omission| {
+            omission.provenance == Some(VisualProvenance::PdfPage { page_number: 1 })
+                && omission.detail.contains("inline image")
+        }));
     }
 
     #[test]

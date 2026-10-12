@@ -98,6 +98,14 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: A synthetic PDF with text plus an inline (`BI`) raster
+  previously appeared image-complete when no XObject was present. Visual
+  extraction now records a page-cited unsupported-inline-image omission even
+  with readable text. The development-only supervised stage fails closed with
+  the exact page instead of indexing text while silently losing consented
+  image evidence. Ordinary small-PDF indexing can still publish its text with
+  truthful missing-visual status; this is not a renderer and does not qualify
+  scans or change release no-go.
 - 2026-10-12 Copilot: The development-only visual stage now frames a bounded
   number of individually validated images per page (32 attachments/32 MiB
   maximum per page), with an explicit empty text-only page. A synthetic

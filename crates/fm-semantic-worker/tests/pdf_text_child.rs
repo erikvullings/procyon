@@ -113,6 +113,41 @@ fn synthetic_visual_pdf(visual_pages: &[u32]) -> Vec<u8> {
 }
 
 #[test]
+fn visual_stage_rejects_unrendered_inline_image_on_text_page() {
+    let mut pdf = Document::load_mem(&synthetic_pdf()).expect("synthetic PDF");
+    let page = pdf.get_pages()[&2];
+    let content_id = pdf.get_page_contents(page)[0];
+    let stream = pdf
+        .get_object_mut(content_id)
+        .expect("page content")
+        .as_stream_mut()
+        .expect("content stream");
+    let mut content = stream.get_plain_content().expect("content bytes");
+    content.extend_from_slice(b"q BI /W 2 /H 1 /CS /RGB /BPC 8 ID abcdef EI Q\n");
+    stream.set_plain_content(content);
+    let mut bytes = Vec::new();
+    pdf.save_to(&mut bytes).expect("save inline-image PDF");
+    let digest = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let mut spool = tempfile::tempfile().expect("anonymous PDF spool");
+    spool.write_all(&bytes).expect("source bytes");
+    let error = stage_spool_visual_pages(
+        Path::new(env!("CARGO_BIN_EXE_fm-semantic-worker")),
+        &spool,
+        &digest,
+        &CancellationToken::new(),
+    )
+    .expect_err("inline image needs an approved renderer");
+    assert!(
+        error
+            .to_string()
+            .contains("PDF page 2: unsupported inline image")
+    );
+}
+
+#[test]
 fn anonymous_pdf_spool_child_round_trips_page_text_and_rejects_wrong_digest() {
     let bytes = synthetic_pdf();
     let mut spool = tempfile::tempfile().unwrap();

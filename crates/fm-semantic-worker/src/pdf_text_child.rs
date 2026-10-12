@@ -70,6 +70,7 @@ fn page_failure_from_stderr(stderr: &[u8]) -> Option<String> {
                 reason,
                 "no usable visual evidence"
                     | "missing or multiple image candidates"
+                    | "unsupported inline image"
                     | "page conversion failed"
             )
         {
@@ -774,6 +775,8 @@ pub fn run_visual_pages(expected_sha256: &str) -> io::Result<()> {
                 .contains("missing or multiple image candidates")
             {
                 "missing or multiple image candidates"
+            } else if error.to_string().contains("has unsupported inline image") {
+                "unsupported inline image"
             } else {
                 "page conversion failed"
             };
@@ -809,6 +812,15 @@ fn write_visual_page(
             "PDF page {page_number} has no usable visual evidence: {outcome:?}"
         )));
     };
+    if document
+        .visual_omissions()
+        .iter()
+        .any(|omission| omission.detail.contains("inline image"))
+    {
+        return Err(io::Error::other(format!(
+            "PDF page {page_number} has unsupported inline image"
+        )));
+    }
     if !document.visual_omissions().is_empty()
         || (document.visuals().is_empty() && document.units().is_empty())
         || (!staged && document.visuals().len() > 1)
@@ -933,6 +945,10 @@ mod tests {
                 b"PROCYON_PDF_PAGE_ERROR:354:no usable visual evidence\n"
             ),
             Some("PDF page 354: no usable visual evidence".into())
+        );
+        assert_eq!(
+            super::page_failure_from_stderr(b"PROCYON_PDF_PAGE_ERROR:2:unsupported inline image\n"),
+            Some("PDF page 2: unsupported inline image".into())
         );
         assert!(
             super::page_failure_from_stderr(b"PROCYON_PDF_PAGE_ERROR:354:secret source text")

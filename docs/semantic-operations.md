@@ -545,8 +545,10 @@ spool in a supervised child. With an image-enabled Gemma library, a separate
 child stages bounded page-cited extractable rasters on anonymous temporary storage,
 including distinct images on the same page. The ingestion pipeline embeds
 them one at a time into the same atomic text/image generation. Image-only pages
-without reusable rasters and unsupported encodings fail the replacement rather
-than silently publishing partial coverage. This development path has provisional resource
+beyond reusable rasters, inline images and unsupported encodings fail the replacement
+rather than silently publishing partial coverage. For ordinary small-PDF ingestion,
+an inline figure on a text page is reported as missing visual evidence without
+mislabeling its searchable text as absent. This development path has provisional resource
 bounds and no installed page renderer or four-target qualification; it is not
 enabled in the production worker or approved for release.
 
