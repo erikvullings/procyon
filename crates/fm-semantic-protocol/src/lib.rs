@@ -15,6 +15,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 pub const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 /// Maximum cumulative file-content or result stream size (64 mebibytes).
 pub const MAX_STREAM_BYTES: u64 = 64 * 1024 * 1024;
+/// Safety ceiling for a separately negotiated PDF ingestion stream.
+pub const MAX_PDF_INGESTION_BYTES: u64 = 200 * 1024 * 1024;
 /// Maximum number of requests handled concurrently by one worker.
 pub const MAX_CONCURRENT_REQUESTS: usize = 16;
 /// Maximum duration of a unary request.
@@ -424,6 +426,8 @@ pub enum LimitField {
     MessageBytes,
     /// Cumulative stream bytes.
     StreamBytes,
+    /// PDF-only ingestion stream bytes.
+    PdfIngestionBytes,
     /// Concurrent request count.
     ConcurrentRequests,
     /// Unary request duration.
@@ -456,6 +460,9 @@ pub enum NegotiatedLimitsError {
     /// The message limit could not fit inside the stream limit.
     #[error("negotiated message limit exceeds negotiated stream limit")]
     MessageExceedsStream,
+    /// The PDF-only limit must accommodate the ordinary stream.
+    #[error("negotiated PDF ingestion limit is below the ordinary stream limit")]
+    PdfBelowStream,
 }
 
 /// Explicit resource policy applied at the protocol boundary.
@@ -463,6 +470,7 @@ pub enum NegotiatedLimitsError {
 pub struct ProtocolLimits {
     max_message_bytes: usize,
     max_stream_bytes: u64,
+    max_pdf_ingestion_bytes: u64,
     max_concurrent_requests: usize,
     request_deadline: Duration,
     stream_deadline: Duration,
@@ -474,6 +482,7 @@ impl Default for ProtocolLimits {
         Self {
             max_message_bytes: MAX_MESSAGE_BYTES,
             max_stream_bytes: MAX_STREAM_BYTES,
+            max_pdf_ingestion_bytes: MAX_STREAM_BYTES,
             max_concurrent_requests: MAX_CONCURRENT_REQUESTS,
             request_deadline: REQUEST_DEADLINE,
             stream_deadline: STREAM_DEADLINE,
@@ -519,6 +528,18 @@ impl ProtocolLimits {
             limits.maximum_stream_bytes,
             MAX_STREAM_BYTES,
         )?;
+        let maximum_pdf_ingestion_bytes = if limits.maximum_pdf_ingestion_bytes == 0 {
+            maximum_stream_bytes
+        } else {
+            bounded(
+                LimitField::PdfIngestionBytes,
+                limits.maximum_pdf_ingestion_bytes,
+                MAX_PDF_INGESTION_BYTES,
+            )?
+        };
+        if maximum_pdf_ingestion_bytes < maximum_stream_bytes {
+            return Err(NegotiatedLimitsError::PdfBelowStream);
+        }
         let maximum_concurrent_requests = bounded(
             LimitField::ConcurrentRequests,
             u64::from(limits.maximum_concurrent_requests),
@@ -552,6 +573,7 @@ impl ProtocolLimits {
                 }
             })?,
             max_stream_bytes: maximum_stream_bytes,
+            max_pdf_ingestion_bytes: maximum_pdf_ingestion_bytes,
             max_concurrent_requests: usize::try_from(maximum_concurrent_requests).map_err(
                 |_| NegotiatedLimitsError::ExceedsClientCeiling {
                     field: LimitField::ConcurrentRequests,
@@ -656,6 +678,7 @@ impl ProtocolLimits {
         Ok(Self {
             max_message_bytes,
             max_stream_bytes,
+            max_pdf_ingestion_bytes: max_stream_bytes,
             max_concurrent_requests,
             request_deadline,
             stream_deadline,
@@ -673,6 +696,36 @@ impl ProtocolLimits {
     #[must_use]
     pub const fn max_stream_bytes(self) -> u64 {
         self.max_stream_bytes
+    }
+
+    /// Maximum cumulative source bytes accepted for ingestion of this media type.
+    #[must_use]
+    pub fn max_ingestion_bytes(self, media_type: &str) -> u64 {
+        if media_type == "application/pdf" {
+            self.max_pdf_ingestion_bytes
+        } else {
+            self.max_stream_bytes
+        }
+    }
+
+    /// Offers a PDF-only ingestion budget without changing ordinary streams.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an offer below the ordinary stream budget or above the client ceiling.
+    pub fn with_pdf_ingestion_bytes(mut self, maximum: u64) -> Result<Self, InvalidLimits> {
+        if maximum < self.max_stream_bytes {
+            return Err(InvalidLimits::PdfBelowStream);
+        }
+        if maximum > MAX_PDF_INGESTION_BYTES {
+            return Err(InvalidLimits::ExceedsGlobalCeiling {
+                field: LimitField::PdfIngestionBytes,
+                offered: maximum,
+                maximum: MAX_PDF_INGESTION_BYTES,
+            });
+        }
+        self.max_pdf_ingestion_bytes = maximum;
+        Ok(self)
     }
 
     /// Maximum number of concurrent requests.
@@ -695,6 +748,7 @@ impl ProtocolLimits {
         v1::ProtocolLimits {
             maximum_message_bytes: u64::try_from(self.max_message_bytes).unwrap_or(u64::MAX),
             maximum_stream_bytes: self.max_stream_bytes,
+            maximum_pdf_ingestion_bytes: self.max_pdf_ingestion_bytes,
             maximum_concurrent_requests: u32::try_from(self.max_concurrent_requests)
                 .unwrap_or(u32::MAX),
             request_deadline_ms: duration_millis(self.request_deadline),
@@ -768,6 +822,9 @@ pub enum InvalidLimits {
     /// The message limit could not fit inside the stream limit.
     #[error("message limit exceeds stream limit")]
     MessageExceedsStream,
+    /// The PDF-only limit must accommodate the ordinary stream.
+    #[error("PDF ingestion limit is below the ordinary stream limit")]
+    PdfBelowStream,
 }
 
 /// A protocol resource limit violation.
@@ -1078,7 +1135,7 @@ pub fn validate_ingestion_with_limits(
             if start.document_id.is_empty() {
                 return Err(RequestValidationError::MissingDocumentId);
             }
-            if start.expected_content_bytes > limits.max_stream_bytes() {
+            if start.expected_content_bytes > limits.max_ingestion_bytes(&start.media_type) {
                 return Err(RequestValidationError::DeclaredContentTooLarge);
             }
         }

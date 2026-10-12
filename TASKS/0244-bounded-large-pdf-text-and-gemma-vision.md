@@ -98,6 +98,19 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-11 Copilot: Added a separately negotiated PDF-only IPC ceiling with old-worker
+  negotiation defaulting to the unchanged 64 MiB stream limit; ordinary media, result streams,
+  and 1 MiB frames remain bounded as before. An opt-in worker configuration spools an oversized
+  PDF stream to an anonymous temporary file with a single active spool, cumulative byte budget,
+  existing stream deadline and cancellation; completion currently returns an explicit
+  `LimitExceeded` rather than materializing the file or reporting an accepted ingestion.
+  Protocol boundary and worker IPC regressions cover the opt-in negotiation, non-PDF rejection,
+  cancellation, and no-publication completion. The production worker advertises only the
+  ordinary 64 MiB limit, and the host and converter remain capped at 64 MiB. This is a
+  transport-safety milestone, **not** functional large-PDF ingestion: host VFS streaming,
+  content-integrity checksum, disk-pressure limits, killable conversion/page isolation,
+  multi-workspace publication and four-target resource measurements remain prerequisites
+  before opting in or claiming coverage. No live user PDF or review profile was accessed.
 - 2026-10-11: User explicitly made large-PDF text and PDF image embeddings release prerequisites.
   Read-only live diagnosis: 354-page `cropped/input.pdf` is 173,653,067 bytes and skipped at 64
   MiB; a separate text-bearing OCRed PDF is 188,589,866 bytes but outside the enrolled scope.

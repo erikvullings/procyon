@@ -1691,6 +1691,188 @@ async fn ingestion_operation_can_be_cancelled_before_content_arrives() {
 }
 
 #[tokio::test]
+async fn negotiated_large_pdf_stream_can_be_cancelled_without_publishing_a_document() {
+    let directory = test_directory("large-pdf-pending-cancellation");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([67; 32]);
+    let limits = ProtocolLimits::default()
+        .with_pdf_ingestion_bytes(200 * 1024 * 1024)
+        .unwrap();
+    let task = tokio::spawn(
+        WorkerServer::new(WorkerConfig::new(endpoint.clone(), secret.clone()).with_limits(limits))
+            .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let observer = WorkerClient::connect(&endpoint, secret.clone())
+        .await
+        .unwrap();
+    let (mut raw, session) = raw_authenticated_stream(&endpoint, &secret).await;
+    let scope = v1::ResourceScope {
+        tenant_id: "tenant".into(),
+        library_id: "library".into(),
+    };
+    write_frame(
+        &mut raw,
+        &v1::ClientFrame {
+            correlation_id: 181,
+            payload: Some(v1::client_frame::Payload::Ingestion(v1::IngestionRequest {
+                session: Some(session.clone()),
+                scope: Some(scope.clone()),
+                request_id: "cancel-large-pdf".into(),
+                payload: Some(v1::ingestion_request::Payload::Start(v1::IngestionStart {
+                    document_id: "document".into(),
+                    metadata: Vec::new(),
+                    media_type: "application/pdf".into(),
+                    expected_content_bytes: MAX_STREAM_BYTES + 1,
+                    pdf_images_consented: false,
+                })),
+            })),
+        },
+        MAX_MESSAGE_BYTES,
+    )
+    .await
+    .unwrap();
+    write_frame(
+        &mut raw,
+        &v1::ClientFrame {
+            correlation_id: 181,
+            payload: Some(v1::client_frame::Payload::Ingestion(v1::IngestionRequest {
+                session: Some(session.clone()),
+                scope: Some(scope),
+                request_id: "cancel-large-pdf".into(),
+                payload: Some(v1::ingestion_request::Payload::Chunk(
+                    v1::FileContentChunk {
+                        sequence: 0,
+                        content: vec![42; 1024],
+                        end_of_stream: false,
+                    },
+                )),
+            })),
+        },
+        MAX_MESSAGE_BYTES,
+    )
+    .await
+    .unwrap();
+    write_frame(
+        &mut raw,
+        &v1::ClientFrame {
+            correlation_id: 182,
+            payload: Some(v1::client_frame::Payload::Cancel(v1::CancelRequest {
+                session: Some(session),
+                request_id: "cancel-large-pdf".into(),
+            })),
+        },
+        MAX_MESSAGE_BYTES,
+    )
+    .await
+    .unwrap();
+    let mut cancelled = false;
+    for _ in 0..4 {
+        let frame = read_frame::<_, v1::ServerFrame>(&mut raw, MAX_MESSAGE_BYTES)
+            .await
+            .unwrap();
+        if matches!(frame.payload, Some(v1::server_frame::Payload::Error(v1::ProtocolError { code, .. })) if code == v1::ErrorCode::Cancelled as i32)
+        {
+            cancelled = true;
+        }
+    }
+    assert!(cancelled);
+    assert!(
+        observer
+            .query("tenant", "library", "document", 1)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    drop(raw);
+    drop(observer);
+    task.abort();
+}
+
+#[tokio::test]
+async fn completed_pdf_spool_does_not_publish_until_large_pdf_conversion_is_supported() {
+    let directory = test_directory("large-pdf-spool-without-converter");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([68; 32]);
+    let limits = ProtocolLimits::new(
+        4096,
+        4096,
+        MAX_CONCURRENT_REQUESTS,
+        REQUEST_DEADLINE,
+        STREAM_DEADLINE,
+        SHUTDOWN_DEADLINE,
+    )
+    .unwrap()
+    .with_pdf_ingestion_bytes(8192)
+    .unwrap();
+    let task = tokio::spawn(
+        WorkerServer::new(WorkerConfig::new(endpoint.clone(), secret.clone()).with_limits(limits))
+            .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let (mut raw, session) = raw_authenticated_stream(&endpoint, &secret).await;
+    let scope = ("tenant", "library");
+    write_frame(
+        &mut raw,
+        &v1::ClientFrame {
+            correlation_id: 183,
+            payload: Some(v1::client_frame::Payload::Ingestion(v1::IngestionRequest {
+                session: Some(session.clone()),
+                scope: Some(v1::ResourceScope {
+                    tenant_id: scope.0.into(),
+                    library_id: scope.1.into(),
+                }),
+                request_id: "complete-large-pdf".into(),
+                payload: Some(v1::ingestion_request::Payload::Start(v1::IngestionStart {
+                    document_id: "document".into(),
+                    metadata: vec![],
+                    media_type: "application/pdf".into(),
+                    expected_content_bytes: 4608,
+                    pdf_images_consented: false,
+                })),
+            })),
+        },
+        MAX_MESSAGE_BYTES,
+    )
+    .await
+    .unwrap();
+    for sequence in 0..9 {
+        write_ingestion_chunk(
+            &mut raw,
+            183,
+            session.clone(),
+            "complete-large-pdf",
+            scope,
+            (sequence, &[42; 512], sequence == 8),
+        )
+        .await;
+    }
+    assert!(
+        !task.is_finished(),
+        "worker server exited while streaming PDF"
+    );
+    let response = read_frame::<_, v1::ServerFrame>(&mut raw, MAX_MESSAGE_BYTES)
+        .await
+        .unwrap();
+    assert!(matches!(
+        response.payload,
+        Some(v1::server_frame::Payload::Error(v1::ProtocolError { code, .. }))
+            if code == v1::ErrorCode::LimitExceeded as i32
+    ));
+    let observer = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    assert!(
+        observer
+            .query("tenant", "library", "document", 1)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    drop(raw);
+    drop(observer);
+    task.abort();
+}
+
+#[tokio::test]
 async fn ingestion_rejects_non_contiguous_sequences_and_scope_changes_without_committing() {
     let directory = test_directory("ingestion-stream-identity");
     let endpoint = Endpoint::for_runtime_directory(&directory);
@@ -2459,6 +2641,7 @@ async fn client_write_backpressure_is_bounded_for_the_writer_and_waiters() {
                             request_deadline_ms: 100,
                             stream_deadline_ms: 40,
                             shutdown_deadline_ms: 100,
+                            maximum_pdf_ingestion_bytes: 0,
                         }),
                     },
                 )),
@@ -2677,6 +2860,7 @@ async fn rejects_malicious_negotiated_limits_before_sending_the_launch_secret() 
                             request_deadline_ms: REQUEST_DEADLINE.as_millis() as u64,
                             stream_deadline_ms: STREAM_DEADLINE.as_millis() as u64,
                             shutdown_deadline_ms: SHUTDOWN_DEADLINE.as_millis() as u64,
+                            maximum_pdf_ingestion_bytes: 0,
                         }),
                     },
                 )),
@@ -2742,6 +2926,7 @@ async fn rejects_an_out_of_range_selected_version_before_sending_the_launch_secr
                             request_deadline_ms: REQUEST_DEADLINE.as_millis() as u64,
                             stream_deadline_ms: STREAM_DEADLINE.as_millis() as u64,
                             shutdown_deadline_ms: SHUTDOWN_DEADLINE.as_millis() as u64,
+                            maximum_pdf_ingestion_bytes: 0,
                         }),
                     },
                 )),
@@ -2808,6 +2993,7 @@ async fn client_rejects_a_peer_that_exceeds_the_negotiated_stream_budget() {
                             request_deadline_ms: 1_000,
                             stream_deadline_ms: 1_000,
                             shutdown_deadline_ms: 1_000,
+                            maximum_pdf_ingestion_bytes: 0,
                         }),
                     },
                 )),

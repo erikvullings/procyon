@@ -60,6 +60,8 @@ message ProtocolLimits {
   uint64 stream_deadline_ms = 5;
   // Maximum graceful-shutdown duration.
   uint64 shutdown_deadline_ms = 6;
+  // PDF ingestion only; zero means the ordinary stream limit for older workers.
+  uint64 maximum_pdf_ingestion_bytes = 7;
 }
 
 // Tenant and library ownership of a request.

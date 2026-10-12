@@ -58,7 +58,7 @@ use fm_semantic_protocol::{
     validate_query, write_frame,
 };
 use prost::Message;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{Mutex as AsyncMutex, Notify, OwnedSemaphorePermit, Semaphore, mpsc, watch};
 use tokio_util::sync::CancellationToken;
 
@@ -2867,6 +2867,7 @@ struct RuntimeState {
     active_atomic: AtomicUsize,
     atomic_finished: Notify,
     concurrency: Arc<Semaphore>,
+    pdf_spool_concurrency: Arc<Semaphore>,
 }
 
 #[derive(Clone)]
@@ -2888,13 +2889,19 @@ struct PendingIngestion {
     request_id: String,
     scope: v1::ResourceScope,
     start: v1::IngestionStart,
-    content: Vec<u8>,
+    content: PendingContent,
     budget: StreamBudget,
     next_sequence: u64,
     deadline: tokio::time::Instant,
     cancellation: CancellationToken,
     stream_finished: CancellationToken,
     _permit: OwnedSemaphorePermit,
+    _pdf_spool_permit: Option<OwnedSemaphorePermit>,
+}
+
+enum PendingContent {
+    Memory(Vec<u8>),
+    PdfSpool(tokio::fs::File),
 }
 
 struct ConnectionState {
@@ -3094,6 +3101,7 @@ impl WorkerServer {
                 active_atomic: AtomicUsize::new(0),
                 atomic_finished: Notify::new(),
                 concurrency,
+                pdf_spool_concurrency: Arc::new(Semaphore::new(1)),
             }),
         }
     }
@@ -3553,7 +3561,9 @@ async fn handle_frame(
                         .await;
                         return;
                     };
-                    if start.expected_content_bytes > state.config.limits.max_stream_bytes() {
+                    if start.expected_content_bytes
+                        > state.config.limits.max_ingestion_bytes(&start.media_type)
+                    {
                         send_error(
                             &writer,
                             correlation_id,
@@ -3592,6 +3602,46 @@ async fn handle_frame(
                         .await;
                         return;
                     };
+                    let (content, pdf_spool_permit) =
+                        if start.expected_content_bytes > state.config.limits.max_stream_bytes() {
+                            let Ok(spool_permit) =
+                                Arc::clone(&state.pdf_spool_concurrency).try_acquire_owned()
+                            else {
+                                send_error(
+                                    &writer,
+                                    correlation_id,
+                                    protocol_error(
+                                        v1::ErrorCode::LimitExceeded,
+                                        "PDF spool is occupied",
+                                    ),
+                                    state.config.limits,
+                                )
+                                .await;
+                                return;
+                            };
+                            let file = match tempfile::tempfile() {
+                                Ok(file) => file,
+                                Err(error) => {
+                                    send_error(
+                                        &writer,
+                                        correlation_id,
+                                        protocol_error(
+                                            v1::ErrorCode::Internal,
+                                            format!("PDF spool creation failed: {error}"),
+                                        ),
+                                        state.config.limits,
+                                    )
+                                    .await;
+                                    return;
+                                }
+                            };
+                            (
+                                PendingContent::PdfSpool(tokio::fs::File::from_std(file)),
+                                Some(spool_permit),
+                            )
+                        } else {
+                            (PendingContent::Memory(Vec::new()), None)
+                        };
                     let Some(cancellation) =
                         register_cancellation(&connection, &request.request_id)
                     else {
@@ -3611,19 +3661,23 @@ async fn handle_frame(
                     let request_id = request.request_id;
                     let ingestion_timeout = state.config.effective_ingestion_timeout();
                     let deadline = deadline_after(ingestion_timeout);
+                    let budget = StreamBudget::new(
+                        state.config.limits.max_ingestion_bytes(&start.media_type),
+                    );
                     connection.ingestions.lock().await.insert(
                         correlation_id,
                         PendingIngestion {
                             request_id: request_id.clone(),
                             scope,
                             start,
-                            content: Vec::new(),
-                            budget: StreamBudget::new(state.config.limits.max_stream_bytes()),
+                            content,
+                            budget,
                             next_sequence: 0,
                             deadline,
                             cancellation: cancellation.clone(),
                             stream_finished: stream_finished.clone(),
                             _permit: permit,
+                            _pdf_spool_permit: pdf_spool_permit,
                         },
                     );
                     tokio::spawn(expire_pending_ingestion(PendingIngestionExpiration {
@@ -3712,7 +3766,29 @@ async fn handle_frame(
                         return;
                     }
                     pending.next_sequence = next_sequence.unwrap_or(pending.next_sequence);
-                    pending.content.extend_from_slice(&chunk.content);
+                    let write_result = match &mut pending.content {
+                        PendingContent::Memory(content) => {
+                            content.extend_from_slice(&chunk.content);
+                            Ok(())
+                        }
+                        PendingContent::PdfSpool(file) => file.write_all(&chunk.content).await,
+                    };
+                    if let Err(error) = write_result {
+                        let pending = ingestions.remove(&correlation_id);
+                        drop(ingestions);
+                        discard_pending_ingestion(&connection, pending.as_ref());
+                        send_error(
+                            &writer,
+                            correlation_id,
+                            protocol_error(
+                                v1::ErrorCode::Internal,
+                                format!("PDF spool write failed: {error}"),
+                            ),
+                            state.config.limits,
+                        )
+                        .await;
+                        return;
+                    }
                     if !chunk.end_of_stream {
                         return;
                     }
@@ -4563,7 +4639,7 @@ async fn complete_ingestion(
     let response_deadline = pending.deadline;
     let response_cancellation = pending.cancellation.clone();
 
-    if pending.content.len() as u64 != pending.start.expected_content_bytes {
+    if pending.budget.consumed() != pending.start.expected_content_bytes {
         send_error(
             &writer,
             correlation_id,
@@ -4601,6 +4677,22 @@ async fn complete_ingestion(
         }
         () = tokio::time::sleep(state.config.atomic_ingestion_delay) => {}
     }
+    let content = match pending.content {
+        PendingContent::Memory(content) => content,
+        PendingContent::PdfSpool(_) => {
+            send_error(
+                &writer,
+                correlation_id,
+                protocol_error(
+                    v1::ErrorCode::LimitExceeded,
+                    "large PDF conversion is not yet available",
+                ),
+                state.config.limits,
+            )
+            .await;
+            return;
+        }
+    };
     let document_id = pending.start.document_id;
     let metadata = pending
         .start
@@ -4617,7 +4709,7 @@ async fn complete_ingestion(
             media_type: pending.start.media_type,
             pdf_images_consented: pending.start.pdf_images_consented,
             metadata,
-            content: pending.content,
+            content,
         };
         let job_id = match backend.enqueue(input, pending.cancellation) {
             Ok(job_id) => job_id,
@@ -4652,7 +4744,7 @@ async fn complete_ingestion(
             library_id: pending.scope.library_id.clone(),
             document_id: document_id.clone(),
             metadata,
-            content: pending.content,
+            content,
         }));
     let job_id = format!("job-{}", state.next_job.fetch_add(1, Ordering::Relaxed));
     {
