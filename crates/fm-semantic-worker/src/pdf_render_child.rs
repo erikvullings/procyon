@@ -31,7 +31,8 @@ fn render_page_with_library(
     expected_page_count: u32,
     library: &Path,
 ) -> io::Result<VisualAttachment> {
-    let bindings = Pdfium::bind_to_library(library).map_err(io::Error::other)?;
+    let bindings = Pdfium::bind_to_library(library)
+        .map_err(|error| io::Error::other(format!("PDF renderer unavailable: {error}")))?;
     let pdfium = Pdfium::new(bindings);
     let document = pdfium
         .load_pdf_from_byte_slice(source, None)
@@ -53,7 +54,7 @@ fn render_page_with_library(
         || !(1.0..=14_400.0).contains(&page_height)
     {
         return Err(io::Error::other(
-            "PDF page geometry exceeds the rendering budget",
+            "PDF renderer geometry exceeds the rendering budget",
         ));
     }
     let config = PdfRenderConfig::new()

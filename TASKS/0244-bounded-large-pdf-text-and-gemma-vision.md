@@ -98,6 +98,12 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Missing or invalid adjacent PDFium now fails the
+  supervised synthetic inline-image stage with a bounded, page-specific
+  `renderer unavailable` reason rather than the generic `page conversion
+  failed`; oversized page geometry has its own bounded reason. Parent
+  diagnostics remain restricted to known reason codes, never arbitrary
+  child stderr, paths or source text.
 - 2026-10-12 Copilot: The opt-in qualification path now checks packaged
   PDFium loader and notice artifacts against catalog hashes, compares the
   complete notices with the pinned upstream package, verifies Mac Developer

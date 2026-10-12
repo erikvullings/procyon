@@ -198,12 +198,24 @@ fn renderer_rejects_absent_or_invalid_adjacent_library() {
     });
     std::fs::copy(env!("CARGO_BIN_EXE_fm-semantic-worker"), &worker).expect("copy worker");
     let cancellation = CancellationToken::new();
-    assert!(stage_spool_visual_pages(&worker, &spool, &digest, &cancellation).is_err());
+    let error = stage_spool_visual_pages(&worker, &spool, &digest, &cancellation)
+        .expect_err("missing adjacent PDFium must fail closed on the visual page");
+    assert!(
+        error
+            .to_string()
+            .contains("PDF page 2: renderer unavailable")
+    );
 
     let library =
         pdfium_render::prelude::Pdfium::pdfium_platform_library_name_at_path(directory.path());
     std::fs::write(&library, b"invalid PDFium library").expect("write invalid library");
-    assert!(stage_spool_visual_pages(&worker, &spool, &digest, &cancellation).is_err());
+    let error = stage_spool_visual_pages(&worker, &spool, &digest, &cancellation)
+        .expect_err("invalid adjacent PDFium must fail closed on the visual page");
+    assert!(
+        error
+            .to_string()
+            .contains("PDF page 2: renderer unavailable")
+    );
 }
 
 #[cfg(feature = "experimental-pdf-render")]

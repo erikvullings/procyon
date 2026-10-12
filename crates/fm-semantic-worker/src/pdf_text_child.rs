@@ -71,6 +71,8 @@ fn page_failure_from_stderr(stderr: &[u8]) -> Option<String> {
                 "no usable visual evidence"
                     | "missing or multiple image candidates"
                     | "unsupported inline image"
+                    | "renderer unavailable"
+                    | "renderer geometry exceeds budget"
                     | "page conversion failed"
             )
         {
@@ -790,6 +792,13 @@ pub fn run_visual_pages(expected_sha256: &str) -> io::Result<()> {
                 "missing or multiple image candidates"
             } else if error.to_string().contains("has unsupported inline image") {
                 "unsupported inline image"
+            } else if error.to_string().contains("PDF renderer unavailable") {
+                "renderer unavailable"
+            } else if error
+                .to_string()
+                .contains("PDF renderer geometry exceeds the rendering budget")
+            {
+                "renderer geometry exceeds budget"
             } else {
                 "page conversion failed"
             };
@@ -990,6 +999,12 @@ mod tests {
         assert_eq!(
             super::page_failure_from_stderr(b"PROCYON_PDF_PAGE_ERROR:2:unsupported inline image\n"),
             Some("PDF page 2: unsupported inline image".into())
+        );
+        assert_eq!(
+            super::page_failure_from_stderr(
+                b"PROCYON_PDF_PAGE_ERROR:2:renderer geometry exceeds budget\n"
+            ),
+            Some("PDF page 2: renderer geometry exceeds budget".into())
         );
         assert!(
             super::page_failure_from_stderr(b"PROCYON_PDF_PAGE_ERROR:354:secret source text")
