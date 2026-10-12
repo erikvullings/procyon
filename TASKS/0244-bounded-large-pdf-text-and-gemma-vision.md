@@ -98,6 +98,20 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Directly drawn 8-bit DeviceRGB/DeviceGray Flate
+  images now accept validated PNG predictor parameters (10-15), with
+  compressed-row overhead included in the decompression bound. A synthetic
+  predictor-12 image round-trips its exact pixels and page citation; mismatched
+  columns fail as a reported omission. This improves consented embedded-image
+  coverage but does not render pages, lift the 32-image or 64-MiB source
+  limits, or qualify a large scan.
+- 2026-10-12 Copilot: A prototype child consuming the anonymous PDF spool
+  was removed after finite `RLIMIT_AS` and `RLIMIT_DATA` both returned
+  `EINVAL` on the required macOS arm64 host; shell `ulimit -v/-d/-m`
+  independently rejected those limits. An alternative qualified process
+  memory watchdog/boundary remains required before >64 MiB admission.
+  Do not silently substitute an unbounded Mac process or treat sampled
+  RSS as an instantaneous OS-enforced cap. Release remains no-go.
 - 2026-10-12 Copilot: The preferred/advanced converter's bounded-byte
   preflight now borrows an already-materialized source instead of cloning
   the whole PDF before parsing. Reader inputs still materialize only under

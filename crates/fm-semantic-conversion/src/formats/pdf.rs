@@ -358,17 +358,11 @@ impl Write for BoundedPngWriter {
 }
 
 fn png_from_flate_image(image: &lopdf::Stream) -> Result<Vec<u8>, &'static str> {
-    if [
-        b"DecodeParms".as_slice(),
-        b"Decode",
-        b"Mask",
-        b"SMask",
-        b"ImageMask",
-    ]
-    .iter()
-    .any(|key| image.dict.has(key))
+    if [b"Decode".as_slice(), b"Mask", b"SMask", b"ImageMask"]
+        .iter()
+        .any(|key| image.dict.has(key))
     {
-        return Err("PDF Flate image has unsupported predictor, palette, mask or decode mapping");
+        return Err("PDF Flate image has unsupported palette, mask or decode mapping");
     }
     let channels = match image.dict.get(b"ColorSpace").and_then(Object::as_name) {
         Ok(b"DeviceRGB") => 3_usize,
@@ -392,8 +386,48 @@ fn png_from_flate_image(image: &lopdf::Stream) -> Result<Vec<u8>, &'static str> 
     })()
     .ok_or("PDF Flate image dimensions or decoded bytes exceed the raster limit")?;
     let (width, height, expected_bytes) = size;
+    let predictor = match image.dict.get(b"DecodeParms") {
+        Ok(Object::Dictionary(params)) => {
+            if params.iter().any(|(key, _)| {
+                !matches!(
+                    key.as_slice(),
+                    b"Predictor" | b"Columns" | b"Colors" | b"BitsPerComponent"
+                )
+            }) {
+                return Err("PDF Flate image has unsupported predictor parameters");
+            }
+            let value = |key: &[u8], default| -> Result<i64, &'static str> {
+                match params.get(key) {
+                    Ok(value) => value
+                        .as_i64()
+                        .map_err(|_| "PDF Flate image has invalid predictor parameters"),
+                    Err(lopdf::Error::DictKey(_)) => Ok(default),
+                    Err(_) => Err("PDF Flate image has invalid predictor parameters"),
+                }
+            };
+            if value(b"Columns", 1)? != i64::from(width)
+                || value(b"Colors", 1)? != channels as i64
+                || value(b"BitsPerComponent", 8)? != 8
+            {
+                return Err("PDF Flate image predictor dimensions do not match the raster");
+            }
+            value(b"Predictor", 1)?
+        }
+        Err(lopdf::Error::DictKey(_)) => 1,
+        _ => return Err("PDF Flate image has invalid predictor parameters"),
+    };
+    if predictor != 1 && !(10..=15).contains(&predictor) {
+        return Err("PDF Flate image has unsupported predictor");
+    }
+    let decompressed_limit = if predictor == 1 {
+        expected_bytes
+    } else {
+        expected_bytes
+            .checked_add(height as usize)
+            .ok_or("PDF Flate image predictor exceeds the raster limit")?
+    };
     let pixels = image
-        .decompressed_content_with_limit(expected_bytes)
+        .decompressed_content_with_limit(decompressed_limit)
         .map_err(|_| "PDF Flate image could not be decompressed within its raster limit")?;
     if pixels.len() != expected_bytes {
         return Err("PDF Flate image decoded byte length does not match its dimensions");
@@ -908,7 +942,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn flate_image_with_predictor_is_omitted_instead_of_misdecoded() {
+    fn flate_image_with_bounded_png_predictor_preserves_pixels_and_rejects_invalid_params() {
         let bytes = text_pdf(&[&["Visible text"]]);
         let mut document = Document::load_mem(&bytes).expect("load fixture");
         let page_id = document.get_pages()[&1];
@@ -919,6 +953,13 @@ pub(crate) mod tests {
             .as_stream_mut()
             .unwrap()
             .set_plain_content(b"q /Im1 Do Q\nBT /F1 12 Tf (Visible text) Tj ET\n".to_vec());
+        let pixels = [255, 0, 0, 0, 255, 0].repeat(1_000);
+        let mut predicted = Vec::with_capacity(7_000);
+        predicted.push(2);
+        predicted.extend_from_slice(&pixels[..6]);
+        for _ in 1..1_000 {
+            predicted.extend_from_slice(&[2, 0, 0, 0, 0, 0, 0]);
+        }
         let mut image = Stream::new(
             dictionary! {
                 "Type" => "XObject",
@@ -927,9 +968,14 @@ pub(crate) mod tests {
                 "Height" => 1000,
                 "ColorSpace" => "DeviceRGB",
                 "BitsPerComponent" => 8,
-                "DecodeParms" => dictionary! { "Predictor" => 12 },
+                "DecodeParms" => dictionary! {
+                    "Predictor" => 12,
+                    "Columns" => 2,
+                    "Colors" => 3,
+                    "BitsPerComponent" => 8,
+                },
             },
-            [255, 0, 0, 0, 255, 0].repeat(1_000),
+            predicted,
         );
         image.compress().expect("compress pixels");
         let image_id = document.add_object(image);
@@ -941,6 +987,53 @@ pub(crate) mod tests {
         let mut bytes = Vec::new();
         document.save_to(&mut bytes).expect("save fixture");
 
+        assert!(
+            convert_pdf(&bytes)
+                .expect("text-only conversion")
+                .visuals()
+                .is_empty()
+        );
+        let converted = convert_pdf_with_visuals(&bytes, true).expect("convert text");
+        assert_eq!(converted.visuals().len(), 1);
+        assert_eq!(
+            image::load_from_memory(&converted.visuals()[0].data)
+                .expect("valid PNG")
+                .to_rgb8()
+                .into_raw(),
+            pixels
+        );
+        assert_eq!(
+            converted.visuals()[0].provenance,
+            VisualProvenance::PdfImage {
+                page_number: 1,
+                image_index: 0,
+            }
+        );
+        let mut document = Document::load_mem(&bytes).expect("load compressed fixture");
+        let resources_id = document
+            .get_page_resources(document.get_pages()[&1])
+            .unwrap()
+            .1[0];
+        let image_id = document
+            .get_dict_in_dict(document.get_dictionary(resources_id).unwrap(), b"XObject")
+            .unwrap()
+            .get(b"Im1")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let image = document
+            .get_object_mut(image_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap();
+        image.dict.set(
+            "DecodeParms",
+            dictionary! { "Predictor" => 12, "Columns" => 3, "Colors" => 3 },
+        );
+        let mut bytes = Vec::new();
+        document
+            .save_to(&mut bytes)
+            .expect("save invalid predictor");
         let converted = convert_pdf_with_visuals(&bytes, true).expect("convert text");
         assert!(converted.visuals().is_empty());
         assert!(converted.visual_omissions().iter().any(|omission| {
@@ -950,6 +1043,41 @@ pub(crate) mod tests {
                         page_number: 1,
                         image_index: 0,
                     })
+        }));
+
+        let mut overlong = Document::load_mem(&bytes).expect("load invalid predictor fixture");
+        let resources_id = overlong
+            .get_page_resources(overlong.get_pages()[&1])
+            .unwrap()
+            .1[0];
+        let image_id = overlong
+            .get_dict_in_dict(overlong.get_dictionary(resources_id).unwrap(), b"XObject")
+            .unwrap()
+            .get(b"Im1")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let image = overlong
+            .get_object_mut(image_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap();
+        let mut overlong_rows = Vec::with_capacity(7_007);
+        overlong_rows.extend_from_slice(&[2, 255, 0, 0, 0, 255, 0]);
+        for _ in 0..1_000 {
+            overlong_rows.extend_from_slice(&[2, 0, 0, 0, 0, 0, 0]);
+        }
+        image.set_plain_content(overlong_rows);
+        image.compress().expect("compress extra row");
+        let mut overlong_bytes = Vec::new();
+        overlong
+            .save_to(&mut overlong_bytes)
+            .expect("save extra-row fixture");
+        let converted =
+            convert_pdf_with_visuals(&overlong_bytes, true).expect("retain text with omission");
+        assert!(converted.visuals().is_empty());
+        assert!(converted.visual_omissions().iter().any(|omission| {
+            omission.detail.contains("raster limit") || omission.detail.contains("decoded byte")
         }));
 
         let mut document = Document::load_mem(&bytes).expect("load compressed fixture");
