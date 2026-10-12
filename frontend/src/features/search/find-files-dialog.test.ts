@@ -307,9 +307,8 @@ describe('FindFilesDialog', () => {
       ?.click();
     expect(onSearch).toHaveBeenCalledWith(
       expect.objectContaining({
-        semanticQuery: expect.stringMatching(
-          /^Remote sensing\. An advanced system of information gathering.* Broader concept: Encoding\. Topic: Information technology$/s,
-        ),
+        semanticQuery:
+          "Remote sensing. Remote sensing obtains information about the Earth's surface from sensors located away from it, such as those on aircraft or satellites.",
       }),
     );
   });
@@ -360,7 +359,7 @@ describe('FindFilesDialog', () => {
     expect(await client.listSemanticVocabularies()).toEqual([]);
   });
 
-  it('adds source-topic context for an otherwise undescribed concept', async () => {
+  it('uses a bundled UNESCO definition rather than fallback query context', async () => {
     const client = await indexedClient();
     const onSearch = vi.fn();
     m.mount(root, {
@@ -390,13 +389,67 @@ describe('FindFilesDialog', () => {
     );
     root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
     m.redraw.sync();
+    expect(root.querySelector('.fm-find-concept-enrichment')?.textContent).toContain(
+      'not authored by UNESCO',
+    );
     [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
       .find((button) => button.textContent?.trim() === 'Search')
       ?.click();
     expect(onSearch).toHaveBeenCalledWith(
       expect.objectContaining({
         semanticQuery:
-          'Urban warfare. Broader concept: Warfare. Topic: Defence and military engineering',
+          'Urban warfare. Urban warfare is armed conflict conducted in towns or cities where buildings, streets, and civilians shape operations.',
+      }),
+    );
+  });
+
+  it('retains contextual fallback for an imported concept without a definition', async () => {
+    const client = await indexedClient();
+    await client.importSemanticVocabulary(
+      JSON.stringify({
+        format: 'procyon-skos-1',
+        id: 'research-topics',
+        name: 'Research topics',
+        concepts: [
+          { uri: 'https://example.test/data-science', prefLabels: { en: 'Data science' } },
+        ],
+      }),
+    );
+    const onSearch = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          client,
+          workspaceId: 'workspace-a',
+          scopeLabel: '/Documents',
+          onSearch,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-files-modes')).not.toBeNull());
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    m.redraw.sync();
+    const filter = root.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!filter) throw new Error('Concept filter missing');
+    filter.value = 'Data science';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-concept-choice')?.textContent).toContain('Data science'),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-find-concept-enrichment')).toBeNull();
+    [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
+      .find((button) => button.textContent?.trim() === 'Search')
+      ?.click();
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        semanticQuery: 'Data science. Topic: Research topics',
       }),
     );
   });

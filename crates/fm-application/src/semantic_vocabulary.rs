@@ -982,6 +982,19 @@ mod tests {
                 vocabulary.extensions["https://procyon.app/ns/skos-starter/license"],
                 expected_license
             );
+            if vocabulary.id.as_str().starts_with("unesco-") {
+                assert!(vocabulary.concepts.values().all(|concept| {
+                    concept
+                        .definitions
+                        .get("en")
+                        .is_some_and(|definition| !definition.trim().is_empty())
+                }));
+                assert!(
+                    vocabulary.extensions["https://procyon.app/ns/skos-starter/enrichment"]
+                        .as_str()
+                        .is_some_and(|notice| notice.contains("not authored by UNESCO"))
+                );
+            }
         }
     }
 

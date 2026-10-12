@@ -1670,6 +1670,8 @@ export const nl = {
     description:
       'Importeer hier uw eigen SKOS-woordenlijst. Meegeleverde startwoordenlijsten zijn direct beschikbaar via Zoeken op concept, zonder import of koppeling. Koppel geïmporteerde woordenlijsten alleen voor annotatie en beoordeling.',
     starterSourceLink: 'Originele SKOS-bron',
+    starterEnrichment:
+      'Bewerkt fragment uit de UNESCO Thesaurus: ontbrekende definities zijn door Procyon met AI aangevuld voor RAG en zijn niet geschreven door UNESCO. Dit impliceert geen goedkeuring door UNESCO.',
     importLabel: 'SKOS-JSON',
     importPlaceholder: 'Plak een procyon-skos-1-document',
     importAction: 'Woordenlijst importeren',

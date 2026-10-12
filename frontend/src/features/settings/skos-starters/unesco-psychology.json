@@ -9,7 +9,9 @@
         "en": "Talent"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Talent is a marked natural or developed capacity for performing a particular activity well."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept389"],
       "narrower": [],
@@ -28,7 +30,9 @@
       "altLabels": {
         "en": ["Mentality"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Mind refers to the faculties and processes involved in thought, awareness, feeling, and intention."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept391"],
       "narrower": [],
@@ -41,7 +45,9 @@
         "en": "Experimental psychology"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Experimental psychology studies behaviour and mental processes by testing hypotheses in controlled experiments."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept7833"],
       "narrower": [],
@@ -59,7 +65,9 @@
       "altLabels": {
         "en": ["Performance motivation"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Achievement motivation is the drive to meet standards of success and accomplish challenging goals."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept390"],
       "narrower": [],
@@ -77,7 +85,9 @@
       "altLabels": {
         "en": ["Self control"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Self discipline is the ability to regulate one's behaviour and impulses in pursuit of longer-term goals."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept390"],
       "narrower": [],
@@ -92,7 +102,9 @@
       "altLabels": {
         "en": ["Individuals", "Personal identity"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Identity is a person's sense of who they are, shaped by personal characteristics and social affiliations."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept391"],
       "narrower": [],
@@ -110,7 +122,9 @@
       "altLabels": {
         "en": ["Mental strain"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Mental stress is psychological strain arising when perceived demands challenge a person's coping resources."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept3691"],
       "narrower": [],
@@ -123,7 +137,9 @@
         "en": "Perception"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Perception is the process of organizing and interpreting sensory information about the world."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept998"],
       "narrower": [],
@@ -136,7 +152,9 @@
         "en": "Self esteem"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Self esteem is a person's overall evaluation of their own worth or value."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept391"],
       "narrower": [],
@@ -149,7 +167,9 @@
         "en": "Psychometrics"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Psychometrics is the theory and practice of measuring psychological traits, abilities, and states."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept6239"],
       "narrower": [],
@@ -164,7 +184,9 @@
       "altLabels": {
         "en": ["Feelings", "Love"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Emotions are experiences involving feelings, bodily responses, and tendencies to act in response to events."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept386"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17133"],
@@ -179,7 +201,9 @@
       "altLabels": {
         "en": ["Dreams"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Sleep is a recurring state of reduced responsiveness and altered consciousness that supports bodily and mental functions."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept3692"],
       "narrower": [],
@@ -194,7 +218,9 @@
       "altLabels": {
         "en": ["Critical mind"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Critical thinking is the deliberate evaluation of claims and evidence to reach well-reasoned judgments."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept5557"],
       "narrower": [],
@@ -207,7 +233,9 @@
         "en": "Happiness"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Happiness is a subjective state of positive emotion or satisfaction with life."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept1597"],
       "narrower": [],
@@ -222,7 +250,9 @@
       "altLabels": {
         "en": ["Interpersonal skills", "Social abilities", "Social competence"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Social skills are learned abilities used to communicate, cooperate, and interact effectively with others."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept999"],
       "narrower": [],
@@ -237,7 +267,9 @@
       "altLabels": {
         "en": ["Sex customs", "Sexuality"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Sexual behaviour comprises actions and interactions associated with sexual expression and intimacy."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept386"],
       "narrower": [],
@@ -250,7 +282,9 @@
         "en": "Creativity"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Creativity is the capacity to produce ideas or works that are both original and useful or meaningful."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept5554"],
       "narrower": [],
@@ -267,7 +301,9 @@
         "en": "Attitude change"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Attitude change is a shift in a person's evaluations or beliefs about an object, person, or issue."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept385"],
       "narrower": [],
@@ -280,7 +316,9 @@
         "en": "Intolerance"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Intolerance is an unwillingness to accept beliefs, practices, or people perceived as different."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept385"],
       "narrower": [],
@@ -296,7 +334,9 @@
         "en": "Prejudice"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Prejudice is a preconceived, often negative judgment of people based on their perceived group membership."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept385"],
       "narrower": [],
@@ -309,7 +349,9 @@
         "en": "Tolerance"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Tolerance is the willingness to allow and respect beliefs or practices one does not share."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept385"],
       "narrower": [],
@@ -324,7 +366,9 @@
       "altLabels": {
         "en": ["Left handedness"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Lateral dominance is the tendency to favour one side of the body for activities such as writing or kicking."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept386"],
       "narrower": [],
@@ -339,7 +383,9 @@
       "altLabels": {
         "en": ["Psychological factors"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Psychological effects are changes in thoughts, feelings, or behaviour resulting from an experience or condition."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept386"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept13013"],
@@ -352,7 +398,9 @@
         "en": "Unconscious"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "The unconscious comprises mental processes and contents that influence behaviour without being directly available to awareness."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept386"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept16462"],
@@ -365,7 +413,9 @@
         "en": "Attitudes"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Attitudes are relatively enduring evaluations of people, objects, or ideas that can influence responses to them."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -388,7 +438,9 @@
       "altLabels": {
         "en": ["Human behaviour"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Behaviour is the observable actions and responses of an organism, especially a person in a psychological context."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -413,7 +465,9 @@
       "altLabels": {
         "en": ["Cognitive processes"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Cognition comprises mental processes used to acquire, process, remember, and apply information."
+      },
       "scopeNotes": {
         "en": "The mental action or process of acquiring knowledge through thought, experience and senses."
       },
@@ -436,7 +490,9 @@
       "altLabels": {
         "en": ["Genetic psychology", "Individual development"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Developmental psychology studies changes in thinking, emotion, and social functioning throughout the human lifespan."
+      },
       "scopeNotes": {
         "en": "Study of the changes in cognitive, motivational, psychophysiological, and social functioning that occur throughout the human life span."
       },
@@ -456,7 +512,9 @@
         "en": "Intelligence"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Intelligence is the capacity to learn, reason, solve problems, and adapt to new situations."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -476,7 +534,9 @@
         "en": "Motivation"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Motivation is the set of processes that initiate, direct, and sustain goal-oriented behaviour."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -497,7 +557,9 @@
       "altLabels": {
         "en": ["Character", "Temperament"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Personality is the relatively enduring pattern of thoughts, feelings, and behaviours that distinguishes an individual."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -517,7 +579,9 @@
       "altLabels": {
         "en": ["Individual psychology"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Psychology is the scientific study of behaviour and mental processes."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -539,7 +603,9 @@
         "en": "Child development"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Child development is the progression of physical, cognitive, emotional, and social capacities from infancy through childhood."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept7752"],
       "narrower": [],
@@ -556,7 +622,9 @@
         "en": "Emotional development"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Emotional development is the change in how people experience, express, understand, and regulate emotions over time."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept388"],
       "narrower": [],
@@ -574,7 +642,9 @@
       "altLabels": {
         "en": ["Intellectual development", "Thought process development"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Mental development is the growth and change of thinking, learning, and other cognitive abilities over time."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept388"],
       "narrower": [],
@@ -590,7 +660,9 @@
         "en": "Moral development"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Moral development is the growth and change of judgments, values, and behaviour concerning right and wrong."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept388"],
       "narrower": [],
@@ -605,7 +677,9 @@
       "altLabels": {
         "en": ["Concept formation", "Concepts"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Conceptualization is the mental process of forming and organizing general ideas from experiences or information."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept387"],
       "narrower": [],
@@ -618,7 +692,9 @@
         "en": "Imagination"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Imagination is the ability to form mental images or possibilities not currently perceived through the senses."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept387"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept3086"],
@@ -634,7 +710,9 @@
         "en": "Intuition"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Intuition is an immediate judgment or understanding reached without conscious step-by-step reasoning."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept387"],
       "narrower": [],
@@ -649,7 +727,9 @@
       "altLabels": {
         "en": ["Memory"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Memorization is the process of encoding and retaining information so it can be recalled later."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept387"],
       "narrower": [],
@@ -664,7 +744,9 @@
       "altLabels": {
         "en": ["Thought process"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Thinking is the mental activity of forming ideas, reasoning, and working through problems."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept387"],
       "narrower": [
@@ -681,7 +763,9 @@
         "en": "Psychological research"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Psychological research systematically investigates behaviour and mental processes through observation and empirical methods."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept392"],
       "narrower": [
@@ -697,7 +781,9 @@
         "en": "Creative thinking"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Creative thinking is the generation of original ideas or novel ways of solving problems."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept5557"],
       "narrower": [],
@@ -710,7 +796,9 @@
         "en": "Visualization"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Visualization is the formation or use of mental images to represent objects, events, or ideas."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept998"],
       "narrower": [],
@@ -729,7 +817,9 @@
       "altLabels": {
         "en": ["Abstract reasoning", "Deduction (reasoning)", "Induction (reasoning)"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Reasoning is the process of drawing conclusions from evidence, premises, or patterns of thought."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept5557"],
       "narrower": [],
@@ -742,7 +832,9 @@
         "en": "Personality development"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Personality development is the formation and change of an individual's characteristic patterns of thinking, feeling, and behaviour."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept388"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept5055"],
@@ -755,7 +847,9 @@
         "en": "Psychological schools"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Psychological schools are distinct traditions of theory and method for explaining behaviour and mental processes."
+      },
       "scopeNotes": {
         "en": "Freudian, Jungian, Gestalt, dynamic, introspective, etc."
       },
@@ -772,7 +866,9 @@
       "altLabels": {
         "en": ["Individuality"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Individual differences are variations between people in characteristics such as ability, personality, or behaviour."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept391"],
       "narrower": [],
@@ -788,7 +884,9 @@
         "en": "Psychological tests"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Psychological tests are standardized tools used to assess mental abilities, traits, or states."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept6239"],
       "narrower": [],
@@ -806,7 +904,9 @@
       "altLabels": {
         "en": ["Intellectual ability"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Ability is a person's present capacity to perform a task or activity."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept389"],
       "narrower": [],
@@ -824,7 +924,9 @@
         "en": "Aptitude"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Aptitude is a person's potential to learn or perform a particular task or skill."
+      },
       "scopeNotes": {
         "en": "The potential ability of an individual to perform an as yet unlearned task or skill."
       },
@@ -843,7 +945,9 @@
         "en": "Sensorimotor activities"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Sensorimotor activities combine sensory perception with bodily movement, such as reaching for a seen object."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept386"],
       "narrower": [
@@ -864,7 +968,9 @@
         "en": "Skills"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Skills are learned capacities to perform particular tasks effectively."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept996"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17154"],
@@ -878,6 +984,7 @@
   "extensions": {
     "https://procyon.app/ns/skos-starter/source": "https://vocabularies.unesco.org/exports/thesaurus/latest/unesco-thesaurus.rdf",
     "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by-sa/3.0/igo/",
-    "https://procyon.app/ns/skos-starter/selection": ["mt4.10"]
+    "https://procyon.app/ns/skos-starter/selection": ["mt4.10"],
+    "https://procyon.app/ns/skos-starter/enrichment": "Adapted UNESCO Thesaurus excerpt with English definitions AI-enriched by Procyon for RAG where the source has none. Added definitions are not authored by UNESCO; no UNESCO endorsement is implied."
   }
 }

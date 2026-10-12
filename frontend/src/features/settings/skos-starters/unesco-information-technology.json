@@ -11,7 +11,9 @@
       "altLabels": {
         "en": ["Microfilm cameras", "Microfilm readers"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Microform equipment comprises devices for recording, storing, or reading miniaturized images of documents on film or similar media."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept537"],
       "narrower": [],
@@ -26,7 +28,9 @@
       "altLabels": {
         "en": ["Direct access"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Random access is the ability to retrieve a stored data item directly without reading preceding items in sequence."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept6082"],
       "narrower": [],
@@ -39,7 +43,9 @@
         "en": "Telephone engineering"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Telephone engineering concerns the design and operation of systems that transmit voice and related signals over distance."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept527"],
       "narrower": [],
@@ -54,7 +60,9 @@
       "altLabels": {
         "en": ["Videotelephone"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "A telephone is a device for two-way voice communication between people at different locations."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept539"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17086"],
@@ -69,7 +77,9 @@
       "altLabels": {
         "en": ["Telegraph"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Telex is a system for exchanging typed messages between teleprinter terminals over a telecommunications network."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept539"],
       "narrower": [],
@@ -82,7 +92,9 @@
         "en": "Office management"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Office management is the coordination of administrative staff, procedures, equipment, and records needed to run an office."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept524"],
       "narrower": [],
@@ -97,7 +109,9 @@
       "altLabels": {
         "en": ["Sensors", "Telemetry"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Remote sensing obtains information about the Earth's surface from sensors located away from it, such as those on aircraft or satellites."
+      },
       "scopeNotes": {
         "en": "An advanced system of information gathering to monitor and forecast developments on the surface of the earth and identify an area's natural resources by looking at the world from aircraft, balloons, or satellites and evaluating the data gathered."
       },
@@ -115,7 +129,9 @@
         "en": "Transistors"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Transistors are semiconductor devices used to switch or amplify electrical signals."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept9546"],
       "narrower": [],
@@ -130,7 +146,9 @@
       "altLabels": {
         "en": ["Intranet", "LANs", "Local area networks", "WANs", "Wide area networks"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "The Internet is a global network of interconnected computer networks that exchange data using shared communication protocols."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept6019"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17138"],
@@ -145,7 +163,9 @@
       "altLabels": {
         "en": ["Cell phones", "Cellphones", "Cellular phones", "Smartphones"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Mobile phones are portable devices that use cellular networks for voice calls and other wireless communications."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept12747"],
       "narrower": [],
@@ -160,7 +180,9 @@
       "altLabels": {
         "en": ["FOSS", "Free and open source software"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Open source software is software whose source code is available under a licence permitting its use, modification, and redistribution."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept6081"],
       "narrower": [],
@@ -173,7 +195,9 @@
         "en": "Internet universality"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Internet universality is the principle that the Internet should respect human rights, remain open and accessible, and support multistakeholder participation."
+      },
       "scopeNotes": {
         "en": "Advocates for an Internet that is based on human Rights, that is Open and Accessible to all, and nurtured by Multistakeholder participation (ROAM principles)."
       },
@@ -188,7 +212,9 @@
         "en": "Allocation of frequencies"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Allocation of frequencies assigns portions of the radio spectrum to services or users to coordinate transmissions and limit interference."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept4364"],
       "narrower": [],
@@ -201,7 +227,9 @@
         "en": "High definition TV"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "High definition TV is television that transmits or displays images at a higher resolution than standard-definition television."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept4365"],
       "narrower": [],
@@ -218,7 +246,9 @@
         "en": "Data analysis"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Data analysis is the examination and interpretation of data to identify patterns, answer questions, or support decisions."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept522"],
       "narrower": [],
@@ -234,7 +264,9 @@
         "en": "Analogue computers"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Analogue computers represent and process quantities as continuously varying physical signals rather than discrete digital values."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
       "narrower": [],
@@ -247,7 +279,9 @@
         "en": "Antennas"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Antennas are devices that transmit or receive electromagnetic waves for wireless communication."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept4338"],
       "narrower": [],
@@ -262,7 +296,9 @@
       "altLabels": {
         "en": ["Machine readable archives"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Archive automation uses computer systems to manage archival records, descriptions, retrieval, and related workflows."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
       "narrower": [],
@@ -277,7 +313,9 @@
       "altLabels": {
         "en": ["Computerized documentation", "Computerized libraries"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Library automation uses computer systems to manage library catalogues, circulation, acquisitions, and other services."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
       "narrower": [],
@@ -290,7 +328,9 @@
         "en": "Artificial intelligence"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Artificial intelligence develops computer systems capable of tasks associated with human intelligence, such as learning or reasoning."
+      },
       "scopeNotes": {
         "en": "Capability of a device to perform functions normally associated with human intelligence."
       },
@@ -311,7 +351,9 @@
       "altLabels": {
         "en": ["Knowledge based systems"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Expert systems are programs that apply encoded specialist knowledge and rules to problems in a particular domain."
+      },
       "scopeNotes": {
         "en": "Computer system based on a data base created by human authorities on a particular subject."
       },
@@ -326,7 +368,9 @@
         "en": "Pattern recognition"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Pattern recognition is the identification and classification of recurring structures or regularities in data."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept3052"],
       "narrower": [],
@@ -339,7 +383,9 @@
         "en": "Robotics"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Robotics concerns the design, control, and use of robots to perform physical tasks."
+      },
       "scopeNotes": {
         "en": "An area of artificial intelligence applied to the industrial use of robots for performance of repetitive tasks."
       },
@@ -354,7 +400,9 @@
         "en": "Projectors"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Projectors are devices that cast images or moving pictures onto a screen or other surface."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept537"],
       "narrower": [],
@@ -369,7 +417,9 @@
       "altLabels": {
         "en": ["Machine translation"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Automatic translation uses computer systems to convert text or speech from one language into another."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept3411"],
       "narrower": [],
@@ -384,7 +434,9 @@
       "altLabels": {
         "en": ["Computer linguistics"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Computational linguistics uses computational methods to model, analyse, and process human language."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept3410"],
@@ -399,7 +451,9 @@
       "altLabels": {
         "en": ["Cassettes (computer)", "DAT"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Magnetic tapes are flexible strips with a magnetic coating used to record sound, video, or computer data."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept6072"],
       "narrower": [],
@@ -414,7 +468,9 @@
       "altLabels": {
         "en": ["Direct broadcasting"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Satellite broadcasting transmits radio or television signals via satellites to receiving stations or audiences."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept519"],
       "narrower": [],
@@ -435,7 +491,9 @@
           "Television transmitters"
         ]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "TV/radio equipment comprises devices for producing, transmitting, receiving, or displaying television and radio signals."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept531"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept2488"],
@@ -451,7 +509,9 @@
         "en": "Cable television"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Cable television delivers television programmes to subscribers through wired distribution networks."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept519"],
       "narrower": [],
@@ -468,7 +528,9 @@
         "en": "Radio engineering"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Radio engineering concerns the design and operation of systems that transmit or receive radio-frequency signals."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept519"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept2074"],
@@ -486,7 +548,9 @@
         "en": "Television engineering"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Television engineering concerns the technologies used to capture, transmit, receive, and display television programmes."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept519"],
       "narrower": [
@@ -509,7 +573,9 @@
         "en": "Office automation"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Office automation uses electronic systems to carry out or streamline routine administrative tasks."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept7414"],
@@ -527,7 +593,9 @@
         "en": "Closed circuit television"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Closed circuit television is a video system in which cameras send images to a limited set of monitors or recorders."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept4365"],
       "narrower": [],
@@ -544,7 +612,9 @@
         "en": "Digital computers"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Digital computers process data represented as discrete values according to stored instructions."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
       "narrower": [],
@@ -557,7 +627,9 @@
         "en": "Film cameras"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Film cameras record still or moving images by exposing photographic film to light."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept537"],
       "narrower": [],
@@ -572,7 +644,9 @@
       "altLabels": {
         "en": ["OCR", "Optical character recognition"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Character recognition converts images of printed or handwritten characters into machine-readable text."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept5530"],
       "narrower": [],
@@ -587,7 +661,9 @@
       "altLabels": {
         "en": ["Broadcasting engineering"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Broadcasting technology comprises the methods and systems used to distribute audio or video programmes to audiences."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -605,7 +681,9 @@
         "en": "Computer applications"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Computer applications are uses of computer systems to perform tasks in domains such as administration, science, or communication."
+      },
       "scopeNotes": {
         "en": "Use more specific term if appropriate."
       },
@@ -634,7 +712,9 @@
         "en": "Computer programming"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Computer programming is the design and writing of instructions that make a computer perform specified tasks."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -666,7 +746,9 @@
           "Teleprocessing"
         ]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Data processing is the systematic manipulation and computation of data by computer to produce usable results."
+      },
       "scopeNotes": {
         "en": "Systematic handling, manipulation, and computation of data, always involving the use of computers. Do not confuse with \"information processing\"."
       },
@@ -693,7 +775,9 @@
       "altLabels": {
         "en": ["ICT"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Information technology comprises systems for creating, storing, processing, and distributing digital information."
+      },
       "scopeNotes": {
         "en": "Includes technology for data base management systems, as well as for information distribution, such as teleprocessing systems, networks of terminals, videotex systems, micrography, etc."
       },
@@ -716,7 +800,9 @@
       "altLabels": {
         "en": ["Secretarial work", "Typing"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Office services are administrative support activities such as correspondence, typing, filing, and scheduling."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept1361"],
@@ -734,7 +820,9 @@
       "altLabels": {
         "en": ["Circuits", "Computer circuits", "Digital circuits", "Logic and switching circuits"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Electronic circuits are connected electrical components arranged to process or control electrical signals."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept535"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept5244"],
@@ -751,7 +839,9 @@
         "en": "Integrated circuits"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Integrated circuits combine many electronic components and their connections on a small semiconductor chip."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept5242"],
       "narrower": [],
@@ -766,7 +856,9 @@
       "altLabels": {
         "en": ["Document reproduction", "Photocopying"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Reprography is the reproduction of documents using processes such as photocopying and scanning."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [],
@@ -779,7 +871,9 @@
         "en": "Telecommunications"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Telecommunications is the transmission of information over distance by electronic or electromagnetic means."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -807,7 +901,9 @@
         "en": "Telecommunications applications"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Telecommunications applications are practical uses of distance communication systems for services such as voice, data, and video."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -823,7 +919,9 @@
         "en": "Broadcasting equipment"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Broadcasting equipment comprises devices used to produce, transmit, or receive radio and television broadcasts."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept4338"],
@@ -836,7 +934,9 @@
         "en": "Communication equipment"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Communication equipment comprises devices used to send, receive, or relay information between locations."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept5744"],
@@ -849,7 +949,9 @@
         "en": "Computer systems"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Computer systems combine hardware, software, and associated devices to process and store data."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept6019"],
@@ -864,7 +966,9 @@
       "altLabels": {
         "en": ["Calculating machines", "Computer hardware"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Computers are programmable electronic devices that process data according to instructions."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -895,7 +999,9 @@
         "en": "Electronic equipment"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Electronic equipment consists of devices that use electronic circuits to control, process, or communicate signals."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -915,7 +1021,9 @@
       "altLabels": {
         "en": ["Office machines", "Photocopying equipment"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Office equipment consists of machines and devices used to perform administrative tasks in workplaces."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [],
@@ -932,7 +1040,9 @@
         "en": "Photographic equipment"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Photographic equipment consists of devices and accessories used to capture, process, or display photographs."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -951,7 +1061,9 @@
       "altLabels": {
         "en": ["Printing machines"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Printing equipment consists of machines and devices used to reproduce text or images on physical media."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [],
@@ -966,7 +1078,9 @@
       "altLabels": {
         "en": ["Data communication equipment", "Modems"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Telecommunications equipment consists of devices used to transmit, route, or receive signals over distance."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -988,7 +1102,9 @@
         "en": "Colour television"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Colour television is television that transmits and displays images with colour information rather than monochrome images."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept4365"],
       "narrower": [],
@@ -1006,7 +1122,9 @@
       "altLabels": {
         "en": ["Data capture", "Keyboarding"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Encoding is the representation or transformation of information according to a specified code."
+      },
       "scopeNotes": {
         "en": "\"Data transformation\" or representation applying a \"code\"."
       },
@@ -1026,7 +1144,9 @@
       "altLabels": {
         "en": ["Tape recorders", "Video recorders"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Recording equipment consists of devices used to capture and store sound, video, or other signals."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept532"],
       "narrower": [],
@@ -1039,7 +1159,9 @@
         "en": "Lasers"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Lasers are devices that emit a concentrated, coherent beam of light through stimulated emission."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept535"],
       "narrower": [],
@@ -1057,7 +1179,9 @@
         "en": "Mobile communication"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Mobile communication is the exchange of information using wireless devices while users or devices change location."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept527"],
       "narrower": [],
@@ -1072,7 +1196,9 @@
       "altLabels": {
         "en": ["Interstellar communication"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Space communication is the transmission of information between Earth and spacecraft or between objects in space."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept527"],
       "narrower": [],
@@ -1087,7 +1213,9 @@
       "altLabels": {
         "en": ["Teleinformatics"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Telematics combines telecommunications and information processing to provide remote data services."
+      },
       "scopeNotes": {
         "en": "Data transfer services via telecommunication systems."
       },
@@ -1117,7 +1245,9 @@
           "Telecommunications technology"
         ]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Communication technology comprises the methods and systems used to transmit, receive, and exchange information."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept523"],
       "narrower": [],
@@ -1137,7 +1267,9 @@
       "altLabels": {
         "en": ["Programming languages"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Computer languages are formal languages used to express instructions or descriptions that computers can process."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept521"],
       "narrower": [],
@@ -1152,7 +1284,9 @@
       "altLabels": {
         "en": ["CAD"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Computer aided design uses software to create, modify, analyse, or document designs."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
       "narrower": [],
@@ -1170,7 +1304,9 @@
       "altLabels": {
         "en": ["CAM"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Computer aided manufacturing uses computer systems to plan, control, or automate manufacturing processes."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
       "narrower": [],
@@ -1183,7 +1319,9 @@
         "en": "Computer graphics"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Computer graphics is the creation and manipulation of visual images using computer systems."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
       "narrower": [],
@@ -1196,7 +1334,9 @@
         "en": "Video games"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Video games are interactive electronic games that present visual output in response to player actions."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept520"],
       "narrower": [],
@@ -1211,7 +1351,9 @@
       "altLabels": {
         "en": ["Computer communications", "Data networks", "Electronic networking"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Computer networks connect computing devices so they can exchange data and share resources."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept533"],
       "narrower": [
@@ -1235,7 +1377,9 @@
       "altLabels": {
         "en": ["Computer links"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Computer interfaces are points or mechanisms through which computer components, systems, or users exchange information."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept6019"],
       "narrower": [],
@@ -1250,7 +1394,9 @@
       "altLabels": {
         "en": ["Keyboards", "Screens (computer)"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Computer terminals are devices used to enter information into and display output from a computer system."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
       "narrower": [],
@@ -1275,7 +1421,9 @@
           "Telecommunications links"
         ]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Telecommunications networks link communication devices and transmission facilities to exchange information across locations."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept527"],
       "narrower": [],
@@ -1290,7 +1438,9 @@
       "altLabels": {
         "en": ["COM"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Computer output microforms are microfilm or microfiche records generated directly from computer data."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept6069"],
       "narrower": [],
@@ -1303,7 +1453,9 @@
         "en": "Computer printers"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Computer printers produce physical copies of digital text or images on paper or other media."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept6069"],
       "narrower": [],
@@ -1318,7 +1470,9 @@
       "altLabels": {
         "en": ["Input output media"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Computer peripheral equipment comprises external input, output, and storage devices connected to a computer."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
       "narrower": [
@@ -1339,7 +1493,9 @@
       "altLabels": {
         "en": ["Computer memories", "Storage devices"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Computer storage devices retain digital data for later retrieval by a computer."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
       "narrower": [
@@ -1368,7 +1524,9 @@
           "Software packages"
         ]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Computer software consists of programs and associated instructions that direct a computer's operations."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept521"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17094"],
@@ -1383,7 +1541,9 @@
       "altLabels": {
         "en": ["Computer storage organization"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "File organization is the arrangement of stored computer records and files to support access and management."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept521"],
       "narrower": [
@@ -1401,7 +1561,9 @@
       "altLabels": {
         "en": ["Timesharing systems"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Multiuser systems allow several people to use the same computing resources through separate sessions or accounts."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept521"],
       "narrower": [],
@@ -1416,7 +1578,9 @@
       "altLabels": {
         "en": ["Interactive online systems", "Realtime systems"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Online systems provide access to computer services or data through an active network connection."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept521"],
       "narrower": [],
@@ -1431,7 +1595,9 @@
       "altLabels": {
         "en": ["Computer conferencing", "Videoconferencing", "Virtual conferencing"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Teleconferencing enables people in different locations to take part in the same meeting through audio, video, or related media."
+      },
       "scopeNotes": {
         "en": "Conducting conferences simultaneously at dispersed locations using video, telephone or related media."
       },
@@ -1451,7 +1617,9 @@
       "altLabels": {
         "en": ["Diskettes", "Floppy disks"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Magnetic discs store data by magnetizing regions of a rotating disk surface."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept6072"],
       "narrower": [],
@@ -1466,7 +1634,9 @@
       "altLabels": {
         "en": ["CD-ROM", "DVD", "Digital optical disks", "Digital versatile disks"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Optical discs store digital information in patterns read by a laser, as in CDs and DVDs."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept6072"],
       "narrower": [],
@@ -1481,7 +1651,9 @@
       "altLabels": {
         "en": ["Laptop computers", "PCs", "Personal computers"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Microcomputers are small computers built around a microprocessor, including personal and laptop computers."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
       "narrower": [],
@@ -1497,7 +1669,9 @@
         "en": "Minicomputers"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Minicomputers are mid-sized computers historically used by multiple users for tasks between those of personal computers and mainframes."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept534"],
       "narrower": [],
@@ -1512,7 +1686,9 @@
       "altLabels": {
         "en": ["Chip"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Microprocessors are integrated circuits that execute a computer's instructions as its central processing unit."
+      },
       "scopeNotes": {
         "en": "The computer's central processing unit."
       },
@@ -1534,7 +1710,9 @@
       "altLabels": {
         "en": ["E-mail", "Electronic messaging", "Messaging systems"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Electronic mail is the exchange of digital messages between users through networked mail systems."
+      },
       "scopeNotes": {
         "en": "Includes message creation, electronic mail and electronic filing."
       },
@@ -1555,7 +1733,9 @@
       "altLabels": {
         "en": ["Data acquisition", "Data compilation"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Data collection is the systematic gathering of observations, measurements, or records for later use or analysis."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept522"],
       "narrower": [],
@@ -1568,7 +1748,9 @@
         "en": "Data exchange"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Data exchange is the transfer of structured information between people, organizations, or computer systems."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept522"],
       "narrower": [],
@@ -1586,7 +1768,9 @@
       "altLabels": {
         "en": ["Data layout"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Data formats specify how information is structured and represented for storage, transmission, or processing."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept6082"],
       "narrower": [],
@@ -1601,7 +1785,9 @@
       "altLabels": {
         "en": ["Transborder data flow"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Transnational data flow is the movement of data across national borders through communication or computing systems."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept7413"],
       "narrower": [],
@@ -1616,7 +1802,9 @@
       "altLabels": {
         "en": ["Digital technology"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Digitization converts information from an analogue or physical form, such as a paper document, into a digital representation."
+      },
       "scopeNotes": {
         "en": "Conversion of paper image or any other traditional document support into electronic image."
       },
@@ -1631,7 +1819,9 @@
         "en": "Data transmission"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Data transmission is the sending of information as signals from one device or location to another."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept527"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept7399"],
@@ -1650,7 +1840,9 @@
       "altLabels": {
         "en": ["Electronic text processing"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Word processing uses software to create, edit, format, and produce text documents."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept4455"],
       "narrower": [],
@@ -1670,7 +1862,9 @@
       "altLabels": {
         "en": ["Facsimile transmitters"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Fax is a method or device for transmitting scanned images of documents over a telecommunications connection."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept539"],
       "narrower": [],
@@ -1686,7 +1880,9 @@
         "en": "Semiconductors"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Semiconductors are materials whose electrical conductivity can be controlled for use in electronic devices."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept535"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept16358"],
@@ -1702,6 +1898,7 @@
   "extensions": {
     "https://procyon.app/ns/skos-starter/source": "https://vocabularies.unesco.org/exports/thesaurus/latest/unesco-thesaurus.rdf",
     "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by-sa/3.0/igo/",
-    "https://procyon.app/ns/skos-starter/selection": ["mt5.40", "mt5.45"]
+    "https://procyon.app/ns/skos-starter/selection": ["mt5.40", "mt5.45"],
+    "https://procyon.app/ns/skos-starter/enrichment": "Adapted UNESCO Thesaurus excerpt with English definitions AI-enriched by Procyon for RAG where the source has none. Added definitions are not authored by UNESCO; no UNESCO endorsement is implied."
   }
 }

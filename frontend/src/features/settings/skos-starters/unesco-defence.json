@@ -11,7 +11,9 @@
       "altLabels": {
         "en": ["Military tactics"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Military strategy is the planning and coordination of military means to achieve broader defence or political objectives."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept613"],
       "narrower": [],
@@ -24,7 +26,9 @@
         "en": "Urban warfare"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Urban warfare is armed conflict conducted in towns or cities where buildings, streets, and civilians shape operations."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept12047"],
       "narrower": [],
@@ -37,7 +41,9 @@
         "en": "Nuclear warfare"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Nuclear warfare is armed conflict involving the use or threatened use of nuclear weapons."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept12047"],
       "narrower": [],
@@ -50,7 +56,9 @@
         "en": "Warfare"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Warfare is organized armed conflict between states or other groups."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept613"],
       "narrower": [
@@ -68,7 +76,9 @@
         "en": "Military operations"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Military operations are coordinated actions by armed forces to accomplish specified objectives."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept613"],
       "narrower": [],
@@ -83,7 +93,9 @@
       "altLabels": {
         "en": ["Ballistic missiles"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Missiles are self-propelled weapons designed to carry a payload toward a target."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2864"],
       "narrower": [],
@@ -96,7 +108,9 @@
         "en": "Air warfare"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Air warfare is armed conflict in which aircraft or other aerial systems play a central role."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept12047"],
       "narrower": [],
@@ -111,7 +125,9 @@
       "altLabels": {
         "en": ["Armaments"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Weapons are devices intended to inflict harm, disable targets, or threaten force."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept652"],
       "narrower": [
@@ -134,7 +150,9 @@
       "altLabels": {
         "en": ["Atomic bomb", "Atomic weapons", "Weapons of mass destruction"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Nuclear weapons are explosive weapons that release energy through nuclear fission, fusion, or both."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2864"],
       "narrower": [],
@@ -149,7 +167,9 @@
       "altLabels": {
         "en": ["Civil defence", "Military defence"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Defence comprises measures taken to protect a population or territory against attack or other threats."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -165,7 +185,9 @@
         "en": "Arms race"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "An arms race is sustained competition between parties to expand or improve their military capabilities."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2877"],
       "narrower": [],
@@ -178,7 +200,9 @@
         "en": "Arms sales"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Arms sales are commercial transfers of weapons or military equipment between sellers and buyers."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2877"],
       "narrower": [],
@@ -191,7 +215,9 @@
         "en": "Chemical/biological warfare"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Chemical/biological warfare is armed conflict involving toxic chemicals or disease-causing biological agents as weapons."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept12047"],
       "narrower": [],
@@ -206,7 +232,9 @@
       "altLabels": {
         "en": ["Military technology"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Military engineering applies engineering knowledge to the construction, maintenance, and support needs of armed forces."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -227,7 +255,9 @@
         "en": "Military equipment"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Military equipment comprises tools, vehicles, and other materiel used to equip and support armed forces."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept2864"],
@@ -242,7 +272,9 @@
       "altLabels": {
         "en": ["Antipersonnel mines"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Land mines are explosive devices placed on or beneath the ground that detonate when triggered by a person or vehicle."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2864"],
       "narrower": [],
@@ -253,6 +285,7 @@
   "extensions": {
     "https://procyon.app/ns/skos-starter/source": "https://vocabularies.unesco.org/exports/thesaurus/latest/unesco-thesaurus.rdf",
     "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by-sa/3.0/igo/",
-    "https://procyon.app/ns/skos-starter/selection": ["concept2877", "concept613", "concept652"]
+    "https://procyon.app/ns/skos-starter/selection": ["concept2877", "concept613", "concept652"],
+    "https://procyon.app/ns/skos-starter/enrichment": "Adapted UNESCO Thesaurus excerpt with English definitions AI-enriched by Procyon for RAG where the source has none. Added definitions are not authored by UNESCO; no UNESCO endorsement is implied."
   }
 }

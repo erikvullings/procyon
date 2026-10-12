@@ -9,7 +9,9 @@
         "en": "Marine fish"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Marine fish are fish that live in saltwater environments such as seas and oceans."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2625"],
       "narrower": [],
@@ -22,7 +24,9 @@
         "en": "Plants"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Plants are organisms that typically make their own food through photosynthesis and include mosses, ferns, and flowering plants."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept4251"],
       "narrower": [
@@ -43,7 +47,9 @@
         "en": "Primates"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Primates are an order of mammals that includes lemurs, monkeys, apes, and humans."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2462"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17137"],
@@ -56,7 +62,9 @@
         "en": "Tsetse flies"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Tsetse flies are blood-feeding African flies capable of transmitting the parasites that cause sleeping sickness."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2461"],
       "narrower": [],
@@ -69,7 +77,9 @@
         "en": "Plant transpiration"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Plant transpiration is the release of water vapour from plants, chiefly through openings in their leaves."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept4262"],
       "narrower": [],
@@ -84,7 +94,9 @@
       "altLabels": {
         "en": ["Chimpanzees", "Gorillas", "Orangutans"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Great apes are large tailless primates including orangutans, gorillas, chimpanzees, bonobos, and humans."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept12033"],
       "narrower": [],
@@ -104,7 +116,9 @@
           "Non-native species"
         ]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Invasive species are organisms introduced outside their native range that spread and cause ecological, economic, or other harm."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept234"],
       "narrower": [],
@@ -117,7 +131,9 @@
         "en": "Algae"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Algae are diverse photosynthetic organisms, mostly aquatic, that lack the differentiated roots, stems, and leaves of land plants."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2630"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept2016"],
@@ -132,7 +148,9 @@
       "altLabels": {
         "en": ["Animal breeding", "Animal reproduction"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Animal genetics studies inherited traits and genetic variation in animals, including their implications for breeding and reproduction."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
       "narrower": [],
@@ -147,7 +165,9 @@
       "altLabels": {
         "en": ["Plant breeding", "Plant reproduction"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Plant genetics studies inherited traits and genetic variation in plants, including their implications for breeding."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept230"],
       "narrower": [],
@@ -162,7 +182,9 @@
       "altLabels": {
         "en": ["Marine plants", "Seaweed", "Seaweeds"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Marine algae are algae living in saltwater, including many forms commonly called seaweed."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept17175"],
       "narrower": [],
@@ -177,7 +199,9 @@
       "altLabels": {
         "en": ["Physical anthropology"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Anthropology studies humans, their societies, cultures, and biological development across time and place."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept2509"],
@@ -195,7 +219,9 @@
       "altLabels": {
         "en": ["Botanical research", "Plant biology"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Botany is the scientific study of plants, including their structure, growth, reproduction, and diversity."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -222,7 +248,9 @@
         "en": "Life sciences"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Life sciences study living organisms and the processes that sustain and change them."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [],
@@ -242,7 +270,9 @@
       "altLabels": {
         "en": ["Nature study"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Natural history is the observation and study of organisms and natural environments, often describing their diversity and interactions."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [],
@@ -259,7 +289,9 @@
         "en": "Natural sciences"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Natural sciences investigate the physical and living world through observation, measurement, and experimentation."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [],
@@ -282,7 +314,9 @@
         "en": "Species"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "A species is a basic unit of biological classification grouping organisms with a shared evolutionary lineage."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17155"],
@@ -300,7 +334,9 @@
       "altLabels": {
         "en": ["Animal biology"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Zoology is the scientific study of animals, including their biology, behaviour, and diversity."
+      },
       "scopeNotes": {},
       "broader": [],
       "narrower": [
@@ -327,7 +363,9 @@
         "en": "Animals"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Animals are multicellular organisms that obtain nutrients by consuming other organisms or organic material."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
       "narrower": [
@@ -355,7 +393,9 @@
         "en": "Aquatic animals"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Aquatic animals are animals that live in freshwater or marine environments for all or part of their lives."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
       "narrower": [
@@ -371,7 +411,9 @@
         "en": "Laboratory animals"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Laboratory animals are animals kept for controlled scientific research, testing, or teaching."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
       "narrower": [],
@@ -386,7 +428,9 @@
       "altLabels": {
         "en": ["Animal pathology", "Zoopathology"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Animal diseases are disorders that impair the health or normal functioning of animals."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
       "narrower": [],
@@ -399,7 +443,9 @@
         "en": "Domestic animals"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Domestic animals are animal populations bred or managed by people for companionship, food, work, or other purposes."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
       "narrower": [],
@@ -414,7 +460,9 @@
       "altLabels": {
         "en": ["Animal distribution"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Zoogeography studies the geographic distribution of animals and the factors shaping their ranges."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
       "narrower": [],
@@ -427,7 +475,9 @@
         "en": "Marine animals"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Marine animals are animals that live in the sea or depend on marine habitats for part of their life cycle."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2382"],
       "narrower": [],
@@ -443,7 +493,9 @@
         "en": "Birds"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Birds are feathered, warm-blooded vertebrates that reproduce by laying hard-shelled eggs."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
       "narrower": [],
@@ -458,7 +510,9 @@
       "altLabels": {
         "en": ["Animal feeding"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Animal nutrition concerns the nutrients animals obtain from food and how they use them for growth and maintenance."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
       "narrower": [],
@@ -471,7 +525,9 @@
         "en": "Fauna"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Fauna is the animal life found in a particular region, habitat, or geological period."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
       "narrower": [],
@@ -489,7 +545,9 @@
       "altLabels": {
         "en": ["Game animals"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Wild animals are animals living outside domestication, generally in natural or free-ranging populations."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
       "narrower": [],
@@ -504,7 +562,9 @@
       "altLabels": {
         "en": ["Zoological taxonomy"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Animal taxonomy identifies, names, and classifies animal species according to their characteristics and relationships."
+      },
       "scopeNotes": {
         "en": "Classification of the species of animals."
       },
@@ -519,7 +579,9 @@
         "en": "Insects"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Insects are six-legged arthropods with a three-part body and typically one or two pairs of wings as adults."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
       "narrower": [
@@ -535,7 +597,9 @@
         "en": "Mammals"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Mammals are vertebrates whose young are nourished with milk produced by the mother."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
       "narrower": [
@@ -551,7 +615,9 @@
         "en": "Reptiles"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Reptiles are a group of vertebrates including lizards, snakes, turtles, and crocodilians."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2380"],
       "narrower": [],
@@ -564,7 +630,9 @@
         "en": "Prehistoric man"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Prehistoric man refers to humans and their ancestors in periods before written historical records."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept229"],
       "narrower": [],
@@ -579,7 +647,9 @@
       "altLabels": {
         "en": ["Freshwater fish"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Fish are aquatic vertebrates that breathe primarily through gills and move using fins."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2382"],
       "narrower": [
@@ -595,7 +665,9 @@
         "en": "Aquatic plants"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Aquatic plants are plants that grow submerged in water, floating on it, or rooted in waterlogged habitats."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept10957"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17175"],
@@ -608,7 +680,9 @@
         "en": "Trees"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Trees are long-lived woody plants usually growing with a trunk that supports branches and leaves."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept10957"],
       "narrower": [],
@@ -623,7 +697,9 @@
       "altLabels": {
         "en": ["Plant distribution", "Plant geography"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Phytogeography studies where plants occur and how environmental and historical factors shape their distribution."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept230"],
       "narrower": [],
@@ -638,7 +714,9 @@
       "altLabels": {
         "en": ["Human beings", "Humankind", "Humans", "Mankind"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Human species refers to humans as a biological species, Homo sapiens."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2462"],
       "narrower": [],
@@ -651,7 +729,9 @@
         "en": "Ornithology"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Ornithology is the scientific study of birds, including their behaviour, ecology, and classification."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
       "narrower": [],
@@ -667,7 +747,9 @@
         "en": "Flora"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Flora is the plant life found in a particular region, habitat, or geological period."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept4264"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept10957"],
@@ -683,7 +765,9 @@
         "en": "Ethnobotany"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Ethnobotany studies how communities know, use, and manage plants and plant resources."
+      },
       "scopeNotes": {
         "en": "Knowledge, uses and methods of management of plant resources by communities."
       },
@@ -700,7 +784,9 @@
       "altLabels": {
         "en": ["Phytopathology", "Plant pathology"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Plant diseases are disorders that damage plants or disrupt their normal growth and functioning."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept230"],
       "narrower": [],
@@ -713,7 +799,9 @@
         "en": "Plant nutrition"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Plant nutrition concerns the uptake and use of mineral nutrients needed for plant growth and development."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept230"],
       "narrower": [],
@@ -728,7 +816,9 @@
       "altLabels": {
         "en": ["Plant growth", "Plant metabolism"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Plant physiology studies how plants function, including their growth, metabolism, and responses to the environment."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept230"],
       "narrower": ["http://vocabularies.unesco.org/thesaurus/concept15229"],
@@ -743,7 +833,9 @@
       "altLabels": {
         "en": ["Botanical taxonomy"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Plant taxonomy identifies, names, and classifies plant species according to their characteristics and relationships."
+      },
       "scopeNotes": {
         "en": "Classification of the species of plants."
       },
@@ -761,7 +853,9 @@
         "en": "Vegetation"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Vegetation is the plant cover characteristic of a place or ecological area, considered as communities rather than a species list."
+      },
       "scopeNotes": {
         "en": "Plant life characteristic of an ecological area. For taxonomic aspects use \"flora\"."
       },
@@ -779,7 +873,9 @@
         "en": "Vegetation maps"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Vegetation maps show the geographic distribution of plant cover or vegetation types across an area."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept4264"],
       "narrower": [],
@@ -794,7 +890,9 @@
       "altLabels": {
         "en": ["Mould", "Mushrooms", "Mycology"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Fungi are organisms such as mushrooms, moulds, and yeasts that absorb nutrients from organic material."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept10957"],
       "narrower": [],
@@ -807,7 +905,9 @@
         "en": "Termites"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Termites are social insects that live in colonies and often feed on wood or other plant material."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2461"],
       "narrower": [],
@@ -822,7 +922,9 @@
       "altLabels": {
         "en": ["Crustacea"]
       },
-      "definitions": {},
+      "definitions": {
+        "en": "Shellfish are aquatic invertebrates with shells or hard outer coverings, commonly including molluscs and crustaceans."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept2625"],
       "narrower": [],
@@ -835,7 +937,9 @@
         "en": "Medicinal plants"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Medicinal plants are plants used as sources of remedies or compounds intended to prevent or treat illness."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept10957"],
       "narrower": [],
@@ -848,7 +952,9 @@
         "en": "Entomology"
       },
       "altLabels": {},
-      "definitions": {},
+      "definitions": {
+        "en": "Entomology is the scientific study of insects."
+      },
       "scopeNotes": {},
       "broader": ["http://vocabularies.unesco.org/thesaurus/concept235"],
       "narrower": [],
@@ -862,6 +968,7 @@
   "extensions": {
     "https://procyon.app/ns/skos-starter/source": "https://vocabularies.unesco.org/exports/thesaurus/latest/unesco-thesaurus.rdf",
     "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by-sa/3.0/igo/",
-    "https://procyon.app/ns/skos-starter/selection": ["mt2.75"]
+    "https://procyon.app/ns/skos-starter/selection": ["mt2.75"],
+    "https://procyon.app/ns/skos-starter/enrichment": "Adapted UNESCO Thesaurus excerpt with English definitions AI-enriched by Procyon for RAG where the source has none. Added definitions are not authored by UNESCO; no UNESCO endorsement is implied."
   }
 }

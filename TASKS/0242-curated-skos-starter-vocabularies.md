@@ -88,3 +88,15 @@ a prerequisite for the EmbeddingGemma experimental release.
   broader labels, and vocabulary topic in the *query*, without writing artificial definitions.
   Regeneration `--check`, the Rust starter importer test, workspace lint, 2,371 frontend tests,
   117 script tests, and the frontend production build passed.
+- 2026-10-12: Reopened to add missing English definitions to the adapted UNESCO excerpts.
+  User approved a single vocabulary-level disclosure: AI-enriched descriptions improve RAG
+  but are not UNESCO-authored. Keep the additions reproducible and separate from source text;
+  query-only context does not meet this requirement.
+- 2026-10-12: Added 220 reviewed English definitions for all four UNESCO selections in
+  `scripts/unesco-enriched-definitions.json`. The generator adds them only where pinned RDF
+  has no English definition, rejects missing/unused entries, and records a vocabulary-level
+  derivative/AI-enrichment notice in each JSON excerpt. The concept picker shows a localized
+  disclosure after selecting an enriched starter; imported definition-less concepts retain
+  query-only context fallback. `docs/semantic-operations.md` distinguishes source text from
+  Procyon additions. Pinned regeneration check, Rust SKOS import test, workspace lint, 2,372
+  frontend tests, 117 script tests and frontend production build passed.

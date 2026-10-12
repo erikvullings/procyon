@@ -342,10 +342,11 @@ semantic components are enabled and the active workspace has an indexed document
 root. Type a label and select a bundled or imported concept (recent selections appear before
 typing). This runs a similarity search of indexed document chunks across the active workspace;
 **Current folder only** is optional. Results are *related to* the concept, not authoritative
-concept assignments. Where the source provides an English definition, the query embeds the
-label and definition. Where it does not, the query uses the source's English scope note (if any),
-retained broader-concept labels, and the vocabulary topic as contextual search text. These
-are **not** new SKOS definitions and do not modify the imported or bundled vocabulary.
+concept assignments. The query embeds the label and English definition when available.
+The adapted UNESCO excerpts include reviewed AI-enriched definitions for concepts without
+source definitions. For other concepts without definitions (including imported vocabularies),
+the query uses the source's English scope note (if any), retained broader-concept labels,
+and the vocabulary topic as contextual search text. That fallback does not add SKOS definitions.
 **Save as smart folder** pins this similarity search in Smart folders using
 that contextual query as a snapshot; it does not assign labels to files. Recreate
 the saved search if the concept's text changes. Only indexed/authorized documents can appear.
@@ -369,7 +370,14 @@ is © UNESCO, licensed [CC BY-SA 3.0 IGO](https://creativecommons.org/licenses/b
 The adapted UNESCO excerpt JSON files in `frontend/src/features/settings/skos-starters/`
 are distributed **under CC BY-SA 3.0 IGO**, not under Procyon's code license; no UNESCO endorsement
 is implied. Adaptations retain English labels only, filter relationships to selected concepts,
-and convert RDF to `procyon-skos-1`. The source has no immutable versioned download URL: the
+convert RDF to `procyon-skos-1`, and fill missing English definitions with AI-enriched
+descriptions reviewed for RAG by Procyon. **The added descriptions are not authored or endorsed
+by UNESCO.** This derivative/enrichment disclosure appears once per vocabulary in its metadata
+and in the concept picker on selection, rather than on every definition. Original concept
+URIs and source-supplied definitions are retained. The reviewed additions live in
+`scripts/unesco-enriched-definitions.json`, separate from the pinned source and applied
+deterministically by `scripts/generate-skos-starters.py`; unknown or missing entries fail
+regeneration. The source has no immutable versioned download URL: the
 bundled snapshot was retrieved 2026-10-11, its concept scheme reports modification date
 2026-08-31, and its exact bytes are pinned by SHA-256 in `scripts/generate-skos-starters.py`.
 If UNESCO updates `/latest/`, regeneration deliberately fails until the snapshot and provenance

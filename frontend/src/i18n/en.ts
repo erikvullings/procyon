@@ -1665,6 +1665,8 @@ export const en = {
     description:
       'Import your own SKOS vocabulary here. Bundled starter vocabularies are available directly in Find by concept without importing or attaching them. Attach imported vocabularies only for annotation and review workflows.',
     starterSourceLink: 'Original SKOS source',
+    starterEnrichment:
+      'Adapted UNESCO Thesaurus excerpt: missing definitions were AI-enriched by Procyon for RAG and are not authored by UNESCO. No UNESCO endorsement is implied.',
     importLabel: 'SKOS JSON',
     importPlaceholder: 'Paste a procyon-skos-1 document',
     importAction: 'Import vocabulary',
