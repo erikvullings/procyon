@@ -98,6 +98,16 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: The opt-in qualification path now checks packaged
+  PDFium loader and notice artifacts against catalog hashes, compares the
+  complete notices with the pinned upstream package, verifies Mac Developer
+  ID signing (or exact unsigned bytes on Linux/Windows), and launches the
+  *packaged* worker with a deterministic one-page non-reusable RLE scan.
+  A bounded frame parser requires a page-1 `pdfPageRender` JPEG before the
+  read-only qualification can proceed. The local isolated macOS development
+  worker passed this 1-page native smoke, and parser/pairing negatives
+  passed. This is not an installed four-target candidate, 354-page resource
+  proof, real-Gemma query or release approval.
 - 2026-10-12 Copilot: Added an explicit Gemma-only
   `--experimental-pdf-render true` production-bundle preparation path,
   still **off by default**. The unsigned catalog input includes separate

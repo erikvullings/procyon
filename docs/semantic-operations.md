@@ -559,7 +559,10 @@ with the features, sign a target-specific PDFium loader and its separate
 complete license-notices artifact into the semantic catalog, and assemble the
 verified payloads beside the worker. On macOS the loader joins the Developer ID
 signing and notarization submission. This is **not** installed or release-qualified
-on all four targets; resource ceilings, installed real-Gemma behavior, host
+on all four targets. A qualification-only packaged-worker smoke requires a
+bounded `pdfPageRender` JPEG from a one-page synthetic non-reusable scan and
+compares the bundled license terms with the pinned target-specific archive.
+Resource ceilings, installed real-Gemma behavior, host
 navigation, rollback, and review remain outstanding. No release is approved.
 
 Once a replacement generation is published, superseded catalogue and Zvec records are reclaimed
