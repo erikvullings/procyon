@@ -227,7 +227,7 @@ impl std::fmt::Display for FormatKind {
 }
 
 /// What a structural unit represents inside its document.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum UnitKind {
     /// A heading; also contributes to the section path of following units.
     Heading,
@@ -451,7 +451,7 @@ pub struct StructuralUnit {
 }
 
 /// A non-fatal observation about a conversion.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConversionWarning {
     /// Bytes did not decode cleanly in the chosen encoding.
     LossyDecoding {

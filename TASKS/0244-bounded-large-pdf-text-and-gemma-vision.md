@@ -113,6 +113,15 @@ optional Docling ML/PDFium pack is qualified on those targets.
   The worker still needs a bounded child-result transport,
   cancellation-aware atomic staging, and spool admission before large PDF
   text is searchable.
+- 2026-10-12 Copilot: A path-free `PdfTextReport` now serializes only a
+  complete baseline PDF's ordered text units, page/block citations and
+  conversion warnings. The receiving side validates page/character/unit
+  budgets and reconstructs the same versioned `ConvertedDocument` for the
+  normal chunker; malformed citations, kinds, order or oversized text fail
+  closed. In the synthetic child probe, all 354 pages round-tripped through
+  a 50,339-byte report with 397,131,776 bytes sampled child peak RSS.
+  Authentication/source digest, actual worker child-result transport and
+  atomic publication remain separate unimplemented release prerequisites.
 - 2026-10-12 Copilot: A synthetic-only conversion probe
   (`cargo run -p fm-semantic-conversion --example measure_large_pdf_text -- <fixture>`)
   checks that the generated 354-page, 188,870,838-byte text fixture

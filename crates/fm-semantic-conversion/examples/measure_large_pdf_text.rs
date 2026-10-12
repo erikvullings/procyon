@@ -12,9 +12,9 @@ use std::time::{Duration, Instant};
 
 use fm_semantic_conversion::{
     BaselineConverter, ConversionBudgets, ConversionContext, ConversionOutcome, DocumentConverter,
-    DocumentMetadata, PdfPageWindow, Provenance, SourceContent, merge_pdf_text_windows,
+    DocumentMetadata, PdfPageWindow, PdfTextReport, Provenance, SourceContent,
+    merge_pdf_text_windows,
 };
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
@@ -27,12 +27,6 @@ const PROBE_MEMORY_BYTES: u64 = 512 * 1024 * 1024;
 const PROBE_DEADLINE: Duration = Duration::from_secs(120);
 
 struct KillOnDrop(Child);
-
-#[derive(Serialize, Deserialize)]
-struct PageText {
-    number: u32,
-    text: String,
-}
 
 impl Drop for KillOnDrop {
     fn drop(&mut self) {
@@ -147,13 +141,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if output.len() as u64 > MAX_PAGE_REPORT_BYTES {
                 return Err("child page report exceeded the bounded output limit".into());
             }
-            let pages: Vec<PageText> = serde_json::from_slice(&output)?;
-            if pages.len() != 354
-                || pages.iter().enumerate().any(|(index, page)| {
-                    page.number != index as u32 + 1
-                        || !page
-                            .text
-                            .contains(&format!("Synthetic page {} of 354:", page.number))
+            let report: PdfTextReport = serde_json::from_slice(&output)?;
+            let document = report.into_document(&ConversionBudgets::default())?;
+            let pages = document
+                .units()
+                .iter()
+                .filter_map(|unit| match unit.provenance {
+                    Provenance::PdfBlock { page_number, .. } => Some(page_number),
+                    _ => None,
+                })
+                .collect::<std::collections::BTreeSet<_>>();
+            if document.is_partial()
+                || pages.len() != 354
+                || pages.first() != Some(&1)
+                || pages.last() != Some(&354)
+                || document.units().iter().any(|unit| {
+                    let Provenance::PdfBlock { page_number, .. } = unit.provenance else {
+                        return true;
+                    };
+                    !unit
+                        .text
+                        .contains(&format!("Synthetic page {page_number} of 354:"))
                 })
             {
                 return Err("child page report is missing or misattributes text".into());
@@ -221,19 +229,7 @@ fn convert_child() -> Result<(), Box<dyn std::error::Error>> {
     if pages.len() != 354 || pages.first() != Some(&1) || pages.last() != Some(&354) {
         return Err(format!("expected text on pages 1-354; found {pages:?}").into());
     }
-    let report = pages
-        .into_iter()
-        .map(|number| PageText {
-            number,
-            text: document
-                .units()
-                .iter()
-                .filter(|unit| matches!(unit.provenance, Provenance::PdfBlock { page_number, .. } if page_number == number))
-                .map(|unit| unit.text.as_str())
-                .collect::<Vec<_>>()
-                .join("\n"),
-        })
-        .collect::<Vec<_>>();
+    let report = PdfTextReport::from_document(354, &document, &budgets)?;
     let output = serde_json::to_vec(&report)?;
     if output.len() as u64 > MAX_PAGE_REPORT_BYTES {
         return Err("child page report exceeded the bounded output limit".into());
