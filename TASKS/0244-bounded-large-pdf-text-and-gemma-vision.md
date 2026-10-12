@@ -111,8 +111,11 @@ optional Docling ML/PDFium pack is qualified on those targets.
   The full fixture completed in 919 ms parent wall time, with 354/354 text
   pages and 395,034,624 bytes sampled child peak RSS; `/usr/bin/time -l`
   reported a 2,949,552-byte peak memory footprint for the parent command.
-  `--verify-kill` confirmed a
-  deliberately low 32-MiB sampled threshold kills and reaps the child.
+  `--verify-kill` confirmed a deliberately low 32-MiB sampled threshold
+  kills and reaps the child. The child also returns a 25,627-byte capped
+  page-text report over stdout, validated in the parent for ordered page
+  citations 1-354 and each page's synthetic text; sampled peak child RSS
+  was 395,083,776 bytes in that run. Parent-side output reads stop at 8 MiB.
   The example is **not the production worker path** and a sampled
   watchdog is not an instantaneous hard OS memory cap. It excludes IPC,
   embeddings, image extraction, atomic staging, cancellation and
