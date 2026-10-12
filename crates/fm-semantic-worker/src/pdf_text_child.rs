@@ -86,6 +86,8 @@ fn page_failure_from_stderr(stderr: &[u8]) -> Option<String> {
 struct PageImageHeader {
     page_number: u32,
     image_index: u32,
+    #[serde(default)]
+    rendered_page: bool,
     media_type: String,
     width: u32,
     height: u32,
@@ -247,8 +249,10 @@ impl StagedPdfVisualPages {
         for _ in 0..count {
             let image = read_image_report(&mut self.file, self.next_page)?
                 .ok_or_else(|| io::Error::other("PDF page has an empty image record"))?;
-            let VisualProvenance::PdfImage { image_index, .. } = image.provenance else {
-                return Err(io::Error::other("PDF image lacks page provenance"));
+            let image_index = match image.provenance {
+                VisualProvenance::PdfImage { image_index, .. } => image_index,
+                VisualProvenance::PdfPageRender { .. } => 0,
+                _ => return Err(io::Error::other("PDF image lacks page provenance")),
             };
             if !indices.insert(image_index) {
                 return Err(io::Error::other("PDF page repeats an image citation"));
@@ -325,12 +329,15 @@ pub(crate) fn staged_visual_fixture(
                 .to_be_bytes(),
         )?;
         for image in images {
-            let VisualProvenance::PdfImage { image_index, .. } = image.provenance else {
-                return Err(io::Error::other("fixture image lacks PDF provenance"));
+            let (image_index, rendered_page) = match image.provenance {
+                VisualProvenance::PdfImage { image_index, .. } => (image_index, false),
+                VisualProvenance::PdfPageRender { .. } => (0, true),
+                _ => return Err(io::Error::other("fixture image lacks PDF provenance")),
             };
             let header = PageImageHeader {
                 page_number: u32::try_from(index + 1).map_err(io::Error::other)?,
                 image_index,
+                rendered_page,
                 media_type: image.media_type.as_str().into(),
                 width: image.width,
                 height: image.height,
@@ -375,6 +382,7 @@ fn validate_image(
 ) -> io::Result<VisualAttachment> {
     if header.page_number != page_number
         || header.image_index == u32::MAX
+        || (header.rendered_page && header.image_index != 0)
         || header.byte_length == 0
         || header.byte_length > MAX_VISUAL_BYTES
         || data.len() != header.byte_length
@@ -386,16 +394,21 @@ fn validate_image(
     {
         return Err(io::Error::other("PDF image report failed validation"));
     }
+    let provenance = if header.rendered_page {
+        VisualProvenance::PdfPageRender { page_number }
+    } else {
+        VisualProvenance::PdfImage {
+            page_number,
+            image_index: header.image_index,
+        }
+    };
     Ok(VisualAttachment {
         id: header.id,
         media_type: MediaType::parse(&header.media_type),
         data,
         width: header.width,
         height: header.height,
-        provenance: VisualProvenance::PdfImage {
-            page_number,
-            image_index: header.image_index,
-        },
+        provenance,
         caption: None,
     })
 }
@@ -740,7 +753,7 @@ pub fn run_visual_page(expected_sha256: &str, page_number: u32) -> io::Result<()
         return Err(io::Error::other("PDF page number must be positive"));
     }
     let source = read_verified_source(expected_sha256)?;
-    write_visual_page(&source, page_number, &mut io::stdout().lock(), false)
+    write_visual_page(&source, page_number, &mut io::stdout().lock(), false, 0)
 }
 
 /// Writes complete page-cited image reports, one at a time, without retaining
@@ -767,7 +780,7 @@ pub fn run_visual_pages(expected_sha256: &str) -> io::Result<()> {
     let mut output = io::stdout().lock();
     output.write_all(&count.to_be_bytes())?;
     for page in 1..=count {
-        if let Err(error) = write_visual_page(&source, page, &mut output, true) {
+        if let Err(error) = write_visual_page(&source, page, &mut output, true, count) {
             let reason = if error.to_string().contains("has no usable visual evidence") {
                 "no usable visual evidence"
             } else if error
@@ -792,6 +805,7 @@ fn write_visual_page(
     page_number: u32,
     output: &mut impl Write,
     staged: bool,
+    _expected_page_count: u32,
 ) -> io::Result<()> {
     let window = PdfPageWindow::new(page_number, page_number).map_err(io::Error::other)?;
     let outcome = BaselineConverter::new()
@@ -807,6 +821,31 @@ fn write_visual_page(
                 .with_visual_evidence(true),
         )
         .map_err(io::Error::other)?;
+    #[cfg(feature = "experimental-pdf-render")]
+    if staged
+        && match &outcome {
+            ConversionOutcome::NoTextLayer { .. } => true,
+            ConversionOutcome::Converted(document) => {
+                document.visuals().is_empty() && !document.visual_omissions().is_empty()
+            }
+            _ => false,
+        }
+    {
+        let visual =
+            crate::pdf_render_child::render_page(source, page_number, _expected_page_count)?;
+        let header = PageImageHeader {
+            page_number,
+            image_index: 0,
+            rendered_page: true,
+            media_type: visual.media_type.as_str().to_owned(),
+            width: visual.width,
+            height: visual.height,
+            id: visual.id,
+            byte_length: visual.data.len(),
+        };
+        output.write_all(&1_u32.to_be_bytes())?;
+        return write_image_report(output, &header, &visual.data);
+    }
     let ConversionOutcome::Converted(document) = outcome else {
         return Err(io::Error::other(format!(
             "PDF page {page_number} has no usable visual evidence: {outcome:?}"
@@ -853,6 +892,7 @@ fn write_visual_page(
         let header = PageImageHeader {
             page_number,
             image_index,
+            rendered_page: false,
             media_type: visual.media_type.as_str().to_owned(),
             width: visual.width,
             height: visual.height,
@@ -929,6 +969,7 @@ mod tests {
         let header = PageImageHeader {
             page_number: 1,
             image_index: u32::MAX,
+            rendered_page: false,
             media_type: "image/jpeg".into(),
             width: 2,
             height: 1,

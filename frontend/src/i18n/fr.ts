@@ -1005,6 +1005,8 @@ export const fr = {
     pdfImageCitation: 'Page {page} · Image {image}',
     pdfImageEvidence: 'Image intégrée au PDF',
     pdfImageResult: 'Image intégrée au PDF · Page {page} · Image {image}',
+    pdfPageRenderEvidence: 'Page PDF rendue (pas une image intégrée)',
+    pdfPageRenderResult: 'Page PDF rendue · Page {page}',
     title: 'Recherche sémantique',
     openTitle: 'Recherche sémantique…',
     subjectsPlaceholder: 'Saisissez vos termes de recherche',

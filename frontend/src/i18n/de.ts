@@ -1016,6 +1016,8 @@ export const de = {
     pdfImageCitation: 'Seite {page} · Bild {image}',
     pdfImageEvidence: 'Eingebettetes PDF-Bild',
     pdfImageResult: 'Eingebettetes PDF-Bild · Seite {page} · Bild {image}',
+    pdfPageRenderEvidence: 'Gerenderte PDF-Seite (kein eingebettetes Bild)',
+    pdfPageRenderResult: 'Gerenderte PDF-Seite · Seite {page}',
     title: 'Semantische Suche',
     openTitle: 'Semantische Suche…',
     subjectsPlaceholder: 'Suchbegriffe eingeben',

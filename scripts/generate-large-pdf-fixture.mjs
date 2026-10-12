@@ -20,8 +20,8 @@ for (let index = 0; index < args.length; index += 2) {
 }
 const output = options.get('--output');
 const variant = options.get('--variant');
-if (!output || !['scanned', 'text', 'malformed', 'bomb', 'mixed'].includes(variant)) {
-  throw new Error('Supply --output and --variant scanned|text|malformed|bomb|mixed');
+if (!output || !['scanned', 'rle-scan', 'text', 'malformed', 'bomb', 'mixed'].includes(variant)) {
+  throw new Error('Supply --output and --variant scanned|rle-scan|text|malformed|bomb|mixed');
 }
 function dimension(name, fallback, maximum) {
   const value = options.get(name) ?? String(fallback);
@@ -91,7 +91,17 @@ function image(page) {
     state ^= state << 5;
     pixels[i] = state & 0xff;
   }
-  return deflateSync(pixels, { level: 1 });
+  if (variant !== 'rle-scan') return deflateSync(pixels, { level: 1 });
+  const encoded = Buffer.allocUnsafe(pixels.length + Math.ceil(pixels.length / 128) + 1);
+  let offset = 0;
+  for (let position = 0; position < pixels.length; position += 128) {
+    const length = Math.min(128, pixels.length - position);
+    encoded[offset++] = length - 1;
+    pixels.copy(encoded, offset, position, position + length);
+    offset += length;
+  }
+  encoded[offset++] = 128;
+  return encoded.subarray(0, offset);
 }
 try {
   write('%PDF-1.7\n%\xe2\xe3\xcf\xd3\n');
@@ -123,7 +133,7 @@ try {
     const compressed = reusableJpeg ? syntheticJpeg : image(page);
     stream(
       id + 2,
-      `/Type /XObject /Subtype /Image /Width ${reusableJpeg ? 8 : width} /Height ${reusableJpeg ? 8 : height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /${reusableJpeg ? 'DCTDecode' : 'FlateDecode'}`,
+      `/Type /XObject /Subtype /Image /Width ${reusableJpeg ? 8 : width} /Height ${reusableJpeg ? 8 : height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /${reusableJpeg ? 'DCTDecode' : variant === 'rle-scan' ? 'RunLengthDecode' : 'FlateDecode'}`,
       compressed,
     );
   }

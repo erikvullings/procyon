@@ -21,10 +21,7 @@ export function knowledgeEvidencePage(provenance: string): number | undefined {
   return pageFrom(value);
 }
 
-/** Identifies an exact reusable PDF image without treating the source PDF as image bytes. */
-export function pdfImageProvenance(
-  provenance: string,
-): { readonly page: number; readonly image: number } | undefined {
+function exactPdfEvidence(provenance: string): Record<string, unknown> | undefined {
   let value: unknown;
   try {
     value = JSON.parse(provenance);
@@ -35,8 +32,17 @@ export function pdfImageProvenance(
   const wrapper = value as Record<string, unknown>;
   if (wrapper.kind !== 'exact') return undefined;
   const detail = wrapper.value;
-  if (detail === null || typeof detail !== 'object' || Array.isArray(detail)) return undefined;
-  const fields = detail as Record<string, unknown>;
+  return detail !== null && typeof detail === 'object' && !Array.isArray(detail)
+    ? (detail as Record<string, unknown>)
+    : undefined;
+}
+
+/** Identifies an exact reusable PDF image without treating the source PDF as image bytes. */
+export function pdfImageProvenance(
+  provenance: string,
+): { readonly page: number; readonly image: number } | undefined {
+  const fields = exactPdfEvidence(provenance);
+  if (fields === undefined) return undefined;
   const page = fields.page_number;
   const image = fields.image_index;
   return fields.kind === 'pdfImage' &&
@@ -47,5 +53,17 @@ export function pdfImageProvenance(
     Number.isInteger(image) &&
     image > 0
     ? { page, image }
+    : undefined;
+}
+
+/** Identifies a whole-page raster without claiming an embedded image XObject. */
+export function pdfPageRenderProvenance(provenance: string): { readonly page: number } | undefined {
+  const fields = exactPdfEvidence(provenance);
+  const page = fields?.page_number;
+  return fields?.kind === 'pdfPageRender' &&
+    typeof page === 'number' &&
+    Number.isInteger(page) &&
+    page > 0
+    ? { page }
     : undefined;
 }

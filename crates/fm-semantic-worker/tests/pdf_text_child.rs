@@ -112,6 +112,7 @@ fn synthetic_visual_pdf(visual_pages: &[u32]) -> Vec<u8> {
     result
 }
 
+#[cfg(not(feature = "experimental-pdf-render"))]
 #[test]
 fn visual_stage_rejects_unrendered_inline_image_on_text_page() {
     let mut pdf = Document::load_mem(&synthetic_pdf()).expect("synthetic PDF");
@@ -144,6 +145,214 @@ fn visual_stage_rejects_unrendered_inline_image_on_text_page() {
         error
             .to_string()
             .contains("PDF page 2: unsupported inline image")
+    );
+}
+
+#[cfg(feature = "experimental-pdf-render")]
+fn installed_renderer_worker() -> (tempfile::TempDir, std::path::PathBuf) {
+    let library = std::env::var_os("PROCYON_TEST_PDFIUM_LIBRARY")
+        .expect("set PROCYON_TEST_PDFIUM_LIBRARY to a verified PDFium library");
+    let directory = tempfile::tempdir().expect("isolated renderer install");
+    let worker = directory.path().join(if cfg!(windows) {
+        "fm-semantic-worker.exe"
+    } else {
+        "fm-semantic-worker"
+    });
+    std::fs::copy(env!("CARGO_BIN_EXE_fm-semantic-worker"), &worker).expect("copy worker");
+    std::fs::copy(
+        library,
+        pdfium_render::prelude::Pdfium::pdfium_platform_library_name_at_path(directory.path()),
+    )
+    .expect("install verified local renderer beside worker");
+    (directory, worker)
+}
+
+#[cfg(feature = "experimental-pdf-render")]
+#[test]
+fn renderer_rejects_absent_or_invalid_adjacent_library() {
+    let mut pdf = Document::load_mem(&synthetic_pdf()).expect("synthetic PDF");
+    let page = pdf.get_pages()[&2];
+    let content_id = pdf.get_page_contents(page)[0];
+    let stream = pdf
+        .get_object_mut(content_id)
+        .expect("page content")
+        .as_stream_mut()
+        .expect("content stream");
+    let mut content = stream.get_plain_content().expect("content bytes");
+    content.extend_from_slice(b"q BI /W 2 /H 1 /CS /RGB /BPC 8 ID abcdef EI Q\n");
+    stream.set_plain_content(content);
+    let mut bytes = Vec::new();
+    pdf.save_to(&mut bytes).expect("save inline-image PDF");
+    let digest = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let mut spool = tempfile::tempfile().expect("anonymous source spool");
+    spool.write_all(&bytes).expect("source bytes");
+
+    let directory = tempfile::tempdir().expect("isolated worker");
+    let worker = directory.path().join(if cfg!(windows) {
+        "fm-semantic-worker.exe"
+    } else {
+        "fm-semantic-worker"
+    });
+    std::fs::copy(env!("CARGO_BIN_EXE_fm-semantic-worker"), &worker).expect("copy worker");
+    let cancellation = CancellationToken::new();
+    assert!(stage_spool_visual_pages(&worker, &spool, &digest, &cancellation).is_err());
+
+    let library =
+        pdfium_render::prelude::Pdfium::pdfium_platform_library_name_at_path(directory.path());
+    std::fs::write(&library, b"invalid PDFium library").expect("write invalid library");
+    assert!(stage_spool_visual_pages(&worker, &spool, &digest, &cancellation).is_err());
+}
+
+#[cfg(feature = "experimental-pdf-render")]
+#[test]
+#[ignore = "requires PROCYON_TEST_PDFIUM_LIBRARY pointing at a verified local PDFium library"]
+fn supervised_renderer_cites_mixed_and_image_only_inline_pages() {
+    let (_directory, worker) = installed_renderer_worker();
+    let mut pdf = Document::load_mem(&synthetic_pdf()).expect("synthetic PDF");
+    for page_number in [2, 3] {
+        let page = pdf.get_pages()[&page_number];
+        let content_id = pdf.get_page_contents(page)[0];
+        let stream = pdf
+            .get_object_mut(content_id)
+            .expect("page content")
+            .as_stream_mut()
+            .expect("content stream");
+        let mut content = if page_number == 2 {
+            stream.get_plain_content().expect("text")
+        } else {
+            Vec::new()
+        };
+        content.extend_from_slice(
+            b"q 150 0 0 150 72 500 cm BI /W 2 /H 1 /CS /RGB /BPC 8 ID \xff\x00\x00\x00\x00\xff EI Q\n",
+        );
+        stream.set_plain_content(content);
+    }
+    let mut bytes = Vec::new();
+    pdf.save_to(&mut bytes).expect("save mixed PDF");
+    let digest = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let mut spool = tempfile::tempfile().expect("anonymous source spool");
+    spool.write_all(&bytes).expect("source");
+    let mut staged = stage_spool_visual_pages(&worker, &spool, &digest, &CancellationToken::new())
+        .expect("render missing images in supervised child");
+    assert_eq!(staged.page_count(), 3);
+    assert!(
+        staged
+            .next_page()
+            .expect("text-only page")
+            .unwrap()
+            .is_empty()
+    );
+    for page in [2, 3] {
+        let images = staged.next_page().expect("raster").expect("page");
+        assert_eq!(images.len(), 1);
+        assert_eq!(
+            images[0].provenance,
+            VisualProvenance::PdfPageRender { page_number: page }
+        );
+        assert_eq!(images[0].media_type.as_str(), "image/jpeg");
+        assert!(!images[0].data.is_empty());
+        if page == 3 {
+            let raster = image::load_from_memory(&images[0].data)
+                .expect("rendered JPEG")
+                .into_rgb8();
+            assert!(
+                raster
+                    .pixels()
+                    .any(|pixel| pixel[0] > 180 && pixel[1] < 100 && pixel[2] < 100),
+                "image-only page should contain its red inline raster"
+            );
+        }
+    }
+    assert!(staged.next_page().expect("stage end").is_none());
+    assert_eq!(
+        convert_spool_with_visual_stage(
+            &worker,
+            &spool,
+            &digest,
+            &staged,
+            &CancellationToken::new()
+        )
+        .expect("complete text with rendered pages")
+        .units()
+        .len(),
+        2
+    );
+}
+
+#[cfg(feature = "experimental-pdf-render")]
+#[test]
+#[ignore = "requires a generated 354-page RLE scan and verified local PDFium library"]
+fn supervised_renderer_stages_every_large_non_reusable_scan_page() {
+    use std::io::Read;
+
+    let path = std::env::var_os("PROCYON_SYNTHETIC_RLE_SCAN_PDF")
+        .map(std::path::PathBuf::from)
+        .expect("set PROCYON_SYNTHETIC_RLE_SCAN_PDF to the generated fixture");
+    assert_eq!(path.file_name().unwrap(), "synthetic-354-page-rle-scan.pdf");
+    let target = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target")
+        .canonicalize()
+        .expect("workspace target");
+    assert!(
+        path.canonicalize()
+            .expect("synthetic fixture")
+            .starts_with(target),
+        "the scan fixture must stay within this worktree's target directory"
+    );
+    let mut spool = std::fs::File::open(&path).expect("synthetic scan");
+    let size = spool.metadata().expect("source size").len();
+    assert!(size > 174_000_000 && size < 200 * 1024 * 1024);
+    let mut hasher = Sha256::new();
+    let mut chunk = [0_u8; 64 * 1024];
+    loop {
+        let count = spool.read(&mut chunk).expect("read source");
+        if count == 0 {
+            break;
+        }
+        hasher.update(&chunk[..count]);
+    }
+    let digest = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let (_directory, worker) = installed_renderer_worker();
+    let started = std::time::Instant::now();
+    let mut staged = stage_spool_visual_pages(&worker, &spool, &digest, &CancellationToken::new())
+        .expect("supervised 354-page rendering");
+    assert_eq!(staged.page_count(), 354);
+    let staged_bytes = staged.staged_bytes().unwrap();
+    assert!(staged_bytes < 256 * 1024 * 1024);
+    for page in 1..=354 {
+        let images = staged.next_page().expect("bounded page").expect("page");
+        assert_eq!(images.len(), 1);
+        assert_eq!(
+            images[0].provenance,
+            VisualProvenance::PdfPageRender { page_number: page }
+        );
+    }
+    assert!(staged.next_page().expect("end").is_none());
+    assert!(
+        convert_spool_with_visual_stage(
+            &worker,
+            &spool,
+            &digest,
+            &staged,
+            &CancellationToken::new()
+        )
+        .expect("complete image-only scan")
+        .units()
+        .is_empty()
+    );
+    eprintln!(
+        "Rendered 354 synthetic pages in {:?}; {staged_bytes} staged bytes",
+        started.elapsed()
     );
 }
 
@@ -309,32 +518,35 @@ fn visual_pages_stage_only_complete_page_cited_images() {
     );
     assert!(mixed.next_page().expect("end of stage").is_none());
 
-    let mut image_only_gap = Document::load_mem(&bytes).expect("synthetic PDF");
-    let page = image_only_gap.get_pages()[&1];
-    image_only_gap
-        .get_object_mut(page)
-        .expect("first page")
-        .as_dict_mut()
-        .expect("page dictionary")
-        .remove(b"Contents");
-    let mut bytes = Vec::new();
-    image_only_gap
-        .save_to(&mut bytes)
-        .expect("save missing page");
-    let mut gap = tempfile::tempfile().expect("anonymous incomplete source spool");
-    gap.write_all(&bytes).expect("source");
-    let digest = Sha256::digest(&bytes)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    let error = stage_spool_visual_pages(worker, &gap, &digest, &cancellation)
-        .expect_err("image-only page without extractable image");
-    assert!(
-        error
-            .to_string()
-            .contains("PDF page 1: no usable visual evidence"),
-        "unexpected page failure: {error}"
-    );
+    #[cfg(not(feature = "experimental-pdf-render"))]
+    {
+        let mut image_only_gap = Document::load_mem(&bytes).expect("synthetic PDF");
+        let page = image_only_gap.get_pages()[&1];
+        image_only_gap
+            .get_object_mut(page)
+            .expect("first page")
+            .as_dict_mut()
+            .expect("page dictionary")
+            .remove(b"Contents");
+        let mut bytes = Vec::new();
+        image_only_gap
+            .save_to(&mut bytes)
+            .expect("save missing page");
+        let mut gap = tempfile::tempfile().expect("anonymous incomplete source spool");
+        gap.write_all(&bytes).expect("source");
+        let digest = Sha256::digest(&bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let error = stage_spool_visual_pages(worker, &gap, &digest, &cancellation)
+            .expect_err("image-only page without extractable image");
+        assert!(
+            error
+                .to_string()
+                .contains("PDF page 1: no usable visual evidence"),
+            "unexpected page failure: {error}"
+        );
+    }
 }
 
 #[test]

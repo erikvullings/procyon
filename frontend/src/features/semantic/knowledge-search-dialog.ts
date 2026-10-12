@@ -49,6 +49,7 @@ import { lastPathSegment } from '../navigation/navigation';
 import { copyImageDataUri, copyText } from '../preview/clipboard';
 import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
 import { pathFromUri } from '../workspace/workspace-layout';
+import { pdfPageRenderProvenance } from './evidence-provenance';
 import { decodeEvidenceTitle } from './evidence-title';
 import { mediaDescription, mediaKind, mediaLabel, mediaModifiedLabel } from './media-evidence';
 
@@ -610,6 +611,12 @@ export function knowledgeProvenanceLabel(provenance: string): string {
           image <= 0
           ? undefined
           : t('knowledgeSearch', 'pdfImageCitation', { page, image });
+      }
+      case 'pdfPageRender': {
+        const page = number('page_number');
+        return page === undefined || !Number.isInteger(page) || page <= 0
+          ? undefined
+          : t('ragAsk', 'citationPage', { page });
       }
       case 'textLines':
       case 'codeLines': {
@@ -1873,6 +1880,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   ): m.Vnode {
     const position = knowledgeProvenanceLabel(row.provenance);
     const pdfImage = row.mediaType === 'application/pdf' && row.chunkKind === 'pdf_image';
+    const renderedPage = pdfImage ? pdfPageRenderProvenance(row.provenance) : undefined;
     const indexedTitle = row.sectionPath.join(' / ');
     const openable = !row.unavailable && attrs.onOpenSource !== undefined;
     const kind = mediaKind(row.mediaType);
@@ -1915,7 +1923,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
             ]),
           ]),
       pdfImage
-        ? m('.fm-knowledge-pdf-image-evidence', t('knowledgeSearch', 'pdfImageEvidence'))
+        ? m(
+            '.fm-knowledge-pdf-image-evidence',
+            t('knowledgeSearch', renderedPage ? 'pdfPageRenderEvidence' : 'pdfImageEvidence'),
+          )
         : kind === undefined
           ? m(
               '.fm-knowledge-result-markdown',

@@ -177,6 +177,7 @@ import {
 import {
   knowledgeEvidencePage,
   pdfImageProvenance,
+  pdfPageRenderProvenance,
 } from '../features/semantic/evidence-provenance';
 import { AppUpdateDialog } from '../features/settings/app-update-dialog';
 import { SemanticFolderEnrolmentPrompt } from '../features/settings/semantic-library-management';
@@ -1215,7 +1216,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       ?.semanticResults?.find((candidate) => candidate.entryId === entry.id);
     const evidence = result?.bestEvidence;
     return evidence?.chunkKind === 'pdf_image' && evidence.available && !evidence.stale
-      ? pdfImageProvenance(evidence.provenanceJson)?.page
+      ? (
+          pdfImageProvenance(evidence.provenanceJson) ??
+          pdfPageRenderProvenance(evidence.provenanceJson)
+        )?.page
       : undefined;
   }
 

@@ -3314,6 +3314,7 @@ dependencies = [
  "lattice-inference",
  "lopdf",
  "ort",
+ "pdfium-render",
  "prost",
  "rand 0.10.2",
  "rusqlite",

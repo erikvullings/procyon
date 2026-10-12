@@ -1004,6 +1004,8 @@ export const pt = {
     pdfImageCitation: 'Página {page} · Imagem {image}',
     pdfImageEvidence: 'Imagem incorporada no PDF',
     pdfImageResult: 'Imagem incorporada no PDF · Página {page} · Imagem {image}',
+    pdfPageRenderEvidence: 'Página PDF renderizada (não é imagem incorporada)',
+    pdfPageRenderResult: 'Página PDF renderizada · Página {page}',
     title: 'Pesquisa semântica',
     openTitle: 'Pesquisa semântica…',
     subjectsPlaceholder: 'Introduza os termos de pesquisa',

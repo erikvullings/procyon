@@ -1028,12 +1028,27 @@ impl IngestionCoordinator {
                 Ok(None)
             };
         while let Some(visual) = next_visual()? {
-            let fm_semantic_conversion::VisualProvenance::PdfImage {
-                page_number,
-                image_index,
-            } = visual.provenance
-            else {
-                continue;
+            let (page_number, provenance, excerpt, cache_source) = match visual.provenance {
+                fm_semantic_conversion::VisualProvenance::PdfImage {
+                    page_number,
+                    image_index,
+                } => (
+                    page_number,
+                    fm_semantic_conversion::Provenance::PdfImage {
+                        page_number,
+                        image_index: image_index + 1,
+                    },
+                    format!("PDF page {page_number}, image {}", image_index + 1),
+                    format!("pdf-visual/2:{}", converted.converter()),
+                ),
+                #[cfg(feature = "experimental-pdf-render")]
+                fm_semantic_conversion::VisualProvenance::PdfPageRender { page_number } => (
+                    page_number,
+                    fm_semantic_conversion::Provenance::PdfPageRender { page_number },
+                    format!("PDF page {page_number}, rendered image"),
+                    crate::pdf_render_child::RENDER_IDENTITY.to_owned(),
+                ),
+                _ => continue,
             };
             self.check_cancelled(document, attempts, cancellation)?;
             if !seen.insert((page_number, visual.id.clone())) {
@@ -1043,7 +1058,7 @@ impl IngestionCoordinator {
                 &format!("pdf-image/2:{}:{}", visual.media_type.as_str(), visual.id),
                 identity,
                 self.embedder.preprocessing_version(),
-                &format!("pdf-visual/2:{}", converted.converter()),
+                &cache_source,
             );
             let vector = if let Some(vector) = self.catalog.cached_vector(key)? {
                 vector
@@ -1058,16 +1073,10 @@ impl IngestionCoordinator {
                 media.vector
             };
             let provenance =
-                serde_json::to_string(&fm_semantic_conversion::ChunkProvenance::Exact(
-                    fm_semantic_conversion::Provenance::PdfImage {
-                        page_number,
-                        image_index: image_index + 1,
-                    },
-                ))
-                .map_err(|error| self.fail(document, attempts, error.to_string()))?;
+                serde_json::to_string(&fm_semantic_conversion::ChunkProvenance::Exact(provenance))
+                    .map_err(|error| self.fail(document, attempts, error.to_string()))?;
             let position = staged_records.len();
             let record_id = record_id(document, generation, position);
-            let excerpt = format!("PDF page {page_number}, image {}", image_index + 1);
             staged_records.push(StagedRecord {
                 record_id: record_id.clone(),
                 occurrence_id: document.occurrence_id.clone(),
@@ -2736,6 +2745,66 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "experimental-pdf-render")]
+    #[test]
+    fn rendered_pdf_page_is_published_as_rendered_not_embedded_evidence() {
+        let fixture = Fixture::with_model(healthy_resources(), "google-embeddinggemma-2");
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        document.pdf_images_consented = true;
+        let hash = sha256_hex(b"synthetic rendered source");
+        let data = vec![0xff, 0xd8, 0xff, 0xd9];
+        let image = fm_semantic_conversion::VisualAttachment {
+            id: blake3::hash(&data).to_hex().to_string(),
+            media_type: fm_semantic_conversion::MediaType::parse("image/jpeg"),
+            data,
+            width: 2,
+            height: 1,
+            provenance: fm_semantic_conversion::VisualProvenance::PdfPageRender { page_number: 1 },
+            caption: None,
+        };
+        let stage = crate::pdf_text_child::staged_visual_fixture(&hash, &[vec![image]])
+            .expect("complete rendered page stage");
+        document.pdf_text = Some(PdfTextSource {
+            content_hash: hash,
+            converted: fm_semantic_conversion::ConvertedDocument::new(
+                fm_semantic_conversion::BASELINE_CONVERTER_VERSION,
+                FormatKind::Pdf,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ),
+            visual_stage: Some(Arc::new(Mutex::new(stage))),
+        });
+        let receipt = fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("index consented rendered page");
+        assert_eq!(receipt.chunks, 1);
+        assert_eq!(*fixture.embedder.media_calls.lock().unwrap(), 1);
+        let records = fixture.index.records.lock().unwrap();
+        let evidence = fixture
+            .catalog
+            .begin_read()
+            .unwrap()
+            .filter_visible_candidates(
+                &records.keys().cloned().collect::<Vec<_>>(),
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(evidence.len(), 1);
+        assert_eq!(evidence[0].record_kind, "pdf_image");
+        assert!(
+            evidence[0]
+                .provenance
+                .contains("\"kind\":\"pdfPageRender\"")
+        );
+        assert!(!evidence[0].provenance.contains("\"kind\":\"pdfImage\""));
+    }
+
     #[cfg(feature = "experimental-large-pdf")]
     #[test]
     #[ignore = "requires generated 188.9 MB synthetic PDF and experimental worker binary"]
@@ -2885,6 +2954,114 @@ mod tests {
             })
             .collect::<std::collections::BTreeSet<_>>();
         assert_eq!(pages, (1..=354).collect());
+    }
+
+    #[cfg(feature = "experimental-pdf-render")]
+    #[test]
+    #[ignore = "requires generated 175.5 MB RLE scan and isolated worker with verified PDFium"]
+    fn large_non_reusable_scan_publishes_rendered_page_evidence_atomically() {
+        let path = std::env::var_os("PROCYON_SYNTHETIC_RLE_SCAN_PDF")
+            .map(std::path::PathBuf::from)
+            .expect("generated RLE fixture");
+        assert_eq!(path.file_name().unwrap(), "synthetic-354-page-rle-scan.pdf");
+        let target = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target")
+            .canonicalize()
+            .expect("workspace target");
+        assert!(
+            path.canonicalize()
+                .expect("synthetic fixture")
+                .starts_with(target)
+        );
+        let executable = std::env::var_os("PROCYON_PDF_CHILD_EXE")
+            .map(std::path::PathBuf::from)
+            .expect("isolated renderer worker executable");
+        let source = std::fs::File::open(&path).expect("synthetic fixture");
+        assert_eq!(source.metadata().unwrap().len(), 175_530_108);
+        let digest = "f2e8e12f962f43b5e384dbb8a2648c8ce88213a9895bd11bb5e6fc7b350d3964";
+        let stage = crate::pdf_text_child::stage_spool_visual_pages(
+            &executable,
+            &source,
+            digest,
+            &CancellationToken::new(),
+        )
+        .expect("complete 354-page rendered stage");
+        assert_eq!(stage.page_count(), 354);
+        let converted = crate::pdf_text_child::convert_spool_with_visual_stage(
+            &executable,
+            &source,
+            digest,
+            &stage,
+            &CancellationToken::new(),
+        )
+        .expect("complete image-only scan");
+        assert!(converted.units().is_empty());
+        let fixture = Fixture::with_model(healthy_resources(), "google-embeddinggemma-2");
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        document.pdf_images_consented = true;
+        document.pdf_text = Some(PdfTextSource {
+            content_hash: digest.into(),
+            converted,
+            visual_stage: Some(Arc::new(Mutex::new(stage))),
+        });
+        fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("publish complete rendered generation");
+        let ids = fixture
+            .index
+            .records
+            .lock()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(ids.len(), 354);
+        let visible = fixture
+            .catalog
+            .begin_read()
+            .unwrap()
+            .filter_visible_candidates(
+                &ids,
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(visible.len(), 354);
+        let pages = visible
+            .iter()
+            .map(|record| {
+                assert_eq!(record.record_kind, "pdf_image");
+                let provenance: serde_json::Value =
+                    serde_json::from_str(&record.provenance).unwrap();
+                assert_eq!(provenance["value"]["kind"], "pdfPageRender");
+                provenance["value"]["page_number"].as_u64().unwrap()
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(pages, (1..=354).collect());
+
+        document.job_id = "failed-rendered-replacement".into();
+        fixture.index.fail_next.store(true, Ordering::Release);
+        assert!(
+            fixture
+                .coordinator
+                .ingest(&document, &CancellationToken::new())
+                .is_err()
+        );
+        assert_eq!(
+            fixture
+                .index
+                .records
+                .lock()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            ids
+        );
     }
 
     #[test]

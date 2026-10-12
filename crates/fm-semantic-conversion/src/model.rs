@@ -290,6 +290,11 @@ pub enum Provenance {
         /// 1-based image number on the page.
         image_index: u32,
     },
+    /// A rendered PDF page raster, not an extracted image XObject.
+    PdfPageRender {
+        /// 1-based PDF page number.
+        page_number: u32,
+    },
     /// A shape's text on a 1-based slide.
     Slide {
         /// 1-based slide number in presentation order.
@@ -345,6 +350,11 @@ pub enum VisualProvenance {
         page_number: u32,
         /// 0-based image index on that page.
         image_index: u32,
+    },
+    /// A rasterized whole page, not an embedded image.
+    PdfPageRender {
+        /// 1-based page number.
+        page_number: u32,
     },
     /// An image referenced from a DOCX body block.
     DocxImage {

@@ -69,6 +69,15 @@ test('generates deterministic, validly framed image-only pages without private i
   );
 });
 
+test('generates a deterministic non-reusable scan for supervised page rendering', () => {
+  const first = generate('rle-first.pdf', 'rle-scan', 3);
+  const second = generate('rle-second.pdf', 'rle-scan', 3);
+  assertPdfXref(first);
+  assert.equal([...first.toString('latin1').matchAll(/\/Filter \/RunLengthDecode\b/g)].length, 3);
+  assert.ok(!first.includes('Synthetic search marker'));
+  assert.deepEqual(first, second);
+});
+
 test('makes a five-page text-layer PDF with a known searchable page marker', () => {
   const pdf = generate('text.pdf', 'text', 5);
   assertPdfXref(pdf);

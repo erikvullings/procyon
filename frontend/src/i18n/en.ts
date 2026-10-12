@@ -1037,6 +1037,8 @@ export const en = {
     pdfImageCitation: 'Page {page} · Image {image}',
     pdfImageEvidence: 'Embedded PDF image',
     pdfImageResult: 'Embedded PDF image · Page {page} · Image {image}',
+    pdfPageRenderEvidence: 'Rendered PDF page (not an embedded image)',
+    pdfPageRenderResult: 'Rendered PDF page · Page {page}',
     groupBy: 'Result layout',
     groupByNeed: 'By knowledge need',
     groupByDocument: 'By document',

@@ -1306,63 +1306,74 @@ describe('Pane search breadcrumb rendering', () => {
     expect(onOpenEntry).not.toHaveBeenCalled();
   });
 
-  it('opens PDF image evidence at its cited page without searching its English excerpt', () => {
-    const source = entries[0];
-    if (source === undefined) throw new Error('missing entry fixture');
-    const entry: EntrySummary = {
-      ...source,
-      name: 'scan.pdf',
-      extension: 'pdf',
-      mimeType: 'application/pdf',
-    };
-    const onOpenEntry = vi.fn();
-    const thumbnailLoader = new ThumbnailLoader(new MockFileManagerClient());
-    const thumbnail = vi.spyOn(thumbnailLoader, 'createViewport');
-    mount(
-      attrs({
-        entries: [entry],
-        selectedEntryIds: new Set([entry.id]),
-        onOpenEntry,
-        thumbnailLoader,
-        searchPresentation: {
-          kind: 'semantic',
-          term: 'illustration',
-          executionMode: 'semantic',
-          semanticResults: [
-            {
-              entryId: entry.id,
-              location: entry.location,
-              score: 0.9,
-              bestEvidence: {
-                recordId: 'pdf-image',
-                sourceId: 'pdf-source',
-                score: 0.9,
-                chunkKind: 'pdf_image',
-                excerpt: 'PDF page 3, image 1',
-                provenanceJson:
-                  '{"kind":"exact","value":{"kind":"pdfImage","page_number":3,"image_index":1}}',
-                indexedContentHash: 'sha256:fixture',
-                generation: 1,
-                available: true,
-                stale: false,
-                generated: false,
-                sourcePosition: 3,
-              },
-              additionalEvidence: [],
-              additionalSourceIds: [],
-            },
-          ],
-        },
-      }),
-    );
-    expect(root.querySelector('.fm-semantic-pdf-image-evidence')?.textContent).toBe(
+  it.each([
+    [
+      'embedded image',
+      '{"kind":"exact","value":{"kind":"pdfImage","page_number":3,"image_index":1}}',
       'Embedded PDF image · Page 3 · Image 1',
-    );
-    expect(thumbnail).not.toHaveBeenCalled();
-    const open = root.querySelector<HTMLButtonElement>('.fm-semantic-evidence-actions button');
-    open?.click();
-    expect(onOpenEntry).toHaveBeenCalledWith(entry, undefined, 3);
-  });
+    ],
+    [
+      'rendered page',
+      '{"kind":"exact","value":{"kind":"pdfPageRender","page_number":3}}',
+      'Rendered PDF page · Page 3',
+    ],
+  ])(
+    'opens PDF %s evidence at its cited page without searching its English excerpt',
+    (_, provenance, label) => {
+      const source = entries[0];
+      if (source === undefined) throw new Error('missing entry fixture');
+      const entry: EntrySummary = {
+        ...source,
+        name: 'scan.pdf',
+        extension: 'pdf',
+        mimeType: 'application/pdf',
+      };
+      const onOpenEntry = vi.fn();
+      const thumbnailLoader = new ThumbnailLoader(new MockFileManagerClient());
+      const thumbnail = vi.spyOn(thumbnailLoader, 'createViewport');
+      mount(
+        attrs({
+          entries: [entry],
+          selectedEntryIds: new Set([entry.id]),
+          onOpenEntry,
+          thumbnailLoader,
+          searchPresentation: {
+            kind: 'semantic',
+            term: 'illustration',
+            executionMode: 'semantic',
+            semanticResults: [
+              {
+                entryId: entry.id,
+                location: entry.location,
+                score: 0.9,
+                bestEvidence: {
+                  recordId: 'pdf-image',
+                  sourceId: 'pdf-source',
+                  score: 0.9,
+                  chunkKind: 'pdf_image',
+                  excerpt: 'PDF page 3, image 1',
+                  provenanceJson: provenance,
+                  indexedContentHash: 'sha256:fixture',
+                  generation: 1,
+                  available: true,
+                  stale: false,
+                  generated: false,
+                  sourcePosition: 3,
+                },
+                additionalEvidence: [],
+                additionalSourceIds: [],
+              },
+            ],
+          },
+        }),
+      );
+      expect(root.querySelector('.fm-semantic-pdf-image-evidence')?.textContent).toBe(label);
+      expect(thumbnail).not.toHaveBeenCalled();
+      const open = root.querySelector<HTMLButtonElement>('.fm-semantic-evidence-actions button');
+      open?.click();
+      expect(onOpenEntry).toHaveBeenCalledWith(entry, undefined, 3);
+    },
+  );
 
   it('suppresses stale media thumbnails in grid view while keeping available media visible', () => {
     const source = entries[0];

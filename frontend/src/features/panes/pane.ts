@@ -16,7 +16,7 @@ import {
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { ActiveSourceState } from '../operations/operation-state';
-import { pdfImageProvenance } from '../semantic/evidence-provenance';
+import { pdfImageProvenance, pdfPageRenderProvenance } from '../semantic/evidence-provenance';
 
 /** Renders an icon-only toggle button matching `IconButton`'s `.btn-flat.btn-icon` styling, but
  * without mithril-materialized's `waves-effect` ripple, which isn't needed for a plain toggle
@@ -482,6 +482,10 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
     entry?.mimeType === 'application/pdf' && selected.bestEvidence.chunkKind === 'pdf_image'
       ? pdfImageProvenance(selected.bestEvidence.provenanceJson)
       : undefined;
+  const renderedPage =
+    entry?.mimeType === 'application/pdf' && selected.bestEvidence.chunkKind === 'pdf_image'
+      ? pdfPageRenderProvenance(selected.bestEvidence.provenanceJson)
+      : undefined;
   const mediaAvailable = selected.bestEvidence.available && !selected.bestEvidence.stale;
   const modifiedLabel = mediaModifiedLabel(entry?.modifiedAt);
   return m('.fm-semantic-evidence', [
@@ -495,9 +499,14 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
         }),
       ),
       kind === undefined
-        ? pdfImage === undefined
-          ? undefined
-          : m('.fm-semantic-pdf-image-evidence', t('knowledgeSearch', 'pdfImageResult', pdfImage))
+        ? renderedPage !== undefined
+          ? m(
+              '.fm-semantic-pdf-image-evidence',
+              t('knowledgeSearch', 'pdfPageRenderResult', renderedPage),
+            )
+          : pdfImage === undefined
+            ? undefined
+            : m('.fm-semantic-pdf-image-evidence', t('knowledgeSearch', 'pdfImageResult', pdfImage))
         : m('.fm-semantic-media', [
             kind !== 'audio' &&
             mediaAvailable &&
@@ -518,13 +527,19 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
           item.chunkKind === 'pdf_image' && entry?.mimeType === 'application/pdf'
             ? pdfImageProvenance(item.provenanceJson)
             : undefined;
+        const rendered =
+          item.chunkKind === 'pdf_image' && entry?.mimeType === 'application/pdf'
+            ? pdfPageRenderProvenance(item.provenanceJson)
+            : undefined;
         return m('.fm-semantic-evidence-item', [
           m(
             'p',
             item.chunkKind === 'pdf_image' && entry?.mimeType === 'application/pdf'
-              ? image === undefined
-                ? t('knowledgeSearch', 'pdfImageEvidence')
-                : t('knowledgeSearch', 'pdfImageCitation', image)
+              ? rendered !== undefined
+                ? t('knowledgeSearch', 'pdfPageRenderResult', rendered)
+                : image === undefined
+                  ? t('knowledgeSearch', 'pdfImageEvidence')
+                  : t('knowledgeSearch', 'pdfImageCitation', image)
               : kind === undefined
                 ? item.excerpt
                 : mediaDescription(item.excerpt),
@@ -549,8 +564,8 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
             disabled: entry === undefined || !selected.bestEvidence.available,
             onclick: () => {
               if (entry !== undefined && selected.bestEvidence.available) {
-                if (pdfImage !== undefined) {
-                  void attrs.onOpenEntry(entry, undefined, pdfImage.page);
+                if (pdfImage !== undefined || renderedPage !== undefined) {
+                  void attrs.onOpenEntry(entry, undefined, (pdfImage ?? renderedPage)?.page);
                 } else {
                   void attrs.onOpenEntry(
                     entry,

@@ -98,6 +98,50 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Added a **separate off-by-default development-only**
+  `experimental-pdf-render` worker feature; the production worker recipe is
+  unchanged. The supervised child looks only for a PDFium library beside its
+  own executable, with no system fallback. It checks PDFium/structural page
+  counts, renders at most 768x768 pixels into a checked <=4 MiB JPEG, and
+  stages a distinct `pdfPageRender` citation rather than claiming an
+  extractable XObject. Gemma image consent still gates embedding and text and
+  page images publish atomically; EN/NL and the other supported locale
+  catalogues distinguish rendered pages in Knowledge and file-primary
+  results. An isolated local macOS arm64 worker plus the upstream-verified
+  *ad-hoc-signed* PDFium library rendered a deterministic 175,530,108-byte
+  354-page RunLengthDecode fixture (SHA-256
+  `f2e8e12f962f43b5e384dbb8a2648c8ce88213a9895bd11bb5e6fc7b350d3964`)
+  in 43.09 s, retaining 139,500,666 anonymous stage bytes; an end-to-end
+  worker fixture then atomically published 354 page-rendered records using
+  **fake Gemma-identity embeddings**, with failed replacement preserving
+  the old generation. The earlier 354-page publication run took 47.48 s
+  and `/usr/bin/time -l` observed a 688,553,984-byte maximum process
+  group resident set, not a per-process hard ceiling. These local
+  measurements and an upstream-attested native library do not prove
+  installed real-Gemma quality, source/current-content navigation, all four
+  targets, Procyon signatures, renderer hard isolation or release GO.
+- 2026-10-12 Copilot: Re-audited the pinned public PDFium
+  `bblanchon/pdfium-binaries` `chromium/8086` release: contrary to an
+  earlier note, its **non-V8 Linux arm64 archive does exist**. All four
+  required archives have the expected binary architectures, a top-level
+  redistribution `LICENSE`, and 17 platform-specific third-party notice
+  files. Their release SHA-256 digests are macOS arm64
+  `e98679e052c07edbb5a627980902abb823d4b3f35744d877bd21668bd9fc13ab`,
+  Linux arm64
+  `e7e2fe4686925618330103cb167950aca5a84bb00fd977a41b86be59dd1480a2`,
+  Linux x64
+  `588577cf52dabc1a444988bac841920df54cc2f141801424de97ab04f4fbb935`,
+  and Windows x64
+  `1fd8af952832dbb0eb16d9249f68fe09e5f5ebf7c3dd9f6066ea2720cc28487d`.
+  `gh attestation verify` matched each archive against the same bundled
+  Sigstore/SLSA attestation, the exact upstream
+  `build-all.yml@refs/heads/master` signer and source commit
+  `5325fa6d0d9379329f10f98fdc4839b4e40f2e79`. The downloaded macOS
+  dylib is arm64 and ad-hoc signed, **not** Procyon Developer ID signed.
+  Notices differ by target and must accompany each installed pack. This
+  verifies provenance of candidate inputs, not Procyon package signing,
+  sandboxed loading, memory/deadline limits, installed rendering, or a
+  four-target release GO. No renderer was enabled or release dispatched.
 - 2026-10-12 Copilot: A synthetic PDF with text plus an inline (`BI`) raster
   previously appeared image-complete when no XObject was present. Visual
   extraction now records a page-cited unsupported-inline-image omission even

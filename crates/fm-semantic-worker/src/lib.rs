@@ -35,6 +35,8 @@ pub mod gemma_visual;
 pub mod ingestion;
 pub mod knowledge_ipc;
 pub mod knowledge_retrieval;
+#[cfg(feature = "experimental-pdf-render")]
+mod pdf_render_child;
 #[cfg(feature = "experimental-large-pdf")]
 pub mod pdf_text_child;
 pub mod rag_retrieval;

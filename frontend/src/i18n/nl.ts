@@ -1052,6 +1052,8 @@ export const nl = {
     pdfImageCitation: 'Pagina {page} · Afbeelding {image}',
     pdfImageEvidence: 'Ingesloten PDF-afbeelding',
     pdfImageResult: 'Ingesloten PDF-afbeelding · Pagina {page} · Afbeelding {image}',
+    pdfPageRenderEvidence: 'Gerenderde PDF-pagina (geen ingesloten afbeelding)',
+    pdfPageRenderResult: 'Gerenderde PDF-pagina · Pagina {page}',
     groupBy: 'Resultaatweergave',
     groupByNeed: 'Per kennisbehoefte',
     groupByDocument: 'Per document',

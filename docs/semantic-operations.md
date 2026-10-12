@@ -546,11 +546,16 @@ child stages bounded page-cited extractable rasters on anonymous temporary stora
 including distinct images on the same page. The ingestion pipeline embeds
 them one at a time into the same atomic text/image generation. Image-only pages
 beyond reusable rasters, inline images and unsupported encodings fail the replacement
-rather than silently publishing partial coverage. For ordinary small-PDF ingestion,
-an inline figure on a text page is reported as missing visual evidence without
-mislabeling its searchable text as absent. This development path has provisional resource
-bounds and no installed page renderer or four-target qualification; it is not
-enabled in the production worker or approved for release.
+rather than silently publishing partial coverage. A separate development-only
+`experimental-pdf-render` feature can load a PDFium library strictly beside the
+supervised worker binary and render an otherwise unsupported page as a bounded
+whole-page JPEG. Its provenance distinguishes a rendered page from an embedded
+image; the resulting vector still requires immutable Gemma image consent. For
+ordinary small-PDF ingestion, an inline figure on a text page is reported as
+missing visual evidence without mislabeling its searchable text as absent.
+Neither development feature is built into the production worker; PDFium is
+not installed in the signed semantic catalog, and four-target resource and
+packaging qualification remain outstanding. No release is approved.
 
 Once a replacement generation is published, superseded catalogue and Zvec records are reclaimed
 in bounded batches.

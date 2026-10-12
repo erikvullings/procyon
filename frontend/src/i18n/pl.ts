@@ -1001,6 +1001,8 @@ export const pl = {
     pdfImageCitation: 'Strona {page} · Obraz {image}',
     pdfImageEvidence: 'Obraz osadzony w pliku PDF',
     pdfImageResult: 'Obraz osadzony w pliku PDF · Strona {page} · Obraz {image}',
+    pdfPageRenderEvidence: 'Wyrenderowana strona PDF (nie osadzony obraz)',
+    pdfPageRenderResult: 'Wyrenderowana strona PDF · Strona {page}',
     title: 'Wyszukiwanie semantyczne',
     openTitle: 'Wyszukiwanie semantyczne…',
     subjectsPlaceholder: 'Wpisz szukane terminy',

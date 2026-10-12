@@ -35,6 +35,9 @@ describe('knowledgeEvidencePage', () => {
       ),
     ).toBe(3);
     expect(
+      knowledgeEvidencePage('{"kind":"exact","value":{"kind":"pdfPageRender","page_number":3}}'),
+    ).toBe(3);
+    expect(
       knowledgeEvidencePage(
         '{"kind":"span","first":{"kind":"pdfBlock","page_number":41,"block_index":3},' +
           '"last":{"kind":"pdfBlock","page_number":42,"block_index":0}}',
