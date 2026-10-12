@@ -676,6 +676,14 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
                         ),
                   );
                 })(),
+                selectedConcept &&
+                skosStarters.some(
+                  ({ document }) =>
+                    document === selectedConcept?.vocabulary &&
+                    'https://procyon.app/ns/skos-starter/enrichment' in document.extensions,
+                )
+                  ? m('p.fm-find-concept-enrichment', t('semanticVocabulary', 'starterEnrichment'))
+                  : undefined,
                 m('label.fm-find-concept-scope', [
                   m('input.browser-default', {
                     type: 'checkbox',

@@ -13,6 +13,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "frontend/src/features/settings/skos-starters"
+UNESCO_ENRICHMENTS = ROOT / "scripts/unesco-enriched-definitions.json"
 RDF = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
 SKOS = "{http://www.w3.org/2004/02/skos/core#}"
 LANG = "{http://www.w3.org/XML/1998/namespace}lang"
@@ -20,6 +21,12 @@ BASE = "{http://www.w3.org/XML/1998/namespace}base"
 SKOS_XL = "{http://www.w3.org/2008/05/skos-xl#}"
 CC_BY = "https://creativecommons.org/licenses/by/4.0/"
 CC_BY_SA_IGO = "https://creativecommons.org/licenses/by-sa/3.0/igo/"
+ENRICHMENT_KEY = "https://procyon.app/ns/skos-starter/enrichment"
+UNESCO_ENRICHMENT_NOTICE = (
+    "Adapted UNESCO Thesaurus excerpt with English definitions AI-enriched by Procyon "
+    "for RAG where the source has none. Added definitions are not authored by UNESCO; "
+    "no UNESCO endorsement is implied."
+)
 SOURCES = {
     "gemet": (
         "https://www.eionet.europa.eu/gemet/4.2.3/gemet.rdf.gz",
@@ -179,7 +186,7 @@ def load_source(key):
     return base, subjects
 
 
-def make_document(starter, source):
+def make_document(starter, source, enrichments, used_enrichments):
     identifier, title, key, roots, depth = starter
     base, subjects = source
     def resolve(uri):
@@ -209,6 +216,13 @@ def make_document(starter, source):
         preferred = labels("prefLabel")
         if len(preferred) != 1:
             raise ValueError(f"{key} {uri}: expected one English preferred label")
+        definitions = labels("definition")
+        if key == "unesco" and not definitions:
+            definition = enrichments.get(uri)
+            if not isinstance(definition, str) or not definition.strip():
+                raise ValueError(f"{key} {uri}: missing reviewed English definition")
+            definitions = [definition]
+            used_enrichments.add(uri)
 
         def links(field):
             return sorted(resolve(item.attrib[RDF + "resource"])
@@ -219,7 +233,7 @@ def make_document(starter, source):
             "uri": uri,
             "prefLabels": {"en": preferred[0]},
             "altLabels": {"en": sorted(set(labels("altLabel")))} if labels("altLabel") else {},
-            "definitions": {"en": labels("definition")[0]} if labels("definition") else {},
+            "definitions": {"en": definitions[0]} if definitions else {},
             "scopeNotes": {"en": labels("scopeNote")[0]} if labels("scopeNote") else {},
             "broader": links("broader"),
             "narrower": links("narrower"),
@@ -235,16 +249,19 @@ def make_document(starter, source):
         for narrower in concept["narrower"]:
             if concept["uri"] not in by_uri[narrower]["broader"]:
                 raise ValueError(f"{key}: asymmetric narrower relation for {concept['uri']}")
+    extensions = {
+        "https://procyon.app/ns/skos-starter/source": SOURCES[key][0],
+        "https://procyon.app/ns/skos-starter/license": SOURCES[key][3],
+        "https://procyon.app/ns/skos-starter/selection": list(roots),
+    }
+    if key == "unesco":
+        extensions[ENRICHMENT_KEY] = UNESCO_ENRICHMENT_NOTICE
     return {
         "format": "procyon-skos-1",
         "id": identifier,
         "name": f"{title} ({SOURCES[key][2]} excerpt)",
         "concepts": concepts,
-        "extensions": {
-            "https://procyon.app/ns/skos-starter/source": SOURCES[key][0],
-            "https://procyon.app/ns/skos-starter/license": SOURCES[key][3],
-            "https://procyon.app/ns/skos-starter/selection": list(roots),
-        },
+        "extensions": extensions,
     }
 
 
@@ -252,9 +269,18 @@ def main():
     check = sys.argv[1:] == ["--check"]
     if sys.argv[1:] and not check:
         raise SystemExit("usage: generate-skos-starters.py [--check]")
+    enrichments = json.loads(UNESCO_ENRICHMENTS.read_text())
+    if not isinstance(enrichments, dict):
+        raise ValueError("UNESCO enrichments must map concept URIs to English definitions")
+    used_enrichments = set()
     sources = {key: load_source(key) for key in SOURCES}
-    for starter in STARTERS:
-        document = make_document(starter, sources[starter[2]])
+    documents = [
+        (starter, make_document(starter, sources[starter[2]], enrichments, used_enrichments))
+        for starter in STARTERS
+    ]
+    if set(enrichments) != used_enrichments:
+        raise ValueError(f"Unused UNESCO enrichments: {sorted(set(enrichments) - used_enrichments)}")
+    for starter, document in documents:
         target = OUTPUT / (starter[0] + ".json")
         content = json.dumps(document, indent=2, ensure_ascii=False) + "\n"
         if check:

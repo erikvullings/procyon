@@ -1713,6 +1713,8 @@ export const pl = {
     description:
       'Zaimportuj tutaj własny słownik SKOS. Dołączone słowniki startowe są dostępne bezpośrednio w opcji Znajdź według pojęcia, bez importowania i dołączania. Dołączaj zaimportowane słowniki tylko do adnotacji i przeglądu.',
     starterSourceLink: 'Oryginalne źródło SKOS',
+    starterEnrichment:
+      'Zmodyfikowany fragment Tezaurusa UNESCO: brakujące definicje uzupełnił Procyon za pomocą AI na potrzeby RAG i nie są one autorstwa UNESCO. Nie oznacza to poparcia ze strony UNESCO.',
     importLabel: 'SKOS JSON',
     importPlaceholder: 'Wklej dokument procyon-skos-1',
     importAction: 'Importuj słownik',

@@ -1736,6 +1736,8 @@ export const de = {
     description:
       'Importieren Sie hier Ihr eigenes SKOS-Vokabular. Mitgelieferte Starter-Vokabulare stehen in „Nach Konzept suchen“ direkt zur Verfügung, ohne sie zu importieren oder anzuhängen. Hängen Sie importierte Vokabulare nur für Annotations- und Prüfabläufe an.',
     starterSourceLink: 'Original-SKOS-Quelle',
+    starterEnrichment:
+      'Bearbeiteter Auszug aus dem UNESCO-Thesaurus: Fehlende Definitionen wurden von Procyon per KI für RAG ergänzt und stammen nicht von der UNESCO. Eine Billigung durch die UNESCO ist damit nicht verbunden.',
     importLabel: 'SKOS-JSON',
     importPlaceholder: 'Ein procyon-skos-1-Dokument einfügen',
     importAction: 'Vokabular importieren',

@@ -1716,6 +1716,8 @@ export const es = {
     description:
       'Importa aquí tu propio vocabulario SKOS. Los vocabularios iniciales incluidos están disponibles directamente en Buscar por concepto, sin importarlos ni adjuntarlos. Adjunta los vocabularios importados solo para flujos de anotación y revisión.',
     starterSourceLink: 'Fuente SKOS original',
+    starterEnrichment:
+      'Extracto adaptado del Tesauro de la UNESCO: las definiciones que faltaban fueron añadidas por Procyon con IA para RAG y no son de la UNESCO. No implica el respaldo de la UNESCO.',
     importLabel: 'SKOS JSON',
     importPlaceholder: 'Pega un documento procyon-skos-1',
     importAction: 'Importar vocabulario',
