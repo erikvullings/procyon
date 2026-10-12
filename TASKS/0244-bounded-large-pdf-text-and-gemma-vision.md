@@ -98,6 +98,13 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: The installed worker-only 354-page scan now records
+  worker peak RSS (kernel high-water on Linux/Windows, 200 ms samples on
+  macOS) and isolated worker-data disk high-water (one-second samples) in
+  the candidate-bound report. Both sampling limitations remain explicit;
+  host RSS, crash/restart behavior, host/VFS coverage, and a defensible
+  release ceiling are still absent. These numbers must not qualify the
+  release merely by existing.
 - 2026-10-12 Copilot: Strengthened the opt-in experimental Gemma publish
   guard: signed PDFium payloads alone cannot be approved. The release
   workflow must fetch four exact-run installed PDF reports, check the

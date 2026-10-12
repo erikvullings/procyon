@@ -12,6 +12,10 @@ const measured = {
   imageEvidenceCount: 354,
   backend: 'google/embeddinggemma-2 (native CPU FP32)',
   elapsedSeconds: 12_345,
+  workerPeakRssBytes: 1_234_567_890,
+  workerPeakMethod: 'kernel VmHWM for worker process',
+  temporaryDiskPeakBytes: 234_567_890,
+  temporaryDiskPeakMethod: '1s worker-data directory samples; transient peaks may be missed',
 };
 const lifecycle = { target: 'linux-aarch64', catalogSha256 };
 const candidate = {
@@ -33,7 +37,9 @@ test('a complete installed synthetic report stays no-go without measured resourc
   assert.equal(report.catalogSha256, catalogSha256);
   assert.equal(report.pageCount, 354);
   assert.equal(report.resourceCeilingQualified, false);
-  assert.equal(report.workerPeakRssBytes, null);
+  assert.equal(report.workerPeakRssBytes, measured.workerPeakRssBytes);
+  assert.equal(report.temporaryDiskPeakBytes, measured.temporaryDiskPeakBytes);
+  assert.equal(report.hostPeakRssBytes, null);
 });
 
 test('installed evidence cannot be bound to a different source, target or incomplete scan', () => {
@@ -57,6 +63,16 @@ test('installed evidence cannot be bound to a different source, target or incomp
     () =>
       recordPdfVisionQualification(
         { ...measured, imageEvidenceCount: 353 },
+        lifecycle,
+        candidate,
+        identity,
+      ),
+    /exact signed installed candidate/u,
+  );
+  assert.throws(
+    () =>
+      recordPdfVisionQualification(
+        { ...measured, workerPeakRssBytes: 0 },
         lifecycle,
         candidate,
         identity,

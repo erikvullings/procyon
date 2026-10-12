@@ -3,7 +3,7 @@
 #![cfg(feature = "semantic-runtime")]
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
@@ -72,6 +72,79 @@ async fn wait_for_ingestion(
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     panic!("packaged ingestion did not finish within {timeout:?}");
+}
+
+#[cfg(feature = "gemma-native")]
+fn owned_disk_bytes(root: &Path) -> u64 {
+    let entries = match std::fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return 0,
+        Err(error) => panic!("read isolated worker data: {error}"),
+    };
+    entries
+        .map(|entry| {
+            let entry = entry.expect("read isolated worker entry");
+            let metadata = match std::fs::symlink_metadata(entry.path()) {
+                Ok(metadata) => metadata,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return 0,
+                Err(error) => panic!("stat worker entry: {error}"),
+            };
+            if metadata.is_dir() {
+                owned_disk_bytes(&entry.path())
+            } else if metadata.is_file() {
+                metadata.len()
+            } else {
+                0
+            }
+        })
+        .sum()
+}
+
+#[cfg(all(feature = "gemma-native", target_os = "macos"))]
+fn sample_macos_worker_rss(
+    pid_path: PathBuf,
+) -> (
+    Arc<std::sync::atomic::AtomicBool>,
+    tokio::task::JoinHandle<u64>,
+) {
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let finished = Arc::clone(&stop);
+    let task = tokio::spawn(async move {
+        let mut maximum = 0;
+        while !finished.load(std::sync::atomic::Ordering::Relaxed) {
+            if let Ok(pid) = std::fs::read_to_string(&pid_path) {
+                let output = std::process::Command::new("ps")
+                    .args(["-o", "rss=", "-p", pid.trim()])
+                    .output()
+                    .expect("sample macOS worker RSS");
+                if output.status.success() {
+                    maximum = maximum.max(
+                        String::from_utf8(output.stdout)
+                            .unwrap()
+                            .trim()
+                            .parse::<u64>()
+                            .expect("macOS worker RSS is numeric")
+                            * 1024,
+                    );
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        maximum
+    });
+    (stop, task)
+}
+
+#[cfg(feature = "gemma-native")]
+#[test]
+fn isolated_worker_disk_accounting_excludes_symlink_targets() {
+    let root = tempfile::tempdir().unwrap();
+    let nested = root.path().join("nested");
+    std::fs::create_dir(&nested).unwrap();
+    std::fs::write(nested.join("file"), b"12345").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(nested.join("file"), root.path().join("link")).unwrap();
+    assert_eq!(owned_disk_bytes(root.path()), 5);
 }
 
 #[cfg(feature = "gemma-native")]
@@ -149,6 +222,11 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
         },
     );
     let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
+    let report_path = std::env::var_os("PROCYON_GEMMA_PDF_QUALIFICATION_REPORT");
+    #[cfg(target_os = "macos")]
+    let sampler = report_path
+        .as_ref()
+        .map(|_| sample_macos_worker_rss(runtime.path().join("worker.pid")));
     let client = WorkerConnector::desktop_managed_resolved(runtime.path(), resolver)
         .with_startup_timeout(Duration::from_secs(30))
         .connect()
@@ -173,6 +251,7 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
         .await
         .expect("authenticated PDF stream");
     let mut last_progress = 0;
+    let mut peak_disk_bytes = 0;
     loop {
         let job = client
             .ingestion_job("qualification-tenant", "qualification-library", &job_id)
@@ -182,6 +261,9 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
         assert_ne!(job.state, IngestionState::Cancelled);
         assert!(job.completed_units >= last_progress || job.state == IngestionState::Completed);
         last_progress = job.completed_units;
+        if report_path.is_some() {
+            peak_disk_bytes = peak_disk_bytes.max(owned_disk_bytes(data.path()));
+        }
         if job.state == IngestionState::Completed {
             assert_eq!(job.completed_units, 354);
             break;
@@ -225,7 +307,34 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
         .into_iter()
         .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(pages, (1..=354).collect());
-    if let Some(report) = std::env::var_os("PROCYON_GEMMA_PDF_QUALIFICATION_REPORT") {
+    if let Some(report) = report_path {
+        #[cfg(target_os = "macos")]
+        let (worker_peak_rss_bytes, worker_peak_method) = {
+            let (stop, task) = sampler.expect("macOS RSS sampler");
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+            (
+                task.await.expect("macOS RSS sampling task"),
+                "200ms ps RSS samples; startup/transient peaks may be missed",
+            )
+        };
+        #[cfg(not(target_os = "macos"))]
+        let (worker_peak_rss_bytes, worker_peak_method) = (
+            peak_worker_rss_bytes(
+                std::fs::read_to_string(runtime.path().join("worker.pid"))
+                    .expect("installed worker pid")
+                    .trim(),
+            ),
+            if cfg!(windows) {
+                "kernel PeakWorkingSet64 for worker process"
+            } else {
+                "kernel VmHWM for worker process"
+            },
+        );
+        assert!(
+            worker_peak_rss_bytes > 0,
+            "worker peak RSS was not observed"
+        );
+        assert!(peak_disk_bytes > 0, "worker disk use was not observed");
         let backend = std::fs::read_to_string(runtime.path().join("gemma-backend")).unwrap();
         std::fs::write(
             report,
@@ -236,6 +345,10 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
                 "imageEvidenceCount": pages.len(),
                 "backend": backend.trim(),
                 "elapsedSeconds": started.elapsed().as_secs_f64(),
+                "workerPeakRssBytes": worker_peak_rss_bytes,
+                "workerPeakMethod": worker_peak_method,
+                "temporaryDiskPeakBytes": peak_disk_bytes,
+                "temporaryDiskPeakMethod": "1s worker-data directory samples; transient peaks may be missed",
             }))
             .unwrap(),
         )
@@ -427,35 +540,9 @@ async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
     let connector = WorkerConnector::desktop_managed_resolved(runtime.path(), resolver)
         .with_startup_timeout(Duration::from_secs(30));
     #[cfg(target_os = "macos")]
-    let sampler = report_path.as_ref().map(|_| {
-        let pid_path = runtime.path().join("worker.pid");
-        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let finished = Arc::clone(&stop);
-        let task = tokio::spawn(async move {
-            let mut maximum = 0;
-            while !finished.load(std::sync::atomic::Ordering::Relaxed) {
-                if let Ok(pid) = std::fs::read_to_string(&pid_path) {
-                    let output = std::process::Command::new("ps")
-                        .args(["-o", "rss=", "-p", pid.trim()])
-                        .output()
-                        .expect("sample macOS worker RSS");
-                    if output.status.success() {
-                        maximum = maximum.max(
-                            String::from_utf8(output.stdout)
-                                .unwrap()
-                                .trim()
-                                .parse::<u64>()
-                                .expect("macOS worker RSS is numeric")
-                                * 1024,
-                        );
-                    }
-                }
-                tokio::time::sleep(Duration::from_millis(200)).await;
-            }
-            maximum
-        });
-        (stop, task)
-    });
+    let sampler = report_path
+        .as_ref()
+        .map(|_| sample_macos_worker_rss(runtime.path().join("worker.pid")));
     let started = Instant::now();
     let client = connector
         .connect()
