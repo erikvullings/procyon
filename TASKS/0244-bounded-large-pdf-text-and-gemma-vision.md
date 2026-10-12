@@ -98,6 +98,15 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Corrected PDF image evidence so a JPEG is eligible only
+  when the page content actually invokes its named XObject with `Do`;
+  merely declaring an image in inherited `/Resources` no longer makes it a
+  searchable page hit. A synthetic unused-resource regression failed before
+  the fix, while drawn inherited JPEGs and consented worker image indexing
+  still pass. Page content is inspected with the existing 16 MiB bounded
+  decoder; JPEGs larger than the visual attachment limit are omitted before
+  cloning their bytes. This does not render forms or scanned Flate pages,
+  raise the 64 MiB production cap, or qualify the release.
 - 2026-10-12 Copilot: PDF visual extraction now honors inherited
   `/Resources` and does not invent an image-inspection failure when a
   text-only page has no `/XObject`. The previous `lopdf::get_page_images`

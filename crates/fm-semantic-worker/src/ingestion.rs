@@ -1935,6 +1935,15 @@ mod tests {
             ));
             pdf.add_xobject(pages[&page], b"Figure", image)
                 .expect("figure");
+            let content_id = pdf.get_page_contents(pages[&page])[0];
+            let content = pdf
+                .get_object_mut(content_id)
+                .expect("page content")
+                .as_stream_mut()
+                .expect("content stream");
+            let mut drawing = content.get_plain_content().expect("page content bytes");
+            drawing.extend_from_slice(b"q /Figure Do Q\n");
+            content.set_plain_content(drawing);
         }
         let unsupported = pdf.add_object(Stream::new(
             dictionary! {
@@ -1946,6 +1955,15 @@ mod tests {
         ));
         pdf.add_xobject(pages[&3], b"Scan", unsupported)
             .expect("scan");
+        let content_id = pdf.get_page_contents(pages[&3])[0];
+        let content = pdf
+            .get_object_mut(content_id)
+            .expect("page content")
+            .as_stream_mut()
+            .expect("content stream");
+        let mut drawing = content.get_plain_content().expect("page content bytes");
+        drawing.extend_from_slice(b"q /Scan Do Q\n");
+        content.set_plain_content(drawing);
         let mut result = Vec::new();
         pdf.save_to(&mut result).expect("save mixed PDF");
         result
@@ -2130,11 +2148,13 @@ mod tests {
         let mut pdf = Document::load_mem(&pdf_with_images()).unwrap();
         for page in [1, 2] {
             let page_id = pdf.get_pages()[&page];
+            let drawing_id =
+                pdf.add_object(Stream::new(dictionary! {}, b"q /Figure Do Q\n".to_vec()));
             pdf.get_object_mut(page_id)
                 .unwrap()
                 .as_dict_mut()
                 .unwrap()
-                .remove(b"Contents");
+                .set("Contents", drawing_id);
         }
         pdf.get_object_mut(pdf.get_page_contents(pdf.get_pages()[&3])[0])
             .unwrap()

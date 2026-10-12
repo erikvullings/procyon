@@ -14,11 +14,11 @@
 
 use std::collections::HashSet;
 
-use lopdf::{Dictionary, Document, Object};
+use lopdf::{Dictionary, Document, Object, content::Content};
 
 use crate::budget::Stop;
 use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
-use crate::model::{Provenance, TopLevelBoundary, UnitKind, VisualProvenance};
+use crate::model::{MAX_VISUAL_BYTES, Provenance, TopLevelBoundary, UnitKind, VisualProvenance};
 use crate::pdf_toc::{clean_pdf_toc_text, repair_spaced_elsevier_doi};
 
 /// Maximum decompressed content bytes per page.
@@ -187,7 +187,38 @@ fn extract_page_images(
     let Some(xobjects) = xobjects else {
         return Ok(false);
     };
-    for (image_index, (_, image_ref)) in xobjects.iter().enumerate() {
+    let content = document
+        .get_page_content_with_limit(page_id, MAX_PAGE_CONTENT_BYTES)
+        .and_then(|bytes| Content::decode(&bytes))
+        .map_err(|error| {
+            PdfError::Malformed(format!(
+                "page {page_number} images could not be located: {error}"
+            ))
+        })?;
+    let mut drawn = HashSet::new();
+    for operation in &content.operations {
+        if operation.operator == "Do" {
+            let name = operation
+                .operands
+                .first()
+                .ok_or_else(|| {
+                    PdfError::Malformed(format!(
+                        "page {page_number} has an image drawing operator without a resource"
+                    ))
+                })?
+                .as_name()
+                .map_err(|error| {
+                    PdfError::Malformed(format!(
+                        "page {page_number} has an invalid image drawing resource: {error}"
+                    ))
+                })?;
+            drawn.insert(name.to_vec());
+        }
+    }
+    for (image_index, (name, image_ref)) in xobjects.iter().enumerate() {
+        if !drawn.contains(name) {
+            continue;
+        }
         builder.checkpoint().map_err(PdfError::from)?;
         let provenance = VisualProvenance::PdfImage {
             page_number,
@@ -229,6 +260,13 @@ fn extract_page_images(
             builder.omit_visual(
                 Some(provenance),
                 "PDF image encoding is not a reusable JPEG raster",
+            );
+            continue;
+        }
+        if image.content.len() > MAX_VISUAL_BYTES {
+            builder.omit_visual(
+                Some(provenance),
+                format!("PDF image exceeds {MAX_VISUAL_BYTES} retained bytes"),
             );
             continue;
         }
@@ -475,6 +513,15 @@ pub(crate) mod tests {
         let bytes = text_pdf(&[&["Visible text"]]);
         let mut document = Document::load_mem(&bytes).expect("load fixture");
         let page_id = document.get_pages()[&1];
+        let content_id = document.get_page_contents(page_id)[0];
+        let content = document
+            .get_object_mut(content_id)
+            .expect("page content")
+            .as_stream_mut()
+            .expect("content stream");
+        let mut drawing = content.content.clone();
+        drawing.extend_from_slice(b"q /Im1 Do Q\n");
+        content.set_content(drawing);
         let jpeg = vec![
             0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 1, 0, 2, 3, 1, 0x11, 0, 2, 0x11, 0, 3, 0x11, 0,
             0xff, 0xd9,
@@ -509,6 +556,39 @@ pub(crate) mod tests {
                 image_index: 0
             }
         );
+    }
+
+    #[test]
+    fn unused_page_image_resource_is_not_searchable_evidence() {
+        let bytes = text_pdf(&[&["Visible text"]]);
+        let mut document = Document::load_mem(&bytes).expect("load fixture");
+        let page_id = document.get_pages()[&1];
+        let image_id = document.add_object(Stream::new(
+            dictionary! {
+                "Type" => "XObject",
+                "Subtype" => "Image",
+                "Width" => 2,
+                "Height" => 1,
+                "ColorSpace" => "DeviceRGB",
+                "BitsPerComponent" => 8,
+                "Filter" => "DCTDecode",
+            },
+            vec![
+                0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 1, 0, 2, 3, 1, 0x11, 0, 2, 0x11, 0, 3, 0x11,
+                0, 0xff, 0xd9,
+            ],
+        ));
+        let resources_id = document.get_page_resources(page_id).unwrap().1[0];
+        document
+            .get_dictionary_mut(resources_id)
+            .expect("inherited resources")
+            .set("XObject", dictionary! { "Im1" => image_id });
+        let mut bytes = Vec::new();
+        document.save_to(&mut bytes).expect("save fixture");
+
+        let converted = convert_pdf_with_visuals(&bytes, true).expect("conversion");
+        assert!(converted.visuals().is_empty());
+        assert!(converted.visual_omissions().is_empty());
     }
 
     #[test]
