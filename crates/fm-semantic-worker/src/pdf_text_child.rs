@@ -373,6 +373,7 @@ fn validate_image(
     page_number: u32,
 ) -> io::Result<VisualAttachment> {
     if header.page_number != page_number
+        || header.image_index == u32::MAX
         || header.byte_length == 0
         || header.byte_length > MAX_VISUAL_BYTES
         || data.len() != header.byte_length
@@ -877,7 +878,7 @@ mod tests {
 
     use sha2::Digest as _;
 
-    use super::{read_child_output, staged_visual_fixture};
+    use super::{PageImageHeader, read_child_output, staged_visual_fixture, validate_image};
 
     #[test]
     fn staged_page_rejects_duplicate_citations_and_excess_images() {
@@ -912,6 +913,17 @@ mod tests {
             .to_string()
             .contains("image count limit")
         );
+        let data = vec![0xff, 0xd8, 0xff, 0xd9];
+        let header = PageImageHeader {
+            page_number: 1,
+            image_index: u32::MAX,
+            media_type: "image/jpeg".into(),
+            width: 2,
+            height: 1,
+            id: blake3::hash(&data).to_hex().to_string(),
+            byte_length: data.len(),
+        };
+        assert!(validate_image(header, data, 1).is_err());
     }
 
     #[test]
