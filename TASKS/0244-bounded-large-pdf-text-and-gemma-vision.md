@@ -108,6 +108,10 @@ optional Docling ML/PDFium pack is qualified on those targets.
   archives passed this check. The helper is **not** connected to the
   production bundle, signed catalog, desktop installation, or release
   workflow yet; it is an input primitive, not a release qualification.
+- 2026-10-12 Copilot: A supervised-child regression cancels the in-progress
+  354-page synthetic scan after 500 ms and returns before any complete
+  visual stage is published; this demonstrates cancellation on the local
+  macOS development path, not a four-target hard resource guarantee.
 - 2026-10-12 Copilot: Added a **separate off-by-default development-only**
   `experimental-pdf-render` worker feature; the production worker recipe is
   unchanged. The supervised child looks only for a PDFium library beside its

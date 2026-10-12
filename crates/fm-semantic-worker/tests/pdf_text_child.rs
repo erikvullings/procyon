@@ -356,6 +356,47 @@ fn supervised_renderer_stages_every_large_non_reusable_scan_page() {
     );
 }
 
+#[cfg(feature = "experimental-pdf-render")]
+#[test]
+#[ignore = "requires a generated 354-page RLE scan and verified local PDFium library"]
+fn supervised_renderer_cancels_an_in_progress_large_scan() {
+    let (_directory, worker) = installed_renderer_worker();
+    let source = std::env::var_os("PROCYON_SYNTHETIC_RLE_SCAN_PDF")
+        .map(std::path::PathBuf::from)
+        .expect("generated synthetic RLE scan");
+    assert_eq!(
+        source.file_name().unwrap(),
+        "synthetic-354-page-rle-scan.pdf"
+    );
+    assert!(
+        source.canonicalize().expect("synthetic scan").starts_with(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../target")
+                .canonicalize()
+                .expect("workspace target")
+        )
+    );
+    let spool = std::fs::File::open(source).expect("open synthetic source");
+    let cancellation = CancellationToken::new();
+    let signal = cancellation.clone();
+    let start = std::time::Instant::now();
+    let attempt = std::thread::spawn(move || {
+        stage_spool_visual_pages(
+            &worker,
+            &spool,
+            "f2e8e12f962f43b5e384dbb8a2648c8ce88213a9895bd11bb5e6fc7b350d3964",
+            &signal,
+        )
+    });
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    cancellation.cancel();
+    assert!(attempt.join().expect("stage thread").is_err());
+    assert!(
+        start.elapsed() < std::time::Duration::from_secs(10),
+        "cancelled rendering should not wait for all 354 pages"
+    );
+}
+
 #[test]
 fn anonymous_pdf_spool_child_round_trips_page_text_and_rejects_wrong_digest() {
     let bytes = synthetic_pdf();
