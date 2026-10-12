@@ -6,7 +6,10 @@ use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
 
 use fm_semantic_conversion::{Provenance, VisualProvenance};
-use fm_semantic_worker::pdf_text_child::{convert_spool, convert_spool_visual_page};
+use fm_semantic_worker::pdf_text_child::{
+    convert_spool, convert_spool_visual_page, convert_spool_with_visual_stage,
+    stage_spool_visual_pages,
+};
 use lopdf::{Document, Object, Stream, dictionary};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
@@ -53,33 +56,8 @@ fn synthetic_pdf() -> Vec<u8> {
     bytes
 }
 
-fn synthetic_visual_pdf() -> Vec<u8> {
+fn synthetic_visual_pdf(visual_pages: &[u32]) -> Vec<u8> {
     let mut pdf = Document::load_mem(&synthetic_pdf()).expect("load visual fixture");
-    let page = pdf.get_pages()[&2];
-    let parent = pdf
-        .get_object(page)
-        .expect("page")
-        .as_dict()
-        .expect("page dictionary")
-        .get(b"Parent")
-        .expect("parent")
-        .as_reference()
-        .expect("parent reference");
-    let resources = pdf
-        .get_object(parent)
-        .expect("parent")
-        .as_dict()
-        .expect("parent dictionary")
-        .get(b"Resources")
-        .expect("resources")
-        .as_reference()
-        .expect("resources reference");
-    let page_resources = pdf.add_object(pdf.get_object(resources).expect("resources").clone());
-    pdf.get_object_mut(page)
-        .expect("page")
-        .as_dict_mut()
-        .expect("page dictionary")
-        .set("Resources", page_resources);
     let jpeg = vec![
         0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 1, 0, 2, 3, 1, 0x11, 0, 2, 0x11, 0, 3, 0x11, 0, 0xff,
         0xd9,
@@ -92,16 +70,43 @@ fn synthetic_visual_pdf() -> Vec<u8> {
         },
         jpeg.clone(),
     ));
-    pdf.add_xobject(page, b"Figure", image).expect("add figure");
-    let content_id = pdf.get_page_contents(page)[0];
-    let content = pdf
-        .get_object_mut(content_id)
-        .expect("page content")
-        .as_stream_mut()
-        .expect("content stream");
-    let mut drawing = content.get_plain_content().expect("page content bytes");
-    drawing.extend_from_slice(b"q /Figure Do Q\n");
-    content.set_plain_content(drawing);
+    for number in visual_pages {
+        let page = pdf.get_pages()[number];
+        let parent = pdf
+            .get_object(page)
+            .expect("page")
+            .as_dict()
+            .expect("page dictionary")
+            .get(b"Parent")
+            .expect("parent")
+            .as_reference()
+            .expect("parent reference");
+        let resources = pdf
+            .get_object(parent)
+            .expect("parent")
+            .as_dict()
+            .expect("parent dictionary")
+            .get(b"Resources")
+            .expect("resources")
+            .as_reference()
+            .expect("resources reference");
+        let page_resources = pdf.add_object(pdf.get_object(resources).expect("resources").clone());
+        pdf.get_object_mut(page)
+            .expect("page")
+            .as_dict_mut()
+            .expect("page dictionary")
+            .set("Resources", page_resources);
+        pdf.add_xobject(page, b"Figure", image).expect("add figure");
+        let content_id = pdf.get_page_contents(page)[0];
+        let content = pdf
+            .get_object_mut(content_id)
+            .expect("page content")
+            .as_stream_mut()
+            .expect("content stream");
+        let mut drawing = content.get_plain_content().expect("page content bytes");
+        drawing.extend_from_slice(b"q /Figure Do Q\n");
+        content.set_plain_content(drawing);
+    }
     let mut result = Vec::new();
     pdf.save_to(&mut result).expect("save visual fixture");
     result
@@ -151,7 +156,7 @@ fn anonymous_pdf_spool_child_round_trips_page_text_and_rejects_wrong_digest() {
 
 #[test]
 fn anonymous_pdf_spool_child_returns_one_bounded_cited_image_page() {
-    let bytes = synthetic_visual_pdf();
+    let bytes = synthetic_visual_pdf(&[2]);
     let mut spool = tempfile::tempfile().unwrap();
     spool.write_all(&bytes).unwrap();
     let digest = Sha256::digest(&bytes)
@@ -189,6 +194,112 @@ fn anonymous_pdf_spool_child_returns_one_bounded_cited_image_page() {
 }
 
 #[test]
+fn visual_pages_stage_only_complete_page_cited_images() {
+    let worker = Path::new(env!("CARGO_BIN_EXE_fm-semantic-worker"));
+    let cancellation = CancellationToken::new();
+    let bytes = synthetic_visual_pdf(&[1, 2, 3]);
+    let mut spool = tempfile::tempfile().expect("anonymous source spool");
+    spool.write_all(&bytes).expect("source");
+    let digest = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    assert!(stage_spool_visual_pages(worker, &spool, &"0".repeat(64), &cancellation).is_err());
+    let cancelled = CancellationToken::new();
+    cancelled.cancel();
+    assert!(stage_spool_visual_pages(worker, &spool, &digest, &cancelled).is_err());
+    let mut staged =
+        stage_spool_visual_pages(worker, &spool, &digest, &cancellation).expect("stage pages");
+    assert_eq!(staged.page_count(), 3);
+    assert_eq!(
+        convert_spool_with_visual_stage(worker, &spool, &digest, &staged, &cancellation)
+            .expect("same-source text")
+            .units()
+            .len(),
+        3
+    );
+    assert!(
+        convert_spool_with_visual_stage(worker, &spool, &"0".repeat(64), &staged, &cancellation)
+            .is_err()
+    );
+    for page in 1..=3 {
+        let visual = staged
+            .next_page()
+            .expect("image")
+            .expect("page")
+            .expect("page evidence");
+        assert_eq!(
+            visual.provenance,
+            VisualProvenance::PdfImage {
+                page_number: page,
+                image_index: 0,
+            }
+        );
+        assert_eq!(visual.data.len(), 23);
+    }
+    assert!(staged.next_page().expect("end of stage").is_none());
+
+    let bytes = synthetic_visual_pdf(&[2]);
+    let mut incomplete = tempfile::tempfile().expect("anonymous incomplete source spool");
+    incomplete.write_all(&bytes).expect("source");
+    let digest = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let mut mixed =
+        stage_spool_visual_pages(worker, &incomplete, &digest, &cancellation).expect("mixed pages");
+    assert!(
+        mixed
+            .next_page()
+            .expect("text-only page")
+            .expect("page 1")
+            .is_none()
+    );
+    assert!(
+        mixed
+            .next_page()
+            .expect("image page")
+            .expect("page 2")
+            .is_some()
+    );
+    assert!(
+        mixed
+            .next_page()
+            .expect("text-only page")
+            .expect("page 3")
+            .is_none()
+    );
+    assert!(mixed.next_page().expect("end of stage").is_none());
+
+    let mut image_only_gap = Document::load_mem(&bytes).expect("synthetic PDF");
+    let page = image_only_gap.get_pages()[&1];
+    image_only_gap
+        .get_object_mut(page)
+        .expect("first page")
+        .as_dict_mut()
+        .expect("page dictionary")
+        .remove(b"Contents");
+    let mut bytes = Vec::new();
+    image_only_gap
+        .save_to(&mut bytes)
+        .expect("save missing page");
+    let mut gap = tempfile::tempfile().expect("anonymous incomplete source spool");
+    gap.write_all(&bytes).expect("source");
+    let digest = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let error = stage_spool_visual_pages(worker, &gap, &digest, &cancellation)
+        .expect_err("image-only page without extractable image");
+    assert!(
+        error
+            .to_string()
+            .contains("PDF page 1: no usable visual evidence"),
+        "unexpected page failure: {error}"
+    );
+}
+
+#[test]
 #[ignore = "requires the generated 174.2 MB synthetic scanned fixture"]
 fn anonymous_spool_extracts_the_final_synthetic_scan_page() {
     let path = std::env::var_os("PROCYON_SYNTHETIC_SCAN_PDF")
@@ -216,6 +327,46 @@ fn anonymous_spool_extracts_the_final_synthetic_scan_page() {
         }
     );
     assert_eq!((image.width, image.height), (512, 320));
+    let mut staged = stage_spool_visual_pages(
+        Path::new(env!("CARGO_BIN_EXE_fm-semantic-worker")),
+        &spool,
+        "d85243b5afaeb10f44e9f73f87424c656c53147d706e4a4643e2268c3bcb2e3e",
+        &CancellationToken::new(),
+    )
+    .expect("all synthetic scan pages staged");
+    assert_eq!(staged.page_count(), 354);
+    eprintln!(
+        "anonymous visual stage bytes: {}",
+        staged.staged_bytes().unwrap()
+    );
+    assert!(
+        convert_spool_with_visual_stage(
+            Path::new(env!("CARGO_BIN_EXE_fm-semantic-worker")),
+            &spool,
+            "d85243b5afaeb10f44e9f73f87424c656c53147d706e4a4643e2268c3bcb2e3e",
+            &staged,
+            &CancellationToken::new()
+        )
+        .expect("complete image-only PDF")
+        .units()
+        .is_empty()
+    );
+    for page in 1..=354 {
+        let visual = staged
+            .next_page()
+            .expect("bounded page")
+            .expect("page")
+            .expect("image");
+        assert_eq!(
+            visual.provenance,
+            VisualProvenance::PdfImage {
+                page_number: page,
+                image_index: 0,
+            }
+        );
+        assert_eq!((visual.width, visual.height), (512, 320));
+    }
+    assert!(staged.next_page().expect("stage end").is_none());
 }
 
 #[test]

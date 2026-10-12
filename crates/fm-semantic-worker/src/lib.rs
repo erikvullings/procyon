@@ -4870,23 +4870,11 @@ async fn complete_ingestion(
                     .await;
                     return;
                 }
-                if pending.start.pdf_images_consented {
-                    send_error(
-                        &writer,
-                        correlation_id,
-                        protocol_error(
-                            v1::ErrorCode::InvalidRequest,
-                            "large PDF text cannot omit consented images",
-                        ),
-                        state.config.limits,
-                    )
-                    .await;
-                    return;
-                }
                 let converted = pdf_text_child::convert_spool_in_worker(
                     file,
                     state.config.pdf_child_executable.as_deref(),
                     &pending.start.expected_sha256,
+                    pending.start.pdf_images_consented,
                     &pending.cancellation,
                     pending.deadline,
                     &connection.disconnected,

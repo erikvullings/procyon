@@ -1,4 +1,4 @@
-//! Opt-in, text-only converter child for bounded PDF source streams.
+//! Opt-in converter child for bounded PDF text and page-image streams.
 
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -23,26 +23,60 @@ use crate::ingestion::PdfTextSource;
 const MAX_SOURCE_BYTES: u64 = 200 * 1024 * 1024;
 const MAX_REPORT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_IMAGE_REPORT_BYTES: usize = MAX_VISUAL_BYTES + 4096;
+// Provisional experimental disk ceiling; installed four-target evidence is still required.
+const MAX_STAGED_VISUAL_BYTES: usize = 256 * 1024 * 1024;
 const MAX_ERROR_BYTES: u64 = 16 * 1024;
+const PAGE_ERROR_PREFIX: &str = "PROCYON_PDF_PAGE_ERROR:";
 // Experimental ceiling pending four-target installed qualification.
 const MAX_SAMPLED_RSS: u64 = 512 * 1024 * 1024;
 const CHILD_DEADLINE: Duration = Duration::from_secs(120);
 
 struct KillOnDrop(Child);
 
-fn read_child_output(
+fn read_child_output<S: Write>(
     reader: impl Read,
     maximum_output_bytes: usize,
-    exceeded: mpsc::Sender<()>,
-) -> io::Result<Vec<u8>> {
-    let mut bytes = Vec::new();
-    reader
-        .take(maximum_output_bytes as u64 + 1)
-        .read_to_end(&mut bytes)?;
-    if bytes.len() > maximum_output_bytes {
-        let _ = exceeded.send(());
+    failure: mpsc::Sender<io::Error>,
+    mut sink: S,
+) -> io::Result<(S, u64)> {
+    let copied = match io::copy(&mut reader.take(maximum_output_bytes as u64 + 1), &mut sink) {
+        Ok(copied) => copied,
+        Err(error) => {
+            let _ = failure.send(io::Error::new(error.kind(), error.to_string()));
+            return Err(error);
+        }
+    };
+    if copied > maximum_output_bytes as u64 {
+        let _ = failure.send(io::Error::other(
+            "PDF converter output exceeded its byte limit",
+        ));
     }
-    Ok(bytes)
+    Ok((sink, copied))
+}
+
+fn page_failure_from_stderr(stderr: &[u8]) -> Option<String> {
+    let text = std::str::from_utf8(stderr).ok()?;
+    for line in text.lines() {
+        let Some((page, reason)) = line
+            .strip_prefix(PAGE_ERROR_PREFIX)
+            .and_then(|value| value.split_once(':'))
+        else {
+            continue;
+        };
+        let page = page.parse::<u32>().ok()?;
+        if !(1..=ConversionBudgets::default().max_items).contains(&page)
+            || !matches!(
+                reason,
+                "no usable visual evidence"
+                    | "missing or multiple image candidates"
+                    | "page conversion failed"
+            )
+        {
+            return None;
+        }
+        return Some(format!("PDF page {page}: {reason}"));
+    }
+    None
 }
 
 #[derive(Serialize, Deserialize)]
@@ -94,6 +128,38 @@ pub fn convert_spool(
         .map_err(io::Error::other)
 }
 
+/// Converts text only after every visual page is staged for this same source.
+pub fn convert_spool_with_visual_stage(
+    executable: &Path,
+    spool: &File,
+    expected_sha256: &str,
+    stage: &StagedPdfVisualPages,
+    cancellation: &CancellationToken,
+) -> io::Result<fm_semantic_conversion::ConvertedDocument> {
+    if stage.source_digest() != expected_sha256 {
+        return Err(io::Error::other("PDF text and image source digests differ"));
+    }
+    let bytes = run_spool_child(
+        executable,
+        spool,
+        expected_sha256,
+        &["--pdf-text-with-visuals-child"],
+        MAX_REPORT_BYTES,
+        cancellation,
+    )?;
+    let report: PdfTextReport = serde_json::from_slice(&bytes)
+        .map_err(|_| io::Error::other("PDF converter output was invalid"))?;
+    if report.total_pages() != stage.page_count() {
+        return Err(io::Error::other("PDF text and image page counts differ"));
+    }
+    report
+        .into_document_with_visual_stage(&ConversionBudgets {
+            max_source_bytes: MAX_SOURCE_BYTES,
+            ..ConversionBudgets::default()
+        })
+        .map_err(io::Error::other)
+}
+
 /// Extracts one bounded image from one verified page in the killable child.
 ///
 /// This is not a publication path; multi-image pages and unsupported encodings
@@ -109,7 +175,7 @@ pub fn convert_spool_visual_page(
         return Err(io::Error::other("PDF page number must be positive"));
     }
     let page = page_number.to_string();
-    let mut bytes = run_spool_child(
+    let bytes = run_spool_child(
         executable,
         spool,
         expected_sha256,
@@ -117,18 +183,175 @@ pub fn convert_spool_visual_page(
         MAX_IMAGE_REPORT_BYTES,
         cancellation,
     )?;
-    let header_length = bytes
-        .get(..4)
-        .and_then(|prefix| <[u8; 4]>::try_from(prefix).ok())
-        .map(u32::from_be_bytes)
-        .ok_or_else(|| io::Error::other("PDF image report has no header length"))?
-        as usize;
-    if header_length == 0 || header_length > 4092 || bytes.len() < 4 + header_length {
+    let mut report = io::Cursor::new(bytes);
+    let image = read_image_report(&mut report, page_number)?
+        .ok_or_else(|| io::Error::other("PDF page has no image"))?;
+    if report.position() != report.get_ref().len() as u64 {
+        return Err(io::Error::other("PDF image report contains trailing data"));
+    }
+    Ok(image)
+}
+
+/// Bounded anonymous staging of one optional image per validated PDF page.
+///
+/// The stage is not a published generation and is deleted when its file closes.
+#[derive(Debug)]
+pub struct StagedPdfVisualPages {
+    file: File,
+    page_count: u32,
+    next_page: u32,
+    source_digest: String,
+}
+
+impl StagedPdfVisualPages {
+    /// Number of validated pages in this staged PDF.
+    #[must_use]
+    pub const fn page_count(&self) -> u32 {
+        self.page_count
+    }
+
+    /// Digest of the original source verified independently by both processes.
+    #[must_use]
+    pub fn source_digest(&self) -> &str {
+        &self.source_digest
+    }
+
+    /// Temporary bytes retained until this anonymous stage is dropped.
+    pub fn staged_bytes(&self) -> io::Result<u64> {
+        Ok(self.file.metadata()?.len())
+    }
+
+    /// Rewinds an already validated stage for an idempotent ingestion retry.
+    pub fn rewind(&mut self) -> io::Result<()> {
+        self.file.seek(SeekFrom::Start(4))?;
+        self.next_page = 1;
+        Ok(())
+    }
+
+    /// Reads one page at a time: `Some(None)` means text but no image on that page.
+    pub fn next_page(&mut self) -> io::Result<Option<Option<VisualAttachment>>> {
+        if self.next_page > self.page_count {
+            return Ok(None);
+        }
+        let image = read_image_report(&mut self.file, self.next_page)?;
+        self.next_page += 1;
+        Ok(Some(image))
+    }
+}
+
+/// Runs one supervised child across all pages, staging rather than retaining images.
+pub fn stage_spool_visual_pages(
+    executable: &Path,
+    spool: &File,
+    expected_sha256: &str,
+    cancellation: &CancellationToken,
+) -> io::Result<StagedPdfVisualPages> {
+    let file = tempfile::tempfile()?;
+    let file = run_spool_child_with_output(
+        executable,
+        spool,
+        expected_sha256,
+        &["--pdf-visual-pages-child"],
+        MAX_STAGED_VISUAL_BYTES,
+        cancellation,
+        file,
+    )?;
+    validated_visual_stage(file, expected_sha256)
+}
+
+fn validated_visual_stage(
+    mut file: File,
+    expected_sha256: &str,
+) -> io::Result<StagedPdfVisualPages> {
+    file.seek(SeekFrom::Start(0))?;
+    let mut count = [0_u8; 4];
+    file.read_exact(&mut count)?;
+    let page_count = u32::from_be_bytes(count);
+    if page_count == 0 || page_count > ConversionBudgets::default().max_items {
+        return Err(io::Error::other("PDF visual stage has invalid page count"));
+    }
+    let mut staged = StagedPdfVisualPages {
+        file,
+        page_count,
+        next_page: 1,
+        source_digest: expected_sha256.to_owned(),
+    };
+    while staged.next_page()?.is_some() {}
+    if staged.file.read(&mut [0_u8; 1])? != 0 {
+        return Err(io::Error::other("PDF visual stage contains trailing data"));
+    }
+    staged.file.seek(SeekFrom::Start(4))?;
+    staged.next_page = 1;
+    Ok(staged)
+}
+
+#[cfg(test)]
+pub(crate) fn staged_visual_fixture(
+    source_digest: &str,
+    images: &[Option<VisualAttachment>],
+) -> io::Result<StagedPdfVisualPages> {
+    let mut file = tempfile::tempfile()?;
+    let count = u32::try_from(images.len()).map_err(io::Error::other)?;
+    file.write_all(&count.to_be_bytes())?;
+    for (index, image) in images.iter().enumerate() {
+        let Some(image) = image else {
+            file.write_all(&0_u32.to_be_bytes())?;
+            continue;
+        };
+        let VisualProvenance::PdfImage { image_index, .. } = image.provenance else {
+            return Err(io::Error::other("fixture image lacks PDF provenance"));
+        };
+        let header = PageImageHeader {
+            page_number: u32::try_from(index + 1).map_err(io::Error::other)?,
+            image_index,
+            media_type: image.media_type.as_str().into(),
+            width: image.width,
+            height: image.height,
+            id: image.id.clone(),
+            byte_length: image.data.len(),
+        };
+        let encoded = serde_json::to_vec(&header).map_err(io::Error::other)?;
+        file.write_all(
+            &u32::try_from(encoded.len())
+                .map_err(io::Error::other)?
+                .to_be_bytes(),
+        )?;
+        file.write_all(&encoded)?;
+        file.write_all(&image.data)?;
+    }
+    validated_visual_stage(file, source_digest)
+}
+
+fn read_image_report(
+    reader: &mut impl Read,
+    page_number: u32,
+) -> io::Result<Option<VisualAttachment>> {
+    let mut length = [0_u8; 4];
+    reader.read_exact(&mut length)?;
+    let header_length = u32::from_be_bytes(length) as usize;
+    if header_length == 0 {
+        return Ok(None);
+    }
+    if header_length > 4092 {
         return Err(io::Error::other("PDF image report header is invalid"));
     }
-    let header: PageImageHeader = serde_json::from_slice(&bytes[4..4 + header_length])
+    let mut encoded = vec![0_u8; header_length];
+    reader.read_exact(&mut encoded)?;
+    let header: PageImageHeader = serde_json::from_slice(&encoded)
         .map_err(|_| io::Error::other("PDF image report metadata is invalid"))?;
-    let data = bytes.split_off(4 + header_length);
+    if header.byte_length == 0 || header.byte_length > MAX_VISUAL_BYTES {
+        return Err(io::Error::other("PDF image report byte length is invalid"));
+    }
+    let mut data = vec![0_u8; header.byte_length];
+    reader.read_exact(&mut data)?;
+    validate_image(header, data, page_number).map(Some)
+}
+
+fn validate_image(
+    header: PageImageHeader,
+    data: Vec<u8>,
+    page_number: u32,
+) -> io::Result<VisualAttachment> {
     if header.page_number != page_number
         || header.byte_length == 0
         || header.byte_length > MAX_VISUAL_BYTES
@@ -163,6 +386,26 @@ fn run_spool_child(
     maximum_output_bytes: usize,
     cancellation: &CancellationToken,
 ) -> io::Result<Vec<u8>> {
+    run_spool_child_with_output(
+        executable,
+        spool,
+        expected_sha256,
+        arguments,
+        maximum_output_bytes,
+        cancellation,
+        Vec::new(),
+    )
+}
+
+fn run_spool_child_with_output<S: Write + Send + 'static>(
+    executable: &Path,
+    spool: &File,
+    expected_sha256: &str,
+    arguments: &[&str],
+    maximum_output_bytes: usize,
+    cancellation: &CancellationToken,
+    sink: S,
+) -> io::Result<S> {
     let length = spool.metadata()?.len();
     if length == 0 || length > MAX_SOURCE_BYTES {
         return Err(io::Error::other("PDF spool exceeds child source limit"));
@@ -207,9 +450,9 @@ fn run_spool_child(
         .stdout
         .take()
         .ok_or_else(|| io::Error::other("missing child output"))?;
-    let (overflow_tx, overflow_rx) = mpsc::channel();
+    let (failure_tx, failure_rx) = mpsc::channel();
     let output =
-        thread::spawn(move || read_child_output(stdout, maximum_output_bytes, overflow_tx));
+        thread::spawn(move || read_child_output(stdout, maximum_output_bytes, failure_tx, sink));
     let mut stderr = child
         .0
         .stderr
@@ -231,10 +474,8 @@ fn run_spool_child(
         if cancellation.is_cancelled() {
             return Err(io::Error::other("PDF conversion cancelled"));
         }
-        if overflow_rx.try_recv().is_ok() {
-            return Err(io::Error::other(
-                "PDF converter output exceeded its byte limit",
-            ));
+        if let Ok(error) = failure_rx.try_recv() {
+            return Err(error);
         }
         system.refresh_processes_specifics(
             ProcessesToUpdate::Some(&[pid]),
@@ -255,23 +496,30 @@ fn run_spool_child(
         }
         if let Some(status) = child.0.try_wait()? {
             if !status.success() {
-                return Err(io::Error::other("PDF converter child failed"));
+                let stderr = errors
+                    .join()
+                    .map_err(|_| io::Error::other("PDF converter error reader failed"))??;
+                return Err(io::Error::other(
+                    page_failure_from_stderr(&stderr)
+                        .unwrap_or_else(|| "PDF converter child failed".into()),
+                ));
             }
             if !sampled {
                 return Err(io::Error::other("PDF converter had no memory sample"));
             }
-            let bytes = output
+            let result = output
                 .join()
-                .map_err(|_| io::Error::other("PDF converter output reader failed"))??;
+                .map_err(|_| io::Error::other("PDF converter output reader failed"))?;
+            let (sink, count) = result.map_err(|error| failure_rx.try_recv().unwrap_or(error))?;
             errors
                 .join()
                 .map_err(|_| io::Error::other("PDF converter error reader failed"))??;
-            if bytes.len() > maximum_output_bytes {
+            if count > maximum_output_bytes as u64 {
                 return Err(io::Error::other(
                     "PDF converter output exceeded its byte limit",
                 ));
             }
-            return Ok(bytes);
+            return Ok(sink);
         }
         if started.elapsed() >= CHILD_DEADLINE {
             return Err(io::Error::other("PDF converter child exceeded deadline"));
@@ -285,6 +533,7 @@ pub async fn convert_spool_in_worker(
     file: tokio::fs::File,
     executable: Option<&Path>,
     expected_sha256: &[u8],
+    pdf_images_consented: bool,
     cancellation: &CancellationToken,
     deadline: tokio::time::Instant,
     disconnected: &CancellationToken,
@@ -305,9 +554,22 @@ pub async fn convert_spool_in_worker(
     let guard = child_cancellation.clone();
     let child_digest = digest.clone();
     let mut task = tokio::task::spawn_blocking(move || {
-        convert_spool(&executable, &source, &child_digest, &guard)
+        if pdf_images_consented {
+            let stage = stage_spool_visual_pages(&executable, &source, &child_digest, &guard)?;
+            let converted = convert_spool_with_visual_stage(
+                &executable,
+                &source,
+                &child_digest,
+                &stage,
+                &guard,
+            )?;
+            Ok((converted, Some(stage)))
+        } else {
+            convert_spool(&executable, &source, &child_digest, &guard)
+                .map(|converted| (converted, None))
+        }
     });
-    let converted = tokio::select! {
+    let (converted, visual_stage) = tokio::select! {
         result = &mut task => result.map_err(io::Error::other)?,
         () = cancellation.cancelled() => {
             child_cancellation.cancel();
@@ -328,6 +590,7 @@ pub async fn convert_spool_in_worker(
     Ok(PdfTextSource {
         content_hash: digest,
         converted,
+        visual_stage: visual_stage.map(|stage| std::sync::Arc::new(std::sync::Mutex::new(stage))),
     })
 }
 
@@ -357,6 +620,15 @@ fn read_verified_source(expected_sha256: &str) -> io::Result<Vec<u8>> {
 
 /// Converts a path-free stdin PDF and emits one validated, complete text result.
 pub fn run(expected_sha256: &str) -> io::Result<()> {
+    run_text(expected_sha256, false)
+}
+
+/// Emits text that may be empty only for the separately staged visual source.
+pub fn run_with_visual_stage(expected_sha256: &str) -> io::Result<()> {
+    run_text(expected_sha256, true)
+}
+
+fn run_text(expected_sha256: &str, allow_empty: bool) -> io::Result<()> {
     let source = read_verified_source(expected_sha256)?;
     let budgets = ConversionBudgets {
         max_source_bytes: MAX_SOURCE_BYTES,
@@ -396,17 +668,41 @@ pub fn run(expected_sha256: &str) -> io::Result<()> {
                     .with_pdf_page_window(window),
             )
             .map_err(io::Error::other)?;
-        let ConversionOutcome::Converted(document) = outcome else {
-            return Err(io::Error::other(format!(
-                "PDF text conversion failed on page {start}: {outcome:?}"
-            )));
+        let document = match outcome {
+            ConversionOutcome::Converted(document) => document,
+            ConversionOutcome::NoTextLayer { .. } if allow_empty => {
+                fm_semantic_conversion::ConvertedDocument::new(
+                    fm_semantic_conversion::BASELINE_CONVERTER_VERSION,
+                    fm_semantic_conversion::FormatKind::Pdf,
+                    Vec::new(),
+                    Vec::new(),
+                    if window.end() - window.start() + 1 == total_pages {
+                        Vec::new()
+                    } else {
+                        vec![fm_semantic_conversion::Omission::ItemsDropped {
+                            item: "page",
+                            converted: window.end() - window.start() + 1,
+                            total: total_pages,
+                        }]
+                    },
+                )
+            }
+            _ => {
+                return Err(io::Error::other(format!(
+                    "PDF text conversion failed on page {start}: {outcome:?}"
+                )));
+            }
         };
         windows.push((window, document));
     }
     let document =
         merge_pdf_text_windows(total_pages, windows, &budgets).map_err(io::Error::other)?;
-    let report =
-        PdfTextReport::from_document(total_pages, &document, &budgets).map_err(io::Error::other)?;
+    let report = if allow_empty {
+        PdfTextReport::from_document_with_visual_stage(total_pages, &document, &budgets)
+    } else {
+        PdfTextReport::from_document(total_pages, &document, &budgets)
+    }
+    .map_err(io::Error::other)?;
     let payload = serde_json::to_vec(&report).map_err(io::Error::other)?;
     if payload.len() > MAX_REPORT_BYTES {
         return Err(io::Error::other(
@@ -422,10 +718,56 @@ pub fn run_visual_page(expected_sha256: &str, page_number: u32) -> io::Result<()
         return Err(io::Error::other("PDF page number must be positive"));
     }
     let source = read_verified_source(expected_sha256)?;
+    write_visual_page(&source, page_number, &mut io::stdout().lock())
+}
+
+/// Writes complete page-cited image reports, one at a time, without retaining
+/// the previous pages' encoded bytes.
+pub fn run_visual_pages(expected_sha256: &str) -> io::Result<()> {
+    let source = read_verified_source(expected_sha256)?;
+    let document = lopdf::Document::load_mem_with_options(
+        &source,
+        lopdf::LoadOptions::with_max_decompressed_size(
+            fm_semantic_conversion::MAX_PDF_STRUCTURAL_STREAM_BYTES,
+        ),
+    )
+    .map_err(io::Error::other)?;
+    let count = u32::try_from(
+        fm_semantic_conversion::checked_pdf_pages(&document)
+            .map_err(io::Error::other)?
+            .len(),
+    )
+    .map_err(io::Error::other)?;
+    if count == 0 || count > ConversionBudgets::default().max_items {
+        return Err(io::Error::other("PDF page count exceeds the visual budget"));
+    }
+    drop(document);
+    let mut output = io::stdout().lock();
+    output.write_all(&count.to_be_bytes())?;
+    for page in 1..=count {
+        if let Err(error) = write_visual_page(&source, page, &mut output) {
+            let reason = if error.to_string().contains("has no usable visual evidence") {
+                "no usable visual evidence"
+            } else if error
+                .to_string()
+                .contains("missing or multiple image candidates")
+            {
+                "missing or multiple image candidates"
+            } else {
+                "page conversion failed"
+            };
+            writeln!(io::stderr(), "{PAGE_ERROR_PREFIX}{page}:{reason}")?;
+            return Err(io::Error::other(format!("PDF page {page}: {reason}")));
+        }
+    }
+    Ok(())
+}
+
+fn write_visual_page(source: &[u8], page_number: u32, output: &mut impl Write) -> io::Result<()> {
     let window = PdfPageWindow::new(page_number, page_number).map_err(io::Error::other)?;
     let outcome = BaselineConverter::new()
         .convert(
-            SourceContent::Bytes(&source),
+            SourceContent::Bytes(source),
             &DocumentMetadata::unknown().with_media_type("application/pdf"),
             &ConversionContext::new()
                 .with_budgets(ConversionBudgets {
@@ -441,6 +783,12 @@ pub fn run_visual_page(expected_sha256: &str, page_number: u32) -> io::Result<()
             "PDF page {page_number} has no usable visual evidence: {outcome:?}"
         )));
     };
+    if document.visuals().is_empty()
+        && !document.units().is_empty()
+        && document.visual_omissions().is_empty()
+    {
+        return output.write_all(&0_u32.to_be_bytes());
+    }
     if document.visuals().len() != 1 || !document.visual_omissions().is_empty() {
         return Err(io::Error::other(format!(
             "PDF page {page_number} has missing or multiple image candidates"
@@ -470,7 +818,6 @@ pub fn run_visual_page(expected_sha256: &str, page_number: u32) -> io::Result<()
     if encoded.len() > 4092 || visual.data.len() > MAX_VISUAL_BYTES {
         return Err(io::Error::other("PDF image report exceeds its byte limit"));
     }
-    let mut output = io::stdout().lock();
     output.write_all(
         &u32::try_from(encoded.len())
             .map_err(io::Error::other)?
@@ -489,6 +836,26 @@ mod tests {
     use sha2::Digest as _;
 
     use super::read_child_output;
+
+    #[test]
+    fn page_error_diagnostics_accept_only_bounded_known_codes() {
+        assert_eq!(
+            super::page_failure_from_stderr(
+                b"PROCYON_PDF_PAGE_ERROR:354:no usable visual evidence\n"
+            ),
+            Some("PDF page 354: no usable visual evidence".into())
+        );
+        assert!(
+            super::page_failure_from_stderr(b"PROCYON_PDF_PAGE_ERROR:354:secret source text")
+                .is_none()
+        );
+        assert!(
+            super::page_failure_from_stderr(
+                b"PROCYON_PDF_PAGE_ERROR:999999:no usable visual evidence"
+            )
+            .is_none()
+        );
+    }
 
     struct NeverEndsAfterLimit {
         remaining: usize,
@@ -518,14 +885,67 @@ mod tests {
             remaining: 65,
             release: release_rx,
         };
-        let task = std::thread::spawn(move || read_child_output(reader, 64, overflow_tx));
+        let task =
+            std::thread::spawn(move || read_child_output(reader, 64, overflow_tx, Vec::new()));
         let result = overflow_rx.recv_timeout(Duration::from_secs(1));
         let _ = release_tx.send(());
-        assert_eq!(result, Ok(()));
+        assert!(
+            result
+                .expect("overflow signal")
+                .to_string()
+                .contains("output exceeded its byte limit")
+        );
         assert_eq!(
             task.join().expect("reader thread").expect("reader"),
-            vec![b'X'; 65]
+            (vec![b'X'; 65], 65)
         );
+    }
+
+    #[test]
+    fn failed_stage_write_signals_without_waiting_for_child_exit() {
+        #[derive(Debug)]
+        struct FailingStage;
+        impl Write for FailingStage {
+            fn write(&mut self, _bytes: &[u8]) -> io::Result<usize> {
+                Err(io::Error::other("synthetic stage disk full"))
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let (failure_tx, failure_rx) = mpsc::channel();
+        let result = read_child_output(io::Cursor::new([42_u8; 16]), 32, failure_tx, FailingStage);
+        assert!(result.is_err());
+        assert!(
+            failure_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("prompt stage failure")
+                .to_string()
+                .contains("synthetic stage disk full")
+        );
+        #[cfg(unix)]
+        {
+            let mut spool = tempfile::tempfile().expect("anonymous spool");
+            spool.write_all(b"synthetic").expect("write spool");
+            let digest = super::Sha256::digest(b"synthetic")
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            let started = Instant::now();
+            let error = super::run_spool_child_with_output(
+                std::path::Path::new("/bin/sh"),
+                &spool,
+                &digest,
+                &["-c", "while :; do printf '12345678901234567890'; done"],
+                1024,
+                &tokio_util::sync::CancellationToken::new(),
+                FailingStage,
+            )
+            .expect_err("child must stop after stage write fails");
+            assert!(error.to_string().contains("synthetic stage disk full"));
+            assert!(started.elapsed() < Duration::from_secs(2));
+        }
     }
 
     #[cfg(unix)]

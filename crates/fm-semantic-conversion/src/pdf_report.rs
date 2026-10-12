@@ -39,6 +39,25 @@ impl PdfTextReport {
         document: &ConvertedDocument,
         budgets: &ConversionBudgets,
     ) -> Result<Self, InvalidPdfTextReport> {
+        Self::from_document_inner(total_pages, document, budgets, false)
+    }
+
+    /// Accepts an empty text layer only when a separate complete visual stage
+    /// has already been verified for the same source and page count.
+    pub fn from_document_with_visual_stage(
+        total_pages: u32,
+        document: &ConvertedDocument,
+        budgets: &ConversionBudgets,
+    ) -> Result<Self, InvalidPdfTextReport> {
+        Self::from_document_inner(total_pages, document, budgets, true)
+    }
+
+    fn from_document_inner(
+        total_pages: u32,
+        document: &ConvertedDocument,
+        budgets: &ConversionBudgets,
+        allow_empty: bool,
+    ) -> Result<Self, InvalidPdfTextReport> {
         let invalid = |detail: &str| InvalidPdfTextReport(detail.into());
         if document.format() != FormatKind::Pdf
             || document.converter() != BASELINE_CONVERTER_VERSION
@@ -81,7 +100,7 @@ impl PdfTextReport {
             units,
             warnings: document.warnings().to_vec(),
         };
-        report.validate(budgets)?;
+        report.validate(budgets, allow_empty)?;
         Ok(report)
     }
 
@@ -90,7 +109,29 @@ impl PdfTextReport {
         self,
         budgets: &ConversionBudgets,
     ) -> Result<ConvertedDocument, InvalidPdfTextReport> {
-        self.validate(budgets)?;
+        self.into_document_inner(budgets, false)
+    }
+
+    /// Reconstructs empty text only when matching visual pages are staged.
+    pub fn into_document_with_visual_stage(
+        self,
+        budgets: &ConversionBudgets,
+    ) -> Result<ConvertedDocument, InvalidPdfTextReport> {
+        self.into_document_inner(budgets, true)
+    }
+
+    /// Declared page count, checked when reconstructing the report.
+    #[must_use]
+    pub const fn total_pages(&self) -> u32 {
+        self.total_pages
+    }
+
+    fn into_document_inner(
+        self,
+        budgets: &ConversionBudgets,
+        allow_empty: bool,
+    ) -> Result<ConvertedDocument, InvalidPdfTextReport> {
+        self.validate(budgets, allow_empty)?;
         let units = self
             .units
             .into_iter()
@@ -118,12 +159,16 @@ impl PdfTextReport {
         ))
     }
 
-    fn validate(&self, budgets: &ConversionBudgets) -> Result<(), InvalidPdfTextReport> {
+    fn validate(
+        &self,
+        budgets: &ConversionBudgets,
+        allow_empty: bool,
+    ) -> Result<(), InvalidPdfTextReport> {
         let invalid = |detail: &str| InvalidPdfTextReport(detail.into());
         if self.total_pages == 0 || self.total_pages > budgets.max_items {
             return Err(invalid("page count exceeds the PDF budget"));
         }
-        if self.units.is_empty()
+        if (!allow_empty && self.units.is_empty())
             || self.units.len() > budgets.max_units as usize
             || self.warnings.len() > budgets.max_units as usize
         {
@@ -162,6 +207,29 @@ mod tests {
     use crate::{
         BaselineConverter, ConversionContext, DocumentConverter, DocumentMetadata, SourceContent,
     };
+
+    #[test]
+    fn empty_pdf_text_is_valid_only_alongside_verified_visual_pages() {
+        let budgets = ConversionBudgets::default();
+        let empty = ConvertedDocument::new(
+            BASELINE_CONVERTER_VERSION,
+            FormatKind::Pdf,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        assert!(PdfTextReport::from_document(3, &empty, &budgets).is_err());
+        let report = PdfTextReport::from_document_with_visual_stage(3, &empty, &budgets)
+            .expect("image-backed empty text");
+        assert!(report.clone().into_document(&budgets).is_err());
+        assert!(
+            report
+                .into_document_with_visual_stage(&budgets)
+                .expect("image-backed reconstruction")
+                .units()
+                .is_empty()
+        );
+    }
 
     #[test]
     fn round_trip_preserves_exact_pdf_text_and_citations_and_rejects_corruption() {

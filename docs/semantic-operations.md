@@ -539,6 +539,17 @@ Publication respects Zvec's 1,024-document write limit, and one document that ex
 five-minute ingestion fail-safe is recorded as failed without aborting reconciliation of the rest
 of the enrolled root. Source conversion remains bounded at 64 MiB per document; the larger
 synthetic PDF evaluation fixture does not raise that host, IPC, or production conversion limit.
+An off-by-default development worker built with `experimental-large-pdf` instead
+negotiates a PDF-only 200 MiB source stream and converts it from an anonymous
+spool in a supervised child. With an image-enabled Gemma library, a separate
+child stages page-cited extractable rasters on anonymous temporary storage
+and the ingestion pipeline reads them one at a time into the same atomic
+text/image generation. Image-only pages without reusable rasters, unsupported
+encodings, and multi-image pages fail the replacement rather than silently
+publishing partial coverage. This development path has provisional resource
+bounds and no installed page renderer or four-target qualification; it is not
+enabled in the production worker or approved for release.
+
 Once a replacement generation is published, superseded catalogue and Zvec records are reclaimed
 in bounded batches.
 

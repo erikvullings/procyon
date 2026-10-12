@@ -152,25 +152,32 @@ async fn negotiated_pdf_spool_returns_complete_child_text_to_ingestion_backend()
         );
         assert!(unit.text.contains(&format!("Synthetic page {}", index + 1)));
     }
-    assert!(matches!(
-        client
-            .ingest_pdf_reader(
-                "consented-images",
-                IngestionScope::new("tenant", "library"),
-                "document",
-                BTreeMap::new(),
-                true,
-                std::io::Cursor::new(bytes.clone()),
-                bytes.len() as u64,
-                digest,
-            )
-            .await,
-        Err(ClientError::Remote {
-            code: v1::ErrorCode::InvalidRequest,
-            ..
-        })
-    ));
-    assert!(capture.input.lock().unwrap().is_none());
+    client
+        .ingest_pdf_reader(
+            "consented-images",
+            IngestionScope::new("tenant", "library"),
+            "document",
+            BTreeMap::new(),
+            true,
+            std::io::Cursor::new(bytes.clone()),
+            bytes.len() as u64,
+            digest,
+        )
+        .await
+        .expect("consented text-only pages have a complete visual stage");
+    let input = capture.input.lock().unwrap().take().expect("queued input");
+    assert!(input.pdf_images_consented);
+    let pdf = input
+        .pdf_text
+        .expect("verified same-source text and page stage");
+    assert_eq!(pdf.converted.units().len(), 3);
+    let images = pdf.visual_stage.expect("completed image stage");
+    let mut pages = images.lock().unwrap();
+    assert_eq!(pages.page_count(), 3);
+    for _ in 0..3 {
+        assert!(pages.next_page().expect("page").expect("present").is_none());
+    }
+    assert!(pages.next_page().expect("stage end").is_none());
     drop(client);
     task.abort();
 }
@@ -237,6 +244,82 @@ async fn large_synthetic_pdf_streams_from_host_to_child_with_complete_page_evide
     assert_eq!(pages.len(), 354);
     assert_eq!(pages.first(), Some(&1));
     assert_eq!(pages.last(), Some(&354));
+    drop(client);
+    task.abort();
+}
+
+#[cfg(feature = "experimental-large-pdf")]
+#[tokio::test]
+#[ignore = "requires the generated 174.2 MB synthetic scanned PDF"]
+async fn consented_synthetic_scan_streams_to_a_complete_page_image_stage() {
+    let path = std::env::var_os("PROCYON_SYNTHETIC_SCAN_PDF")
+        .map(PathBuf::from)
+        .expect("set PROCYON_SYNTHETIC_SCAN_PDF to the generated scan fixture");
+    assert_eq!(path.file_name().unwrap(), "synthetic-354-page-scan.pdf");
+    let source = tokio::fs::File::open(&path).await.expect("synthetic scan");
+    let length = source.metadata().await.expect("source size").len();
+    assert_eq!(length, 174_224_803);
+    let expected = "d85243b5afaeb10f44e9f73f87424c656c53147d706e4a4643e2268c3bcb2e3e";
+    let digest: [u8; 32] = std::array::from_fn(|index| {
+        u8::from_str_radix(&expected[2 * index..2 * index + 2], 16).expect("digest byte")
+    });
+    let directory = test_directory("large-scan-child-ipc");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([126; 32]);
+    let capture = Arc::new(CapturingIngestionBackend::default());
+    let config = WorkerConfig::new(endpoint.clone(), secret.clone())
+        .with_limits(
+            ProtocolLimits::default()
+                .with_pdf_ingestion_bytes(200 * 1024 * 1024)
+                .expect("PDF-specific offer"),
+        )
+        .with_pdf_child_executable(PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker")));
+    let task = tokio::spawn(WorkerServer::with_ingestion_backend(config, capture.clone()).run());
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret)
+        .await
+        .expect("client");
+    client
+        .ingest_pdf_reader(
+            "synthetic-354-page-scan",
+            IngestionScope::new("tenant", "library"),
+            "synthetic-scan",
+            BTreeMap::new(),
+            true,
+            source,
+            length,
+            digest,
+        )
+        .await
+        .expect("consented scan accepted");
+    let input = capture
+        .input
+        .lock()
+        .expect("capture")
+        .take()
+        .expect("queued scan");
+    assert!(input.content.is_empty());
+    assert!(input.pdf_images_consented);
+    let pdf = input.pdf_text.expect("verified image-backed text");
+    assert!(pdf.converted.units().is_empty());
+    let images = pdf.visual_stage.expect("completed visual stage");
+    let mut pages = images.lock().expect("stage lock");
+    assert_eq!(pages.page_count(), 354);
+    for page in 1..=354 {
+        let visual = pages
+            .next_page()
+            .expect("bounded page")
+            .expect("page")
+            .expect("image");
+        assert_eq!(
+            visual.provenance,
+            fm_semantic_conversion::VisualProvenance::PdfImage {
+                page_number: page,
+                image_index: 0,
+            }
+        );
+    }
+    assert!(pages.next_page().expect("stage end").is_none());
     drop(client);
     task.abort();
 }

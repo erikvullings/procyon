@@ -17,6 +17,19 @@ async fn main() -> Result<(), fm_semantic_worker::ServerError> {
         return fm_semantic_worker::pdf_text_child::run(&digest).map_err(Into::into);
     }
     #[cfg(feature = "experimental-large-pdf")]
+    if std::env::args_os().nth(1).as_deref()
+        == Some(std::ffi::OsStr::new("--pdf-text-with-visuals-child"))
+    {
+        let mut args = std::env::args_os().skip(2);
+        let digest = args
+            .next()
+            .and_then(|argument| argument.into_string().ok())
+            .filter(|_| args.next().is_none())
+            .ok_or_else(|| io::Error::other("PDF child requires one source digest"))?;
+        return fm_semantic_worker::pdf_text_child::run_with_visual_stage(&digest)
+            .map_err(Into::into);
+    }
+    #[cfg(feature = "experimental-large-pdf")]
     if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--pdf-visual-child")) {
         let mut args = std::env::args_os().skip(2);
         let page = args
@@ -34,6 +47,18 @@ async fn main() -> Result<(), fm_semantic_worker::ServerError> {
             .ok_or_else(|| io::Error::other("PDF visual child requires one source digest"))?;
         return fm_semantic_worker::pdf_text_child::run_visual_page(&digest, page)
             .map_err(Into::into);
+    }
+    #[cfg(feature = "experimental-large-pdf")]
+    if std::env::args_os().nth(1).as_deref()
+        == Some(std::ffi::OsStr::new("--pdf-visual-pages-child"))
+    {
+        let mut args = std::env::args_os().skip(2);
+        let digest = args
+            .next()
+            .and_then(|argument| argument.into_string().ok())
+            .filter(|_| args.next().is_none())
+            .ok_or_else(|| io::Error::other("PDF visual child requires one source digest"))?;
+        return fm_semantic_worker::pdf_text_child::run_visual_pages(&digest).map_err(Into::into);
     }
     let arguments = arguments_from(std::env::args_os().skip(1))?;
     #[cfg(feature = "semantic-runtime")]

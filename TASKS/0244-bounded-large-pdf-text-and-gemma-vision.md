@@ -98,6 +98,30 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: The off-by-default `experimental-large-pdf` worker now
+  stages PDF image evidence page by page in an anonymous owner-only file,
+  rather than retaining 354 encoded images in RAM. The killable child checks
+  the original SHA-256, validates page counts and per-image provenance,
+  fingerprints, pixels and byte bounds, and refuses an unextractable
+  image-only page or multiple images on one page; text-bearing pages without
+  images carry an explicit empty-page marker. A separate text child may
+  report zero units **only** with the same-source, page-complete visual stage.
+  The normal Gemma-consent ingestion path consumes one bounded image at a
+  time and stages all image/text vectors under a single document generation;
+  a derived-index failure preserves the previous published generation.
+  Synthetic authenticated host-to-worker IPC accepted all 354 scanned pages;
+  the scan stage occupied 174,212,146 temporary bytes. The isolated worker
+  fixture published 354 distinct page-cited `pdf_image` records in one
+  generation with a deterministic fake embedder, never with the real Gemma
+  model. On this macOS arm64 host the ignored IPC fixture ran in 35.79 s
+  (455,327,744 bytes process-group maximum RSS); the ignored worker
+  publication fixture ran in 35.58 s (383,270,912 bytes maximum RSS).
+  The current 256 MiB visual-stage disk cap and 512 MiB sampled child RSS
+  limit are **provisional**, not four-target release ceilings. The pipeline
+  still fails closed on unsupported images, multi-image pages and absent
+  page rendering. No renderer pack, real installed Gemma query, four-target
+  resource evidence, durable UI omissions, signed final candidate, tag or
+  release approval exists; release remains no-go.
 - 2026-10-12 Copilot: The opt-in converter child now has a separate
   path-free **one-page** image extraction command. The parent rechecks the
   anonymous spool's SHA-256, supervises child memory/cancellation/deadline,
