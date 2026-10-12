@@ -652,6 +652,19 @@ fn semantic_result_entry(
         .cloned()
         .or_else(|| location.name().ok())
         .unwrap_or_else(|| result.document_id.as_str().to_owned());
+    let extension = result
+        .metadata
+        .get("extension")
+        .filter(|value| !value.is_empty())
+        .cloned()
+        .or_else(|| {
+            location.name().ok().and_then(|name| {
+                std::path::Path::new(&name)
+                    .extension()?
+                    .to_str()
+                    .map(str::to_owned)
+            })
+        });
     Some(EntrySummary {
         id: result
             .metadata
@@ -669,7 +682,7 @@ fn semantic_result_entry(
         created_at: None,
         hidden: false,
         read_only: false,
-        extension: result.metadata.get("extension").cloned(),
+        extension,
         mime_type,
         icon_key: None,
         metadata_revision: 0,
@@ -816,11 +829,11 @@ mod tests {
                 document_id: DocumentId::new("document-1"),
                 metadata: BTreeMap::from([
                     ("provider_id".to_owned(), "local".to_owned()),
-                    ("uri".to_owned(), "file:///library/report.pdf".to_owned()),
-                    ("name".to_owned(), "report.pdf".to_owned()),
-                    ("media_type".to_owned(), "application/pdf".to_owned()),
+                    ("uri".to_owned(), "file:///library/page_000.png".to_owned()),
+                    ("name".to_owned(), "page_000.png".to_owned()),
+                    ("media_type".to_owned(), "image/png".to_owned()),
                 ]),
-                media_type: "application/pdf".to_owned(),
+                media_type: "image/png".to_owned(),
                 pdf_images_consented: false,
                 content: b"multilingual semantic retrieval".to_vec(),
             })
@@ -862,7 +875,7 @@ mod tests {
                         },
                         name: None,
                         entry_kinds: Vec::new(),
-                        mime_types: vec!["application/pdf".to_owned()],
+                        mime_types: vec!["image/png".to_owned()],
                         min_size_bytes: None,
                         max_size_bytes: None,
                         modified_after: None,
@@ -892,7 +905,8 @@ mod tests {
             .page(response.search_id, 0, 10)
             .expect("registered search");
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].name, "report.pdf");
+        assert_eq!(entries[0].name, "page_000.png");
+        assert_eq!(entries[0].extension.as_deref(), Some("png"));
         assert!(!more);
         let SubscriptionEvent::Event(event) = subscription.recv().await.expect("search batch")
         else {
