@@ -98,6 +98,20 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: `node scripts/generate-semantic-pdf-fixtures.mjs
+  <existing-temp-directory>` now generates deterministic, page-local 354-page
+  image-only and text-layer PDFs on demand without checking large binaries
+  into Git or overwriting existing files. The synthetic scans use Flate RGB
+  XObjects, not JPEGs or a private document. A full run produced 173,969,316
+  bytes (scan, SHA-256 `55731b028f572398ecf3063c24e5ade84e2116e8ac9e5a6818949f4d0f9eeb4a`)
+  and 188,870,838 bytes (text, SHA-256
+  `b1e36f4b3e4664d00e09475372f9e90858aaef0adfab3762aaa0ea98cc4d2285`).
+  `pdfinfo` identified 354 pages in each, `pdftotext` found the final page's
+  label in the text PDF and zero text in the scan; generated files were
+  deleted after validation. This supplies reproducible target-sized inputs,
+  **not** measured conversion memory or page-image coverage. JPEG, malformed,
+  bomb, edit/deletion, resource and cancellation cases still need separate
+  fixtures/qualification before raising the host limit.
 - 2026-10-12 Copilot: PDF text conversion budget exhaustion now fails
   ingestion for image-off/E5 PDFs too, rather than publishing later pages as
   an apparently complete document. A two-page synthetic edit that exceeds
