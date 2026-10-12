@@ -98,6 +98,19 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Release packaging audit found an additional desktop no-go:
+  `release-semantic-components.yml` signs workers for macOS arm64, Windows x64,
+  Linux x64 and Linux arm64, whereas experimental `release-desktop.yml` builds a
+  **universal** macOS application but fetches only the macOS arm64 worker/catalog.
+  The pinned Zvec runtime inventory has no macOS x64 binary. A signed four-target
+  semantic candidate therefore does not establish that Gemma works on an Intel
+  Mac in the universal installer. Before desktop approval, either qualify and
+  package an independently signed Intel worker/catalog or explicitly ship an
+  arm64-only experimental Mac artifact with the installer/updater paths adjusted
+  and its scope disclosed. Do not infer Intel support from the universal app binary
+  or relax the exact-candidate gate. The pinned no-ML Docling converter has no
+  page rasterizer; no native PDFium library, notices or renderer package is yet
+  pinned across the signed worker targets, so scanned-page support is also no-go.
 - 2026-10-12 Copilot: Fixed Knowledge's same-page PDF-image identity collision.
   Its previous de-duplication key used only document, record kind, generation and
   source position, so separate images on one PDF page collapsed into a single

@@ -17,6 +17,13 @@ export function checkDesktopGemmaRelease(manifest, semanticEnabled, experimental
   for (const target of ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64']) {
     semanticComponentReleasePlan(manifest, target);
   }
+  // The desktop workflow packages a universal Mac app, but its current catalog is arm64-only.
+  if (!manifest.targets?.['macos-x86_64']) {
+    throw new Error(
+      'experimental universal macOS desktop requires an approved macos-x86_64 worker/catalog; arm64 alone cannot run on Intel',
+    );
+  }
+  semanticComponentReleasePlan(manifest, 'macos-x86_64');
   return manifest;
 }
 

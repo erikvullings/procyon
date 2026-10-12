@@ -146,7 +146,22 @@ test('experimental desktop rejects missing consent, old candidates and mismatche
   };
   assert.throws(() => checkDesktopGemmaRelease(proposed, 'false', 'true'), /both independent/u);
   assert.throws(() => checkDesktopGemmaRelease(proposed, 'true', 'false'), /both independent/u);
-  assert.doesNotThrow(() => checkDesktopGemmaRelease(proposed, 'true', 'true'));
+  assert.throws(
+    () => checkDesktopGemmaRelease(proposed, 'true', 'true'),
+    /universal macOS desktop requires an approved macos-x86_64 worker\/catalog/u,
+  );
+  assert.throws(
+    () =>
+      checkDesktopGemmaRelease(
+        {
+          ...proposed,
+          targets: { ...targets, 'macos-x86_64': manifest.targets['linux-x86_64'] },
+        },
+        'true',
+        'true',
+      ),
+    /approved four-target experimental Gemma release/u,
+  );
   assert.throws(
     () => checkDesktopGemmaRelease({ ...proposed, experimentalGemma: undefined }, 'true', 'true'),
     /explicit experimental/u,
