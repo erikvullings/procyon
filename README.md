@@ -371,7 +371,9 @@ A distinct read-only `qualify_pdf_host_full` workflow input can run the 354-page
 synthetic scan through an enrolled host without doubling the worker-only run on
 the same runner. Its page-complete report is deliberately not release approval:
 anonymous temporary-disk peak, cross-host navigation, fallback and rollback
-remain unqualified.
+remain unqualified. The report is separately bound to the exact signed
+candidate and installed qualification run; the publication gate still
+rejects it as incomplete.
 
 ## CI
 

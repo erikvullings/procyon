@@ -712,6 +712,19 @@ jobs:
           "$RUNNER_TEMP/gemma-installed-report.json"
           candidate/semantic-component-release.json
           "$RUNNER_TEMP/gemma-pdf-bound-report.json"
+      - name: Bind full enrolled-host PDF evidence to exact installed candidate
+        if: inputs.qualify_pdf_host_full == true
+        shell: bash
+        env:
+          GEMMA_TARGET: ${{ matrix.target }}
+          CANDIDATE_RUN_ID: ${{ inputs.installed_candidate_run_id }}
+        run: >
+          node scripts/record-pdf-vision-qualification.mjs
+          "$RUNNER_TEMP/gemma-pdf-host-full.json"
+          "$RUNNER_TEMP/gemma-installed-report.json"
+          candidate/semantic-component-release.json
+          "$RUNNER_TEMP/gemma-pdf-host-bound-report.json"
+          --host
       - name: Record runner hardware and bounded installed measurements
         if: inputs.measure_installed_gemma == true
         shell: bash
@@ -770,6 +783,7 @@ jobs:
             ${{ runner.temp }}/gemma-pdf-bound-report.json
             ${{ runner.temp }}/gemma-pdf-host-smoke.json
             ${{ runner.temp }}/gemma-pdf-host-full.json
+            ${{ runner.temp }}/gemma-pdf-host-bound-report.json
             ${{ runner.temp }}/gemma-cpu/*.json
           if-no-files-found: warn
           retention-days: 14

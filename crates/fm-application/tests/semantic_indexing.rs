@@ -1168,6 +1168,7 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
                     "installed-host-vfs-one-page-synthetic-pdf-smoke"
                 },
                 "pageCount": pages,
+                "imageEvidenceCount": pages,
                 "sourceBytes": source_bytes,
                 "sourceSha256": source_sha256,
                 "hostVfsVerified": true,

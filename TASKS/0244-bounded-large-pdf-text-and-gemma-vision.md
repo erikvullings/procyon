@@ -104,7 +104,8 @@ optional Docling ML/PDFium pack is qualified on those targets.
   service publishes one complete generation with 354 distinct page-rendered
   image citations, authorizes only the enrolled workspace, resolves a live
   source and revokes its citation after deletion. It emits a distinct
-  deliberately non-approving report; the workflow refuses combined
+  candidate/run/catalog-bound, deliberately non-approving report; the
+  workflow refuses combined
   worker-only/host-full inputs to avoid two approximately three-hour runs
   in one six-hour runner. Feature-enabled test binary compiles and the
   workflow is statically read-only, but the full installed test **has not

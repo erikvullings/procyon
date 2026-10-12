@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { recordPdfVisionQualification } from './record-pdf-vision-qualification.mjs';
+import {
+  recordPdfHostQualification,
+  recordPdfVisionQualification,
+} from './record-pdf-vision-qualification.mjs';
 
 const sourceRevision = 'a'.repeat(40);
 const catalogSha256 = 'b'.repeat(64);
@@ -89,6 +92,43 @@ test('installed evidence cannot be bound to a different source, target or incomp
         candidate,
         identity,
       ),
+    /exact signed installed candidate/u,
+  );
+});
+
+test('full enrolled-host PDF evidence binds exact candidate but remains no-go', () => {
+  const fullHost = {
+    scope: 'installed-host-vfs-354-page-synthetic-pdf-probe',
+    pageCount: 354,
+    imageEvidenceCount: 354,
+    sourceBytes: measured.sourceBytes,
+    sourceSha256: measured.sourceSha256,
+    hostVfsVerified: true,
+    workspaceIsolationVerified: true,
+    currentContentAndDeletionVerified: true,
+  };
+  const report = recordPdfHostQualification(fullHost, lifecycle, candidate, identity);
+  assert.equal(report.candidateSourceRevision, sourceRevision);
+  assert.equal(report.catalogSha256, catalogSha256);
+  assert.equal(report.decision, 'noGo');
+  assert.equal(report.hostVfsVerified, true);
+  assert.equal(report.resourceCeilingQualified, false);
+  assert.throws(
+    () =>
+      recordPdfHostQualification(
+        { ...fullHost, imageEvidenceCount: 353 },
+        lifecycle,
+        candidate,
+        identity,
+      ),
+    /exact signed installed candidate/u,
+  );
+  assert.throws(
+    () =>
+      recordPdfHostQualification(fullHost, lifecycle, candidate, {
+        ...identity,
+        qualificationSourceRevision: 'c'.repeat(40),
+      }),
     /exact signed installed candidate/u,
   );
 });

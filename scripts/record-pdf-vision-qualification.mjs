@@ -3,16 +3,26 @@ import { fileURLToPath } from 'node:url';
 
 const sourceHash = 'f2e8e12f962f43b5e384dbb8a2648c8ce88213a9895bd11bb5e6fc7b350d3964';
 
-export function recordPdfVisionQualification(measured, lifecycle, candidate, identity) {
+function exactCandidateTarget(lifecycle, candidate, identity) {
   const { target, qualificationRunId, qualificationSourceRevision, candidateRunId } = identity;
   const approvedTarget = candidate.targets?.[target];
   if (
     !approvedTarget ||
+    !/^[1-9][0-9]*$/u.test(String(qualificationRunId)) ||
     !/^[0-9a-f]{40}$/u.test(candidate.sourceRevision ?? '') ||
     candidate.sourceRevision !== qualificationSourceRevision ||
     candidate.qualificationRunId !== Number(candidateRunId) ||
     lifecycle.target !== target ||
-    lifecycle.catalogSha256 !== approvedTarget.catalogSha256 ||
+    lifecycle.catalogSha256 !== approvedTarget.catalogSha256
+  ) {
+    throw new Error('PDF vision evidence does not match the exact signed installed candidate');
+  }
+}
+
+export function recordPdfVisionQualification(measured, lifecycle, candidate, identity) {
+  exactCandidateTarget(lifecycle, candidate, identity);
+  const { target, qualificationRunId, qualificationSourceRevision, candidateRunId } = identity;
+  if (
     measured.sourceBytes !== 175_530_108 ||
     measured.sourceSha256 !== sourceHash ||
     measured.pageCount !== 354 ||
@@ -60,14 +70,54 @@ export function recordPdfVisionQualification(measured, lifecycle, candidate, ide
   };
 }
 
+export function recordPdfHostQualification(measured, lifecycle, candidate, identity) {
+  exactCandidateTarget(lifecycle, candidate, identity);
+  if (
+    measured.scope !== 'installed-host-vfs-354-page-synthetic-pdf-probe' ||
+    measured.sourceBytes !== 175_530_108 ||
+    measured.sourceSha256 !== sourceHash ||
+    measured.pageCount !== 354 ||
+    measured.imageEvidenceCount !== 354 ||
+    measured.hostVfsVerified !== true ||
+    measured.workspaceIsolationVerified !== true ||
+    measured.currentContentAndDeletionVerified !== true
+  ) {
+    throw new Error('PDF host evidence does not match the exact signed installed candidate');
+  }
+  return {
+    schemaVersion: 1,
+    decision: 'noGo',
+    scope: measured.scope,
+    target: identity.target,
+    qualificationRunId: identity.qualificationRunId,
+    qualificationSourceRevision: identity.qualificationSourceRevision,
+    candidateRunId: Number(identity.candidateRunId),
+    candidateSourceRevision: candidate.sourceRevision,
+    catalogSha256: lifecycle.catalogSha256,
+    sourceBytes: measured.sourceBytes,
+    sourceSha256: measured.sourceSha256,
+    pageCount: measured.pageCount,
+    imageEvidenceCount: measured.imageEvidenceCount,
+    hostVfsVerified: true,
+    workspaceIsolationVerified: true,
+    currentContentAndDeletionVerified: true,
+    resourceCeilingQualified: false,
+    hostPeakRssBytes: null,
+    temporaryDiskPeakBytes: null,
+    limitations:
+      'One installed Tauri application-service full-scan fixture; no measured host RSS, anonymous temporary-disk peak, cross-host navigation, upgrade/rollback or CPU fallback.',
+  };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [, , measuredPath, lifecyclePath, candidatePath, output] = process.argv;
-  if (!measuredPath || !lifecyclePath || !candidatePath || !output) {
+  const [, , measuredPath, lifecyclePath, candidatePath, output, mode] = process.argv;
+  if (!measuredPath || !lifecyclePath || !candidatePath || !output || (mode && mode !== '--host')) {
     throw new Error(
-      'Usage: record-pdf-vision-qualification.mjs <measured> <lifecycle> <candidate> <output>',
+      'Usage: record-pdf-vision-qualification.mjs <measured> <lifecycle> <candidate> <output> [--host]',
     );
   }
-  const report = recordPdfVisionQualification(
+  const record = mode === '--host' ? recordPdfHostQualification : recordPdfVisionQualification;
+  const report = record(
     JSON.parse(fs.readFileSync(measuredPath, 'utf8')),
     JSON.parse(fs.readFileSync(lifecyclePath, 'utf8')),
     JSON.parse(fs.readFileSync(candidatePath, 'utf8')),

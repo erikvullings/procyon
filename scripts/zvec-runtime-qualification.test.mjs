@@ -274,6 +274,8 @@ test('full enrolled-host PDF qualification is a separate read-only installed run
   const installed = JSON.stringify(workflow.jobs['installed-gemma-qualification']);
   assert.match(installed, /PROCYON_GEMMA_PDF_HOST_FULL_REPORT/u);
   assert.match(installed, /gemma-pdf-host-full\.json/u);
+  assert.match(installed, /gemma-pdf-host-bound-report\.json/u);
+  assert.match(installed, /record-pdf-vision-qualification\.mjs/u);
   assert.match(installed, /manifest\.sourceRevision !== process\.env\.GITHUB_SHA/u);
   assert.match(workflow.jobs['semantic-publish'].if, /qualify_pdf_host_full != true/u);
   assert.match(workflow.jobs['semantic-payloads'].if, /qualify_pdf_host_full != true/u);
