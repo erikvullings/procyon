@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -28,6 +29,21 @@ const MAX_SAMPLED_RSS: u64 = 512 * 1024 * 1024;
 const CHILD_DEADLINE: Duration = Duration::from_secs(120);
 
 struct KillOnDrop(Child);
+
+fn read_child_output(
+    reader: impl Read,
+    maximum_output_bytes: usize,
+    exceeded: mpsc::Sender<()>,
+) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader
+        .take(maximum_output_bytes as u64 + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > maximum_output_bytes {
+        let _ = exceeded.send(());
+    }
+    Ok(bytes)
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -186,19 +202,14 @@ fn run_spool_child(
             .stderr(Stdio::piped())
             .spawn()?,
     );
-    let mut stdout = child
+    let stdout = child
         .0
         .stdout
         .take()
         .ok_or_else(|| io::Error::other("missing child output"))?;
-    let output = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stdout
-            .by_ref()
-            .take(maximum_output_bytes as u64 + 1)
-            .read_to_end(&mut bytes)?;
-        Ok::<_, io::Error>(bytes)
-    });
+    let (overflow_tx, overflow_rx) = mpsc::channel();
+    let output =
+        thread::spawn(move || read_child_output(stdout, maximum_output_bytes, overflow_tx));
     let mut stderr = child
         .0
         .stderr
@@ -219,6 +230,11 @@ fn run_spool_child(
     loop {
         if cancellation.is_cancelled() {
             return Err(io::Error::other("PDF conversion cancelled"));
+        }
+        if overflow_rx.try_recv().is_ok() {
+            return Err(io::Error::other(
+                "PDF converter output exceeded its byte limit",
+            ));
         }
         system.refresh_processes_specifics(
             ProcessesToUpdate::Some(&[pid]),
@@ -462,4 +478,79 @@ pub fn run_visual_page(expected_sha256: &str, page_number: u32) -> io::Result<()
     )?;
     output.write_all(&encoded)?;
     output.write_all(&visual.data)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{self, Read, Write};
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    use sha2::Digest as _;
+
+    use super::read_child_output;
+
+    struct NeverEndsAfterLimit {
+        remaining: usize,
+        release: mpsc::Receiver<()>,
+    }
+
+    impl Read for NeverEndsAfterLimit {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            if self.remaining > 0 {
+                let count = buffer.len().min(self.remaining);
+                buffer[..count].fill(b'X');
+                self.remaining -= count;
+                return Ok(count);
+            }
+            self.release
+                .recv()
+                .map_err(|_| io::Error::other("test reader was not released"))?;
+            Ok(0)
+        }
+    }
+
+    #[test]
+    fn oversized_child_output_signals_without_waiting_for_eof() {
+        let (overflow_tx, overflow_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let reader = NeverEndsAfterLimit {
+            remaining: 65,
+            release: release_rx,
+        };
+        let task = std::thread::spawn(move || read_child_output(reader, 64, overflow_tx));
+        let result = overflow_rx.recv_timeout(Duration::from_secs(1));
+        let _ = release_tx.send(());
+        assert_eq!(result, Ok(()));
+        assert_eq!(
+            task.join().expect("reader thread").expect("reader"),
+            vec![b'X'; 65]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn oversized_child_is_stopped_before_its_deadline() {
+        let mut spool = tempfile::tempfile().expect("anonymous spool");
+        spool.write_all(b"synthetic").expect("write spool");
+        let digest = super::Sha256::digest(b"synthetic")
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let started = Instant::now();
+        let error = super::run_spool_child(
+            std::path::Path::new("/bin/sh"),
+            &spool,
+            &digest,
+            &["-c", "while :; do printf '12345678901234567890'; done"],
+            1024,
+            &tokio_util::sync::CancellationToken::new(),
+        )
+        .expect_err("oversized output must stop the child");
+        assert!(
+            error.to_string().contains("output exceeded its byte limit"),
+            "unexpected child error: {error}"
+        );
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
 }
