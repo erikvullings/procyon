@@ -218,6 +218,28 @@ test('Gemma qualification is explicit and uses verified originals on every targe
   assert.match(JSON.stringify(publish), /semantic_production_catalog/u);
 });
 
+test('354-page installed PDF vision qualification is opt-in and cannot publish', () => {
+  const workflow = loadYaml(
+    fs.readFileSync(path.resolve('.github/workflows/release-semantic-components.yml'), 'utf8'),
+  );
+  assert.equal(workflow.on.workflow_dispatch.inputs.qualify_pdf_vision.default, false);
+  assert.match(
+    workflow.jobs['validate-pdf-vision-request'].steps[0].run,
+    /INSTALLED_CANDIDATE_SOURCE_REVISION/u,
+  );
+  assert.match(workflow.jobs['installed-gemma-qualification'].if, /qualify_installed_gemma/u);
+  assert.match(
+    JSON.stringify(workflow.jobs['installed-gemma-qualification']),
+    /PROCYON_GEMMA_PDF_QUALIFICATION_REPORT/u,
+  );
+  assert.match(
+    JSON.stringify(workflow.jobs['installed-gemma-qualification']),
+    /record-pdf-vision-qualification\.mjs/u,
+  );
+  assert.match(workflow.jobs['semantic-publish'].if, /qualify_pdf_vision != true/u);
+  assert.match(workflow.jobs['semantic-payloads'].if, /qualify_pdf_vision != true/u);
+});
+
 test('private qualification rejects release events and enabled release gates', () => {
   assert.deepEqual(
     assertQualificationDispatchEnvironment({

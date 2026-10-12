@@ -98,6 +98,20 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Added an opt-in **read-only**, exact-source installed
+  Gemma/PDFium four-target qualification path. Its ignored packaged-worker
+  test generates only the deterministic 175,530,108-byte synthetic scan,
+  streams it over authenticated IPC with immutable image consent, and
+  requires 354 completed page-render image records and all 354 exact page
+  citations. The installed qualifier assembles the signed PDFium pair and
+  calls this test only when `qualify_pdf_vision` and installed qualification
+  are both requested; the publish job excludes that input. The candidate-
+  bound report records exact source/catalog identity and deliberately says
+  `noGo`, with resource ceilings unset. Tests for workflow safety, report
+  binding and test-binary compilation passed, but **the actual signed
+  four-target real-Gemma run has not occurred**. The current report has no
+  host VFS, peak RSS/temp-disk, CPU fallback or query-quality proof. Do not
+  use it to approve or publish a candidate.
 - 2026-10-12 Copilot: The read-only installed Gemma lifecycle qualifier now
   assembles verified PDFium loader and full notices beside its isolated
   worker when a signed catalog selected both, and refuses a one-sided

@@ -357,6 +357,10 @@ Optional semantic workers, native runtimes, models, and signed catalogs use the 
 Qualification emits a reviewed fingerprint lock; publication reuses the exact retained artifacts.
 Desktop releases only fetch catalogs named by that lock, so semantic component failures do not
 block base application packaging and application failures do not rebuild component assets.
+The separately opt-in `qualify_pdf_vision` input runs a read-only installed Gemma worker test on
+a deterministic 354-page synthetic scan when paired with `qualify_installed_gemma` and an exact
+retained signed candidate. It cannot publish a release; its candidate-bound report explicitly
+remains **no-go** without host/VFS, resource-ceiling, fallback, and quality evidence.
 
 ## CI
 

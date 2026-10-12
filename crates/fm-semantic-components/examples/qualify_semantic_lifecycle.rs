@@ -519,6 +519,27 @@ fn qualify_installed_gemma(
             );
         }
     }
+    if let Some(report) = std::env::var_os("PROCYON_GEMMA_PDF_QUALIFICATION_REPORT") {
+        let status = std::process::Command::new(test)
+            .args([
+                "--exact",
+                "packaged_gemma_indexes_all_synthetic_scan_pages_offline",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("PROCYON_SEMANTIC_PRODUCTION_WORKER", &launch_worker)
+            .env("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY", &native)
+            .env(loader_variable, std::env::join_paths(&loader_paths)?)
+            .env(
+                "PROCYON_GEMMA_PACKAGED_FILES",
+                serde_json::to_string(&originals)?,
+            )
+            .env("PROCYON_GEMMA_PDF_QUALIFICATION_REPORT", report)
+            .status()?;
+        if !status.success() {
+            return Err(format!("installed 354-page Gemma scan failed: {status}").into());
+        }
+    }
     Ok(())
 }
 

@@ -16,6 +16,8 @@ use fm_semantic_worker::{
 };
 #[cfg(feature = "gemma-native")]
 use serde_json::json;
+#[cfg(feature = "gemma-native")]
+use sha2::{Digest, Sha256};
 
 fn required_path(variable: &str) -> PathBuf {
     PathBuf::from(std::env::var_os(variable).unwrap_or_else(|| panic!("{variable} is required")))
@@ -70,6 +72,175 @@ async fn wait_for_ingestion(
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     panic!("packaged ingestion did not finish within {timeout:?}");
+}
+
+#[cfg(feature = "gemma-native")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires an exact signed PDFium-enabled Gemma worker, installed originals, and a long-running isolated synthetic fixture"]
+async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
+    let original_files: BTreeMap<String, PathBuf> = serde_json::from_str(
+        &std::env::var("PROCYON_GEMMA_PACKAGED_FILES").expect("verified installed original files"),
+    )
+    .unwrap();
+    let files = GemmaNativeFiles::from_original_files(&original_files).unwrap();
+    let native = required_path("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY");
+    let pdfium_name = if cfg!(target_os = "macos") {
+        "libpdfium.dylib"
+    } else if cfg!(windows) {
+        "pdfium.dll"
+    } else {
+        "libpdfium.so"
+    };
+    assert!(native.join(pdfium_name).is_file());
+    assert!(native.join("pdfium-licenses.txt").is_file());
+    let fixture_root = tempfile::tempdir().unwrap();
+    let source = fixture_root.path().join("synthetic-354-page-rle-scan.pdf");
+    let generator = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/generate-large-pdf-fixture.mjs");
+    let output = std::process::Command::new("node")
+        .args([
+            "--",
+            generator.to_str().unwrap(),
+            "--variant",
+            "rle-scan",
+            "--output",
+        ])
+        .arg(&source)
+        .output()
+        .expect("generate deterministic synthetic scan");
+    assert!(
+        output.status.success(),
+        "synthetic scan generation failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let mut input = std::fs::File::open(&source).unwrap();
+    let bytes = input.metadata().unwrap().len();
+    assert_eq!(bytes, 175_530_108);
+    let mut hasher = Sha256::new();
+    let mut chunk = [0_u8; 64 * 1024];
+    loop {
+        let count = std::io::Read::read(&mut input, &mut chunk).unwrap();
+        if count == 0 {
+            break;
+        }
+        hasher.update(&chunk[..count]);
+    }
+    let digest: [u8; 32] = hasher.finalize().into();
+    let digest_hex = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    assert_eq!(
+        digest_hex,
+        "f2e8e12f962f43b5e384dbb8a2648c8ce88213a9895bd11bb5e6fc7b350d3964"
+    );
+    let runtime = tempfile::tempdir().unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let launch = ManagedWorkerLaunch::new_gemma(
+        required_path("PROCYON_SEMANTIC_PRODUCTION_WORKER"),
+        data.path().to_owned(),
+        native,
+        files,
+        128,
+        GemmaMedia {
+            images: true,
+            audio: false,
+            video: false,
+        },
+    );
+    let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
+    let client = WorkerConnector::desktop_managed_resolved(runtime.path(), resolver)
+        .with_startup_timeout(Duration::from_secs(30))
+        .connect()
+        .await
+        .expect("start signed installed Gemma worker");
+    let started = Instant::now();
+    let job_id = client
+        .ingest_pdf_reader(
+            "qualify-354-page-scan",
+            IngestionScope::new("qualification-tenant", "qualification-library"),
+            "synthetic-354-page-scan",
+            BTreeMap::from([
+                ("occurrence_id".into(), "synthetic-scan-occurrence".into()),
+                ("source_id".into(), "synthetic-scan-source".into()),
+                ("root_id".into(), "synthetic-scan-root".into()),
+            ]),
+            true,
+            tokio::fs::File::open(&source).await.unwrap(),
+            bytes,
+            digest,
+        )
+        .await
+        .expect("authenticated PDF stream");
+    let mut last_progress = 0;
+    loop {
+        let job = client
+            .ingestion_job("qualification-tenant", "qualification-library", &job_id)
+            .await
+            .expect("signed worker job progress");
+        assert_ne!(job.state, IngestionState::Failed, "{:?}", job.detail);
+        assert_ne!(job.state, IngestionState::Cancelled);
+        assert!(job.completed_units >= last_progress || job.state == IngestionState::Completed);
+        last_progress = job.completed_units;
+        if job.state == IngestionState::Completed {
+            assert_eq!(job.completed_units, 354);
+            break;
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(4 * 60 * 60),
+            "synthetic installed qualification exceeded the test-runner limit"
+        );
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    let index_root = data.path().join("indexes");
+    let catalogs = std::fs::read_dir(index_root)
+        .unwrap()
+        .map(|entry| entry.unwrap().path().join("catalog.sqlite"))
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    assert_eq!(catalogs.len(), 1, "one isolated Gemma image index");
+    let catalog = rusqlite::Connection::open(&catalogs[0]).unwrap();
+    let mut statement = catalog
+        .prepare(
+            "SELECT r.provenance FROM records r
+             JOIN generations g ON g.tenant_id = r.tenant_id
+               AND g.library_id = r.library_id AND g.document_id = r.document_id
+               AND g.generation = r.generation
+             WHERE r.document_id = 'synthetic-354-page-scan'
+               AND r.record_kind = 'pdf_image' AND g.state = 'complete'",
+        )
+        .unwrap();
+    let records = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .map(|record| {
+            let record = record.unwrap();
+            let provenance: serde_json::Value = serde_json::from_str(&record).unwrap();
+            assert_eq!(provenance["value"]["kind"], "pdfPageRender");
+            provenance["value"]["page_number"].as_u64().unwrap()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(records.len(), 354, "one image record per synthetic page");
+    let pages = records
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(pages, (1..=354).collect());
+    if let Some(report) = std::env::var_os("PROCYON_GEMMA_PDF_QUALIFICATION_REPORT") {
+        let backend = std::fs::read_to_string(runtime.path().join("gemma-backend")).unwrap();
+        std::fs::write(
+            report,
+            serde_json::to_vec_pretty(&json!({
+                "sourceBytes": bytes,
+                "sourceSha256": digest_hex,
+                "pageCount": pages.len(),
+                "imageEvidenceCount": pages.len(),
+                "backend": backend.trim(),
+                "elapsedSeconds": started.elapsed().as_secs_f64(),
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
 }
 
 fn terminate_worker(pid: &str) {
