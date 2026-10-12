@@ -3166,6 +3166,8 @@ mod tests {
             .coordinator
             .ingest(&document, &CancellationToken::new())
             .expect("publish complete rendered generation");
+        let complete_job = fixture.catalog.job(&document.job_id).unwrap().unwrap();
+        assert_eq!((complete_job.completed, complete_job.total), (354, 354));
         let ids = fixture
             .index
             .records

@@ -106,6 +106,12 @@ optional Docling ML/PDFium pack is qualified on those targets.
   minimum packaging safeguard, **not** evidence of 354-page installed
   coverage, target resource limits or release GO. The existing blocked
   candidate remains blocked.
+- 2026-10-12 Copilot: Re-ran the isolated 175,530,108-byte, SHA-256-pinned
+  354-page RLE scan through PDFium, fake-Gemma-identity image embedding, and
+  atomic worker generation after the progress change: all 354 page citations
+  published, the complete job reported 354/354 work units, and failure of a
+  replacement left the prior generation intact (48.52 s macOS arm64 debug
+  test). This does not exercise installed real Gemma or host VFS/IPC.
 - 2026-10-12 Copilot: Worker job progress is now persisted with a backward-
   compatible catalog schema 7 extension (including old catalogs without
   progress columns, so the previous worker can still reopen the catalog),
