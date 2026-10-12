@@ -1008,6 +1008,7 @@ struct ChunkIdentity {
     record_kind: String,
     generation: u64,
     source_position: u32,
+    image_provenance: Option<String>,
 }
 
 impl ChunkIdentity {
@@ -1017,6 +1018,8 @@ impl ChunkIdentity {
             record_kind: evidence.record_kind.clone(),
             generation: evidence.generation,
             source_position: evidence.source_position,
+            image_provenance: (evidence.record_kind == "pdf_image")
+                .then(|| evidence.provenance.clone()),
         }
     }
 }
@@ -2833,6 +2836,68 @@ mod tests {
             retrieval.evidence[0].duplicate_source_ids,
             ["source-a-copy"]
         );
+    }
+
+    #[test]
+    fn distinct_pdf_images_on_one_page_remain_visible_across_duplicate_occurrences() {
+        let path = catalog_path();
+        let catalog = fixture(&path);
+        let image_record = |id: &str, occurrence_id: &str, image_index: u32| {
+            let mut record = record(id, occurrence_id, 1);
+            record.record_kind = "pdf_image".into();
+            record.content.clear();
+            record.token_count = 0;
+            record.provenance = serde_json::to_string(&ChunkProvenance::Exact(
+                fm_semantic_conversion::Provenance::PdfImage {
+                    page_number: 1,
+                    image_index,
+                },
+            ))
+            .expect("PDF image provenance");
+            record
+        };
+        let pdf_occurrence = |id, source| Occurrence {
+            media_type: "application/pdf".into(),
+            ..occurrence(id, source, "root-a", "workspace-a", true)
+        };
+        publish(
+            &catalog,
+            "tenant-a",
+            "document-pdf",
+            vec![
+                pdf_occurrence("pdf-a", "source-pdf-a"),
+                pdf_occurrence("pdf-b", "source-pdf-b"),
+            ],
+            vec![
+                image_record("img-1", "pdf-a", 1),
+                image_record("img-2", "pdf-a", 2),
+                image_record("img-1-copy", "pdf-b", 1),
+            ],
+        );
+        let service = KnowledgeRetrievalService::new(
+            catalog,
+            None,
+            None,
+            Some(FakeFullTextIndex::returning(vec![vec![
+                "img-1",
+                "img-2",
+                "img-1-copy",
+            ]])),
+        );
+        let retrieved = service
+            .retrieve(
+                request(
+                    KnowledgeRoute::FullText,
+                    KnowledgeRetrievalPolicy {
+                        result_limit: 3,
+                        ..policy()
+                    },
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("page-image evidence");
+        assert_eq!(record_ids(&retrieved), ["img-1", "img-2"]);
+        assert_eq!(retrieved.evidence[0].duplicate_source_ids, ["source-pdf-b"]);
     }
 
     #[test]

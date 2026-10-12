@@ -98,6 +98,14 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Fixed Knowledge's same-page PDF-image identity collision.
+  Its previous de-duplication key used only document, record kind, generation and
+  source position, so separate images on one PDF page collapsed into a single
+  result. Exact image provenance now distinguishes images while identical
+  image records across source occurrences still coalesce. A public retrieval
+  regression with two interleaved image candidates and a duplicate occurrence
+  failed before the change and passes after it, as does the worker library suite.
+  This does not change the production 64 MiB cap or the release no-go.
 - 2026-10-12 Copilot: File-primary semantic results now distinguish an exact `pdf_image`
   match from source-level PDF text: the selected result shows a localized embedded-image
   page citation, does not fetch/display the whole PDF as an image, and opens its source
