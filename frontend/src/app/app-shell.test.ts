@@ -3158,7 +3158,7 @@ describe('AppShell', () => {
     expect(searchInput?.value).toBe('ERROR');
   });
 
-  it('submits a selected bundled concept to the client and reports a failed start', async () => {
+  it('handles failed, empty, and matched searches from a selected bundled concept', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     const workspace = await client.startWorkspace();
     const status = await client.getSemanticLibraryStatus();
@@ -3197,7 +3197,9 @@ describe('AppShell', () => {
     document.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'F7', altKey: true, bubbles: true }),
     );
-    await vi.waitFor(() => expect(root.querySelector('.fm-find-files-modes')).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-files-modal.active')).not.toBeNull(),
+    );
     [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
       .find((button) => button.textContent === 'Find by concept')
       ?.click();
@@ -3212,9 +3214,13 @@ describe('AppShell', () => {
     );
     root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
     m.redraw.sync();
-    [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
-      .find((button) => button.textContent?.trim() === 'Search')
-      ?.click();
+    const submit = [
+      ...root.querySelectorAll<HTMLButtonElement>(
+        '.fm-find-files-modal.active .modal-footer button',
+      ),
+    ].find((button) => button.textContent?.trim() === 'Search');
+    expect(submit?.disabled).toBe(false);
+    submit?.click();
     await vi.waitFor(() => expect(startSearch).toHaveBeenCalledOnce());
     expect(startSearch.mock.calls[0]?.[0].structuredQuery?.semantic?.query).toContain(
       'Mental stress',
@@ -3223,6 +3229,8 @@ describe('AppShell', () => {
       vocabularyId: 'unesco-psychology',
       conceptUri: 'http://vocabularies.unesco.org/thesaurus/concept13013',
     });
+    const syntheticQuery = startSearch.mock.calls[0]?.[0].structuredQuery?.semantic?.query;
+    if (!syntheticQuery) throw new Error('Missing synthetic concept query');
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-find-files-body [role="status"]')?.textContent).toContain(
         'Starting search',
@@ -3255,6 +3263,65 @@ describe('AppShell', () => {
         breadcrumb.textContent?.includes('Mental stress (UNESCO)'),
       ),
     ).toBe(true);
+
+    const location = { providerId: 'mock', uri: 'mock:///Documents/report.pdf' };
+    const file = await client.loadEditableFile({ location });
+    await client.saveEditableFile({
+      location,
+      content: syntheticQuery,
+      expectedRevision: file.revision,
+      overwriteConflict: false,
+    });
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F7', altKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-files-modal.active')).not.toBeNull(),
+    );
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelector('#find-files-concept')).not.toBeNull());
+    const nextFilter = root.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!nextFilter) throw new Error('Concept filter missing on retry');
+    nextFilter.value = 'Mental stress';
+    nextFilter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-concept-choice')).not.toBeNull());
+    root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
+    m.redraw.sync();
+    const retrySubmit = [
+      ...root.querySelectorAll<HTMLButtonElement>(
+        '.fm-find-files-modal.active .modal-footer button',
+      ),
+    ].find((button) => button.textContent?.trim() === 'Search');
+    expect(retrySubmit?.disabled).toBe(false);
+    retrySubmit?.click();
+    await vi.waitFor(() => expect(retry).toHaveBeenCalledTimes(2));
+    const matchResponse = await retry.mock.results[1]?.value;
+    expect(matchResponse?.semanticResults).toHaveLength(1);
+    await vi.waitFor(() =>
+      expect(
+        [...root.querySelectorAll('.fm-pane-tab')].filter((tab) =>
+          tab.textContent?.includes('Related to Mental stress (UNESCO)'),
+        ),
+      ).toHaveLength(2),
+    );
+    const latestTab = [...root.querySelectorAll('.fm-pane-tab')]
+      .filter((tab) => tab.textContent?.includes('Related to Mental stress (UNESCO)'))
+      .at(-1);
+    const resultsPane = latestTab?.closest('.fm-pane');
+    await vi.waitFor(() => {
+      expect(
+        [...(resultsPane?.querySelectorAll('.fm-directory-row') ?? [])].some((row) =>
+          row.textContent?.includes('report'),
+        ),
+      ).toBe(true);
+      expect(resultsPane?.querySelector('.fm-semantic-evidence')?.textContent).not.toContain(
+        'No matches',
+      );
+    });
+    expect(retry).toHaveBeenCalledTimes(2);
   });
 
   it('closes the Lister viewer via its close button', async () => {
