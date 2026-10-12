@@ -98,6 +98,15 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Cancelled and resource-paused worker attempts no longer
+  spend the three-attempt **failure** budget; a cancellation during retry
+  backoff retains preceding fatal attempts. A two-page distinct-image PDF
+  fixture cancels after the first cached image embedding, keeps the previous
+  text generation visible, and resumes with one remaining image embedding
+  before atomically publishing both page citations. This protects the
+  existing durable per-image cache but does not schedule automatic document
+  continuation or remove the five-minute host timeout; 354 real Gemma images
+  remain release no-go.
 - 2026-10-12 Copilot: Missing or invalid adjacent PDFium now fails the
   supervised synthetic inline-image stage with a bounded, page-specific
   `renderer unavailable` reason rather than the generic `page conversion

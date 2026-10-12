@@ -706,7 +706,7 @@ impl IngestionCoordinator {
         let retry_delay = retry_backoff(previous_attempts);
         let retry_started = std::time::Instant::now();
         while retry_started.elapsed() < retry_delay {
-            self.check_cancelled(document, previous_attempts, cancellation)?;
+            self.check_cancelled(document, previous_attempts + 1, cancellation)?;
             std::thread::sleep(
                 retry_delay
                     .saturating_sub(retry_started.elapsed())
@@ -1461,8 +1461,16 @@ impl IngestionCoordinator {
         completed: u64,
         total: u64,
     ) -> Result<(), IngestionError> {
-        self.catalog
-            .upsert_job(&document.job_id, stage.as_str(), attempts, detail)?;
+        self.catalog.upsert_job(
+            &document.job_id,
+            stage.as_str(),
+            if matches!(stage, IngestionStage::Paused | IngestionStage::Cancelled) {
+                attempts.saturating_sub(1)
+            } else {
+                attempts
+            },
+            detail,
+        )?;
         self.events.publish(IngestionProgress {
             job_id: document.job_id.clone(),
             stage,
@@ -1623,6 +1631,7 @@ mod tests {
         calls: Mutex<usize>,
         media_calls: Mutex<usize>,
         fail_media: AtomicBool,
+        cancel_after_first_media: AtomicBool,
         remaining_before_failure: Mutex<Option<usize>>,
     }
 
@@ -1654,10 +1663,14 @@ mod tests {
             &self,
             media_type: &str,
             _bytes: &[u8],
-            _cancellation: &CancellationToken,
+            cancellation: &CancellationToken,
         ) -> Result<MediaEmbedding, EmbeddingError> {
             assert!(matches!(media_type, "image/jpeg" | "image/png"));
-            *self.media_calls.lock().expect("media calls") += 1;
+            let mut calls = self.media_calls.lock().expect("media calls");
+            *calls += 1;
+            if *calls == 1 && self.cancel_after_first_media.load(Ordering::Acquire) {
+                cancellation.cancel();
+            }
             if self.fail_media.load(Ordering::Acquire) {
                 return Err(EmbeddingError::Backend("injected image failure".into()));
             }
@@ -1759,6 +1772,7 @@ mod tests {
                 calls: Mutex::new(0),
                 media_calls: Mutex::new(0),
                 fail_media: AtomicBool::new(false),
+                cancel_after_first_media: AtomicBool::new(false),
                 remaining_before_failure: Mutex::new(None),
             });
             let index = Arc::new(FakeIndex::default());
@@ -2036,6 +2050,10 @@ mod tests {
     }
 
     fn pdf_with_images() -> Vec<u8> {
+        pdf_with_figures(false)
+    }
+
+    fn pdf_with_figures(distinct: bool) -> Vec<u8> {
         let bytes = positioned_pdf_pages(&[
             "BT /F1 12 Tf 72 720 Td (First page has text and a figure.) Tj ET",
             "BT /F1 12 Tf 72 720 Td (Second page has a figure too.) Tj ET",
@@ -2075,13 +2093,20 @@ mod tests {
             0xff, 0xd9,
         ];
         for page in [1, 2] {
+            let mut bytes = jpeg.clone();
+            if distinct && page == 2 {
+                bytes.splice(
+                    bytes.len() - 2..bytes.len() - 2,
+                    [0xff, 0xfe, 0, 4, b'A', b'B'],
+                );
+            }
             let image = pdf.add_object(Stream::new(
                 dictionary! {
                     "Type" => "XObject", "Subtype" => "Image", "Width" => 2,
                     "Height" => 1, "ColorSpace" => "DeviceRGB",
                     "BitsPerComponent" => 8, "Filter" => "DCTDecode",
                 },
-                jpeg.clone(),
+                bytes,
             ));
             pdf.add_xobject(pages[&page], b"Figure", image)
                 .expect("figure");
@@ -2253,6 +2278,77 @@ mod tests {
         ));
         assert!(fixture.visible_excerpt().contains("First page"));
         assert!(fixture.catalog.job("job-images").unwrap().unwrap().stage == "failed");
+    }
+
+    #[test]
+    fn interrupted_pdf_image_embedding_reuses_first_page_without_partial_publication() {
+        let fixture = Fixture::with_model(healthy_resources(), "google-embeddinggemma-2");
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        document.bytes = pdf_with_figures(true);
+        fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("initial image-off PDF");
+        document.pdf_images_consented = true;
+        document.job_id = "job-page-retry".into();
+        fixture
+            .embedder
+            .cancel_after_first_media
+            .store(true, Ordering::Release);
+        assert!(matches!(
+            fixture
+                .coordinator
+                .ingest(&document, &CancellationToken::new()),
+            Err(IngestionError::Cancelled)
+        ));
+        assert!(fixture.visible_excerpt().contains("First page"));
+        assert_eq!(
+            fixture
+                .catalog
+                .job(&document.job_id)
+                .unwrap()
+                .unwrap()
+                .attempts,
+            0
+        );
+        fixture
+            .embedder
+            .cancel_after_first_media
+            .store(false, Ordering::Release);
+        fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("resume two-page PDF");
+        assert_eq!(*fixture.embedder.media_calls.lock().unwrap(), 2);
+        let candidates = fixture
+            .index
+            .records
+            .lock()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        let evidence = fixture
+            .catalog
+            .begin_read()
+            .unwrap()
+            .filter_visible_candidates(
+                &candidates,
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            evidence
+                .iter()
+                .filter(|record| record.record_kind == "pdf_image")
+                .count(),
+            2
+        );
+        assert!(evidence.iter().all(|record| record.generation == 2));
     }
 
     #[test]
@@ -3494,6 +3590,125 @@ mod tests {
             *fixture.embedder.calls.lock().expect("calls"),
             EMBEDDING_CHECKPOINT_INPUTS + receipt.embedded
         );
+    }
+
+    #[test]
+    fn repeated_cancellation_does_not_exhaust_a_document_retry_budget() {
+        let fixture = Fixture::new(healthy_resources());
+        let document = fixture.document("A complete synthetic document");
+        for _ in 0..4 {
+            let cancellation = CancellationToken::new();
+            cancellation.cancel();
+            assert!(matches!(
+                fixture.coordinator.ingest(&document, &cancellation),
+                Err(IngestionError::Cancelled)
+            ));
+            assert_eq!(
+                fixture
+                    .catalog
+                    .job(&document.job_id)
+                    .unwrap()
+                    .unwrap()
+                    .attempts,
+                0,
+                "a cancelled attempt must not consume the failure budget"
+            );
+        }
+        let receipt = fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("cancelled work remains resumable");
+        assert!(receipt.chunks > 0);
+        assert_eq!(
+            fixture
+                .catalog
+                .job(&document.job_id)
+                .unwrap()
+                .unwrap()
+                .attempts,
+            1
+        );
+    }
+
+    #[test]
+    fn cancelling_between_failures_does_not_reset_the_failure_limit() {
+        let fixture = Fixture::new(healthy_resources());
+        let document = fixture.document("Synthetic document");
+        *fixture
+            .embedder
+            .remaining_before_failure
+            .lock()
+            .expect("failure lock") = Some(0);
+
+        for failures in 1..=3 {
+            assert!(matches!(
+                fixture
+                    .coordinator
+                    .ingest(&document, &CancellationToken::new()),
+                Err(IngestionError::PipelineFailed(_))
+            ));
+            assert_eq!(
+                fixture
+                    .catalog
+                    .job(&document.job_id)
+                    .unwrap()
+                    .unwrap()
+                    .attempts,
+                failures
+            );
+            if failures < 3 {
+                let cancellation = CancellationToken::new();
+                cancellation.cancel();
+                assert!(matches!(
+                    fixture.coordinator.ingest(&document, &cancellation),
+                    Err(IngestionError::Cancelled)
+                ));
+                assert_eq!(
+                    fixture
+                        .catalog
+                        .job(&document.job_id)
+                        .unwrap()
+                        .unwrap()
+                        .attempts,
+                    failures
+                );
+            }
+        }
+        assert!(matches!(
+            fixture
+                .coordinator
+                .ingest(&document, &CancellationToken::new()),
+            Err(IngestionError::RetryExhausted)
+        ));
+    }
+
+    #[test]
+    fn repeated_resource_pause_keeps_a_document_resumable() {
+        let fixture = Fixture::new(healthy_resources());
+        let document = fixture.document("Synthetic document");
+        fixture.coordinator.pause();
+        for _ in 0..4 {
+            assert!(matches!(
+                fixture
+                    .coordinator
+                    .ingest(&document, &CancellationToken::new()),
+                Err(IngestionError::Paused(_))
+            ));
+            assert_eq!(
+                fixture
+                    .catalog
+                    .job(&document.job_id)
+                    .unwrap()
+                    .unwrap()
+                    .attempts,
+                0
+            );
+        }
+        fixture.coordinator.resume();
+        fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("resumed work succeeds");
     }
 
     #[test]
