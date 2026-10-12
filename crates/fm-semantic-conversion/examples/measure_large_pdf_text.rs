@@ -85,8 +85,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if digest != SYNTHETIC_TEXT_DIGEST {
         return Err("input bytes do not match the generated synthetic fixture".into());
     }
-    let memory_cap = match env::args_os().nth(2).as_deref() {
+    let mode = env::args_os().nth(2);
+    let memory_cap = match mode.as_deref() {
         None => PROBE_MEMORY_BYTES,
+        Some(value) if value == "--verify-cancel" => PROBE_MEMORY_BYTES,
         Some(value) if value == "--verify-kill" => 32 * 1024 * 1024,
         Some(_) => return Err("unsupported probe argument".into()),
     };
@@ -161,6 +163,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 started.elapsed().as_millis()
             );
             return Ok(());
+        }
+        if mode.as_deref() == Some(std::ffi::OsStr::new("--verify-cancel"))
+            && started.elapsed() >= Duration::from_millis(50)
+        {
+            return Err("probe child cancelled and reaped".into());
         }
         if started.elapsed() >= PROBE_DEADLINE {
             return Err("probe child exceeded wall-clock deadline".into());
