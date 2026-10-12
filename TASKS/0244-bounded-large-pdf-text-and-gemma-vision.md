@@ -103,7 +103,9 @@ optional Docling ML/PDFium pack is qualified on those targets.
   With visual evidence enabled, every page yields one distinct bounded
   Flate-to-PNG image with exact page/XObject provenance and no visual
   omission; the first page with images disabled yields no text layer.
-  The direct conversion probe finished in about 51 seconds on macOS arm64.
+  On macOS arm64 the direct test process took 51.60 seconds and
+  `/usr/bin/time -l` reported 372,310,016 bytes maximum RSS; the
+  generated 174 MB fixture was removed afterward.
   It loads the fixture in the test process and does **not** exercise the
   isolated child, IPC, consented Gemma embeddings, atomic publication,
   unsupported encodings or a renderer for PDFs without reusable images.
