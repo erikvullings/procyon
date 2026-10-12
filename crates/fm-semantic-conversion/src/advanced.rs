@@ -1,5 +1,6 @@
 //! Optional advanced converter adapter and baseline-safe fallback chain.
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::io::Read;
 use std::sync::Arc;
@@ -292,16 +293,16 @@ impl DocumentConverter for OptionalConverter {
     }
 }
 
-enum BoundedBytes {
-    Bytes(Vec<u8>),
+enum BoundedBytes<'a> {
+    Bytes(Cow<'a, [u8]>),
     Outcome(ConversionOutcome),
 }
 
-fn bounded_bytes(
-    content: SourceContent<'_>,
+fn bounded_bytes<'a>(
+    content: SourceContent<'a>,
     metadata: &DocumentMetadata,
     context: &ConversionContext,
-) -> Result<BoundedBytes, ConversionError> {
+) -> Result<BoundedBytes<'a>, ConversionError> {
     let maximum = context.budgets().max_source_bytes;
     if metadata
         .byte_length()
@@ -313,13 +314,13 @@ fn bounded_bytes(
         }));
     }
     let bytes = match content {
-        SourceContent::Bytes(bytes) => bytes.to_vec(),
+        SourceContent::Bytes(bytes) => Cow::Borrowed(bytes),
         SourceContent::Reader(reader) => {
             let mut bytes = Vec::new();
             reader
                 .take(maximum.saturating_add(1))
                 .read_to_end(&mut bytes)?;
-            bytes
+            Cow::Owned(bytes)
         }
     };
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > maximum {
@@ -392,5 +393,28 @@ fn malformed(detail: &str) -> AdvancedConversion {
             detail: detail.to_owned(),
         },
         provenance_precision: ProvenancePrecision::FileOnly,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn already_bounded_source_bytes_are_borrowed_without_another_copy() {
+        let bytes = b"%PDF-1.7 synthetic text";
+        let metadata = DocumentMetadata::unknown().with_media_type("application/pdf");
+        let context = ConversionContext::new();
+        match bounded_bytes(SourceContent::Bytes(bytes), &metadata, &context).unwrap() {
+            BoundedBytes::Bytes(Cow::Borrowed(borrowed)) => {
+                assert_eq!(borrowed.as_ptr(), bytes.as_ptr());
+            }
+            _ => panic!("borrowed PDF source was cloned"),
+        }
+        let mut reader = std::io::Cursor::new(bytes);
+        assert!(matches!(
+            bounded_bytes(SourceContent::Reader(&mut reader), &metadata, &context).unwrap(),
+            BoundedBytes::Bytes(Cow::Owned(_))
+        ));
     }
 }

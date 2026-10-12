@@ -98,6 +98,14 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: The preferred/advanced converter's bounded-byte
+  preflight now borrows an already-materialized source instead of cloning
+  the whole PDF before parsing. Reader inputs still materialize only under
+  the existing source-byte limit. An ownership regression checks both
+  paths. This removes one full input-sized allocation from the current
+  <=64 MiB path and reduces a future child process's memory pressure, but
+  does **not** make 189 MB parsing safe in the parent or establish a
+  four-target memory ceiling.
 - 2026-10-12 Copilot: Added an explicit one-based, validated PDF page window
   to the conversion context. The baseline converter validates the complete
   page tree before extracting a subset, retains original page citations,
