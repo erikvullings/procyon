@@ -204,6 +204,11 @@ impl DocumentConverter for OptionalConverter {
             BoundedBytes::Bytes(bytes) => bytes,
             BoundedBytes::Outcome(outcome) => return Ok(outcome),
         };
+        if context.pdf_page_window().is_some() {
+            return self
+                .baseline
+                .convert(SourceContent::Bytes(&bytes), metadata, context);
+        }
         if self.selection == AdvancedSelection::Preferred
             && let Some(advanced) = &self.advanced
         {

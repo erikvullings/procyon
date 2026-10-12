@@ -1889,6 +1889,33 @@ mod tests {
         bytes
     }
 
+    #[test]
+    fn preferred_pdf_converter_respects_explicit_partial_page_windows() {
+        let fixture = Fixture::new(healthy_resources());
+        let bytes = positioned_pdf_pages(&[
+            "BT /F1 12 Tf 72 720 Td (First page source.) Tj ET",
+            "BT /F1 12 Tf 72 720 Td (Second page source.) Tj ET",
+        ]);
+        let context = ConversionContext::new()
+            .with_pdf_page_window(fm_semantic_conversion::PdfPageWindow::new(2, 2).unwrap());
+        let outcome = fixture
+            .coordinator
+            .converter
+            .convert(
+                SourceContent::Bytes(&bytes),
+                &DocumentMetadata::unknown().with_media_type("application/pdf"),
+                &context,
+            )
+            .expect("convert window");
+        let converted = outcome.document().expect("partial PDF");
+        assert!(converted.is_partial(), "a page window cannot be published");
+        assert!(converted.units().iter().all(|unit| matches!(
+            unit.provenance,
+            fm_semantic_conversion::Provenance::PdfBlock { page_number: 2, .. }
+        )));
+        assert!(!converted.units().is_empty());
+    }
+
     fn pdf_with_images() -> Vec<u8> {
         let bytes = positioned_pdf_pages(&[
             "BT /F1 12 Tf 72 720 Td (First page has text and a figure.) Tj ET",

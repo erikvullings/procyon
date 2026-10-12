@@ -21,8 +21,9 @@ use lopdf::{Dictionary, Document, LoadOptions, Object, content::Content};
 use crate::MAX_PDF_STRUCTURAL_STREAM_BYTES;
 use crate::budget::Stop;
 use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
+use crate::converter::PdfPageWindow;
 use crate::model::{
-    MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES, Provenance, TopLevelBoundary, UnitKind,
+    MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES, Omission, Provenance, TopLevelBoundary, UnitKind,
     VisualProvenance,
 };
 use crate::pdf_toc::{clean_pdf_toc_text, repair_spaced_elsevier_doi};
@@ -82,7 +83,11 @@ fn page_blocks(text: &str) -> Vec<String> {
 }
 
 /// Converts a PDF's text layer into per-page blocks.
-pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Result<(), PdfError> {
+pub(crate) fn convert(
+    builder: &mut DocumentBuilder<'_, '_>,
+    bytes: &[u8],
+    window: Option<PdfPageWindow>,
+) -> Result<(), PdfError> {
     let document = Document::load_mem_with_options(
         bytes,
         LoadOptions::with_max_decompressed_size(MAX_PDF_STRUCTURAL_STREAM_BYTES),
@@ -94,15 +99,35 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
         ));
     }
     let pages = crate::checked_pdf_pages(&document).map_err(PdfError::Malformed)?;
-    let mut page_numbers: Vec<u32> = pages.keys().copied().collect();
+    let total_pages = pages.len();
+    if let Some(window) = window
+        && usize::try_from(window.end()).map_or(true, |end| end > total_pages)
+    {
+        return Err(PdfError::Malformed(format!(
+            "PDF page window ends at page {}, but the document has {total_pages} pages",
+            window.end()
+        )));
+    }
+    let mut page_numbers: Vec<u32> = pages
+        .keys()
+        .copied()
+        .filter(|page| window.is_none_or(|range| *page >= range.start() && *page <= range.end()))
+        .collect();
     page_numbers.sort_unstable();
     if page_numbers.is_empty() {
         return Err(PdfError::Malformed("the PDF contains no pages".to_owned()));
     }
     builder
         .tracker()
-        .charge_items(page_numbers.len() as u64)
+        .charge_items(total_pages as u64)
         .map_err(PdfError::from)?;
+    if page_numbers.len() != total_pages {
+        builder.omit(Omission::ItemsDropped {
+            item: "page",
+            converted: page_numbers.len() as u32,
+            total: total_pages as u32,
+        });
+    }
 
     let mut extracted_any = false;
     let mut uncovered_pages = 0_u32;
@@ -424,6 +449,47 @@ pub(crate) mod tests {
     use crate::cancellation::Cancellation;
     use crate::model::{ComponentVersion, ConvertedDocument, FormatKind, VisualProvenance};
 
+    #[test]
+    fn page_window_keeps_citations_but_cannot_be_published_as_complete() {
+        use crate::{
+            BaselineConverter, ConversionContext, ConversionOutcome, DocumentConverter,
+            DocumentMetadata, SourceContent,
+        };
+
+        let bytes = text_pdf(&[&["First page"], &["Middle page"], &["Last page"]]);
+        let metadata = DocumentMetadata::unknown().with_media_type("application/pdf");
+        let window = PdfPageWindow::new(2, 2).expect("valid page range");
+        let converted = BaselineConverter::new()
+            .convert(
+                SourceContent::Bytes(&bytes),
+                &metadata,
+                &ConversionContext::new().with_pdf_page_window(window),
+            )
+            .expect("window conversion");
+        let document = converted.document().expect("partial document");
+        assert_eq!(document.units().len(), 1);
+        assert!(matches!(
+            document.units()[0].provenance,
+            Provenance::PdfBlock { page_number: 2, .. }
+        ));
+        assert!(document.is_partial());
+        assert!(document.omissions().contains(&Omission::ItemsDropped {
+            item: "page",
+            converted: 1,
+            total: 3,
+        }));
+        assert!(PdfPageWindow::new(0, 1).is_err());
+        assert!(PdfPageWindow::new(3, 2).is_err());
+        let invalid = BaselineConverter::new()
+            .convert(
+                SourceContent::Bytes(&bytes),
+                &metadata,
+                &ConversionContext::new().with_pdf_page_window(PdfPageWindow::new(2, 4).unwrap()),
+            )
+            .expect("out-of-range outcome");
+        assert!(matches!(invalid, ConversionOutcome::Malformed { .. }));
+    }
+
     /// Generates a small single-font PDF whose pages carry the given text
     /// lines, so no binary fixture is checked in.
     pub(crate) fn text_pdf(pages: &[&[&str]]) -> Vec<u8> {
@@ -529,7 +595,7 @@ pub(crate) mod tests {
             &mut tracker,
         );
         builder.set_visuals_enabled(visuals);
-        convert(&mut builder, bytes)?;
+        convert(&mut builder, bytes, None)?;
         Ok(builder.finish())
     }
 
@@ -965,6 +1031,30 @@ pub(crate) mod tests {
                 if detail.contains(&format!("page {page_count} image 1"))
                     && detail.contains("no partial generation published"))
         );
+        for (start, end, expected_count) in [
+            (1, MAX_VISUAL_ATTACHMENTS as u32, MAX_VISUAL_ATTACHMENTS),
+            (page_count as u32, page_count as u32, 1),
+        ] {
+            let budgets = ConversionBudgets::default();
+            let cancellation = Cancellation::none();
+            let clock = ManualClock::new();
+            let mut tracker = BudgetTracker::new(&budgets, &cancellation, &clock);
+            let mut builder = DocumentBuilder::new(
+                ComponentVersion::new("baseline", 1),
+                FormatKind::Pdf,
+                &mut tracker,
+            );
+            builder.set_visuals_enabled(true);
+            convert(
+                &mut builder,
+                &bytes,
+                Some(PdfPageWindow::new(start, end).unwrap()),
+            )
+            .expect("window conversion");
+            let window = builder.finish();
+            assert_eq!(window.visuals().len(), expected_count);
+            assert!(window.is_partial(), "a window is not a publishable PDF");
+        }
 
         let mut document = Document::load_mem(&bytes).expect("load fixture");
         let last_page = document.get_pages()[&(page_count as u32)];

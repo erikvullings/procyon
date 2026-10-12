@@ -98,6 +98,18 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Added an explicit one-based, validated PDF page window
+  to the conversion context. The baseline converter validates the complete
+  page tree before extracting a subset, retains original page citations,
+  and marks every subset `Partial` with dropped-page accounting; the
+  preferred converter delegates window requests to baseline rather than
+  accidentally extracting the entire PDF. A 33-image synthetic scan
+  fails whole-document conversion but can be extracted as 32+1
+  bounded *partial* windows; ingestion still rejects publishing either
+  window alone. This is a staging primitive, not a streaming parser:
+  each invocation still loads the entire source into memory, the 32-MiB
+  visual budget is per window, and no atomic window aggregation, killable
+  child, >64 MiB admission or scan renderer exists yet.
 - 2026-10-12 Copilot: The worker now transports a completed PDF's retained
   image/page omission summary as a separate optional `coverage_detail`
   field, never as a protocol error. Scoped catalog jobs and IPC regressions

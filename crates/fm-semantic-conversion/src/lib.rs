@@ -88,7 +88,7 @@ pub use chunk::{
 };
 pub use converter::{
     BASELINE_CONVERTER_VERSION, BaselineConverter, ConversionContext, ConversionError,
-    DocumentConverter, SourceContent,
+    DocumentConverter, InvalidPdfPageWindow, PdfPageWindow, SourceContent,
 };
 pub use model::{
     Completeness, ComponentVersion, ConversionOutcome, ConversionWarning, ConvertedDocument,
