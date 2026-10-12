@@ -12,7 +12,9 @@
 //! which is the signal an OCR pack (task 0189) would act on. An encrypted
 //! document is reported as encrypted rather than parsed as garbage.
 
-use lopdf::Document;
+use std::collections::HashSet;
+
+use lopdf::{Dictionary, Document, Object};
 
 use crate::budget::Stop;
 use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
@@ -145,7 +147,7 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
             uncovered_pages += 1;
             first_uncovered_page.get_or_insert(page_number);
             builder.omit_visual(
-                None,
+                Some(VisualProvenance::PdfPage { page_number }),
                 format!(
                     "page {page_number} has no extractable text; page rendering is unsupported"
                 ),
@@ -172,39 +174,104 @@ fn extract_page_images(
     page_number: u32,
 ) -> Result<bool, PdfError> {
     let mut retained = false;
-    match document.get_page_images(page_id) {
-        Ok(images) => {
-            for (image_index, image) in images.into_iter().enumerate() {
-                let provenance = VisualProvenance::PdfImage {
-                    page_number,
-                    image_index: image_index as u32,
-                };
-                if image.filters.as_deref() != Some(&["DCTDecode".to_owned()]) {
-                    builder.omit_visual(
-                        Some(provenance),
-                        "PDF image encoding is not a reusable JPEG raster",
-                    );
-                    continue;
-                }
-                retained |= builder
-                    .push_visual(VisualDraft {
-                        media_type: "image/jpeg",
-                        data: image.content.to_vec(),
-                        provenance,
-                        caption: None,
-                    })
-                    .map_err(PdfError::from)?;
+    let xobjects = match page_xobjects(document, page_id) {
+        Ok(xobjects) => xobjects,
+        Err(error) => {
+            builder.omit_visual(
+                Some(VisualProvenance::PdfPage { page_number }),
+                format!("PDF page images could not be inspected: {error}"),
+            );
+            return Ok(false);
+        }
+    };
+    let Some(xobjects) = xobjects else {
+        return Ok(false);
+    };
+    for (image_index, (_, image_ref)) in xobjects.iter().enumerate() {
+        builder.checkpoint().map_err(PdfError::from)?;
+        let provenance = VisualProvenance::PdfImage {
+            page_number,
+            image_index: image_index as u32,
+        };
+        let image = (|| -> lopdf::Result<&lopdf::Stream> {
+            let id = image_ref.as_reference()?;
+            document.get_object(id)?.as_stream()
+        })();
+        let image = match image {
+            Ok(image) => image,
+            Err(error) => {
+                builder.omit_visual(
+                    Some(provenance),
+                    format!("PDF image could not be inspected: {error}"),
+                );
+                continue;
+            }
+        };
+        match image.dict.get(b"Subtype").and_then(Object::as_name) {
+            Ok(name) if name == b"Image" => {}
+            Ok(_) => continue,
+            Err(error) => {
+                builder.omit_visual(
+                    Some(provenance),
+                    format!("PDF XObject subtype could not be inspected: {error}"),
+                );
+                continue;
             }
         }
-        Err(error) => builder.omit_visual(
-            Some(VisualProvenance::PdfImage {
-                page_number,
-                image_index: 0,
-            }),
-            format!("PDF page images could not be inspected: {error}"),
-        ),
+        let jpeg = match image.dict.get(b"Filter") {
+            Ok(Object::Name(filter)) => filter == b"DCTDecode",
+            Ok(Object::Array(filters)) if filters.len() == 1 => {
+                filters[0].as_name().is_ok_and(|name| name == b"DCTDecode")
+            }
+            _ => false,
+        };
+        if !jpeg {
+            builder.omit_visual(
+                Some(provenance),
+                "PDF image encoding is not a reusable JPEG raster",
+            );
+            continue;
+        }
+        retained |= builder
+            .push_visual(VisualDraft {
+                media_type: "image/jpeg",
+                data: image.content.clone(),
+                provenance,
+                caption: None,
+            })
+            .map_err(PdfError::from)?;
     }
     Ok(retained)
+}
+
+fn page_xobjects(
+    document: &Document,
+    page_id: lopdf::ObjectId,
+) -> lopdf::Result<Option<&Dictionary>> {
+    let mut current = page_id;
+    let mut seen = HashSet::new();
+    loop {
+        if !seen.insert(current) {
+            return Err(lopdf::Error::ReferenceCycle(current));
+        }
+        let page = document.get_dictionary(current)?;
+        match document.get_dict_in_dict(page, b"Resources") {
+            Ok(resources) => {
+                return match document.get_dict_in_dict(resources, b"XObject") {
+                    Ok(xobjects) => Ok(Some(xobjects)),
+                    Err(lopdf::Error::DictKey(_)) => Ok(None),
+                    Err(error) => Err(error),
+                };
+            }
+            Err(lopdf::Error::DictKey(_)) => {}
+            Err(error) => return Err(error),
+        }
+        current = match page.get(b"Parent") {
+            Ok(parent) => parent.as_reference()?,
+            Err(lopdf::Error::DictKey(_)) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+    }
 }
 
 #[cfg(test)]
@@ -404,7 +471,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn reusable_pdf_jpeg_images_are_retained_with_page_provenance() {
+    fn inherited_pdf_jpeg_images_are_retained_with_page_provenance() {
         let bytes = text_pdf(&[&["Visible text"]]);
         let mut document = Document::load_mem(&bytes).expect("load fixture");
         let page_id = document.get_pages()[&1];
@@ -424,9 +491,11 @@ pub(crate) mod tests {
             },
             jpeg,
         ));
+        let resources_id = document.get_page_resources(page_id).unwrap().1[0];
         document
-            .add_xobject(page_id, b"Im1", image_id)
-            .expect("attach image");
+            .get_dictionary_mut(resources_id)
+            .expect("inherited resources")
+            .set("XObject", dictionary! { "Im1" => image_id });
         let mut bytes = Vec::new();
         document.save_to(&mut bytes).expect("save fixture");
 
@@ -439,6 +508,25 @@ pub(crate) mod tests {
                 page_number: 1,
                 image_index: 0
             }
+        );
+    }
+
+    #[test]
+    fn image_only_page_omission_has_structural_page_provenance() {
+        let bytes = text_pdf(&[&["Searchable first page"], &[]]);
+        let converted = convert_pdf_with_visuals(&bytes, true).expect("conversion");
+        let page_omissions = converted
+            .visual_omissions()
+            .iter()
+            .filter(|omission| {
+                matches!(omission.provenance, Some(VisualProvenance::PdfPage { .. }))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(page_omissions.len(), 1);
+        assert_eq!(converted.visual_omissions().len(), 1);
+        assert_eq!(
+            page_omissions[0].provenance,
+            Some(VisualProvenance::PdfPage { page_number: 2 })
         );
     }
 }

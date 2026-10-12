@@ -996,6 +996,17 @@ impl IngestionCoordinator {
         }
         self.check_cancelled(document, attempts, cancellation)?;
         let omission_detail = (!converted.visual_omissions().is_empty()).then(|| {
+            let omitted_pages = converted
+                .visual_omissions()
+                .iter()
+                .filter(|omission| {
+                    matches!(
+                        omission.provenance,
+                        Some(fm_semantic_conversion::VisualProvenance::PdfPage { .. })
+                    )
+                })
+                .count();
+            let omitted_images = converted.visual_omissions().len() - omitted_pages;
             let examples = converted
                 .visual_omissions()
                 .iter()
@@ -1004,8 +1015,10 @@ impl IngestionCoordinator {
                 .collect::<Vec<_>>()
                 .join("; ");
             format!(
-                "{} PDF image/page omissions: {examples}",
-                converted.visual_omissions().len()
+                "{} PDF image/page omissions ({omitted_pages} {} without searchable evidence, {omitted_images} image/XObject {}): {examples}",
+                converted.visual_omissions().len(),
+                if omitted_pages == 1 { "page" } else { "pages" },
+                if omitted_images == 1 { "omission" } else { "omissions" },
             )
         });
 
@@ -1996,16 +2009,16 @@ mod tests {
                 .iter()
                 .all(|entry| entry.provenance.contains("pdfImage"))
         );
-        assert!(
-            fixture
-                .catalog
-                .job("job-images")
-                .unwrap()
-                .unwrap()
-                .detail
-                .unwrap()
-                .contains("page 3")
-        );
+        let detail = fixture
+            .catalog
+            .job("job-images")
+            .unwrap()
+            .unwrap()
+            .detail
+            .unwrap();
+        assert!(detail.contains("1 page without searchable evidence"));
+        assert!(detail.contains("1 image/XObject omission"));
+        assert!(detail.contains("page 3"));
     }
 
     #[test]

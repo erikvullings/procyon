@@ -334,6 +334,11 @@ pub enum Provenance {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum VisualProvenance {
+    /// A PDF page without extractable text or retained image evidence.
+    PdfPage {
+        /// 1-based page number.
+        page_number: u32,
+    },
     /// An image XObject on a 1-based PDF page.
     PdfImage {
         /// 1-based page number.

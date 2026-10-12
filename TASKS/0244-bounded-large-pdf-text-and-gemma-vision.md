@@ -98,6 +98,17 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: PDF visual extraction now honors inherited
+  `/Resources` and does not invent an image-inspection failure when a
+  text-only page has no `/XObject`. The previous `lopdf::get_page_images`
+  shortcut read only direct page resources, so it missed an inherited JPEG
+  and classified a normal inherited font-only resource as an error.
+  Image-only pages without a reusable image now carry explicit
+  `PdfPage { page_number }` omission provenance; image/XObject failures retain
+  distinct image provenance. Worker job detail separates page-coverage gaps
+  from image omissions and keeps page reasons as examples. Synthetic converter
+  and worker regressions pass. These counts are not yet projected into the
+  host/frontend; page rendering and >64 MiB conversion remain disabled.
 - 2026-10-12 Copilot: `node scripts/generate-semantic-pdf-fixtures.mjs
   <existing-temp-directory>` now generates deterministic, page-local 354-page
   image-only and text-layer PDFs on demand without checking large binaries
