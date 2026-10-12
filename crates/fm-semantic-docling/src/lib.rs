@@ -1096,7 +1096,12 @@ fn convert_text_layer(
         return conversion(outcome);
     }
 
-    let pdf = match lopdf::Document::load_mem(bytes) {
+    let pdf = match lopdf::Document::load_mem_with_options(
+        bytes,
+        lopdf::LoadOptions::with_max_decompressed_size(
+            fm_semantic_conversion::MAX_PDF_STRUCTURAL_STREAM_BYTES,
+        ),
+    ) {
         Ok(pdf) => pdf,
         Err(error) => {
             return conversion(ConversionOutcome::Malformed {
@@ -1111,6 +1116,11 @@ fn convert_text_layer(
     }
 
     let total_pages = pdf.get_pages().len();
+    if total_pages == 0 {
+        return conversion(ConversionOutcome::Malformed {
+            detail: "Docling PDF contains no readable pages".into(),
+        });
+    }
     if total_pages > 0 && context.budgets().max_items == 0 {
         return conversion(ConversionOutcome::OverBudget {
             budget: fm_semantic_conversion::BudgetKind::Items,
@@ -1143,7 +1153,12 @@ fn convert_ml(
     if let Some(outcome) = stopped(context) {
         return conversion(outcome);
     }
-    let pdf = match lopdf::Document::load_mem(bytes) {
+    let pdf = match lopdf::Document::load_mem_with_options(
+        bytes,
+        lopdf::LoadOptions::with_max_decompressed_size(
+            fm_semantic_conversion::MAX_PDF_STRUCTURAL_STREAM_BYTES,
+        ),
+    ) {
         Ok(pdf) => pdf,
         Err(error) => {
             return conversion(ConversionOutcome::Malformed {
@@ -1157,6 +1172,11 @@ fn convert_ml(
         });
     }
     let total_pages = pdf.get_pages().len();
+    if total_pages == 0 {
+        return conversion(ConversionOutcome::Malformed {
+            detail: "Docling PDF contains no readable pages".into(),
+        });
+    }
     if total_pages > 0 && context.budgets().max_items == 0 {
         return conversion(ConversionOutcome::OverBudget {
             budget: fm_semantic_conversion::BudgetKind::Items,
@@ -1673,6 +1693,39 @@ mod tests {
         let mut bytes = Vec::new();
         pdf.save_to(&mut bytes).expect("save fixture");
         bytes
+    }
+
+    #[test]
+    fn compressed_page_object_bomb_cannot_be_mistaken_for_an_ocr_only_pdf() {
+        let mut pdf =
+            lopdf::Document::load_mem(&pdf_with_oversized_page(false)).expect("load fixture");
+        let page_id = pdf.get_pages()[&1];
+        pdf.get_dictionary_mut(page_id)
+            .expect("page dictionary")
+            .set(
+                "LargeStructuralValue",
+                Object::string_literal(vec![
+                    b' ';
+                    fm_semantic_conversion::MAX_PDF_STRUCTURAL_STREAM_BYTES
+                        + 1
+                ]),
+            );
+        let mut bytes = Vec::new();
+        pdf.save_modern(&mut bytes)
+            .expect("save compressed fixture");
+        assert!(bytes.len() < 1024 * 1024);
+
+        let result = converter_with_baseline_fallback()
+            .convert(
+                SourceContent::Bytes(&bytes),
+                &DocumentMetadata::unknown().with_media_type("application/pdf"),
+                &ConversionContext::new(),
+            )
+            .expect("convert");
+        assert!(
+            matches!(result, ConversionOutcome::Malformed { .. }),
+            "missing page structure must fail, not offer OCR or publish partial evidence"
+        );
     }
 
     #[test]

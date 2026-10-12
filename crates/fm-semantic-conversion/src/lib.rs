@@ -43,6 +43,10 @@ mod sniff;
 mod text;
 mod tokens;
 
+/// Maximum eager decompression of one PDF object or xref stream while loading.
+/// This is not a limit on total parser memory or a substitute for isolation.
+pub const MAX_PDF_STRUCTURAL_STREAM_BYTES: usize = 16 * 1024 * 1024;
+
 pub use advanced::{
     AdvancedCapability, AdvancedConversion, AdvancedConverterAdapter, AdvancedConverterBackend,
     OptionalConverter, ProvenancePrecision,

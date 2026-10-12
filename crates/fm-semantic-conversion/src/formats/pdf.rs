@@ -14,8 +14,9 @@
 
 use std::collections::HashSet;
 
-use lopdf::{Dictionary, Document, Object, content::Content};
+use lopdf::{Dictionary, Document, LoadOptions, Object, content::Content};
 
+use crate::MAX_PDF_STRUCTURAL_STREAM_BYTES;
 use crate::budget::Stop;
 use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
 use crate::model::{MAX_VISUAL_BYTES, Provenance, TopLevelBoundary, UnitKind, VisualProvenance};
@@ -76,8 +77,11 @@ fn page_blocks(text: &str) -> Vec<String> {
 
 /// Converts a PDF's text layer into per-page blocks.
 pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Result<(), PdfError> {
-    let document = Document::load_mem(bytes)
-        .map_err(|error| PdfError::Malformed(format!("the PDF is not readable: {error}")))?;
+    let document = Document::load_mem_with_options(
+        bytes,
+        LoadOptions::with_max_decompressed_size(MAX_PDF_STRUCTURAL_STREAM_BYTES),
+    )
+    .map_err(|error| PdfError::Malformed(format!("the PDF is not readable: {error}")))?;
     if document.is_encrypted() {
         return Err(PdfError::Encrypted(
             "the PDF is encrypted and cannot be read without a password".to_owned(),
@@ -472,6 +476,32 @@ pub(crate) mod tests {
         assert!(
             matches!(convert_pdf(&bytes), Err(PdfError::Malformed(detail)) if detail.contains("page 1")),
             "an unreadable page must not offer OCR guidance"
+        );
+    }
+
+    #[test]
+    fn oversized_structural_object_stream_cannot_hide_a_page() {
+        let bytes = text_pdf(&[&["Visible text"]]);
+        let mut document = Document::load_mem(&bytes).expect("load fixture");
+        let page_id = document.get_pages()[&1];
+        document
+            .get_dictionary_mut(page_id)
+            .expect("page dictionary")
+            .set(
+                "LargeStructuralValue",
+                Object::string_literal(vec![b' '; MAX_PAGE_CONTENT_BYTES + 1]),
+            );
+        let mut bytes = Vec::new();
+        document
+            .save_modern(&mut bytes)
+            .expect("save compressed PDF");
+        assert!(
+            bytes.len() < 1024 * 1024,
+            "fixture must be a compression bomb"
+        );
+        assert!(
+            matches!(convert_pdf(&bytes), Err(PdfError::Malformed(_))),
+            "losing compressed page objects must fail, not publish incomplete evidence"
         );
     }
 

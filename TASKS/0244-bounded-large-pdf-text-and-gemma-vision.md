@@ -98,6 +98,14 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Baseline and Docling's initial PDF parse now cap eager
+  decompression of each structural object/xref stream at 16 MiB. A synthetic
+  sub-MiB PDF with an over-16-MiB compressed page object must fail as malformed,
+  not become an OCR suggestion or publish partial text. This is a parser
+  safety prerequisite, not a total memory bound: `lopdf` still materializes the
+  source and the full document, and Docling may parse again. Production still
+  rejects the >64 MiB spool until a measured, killable, resource-bounded child
+  can consume it.
 - 2026-10-12 Copilot: Corrected PDF image evidence so a JPEG is eligible only
   when the page content actually invokes its named XObject with `Do`;
   merely declaring an image in inherited `/Resources` no longer makes it a
