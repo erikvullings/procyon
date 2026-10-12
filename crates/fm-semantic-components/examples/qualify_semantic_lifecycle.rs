@@ -456,6 +456,18 @@ fn qualify_installed_gemma(
             native.join("libonnxruntime.so.1"),
         )?;
     }
+    let selected_component = |component: &str| {
+        catalog.artifacts().iter().any(|artifact| {
+            artifact.component_id().as_str() == component && selected.contains(artifact.id())
+        })
+    };
+    let pdfium = selected_component("procyon.semantic.pdfium-runtime")
+        .then(|| installed("procyon.semantic.pdfium-runtime"))
+        .transpose()?;
+    let notices = selected_component("procyon.semantic.pdfium-notices")
+        .then(|| installed("procyon.semantic.pdfium-notices"))
+        .transpose()?;
+    stage_pdfium_payloads(&native, pdfium.as_deref(), notices.as_deref())?;
     let measure_dir = std::env::var_os("PROCYON_GEMMA_MEASURE_DIR").map(PathBuf::from);
     if let Some(directory) = &measure_dir {
         fs::create_dir(directory)?;
@@ -508,6 +520,59 @@ fn qualify_installed_gemma(
         }
     }
     Ok(())
+}
+
+fn stage_pdfium_payloads(
+    native: &Path,
+    library: Option<&Path>,
+    notices: Option<&Path>,
+) -> Result<(), Box<dyn Error>> {
+    match (library, notices) {
+        (None, None) => Ok(()),
+        (Some(library), Some(notices)) => {
+            let filename = if cfg!(target_os = "macos") {
+                "libpdfium.dylib"
+            } else if cfg!(windows) {
+                "pdfium.dll"
+            } else {
+                "libpdfium.so"
+            };
+            fs::copy(library, native.join(filename))?;
+            fs::copy(notices, native.join("pdfium-licenses.txt"))?;
+            Ok(())
+        }
+        _ => Err("installed PDFium loader and notices must be paired".into()),
+    }
+}
+
+#[cfg(test)]
+mod pdfium_install_tests {
+    use super::*;
+
+    #[test]
+    fn installed_renderer_stages_loader_with_notices_or_fails_closed() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = directory.path().join("pinned-loader");
+        let notices = directory.path().join("pinned-notices");
+        fs::write(&library, b"loader").unwrap();
+        fs::write(&notices, b"all notices").unwrap();
+        let native = directory.path().join("native");
+        fs::create_dir(&native).unwrap();
+        assert!(stage_pdfium_payloads(&native, Some(&library), None).is_err());
+        stage_pdfium_payloads(&native, Some(&library), Some(&notices)).unwrap();
+        let library_name = if cfg!(target_os = "macos") {
+            "libpdfium.dylib"
+        } else if cfg!(windows) {
+            "pdfium.dll"
+        } else {
+            "libpdfium.so"
+        };
+        assert_eq!(fs::read(native.join(library_name)).unwrap(), b"loader");
+        assert_eq!(
+            fs::read(native.join("pdfium-licenses.txt")).unwrap(),
+            b"all notices"
+        );
+    }
 }
 
 fn qualify_concurrent_lifecycle(

@@ -98,6 +98,12 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: The read-only installed Gemma lifecycle qualifier now
+  assembles verified PDFium loader and full notices beside its isolated
+  worker when a signed catalog selected both, and refuses a one-sided
+  install. The helper's paired/missing payload test passes; this closes an
+  installed qualification wiring gap, but no new signed installed 354-page
+  real-Gemma run was dispatched or measured.
 - 2026-10-12 Copilot: The experimental Gemma publish checker now refuses any
   four-target signed candidate missing PDFium and its paired notices, the
   exact pinned upstream provenance, or the worker's PDFium compatibility
