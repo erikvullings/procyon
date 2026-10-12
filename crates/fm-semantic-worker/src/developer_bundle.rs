@@ -1429,6 +1429,7 @@ mod tests {
                         library_id: "library".into(),
                         document_id: format!("document-{name}"),
                         media_type: media_type.into(),
+                        pdf_images_consented: false,
                         metadata: BTreeMap::from([
                             ("occurrence_id".into(), format!("occurrence-{name}")),
                             ("source_id".into(), format!("source-{name}")),
@@ -1437,6 +1438,8 @@ mod tests {
                             ("title".into(), format!("Gemma {name}")),
                         ]),
                         content,
+                        #[cfg(feature = "experimental-large-pdf")]
+                        pdf_text: None,
                     },
                     CancellationToken::new(),
                 )
@@ -1488,6 +1491,7 @@ mod tests {
                     library_id: "library".into(),
                     document_id: "document-invalid-video".into(),
                     media_type: "video/mp4".into(),
+                    pdf_images_consented: false,
                     metadata: BTreeMap::from([
                         ("occurrence_id".into(), "occurrence-invalid-video".into()),
                         ("source_id".into(), "source-invalid-video".into()),
@@ -1495,6 +1499,8 @@ mod tests {
                         ("modified_at_ms".into(), "1".into()),
                     ]),
                     content: b"not an H.264 MP4".to_vec(),
+                    #[cfg(feature = "experimental-large-pdf")]
+                    pdf_text: None,
                 },
                 CancellationToken::new(),
             )
@@ -1632,6 +1638,7 @@ mod tests {
                     library_id: "library-gemma".into(),
                     document_id: "document-gemma".into(),
                     media_type: "text/plain".into(),
+                    pdf_images_consented: false,
                     metadata: BTreeMap::from([
                         ("occurrence_id".into(), "occurrence-gemma".into()),
                         ("source_id".into(), "source-gemma".into()),
@@ -1641,6 +1648,8 @@ mod tests {
                     ]),
                     content: b"Native Gemma semantic indexes preserve searchable evidence."
                         .to_vec(),
+                    #[cfg(feature = "experimental-large-pdf")]
+                    pdf_text: None,
                 },
                 CancellationToken::new(),
             )
@@ -1847,6 +1856,7 @@ mod tests {
                     library_id: "library-development".into(),
                     document_id: "document-development".into(),
                     media_type: "text/plain".into(),
+                    pdf_images_consented: false,
                     metadata: BTreeMap::from([
                         ("occurrence_id".into(), "occurrence-development".into()),
                         ("source_id".into(), "source-development".into()),
@@ -1854,6 +1864,8 @@ mod tests {
                         ("modified_at_ms".into(), "1".into()),
                     ]),
                     content: b"Durable semantic indexes preserve searchable evidence.".to_vec(),
+                    #[cfg(feature = "experimental-large-pdf")]
+                    pdf_text: None,
                 },
                 CancellationToken::new(),
             )
@@ -2282,6 +2294,7 @@ mod tests {
                         library_id: "library-multilingual".into(),
                         document_id: document.into(),
                         media_type: "text/plain".into(),
+                        pdf_images_consented: false,
                         metadata: BTreeMap::from([
                             ("occurrence_id".into(), format!("occurrence-{document}")),
                             ("source_id".into(), format!("source-{document}")),
@@ -2289,6 +2302,8 @@ mod tests {
                             ("modified_at_ms".into(), "1".into()),
                         ]),
                         content: content.as_bytes().to_vec(),
+                        #[cfg(feature = "experimental-large-pdf")]
+                        pdf_text: None,
                     },
                     CancellationToken::new(),
                 )

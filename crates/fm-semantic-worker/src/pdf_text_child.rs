@@ -15,6 +15,8 @@ use sha2::{Digest, Sha256};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use tokio_util::sync::CancellationToken;
 
+use crate::ingestion::PdfTextSource;
+
 const MAX_SOURCE_BYTES: u64 = 200 * 1024 * 1024;
 const MAX_REPORT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_ERROR_BYTES: u64 = 16 * 1024;
@@ -47,6 +49,7 @@ pub fn convert_spool(
     if length == 0 || length > MAX_SOURCE_BYTES {
         return Err(io::Error::other("PDF spool exceeds child source limit"));
     }
+
     let mut input = spool.try_clone()?;
     input.seek(SeekFrom::Start(0))?;
     let mut hasher = Sha256::new();
@@ -164,6 +167,57 @@ pub fn convert_spool(
         }
         thread::sleep(Duration::from_millis(10));
     }
+}
+
+/// Reaps a conversion child before the stream's cancellation or deadline exits.
+pub async fn convert_spool_in_worker(
+    file: tokio::fs::File,
+    executable: Option<&Path>,
+    expected_sha256: &[u8],
+    cancellation: &CancellationToken,
+    deadline: tokio::time::Instant,
+    disconnected: &CancellationToken,
+) -> io::Result<PdfTextSource> {
+    if expected_sha256.len() != 32 {
+        return Err(io::Error::other(
+            "large PDF stream requires a SHA-256 digest",
+        ));
+    }
+    let digest = expected_sha256
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let executable =
+        executable.map_or_else(std::env::current_exe, |path| Ok(path.to_path_buf()))?;
+    let source = file.into_std().await;
+    let child_cancellation = cancellation.child_token();
+    let guard = child_cancellation.clone();
+    let child_digest = digest.clone();
+    let mut task = tokio::task::spawn_blocking(move || {
+        convert_spool(&executable, &source, &child_digest, &guard)
+    });
+    let converted = tokio::select! {
+        result = &mut task => result.map_err(io::Error::other)?,
+        () = cancellation.cancelled() => {
+            child_cancellation.cancel();
+            let _ = task.await;
+            return Err(io::Error::other("PDF conversion cancelled"));
+        }
+        () = disconnected.cancelled() => {
+            child_cancellation.cancel();
+            let _ = task.await;
+            return Err(io::Error::other("PDF stream disconnected"));
+        }
+        () = tokio::time::sleep_until(deadline) => {
+            child_cancellation.cancel();
+            let _ = task.await;
+            return Err(io::Error::other("PDF stream deadline exceeded"));
+        }
+    }?;
+    Ok(PdfTextSource {
+        content_hash: digest,
+        converted,
+    })
 }
 
 /// Converts a path-free stdin PDF and emits one validated, complete text result.

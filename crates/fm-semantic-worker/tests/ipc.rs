@@ -19,6 +19,8 @@ use fm_semantic_worker::{
     WorkerConfig, WorkerConnector, WorkerHealth, WorkerIngestionBackend, WorkerIngestionInput,
     WorkerIngestionJob, WorkerQueryBackend, WorkerQueryInput, WorkerServer,
 };
+#[cfg(feature = "experimental-large-pdf")]
+use lopdf::{Document, Object, Stream, dictionary};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
@@ -49,6 +51,193 @@ struct CoverageIngestionBackend;
 #[derive(Default)]
 struct CapturingIngestionBackend {
     input: Mutex<Option<WorkerIngestionInput>>,
+}
+
+#[cfg(feature = "experimental-large-pdf")]
+#[tokio::test]
+async fn negotiated_pdf_spool_returns_complete_child_text_to_ingestion_backend() {
+    let mut document = Document::with_version("1.5");
+    let pages_id = document.new_object_id();
+    let font_id = document.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type1",
+        "BaseFont" => "Helvetica",
+    });
+    let resources_id = document.add_object(dictionary! {
+        "Font" => dictionary! { "F1" => font_id },
+    });
+    let mut page_ids = Vec::new();
+    for page in 1..=3 {
+        let text = format!("Synthetic page {page} {}", "x".repeat(2_000));
+        let content = format!("BT /F1 12 Tf 72 720 Td ({text}) Tj ET\n");
+        let content_id = document.add_object(Stream::new(dictionary! {}, content.into_bytes()));
+        page_ids.push(document.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "Contents" => content_id,
+            "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        }));
+    }
+    let kids: Vec<Object> = page_ids.into_iter().map(Object::Reference).collect();
+    document.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages",
+            "Count" => kids.len() as i64,
+            "Kids" => kids,
+            "Resources" => resources_id,
+        }),
+    );
+    let catalog_id = document.add_object(dictionary! {
+        "Type" => "Catalog",
+        "Pages" => pages_id,
+    });
+    document.trailer.set("Root", catalog_id);
+    let mut bytes = Vec::new();
+    document.save_to(&mut bytes).expect("save synthetic PDF");
+    assert!(bytes.len() > 4_096);
+    let digest: [u8; 32] = Sha256::digest(&bytes).into();
+    let directory = test_directory("pdf-child-ipc");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([124; 32]);
+    let limits = ProtocolLimits::new(
+        4_096,
+        4_096,
+        MAX_CONCURRENT_REQUESTS,
+        REQUEST_DEADLINE,
+        STREAM_DEADLINE,
+        SHUTDOWN_DEADLINE,
+    )
+    .unwrap()
+    .with_pdf_ingestion_bytes(16_384)
+    .unwrap();
+    let capture = Arc::new(CapturingIngestionBackend::default());
+    let task = tokio::spawn(
+        WorkerServer::with_ingestion_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone())
+                .with_limits(limits)
+                .with_pdf_child_executable(PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker"))),
+            capture.clone(),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    client
+        .ingest_pdf_reader(
+            "isolated-pdf",
+            IngestionScope::new("tenant", "library"),
+            "document",
+            BTreeMap::new(),
+            false,
+            std::io::Cursor::new(bytes.clone()),
+            bytes.len() as u64,
+            digest,
+        )
+        .await
+        .expect("spooled PDF text accepted");
+    let input = capture.input.lock().unwrap().take().expect("queued input");
+    assert!(input.content.is_empty());
+    let converted = input.pdf_text.expect("verified child report").converted;
+    assert!(!converted.is_partial());
+    assert_eq!(converted.units().len(), 3);
+    for (index, unit) in converted.units().iter().enumerate() {
+        assert_eq!(
+            unit.provenance,
+            fm_semantic_conversion::Provenance::PdfBlock {
+                page_number: index as u32 + 1,
+                block_index: 0,
+            }
+        );
+        assert!(unit.text.contains(&format!("Synthetic page {}", index + 1)));
+    }
+    assert!(matches!(
+        client
+            .ingest_pdf_reader(
+                "consented-images",
+                IngestionScope::new("tenant", "library"),
+                "document",
+                BTreeMap::new(),
+                true,
+                std::io::Cursor::new(bytes.clone()),
+                bytes.len() as u64,
+                digest,
+            )
+            .await,
+        Err(ClientError::Remote {
+            code: v1::ErrorCode::InvalidRequest,
+            ..
+        })
+    ));
+    assert!(capture.input.lock().unwrap().is_none());
+    drop(client);
+    task.abort();
+}
+
+#[cfg(feature = "experimental-large-pdf")]
+#[tokio::test]
+#[ignore = "requires the generated 188.9 MB synthetic PDF"]
+async fn large_synthetic_pdf_streams_from_host_to_child_with_complete_page_evidence() {
+    let path = std::env::var_os("PROCYON_SYNTHETIC_PDF")
+        .map(PathBuf::from)
+        .expect("set PROCYON_SYNTHETIC_PDF to the generated text fixture");
+    assert_eq!(path.file_name().unwrap(), "synthetic-354-page-text.pdf");
+    let source = tokio::fs::File::open(&path).await.unwrap();
+    let length = source.metadata().await.unwrap().len();
+    assert_eq!(length, 188_870_838);
+    let expected = "b1e36f4b3e4664d00e09475372f9e90858aaef0adfab3762aaa0ea98cc4d2285";
+    let digest: [u8; 32] = std::array::from_fn(|index| {
+        u8::from_str_radix(&expected[2 * index..2 * index + 2], 16).unwrap()
+    });
+    let directory = test_directory("large-pdf-child-ipc");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([125; 32]);
+    let capture = Arc::new(CapturingIngestionBackend::default());
+    let config = WorkerConfig::new(endpoint.clone(), secret.clone())
+        .with_limits(
+            ProtocolLimits::default()
+                .with_pdf_ingestion_bytes(200 * 1024 * 1024)
+                .unwrap(),
+        )
+        .with_pdf_child_executable(PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker")));
+    let task = tokio::spawn(WorkerServer::with_ingestion_backend(config, capture.clone()).run());
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    client
+        .ingest_pdf_reader(
+            "synthetic-354-page-text",
+            IngestionScope::new("tenant", "library"),
+            "synthetic-document",
+            BTreeMap::new(),
+            false,
+            source,
+            length,
+            digest,
+        )
+        .await
+        .expect("large synthetic PDF streamed");
+    let captured = capture
+        .input
+        .lock()
+        .unwrap()
+        .take()
+        .expect("queued child output");
+    assert!(captured.content.is_empty());
+    let document = captured.pdf_text.expect("text-only child output").converted;
+    assert!(!document.is_partial());
+    let pages = document
+        .units()
+        .iter()
+        .filter_map(|unit| match unit.provenance {
+            fm_semantic_conversion::Provenance::PdfBlock { page_number, .. } => Some(page_number),
+            _ => None,
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(pages.len(), 354);
+    assert_eq!(pages.first(), Some(&1));
+    assert_eq!(pages.last(), Some(&354));
+    drop(client);
+    task.abort();
 }
 
 impl WorkerIngestionBackend for CapturingIngestionBackend {

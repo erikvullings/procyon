@@ -98,6 +98,24 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: The opt-in worker now routes a completed, digest-verified
+  >64-MiB anonymous PDF spool through the bounded text child and passes the
+  reconstructed report into the normal ingestion coordinator without a
+  second host-side source copy. Feature-gated authenticated IPC tests cover
+  spool admission, missing backend, consented-image refusal and page-cited
+  backend input; the pipeline's atomic-generation test preserves a prior
+  complete generation when a replacement report is partial. An ignored
+  fixture test streamed the 188,870,838-byte synthetic PDF through worker
+  IPC and confirmed 354/354 page evidence at the backend; a second ignored
+  fixture test embedded the child output through the real generation
+  pipeline and confirmed 354 visible page records with first/last page
+  citations. **Only** the development
+  `experimental-large-pdf` feature enables this path, and its sampled
+  Mac memory watchdog and text-only behavior are not release-qualified.
+  Gemma libraries with image consent still reject a large PDF rather than
+  publish text while omitting its images. The production worker recipe,
+  native installed app, scans, durable UI coverage and four-target evidence
+  remain no-go; no release/tag/candidate was dispatched.
 - 2026-10-12 Copilot: Behind the off-by-default
   `fm-semantic-worker/experimental-large-pdf` feature, the real worker
   executable now has a path-free PDF text child and a supervisor that

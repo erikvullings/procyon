@@ -145,6 +145,19 @@ pub struct IngestionDocument {
     pub modified_at_ms: i64,
     /// Bounded source bytes streamed by the host.
     pub bytes: Vec<u8>,
+    /// Verified, isolated text conversion instead of source bytes.
+    #[cfg(feature = "experimental-large-pdf")]
+    pub pdf_text: Option<PdfTextSource>,
+}
+
+/// Path-free PDF text and digest checked against the anonymous source spool.
+#[cfg(feature = "experimental-large-pdf")]
+#[derive(Debug, Clone)]
+pub struct PdfTextSource {
+    /// Streamed source SHA-256.
+    pub content_hash: String,
+    /// Complete text-only converted document.
+    pub converted: fm_semantic_conversion::ConvertedDocument,
 }
 
 /// Derived occurrence record written before generation publication.
@@ -447,6 +460,8 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
             pdf_images_consented: input.pdf_images_consented,
             modified_at_ms,
             bytes: input.content,
+            #[cfg(feature = "experimental-large-pdf")]
+            pdf_text: input.pdf_text,
         };
         if let Some(job) = self
             .coordinator
@@ -701,6 +716,32 @@ impl IngestionCoordinator {
         self.check_preconditions(document, attempts, cancellation)?;
 
         self.transition(document, IngestionStage::Hashing, attempts, None, 0, 1)?;
+        #[cfg(feature = "experimental-large-pdf")]
+        let content_hash = if let Some(pdf) = &document.pdf_text {
+            if !document.bytes.is_empty()
+                || document.media_type != "application/pdf"
+                || document.pdf_images_consented
+                || pdf.converted.format() != FormatKind::Pdf
+                || pdf.converted.is_partial()
+                || !pdf.converted.visuals().is_empty()
+                || !pdf.converted.visual_omissions().is_empty()
+                || pdf.content_hash.len() != 64
+                || !pdf
+                    .content_hash
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit())
+            {
+                return Err(self.fail(
+                    document,
+                    attempts,
+                    "isolated PDF text source is incomplete or inconsistent".into(),
+                ));
+            }
+            pdf.content_hash.clone()
+        } else {
+            sha256_hex(&document.bytes)
+        };
+        #[cfg(not(feature = "experimental-large-pdf"))]
         let content_hash = sha256_hex(&document.bytes);
         self.check_cancelled(document, attempts, cancellation)?;
 
@@ -728,6 +769,15 @@ impl IngestionCoordinator {
             .with_cancellation(Cancellation::new(Arc::new(TokenSignal(
                 cancellation.clone(),
             ))));
+        #[cfg(feature = "experimental-large-pdf")]
+        let outcome = if let Some(pdf) = &document.pdf_text {
+            ConversionOutcome::Converted(pdf.converted.clone())
+        } else {
+            self.converter
+                .convert(SourceContent::Bytes(&document.bytes), &metadata, &context)
+                .map_err(|error| self.fail(document, attempts, error.to_string()))?
+        };
+        #[cfg(not(feature = "experimental-large-pdf"))]
         let outcome = self
             .converter
             .convert(SourceContent::Bytes(&document.bytes), &metadata, &context)
@@ -1677,6 +1727,8 @@ mod tests {
                 pdf_images_consented: false,
                 modified_at_ms: 1_000,
                 bytes: body.as_bytes().to_vec(),
+                #[cfg(feature = "experimental-large-pdf")]
+                pdf_text: None,
             }
         }
 
@@ -2435,6 +2487,140 @@ mod tests {
         assert!(evidence.iter().all(|record| record.generation == 1));
     }
 
+    #[cfg(feature = "experimental-large-pdf")]
+    #[test]
+    fn isolated_pdf_text_publishes_atomically_and_rejects_partial_replacement() {
+        let fixture = Fixture::new(healthy_resources());
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        let bytes = positioned_pdf_pages(&[
+            "BT /F1 12 Tf 72 720 Td (Synthetic complete page for isolated conversion.) Tj ET",
+        ]);
+        let outcome = fm_semantic_conversion::BaselineConverter::new()
+            .convert(
+                SourceContent::Bytes(&bytes),
+                &DocumentMetadata::unknown().with_media_type("application/pdf"),
+                &ConversionContext::new(),
+            )
+            .expect("convert small synthetic PDF");
+        let converted = outcome.document().expect("complete PDF").clone();
+        document.pdf_text = Some(PdfTextSource {
+            content_hash: sha256_hex(&bytes),
+            converted: converted.clone(),
+        });
+        fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("index isolated PDF text");
+        let original_ids = fixture
+            .index
+            .records
+            .lock()
+            .expect("index")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        assert!(!original_ids.is_empty());
+
+        document.job_id = "job-partial-isolated-pdf".into();
+        document.pdf_text.as_mut().unwrap().converted =
+            fm_semantic_conversion::ConvertedDocument::new(
+                converted.converter(),
+                FormatKind::Pdf,
+                converted.units().to_vec(),
+                converted.warnings().to_vec(),
+                vec![fm_semantic_conversion::Omission::ItemsDropped {
+                    item: "page",
+                    converted: 1,
+                    total: 2,
+                }],
+            );
+        assert!(matches!(
+            fixture
+                .coordinator
+                .ingest(&document, &CancellationToken::new()),
+            Err(IngestionError::PipelineFailed(_))
+        ));
+        assert_eq!(
+            fixture
+                .index
+                .records
+                .lock()
+                .expect("index")
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            original_ids
+        );
+    }
+
+    #[cfg(feature = "experimental-large-pdf")]
+    #[test]
+    #[ignore = "requires generated 188.9 MB synthetic PDF and experimental worker binary"]
+    fn large_synthetic_pdf_is_embedded_with_visible_first_and_last_page_citations() {
+        let path = std::env::var_os("PROCYON_SYNTHETIC_PDF")
+            .map(std::path::PathBuf::from)
+            .expect("set PROCYON_SYNTHETIC_PDF to the generated text fixture");
+        assert_eq!(path.file_name().unwrap(), "synthetic-354-page-text.pdf");
+        let executable = std::env::var_os("PROCYON_PDF_CHILD_EXE")
+            .map(std::path::PathBuf::from)
+            .expect("set PROCYON_PDF_CHILD_EXE to the experimental worker binary");
+        let source = std::fs::File::open(&path).expect("synthetic fixture");
+        assert_eq!(source.metadata().unwrap().len(), 188_870_838);
+        let mut spool = tempfile::tempfile().expect("anonymous spool");
+        std::io::copy(&mut std::io::BufReader::new(source), &mut spool).expect("stream fixture");
+        let digest = "b1e36f4b3e4664d00e09475372f9e90858aaef0adfab3762aaa0ea98cc4d2285";
+        let converted = crate::pdf_text_child::convert_spool(
+            &executable,
+            &spool,
+            digest,
+            &CancellationToken::new(),
+        )
+        .expect("isolated conversion");
+        let fixture = Fixture::new(healthy_resources());
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        document.pdf_text = Some(PdfTextSource {
+            content_hash: digest.into(),
+            converted,
+        });
+        fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("atomic 354-page generation");
+        let record_ids = fixture
+            .index
+            .records
+            .lock()
+            .expect("index")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        let evidence = fixture
+            .catalog
+            .begin_read()
+            .expect("catalog")
+            .filter_visible_candidates(
+                &record_ids,
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .expect("visible evidence");
+        assert_eq!(evidence.len(), 354);
+        for page in [1, 354] {
+            assert!(evidence.iter().any(|record| {
+                record
+                    .provenance
+                    .contains(&format!("\"page_number\":{page}"))
+                    && record
+                        .content
+                        .contains(&format!("Synthetic page {page} of 354:"))
+            }));
+        }
+    }
+
     #[test]
     fn unsupported_image_only_pdf_does_not_claim_searchable_coverage() {
         let fixture = Fixture::with_model(healthy_resources(), "google-embeddinggemma-2");
@@ -3008,6 +3194,8 @@ mod tests {
                     .into_iter()
                     .collect(),
                     content: b"protocol content".to_vec(),
+                    #[cfg(feature = "experimental-large-pdf")]
+                    pdf_text: None,
                 },
                 CancellationToken::new(),
             )

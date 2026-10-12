@@ -213,6 +213,8 @@ pub struct WorkerConfig {
     test_event_scan_delay: Duration,
     test_event_phase_bytes: usize,
     test_idle_wait_delay: Duration,
+    #[cfg(feature = "experimental-large-pdf")]
+    pdf_child_executable: Option<PathBuf>,
 }
 
 impl WorkerConfig {
@@ -233,6 +235,8 @@ impl WorkerConfig {
             test_event_scan_delay: Duration::ZERO,
             test_event_phase_bytes: 0,
             test_idle_wait_delay: Duration::ZERO,
+            #[cfg(feature = "experimental-large-pdf")]
+            pdf_child_executable: None,
         }
     }
 
@@ -340,6 +344,14 @@ impl WorkerConfig {
     #[must_use]
     pub fn with_test_idle_wait_delay(mut self, delay: Duration) -> Self {
         self.test_idle_wait_delay = delay;
+        self
+    }
+
+    /// Overrides the same-executable child path for isolated integration tests.
+    #[cfg(feature = "experimental-large-pdf")]
+    #[must_use]
+    pub fn with_pdf_child_executable(mut self, executable: PathBuf) -> Self {
+        self.pdf_child_executable = Some(executable);
         self
     }
 }
@@ -1749,6 +1761,9 @@ pub struct WorkerIngestionInput {
     pub metadata: BTreeMap<String, String>,
     /// Bounded source bytes.
     pub content: Vec<u8>,
+    /// Isolated text conversion of a verified PDF spool, never accompanied by bytes.
+    #[cfg(feature = "experimental-large-pdf")]
+    pub pdf_text: Option<ingestion::PdfTextSource>,
 }
 
 /// Trusted media type and host-authorized PDF image choice for one ingestion.
@@ -4829,20 +4844,83 @@ async fn complete_ingestion(
         }
         () = tokio::time::sleep(state.config.atomic_ingestion_delay) => {}
     }
+    #[cfg(feature = "experimental-large-pdf")]
+    let mut pdf_text = None;
     let content = match pending.content {
         PendingContent::Memory(content) => content,
-        PendingContent::PdfSpool(_) => {
-            send_error(
-                &writer,
-                correlation_id,
-                protocol_error(
-                    v1::ErrorCode::LimitExceeded,
-                    "large PDF conversion is not yet available",
-                ),
-                state.config.limits,
-            )
-            .await;
-            return;
+        PendingContent::PdfSpool(file) => {
+            #[cfg(feature = "experimental-large-pdf")]
+            {
+                if state.ingestion_backend.is_none() {
+                    send_error(
+                        &writer,
+                        correlation_id,
+                        protocol_error(
+                            v1::ErrorCode::LimitExceeded,
+                            "large PDF text indexing backend is unavailable",
+                        ),
+                        state.config.limits,
+                    )
+                    .await;
+                    return;
+                }
+                if pending.start.pdf_images_consented {
+                    send_error(
+                        &writer,
+                        correlation_id,
+                        protocol_error(
+                            v1::ErrorCode::InvalidRequest,
+                            "large PDF text cannot omit consented images",
+                        ),
+                        state.config.limits,
+                    )
+                    .await;
+                    return;
+                }
+                let converted = pdf_text_child::convert_spool_in_worker(
+                    file,
+                    state.config.pdf_child_executable.as_deref(),
+                    &pending.start.expected_sha256,
+                    &pending.cancellation,
+                    pending.deadline,
+                    &connection.disconnected,
+                )
+                .await;
+                match converted {
+                    Ok(pdf) => {
+                        pdf_text = Some(pdf);
+                        Vec::new()
+                    }
+                    Err(error) => {
+                        send_error(
+                            &writer,
+                            correlation_id,
+                            protocol_error(
+                                v1::ErrorCode::Internal,
+                                format!("large PDF text conversion failed: {error}"),
+                            ),
+                            state.config.limits,
+                        )
+                        .await;
+                        return;
+                    }
+                }
+            }
+            #[cfg(not(feature = "experimental-large-pdf"))]
+            {
+                drop(file);
+                send_error(
+                    &writer,
+                    correlation_id,
+                    protocol_error(
+                        v1::ErrorCode::LimitExceeded,
+                        "large PDF conversion is not yet available",
+                    ),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            }
         }
     };
     let document_id = pending.start.document_id;
@@ -4862,6 +4940,8 @@ async fn complete_ingestion(
             pdf_images_consented: pending.start.pdf_images_consented,
             metadata,
             content,
+            #[cfg(feature = "experimental-large-pdf")]
+            pdf_text,
         };
         let job_id = match backend.enqueue(input, pending.cancellation) {
             Ok(job_id) => job_id,
