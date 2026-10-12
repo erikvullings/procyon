@@ -98,6 +98,21 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: `merge_pdf_text_windows` now accepts only adjacent,
+  ordered PDF text windows covering every declared page, with the exact
+  expected per-window `ItemsDropped` omission and no other truncation or
+  visual omissions. It rebases unit order while retaining original page
+  citations and enforces combined document character/unit/warning budgets.
+  Missing, overlapping, budget-exceeding, or visually incomplete windows
+  cannot be promoted to a complete document. This is a conversion-stage
+  primitive; the 188,870,838-byte synthetic text fixture also passed
+  twelve 32-page-or-smaller windows inside the killable probe child,
+  producing all 354 parent-validated page citations in 1,756 ms parent
+  wall time with 397,115,392 bytes sampled child peak RSS. Low-RSS
+  and cancellation probes still killed/reaped the windowed child.
+  The worker still needs a bounded child-result transport,
+  cancellation-aware atomic staging, and spool admission before large PDF
+  text is searchable.
 - 2026-10-12 Copilot: A synthetic-only conversion probe
   (`cargo run -p fm-semantic-conversion --example measure_large_pdf_text -- <fixture>`)
   checks that the generated 354-page, 188,870,838-byte text fixture

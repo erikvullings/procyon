@@ -19,18 +19,118 @@ use image::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
 use lopdf::{Dictionary, Document, LoadOptions, Object, content::Content};
 
 use crate::MAX_PDF_STRUCTURAL_STREAM_BYTES;
+use crate::budget::ConversionBudgets;
 use crate::budget::Stop;
 use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
 use crate::converter::PdfPageWindow;
 use crate::model::{
-    MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES, Omission, Provenance, TopLevelBoundary, UnitKind,
-    VisualProvenance,
+    ComponentVersion, ConvertedDocument, FormatKind, MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES,
+    Omission, Provenance, TopLevelBoundary, UnitKind, VisualProvenance,
 };
 use crate::pdf_toc::{clean_pdf_toc_text, repair_spaced_elsevier_doi};
 
 /// Maximum decompressed content bytes per page.
 const MAX_PAGE_CONTENT_BYTES: usize = 16 * 1024 * 1024;
 const MAX_PDF_FLATE_RASTER_BYTES: usize = 4 * 1024 * 1024;
+
+/// A PDF window is missing, repeated, truncated, or inconsistent with its peers.
+#[derive(Debug, thiserror::Error)]
+#[error("PDF text windows cannot form a complete document: {0}")]
+pub struct PdfWindowMergeError(pub String);
+
+/// Reassembles only complete text coverage from individually partial page windows.
+///
+/// Windows must be in ascending order and cover every page exactly once.
+/// Visual evidence requires separate bounded staging rather than retaining an
+/// entire scanned PDF's images in this text-only aggregation.
+pub fn merge_pdf_text_windows(
+    total_pages: u32,
+    windows: impl IntoIterator<Item = (PdfPageWindow, ConvertedDocument)>,
+    budgets: &ConversionBudgets,
+) -> Result<ConvertedDocument, PdfWindowMergeError> {
+    let reject = |reason: &str| PdfWindowMergeError(reason.to_owned());
+    if total_pages == 0 || total_pages > budgets.max_items {
+        return Err(reject("page count exceeds the conversion budget"));
+    }
+    let end_page = total_pages
+        .checked_add(1)
+        .ok_or_else(|| reject("page number overflowed"))?;
+    let mut next_page = 1;
+    let mut version: Option<ComponentVersion> = None;
+    let mut units = Vec::new();
+    let mut warnings = Vec::new();
+    let mut output_chars = 0_u64;
+    for (window, document) in windows {
+        if window.start() != next_page || window.end() > total_pages {
+            return Err(reject("a page window is missing, repeated or out of order"));
+        }
+        if document.format() != FormatKind::Pdf
+            || version.is_some_and(|current| current != document.converter())
+            || !document.visuals().is_empty()
+            || !document.visual_omissions().is_empty()
+        {
+            return Err(reject(
+                "window format, converter or visual evidence differs",
+            ));
+        }
+        let expected_pages = window.end() - window.start() + 1;
+        let expected_omission = Omission::ItemsDropped {
+            item: "page",
+            converted: expected_pages,
+            total: total_pages,
+        };
+        if (expected_pages == total_pages && !document.omissions().is_empty())
+            || (expected_pages != total_pages && document.omissions() != [expected_omission])
+        {
+            return Err(reject("a window has missing or truncated content"));
+        }
+        version = Some(document.converter());
+        let mut last_cited_page = window.start();
+        for mut unit in document.units().iter().cloned() {
+            let Provenance::PdfBlock { page_number, .. } = unit.provenance else {
+                return Err(reject("a text unit has no PDF page citation"));
+            };
+            if unit.format != FormatKind::Pdf
+                || unit.boundary != TopLevelBoundary::Page(page_number)
+                || !(window.start()..=window.end()).contains(&page_number)
+                || page_number < last_cited_page
+                || unit.truncated
+            {
+                return Err(reject("a text unit is outside its untruncated page window"));
+            }
+            last_cited_page = page_number;
+            output_chars = output_chars
+                .checked_add(unit.text.chars().count() as u64)
+                .ok_or_else(|| reject("output character count overflowed"))?;
+            if output_chars > budgets.max_output_chars || units.len() >= budgets.max_units as usize
+            {
+                return Err(reject("combined text exceeds the document output budget"));
+            }
+            unit.order = u32::try_from(units.len()).map_err(|_| reject("unit order overflowed"))?;
+            units.push(unit);
+        }
+        if warnings.len().saturating_add(document.warnings().len()) > budgets.max_units as usize {
+            return Err(reject(
+                "combined warnings exceed the document output budget",
+            ));
+        }
+        warnings.extend_from_slice(document.warnings());
+        next_page = window
+            .end()
+            .checked_add(1)
+            .ok_or_else(|| reject("page number overflowed"))?;
+    }
+    if next_page != end_page {
+        return Err(reject("the final PDF page window is missing"));
+    }
+    Ok(ConvertedDocument::new(
+        version.ok_or_else(|| reject("there are no PDF page windows"))?,
+        FormatKind::Pdf,
+        units,
+        warnings,
+        Vec::new(),
+    ))
+}
 
 /// Why a PDF could not be converted.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -522,6 +622,109 @@ pub(crate) mod tests {
             )
             .expect("out-of-range outcome");
         assert!(matches!(invalid, ConversionOutcome::Malformed { .. }));
+    }
+
+    #[test]
+    fn complete_text_windows_restore_page_citations_without_publishing_partial_windows() {
+        use crate::{
+            BaselineConverter, ConversionContext, DocumentConverter, DocumentMetadata,
+            SourceContent,
+        };
+
+        let bytes = text_pdf(&[&["First page"], &["Middle page"], &["Last page"]]);
+        let metadata = DocumentMetadata::unknown().with_media_type("application/pdf");
+        let convert = |start, end| {
+            let range = PdfPageWindow::new(start, end).unwrap();
+            let outcome = BaselineConverter::new()
+                .convert(
+                    SourceContent::Bytes(&bytes),
+                    &metadata,
+                    &ConversionContext::new().with_pdf_page_window(range),
+                )
+                .unwrap();
+            (range, outcome.document().unwrap().clone())
+        };
+        let first = convert(1, 1);
+        let last = convert(2, 3);
+        assert!(first.1.is_partial());
+        assert!(last.1.is_partial());
+        let merged = merge_pdf_text_windows(
+            3,
+            [first.clone(), last.clone()],
+            &ConversionBudgets::default(),
+        )
+        .unwrap();
+        assert!(!merged.is_partial());
+        assert_eq!(merged.units().len(), 3);
+        assert_eq!(
+            merged
+                .units()
+                .iter()
+                .map(|unit| (unit.text.as_str(), unit.order))
+                .collect::<Vec<_>>(),
+            [("First page", 0), ("Middle page", 1), ("Last page", 2)]
+        );
+        assert_eq!(
+            merged
+                .units()
+                .iter()
+                .map(|unit| unit.provenance.clone())
+                .collect::<Vec<_>>(),
+            [
+                Provenance::PdfBlock {
+                    page_number: 1,
+                    block_index: 0
+                },
+                Provenance::PdfBlock {
+                    page_number: 2,
+                    block_index: 0
+                },
+                Provenance::PdfBlock {
+                    page_number: 3,
+                    block_index: 0
+                },
+            ]
+        );
+        assert!(merge_pdf_text_windows(3, [first.clone()], &ConversionBudgets::default()).is_err());
+        assert!(
+            merge_pdf_text_windows(
+                3,
+                [first.clone(), convert(1, 2), last.clone()],
+                &ConversionBudgets::default()
+            )
+            .is_err()
+        );
+        assert!(
+            merge_pdf_text_windows(
+                3,
+                [first.clone(), last.clone()],
+                &ConversionBudgets {
+                    max_output_chars: 5,
+                    ..ConversionBudgets::default()
+                }
+            )
+            .is_err()
+        );
+        let with_omission = ConvertedDocument::new_with_visuals(
+            first.1.converter(),
+            FormatKind::Pdf,
+            first.1.units().to_vec(),
+            first.1.warnings().to_vec(),
+            first.1.omissions().to_vec(),
+            Vec::new(),
+            vec![crate::VisualOmission {
+                provenance: Some(VisualProvenance::PdfPage { page_number: 1 }),
+                detail: "unrendered page".into(),
+            }],
+        );
+        assert!(
+            merge_pdf_text_windows(
+                3,
+                [(first.0, with_omission), last],
+                &ConversionBudgets::default()
+            )
+            .is_err()
+        );
     }
 
     /// Generates a small single-font PDF whose pages carry the given text

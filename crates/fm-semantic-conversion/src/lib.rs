@@ -90,6 +90,7 @@ pub use converter::{
     BASELINE_CONVERTER_VERSION, BaselineConverter, ConversionContext, ConversionError,
     DocumentConverter, InvalidPdfPageWindow, PdfPageWindow, SourceContent,
 };
+pub use formats::pdf::{PdfWindowMergeError, merge_pdf_text_windows};
 pub use model::{
     Completeness, ComponentVersion, ConversionOutcome, ConversionWarning, ConvertedDocument,
     DocumentMetadata, FormatKind, MAX_TOTAL_VISUAL_BYTES, MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES,

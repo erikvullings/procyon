@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use fm_semantic_conversion::{
     BaselineConverter, ConversionBudgets, ConversionContext, ConversionOutcome, DocumentConverter,
-    DocumentMetadata, Provenance, SourceContent,
+    DocumentMetadata, PdfPageWindow, Provenance, SourceContent, merge_pdf_text_windows,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -193,21 +193,23 @@ fn convert_child() -> Result<(), Box<dyn std::error::Error>> {
         ..ConversionBudgets::default()
     };
     let started = Instant::now();
-    let outcome = BaselineConverter::new().convert(
-        SourceContent::Bytes(&source),
-        &DocumentMetadata::unknown().with_media_type("application/pdf"),
-        &ConversionContext::new().with_budgets(budgets),
-    )?;
-    let ConversionOutcome::Converted(document) = outcome else {
-        return Err(format!("synthetic PDF conversion failed: {outcome:?}").into());
-    };
-    if document.is_partial() {
-        return Err(format!(
-            "synthetic PDF conversion was partial: {:?}",
-            document.omissions()
-        )
-        .into());
+    let metadata = DocumentMetadata::unknown().with_media_type("application/pdf");
+    let mut windows = Vec::new();
+    for start in (1_u32..=354).step_by(32) {
+        let window = PdfPageWindow::new(start, (start + 31).min(354))?;
+        let outcome = BaselineConverter::new().convert(
+            SourceContent::Bytes(&source),
+            &metadata,
+            &ConversionContext::new()
+                .with_budgets(budgets.clone())
+                .with_pdf_page_window(window),
+        )?;
+        let ConversionOutcome::Converted(document) = outcome else {
+            return Err(format!("synthetic PDF window {start} failed: {outcome:?}").into());
+        };
+        windows.push((window, document));
     }
+    let document = merge_pdf_text_windows(354, windows, &budgets)?;
     let pages = document
         .units()
         .iter()
