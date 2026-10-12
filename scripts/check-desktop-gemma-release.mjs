@@ -7,7 +7,12 @@ export const experimentalManifestPath = fileURLToPath(
   new URL('../docs/evaluations/semantic-gemma-experimental-v1.json', import.meta.url),
 );
 
-export function checkDesktopGemmaRelease(manifest, semanticEnabled, experimentalEnabled) {
+export function checkDesktopGemmaRelease(
+  manifest,
+  semanticEnabled,
+  experimentalEnabled,
+  macosArchitecture = 'universal',
+) {
   if (semanticEnabled !== 'true' || experimentalEnabled !== 'true') {
     throw new Error('experimental Gemma desktop requires both independent release approvals');
   }
@@ -17,13 +22,12 @@ export function checkDesktopGemmaRelease(manifest, semanticEnabled, experimental
   for (const target of ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64']) {
     semanticComponentReleasePlan(manifest, target);
   }
-  // The desktop workflow packages a universal Mac app, but its current catalog is arm64-only.
-  if (!manifest.targets?.['macos-x86_64']) {
+  // A universal or Intel app cannot use the signed arm64-only Mac worker.
+  if (macosArchitecture !== 'arm64') {
     throw new Error(
       'experimental universal macOS desktop requires an approved macos-x86_64 worker/catalog; arm64 alone cannot run on Intel',
     );
   }
-  semanticComponentReleasePlan(manifest, 'macos-x86_64');
   return manifest;
 }
 
@@ -33,6 +37,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     manifest,
     process.env.SEMANTIC_RELEASE_QUALIFIED,
     process.env.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED,
+    process.argv.includes('--macos-arm64-only') ? 'arm64' : 'universal',
   );
   console.log(
     `Experimental Gemma desktop uses reviewed signed candidate ${manifest.qualificationRunId}`,

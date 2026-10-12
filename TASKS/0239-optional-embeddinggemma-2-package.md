@@ -98,6 +98,18 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: User selected Apple Silicon-only experimental
+  Gemma macOS desktop packaging. The four signed worker targets remain
+  macOS arm64, Linux arm64/x64, and Windows x64; no Intel worker is implied.
+  The release recipe now builds an arm64-only Tauri target, rejects non-arm64
+  Mach-O app binaries and DMGs without an aarch64 filename, and routes signed
+  updates to a separate experimental endpoint without an Intel entry.
+  Non-Gemma universal macOS builds, the stable updater, Homebrew cask and
+  Chocolatey package are not replaced by experimental releases. Workflow,
+  manifest CLI, approval-guard and Apple Silicon desktop type-checks passed;
+  native signed/notarized install and updater behavior are not yet qualified.
+  This packaging change does not change the PDF prerequisite, noGo approval,
+  or the need for new exact-source evidence.
 - 2026-10-07: Created after the E5/Gemma comparison. Product direction is a
   separate, opt-in Gemma installation alongside default E5, not a replacement
   or an assertion of superior text quality. Initialization locks dimensions

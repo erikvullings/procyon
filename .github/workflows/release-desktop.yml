@@ -20,11 +20,13 @@ jobs:
         env:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
-        run: node scripts/check-desktop-gemma-release.mjs
+        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only
       - uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' || contains(github.ref_name, '-') }}
+          name: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && format('Procyon {0} - Experimental Gemma', github.ref_name) || github.ref_name }}
+          body: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && 'Experimental Gemma is opt-in; multilingual E5 remains the default, and Gemma ranking quality is not established. The macOS Gemma download requires Apple Silicon (arm64) and does not run on Intel Macs. Intel users should use the separate universal non-Gemma release.' || '' }}
 
   macos:
     name: Signed and notarized macOS bundles
@@ -33,6 +35,8 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 120
     environment: desktop-release
+    env:
+      MACOS_TARGET: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && 'aarch64-apple-darwin' || 'universal-apple-darwin' }}
     steps:
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
@@ -48,7 +52,7 @@ jobs:
         env:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
-        run: node scripts/check-desktop-gemma-release.mjs
+        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only
       - name: Compile the production semantic catalog trust key
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
@@ -76,8 +80,15 @@ jobs:
           apps/fm-desktop/src-tauri/resources/semantic/catalog.json
           apps/fm-desktop/src-tauri/resources/semantic/catalog.sig
           "$RUNNER_TEMP/semantic-catalog.pub"
-      - name: Install universal macOS Rust targets
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Install macOS Rust targets
+        env:
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
+        run: |
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" ]]; then
+            rustup target add aarch64-apple-darwin
+          else
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          fi
       - name: Install lld
         run: brew install lld
       - name: Require tag to match the Cargo-owned desktop version
@@ -143,7 +154,7 @@ jobs:
           GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
         run: |
           if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" ]]; then
-            pnpm run build:tauri --target universal-apple-darwin --features semantic-gemma
+            pnpm run build:tauri --target aarch64-apple-darwin --features semantic-gemma
           else
             pnpm run build:tauri --target universal-apple-darwin
           fi
@@ -153,7 +164,7 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
         run: |
           DMG_PATH="$(
-            find target/universal-apple-darwin/release/bundle/dmg \
+            find "target/$MACOS_TARGET/release/bundle/dmg" \
               -maxdepth 1 -type f -name '*.dmg' -print -quit
           )"
           test -n "$DMG_PATH"
@@ -165,14 +176,16 @@ jobs:
             --timeout 45m \
             --no-s3-acceleration
           xcrun stapler staple "$DMG_PATH"
-      - name: Verify signature, notarization, stapling, and universal binary
+      - name: Verify signature, notarization, stapling, and macOS architecture
+        env:
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
         run: |
           APP_PATH="$(
-            find target/universal-apple-darwin/release/bundle/macos \
+            find "target/$MACOS_TARGET/release/bundle/macos" \
               -maxdepth 1 -type d -name '*.app' -print -quit
           )"
           DMG_PATH="$(
-            find target/universal-apple-darwin/release/bundle/dmg \
+            find "target/$MACOS_TARGET/release/bundle/dmg" \
               -maxdepth 1 -type f -name '*.dmg' -print -quit
           )"
           test -n "$APP_PATH"
@@ -202,15 +215,20 @@ jobs:
           spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH"
           hdiutil verify "$DMG_PATH"
           ARCHITECTURES="$(lipo -archs "$APP_PATH/Contents/MacOS/Procyon")"
-          grep -qw arm64 <<< "$ARCHITECTURES"
-          grep -qw x86_64 <<< "$ARCHITECTURES"
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" ]]; then
+            test "$ARCHITECTURES" == "arm64"
+            [[ "$(basename "$DMG_PATH")" == *aarch64*.dmg ]]
+          else
+            grep -qw arm64 <<< "$ARCHITECTURES"
+            grep -qw x86_64 <<< "$ARCHITECTURES"
+          fi
       - uses: softprops/action-gh-release@v3
         if: github.event_name == 'push'
         with:
           files: |
-            target/universal-apple-darwin/release/bundle/dmg/*.dmg
-            target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
-            target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
+            target/${{ env.MACOS_TARGET }}/release/bundle/dmg/*.dmg
+            target/${{ env.MACOS_TARGET }}/release/bundle/macos/*.app.tar.gz
+            target/${{ env.MACOS_TARGET }}/release/bundle/macos/*.app.tar.gz.sig
       - name: Remove temporary signing credentials
         if: always()
         run: rm -f "$APPLE_API_KEY_PATH"
@@ -244,7 +262,7 @@ jobs:
         env:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
-        run: node scripts/check-desktop-gemma-release.mjs
+        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only
       - name: Compile the production semantic catalog trust key
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
@@ -324,7 +342,7 @@ jobs:
         env:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
-        run: node scripts/check-desktop-gemma-release.mjs
+        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only
       - name: Compile the production semantic catalog trust key
         if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
@@ -406,29 +424,41 @@ jobs:
             --pattern "*-setup.exe.sig" \
             --dir updater-assets
       - name: Generate signed update metadata
-        run: >
-          node scripts/generate-updater-manifest.mjs
-          --assets updater-assets
-          --repository "$GITHUB_REPOSITORY"
-          --tag "$GITHUB_REF_NAME"
-          --version "${GITHUB_REF_NAME#v}"
-          --output latest.json
-      - name: Publish stable update endpoint
+        env:
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
+        run: |
+          EXTRA_ARGS=()
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" ]]; then
+            EXTRA_ARGS=(--experimental-gemma)
+          fi
+          node scripts/generate-updater-manifest.mjs \
+            --assets updater-assets \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$GITHUB_REF_NAME" \
+            --version "${GITHUB_REF_NAME#v}" \
+            --output latest.json \
+            "${EXTRA_ARGS[@]}"
+      - name: Publish selected update endpoint
         env:
           GH_TOKEN: ${{ github.token }}
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
         run: |
-          if ! gh release view updater-latest >/dev/null 2>&1; then
-            gh release create updater-latest \
+          UPDATE_TAG=updater-latest
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" ]]; then
+            UPDATE_TAG=updater-gemma-experimental
+          fi
+          if ! gh release view "$UPDATE_TAG" >/dev/null 2>&1; then
+            gh release create "$UPDATE_TAG" \
               --prerelease \
               --title "Procyon updater metadata" \
               --notes "Managed endpoint for signed desktop update metadata."
           fi
-          gh release upload updater-latest latest.json --clobber
+          gh release upload "$UPDATE_TAG" latest.json --clobber
 
   homebrew:
     name: Publish cross-platform Homebrew cask
     needs: [macos, linux]
-    if: ${{ always() && github.event_name == 'push' && needs.macos.result == 'success' && needs.linux.result == 'success' }}
+    if: ${{ always() && github.event_name == 'push' && needs.macos.result == 'success' && needs.linux.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' }}
     runs-on: macos-latest
     environment: desktop-release
     steps:
@@ -478,7 +508,7 @@ jobs:
 
   chocolatey:
     needs: windows
-    if: ${{ always() && github.event_name == 'push' && needs.windows.result == 'success' }}
+    if: ${{ always() && github.event_name == 'push' && needs.windows.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' }}
     uses: ./.github/workflows/publish-chocolatey.yml
     with:
       release_tag: ${{ github.ref_name }}

@@ -332,6 +332,12 @@ macOS releases are signed and notarized. Windows releases are currently unsigned
 Microsoft Defender SmartScreen warning. Desktop builds verify signed update artifacts before
 installation. Automatic checks can be disabled in Settings; checks never download, install, or
 restart without user confirmation, and a manual **Check now** action remains available.
+If approved for release, the opt-in experimental Gemma macOS build will be **Apple Silicon
+(arm64) only**; it cannot run on Intel Macs. Its signed updater uses a separate experimental
+channel. The regular non-Gemma universal macOS build and Homebrew cask remain available to
+Intel users; experimental packages would be downloaded directly from their GitHub Release and
+would not replace the stable cask or Chocolatey package. E5 remains the default, and Gemma
+search quality is not established.
 
 ## Desktop releases
 

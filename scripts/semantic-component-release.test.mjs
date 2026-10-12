@@ -150,6 +150,11 @@ test('experimental desktop rejects missing consent, old candidates and mismatche
     () => checkDesktopGemmaRelease(proposed, 'true', 'true'),
     /universal macOS desktop requires an approved macos-x86_64 worker\/catalog/u,
   );
+  assert.doesNotThrow(() => checkDesktopGemmaRelease(proposed, 'true', 'true', 'arm64'));
+  assert.throws(
+    () => checkDesktopGemmaRelease(proposed, 'true', 'true', 'x86_64'),
+    /universal macOS desktop requires an approved macos-x86_64 worker\/catalog/u,
+  );
   assert.throws(
     () =>
       checkDesktopGemmaRelease(

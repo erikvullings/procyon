@@ -135,12 +135,11 @@ optional Docling ML/PDFium pack is qualified on those targets.
   `release-semantic-components.yml` signs workers for macOS arm64, Windows x64,
   Linux x64 and Linux arm64, whereas experimental `release-desktop.yml` builds a
   **universal** macOS application but fetches only the macOS arm64 worker/catalog.
-  The pinned Zvec runtime inventory has no macOS x64 binary. A signed four-target
-  semantic candidate therefore does not establish that Gemma works on an Intel
-  Mac in the universal installer. Before desktop approval, either qualify and
-  package an independently signed Intel worker/catalog or explicitly ship an
-  arm64-only experimental Mac artifact with the installer/updater paths adjusted
-  and its scope disclosed. Do not infer Intel support from the universal app binary
+  The pinned Zvec runtime inventory has no macOS x64 binary. The user chose an
+  Apple Silicon-only experimental artifact, leaving the normal universal
+  non-Gemma package and Intel updater intact. The release recipe now selects
+  arm64-only Gemma bundles and an isolated experimental updater endpoint;
+  signed/notarized installed behavior remains unverified. Do not infer Intel support
   or relax the exact-candidate gate. The pinned no-ML Docling converter has no
   page rasterizer; no native PDFium library, notices or renderer package is yet
   pinned across the signed worker targets, so scanned-page support is also no-go.
