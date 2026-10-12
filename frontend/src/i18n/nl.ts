@@ -1038,6 +1038,8 @@ export const nl = {
     conceptMode: 'Zoeken op concept',
     vocabulary: 'Woordenlijst',
     allVocabularies: 'Alle woordenlijsten',
+    conceptBroader: 'Breder concept: {concepts}',
+    conceptTopic: 'Onderwerp: {topic}',
     chooseConcept: 'Concept',
     relatedConcept: 'Verwant aan {concept}',
     conceptCurrentFolder: 'Alleen huidige map',

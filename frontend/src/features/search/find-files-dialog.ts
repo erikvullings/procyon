@@ -301,6 +301,44 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
     return `${label} (${starter?.shortName ?? vocabulary.name})`;
   }
 
+  function conceptContext(
+    vocabulary: ConceptSource,
+    uri: string,
+  ): {
+    query: string;
+    description: string;
+  } {
+    const concept = vocabulary.concepts.find((item) => item.uri === uri);
+    const label = conceptLabel(vocabulary, uri);
+    const definition = concept?.definitions?.en;
+    if (definition) return { query: `${label}. ${definition}`, description: definition };
+
+    const note = concept?.scopeNotes?.en;
+    const broader = (concept?.broader ?? [])
+      .filter((parent) => vocabulary.concepts.some((item) => item.uri === parent))
+      .slice(0, 2)
+      .map((parent) => conceptLabel(vocabulary, parent));
+    const starter = skosStarters.find(({ document }) => document === vocabulary);
+    const topic = starter
+      ? (starter.document.name.split(' (')[0] ?? starter.document.name)
+      : vocabulary.name;
+    return {
+      query: [
+        label,
+        note?.replace(/[.!?]+$/, ''),
+        broader.length ? `Broader concept: ${broader.join(', ')}` : undefined,
+        `Topic: ${topic}`,
+      ]
+        .filter((part) => part !== undefined)
+        .join('. '),
+      description:
+        note ??
+        (broader.length
+          ? t('search', 'conceptBroader', { concepts: broader.join(', ') })
+          : t('search', 'conceptTopic', { topic })),
+    };
+  }
+
   function selectConcept(vocabulary: ConceptSource, uri: string): void {
     selectedConcept = { vocabulary, uri };
     conceptFilter = conceptLabel(vocabulary, uri);
@@ -353,15 +391,10 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
       conceptAvailable &&
       conceptLibraryId !== undefined
     ) {
-      const concept = selectedConcept.vocabulary.concepts.find(
-        (item) => item.uri === selectedConcept?.uri,
-      );
-      const label = conceptLabel(selectedConcept.vocabulary, selectedConcept.uri);
-      const definition = concept?.definitions?.en;
       return {
         mode: 'semantic',
         filenameQuery: '',
-        semanticQuery: definition ? `${label}. ${definition}` : label,
+        semanticQuery: conceptContext(selectedConcept.vocabulary, selectedConcept.uri).query,
         conceptLabel: selectedConceptName(selectedConcept.vocabulary, selectedConcept.uri),
         selectedConcept: {
           vocabularyId: selectedConcept.vocabulary.id,
@@ -604,9 +637,10 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
                               [
                                 m('strong', conceptLabel(vocabulary, concept.uri)),
                                 m('span', ` · ${vocabulary.name}`),
-                                concept.definitions?.en
-                                  ? m('small.fm-find-concept-definition', concept.definitions.en)
-                                  : undefined,
+                                m(
+                                  'small.fm-find-concept-definition',
+                                  conceptContext(vocabulary, concept.uri).description,
+                                ),
                               ],
                             ),
                             (() => {

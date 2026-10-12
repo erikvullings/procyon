@@ -1006,6 +1006,8 @@ export const de = {
     vocabulary: 'Vokabular',
     allVocabularies: 'Alle Vokabulare',
     chooseConcept: 'Konzept',
+    conceptBroader: 'Breiteres Konzept: {concepts}',
+    conceptTopic: 'Thema: {topic}',
     relatedConcept: 'Verwandt mit {concept}',
     conceptCurrentFolder: 'Nur aktueller Ordner',
     conceptLoading: 'Vokabulare werden geladen…',

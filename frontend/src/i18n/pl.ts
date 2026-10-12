@@ -995,6 +995,8 @@ export const pl = {
     vocabulary: 'Słownik',
     allVocabularies: 'Wszystkie słowniki',
     chooseConcept: 'Pojęcie',
+    conceptBroader: 'Pojęcie nadrzędne: {concepts}',
+    conceptTopic: 'Temat: {topic}',
     relatedConcept: 'Powiązane z: {concept}',
     conceptCurrentFolder: 'Tylko bieżący folder',
     conceptLoading: 'Wczytywanie słowników…',

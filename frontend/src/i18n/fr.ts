@@ -1001,6 +1001,8 @@ export const fr = {
     vocabulary: 'Vocabulaire',
     allVocabularies: 'Tous les vocabulaires',
     chooseConcept: 'Concept',
+    conceptBroader: 'Concept plus large : {concepts}',
+    conceptTopic: 'Sujet : {topic}',
     relatedConcept: 'Associé à {concept}',
     conceptCurrentFolder: 'Dossier actuel uniquement',
     conceptLoading: 'Chargement des vocabulaires…',

@@ -1,0 +1,411 @@
+{
+  "format": "procyon-skos-1",
+  "id": "agrovoc-sustainable-food",
+  "name": "Sustainable agriculture and food systems (AGROVOC 2026-10-07 snapshot excerpt)",
+  "concepts": [
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_10967",
+      "prefLabels": {
+        "en": "food security"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "A situation that exists when all people, at all times, have physical, social and economic access to sufficient, safe and nutritious food that meets their dietary needs and food preferences for an active and healthy life. Based on this definition, four food security dimensions can be identified: food availability, economic and physical access to food, food utilization, and stability over time. The concept of food security is evolving to also recognize the centrality of agency and sustainability."
+      },
+      "scopeNotes": {
+        "en": "Physical and economic access, by all people at all times, to the basic food they need"
+      },
+      "broader": [],
+      "narrower": ["http://aims.fao.org/aos/agrovoc/c_7d40c88b"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_1348040570280",
+      "prefLabels": {
+        "en": "ecosystem services"
+      },
+      "altLabels": {
+        "en": ["ecosystem goods and services"]
+      },
+      "definitions": {
+        "en": "Ecosystem services are the multitude of benefits that nature provides to society."
+      },
+      "scopeNotes": {
+        "en": "Ecosystem services make human life possible by, for example, providing nutritious food and clean water, regulating disease and climate, supporting the pollination of crops and soil formation, and providing recreational, cultural and spiritual benefits"
+      },
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_1374567058134",
+      "prefLabels": {
+        "en": "climate change adaptation"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Adjustment in natural or human systems to a new or changing environment. Adaptation to climate change refers to adjustment in natural or human systems in response to actual or expected climatic stimuli or their effects, which moderates harm or exploits beneficial opportunities. Various types of adaptation can be distinguished, including anticipatory and reactive adaptation, private and public adaptation, and autonomous and planned adaptation."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_15911",
+      "prefLabels": {
+        "en": "organic agriculture"
+      },
+      "altLabels": {
+        "en": ["organic farming"]
+      },
+      "definitions": {
+        "en": "Holistic production management system which promotes and enhances agro-ecosystem health, including biodiversity, biological cycles and soil biological activity."
+      },
+      "scopeNotes": {
+        "en": "Agricultural methods without use of chemical products"
+      },
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_207",
+      "prefLabels": {
+        "en": "agroforestry"
+      },
+      "altLabels": {
+        "en": ["agrosilvicultural systems", "farm forestry"]
+      },
+      "definitions": {
+        "en": "Agroforestry: the collective term for land-use   systems   and   technologies   in   which   woody perennials (e.g. trees, shrubs, palms or   bamboos)   and   agricultural   crops   or   animals are used deliberately on the same parcel of land in some form of spatial and temporal arrangement."
+      },
+      "scopeNotes": {
+        "en": "Simultaneous production, temporary or permanent, of forest trees with agricultural crops or animals in the same place"
+      },
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_264f7edd",
+      "prefLabels": {
+        "en": "conservation agriculture"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "A sustainable farming system combining crop rotation, minimal soil disturbance (e.g. zero or no tillage), and permanent soil cover."
+      },
+      "scopeNotes": {
+        "en": "Conservation agriculture is characterized by three principles: continuous minimum mechanical soil disturbance, permanent organic soil cover and diversification of crop species grown in sequences or associations."
+      },
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_331342",
+      "prefLabels": {
+        "en": "sustainable forest management"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Forest management that maintains or enhances the economic, social and environmental values of a forest for the benefit of present and future generations."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_33561",
+      "prefLabels": {
+        "en": "sustainable agriculture"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Farming systems that emphasize environmentally benign practices while also sustaining yield and net farm income, e.g. use of biologically based pest control methods"
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": ["http://aims.fao.org/aos/agrovoc/c_98778f1a"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_33949",
+      "prefLabels": {
+        "en": "biodiversity"
+      },
+      "altLabels": {
+        "en": ["biological diversity", "ecosystem diversity"]
+      },
+      "definitions": {
+        "en": "The variability among living organisms from all sources including, inter alia, terrestrial, marine and other aquatic ecosystems and the ecological complexes of which they are part; this includes diversity within species, between species and of ecosystems."
+      },
+      "scopeNotes": {
+        "en": "The variety of life on earth at the genetic, species and ecosystems levels. Diversity indices are measures of richness (the number of species in a system); and to some extent, evenness (variances of species' local abundance). These indices are therefore indifferent to species substitutions which may, however, reflect ecosystem stresses (such as those due to high fishing intensity)."
+      },
+      "broader": [],
+      "narrower": ["http://aims.fao.org/aos/agrovoc/c_37977"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_33955",
+      "prefLabels": {
+        "en": "biodiversity conservation"
+      },
+      "altLabels": {
+        "en": ["biological diversity conservation"]
+      },
+      "definitions": {
+        "en": "Active management of the ecosystem to ensure the survival of the maximum diversity of species and the maintenance of genetic variability within them."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_35332",
+      "prefLabels": {
+        "en": "sustainable development"
+      },
+      "altLabels": {
+        "en": ["ecodevelopment", "sustainable economic development"]
+      },
+      "definitions": {
+        "en": "A holistic approach that seeks to create a balance between economic growth, social well-being, and environmental health. It aims to foster a world where all people can meet their needs, both now and in the future, by promoting practices that are equitable, efficient, and ecologically sound."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_36580",
+      "prefLabels": {
+        "en": "sustainable land management"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "The use of land resources, including soils, water, animals and plants, for the production of goods to meet changing human needs, while simultaneously ensuring the long-term productive potential of these resources and the maintenance of their environmental functions."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_37977",
+      "prefLabels": {
+        "en": "agrobiodiversity"
+      },
+      "altLabels": {
+        "en": ["agricultural biodiversity"]
+      },
+      "definitions": {
+        "en": "Agrobiodiversity is the diversity of crops and their wild relatives, trees, livestock, fish, microbes and other species that contribute to agricultural production."
+      },
+      "scopeNotes": {},
+      "broader": ["http://aims.fao.org/aos/agrovoc/c_33949"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_588e022e",
+      "prefLabels": {
+        "en": "environmental sustainability"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Refers to the capacity of economic growth processes and social change to ensure that natural resources are not depleted faster than they can be regenerated and that ecological systems remain viable. Economic growth must stay within existing carrying capacities."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": ["http://aims.fao.org/aos/agrovoc/c_35332"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_7165",
+      "prefLabels": {
+        "en": "soil conservation"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Soil conservation is a combination of all methods of management and land use that safeguard the soil against depletion or deterioration by natural or human-induced factors. It most often attempts to ensure that soil does not erode and wash into streams and lakes or blow away in the wind, but it also involves the protection of the soil from damage by machinery (e.g., compaction) or by harmful changes to its chemistry (e.g., acidification or salinization)."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_7d40c88b",
+      "prefLabels": {
+        "en": "food access"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Access by individuals to adequate resources (entitlements) for producing or acquiring appropriate foods for a nutritious diet. Entitlements are defined as the set of all commodity bundles over which a person can establish command given the legal, political, economics and social arrangements of the community in which they live (including traditional rights such as access to common resources)."
+      },
+      "scopeNotes": {},
+      "broader": ["http://aims.fao.org/aos/agrovoc/c_10967"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_8315",
+      "prefLabels": {
+        "en": "water conservation"
+      },
+      "altLabels": {
+        "en": ["conserving water", "water protection (resource)", "water saving"]
+      },
+      "definitions": {
+        "en": "The protection, development and efficient management of water resources for beneficial purposes."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_8a6031d8",
+      "prefLabels": {
+        "en": "climate resilience"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Climate resilience is the capacity of a community or environment to anticipate and manage climate impacts, minimize their damage, and recover and transform as needed after the initial shock."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_92381",
+      "prefLabels": {
+        "en": "agroecology"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Agroecology is the science of applying ecological concepts and principles to manage interactions between plants, animals, humans and the environment for food security and nutrition."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_98778f1a",
+      "prefLabels": {
+        "en": "regenerative agriculture"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Regenerative agriculture is a way of farming that nurtures and restores soil health, and therefore reduces water use, prevents land degradation, and promotes biodiversity. By minimizing land ploughing, practicing rotating crops, and using animal manure and compost, regenerative agriculture ensures that the soil stores more carbon, conserves more moisture, and is healthier due to thriving fungal communities."
+      },
+      "scopeNotes": {},
+      "broader": ["http://aims.fao.org/aos/agrovoc/c_33561"],
+      "narrower": [],
+      "related": ["http://aims.fao.org/aos/agrovoc/c_92381"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_bea5db85",
+      "prefLabels": {
+        "en": "food systems"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Food systems comprise all food products that originate from crop and livestock production, forestry, fisheries and aquaculture, and from other sources such as synthetic biology that are meant for human consumption."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_c9484b9b",
+      "prefLabels": {
+        "en": "circular economy"
+      },
+      "altLabels": {},
+      "definitions": {
+        "en": "Economic system that uses a systemic approach to maintain a circular flow of resources, by recovering, retaining or adding to their value, while contributing to sustainable development."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://aims.fao.org/aos/agrovoc/c_fe89fcbc",
+      "prefLabels": {
+        "en": "sustainable fisheries"
+      },
+      "altLabels": {
+        "en": ["sustainable fishing"]
+      },
+      "definitions": {
+        "en": "Fishing activities that do not cause or lead to undesirable changes in biological and economic productivity, biological diversity, or ecosystem structure and functioning from one human generation to the next. Fishing is sustainable when it can be conducted over the long-term at an acceptable level of biological and economic productivity without leading to ecological changes that foreclose options for future generations.,Managing fisheries so that they continue to be healthy, functioning ecosystems that support breeding stocks of catchable fish. Sustainable fishing practices have two components: (1) thoughtful regulations that are grounded in good science, and (2) angling practices that are ethical and in line with those regulations."
+      },
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    }
+  ],
+  "extensions": {
+    "https://procyon.app/ns/skos-starter/source": "https://agrovoc.fao.org/latestAgrovoc/agrovoc_core.rdf.zip",
+    "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by/4.0/",
+    "https://procyon.app/ns/skos-starter/selection": [
+      "c_33561",
+      "c_92381",
+      "c_98778f1a",
+      "c_10967",
+      "c_7d40c88b",
+      "c_8a6031d8",
+      "c_1374567058134",
+      "c_33949",
+      "c_33955",
+      "c_37977",
+      "c_331342",
+      "c_36580",
+      "c_fe89fcbc",
+      "c_8315",
+      "c_7165",
+      "c_15911",
+      "c_207",
+      "c_1348040570280",
+      "c_588e022e",
+      "c_35332",
+      "c_264f7edd",
+      "c_bea5db85",
+      "c_c9484b9b"
+    ]
+  }
+}

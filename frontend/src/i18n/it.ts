@@ -996,6 +996,8 @@ export const it = {
     vocabulary: 'Vocabolario',
     allVocabularies: 'Tutti i vocabolari',
     chooseConcept: 'Concetto',
+    conceptBroader: 'Concetto più ampio: {concepts}',
+    conceptTopic: 'Argomento: {topic}',
     relatedConcept: 'Correlato a {concept}',
     conceptCurrentFolder: 'Solo la cartella corrente',
     conceptLoading: 'Caricamento dei vocabolari…',

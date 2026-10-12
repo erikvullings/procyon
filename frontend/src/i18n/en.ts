@@ -1027,6 +1027,8 @@ export const en = {
     conceptMode: 'Find by concept',
     vocabulary: 'Vocabulary',
     allVocabularies: 'All vocabularies',
+    conceptBroader: 'Broader concept: {concepts}',
+    conceptTopic: 'Topic: {topic}',
     chooseConcept: 'Concept',
     relatedConcept: 'Related to {concept}',
     conceptCurrentFolder: 'Current folder only',
