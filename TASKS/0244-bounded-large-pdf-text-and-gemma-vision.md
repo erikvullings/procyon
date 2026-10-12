@@ -98,6 +98,14 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: The experimental Gemma publish checker now refuses any
+  four-target signed candidate missing PDFium and its paired notices, the
+  exact pinned upstream provenance, or the worker's PDFium compatibility
+  dependency. A renderer-free synthetic candidate previously passed the
+  checker and now fails; the exact signed-pair fixture passes. This is a
+  minimum packaging safeguard, **not** evidence of 354-page installed
+  coverage, target resource limits or release GO. The existing blocked
+  candidate remains blocked.
 - 2026-10-12 Copilot: Worker job progress is now persisted with a backward-
   compatible catalog schema 7 extension (including old catalogs without
   progress columns, so the previous worker can still reopen the catalog),

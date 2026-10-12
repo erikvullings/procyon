@@ -89,6 +89,38 @@ export function checkExperimentalGemmaRelease(assetsRoot, candidateRoot, approva
       }
       const model = models[0];
       const artifacts = envelope.catalog.artifacts;
+      const worker = artifacts.filter(
+        (artifact) => artifact.component_id === 'procyon.semantic.worker',
+      );
+      const rendererComponents = [
+        'procyon.semantic.pdfium-runtime',
+        'procyon.semantic.pdfium-notices',
+      ];
+      if (
+        worker.length !== 1 ||
+        rendererComponents.some(
+          (component) =>
+            artifacts.filter((artifact) => artifact.component_id === component).length !== 1,
+        ) ||
+        !worker[0].compatibility?.runtimes?.some(
+          (runtime) =>
+            runtime.component_id === rendererComponents[0] &&
+            runtime.version_requirement === '=0.8086.0',
+        ) ||
+        rendererComponents.some((component) => {
+          const artifact = artifacts.find((entry) => entry.component_id === component);
+          return !(envelope.provenance ?? []).some(
+            (entry) =>
+              entry.artifact_id === artifact.id &&
+              entry.source === 'https://github.com/bblanchon/pdfium-binaries' &&
+              entry.source_revision === '5325fa6d0d9379329f10f98fdc4839b4e40f2e79',
+          );
+        })
+      ) {
+        throw new Error(
+          'experimental Gemma requires signed PDF renderer and notices on every target',
+        );
+      }
       if (
         model.primary_file_name !== 'model.safetensors' ||
         model.artifact_id !== artifacts.find((entry) => entry.component_id === gemmaFiles[0])?.id ||

@@ -22,7 +22,7 @@ function sha(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-function fixture(context) {
+function fixture(context, { pdfRenderer = true } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'gemma-experimental-release-'));
   context.after(() => rmSync(root, { recursive: true, force: true }));
   const assets = join(root, 'assets');
@@ -32,6 +32,20 @@ function fixture(context) {
   const artifacts = [
     ...files.map(([component, name]) => ({ component, id: `${component}.bin`, content: name })),
     { component: 'procyon.semantic.worker', id: 'worker.bin', content: 'worker' },
+    ...(pdfRenderer
+      ? [
+          {
+            component: 'procyon.semantic.pdfium-runtime',
+            id: 'pdfium-runtime.bin',
+            content: 'native PDFium',
+          },
+          {
+            component: 'procyon.semantic.pdfium-notices',
+            id: 'pdfium-notices.txt',
+            content: 'complete notices',
+          },
+        ]
+      : []),
   ];
   for (const item of artifacts) writeFileSync(join(assets, item.id), item.content);
   for (const target of targets) {
@@ -59,6 +73,18 @@ function fixture(context) {
           location: `https://github.com/o/r/releases/download/semantic-v1/${item.id}`,
           checksum: [...Buffer.from(sha(item.content), 'hex')],
           resources: { download_bytes: Buffer.byteLength(item.content) },
+          ...(item.component === 'procyon.semantic.worker' && pdfRenderer
+            ? {
+                compatibility: {
+                  runtimes: [
+                    {
+                      component_id: 'procyon.semantic.pdfium-runtime',
+                      version_requirement: '=0.8086.0',
+                    },
+                  ],
+                },
+              }
+            : {}),
         })),
       },
       provenance: [
@@ -67,6 +93,13 @@ function fixture(context) {
           source: 'https://github.com/o/r',
           source_revision: 'source',
         },
+        ...(pdfRenderer
+          ? ['pdfium-runtime.bin', 'pdfium-notices.txt'].map((artifact_id) => ({
+              artifact_id,
+              source: 'https://github.com/bblanchon/pdfium-binaries',
+              source_revision: '5325fa6d0d9379329f10f98fdc4839b4e40f2e79',
+            }))
+          : []),
       ],
     };
     writeFileSync(join(assets, `semantic-catalog-${target}.json`), `${JSON.stringify(catalog)}\n`);
@@ -194,6 +227,14 @@ test('missing Gemma originals or a different model revision fail closed', (conte
   assert.throws(
     () => checkExperimentalGemmaRelease(assets, candidateRoot, approval),
     /catalog SHA-256 does not match approval/u,
+  );
+});
+
+test('experimental Gemma refuses signed candidates without PDF renderer and notices on every target', (context) => {
+  const { assets, candidateRoot, approval } = fixture(context, { pdfRenderer: false });
+  assert.throws(
+    () => checkExperimentalGemmaRelease(assets, candidateRoot, approval),
+    /PDF renderer and notices/u,
   );
 });
 
