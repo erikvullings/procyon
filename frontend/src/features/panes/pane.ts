@@ -1607,9 +1607,12 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                       }),
                     ])
                   : m(
-                      'nav.fm-breadcrumb',
+                      isSearchLocation ? 'div.fm-breadcrumb' : 'nav.fm-breadcrumb',
                       {
-                        'aria-label': t('pane', 'currentPath'),
+                        'aria-label': isSearchLocation
+                          ? t('search', 'resultsTitle')
+                          : t('pane', 'currentPath'),
+                        role: isSearchLocation ? 'group' : undefined,
                         ondblclick: isSearchLocation ? undefined : () => beginEditing(attrs.path),
                       },
                       [

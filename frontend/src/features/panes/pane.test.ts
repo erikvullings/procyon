@@ -853,6 +853,8 @@ describe('Pane search breadcrumb rendering', () => {
     expect(root.querySelector('.fm-search-result-scope')?.textContent).toBe(
       'Folder: /Documents/Work',
     );
+    expect(root.querySelector('.fm-breadcrumb')?.tagName).toBe('DIV');
+    expect(root.querySelector('.fm-breadcrumb')?.getAttribute('role')).toBe('group');
     expect(root.querySelector('.fm-breadcrumb')?.textContent).not.toContain('local');
 
     segments[0]?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
