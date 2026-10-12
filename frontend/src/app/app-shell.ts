@@ -174,6 +174,7 @@ import {
   reduceSelection,
   type SelectionState,
 } from '../features/selection/selection';
+import { knowledgeEvidencePage } from '../features/semantic/evidence-provenance';
 import { AppUpdateDialog } from '../features/settings/app-update-dialog';
 import { SemanticFolderEnrolmentPrompt } from '../features/settings/semantic-library-management';
 import {
@@ -297,27 +298,7 @@ interface KnowledgeSearchTabEntry {
   readonly initialSubject: string | undefined;
 }
 
-/** Returns the one-based preview page encoded by structural knowledge provenance. */
-export function knowledgeEvidencePage(provenance: string): number | undefined {
-  let value: unknown;
-  try {
-    value = JSON.parse(provenance);
-  } catch {
-    return undefined;
-  }
-  const pageFrom = (candidate: unknown): number | undefined => {
-    if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
-      return undefined;
-    }
-    const fields = candidate as Record<string, unknown>;
-    if (fields.kind === 'exact') return pageFrom(fields.value);
-    if (fields.kind === 'span') return pageFrom(fields.first) ?? pageFrom(fields.last);
-    const page =
-      fields.page_number ?? fields.pageNumber ?? fields.slide_number ?? fields.slideNumber;
-    return typeof page === 'number' && Number.isInteger(page) && page > 0 ? page : undefined;
-  };
-  return pageFrom(value);
-}
+export { knowledgeEvidencePage } from '../features/semantic/evidence-provenance';
 
 const DEFAULT_THEME: Theme = 'auto';
 
@@ -4135,8 +4116,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getWorkspaceController: () => workspaceController,
     getOpsController: () => opsController,
     openSavedSearch: (saved) => findFilesController.startSavedSearch(saved, 'currentPane'),
-    openViewer: (paneId, entry, initialSearch, openMetadata) =>
-      openViewer(attrsClient, paneId, entry, initialSearch, openMetadata),
+    openViewer: (paneId, entry, initialSearch, openMetadata, initialPage) =>
+      openViewer(attrsClient, paneId, entry, initialSearch, openMetadata, initialPage),
     closeViewer,
     isDocumentSummaryAvailable: () => semanticAssistantAvailable,
     openDocumentSummary: (_paneId, entry) => {

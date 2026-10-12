@@ -98,6 +98,16 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: File-primary semantic results now distinguish an exact `pdf_image`
+  match from source-level PDF text: the selected result shows a localized embedded-image
+  page citation, does not fetch/display the whole PDF as an image, and opens its source
+  viewer at the cited page rather than searching an English image excerpt as PDF text.
+  The page is derived from validated exact provenance; malformed provenance cannot
+  produce a fabricated page. Knowledge and file-primary evidence remain host-neutral.
+  The new file-primary regression passed; the complete 152-file frontend suite,
+  frontend typecheck and workspace lint also passed.
+  This UI change does not supply embedded-image preview bytes or cover scanned pages
+  without an approved renderer. The rest of TASKS/0244 remains in progress.
 - 2026-10-12 Copilot: Consented Gemma PDFs now stage bounded reusable JPEG XObject
   embeddings with the PDF text in one document generation. Exact one-based page/image
   provenance identifies `pdf_image` evidence; repeated JPEG bytes reuse a model- and

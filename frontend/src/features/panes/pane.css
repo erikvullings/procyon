@@ -64,6 +64,11 @@
   margin-block-start: 0.4rem;
 }
 
+.fm-semantic-pdf-image-evidence {
+  margin-block-start: 0.4rem;
+  color: var(--fm-text-muted);
+}
+
 .fm-semantic-media-thumbnail {
   width: 4rem;
   height: 3rem;

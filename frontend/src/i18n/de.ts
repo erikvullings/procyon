@@ -1015,6 +1015,7 @@ export const de = {
     ...en.knowledgeSearch,
     pdfImageCitation: 'Seite {page} · Bild {image}',
     pdfImageEvidence: 'Eingebettetes PDF-Bild',
+    pdfImageResult: 'Eingebettetes PDF-Bild · Seite {page} · Bild {image}',
     title: 'Semantische Suche',
     openTitle: 'Semantische Suche…',
     subjectsPlaceholder: 'Suchbegriffe eingeben',

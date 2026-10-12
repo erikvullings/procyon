@@ -1002,6 +1002,7 @@ export const es = {
     ...en.knowledgeSearch,
     pdfImageCitation: 'Página {page} · Imagen {image}',
     pdfImageEvidence: 'Imagen incrustada en el PDF',
+    pdfImageResult: 'Imagen incrustada en el PDF · Página {page} · Imagen {image}',
     title: 'Búsqueda semántica',
     openTitle: 'Búsqueda semántica…',
     subjectsPlaceholder: 'Introduce los términos de búsqueda',

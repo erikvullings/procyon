@@ -1003,6 +1003,7 @@ export const pt = {
     ...en.knowledgeSearch,
     pdfImageCitation: 'Página {page} · Imagem {image}',
     pdfImageEvidence: 'Imagem incorporada no PDF',
+    pdfImageResult: 'Imagem incorporada no PDF · Página {page} · Imagem {image}',
     title: 'Pesquisa semântica',
     openTitle: 'Pesquisa semântica…',
     subjectsPlaceholder: 'Introduza os termos de pesquisa',

@@ -16,6 +16,7 @@ import {
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { ActiveSourceState } from '../operations/operation-state';
+import { pdfImageProvenance } from '../semantic/evidence-provenance';
 
 /** Renders an icon-only toggle button matching `IconButton`'s `.btn-flat.btn-icon` styling, but
  * without mithril-materialized's `waves-effect` ripple, which isn't needed for a plain toggle
@@ -250,7 +251,11 @@ export interface PaneAttrs {
   readonly actions?: readonly ActionDescriptor[];
   readonly keybindingOverrides?: Readonly<Record<string, string>>;
   // Entry operations (8)
-  readonly onOpenEntry: (entry: EntrySummary, evidenceQuery?: string) => void | Promise<void>;
+  readonly onOpenEntry: (
+    entry: EntrySummary,
+    evidenceQuery?: string,
+    initialPage?: number,
+  ) => void | Promise<void>;
   readonly onDocumentSummary?: (entry: EntrySummary) => void;
   /** Opens search-only knowledge search scoped to this semantic result set (task 0206). */
   readonly onSearchKnowledge?: () => void;
@@ -473,6 +478,10 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
   const entry = attrs.entries.find((candidate) => candidate.id === selected.entryId);
   const evidence = [selected.bestEvidence, ...selected.additionalEvidence];
   const kind = mediaKind(entry?.mimeType);
+  const pdfImage =
+    entry?.mimeType === 'application/pdf' && selected.bestEvidence.chunkKind === 'pdf_image'
+      ? pdfImageProvenance(selected.bestEvidence.provenanceJson)
+      : undefined;
   const mediaAvailable = selected.bestEvidence.available && !selected.bestEvidence.stale;
   const modifiedLabel = mediaModifiedLabel(entry?.modifiedAt);
   return m('.fm-semantic-evidence', [
@@ -486,7 +495,9 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
         }),
       ),
       kind === undefined
-        ? undefined
+        ? pdfImage === undefined
+          ? undefined
+          : m('.fm-semantic-pdf-image-evidence', t('knowledgeSearch', 'pdfImageResult', pdfImage))
         : m('.fm-semantic-media', [
             kind !== 'audio' &&
             mediaAvailable &&
@@ -502,9 +513,22 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
               modifiedLabel === undefined ? undefined : m('small', modifiedLabel),
             ]),
           ]),
-      evidence.map((item) =>
-        m('.fm-semantic-evidence-item', [
-          m('p', kind === undefined ? item.excerpt : mediaDescription(item.excerpt)),
+      evidence.map((item) => {
+        const image =
+          item.chunkKind === 'pdf_image' && entry?.mimeType === 'application/pdf'
+            ? pdfImageProvenance(item.provenanceJson)
+            : undefined;
+        return m('.fm-semantic-evidence-item', [
+          m(
+            'p',
+            item.chunkKind === 'pdf_image' && entry?.mimeType === 'application/pdf'
+              ? image === undefined
+                ? t('knowledgeSearch', 'pdfImageEvidence')
+                : t('knowledgeSearch', 'pdfImageCitation', image)
+              : kind === undefined
+                ? item.excerpt
+                : mediaDescription(item.excerpt),
+          ),
           m(
             'small',
             [
@@ -515,8 +539,8 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
               .filter((label): label is string => label !== undefined)
               .join(' · '),
           ),
-        ]),
-      ),
+        ]);
+      }),
       m('.fm-semantic-evidence-actions', [
         m(
           'button',
@@ -525,10 +549,16 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
             disabled: entry === undefined || !selected.bestEvidence.available,
             onclick: () => {
               if (entry !== undefined && selected.bestEvidence.available) {
-                void attrs.onOpenEntry(
-                  entry,
-                  kind === undefined ? selected.bestEvidence.excerpt : undefined,
-                );
+                if (pdfImage !== undefined) {
+                  void attrs.onOpenEntry(entry, undefined, pdfImage.page);
+                } else {
+                  void attrs.onOpenEntry(
+                    entry,
+                    kind === undefined && selected.bestEvidence.chunkKind !== 'pdf_image'
+                      ? selected.bestEvidence.excerpt
+                      : undefined,
+                  );
+                }
               }
             },
           },

@@ -1051,6 +1051,7 @@ export const nl = {
     openSection: 'Open {section} in de bron',
     pdfImageCitation: 'Pagina {page} · Afbeelding {image}',
     pdfImageEvidence: 'Ingesloten PDF-afbeelding',
+    pdfImageResult: 'Ingesloten PDF-afbeelding · Pagina {page} · Afbeelding {image}',
     groupBy: 'Resultaatweergave',
     groupByNeed: 'Per kennisbehoefte',
     groupByDocument: 'Per document',

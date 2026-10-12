@@ -208,6 +208,7 @@ export interface PaneContentContext {
     entry: EntrySummary,
     initialSearch?: InitialSearch,
     openMetadata?: boolean,
+    initialPage?: number,
   ): void;
   closeViewer(paneId: PaneId): void;
   isDocumentSummaryAvailable?(): boolean;
@@ -574,13 +575,21 @@ export function createPaneContentBuilder(
         tab?.location.uri.startsWith('search://')
           ? context.getNavigation().back(paneId)
           : context.getNavigation().parent(paneId),
-      onOpenEntry: (entry, evidenceQuery) => {
+      onOpenEntry: (entry, evidenceQuery, initialPage) => {
         if (isParentEntry(entry.id)) {
           return tab?.location.uri.startsWith('search://')
             ? context.getNavigation().back(paneId)
             : context.getNavigation().parent(paneId);
         }
         if (tab?.location.uri.startsWith('search://')) {
+          if (initialPage !== undefined) {
+            const otherPaneId = workspace?.paneOrder.find(
+              (candidatePaneId) => candidatePaneId !== paneId,
+            );
+            if (otherPaneId) {
+              return context.openViewer(otherPaneId, entry, undefined, undefined, initialPage);
+            }
+          }
           const initialSearch =
             evidenceQuery === undefined
               ? context.contentSearchInitialQuery(tab.location.uri, entry)

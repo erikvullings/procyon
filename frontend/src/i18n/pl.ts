@@ -1000,6 +1000,7 @@ export const pl = {
     ...en.knowledgeSearch,
     pdfImageCitation: 'Strona {page} · Obraz {image}',
     pdfImageEvidence: 'Obraz osadzony w pliku PDF',
+    pdfImageResult: 'Obraz osadzony w pliku PDF · Strona {page} · Obraz {image}',
     title: 'Wyszukiwanie semantyczne',
     openTitle: 'Wyszukiwanie semantyczne…',
     subjectsPlaceholder: 'Wpisz szukane terminy',

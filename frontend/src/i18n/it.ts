@@ -999,6 +999,7 @@ export const it = {
     ...en.knowledgeSearch,
     pdfImageCitation: 'Pagina {page} · Immagine {image}',
     pdfImageEvidence: 'Immagine incorporata nel PDF',
+    pdfImageResult: 'Immagine incorporata nel PDF · Pagina {page} · Immagine {image}',
     title: 'Ricerca semantica',
     openTitle: 'Ricerca semantica…',
     subjectsPlaceholder: 'Inserisci i termini di ricerca',

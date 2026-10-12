@@ -1036,6 +1036,7 @@ export const en = {
     openSection: 'Open {section} in source',
     pdfImageCitation: 'Page {page} · Image {image}',
     pdfImageEvidence: 'Embedded PDF image',
+    pdfImageResult: 'Embedded PDF image · Page {page} · Image {image}',
     groupBy: 'Result layout',
     groupByNeed: 'By knowledge need',
     groupByDocument: 'By document',
