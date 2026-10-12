@@ -3140,13 +3140,8 @@ describe('AppShell', () => {
       [...(activePane()?.querySelectorAll('.fm-breadcrumb-segment') ?? [])].map(
         (segment) => segment.textContent,
       ),
-    ).toEqual(['/', 'search', 'local', 'content: ERROR']);
-    // The search:// pane's first row is a synthetic ".." parent entry (for backing out of the
-    // virtual search results location) - skip it to select an actual result.
-    const resultRow = () =>
-      [...(activePane()?.querySelectorAll<HTMLElement>('.fm-directory-row') ?? [])].find(
-        (row) => !row.textContent?.includes('..'),
-      );
+    ).toEqual(['Search results · ERROR']);
+    const resultRow = () => activePane()?.querySelector<HTMLElement>('.fm-grouped-entry');
     await vi.waitFor(() => expect(resultRow()).not.toBeUndefined());
     resultRow()?.click();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F3', bubbles: true }));
@@ -3244,6 +3239,37 @@ describe('AppShell', () => {
     );
     startSearch.mockRestore();
     const retry = vi.spyOn(client, 'startSearch');
+    const syntheticPngSnapshot = (snapshot: Awaited<ReturnType<typeof client.navigatePane>>) =>
+      !snapshot.location.uri.startsWith('search://')
+        ? snapshot
+        : {
+            ...snapshot,
+            entries: snapshot.entries.map((hit) => {
+              const { extension: _extension, ...withoutExtension } = hit;
+              return {
+                ...withoutExtension,
+                id: 'synthetic-page-000',
+                location: { providerId: 'mock', uri: 'mock:///Documents/page_000.png' },
+                name: 'page_000.png',
+                mimeType: 'image/png',
+              };
+            }),
+          };
+    const navigatePane = client.navigatePane.bind(client);
+    vi.spyOn(client, 'navigatePane').mockImplementation(async (request, signal) => {
+      return syntheticPngSnapshot(await navigatePane(request, signal));
+    });
+    const listDirectory = client.listDirectory.bind(client);
+    vi.spyOn(client, 'listDirectory').mockImplementation(async (request, signal) => {
+      return syntheticPngSnapshot(await listDirectory(request, signal));
+    });
+    const readFileRange = vi.spyOn(client, 'readFileRange').mockResolvedValue({
+      data: [137, 80, 78, 71, 13, 10, 26, 10],
+      offset: 0,
+      length: 8,
+      eof: true,
+      probablyBinary: true,
+    });
     [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
       .find((button) => button.textContent?.trim() === 'Search')
       ?.click();
@@ -3314,7 +3340,7 @@ describe('AppShell', () => {
     await vi.waitFor(() => {
       expect(
         [...(resultsPane?.querySelectorAll('.fm-directory-row') ?? [])].some((row) =>
-          row.textContent?.includes('report'),
+          row.textContent?.includes('page_000'),
         ),
       ).toBe(true);
       expect(resultsPane?.querySelector('.fm-semantic-evidence')?.textContent).not.toContain(
@@ -3322,6 +3348,30 @@ describe('AppShell', () => {
       );
     });
     expect(retry).toHaveBeenCalledTimes(2);
+    expect(resultsPane?.querySelector('.fm-search-results-title')?.textContent).toBe(
+      'Search results · Mental stress (UNESCO)',
+    );
+    expect(resultsPane?.querySelector('.fm-search-result-scope')?.textContent).toBe(
+      'All enrolled folders',
+    );
+    const pngRow = [
+      ...(resultsPane?.querySelectorAll<HTMLElement>('.fm-grouped-entry') ?? []),
+    ].find((row) => row.textContent?.includes('page_000'));
+    pngRow?.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F3', bubbles: true }));
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector('.fm-file-viewer img[src^="data:image/png;base64,"]'),
+      ).not.toBeNull(),
+    );
+    expect(readFileRange).toHaveBeenCalledWith(
+      {
+        location: { providerId: 'mock', uri: 'mock:///Documents/page_000.png' },
+        offset: 0,
+        length: expect.any(Number),
+      },
+      expect.any(AbortSignal),
+    );
   });
 
   it('closes the Lister viewer via its close button', async () => {
@@ -5840,10 +5890,12 @@ describe('AppShell', () => {
 
     await vi.waitFor(() => {
       expect(
-        [...root.querySelectorAll('.fm-search-result-name')].map((name) => name.textContent),
+        [...root.querySelectorAll('.fm-grouped-entry .fm-entry-name')].map(
+          (name) => name.textContent,
+        ),
       ).toContain('report');
       expect(
-        [...root.querySelectorAll('.fm-search-result-parent')].map((path) => path.textContent),
+        [...root.querySelectorAll('.fm-directory-group-row')].map((row) => row.textContent),
       ).toContain('/Documents');
     });
     document.dispatchEvent(
@@ -5857,10 +5909,10 @@ describe('AppShell', () => {
       ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     m.redraw.sync();
     const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
-    const rows = activePane?.querySelectorAll<HTMLElement>('.fm-directory-row');
-    expect(rows?.item(0).textContent).toContain('..');
+    const rows = activePane?.querySelectorAll<HTMLElement>('.fm-grouped-entry');
+    expect(activePane?.querySelector('.fm-directory-row')?.textContent).toContain('..');
     rows
-      ?.item(1)
+      ?.item(0)
       .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
     m.redraw.sync();
     const searchResultActions = [
@@ -5878,7 +5930,7 @@ describe('AppShell', () => {
     ).toBe(false);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     m.redraw.sync();
-    rows?.item(1).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    rows?.item(0).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
 
     await vi.waitFor(() =>
       expect(navigatePane).toHaveBeenCalledWith(
@@ -5969,7 +6021,7 @@ describe('AppShell', () => {
       [...(activePane?.querySelectorAll('.fm-breadcrumb-segment') ?? [])].map(
         (segment) => segment.textContent,
       ),
-    ).toEqual(['/', 'search', 'local', 'file: e']);
+    ).toEqual(['Search results · e']);
 
     // Focus lands in the pane (not e.g. document.body) so keyboard cursor
     // navigation works immediately, without an extra click. This happens after an
@@ -6007,7 +6059,7 @@ describe('AppShell', () => {
 
     const resultRow = () =>
       root
-        .querySelector<HTMLElement>('[data-active="true"] .fm-search-result-name')
+        .querySelector<HTMLElement>('[data-active="true"] .fm-grouped-entry .fm-entry-name')
         ?.closest<HTMLElement>('.fm-directory-row');
     await vi.waitFor(() => expect(resultRow()).not.toBeUndefined());
     resultRow()?.click();

@@ -8,8 +8,35 @@ import {
   searchQueryFromParams,
 } from './find-files-controller';
 import type { FindFilesSearchParams } from './find-files-dialog';
+import { searchPresentation } from './search-presentation';
 
 describe('searchQueryFromParams', () => {
+  it('labels result scope from the submitted query, not the pane that later shows it', () => {
+    const root = { providerId: 'local', uri: 'file:///current' };
+    const params: FindFilesSearchParams = {
+      mode: 'semantic',
+      filenameQuery: '',
+      semanticQuery: 'Mental stress',
+      semanticScope: 'entireLibrary',
+      contentRegex: false,
+      contentCaseSensitive: false,
+      contentWholeWord: false,
+      recurse: true,
+    };
+    const libraryQuery = searchQueryFromParams(root, params, false);
+    expect(
+      searchPresentation(params, 'semantic', undefined, undefined, undefined, libraryQuery).scope,
+    ).toEqual({ kind: 'allEnrolled' });
+    const folderQuery = searchQueryFromParams(
+      root,
+      { ...params, semanticScope: 'currentFolder' },
+      false,
+    );
+    expect(
+      searchPresentation(params, 'semantic', undefined, undefined, undefined, folderQuery).scope,
+    ).toEqual({ kind: 'folder', location: root });
+  });
+
   it('uses the configured library for an unscoped concept-similarity search', () => {
     const root = { providerId: 'local', uri: 'file:///current' };
     const query = searchQueryFromParams(

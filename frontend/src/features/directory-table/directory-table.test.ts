@@ -654,6 +654,184 @@ describe('DirectoryTable rows', () => {
     expect(root.querySelector('.fm-cursor-row .fm-entry-name')?.textContent).toBe('b');
   });
 
+  it('collapses search folder rows without disturbing columns, widths, selection, or row density', () => {
+    const onCursorChange = vi.fn();
+    const entries = [
+      entry({
+        id: 'first',
+        name: 'page_000.png',
+        extension: 'png',
+        location: { providerId: 'local', uri: 'file:///library/A/page_000.png' },
+      }),
+      entry({
+        id: 'second',
+        name: 'page_001.png',
+        extension: 'png',
+        location: { providerId: 'local', uri: 'file:///library/A/page_001.png' },
+      }),
+      entry({
+        id: 'third',
+        name: 'report.pdf',
+        extension: 'pdf',
+        location: { providerId: 'local', uri: 'file:///library/B/report.pdf' },
+      }),
+    ];
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource(entries),
+      groupByParent: true,
+      collapsibleGroups: true,
+      groupScope: 'search://local/synthetic-png',
+      showFullPath: true,
+      viewportHeight: 120,
+      visibleColumnIds: new Set(['core.modified']),
+      columnWidths: [{ columnId: 'core.name', width: 310 }],
+      cursorIndex: 0,
+      selectedEntryIds: new Set(['first']),
+      onCursorChange,
+    });
+    expect(
+      [...root.querySelectorAll('.fm-directory-header button')].map((column) =>
+        column.textContent?.trim(),
+      ),
+    ).toEqual(['Name', 'Modified']);
+    expect(
+      root.querySelector<HTMLElement>('.fm-directory-row:not(.fm-directory-group-row)')?.style
+        .gridTemplateColumns,
+    ).toContain('310px');
+    expect(root.querySelector('.fm-search-result-parent')).toBeNull();
+    expect(root.querySelector('.fm-directory-group-toggle')?.getAttribute('title')).toBe(
+      '/library/A',
+    );
+    expect(root.querySelector('.fm-directory-group-toggle')?.getAttribute('aria-label')).toContain(
+      '/library/A',
+    );
+    expect(root.querySelector('.fm-directory-group-row')?.textContent).toContain('/library/A');
+    expect(root.querySelector('.fm-directory-row.fm-selected-row')?.textContent).toContain(
+      'page_000',
+    );
+    expect(
+      root.querySelector<HTMLElement>('.fm-directory-row.fm-grouped-entry')?.style.height,
+    ).toBe('20px');
+    root.querySelector<HTMLButtonElement>('.fm-directory-group-toggle')?.click();
+    m.redraw.sync();
+    expect(root.querySelectorAll('.fm-directory-group-row')).toHaveLength(2);
+    expect(root.querySelectorAll('.fm-grouped-entry')).toHaveLength(1);
+    expect(root.querySelector('.fm-grouped-entry')?.textContent).toContain('report');
+    expect(
+      root.querySelector('.fm-directory-viewport')?.getAttribute('aria-activedescendant'),
+    ).toBeNull();
+    root.querySelector<HTMLButtonElement>('.fm-directory-group-toggle')?.click();
+    m.redraw.sync();
+    expect(root.querySelectorAll('.fm-grouped-entry')).toHaveLength(3);
+    root.querySelectorAll<HTMLElement>('.fm-grouped-entry')[1]?.click();
+    expect(onCursorChange).toHaveBeenCalledWith(1, { shiftKey: false, ctrlKey: false });
+  });
+
+  it('copies the full remote folder URI rather than only its displayed path', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    try {
+      mount({
+        state: { type: 'loaded' },
+        source: entryArraySource([
+          entry({
+            location: { providerId: 'sftp', uri: 'sftp://example.test/library/page_000.png' },
+            name: 'page_000.png',
+          }),
+        ]),
+        groupByParent: true,
+        collapsibleGroups: true,
+        groupScope: 'search://local/remote',
+      });
+      expect(root.querySelector('.fm-directory-group-toggle')?.getAttribute('title')).toBe(
+        'sftp://example.test/library',
+      );
+      root.querySelector<HTMLButtonElement>('.fm-directory-group-copy')?.click();
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('sftp://example.test/library'));
+    } finally {
+      if (originalClipboard !== undefined) {
+        Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      } else {
+        Reflect.deleteProperty(navigator, 'clipboard');
+      }
+    }
+  });
+
+  it('keeps a large grouped search virtualized', () => {
+    const entries = Array.from({ length: 5_000 }, (_, index) =>
+      entry({
+        id: `page-${index}`,
+        name: `page_${index}.png`,
+        location: {
+          providerId: 'local',
+          uri: `file:///library/A/page_${index}.png`,
+        },
+      }),
+    );
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource(entries),
+      groupByParent: true,
+      collapsibleGroups: true,
+      groupScope: 'search://local/large',
+      viewportHeight: 100,
+    });
+    expect(root.querySelector('.fm-directory-viewport')?.getAttribute('aria-rowcount')).toBe(
+      '5002',
+    );
+    expect(root.querySelectorAll('.fm-directory-row').length).toBeLessThan(20);
+    root.querySelector<HTMLButtonElement>('.fm-directory-group-toggle')?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-directory-viewport')?.getAttribute('aria-rowcount')).toBe('2');
+    expect(root.querySelectorAll('.fm-grouped-entry')).toHaveLength(0);
+  });
+
+  it('uses the pane compact row height for both folder headings and file rows', async () => {
+    const computedStyle = globalThis.getComputedStyle.bind(globalThis);
+    const compact = vi
+      .spyOn(globalThis, 'getComputedStyle')
+      .mockImplementation((element, pseudo) => {
+        const style = computedStyle(element, pseudo);
+        if (
+          !(element instanceof HTMLElement) ||
+          !element.classList.contains('fm-directory-viewport')
+        ) {
+          return style;
+        }
+        const getPropertyValue = style.getPropertyValue.bind(style);
+        style.getPropertyValue = (property: string) =>
+          property === '--fm-row-height' ? '16px' : getPropertyValue(property);
+        return style;
+      });
+    try {
+      mount({
+        state: { type: 'loaded' },
+        source: entryArraySource([
+          entry({
+            location: { providerId: 'local', uri: 'file:///library/A/page_000.png' },
+            name: 'page_000.png',
+          }),
+        ]),
+        groupByParent: true,
+        collapsibleGroups: true,
+        groupScope: 'search://local/compact',
+      });
+      await vi.waitFor(() =>
+        expect(root.querySelector<HTMLElement>('.fm-directory-group-row')?.style.height).toBe(
+          '16px',
+        ),
+      );
+      expect(root.querySelector<HTMLElement>('.fm-grouped-entry')?.style.height).toBe('16px');
+    } finally {
+      compact.mockRestore();
+    }
+  });
+
   it('collapses every parent-path segment already shown by the previous search result', () => {
     mount({
       state: { type: 'loaded' },

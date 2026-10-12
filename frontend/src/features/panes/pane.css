@@ -434,13 +434,28 @@ button.fm-breadcrumb-scheme:hover {
   transform: translateY(-2px);
 }
 
-.fm-search-execution-mode {
+.fm-search-results-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fm-breadcrumb-segment.fm-search-results-title::after {
+  content: none;
+}
+
+.fm-search-result-scope {
   display: inline-flex;
   align-items: center;
-  align-self: stretch;
-  padding: 0 0.35rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  padding: 0 0.5rem;
   color: var(--fm-text-muted);
   font-size: 0.82em;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

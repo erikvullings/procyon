@@ -73,3 +73,9 @@ the evidence without flooding the pane with duplicate rows.
   ingestion, not merely an observed file. Existing pre-receipt indices remain searchable while
   their unverified older occurrences are reprocessed; Settings reports confirmed completions
   separately from that unverified backlog.
+- 2026-10-12: Materialized hits inherit the file extension from their authorized location when
+  metadata omits it, so F3 selects the same image/media renderer as a normal directory entry.
+  Search-only result tables group file rows under expandable parent folders while preserving
+  normal pane columns, density, selection, sorting and virtualization. The non-navigable result
+  header shows the selected query and saved scope rather than treating `search://` as a filesystem
+  breadcrumb.

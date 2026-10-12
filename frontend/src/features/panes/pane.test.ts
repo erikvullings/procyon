@@ -33,7 +33,7 @@ import {
   type PaneAttrs,
   type PaneTab,
   SELECTION_MASK_STORAGE_KEY,
-  searchBreadcrumbSegments,
+  searchResultTitle,
 } from './pane';
 
 let root: HTMLElement;
@@ -761,34 +761,76 @@ describe('breadcrumbSegments', () => {
   });
 });
 
-describe('searchBreadcrumbSegments', () => {
-  it('shows the originating query in place of the opaque search id', () => {
+describe('searchResultTitle', () => {
+  it('labels the actual result set without an invented filesystem breadcrumb', () => {
     expect(
-      searchBreadcrumbSegments('search://local/abc-123', {
+      searchResultTitle({
         kind: 'filename',
         term: '*.svg',
         executionMode: 'liveRecursive',
       }),
-    ).toEqual([
-      { label: '/', path: '/' },
-      { label: 'search', path: 'search' },
-      { label: 'local', path: 'local' },
-      { label: 'file: *.svg', path: '*.svg' },
-    ]);
+    ).toBe('Search results · *.svg');
   });
 
-  it('falls back to the raw search id when the query is not known', () => {
-    expect(searchBreadcrumbSegments('search://local/abc-123', undefined)).toEqual([
-      { label: '/', path: '/' },
-      { label: 'search', path: 'search' },
-      { label: 'local', path: 'local' },
-      { label: 'abc-123', path: 'abc-123' },
-    ]);
+  it('does not show the opaque search id when the query is unknown', () => {
+    expect(searchResultTitle(undefined)).toBe('Search results');
   });
 });
 
 describe('Pane search breadcrumb rendering', () => {
-  it('renders search:// breadcrumbs as non-clickable spans instead of navigable buttons', () => {
+  it('skips collapsed search folders with arrow keys and expands them with Right', () => {
+    const onSelectionAction = vi.fn();
+    const resultEntries = ['A/first.png', 'B/second.png', 'B/third.png', 'C/fourth.png'].map(
+      (path, index): EntrySummary => ({
+        id: `hit-${index}`,
+        location: { providerId: 'local', uri: `file:///library/${path}` },
+        name: path.split('/').at(-1) ?? path,
+        kind: 'file',
+        hidden: false,
+        readOnly: false,
+        metadataRevision: 0,
+      }),
+    );
+    mount(
+      attrs({
+        path: 'search://local/synthetic',
+        entries: resultEntries,
+        cursorIndex: 0,
+        onSelectionAction,
+      }),
+    );
+    const group = root.querySelector<HTMLButtonElement>(
+      '.fm-directory-group-toggle[title="/library/B"]',
+    );
+    group?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    m.redraw.sync();
+    expect(group?.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelectorAll('.fm-grouped-entry')).toHaveLength(2);
+    root
+      .querySelector('.fm-pane')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(onSelectionAction).toHaveBeenLastCalledWith({
+      type: 'positionCursor',
+      entryId: 'hit-3',
+    });
+    group?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelectorAll('.fm-grouped-entry')).toHaveLength(4);
+    root
+      .querySelector('.fm-pane')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(onSelectionAction).toHaveBeenLastCalledWith({ type: 'moveCursor', offset: 1 });
+    root
+      .querySelector<HTMLButtonElement>('.fm-directory-group-toggle[title="/library/A"]')
+      ?.click();
+    m.redraw.sync();
+    expect(onSelectionAction).toHaveBeenLastCalledWith({
+      type: 'positionCursor',
+      entryId: 'hit-1',
+    });
+  });
+
+  it('renders a non-navigable result title and the query-selected folder scope', () => {
     mount(
       attrs({
         path: 'search://local/abc-123',
@@ -796,26 +838,29 @@ describe('Pane search breadcrumb rendering', () => {
           kind: 'filename',
           term: '*.svg',
           executionMode: 'liveRecursive',
+          scope: {
+            kind: 'folder',
+            location: { providerId: 'local', uri: 'file:///Documents/Work' },
+          },
         },
         tabs: [{ id: 'tab-1' as TabId, title: 'search: *.svg', path: 'search://local/abc-123' }],
       }),
     );
 
     const segments = [...root.querySelectorAll<HTMLElement>('.fm-breadcrumb-segment')];
-    expect(segments.map((segment) => segment.tagName)).toEqual(['SPAN', 'SPAN', 'SPAN', 'SPAN']);
-    expect(segments.map((segment) => segment.textContent)).toEqual([
-      '/',
-      'search',
-      'local',
-      'file: *.svg',
-    ]);
+    expect(segments.map((segment) => segment.tagName)).toEqual(['SPAN']);
+    expect(segments.map((segment) => segment.textContent)).toEqual(['Search results · *.svg']);
+    expect(root.querySelector('.fm-search-result-scope')?.textContent).toBe(
+      'Folder: /Documents/Work',
+    );
+    expect(root.querySelector('.fm-breadcrumb')?.textContent).not.toContain('local');
 
-    segments[3]?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    segments[0]?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     m.redraw.sync();
     expect(root.querySelector('.fm-path-input')).toBeNull();
   });
 
-  it('shows the execution mode and makes a search refresh actionable', () => {
+  it('shows all enrolled folders from the actual semantic scope and keeps refresh actionable', () => {
     const onRefreshSearch = vi.fn();
     mount(
       attrs({
@@ -824,12 +869,13 @@ describe('Pane search breadcrumb rendering', () => {
           kind: 'filename',
           term: '*.svg',
           executionMode: 'indexed',
+          scope: { kind: 'allEnrolled' },
         },
         onRefreshSearch,
       }),
     );
 
-    expect(root.querySelector('.fm-search-execution-mode')?.textContent).toBe('Indexed');
+    expect(root.querySelector('.fm-search-result-scope')?.textContent).toBe('All enrolled folders');
     expect(
       root
         .querySelector<HTMLButtonElement>('[aria-label="Refresh search"] svg')
@@ -1199,7 +1245,7 @@ describe('Pane search breadcrumb rendering', () => {
     );
 
     const segments = [...root.querySelectorAll<HTMLElement>('.fm-breadcrumb-segment')];
-    expect(segments.at(-1)?.textContent).toBe('file: Readable documents');
+    expect(segments.at(-1)?.textContent).toBe('Search results · Readable documents');
   });
 });
 
@@ -1457,7 +1503,7 @@ describe('Pane breadcrumb editing', () => {
       {
         path: 'search://local/abc-123',
         locationUri: 'search://local/abc-123',
-        last: 'file: long-query-for-a-narrow-pane',
+        last: 'Search results · long-query-for-a-narrow-pane',
       },
     ])('preserves the final $last segment of $path', ({ path, locationUri, last }) => {
       mount(

@@ -99,7 +99,7 @@ import {
   mediaLabel,
   mediaModifiedLabel,
 } from '../semantic/media-evidence';
-import { BreadcrumbTrail, breadcrumbSegments, searchBreadcrumbSegments } from './breadcrumb-view';
+import { BreadcrumbTrail, breadcrumbSegments, searchResultTitle } from './breadcrumb-view';
 import { formatListingSummary, sizeLabel } from './pane-status-summary';
 import { isParentEntry } from './parent-entry';
 import { createRenameEditingController, findRenameCollision } from './rename-edit-controller';
@@ -109,7 +109,7 @@ import { createTypeaheadController } from './typeahead-controller';
 import './pane.css';
 
 export type { BreadcrumbSegment } from './breadcrumb-view';
-export { breadcrumbSegments, searchBreadcrumbSegments } from './breadcrumb-view';
+export { breadcrumbSegments, searchResultTitle } from './breadcrumb-view';
 export type { PaneTab } from './tab-strip';
 
 // ── Sub-object interfaces ──────────────────────────────────────────────────────
@@ -393,17 +393,15 @@ function recentLocationDisplayName(
   return truncateLocationForDisplay(location.uri);
 }
 
-function searchExecutionModeLabel(mode: SearchPresentation['executionMode']): string {
-  switch (mode) {
-    case 'indexed':
-      return t('search', 'executionIndexed');
-    case 'liveRecursive':
-      return t('search', 'executionLive');
-    case 'mixed':
-      return t('search', 'executionMixed');
-    case 'semantic':
-      return t('search', 'executionSemantic');
-  }
+function searchScopeLabel(presentation: SearchPresentation | undefined): string | undefined {
+  const scope = presentation?.scope;
+  if (scope === undefined) return undefined;
+  if (scope.kind === 'allEnrolled') return t('search', 'allEnrolledFolders');
+  const uri = scope.location.uri;
+  const path = uri.startsWith('file://')
+    ? decodeURIComponent(new URL(uri).pathname)
+    : decodeURIComponent(uri);
+  return t('search', 'folderScope', { path });
 }
 
 const SemanticMediaPreview: FactoryComponent<{
@@ -622,6 +620,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
   let selectionMaskNeedsFocus = false;
   let photoModeByTab = new Map<TabId, boolean>();
   let typeaheadPath: string | undefined;
+  let visibleSearchEntryIndices: readonly number[] | undefined;
   /** The pane's own `section.fm-pane` DOM node - the actual keyboard target (`onkeydown` is bound
    * here, see the view below). Mouse row clicks only ever changed selection *state*; nothing moved
    * real DOM focus here to match, so a keypress immediately after a click could still be racing (or
@@ -630,6 +629,41 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
   let sectionElement: HTMLElement | undefined;
 
   const typeaheadCtrl = createTypeaheadController(() => m.redraw());
+
+  function moveVisibleSearchCursor(
+    attrs: PaneAttrs,
+    offset: number,
+    edge?: 'first' | 'last',
+  ): boolean {
+    if (visibleSearchEntryIndices === undefined || typeaheadCtrl.prefix !== undefined) return false;
+    const indices = visibleSearchEntryIndices;
+    const cursor = attrs.cursorIndex ?? -1;
+    const nextPosition =
+      offset > 0
+        ? indices.findIndex((index) => index > cursor)
+        : indices.findLastIndex((index) => index < cursor);
+    const next =
+      edge === 'first'
+        ? indices[0]
+        : edge === 'last'
+          ? indices.at(-1)
+          : nextPosition < 0
+            ? undefined
+            : indices[
+                Math.max(
+                  0,
+                  Math.min(
+                    nextPosition + (offset > 0 ? offset - 1 : offset + 1),
+                    indices.length - 1,
+                  ),
+                )
+              ];
+    const entry = next === undefined ? undefined : attrs.entries[next];
+    if (entry !== undefined && next !== cursor) {
+      attrs.onSelectionAction({ type: 'positionCursor', entryId: entry.id });
+    }
+    return true;
+  }
   const renameCtrl = createRenameEditingController();
   let renameContext: { readonly path: string; readonly tabId: TabId } | undefined;
   /** Selection just before the current keystroke, for the Numpad `/` "restore" shortcut. */
@@ -836,9 +870,11 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
       if (pathChanged) {
         typeaheadPath = attrs.path;
         typeaheadCtrl.reset();
+        visibleSearchEntryIndices = undefined;
       }
       const activeLocationUri = attrs.locationUri ?? attrs.path;
       const isSearchLocation = activeLocationUri.startsWith('search://');
+      const searchScope = isSearchLocation ? searchScopeLabel(attrs.searchPresentation) : undefined;
       const remoteScheme = /^(sftp|ftp|ftps|onedrive|webdav|s3):\/\//.exec(activeLocationUri)?.[1];
       const activeConnection = connectionForLocation(
         { providerId: remoteScheme ?? '', uri: activeLocationUri },
@@ -1004,6 +1040,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               void attrs.navigation.onParent();
             } else if (command?.type === 'moveCursor') {
               event.preventDefault();
+              if (moveVisibleSearchCursor(attrs, command.offset)) return;
               const cursorEntry =
                 attrs.cursorIndex === undefined ? undefined : attrs.entries[attrs.cursorIndex];
               const taResult = typeaheadCtrl.moveWithinMatches(
@@ -1021,6 +1058,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
             } else if (command?.type === 'moveCursorByPage') {
               event.preventDefault();
               const offset = command.pages * 10;
+              if (moveVisibleSearchCursor(attrs, offset)) return;
               const cursorEntry =
                 attrs.cursorIndex === undefined ? undefined : attrs.entries[attrs.cursorIndex];
               const taResult = typeaheadCtrl.moveWithinMatches(
@@ -1037,6 +1075,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               }
             } else if (command?.type === 'moveCursorTo') {
               event.preventDefault();
+              if (moveVisibleSearchCursor(attrs, 0, command.edge)) return;
               const cursorEntry =
                 attrs.cursorIndex === undefined ? undefined : attrs.entries[attrs.cursorIndex];
               const taResult = typeaheadCtrl.moveWithinMatches(
@@ -1597,16 +1636,19 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                             pathKey: `${activeLocationUri}\0${attrs.path}\0${attrs.searchPresentation?.kind ?? ''}\0${attrs.searchPresentation?.label ?? attrs.searchPresentation?.term ?? ''}`,
                           },
                           isSearchLocation
-                            ? searchBreadcrumbSegments(
-                                activeLocationUri,
-                                attrs.searchPresentation,
-                              ).map((segment) =>
+                            ? [
                                 m(
-                                  'span.fm-breadcrumb-segment',
-                                  { key: segment.path },
-                                  segment.label,
+                                  'span.fm-breadcrumb-segment.fm-search-results-title',
+                                  searchResultTitle(attrs.searchPresentation),
                                 ),
-                              )
+                                searchScope === undefined
+                                  ? undefined
+                                  : m(
+                                      'span.fm-search-result-scope',
+                                      { title: searchScope },
+                                      searchScope,
+                                    ),
+                              ]
                             : (remoteScheme !== undefined && attrs.path !== '/'
                                 ? breadcrumbSegments(attrs.path).slice(1)
                                 : breadcrumbSegments(attrs.path)
@@ -1622,13 +1664,6 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                                 ),
                               ),
                         ),
-                        isSearchLocation && attrs.searchPresentation !== undefined
-                          ? m(
-                              'span.fm-search-execution-mode',
-                              { 'aria-label': t('search', 'executionMode') },
-                              searchExecutionModeLabel(attrs.searchPresentation.executionMode),
-                            )
-                          : undefined,
                         isSearchLocation && attrs.onRefreshSearch !== undefined
                           ? tooltip(
                               t('search', 'refresh'),
@@ -1993,7 +2028,38 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                     : { onColumnWidthChange: attrs.tableConfig.onColumnWidthChange }),
                   showGitStatusColumn: attrs.tableConfig.showGitStatusColumn === true,
                   showFullPath: isSearchLocation,
-                  groupByParent: attrs.tableConfig.groupByParent === true,
+                  groupByParent: isSearchLocation || attrs.tableConfig.groupByParent === true,
+                  collapsibleGroups: isSearchLocation,
+                  ...(isSearchLocation ? { groupScope: activeLocationUri } : {}),
+                  ...(isSearchLocation
+                    ? {
+                        onGroupVisibilityChange: (
+                          indices: readonly number[] | undefined,
+                          relocateCursor: boolean,
+                        ) => {
+                          visibleSearchEntryIndices = indices;
+                          const cursor = attrs.cursorIndex;
+                          if (
+                            !relocateCursor ||
+                            indices === undefined ||
+                            cursor === undefined ||
+                            indices.includes(cursor)
+                          ) {
+                            return;
+                          }
+                          const nextIndex =
+                            indices.find((index) => index > cursor) ?? indices.at(-1);
+                          const entry =
+                            nextIndex === undefined ? undefined : attrs.entries[nextIndex];
+                          if (entry !== undefined) {
+                            attrs.onSelectionAction({
+                              type: 'positionCursor',
+                              entryId: entry.id,
+                            });
+                          }
+                        },
+                      }
+                    : {}),
                   ...(renameCtrl.entry === undefined
                     ? {}
                     : { renamingEntryId: renameCtrl.entry.id }),

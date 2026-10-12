@@ -1,6 +1,13 @@
 import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
+import { toast } from 'mithril-materialized';
 import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
-import { eyeOffIcon, linkIcon } from '../../components/tabler-icons';
+import {
+  chevronDownIcon,
+  chevronRightIcon,
+  copyIcon,
+  eyeOffIcon,
+  linkIcon,
+} from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type {
@@ -10,6 +17,7 @@ import type {
   LoadingState,
   SortDescriptor,
 } from '../../models';
+import { writeSystemClipboardText } from '../clipboard/copy-selection-actions';
 import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import {
   beginPointerFileDrag,
@@ -92,21 +100,50 @@ function listEntryIcon(
 }
 
 type DirectoryDisplayRow =
-  | { readonly type: 'group'; readonly label: string; readonly entryIndex: number }
+  | {
+      readonly type: 'group';
+      readonly label: string;
+      readonly path: string;
+      readonly key: string;
+      readonly entryIndex: number;
+    }
   | { readonly type: 'entry'; readonly entry: EntrySummary; readonly entryIndex: number };
 
-function directoryDisplayRows(source: DirectoryEntrySource): readonly DirectoryDisplayRow[] {
+function groupKey(entry: EntrySummary): string {
+  const uri = new URL(entry.location.uri);
+  return `${entry.location.providerId}:${uri.host}:${parentPath(entry)}`;
+}
+
+function fullParentPath(entry: EntrySummary): string {
+  if (entry.location.providerId === 'local' || entry.location.providerId === 'mock') {
+    return parentPath(entry);
+  }
+  const uri = entry.location.uri;
+  return decodeURIComponent(uri.slice(0, uri.lastIndexOf('/')));
+}
+
+function directoryDisplayRows(
+  source: DirectoryEntrySource,
+  collapsed?: ReadonlySet<string>,
+): readonly DirectoryDisplayRow[] {
   const rows: DirectoryDisplayRow[] = [];
-  let previousLabel: string | undefined;
+  let previousKey: string | undefined;
   for (let index = 0; index < (source.loadedLength ?? source.length); index += 1) {
     const entry = source.entryAt(index);
     if (entry === undefined) break;
-    const label = parentPathLabel(entry);
-    if (label !== previousLabel) {
-      rows.push({ type: 'group', label, entryIndex: index });
-      previousLabel = label;
+    if (isParentEntry(entry.id)) {
+      rows.push({ type: 'entry', entry, entryIndex: index });
+      previousKey = undefined;
+      continue;
     }
-    rows.push({ type: 'entry', entry, entryIndex: index });
+    const label = parentPathLabel(entry);
+    const path = fullParentPath(entry);
+    const key = groupKey(entry);
+    if (key !== previousKey) {
+      rows.push({ type: 'group', label, path, key, entryIndex: index });
+      previousKey = key;
+    }
+    if (!collapsed?.has(key)) rows.push({ type: 'entry', entry, entryIndex: index });
   }
   return rows;
 }
@@ -163,6 +200,13 @@ export interface DirectoryTableAttrs {
   readonly showFullPath?: boolean;
   /** Inserts non-interactive parent-folder rows before groups; entry indices remain unchanged. */
   readonly groupByParent?: boolean;
+  /** Search-only collapsible parent headings; other grouped virtual folders stay unchanged. */
+  readonly collapsibleGroups?: boolean;
+  readonly groupScope?: string;
+  readonly onGroupVisibilityChange?: (
+    visibleEntryIndices: readonly number[] | undefined,
+    relocateCursor: boolean,
+  ) => void;
   readonly sort?: readonly SortDescriptor[];
   readonly onSortChange?: (sort: readonly SortDescriptor[]) => void;
   readonly formatSettings?: EntryFormatSettings;
@@ -783,6 +827,8 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
   let sourceColumnWidths: readonly ColumnWidthEntry[] | undefined;
   let displayedColumnWidths: readonly ColumnWidthEntry[] | undefined;
   let stopColumnResize: (() => void) | undefined;
+  const collapsedGroups = new Set<string>();
+  let previousGroupScope: string | undefined;
 
   function columnWidthMap(entries: readonly ColumnWidthEntry[] | undefined): Map<string, number> {
     return new Map((entries ?? []).map((entry) => [entry.columnId, entry.width]));
@@ -851,7 +897,12 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
   ): void {
     if (element === undefined || attrs.source === undefined) return;
     const displayRows =
-      attrs.groupByParent === true ? directoryDisplayRows(attrs.source) : undefined;
+      attrs.groupByParent === true
+        ? directoryDisplayRows(
+            attrs.source,
+            attrs.collapsibleGroups === true ? collapsedGroups : undefined,
+          )
+        : undefined;
     const rowIndex =
       displayRows?.findIndex((row) => row.type === 'entry' && row.entryIndex === cursorIndex) ??
       cursorIndex;
@@ -887,6 +938,12 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
     ) {
       return;
     }
+    if (attrs.collapsibleGroups === true && attrs.groupByParent === true) {
+      const entry = attrs.source.entryAt(attrs.cursorIndex);
+      if (entry !== undefined && attrs.cursorIndex !== previousCursorIndex) {
+        collapsedGroups.delete(groupKey(entry));
+      }
+    }
     previousCursorIndex = attrs.cursorIndex;
     previousCursorEntryId = cursorEntryId;
     previousEntryCount = entryCount;
@@ -918,6 +975,11 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
     },
     view: ({ attrs }) => {
       currentAttrs = attrs;
+      if (previousGroupScope !== attrs.groupScope) {
+        collapsedGroups.clear();
+        previousGroupScope = attrs.groupScope;
+        previousCursorIndex = undefined;
+      }
       syncCursor(attrs);
       if (!columnWidthsEqual(sourceColumnWidths, attrs.columnWidths)) {
         sourceColumnWidths = attrs.columnWidths;
@@ -932,9 +994,17 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
         attrs.viewportHeight ?? (element?.clientHeight || DEFAULT_VIEWPORT_HEIGHT);
       const displayRows =
         source !== undefined && attrs.groupByParent === true
-          ? directoryDisplayRows(source)
+          ? directoryDisplayRows(
+              source,
+              attrs.collapsibleGroups === true ? collapsedGroups : undefined,
+            )
           : undefined;
       const displayLength = displayRows?.length ?? source?.length;
+      const visibleEntryIndices =
+        attrs.collapsibleGroups === true && collapsedGroups.size > 0
+          ? displayRows?.filter((row) => row.type === 'entry').map((row) => row.entryIndex)
+          : undefined;
+      attrs.onGroupVisibilityChange?.(visibleEntryIndices, false);
       const window =
         source === undefined
           ? undefined
@@ -960,11 +1030,22 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
         for (let index = window.start; index < window.end; index += 1) {
           const displayRow = displayRows?.[index];
           if (displayRow?.type === 'group') {
+            const setGroupCollapsed = (collapsed: boolean): void => {
+              if (collapsed) collapsedGroups.add(displayRow.key);
+              else collapsedGroups.delete(displayRow.key);
+              const visible =
+                collapsedGroups.size === 0
+                  ? undefined
+                  : directoryDisplayRows(source, collapsedGroups)
+                      .filter((row) => row.type === 'entry')
+                      .map((row) => row.entryIndex);
+              attrs.onGroupVisibilityChange?.(visible, true);
+            };
             rows.push(
               m(
                 '.fm-directory-row.fm-directory-group-row',
                 {
-                  key: `group:${displayRow.entryIndex}:${displayRow.label}`,
+                  key: `group:${displayRow.key}`,
                   role: 'row',
                   'aria-rowindex': index + 2,
                   'data-row-stripe': index % 2 === 1 ? 'alternate' : undefined,
@@ -978,7 +1059,59 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                 m(
                   '.fm-directory-cell.fm-directory-group-cell',
                   { role: 'rowheader', style: { gridColumn: `1 / ${columns.length + 1}` } },
-                  displayRow.label,
+                  attrs.collapsibleGroups === true
+                    ? [
+                        m(
+                          'button.fm-directory-group-toggle',
+                          {
+                            type: 'button',
+                            title: displayRow.path,
+                            'aria-label': t(
+                              'table',
+                              collapsedGroups.has(displayRow.key)
+                                ? 'expandFolder'
+                                : 'collapseFolder',
+                              { path: displayRow.path },
+                            ),
+                            'aria-expanded': collapsedGroups.has(displayRow.key) ? 'false' : 'true',
+                            onclick: () => setGroupCollapsed(!collapsedGroups.has(displayRow.key)),
+                            onkeydown: (event: KeyboardEvent) => {
+                              if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setGroupCollapsed(event.key === 'ArrowLeft');
+                                m.redraw();
+                              } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                                element?.focus();
+                              }
+                            },
+                          },
+                          collapsedGroups.has(displayRow.key)
+                            ? chevronRightIcon({ size: 14 })
+                            : chevronDownIcon({ size: 14 }),
+                          m('span.fm-directory-group-label', displayRow.label),
+                        ),
+                        m(
+                          'button.fm-directory-group-copy',
+                          {
+                            type: 'button',
+                            title: t('table', 'copyFolderPath'),
+                            'aria-label': `${t('table', 'copyFolderPath')}: ${displayRow.path}`,
+                            onclick: () => {
+                              void writeSystemClipboardText(displayRow.path).catch(
+                                (error: unknown) => {
+                                  const message = document.createElement('span');
+                                  message.textContent =
+                                    error instanceof Error ? error.message : String(error);
+                                  toast({ html: message.outerHTML, className: 'fm-toast-warning' });
+                                },
+                              );
+                            },
+                          },
+                          copyIcon({ size: 14 }),
+                        ),
+                      ]
+                    : displayRow.label,
                 ),
               ),
             );
@@ -1058,6 +1191,9 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                 },
                 ondblclick: () => attrs.onActivate?.(entryIndex),
                 class: [
+                  attrs.collapsibleGroups === true && !isParentEntry(entry.id)
+                    ? 'fm-grouped-entry'
+                    : '',
                   entry.hidden ? 'fm-hidden-entry' : '',
                   cursor && attrs.renamingEntryId !== entry.id ? 'fm-cursor-row' : '',
                   selected ? 'fm-selected-row' : '',
@@ -1121,7 +1257,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                           attrs.formatSettings,
                           now,
                           attrs.nativeIconLoader,
-                          attrs.showFullPath,
+                          attrs.showFullPath && attrs.collapsibleGroups !== true,
                           attrs.thumbnailAllowed?.(entry) === false
                             ? undefined
                             : attrs.thumbnailLoader,
@@ -1164,7 +1300,10 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
               'aria-rowcount': (displayLength ?? 0) + 1,
               'aria-colcount': columns.length,
               'aria-activedescendant':
-                cursorEntry === undefined ? undefined : rowId(cursorEntry.id),
+                cursorEntry === undefined ||
+                (attrs.collapsibleGroups === true && collapsedGroups.has(groupKey(cursorEntry)))
+                  ? undefined
+                  : rowId(cursorEntry.id),
               'aria-busy': attrs.state.type === 'loading' ? 'true' : undefined,
               'data-active': attrs.active ? 'true' : 'false',
               oncreate: (vnode: VnodeDOM) => {

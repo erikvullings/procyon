@@ -227,6 +227,7 @@ export function createFindFilesController(
               presentationLabel,
               result.semanticResults,
               result.semanticCoverage,
+              query,
             ),
           );
         context.getFindFilesParamsByLocationUri().set(result.location.uri, params);
