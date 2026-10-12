@@ -98,6 +98,14 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: PDF text conversion budget exhaustion now fails
+  ingestion for image-off/E5 PDFs too, rather than publishing later pages as
+  an apparently complete document. A two-page synthetic edit that exceeds
+  the output budget leaves the previous complete generation visible and marks
+  the new job failed. This closes a partial-publication path but does **not**
+  raise the production 64 MiB limit: the worker still rejects a completed
+  large-PDF spool because baseline conversion requires an in-memory byte
+  slice, and no killable, memory-bounded converter child has been qualified.
 - 2026-10-12 Copilot: Release packaging audit found an additional desktop no-go:
   `release-semantic-components.yml` signs workers for macOS arm64, Windows x64,
   Linux x64 and Linux arm64, whereas experimental `release-desktop.yml` builds a

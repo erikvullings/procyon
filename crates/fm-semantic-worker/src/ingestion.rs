@@ -765,11 +765,11 @@ impl IngestionCoordinator {
                 return Err(self.fail(document, attempts, detail));
             }
         };
-        if document.pdf_images_consented && converted.is_partial() {
+        if document.media_type == "application/pdf" && converted.is_partial() {
             return Err(self.fail(
                 document,
                 attempts,
-                "PDF conversion reached its text/output budget; no partial image generation published"
+                "PDF conversion reached its text/output budget; no partial generation published"
                     .into(),
             ));
         }
@@ -2439,6 +2439,47 @@ mod tests {
             Err(IngestionError::PipelineFailed(_))
         ));
         assert_eq!(fixture.visible_excerpt(), "prior complete evidence");
+        assert_eq!(
+            fixture.catalog.job(&updated.job_id).unwrap().unwrap().stage,
+            "failed"
+        );
+    }
+
+    #[test]
+    fn text_budget_on_later_pdf_page_preserves_previous_complete_generation() {
+        let mut fixture = Fixture::new(healthy_resources());
+        let mut original = fixture.document("");
+        original.media_type = "application/pdf".into();
+        original.bytes = positioned_pdf(
+            "BT /F1 12 Tf 72 720 Td (Readable methods for inventive problem solving.) Tj ET",
+        );
+        fixture
+            .coordinator
+            .ingest(&original, &CancellationToken::new())
+            .expect("initial ingestion");
+
+        let budgets = ConversionBudgets {
+            max_output_chars: 32,
+            ..ConversionBudgets::default()
+        };
+        Arc::get_mut(&mut fixture.coordinator)
+            .expect("exclusive coordinator")
+            .conversion_budgets = budgets;
+        let mut updated = original;
+        updated.media_type = "application/pdf".into();
+        updated.bytes = positioned_pdf_pages(&[
+            "BT /F1 12 Tf 72 720 Td (First page of updated evidence.) Tj ET",
+            "BT /F1 12 Tf 72 720 Td (Second page must also be indexed.) Tj ET",
+        ]);
+
+        assert!(matches!(
+            fixture
+                .coordinator
+                .ingest(&updated, &CancellationToken::new()),
+            Err(IngestionError::PipelineFailed(ref detail))
+                if detail.contains("PDF") && detail.contains("budget")
+        ));
+        assert!(fixture.visible_excerpt().contains("Readable methods"));
         assert_eq!(
             fixture.catalog.job(&updated.job_id).unwrap().unwrap().stage,
             "failed"
