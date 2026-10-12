@@ -503,9 +503,11 @@ export const FindFilesDialog: FactoryComponent<FindFilesDialogAttrs> = () => {
           availabilityError
             ? m('p.fm-field-error', { role: 'alert' }, availabilityError)
             : undefined,
-          attrs.searchPending
-            ? m('p', { role: 'status' }, t('search', 'startingSearch'))
-            : undefined,
+          m(
+            'p.fm-find-search-status',
+            { role: 'status' },
+            attrs.searchPending ? t('search', 'startingSearch') : '',
+          ),
           attrs.error ? m('p.fm-field-error', { role: 'alert' }, attrs.error) : undefined,
           conceptMode
             ? m('.fm-find-concept', [

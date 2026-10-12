@@ -789,6 +789,7 @@ export const nl = {
     tags: 'Tags',
     search: 'Zoeken',
     noResultsToast: 'Geen resultaten gevonden voor deze zoekopdracht.',
+    noMatches: 'Geen overeenkomsten',
     executionMode: 'Uitvoeringsmodus voor zoeken',
     executionIndexed: 'Geïndexeerd',
     executionLive: 'Live scan',

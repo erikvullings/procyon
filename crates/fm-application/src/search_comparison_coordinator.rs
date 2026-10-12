@@ -327,7 +327,11 @@ impl SearchComparisonCoordinator {
                 entries.push(entry);
             }
         }
-        let started = self.search.start_materialized(search_id, entries);
+        let started = self.search.start_materialized(
+            search_id,
+            entries,
+            EventAudience::Workspace(workspace_id.into()),
+        );
         Ok(StartSearchResponseDto {
             search_id,
             location: started.location.into(),
@@ -422,7 +426,11 @@ impl SearchComparisonCoordinator {
                 entries.push(entry);
             }
         }
-        let started = self.search.start_materialized(search_id, entries);
+        let started = self.search.start_materialized(
+            search_id,
+            entries,
+            EventAudience::Workspace(workspace_id.into()),
+        );
         Ok(StartSearchResponseDto {
             search_id,
             location: started.location.into(),
@@ -758,7 +766,7 @@ mod tests {
     use std::sync::Arc;
 
     use fm_comparison::{ComparisonEngine, ComparisonResultsStore};
-    use fm_events::EventBus;
+    use fm_events::{BackendEventPayload, EventBus, SessionId, SubscriptionEvent};
     use fm_search::{SearchEngine, SearchResultsStore};
     use fm_transport_dto::{
         ConceptHierarchyScopeDto, SearchConceptPredicateDto, SearchExecutionModeDto, SearchModeDto,
@@ -818,6 +826,7 @@ mod tests {
             })
             .await
             .expect("ingest fixture");
+        let mut subscription = events.subscribe_all_workspaces(SessionId::new("test"), None);
         let coordinator = SearchComparisonCoordinator::new(
             SearchEngine::new(Arc::clone(&search_store), events.clone(), providers.clone()),
             ComparisonEngine::new(Arc::clone(&comparison_store), events.clone(), providers),
@@ -885,6 +894,26 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].name, "report.pdf");
         assert!(!more);
+        let SubscriptionEvent::Event(event) = subscription.recv().await.expect("search batch")
+        else {
+            panic!("expected a search result event");
+        };
+        assert!(matches!(
+            event.payload,
+            BackendEventPayload::SearchResultsBatch {
+                search_id,
+                ref entries,
+                is_complete: true,
+                execution_mode: fm_events::SearchExecutionModePayload::Semantic,
+                ..
+            } if search_id == response.search_id && entries.len() == 1
+        ));
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(30), subscription.recv())
+                .await
+                .is_err(),
+            "one materialized search must emit only one complete batch"
+        );
     }
 
     #[tokio::test]

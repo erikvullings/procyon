@@ -783,6 +783,7 @@ export const pl = {
     tags: 'Etykiety',
     search: 'Szukaj',
     noResultsToast: 'Nie znaleziono wyników dla tego wyszukiwania.',
+    noMatches: 'Brak wyników',
     executionMode: 'Tryb wykonywania wyszukiwania',
     executionIndexed: 'Zindeksowane',
     executionLive: 'Skanowanie na żywo',

@@ -48,6 +48,14 @@ describe('i18n', () => {
   });
 
   describe('runtime switching', () => {
+    it.each(LOCALES)('localises the concept-search empty state in %s', (locale) => {
+      setLocale(locale);
+      expect(t('search', 'noMatches')).toBe(catalogues[locale].search.noMatches);
+      if (locale !== 'en') {
+        expect(t('search', 'noMatches')).not.toBe(catalogues.en.search.noMatches);
+      }
+    });
+
     it.each(LOCALES)('localises both basket clipboard tooltips in %s', (locale) => {
       setLocale(locale);
       const basketTooltipKeys = [

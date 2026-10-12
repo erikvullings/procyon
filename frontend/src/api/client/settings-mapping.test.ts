@@ -65,7 +65,8 @@ it('preserves existing exact-concept predicates independently of similarity prov
           concept: {
             vocabularyId: 'vocabulary-1',
             conceptUri: 'http://example.test/concept',
-            hierarchyScope: 'exact',
+            hierarchy: 'exact',
+            libraryId: 'library-1',
             enrolledRootIds: ['root-1'],
           },
           gitStatuses: [],
@@ -78,7 +79,8 @@ it('preserves existing exact-concept predicates independently of similarity prov
   expect(settingsFromDto(dto).savedSearches[0]?.query.concept).toEqual({
     vocabularyId: 'vocabulary-1',
     conceptUri: 'http://example.test/concept',
-    hierarchyScope: 'exact',
+    hierarchy: 'exact',
+    libraryId: 'library-1',
     enrolledRootIds: ['root-1'],
   });
 });

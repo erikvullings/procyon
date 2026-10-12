@@ -797,6 +797,7 @@ export const en = {
     tags: 'Tags',
     search: 'Search',
     noResultsToast: 'No results found for this search.',
+    noMatches: 'No matches',
     executionMode: 'Search execution mode',
     executionIndexed: 'Indexed',
     executionLive: 'Live scan',

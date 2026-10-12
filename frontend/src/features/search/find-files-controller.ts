@@ -214,9 +214,6 @@ export function createFindFilesController(
             .catch(() => undefined);
           return;
         }
-        if (target !== 'newTab') context.setFindFilesTargetPane(result.searchId, paneId);
-        if (refresh === undefined) context.setFindFilesSearchId(result.searchId);
-        context.setFindFilesSearchStartPending(false);
         context.getFindFilesRootsByLocationUri().set(result.location.uri, root);
         const executionMode =
           context.getSearchExecutionMode?.(result.searchId) ?? result.executionMode;
@@ -245,6 +242,9 @@ export function createFindFilesController(
           );
         }
         if (target === 'newTab') context.openTabAt(paneId, result.location, root);
+        if (target !== 'newTab') context.setFindFilesTargetPane(result.searchId, paneId);
+        if (refresh === undefined) context.setFindFilesSearchId(result.searchId);
+        context.setFindFilesSearchStartPending(false);
         if (refresh === undefined) {
           context.setFindFilesOpen(false);
           context.setFindFilesRoot(undefined);
@@ -315,7 +315,7 @@ export function createFindFilesController(
           searchPaneId === undefined ? false : this.activeShowHidden(searchPaneId),
         ),
         params,
-        'currentPane',
+        params.selectedConcept === undefined ? 'currentPane' : 'newTab',
         undefined,
         params.conceptLabel === undefined
           ? undefined

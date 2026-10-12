@@ -791,6 +791,7 @@ export const de = {
     tags: 'Tags',
     search: 'Suchen',
     noResultsToast: 'Für diese Suche wurden keine Ergebnisse gefunden.',
+    noMatches: 'Keine Treffer',
     executionMode: 'Suchausführungsmodus',
     executionIndexed: 'Indiziert',
     executionLive: 'Live-Scan',

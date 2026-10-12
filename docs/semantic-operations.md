@@ -363,9 +363,10 @@ concept assignments. **Save as smart folder** pins this similarity search in Sma
 the selected label and definition as a snapshot; the saved query also retains the vocabulary ID
 and stable concept URI as source provenance, not as an exact-concept filter. The suggested name uses
 the preferred label and a short source name (for example, `Mental stress (UNESCO)`). Search shows
-progress while the request starts and a visible error if it fails; it does not assign labels to
-files. Recreate the saved search if the concept's text changes. Only indexed/authorized documents
-can appear.
+progress without resizing the dialog while the request starts, a visible error if it fails, and
+opens a results tab even when no documents match. An empty tab names the concept and displays
+`No matches`; the search does not assign labels to files. Recreate the saved search if the
+concept's text changes. Only indexed/authorized documents can appear.
 Previously saved exact-concept folders remain readable, but are not created by this discovery
 flow; they require separately published concept annotations to return documents.
 

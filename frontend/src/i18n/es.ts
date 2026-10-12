@@ -785,6 +785,7 @@ export const es = {
     tags: 'Etiquetas',
     search: 'Buscar',
     noResultsToast: 'No se encontraron resultados para esta búsqueda.',
+    noMatches: 'Sin resultados',
     executionMode: 'Modo de ejecución de búsqueda',
     executionIndexed: 'Indexado',
     executionLive: 'Análisis en vivo',

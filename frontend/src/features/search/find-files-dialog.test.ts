@@ -102,6 +102,31 @@ describe('FindFilesDialog', () => {
     expect(document.querySelector('#find-files-query')).not.toBeNull();
   });
 
+  it('keeps a reserved status slot while search submission is pending', () => {
+    let searchPending = false;
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          scopeLabel: '/Documents',
+          searchPending,
+          onSearch: vi.fn(),
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    const slot = root.querySelector('.fm-find-search-status[role="status"]');
+    expect(slot?.textContent).toBe('');
+    searchPending = true;
+    m.redraw.sync();
+    expect(root.querySelector('.fm-find-search-status')).toBe(slot);
+    expect(slot?.textContent).toBe('Starting search…');
+    searchPending = false;
+    m.redraw.sync();
+    expect(root.querySelector('.fm-find-search-status')).toBe(slot);
+    expect(slot?.textContent).toBe('');
+  });
+
   it('searches unattached imported concepts and suggests recent selections', async () => {
     const client = await indexedClient();
     await client.importSemanticVocabulary(

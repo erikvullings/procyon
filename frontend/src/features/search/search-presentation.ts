@@ -8,6 +8,7 @@ export interface SearchPresentation {
   readonly executionMode: SearchExecutionMode;
   readonly semanticResults?: StartSearchResult['semanticResults'];
   readonly semanticCoverage?: StartSearchResult['semanticCoverage'];
+  readonly conceptSearch?: boolean;
 }
 
 /** Selects the primary user-facing term for a recursive search. */
@@ -25,6 +26,7 @@ export function searchPresentation(
       term: params.semanticQuery?.trim() ?? '',
       ...(label === undefined ? {} : { label }),
       executionMode,
+      ...(params.selectedConcept === undefined ? {} : { conceptSearch: true }),
       ...(semanticResults === undefined ? {} : { semanticResults }),
       ...(semanticCoverage === undefined ? {} : { semanticCoverage }),
     };

@@ -4204,6 +4204,16 @@ input[type="text"].fm-shortcuts-help-capture-input {
   gap: 0.5rem;
 }
 
+.fm-find-search-status {
+  min-height: 1.25rem;
+  margin: 0;
+  line-height: 1.25rem;
+  color: var(--fm-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .fm-find-files-modes {
   display: flex;
   gap: 0.5rem;

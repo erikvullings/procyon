@@ -2902,11 +2902,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       }
       const entries = directories.get(activeTabKey(paneId))?.entries ?? [];
       if (entries.length > 0) return;
+      if (findFilesPresentationsByLocationUri.get(searchUri)?.conceptSearch) return;
       toast({ html: t('search', 'noResultsToast') });
       const root = findFilesRootsByLocationUri.get(searchUri);
       if (root !== undefined) void navigation.navigate(paneId, root);
     },
-    reportSearchWithoutResults: () => {
+    reportSearchWithoutResults: (searchId) => {
+      if (findFilesPresentationsByLocationUri.get(`search://local/${searchId}`)?.conceptSearch) {
+        return;
+      }
       toast({ html: t('search', 'noResultsToast') });
     },
     applyDiskUsageProgress,

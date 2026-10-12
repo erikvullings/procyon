@@ -452,6 +452,17 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
           indexed: coverage.indexed,
           eligible: coverage.eligible,
         });
+  if (
+    presentation?.conceptSearch &&
+    attrs.state.type === 'loaded' &&
+    attrs.entries.every((entry) => isParentEntry(entry.id))
+  ) {
+    return m('.fm-semantic-evidence', { role: 'status' }, [
+      m('strong', presentation.label ?? query),
+      m('div', t('search', 'noMatches')),
+      coverageLabel === undefined ? undefined : m('div', coverageLabel),
+    ]);
+  }
   if (selected === undefined) {
     return coverageLabel === undefined
       ? undefined

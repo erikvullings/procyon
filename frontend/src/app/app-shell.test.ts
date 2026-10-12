@@ -3239,12 +3239,22 @@ describe('AppShell', () => {
     [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
       .find((button) => button.textContent?.trim() === 'Search')
       ?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-files-modal.active')).toBeNull());
     await vi.waitFor(() =>
-      expect(document.body.textContent).toContain('No results found for this search.'),
+      expect(
+        [...root.querySelectorAll('.fm-semantic-evidence[role="status"]')].some((element) =>
+          element.textContent?.includes('No matches'),
+        ),
+      ).toBe(true),
     );
     expect(retry).toHaveBeenCalledOnce();
     expect((await retry.mock.results[0]?.value)?.executionMode).toBe('semantic');
     expect(root.querySelector('.fm-find-files-modal.active')).toBeNull();
+    expect(
+      [...root.querySelectorAll('.fm-breadcrumb')].some((breadcrumb) =>
+        breadcrumb.textContent?.includes('Mental stress (UNESCO)'),
+      ),
+    ).toBe(true);
   });
 
   it('closes the Lister viewer via its close button', async () => {
