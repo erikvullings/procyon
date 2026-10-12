@@ -1049,6 +1049,8 @@ export const nl = {
     results: 'Bronnen',
     resultsSummary: '{documents} document(en) · {sections} overeenkomende sectie(s)',
     openSection: 'Open {section} in de bron',
+    pdfImageCitation: 'Pagina {page} · Afbeelding {image}',
+    pdfImageEvidence: 'Ingesloten PDF-afbeelding',
     groupBy: 'Resultaatweergave',
     groupByNeed: 'Per kennisbehoefte',
     groupByDocument: 'Per document',

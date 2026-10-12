@@ -7,8 +7,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use fm_semantic_protocol::{FrameError, v1::ErrorCode};
+use fm_semantic_protocol::{FrameError, MAX_PDF_INGESTION_BYTES, MAX_STREAM_BYTES, v1::ErrorCode};
 use fm_semantic_worker::{WorkerClient, WorkerConnector};
+use sha2::{Digest, Sha256};
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::sync::Mutex as AsyncMutex;
 
 pub use fm_semantic_worker::{
@@ -223,6 +225,26 @@ pub struct DocumentIngestion {
     pub content: Vec<u8>,
 }
 
+/// Immutable, host-authorized PDF source streamed without a per-workspace byte clone.
+pub struct PdfStreamIngestion<'source> {
+    /// Tenant and library owning the document.
+    pub scope: SemanticScope,
+    /// Opaque request identity for cancellation.
+    pub operation_id: SemanticOperationId,
+    /// Opaque document identity.
+    pub document_id: DocumentId,
+    /// Structured source metadata.
+    pub metadata: BTreeMap<String, String>,
+    /// Host-authorized immutable PDF image consent.
+    pub pdf_images_consented: bool,
+    /// Source byte count measured while reading the provider.
+    pub content_bytes: u64,
+    /// SHA-256 of those exact source bytes.
+    pub content_sha256: [u8; 32],
+    /// Provider-neutral bounded source reader.
+    pub reader: &'source mut (dyn AsyncRead + Send + Unpin),
+}
+
 /// One scoped semantic query.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemanticQuery {
@@ -315,6 +337,19 @@ pub trait SemanticCapability: Send + Sync {
 
     /// Streams one provider-neutral document into the semantic capability.
     async fn ingest(&self, ingestion: DocumentIngestion) -> Result<SemanticJobId, SemanticError>;
+
+    /// Streams an already-authorized PDF snapshot; unsupported capabilities reject it.
+    async fn ingest_pdf_stream(
+        &self,
+        _ingestion: PdfStreamIngestion<'_>,
+    ) -> Result<SemanticJobId, SemanticError> {
+        Err(SemanticError::Unavailable)
+    }
+
+    /// Maximum PDF source length that this capability can actually ingest.
+    async fn max_pdf_source_bytes(&self) -> Result<u64, SemanticError> {
+        Ok(MAX_STREAM_BYTES)
+    }
 
     /// Executes a tenant/library-scoped semantic query.
     async fn query(&self, query: SemanticQuery)
@@ -491,6 +526,45 @@ impl SemanticCapability for FakeSemanticCapability {
                 },
             );
         Ok(job_id)
+    }
+
+    async fn ingest_pdf_stream(
+        &self,
+        ingestion: PdfStreamIngestion<'_>,
+    ) -> Result<SemanticJobId, SemanticError> {
+        if ingestion.content_bytes > MAX_PDF_INGESTION_BYTES {
+            return Err(SemanticError::LimitExceeded(
+                "PDF source exceeds the client ceiling".into(),
+            ));
+        }
+        let mut content = Vec::new();
+        ingestion
+            .reader
+            .take(ingestion.content_bytes + 1)
+            .read_to_end(&mut content)
+            .await
+            .map_err(|error| SemanticError::WorkerFailure(error.to_string()))?;
+        if content.len() as u64 != ingestion.content_bytes
+            || Sha256::digest(&content).as_slice() != ingestion.content_sha256
+        {
+            return Err(SemanticError::InvalidRequest(
+                "PDF source length or checksum changed".into(),
+            ));
+        }
+        self.ingest(DocumentIngestion {
+            scope: ingestion.scope,
+            operation_id: ingestion.operation_id,
+            document_id: ingestion.document_id,
+            metadata: ingestion.metadata,
+            media_type: "application/pdf".into(),
+            pdf_images_consented: ingestion.pdf_images_consented,
+            content,
+        })
+        .await
+    }
+
+    async fn max_pdf_source_bytes(&self) -> Result<u64, SemanticError> {
+        Ok(MAX_PDF_INGESTION_BYTES)
     }
 
     async fn query(
@@ -729,6 +803,32 @@ impl SemanticCapability for IpcSemanticCapability {
         .map(SemanticJobId::new)
     }
 
+    async fn ingest_pdf_stream(
+        &self,
+        ingestion: PdfStreamIngestion<'_>,
+    ) -> Result<SemanticJobId, SemanticError> {
+        let client = self.worker_client().await?;
+        self.adapt_result(
+            client
+                .ingest_pdf_reader(
+                    ingestion.operation_id.as_str(),
+                    fm_semantic_worker::IngestionScope::new(
+                        ingestion.scope.tenant_id.as_str(),
+                        ingestion.scope.library_id.as_str(),
+                    ),
+                    ingestion.document_id.as_str(),
+                    ingestion.metadata,
+                    ingestion.pdf_images_consented,
+                    ingestion.reader,
+                    ingestion.content_bytes,
+                    ingestion.content_sha256,
+                )
+                .await,
+        )
+        .await
+        .map(SemanticJobId::new)
+    }
+
     async fn query(
         &self,
         query: SemanticQuery,
@@ -952,6 +1052,17 @@ impl SemanticService {
         ingestion: DocumentIngestion,
     ) -> Result<SemanticJobId, SemanticError> {
         self.capability.ingest(ingestion).await
+    }
+
+    pub(crate) async fn ingest_pdf_stream(
+        &self,
+        ingestion: PdfStreamIngestion<'_>,
+    ) -> Result<SemanticJobId, SemanticError> {
+        self.capability.ingest_pdf_stream(ingestion).await
+    }
+
+    pub(crate) async fn max_pdf_source_bytes(&self) -> Result<u64, SemanticError> {
+        self.capability.max_pdf_source_bytes().await
     }
 
     pub(crate) async fn query(

@@ -599,6 +599,18 @@ export function knowledgeProvenanceLabel(provenance: string): string {
         const page = number('page_number');
         return page === undefined ? undefined : t('ragAsk', 'citationPage', { page });
       }
+      case 'pdfImage': {
+        const page = number('page_number');
+        const image = number('image_index');
+        return page === undefined ||
+          !Number.isInteger(page) ||
+          page <= 0 ||
+          image === undefined ||
+          !Number.isInteger(image) ||
+          image <= 0
+          ? undefined
+          : t('knowledgeSearch', 'pdfImageCitation', { page, image });
+      }
       case 'textLines':
       case 'codeLines': {
         const start = number('start_line');
@@ -1860,6 +1872,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     positionInHeader = false,
   ): m.Vnode {
     const position = knowledgeProvenanceLabel(row.provenance);
+    const pdfImage = row.mediaType === 'application/pdf' && row.chunkKind === 'pdf_image';
     const indexedTitle = row.sectionPath.join(' / ');
     const openable = !row.unavailable && attrs.onOpenSource !== undefined;
     const kind = mediaKind(row.mediaType);
@@ -1901,73 +1914,75 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
               relevanceIndicator(row),
             ]),
           ]),
-      kind === undefined
-        ? m(
-            '.fm-knowledge-result-markdown',
-            {
-              onclick: (event: MouseEvent) => {
-                if (!(event.target instanceof Element)) return;
-                const anchor = event.target.closest<HTMLAnchorElement>('a[href]');
-                if (anchor === null) return;
-                event.preventDefault();
-                const url = externalEvidenceUrl(anchor.getAttribute('href') ?? '');
-                if (url === undefined || document.getSelection()?.toString()) return;
-                void openExternalEvidence(attrs, url);
+      pdfImage
+        ? m('.fm-knowledge-pdf-image-evidence', t('knowledgeSearch', 'pdfImageEvidence'))
+        : kind === undefined
+          ? m(
+              '.fm-knowledge-result-markdown',
+              {
+                onclick: (event: MouseEvent) => {
+                  if (!(event.target instanceof Element)) return;
+                  const anchor = event.target.closest<HTMLAnchorElement>('a[href]');
+                  if (anchor === null) return;
+                  event.preventDefault();
+                  const url = externalEvidenceUrl(anchor.getAttribute('href') ?? '');
+                  if (url === undefined || document.getSelection()?.toString()) return;
+                  void openExternalEvidence(attrs, url);
+                },
               },
-            },
-            [
-              m(KnowledgeChunkCopy, {
-                evidence: row,
-                title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
-              }),
-              m(
-                '.fm-knowledge-chunk-content',
-                row.mediaType === 'application/pdf'
-                  ? m('p', evidenceTextWithLinks(decodeEvidenceText(row.content)))
-                  : m.trust(safeMarkdownHtml(row.content)),
-              ),
-            ],
-          )
-        : m('.fm-knowledge-media-evidence', [
-            kind === 'image' &&
-            !row.unavailable &&
-            row.stale !== true &&
-            row.sectionPath.length === 0 &&
-            row.provenance === ''
-              ? m(KnowledgeImagePreview, {
+              [
+                m(KnowledgeChunkCopy, {
+                  evidence: row,
+                  title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
+                }),
+                m(
+                  '.fm-knowledge-chunk-content',
+                  row.mediaType === 'application/pdf'
+                    ? m('p', evidenceTextWithLinks(decodeEvidenceText(row.content)))
+                    : m.trust(safeMarkdownHtml(row.content)),
+                ),
+              ],
+            )
+          : m('.fm-knowledge-media-evidence', [
+              kind === 'image' &&
+              !row.unavailable &&
+              row.stale !== true &&
+              row.sectionPath.length === 0 &&
+              row.provenance === ''
+                ? m(KnowledgeImagePreview, {
+                    client: attrs.client,
+                    workspaceId: attrs.workspaceId,
+                    evidence: row,
+                    title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
+                  })
+                : undefined,
+              m('.fm-knowledge-media-summary', [
+                m('strong', mediaLabel(kind)),
+                modifiedLabel === undefined
+                  ? undefined
+                  : m('small.fm-knowledge-media-modified', modifiedLabel),
+                m(KnowledgeMediaCopy, {
                   client: attrs.client,
                   workspaceId: attrs.workspaceId,
                   evidence: row,
                   title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
-                })
-              : undefined,
-            m('.fm-knowledge-media-summary', [
-              m('strong', mediaLabel(kind)),
-              modifiedLabel === undefined
-                ? undefined
-                : m('small.fm-knowledge-media-modified', modifiedLabel),
-              m(KnowledgeMediaCopy, {
-                client: attrs.client,
-                workspaceId: attrs.workspaceId,
-                evidence: row,
-                title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
-                description: description ?? '',
-              }),
-              m(
-                'button.fm-knowledge-media-open',
-                {
-                  type: 'button',
-                  disabled: !openable,
-                  'aria-expanded': sourceOpen ? 'true' : 'false',
-                  onclick: () => void openSource(attrs, row),
-                },
-                t('search', sourceOpen ? 'closeMedia' : 'openMedia', {
-                  type: mediaLabel(kind).toLowerCase(),
+                  description: description ?? '',
                 }),
-              ),
+                m(
+                  'button.fm-knowledge-media-open',
+                  {
+                    type: 'button',
+                    disabled: !openable,
+                    'aria-expanded': sourceOpen ? 'true' : 'false',
+                    onclick: () => void openSource(attrs, row),
+                  },
+                  t('search', sourceOpen ? 'closeMedia' : 'openMedia', {
+                    type: mediaLabel(kind).toLowerCase(),
+                  }),
+                ),
+              ]),
+              redundantImageDescription ? undefined : m('p', description),
             ]),
-            redundantImageDescription ? undefined : m('p', description),
-          ]),
       states.length === 0
         ? undefined
         : m(

@@ -988,6 +988,9 @@ pub enum RequestValidationError {
     /// Declared content exceeds the configured stream limit.
     #[error("declared content size exceeds the configured stream limit")]
     DeclaredContentTooLarge,
+    /// A PDF digest is malformed or an oversized PDF omitted its digest.
+    #[error("PDF ingestion SHA-256 must be 32 bytes and is required for oversized PDF streams")]
+    InvalidPdfDigest,
     /// A content chunk exceeds the configured message limit.
     #[error("content chunk exceeds the configured message limit")]
     ChunkTooLarge,
@@ -1137,6 +1140,13 @@ pub fn validate_ingestion_with_limits(
             }
             if start.expected_content_bytes > limits.max_ingestion_bytes(&start.media_type) {
                 return Err(RequestValidationError::DeclaredContentTooLarge);
+            }
+            if (!start.expected_sha256.is_empty()
+                && (start.media_type != "application/pdf" || start.expected_sha256.len() != 32))
+                || (start.expected_content_bytes > limits.max_stream_bytes()
+                    && start.expected_sha256.len() != 32)
+            {
+                return Err(RequestValidationError::InvalidPdfDigest);
             }
         }
         Some(v1::ingestion_request::Payload::Chunk(chunk)) => {

@@ -1900,6 +1900,25 @@ impl SemanticLibraryService {
         access: &SemanticAccessContext,
         candidates: &[SemanticFeedCandidate],
     ) -> Result<SemanticWorkerFeedPlan, SemanticLibraryError> {
+        self.worker_feed_plan_with_pdf_limit(
+            access,
+            candidates,
+            crate::semantic_indexing::MAX_SOURCE_BYTES,
+        )
+    }
+
+    pub(crate) fn worker_feed_plan_with_pdf_limit(
+        &self,
+        access: &SemanticAccessContext,
+        candidates: &[SemanticFeedCandidate],
+        max_pdf_source_bytes: u64,
+    ) -> Result<SemanticWorkerFeedPlan, SemanticLibraryError> {
+        if !(crate::semantic_indexing::MAX_SOURCE_BYTES
+            ..=fm_semantic_protocol::MAX_PDF_INGESTION_BYTES)
+            .contains(&max_pdf_source_bytes)
+        {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
         let managed = self.managed_backend()?;
         managed.authorize(access)?;
         let tenant = managed.tenant_for(access)?;
@@ -1909,14 +1928,20 @@ impl SemanticLibraryService {
         if let Some(media) = data.policy.library().model().gemma_media() {
             policy = policy.with_gemma_media(media);
         }
-        let mut budgets = data.policy.resource_profile().budgets;
-        budgets.max_source_bytes_per_document = budgets
-            .max_source_bytes_per_document
-            .min(crate::semantic_indexing::MAX_SOURCE_BYTES);
+        let budgets = data.policy.resource_profile().budgets;
         let usage = core::ResourceUsage::measure(&data.catalog);
         let mut eligible = Vec::new();
         let mut decisions = Vec::new();
         for candidate in candidates {
+            let mut candidate_budgets = budgets;
+            candidate_budgets.max_source_bytes_per_document =
+                candidate_budgets.max_source_bytes_per_document.min(
+                    if candidate.candidate.mime_type.as_deref() == Some("application/pdf") {
+                        max_pdf_source_bytes
+                    } else {
+                        crate::semantic_indexing::MAX_SOURCE_BYTES
+                    },
+                );
             let root = data
                 .policy
                 .root(candidate.root_id)
@@ -1936,7 +1961,7 @@ impl SemanticLibraryService {
                 .evaluate(
                     root.location(),
                     &candidate.candidate,
-                    &budgets,
+                    &candidate_budgets,
                     usage,
                     root.eligibility_overrides(),
                 )

@@ -93,6 +93,8 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
         .map_err(PdfError::from)?;
 
     let mut extracted_any = false;
+    let mut uncovered_pages = 0_u32;
+    let mut first_uncovered_page = None;
     for page_number in page_numbers {
         builder.checkpoint().map_err(PdfError::from)?;
         if builder.is_saturated() {
@@ -134,14 +136,31 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
         let Some(page_id) = pages.get(&page_number).copied() else {
             continue;
         };
-        if builder.visuals_enabled() {
-            extract_page_images(builder, &document, page_id, page_number)?;
+        let retained_image = if builder.visuals_enabled() {
+            extract_page_images(builder, &document, page_id, page_number)?
+        } else {
+            false
+        };
+        if text.trim().is_empty() && builder.visuals_enabled() && !retained_image {
+            uncovered_pages += 1;
+            first_uncovered_page.get_or_insert(page_number);
+            builder.omit_visual(
+                None,
+                format!(
+                    "page {page_number} has no extractable text; page rendering is unsupported"
+                ),
+            );
         }
     }
     if !extracted_any && !builder.has_visuals() {
-        return Err(PdfError::NoTextLayer(
-            "the PDF pages contain no extractable text layer; an OCR pack is required".to_owned(),
-        ));
+        return Err(PdfError::NoTextLayer(if builder.visuals_enabled() {
+            format!(
+                "the PDF has no extractable text or reusable JPEG images; {uncovered_pages} pages omitted (first: page {}); page rendering is unsupported and an OCR pack is required",
+                first_uncovered_page.unwrap_or(1)
+            )
+        } else {
+            "the PDF pages contain no extractable text layer; an OCR pack is required".to_owned()
+        }));
     }
     Ok(())
 }
@@ -151,7 +170,8 @@ fn extract_page_images(
     document: &Document,
     page_id: lopdf::ObjectId,
     page_number: u32,
-) -> Result<(), PdfError> {
+) -> Result<bool, PdfError> {
+    let mut retained = false;
     match document.get_page_images(page_id) {
         Ok(images) => {
             for (image_index, image) in images.into_iter().enumerate() {
@@ -166,7 +186,7 @@ fn extract_page_images(
                     );
                     continue;
                 }
-                builder
+                retained |= builder
                     .push_visual(VisualDraft {
                         media_type: "image/jpeg",
                         data: image.content.to_vec(),
@@ -184,7 +204,7 @@ fn extract_page_images(
             format!("PDF page images could not be inspected: {error}"),
         ),
     }
-    Ok(())
+    Ok(retained)
 }
 
 #[cfg(test)]

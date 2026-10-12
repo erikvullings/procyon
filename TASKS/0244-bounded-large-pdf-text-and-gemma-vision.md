@@ -98,6 +98,50 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Consented Gemma PDFs now stage bounded reusable JPEG XObject
+  embeddings with the PDF text in one document generation. Exact one-based page/image
+  provenance identifies `pdf_image` evidence; repeated JPEG bytes reuse a model- and
+  preprocessing-bound vector. Tests cover image-off and E5 behavior, a mixed PDF,
+  image-only JPEG pages, unsupported-page omissions and preservation of the previous
+  generation on embed/publication failure. Knowledge results now label these records as
+  embedded PDF images with localized page/image citations and open the source PDF on
+  the cited page, without presenting a whole-PDF thumbnail as the indexed image.
+  This does not enable page rendering, expose the stored embedded bytes for preview,
+  or turn unsupported scanned pages into searchable results. Production remains at
+  64 MiB and no release qualification is claimed.
+- 2026-10-12 Copilot: The affected protocol, converter, worker and application Rust
+  suites passed except an existing repository release-report assertion
+  `repository_corpus_and_report_are_current` (`InvalidIdentity`: the checked-in E5
+  report names converter `docling-pdf/1036000+baseline/2` and chunker `structural/3`,
+  whereas the current production pipeline names `docling-pdf/1036001+baseline/3`
+  and `structural/4`). All other affected Rust tests passed
+  when that single assertion was skipped; 204 Knowledge/i18n frontend tests passed,
+  including the new PDF-image evidence case. This report assertion must be reconciled
+  before CI/release; skipping it is only diagnostic, not an approval.
+- 2026-10-12 Copilot: Added a separate host PDF source-snapshot path selected only when an
+  explicitly injected capability advertises more than 64 MiB. The enrolled provider stream is
+  copied in 64 KiB windows to an anonymous tempfile while SHA-256 and exact length are measured;
+  the one snapshot is rewound for each authorized workspace rather than cloning source bytes per
+  workspace. The host's PDF reader capability carries the digest and immutable image consent into
+  the worker client's bounded reader; short, oversized or modified streams fail before
+  publication. A synthetic sparse 65 MiB local PDF test completes through the fake capability
+  for two workspaces under both browser-server and Tauri service configurations; a 200 MiB+1
+  source is skipped without reading it. Checksum mismatch retains old fake evidence, and a
+  capability without the
+  larger offer continues to classify both 65 MiB PDF and text as oversized. The installed
+  production IPC capability still advertises only 64 MiB because worker conversion is not
+  resource-isolated and presently rejects completed larger PDF spools. These tests establish the
+  host/VFS/IPC *boundary*, not 174-189 MB real worker conversion or Gemma PDF image coverage.
+- 2026-10-12 Copilot: Rechecked renderer supply chain without downloading or enabling native
+  libraries. Pinned `docling-pdf` 1.36.0 uses native PDFium only behind its disabled `ml`
+  feature; baseline does not render image-only pages, and a supposed pure-Rust renderer
+  installer claim was not corroborated in the pinned source. The upstream `chromium/8086`
+  `bblanchon/pdfium-binaries` release has one Sigstore/SLSA attestation listing per-asset
+  SHA-256s and non-V8 macOS arm64/x64, Windows x64 and Linux x64 assets, but none is pinned,
+  redistributed with its PDFium/third-party notices, signed into Procyon or measured.
+  `docs/docling-pdf-evaluation.md` additionally lists Linux arm64 as a fifth *candidate*
+  target; `release-desktop.yml` ships four triples, not Linux arm64. Availability is not
+  qualification: leave scanned-page rendering and the release gate disabled.
 - 2026-10-11 Copilot: Added a separately negotiated PDF-only IPC ceiling with old-worker
   negotiation defaulting to the unchanged 64 MiB stream limit; ordinary media, result streams,
   and 1 MiB frames remain bounded as before. An opt-in worker configuration spools an oversized

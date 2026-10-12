@@ -240,6 +240,9 @@ impl DocumentConverter for OptionalConverter {
                     | ConversionOutcome::OverBudget { .. }
                     | ConversionOutcome::Cancelled
                     | ConversionOutcome::Encrypted { .. } => return Ok(baseline),
+                    ConversionOutcome::NoTextLayer { .. } if context.visual_evidence() => {
+                        return Ok(baseline);
+                    }
                     _ => {}
                 }
             }

@@ -1034,6 +1034,8 @@ export const en = {
     results: 'Sources',
     resultsSummary: '{documents} document(s) · {sections} matching section(s)',
     openSection: 'Open {section} in source',
+    pdfImageCitation: 'Page {page} · Image {image}',
+    pdfImageEvidence: 'Embedded PDF image',
     groupBy: 'Result layout',
     groupByNeed: 'By knowledge need',
     groupByDocument: 'By document',

@@ -600,6 +600,7 @@ fn provenance_kind(provenance: &ChunkProvenance) -> &'static str {
         Provenance::TextLines { .. } => "textLines",
         Provenance::CodeLines { .. } => "codeLines",
         Provenance::PdfBlock { .. } => "pdfBlock",
+        Provenance::PdfImage { .. } => "pdfImage",
         Provenance::Slide { .. } => "slide",
         Provenance::SpreadsheetRange { .. } => "spreadsheetRange",
         Provenance::DocxBlock { .. } => "docxBlock",

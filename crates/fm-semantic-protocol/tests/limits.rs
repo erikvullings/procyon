@@ -140,6 +140,7 @@ fn declared_pdf_can_use_negotiated_budget_but_identical_non_pdf_cannot() {
             media_type: "application/pdf".into(),
             expected_content_bytes: 200 * 1024 * 1024,
             pdf_images_consented: false,
+            expected_sha256: vec![0; 32],
         })),
     };
     assert_eq!(validate_ingestion_with_limits(&request, limits), Ok(()));
@@ -149,6 +150,53 @@ fn declared_pdf_can_use_negotiated_budget_but_identical_non_pdf_cannot() {
     assert_eq!(
         validate_ingestion_with_limits(&request, limits),
         Err(RequestValidationError::DeclaredContentTooLarge)
+    );
+}
+
+#[test]
+fn oversized_pdf_requires_sha256_and_rejects_non_pdf_or_malformed_digests() {
+    let limits = ProtocolLimits::default()
+        .with_pdf_ingestion_bytes(MAX_STREAM_BYTES + 1)
+        .unwrap();
+    let mut start = v1::IngestionStart {
+        document_id: "document".into(),
+        metadata: vec![],
+        media_type: "application/pdf".into(),
+        expected_content_bytes: MAX_STREAM_BYTES + 1,
+        pdf_images_consented: false,
+        expected_sha256: Vec::new(),
+    };
+    let request = |start: &v1::IngestionStart| v1::IngestionRequest {
+        session: Some(v1::SessionContext {
+            session_id: "session".into(),
+            session_token: vec![1],
+        }),
+        scope: Some(v1::ResourceScope {
+            tenant_id: "tenant".into(),
+            library_id: "library".into(),
+        }),
+        request_id: "request".into(),
+        payload: Some(v1::ingestion_request::Payload::Start(start.clone())),
+    };
+    assert_eq!(
+        validate_ingestion_with_limits(&request(&start), limits),
+        Err(RequestValidationError::InvalidPdfDigest)
+    );
+    start.expected_sha256 = vec![0; 31];
+    assert_eq!(
+        validate_ingestion_with_limits(&request(&start), limits),
+        Err(RequestValidationError::InvalidPdfDigest)
+    );
+    start.expected_sha256.push(0);
+    assert_eq!(
+        validate_ingestion_with_limits(&request(&start), limits),
+        Ok(())
+    );
+    start.media_type = "image/png".into();
+    start.expected_content_bytes = 1;
+    assert_eq!(
+        validate_ingestion_with_limits(&request(&start), limits),
+        Err(RequestValidationError::InvalidPdfDigest)
     );
 }
 

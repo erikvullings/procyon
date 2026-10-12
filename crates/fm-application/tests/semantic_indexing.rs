@@ -1217,6 +1217,10 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
         .unwrap()
         .set_len(65 * 1024 * 1024)
         .unwrap();
+    std::fs::File::create(root.path().join("oversized.pdf"))
+        .unwrap()
+        .set_len(65 * 1024 * 1024)
+        .unwrap();
     let state = project_temp_dir("partial-state-");
     let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1903));
     let library = library(&state);
@@ -1287,7 +1291,7 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
             .iter()
             .find(|count| count.reason == EligibilityReason::Oversized)
             .map(|count| count.count),
-        Some(1)
+        Some(2)
     );
     let persisted = crate::library(&state).status(&HOST).unwrap();
     assert_eq!(
@@ -1296,12 +1300,13 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
             .iter()
             .find(|count| count.reason == EligibilityReason::Oversized)
             .map(|count| count.count),
-        Some(1),
+        Some(2),
         "the 64 MiB exclusion remains discoverable after reopening"
     );
     assert_eq!(report.reconciliation_generation, 1);
 
     std::fs::remove_file(root.path().join("oversized.txt")).unwrap();
+    std::fs::remove_file(root.path().join("oversized.pdf")).unwrap();
     service
         .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
         .await
@@ -1313,6 +1318,54 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
             .all(|count| count.reason != EligibilityReason::Oversized),
         "a completed reconciliation clears obsolete oversized exclusions"
     );
+}
+
+#[tokio::test]
+async fn enrolled_pdf_above_ordinary_limit_streams_only_when_capability_advertises_pdf_support() {
+    use std::io::Write;
+
+    let root = project_temp_dir("pdf-stream-root-");
+    let pdf = root.path().join("synthetic.pdf");
+    let mut file = std::fs::File::create(&pdf).unwrap();
+    file.write_all(b"%PDF-1.7\nsynthetic marker\n").unwrap();
+    file.set_len(65 * 1024 * 1024).unwrap();
+    drop(file);
+    std::fs::File::create(root.path().join("too-large.pdf"))
+        .unwrap()
+        .set_len(200 * 1024 * 1024 + 1)
+        .unwrap();
+    for runtime in [RuntimeKindDto::Tauri, RuntimeKindDto::BrowserServer] {
+        let state = project_temp_dir("pdf-stream-state-");
+        let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1993));
+        let second_workspace_id = WorkspaceId::from(Uuid::from_u128(0x1994));
+        let library = library(&state);
+        let location = Location::from_native_path(root.path()).unwrap();
+        let root_id = enrol(&library, workspace_id, location.clone());
+        assert_eq!(enrol(&library, second_workspace_id, location), root_id);
+        let service = FileManagerService::new(
+            runtime,
+            state.path().join("workspaces"),
+            state.path().join("settings"),
+        )
+        .with_semantic_library_service(library)
+        .with_semantic_capability(Arc::new(FakeSemanticCapability::new()));
+
+        let report = service
+            .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+            .await
+            .unwrap();
+
+        assert_eq!(report.ingested_occurrences, 2);
+        assert_eq!(
+            report
+                .skipped_reason_counts
+                .iter()
+                .find(|count| count.reason == EligibilityReason::Oversized)
+                .map(|count| count.count),
+            Some(1),
+            "the negotiated PDF ceiling excludes an over-limit source"
+        );
+    }
 }
 
 #[tokio::test]

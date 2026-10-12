@@ -58,7 +58,8 @@ use fm_semantic_protocol::{
     validate_query, write_frame,
 };
 use prost::Message;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use sha2::{Digest, Sha256};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{Mutex as AsyncMutex, Notify, OwnedSemaphorePermit, Semaphore, mpsc, watch};
 use tokio_util::sync::CancellationToken;
 
@@ -2225,8 +2226,80 @@ impl WorkerClient {
         media: IngestionMedia<'_>,
         content: Vec<u8>,
     ) -> Result<String, ClientError> {
-        if u64::try_from(content.len()).unwrap_or(u64::MAX) > self.inner.limits().max_stream_bytes()
-        {
+        let length = u64::try_from(content.len()).unwrap_or(u64::MAX);
+        if length > self.inner.limits().max_stream_bytes() {
+            return Err(ClientError::Remote {
+                code: v1::ErrorCode::LimitExceeded,
+                message: "ingestion stream exceeds its negotiated limit".to_owned(),
+            });
+        }
+        self.ingest_reader(
+            request_id,
+            scope,
+            document_id,
+            metadata,
+            media,
+            std::io::Cursor::new(content),
+            length,
+            None,
+        )
+        .await
+    }
+
+    /// Streams a host-authorized PDF from a bounded reader without collecting it in memory.
+    /// Verifies the complete SHA-256, declared length, and EOF before finishing the stream.
+    /// Dropping this future cancels the outstanding worker request.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed transport, integrity, cancellation, or limit error.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "host-supplied PDF identity, consent, reader, and integrity are separate authority inputs"
+    )]
+    pub async fn ingest_pdf_reader<R: AsyncRead + Unpin>(
+        &self,
+        request_id: &str,
+        scope: IngestionScope,
+        document_id: &str,
+        metadata: BTreeMap<String, String>,
+        pdf_images_consented: bool,
+        reader: R,
+        expected_bytes: u64,
+        expected_sha256: [u8; 32],
+    ) -> Result<String, ClientError> {
+        self.ingest_reader(
+            request_id,
+            scope,
+            document_id,
+            metadata,
+            IngestionMedia {
+                media_type: "application/pdf",
+                pdf_images_consented,
+            },
+            reader,
+            expected_bytes,
+            Some(expected_sha256),
+        )
+        .await
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "shared implementation for legacy Vec and bounded PDF reader inputs"
+    )]
+    async fn ingest_reader<R: AsyncRead + Unpin>(
+        &self,
+        request_id: &str,
+        scope: IngestionScope,
+        document_id: &str,
+        metadata: BTreeMap<String, String>,
+        media: IngestionMedia<'_>,
+        mut reader: R,
+        expected_bytes: u64,
+        expected_sha256: Option<[u8; 32]>,
+    ) -> Result<String, ClientError> {
+        if expected_bytes > self.inner.limits().max_ingestion_bytes(media.media_type) {
             return Err(ClientError::Remote {
                 code: v1::ErrorCode::LimitExceeded,
                 message: "ingestion stream exceeds its negotiated limit".to_owned(),
@@ -2259,8 +2332,9 @@ impl WorkerClient {
                         .map(|(key, value)| v1::MetadataEntry { key, value })
                         .collect(),
                     media_type: media.media_type.to_owned(),
-                    expected_content_bytes: u64::try_from(content.len()).unwrap_or(u64::MAX),
+                    expected_content_bytes: expected_bytes,
                     pdf_images_consented: media.pdf_images_consented,
+                    expected_sha256: expected_sha256.map_or_else(Vec::new, |hash| hash.to_vec()),
                 })),
             }),
             deadline,
@@ -2271,37 +2345,74 @@ impl WorkerClient {
             .limits()
             .max_message_bytes()
             .saturating_sub(1024)
-            .max(1);
-        if content.is_empty() {
+            .clamp(1, 1024 * 1024);
+        let mut buffer = vec![0; chunk_size];
+        let mut received = 0u64;
+        let mut sequence = 0u64;
+        let mut digest = Sha256::new();
+        while received < expected_bytes {
+            let remaining = usize::try_from(expected_bytes - received)
+                .unwrap_or(usize::MAX)
+                .min(chunk_size);
+            let read = tokio::time::timeout_at(deadline, reader.read(&mut buffer[..remaining]))
+                .await
+                .map_err(|_| ClientError::Remote {
+                    code: v1::ErrorCode::DeadlineExceeded,
+                    message: "PDF reader deadline exceeded".to_owned(),
+                })??;
+            if read == 0 {
+                return Err(ClientError::Remote {
+                    code: v1::ErrorCode::InvalidRequest,
+                    message: "source ended before declared length".to_owned(),
+                });
+            }
+            if expected_sha256.is_some() {
+                digest.update(&buffer[..read]);
+            }
+            received += read as u64;
             self.send_ingestion_chunk(
                 correlation_id,
-                scope,
-                request_id,
+                scope.clone(),
+                request_id.clone(),
                 v1::FileContentChunk {
-                    sequence: 0,
-                    content: Vec::new(),
-                    end_of_stream: true,
+                    sequence,
+                    content: buffer[..read].to_vec(),
+                    end_of_stream: false,
                 },
                 deadline,
             )
             .await?;
-        } else {
-            let chunk_count = content.len().div_ceil(chunk_size);
-            for (sequence, chunk) in content.chunks(chunk_size).enumerate() {
-                self.send_ingestion_chunk(
-                    correlation_id,
-                    scope.clone(),
-                    request_id.clone(),
-                    v1::FileContentChunk {
-                        sequence: u64::try_from(sequence).unwrap_or(u64::MAX),
-                        content: chunk.to_vec(),
-                        end_of_stream: sequence + 1 == chunk_count,
-                    },
-                    deadline,
-                )
-                .await?;
-            }
+            sequence = sequence
+                .checked_add(1)
+                .ok_or(ClientError::UnexpectedResponse)?;
         }
+        let mut extra = [0u8; 1];
+        let eof = tokio::time::timeout_at(deadline, reader.read(&mut extra))
+            .await
+            .map_err(|_| ClientError::Remote {
+                code: v1::ErrorCode::DeadlineExceeded,
+                message: "PDF reader deadline exceeded".to_owned(),
+            })??;
+        if eof != 0
+            || expected_sha256.is_some_and(|expected| digest.finalize().as_slice() != expected)
+        {
+            return Err(ClientError::Remote {
+                code: v1::ErrorCode::InvalidRequest,
+                message: "PDF source length or SHA-256 changed while streaming".to_owned(),
+            });
+        }
+        self.send_ingestion_chunk(
+            correlation_id,
+            scope,
+            request_id,
+            v1::FileContentChunk {
+                sequence,
+                content: Vec::new(),
+                end_of_stream: true,
+            },
+            deadline,
+        )
+        .await?;
         let responses = self
             .collect(
                 correlation_id,
@@ -2891,6 +3002,7 @@ struct PendingIngestion {
     start: v1::IngestionStart,
     content: PendingContent,
     budget: StreamBudget,
+    digest: Option<Sha256>,
     next_sequence: u64,
     deadline: tokio::time::Instant,
     cancellation: CancellationToken,
@@ -3664,6 +3776,7 @@ async fn handle_frame(
                     let budget = StreamBudget::new(
                         state.config.limits.max_ingestion_bytes(&start.media_type),
                     );
+                    let digest = (!start.expected_sha256.is_empty()).then(Sha256::new);
                     connection.ingestions.lock().await.insert(
                         correlation_id,
                         PendingIngestion {
@@ -3672,6 +3785,7 @@ async fn handle_frame(
                             start,
                             content,
                             budget,
+                            digest,
                             next_sequence: 0,
                             deadline,
                             cancellation: cancellation.clone(),
@@ -3766,6 +3880,9 @@ async fn handle_frame(
                         return;
                     }
                     pending.next_sequence = next_sequence.unwrap_or(pending.next_sequence);
+                    if let Some(digest) = &mut pending.digest {
+                        digest.update(&chunk.content);
+                    }
                     let write_result = match &mut pending.content {
                         PendingContent::Memory(content) => {
                             content.extend_from_slice(&chunk.content);
@@ -4652,6 +4769,22 @@ async fn complete_ingestion(
         .await;
         return;
     }
+    if pending
+        .digest
+        .is_some_and(|digest| digest.finalize().as_slice() != pending.start.expected_sha256)
+    {
+        send_error(
+            &writer,
+            correlation_id,
+            protocol_error(
+                v1::ErrorCode::InvalidRequest,
+                "PDF SHA-256 does not match declaration",
+            ),
+            state.config.limits,
+        )
+        .await;
+        return;
+    }
     tokio::select! {
         () = connection.disconnected.cancelled() => return,
         () = tokio::time::sleep_until(pending.deadline) => {
@@ -5346,6 +5479,7 @@ fn request_validation_error(error: RequestValidationError) -> v1::ProtocolError 
         | RequestValidationError::MissingRequestId
         | RequestValidationError::MissingPayload
         | RequestValidationError::MissingDocumentId
+        | RequestValidationError::InvalidPdfDigest
         | RequestValidationError::EmptyQuery
         | RequestValidationError::InvalidConceptQuery
         | RequestValidationError::InvalidQueryIntent

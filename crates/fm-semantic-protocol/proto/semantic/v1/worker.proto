@@ -122,6 +122,8 @@ message IngestionStart {
   uint64 expected_content_bytes = 4;
   // Host-authorized PDF image consent from the immutable library policy.
   bool pdf_images_consented = 5;
+  // Optional SHA-256 of the complete PDF source, required for oversized PDF spools.
+  bytes expected_sha256 = 6;
 }
 
 // One ordered segment of document content.

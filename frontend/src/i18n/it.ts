@@ -997,6 +997,8 @@ export const it = {
   ragAsk: en.ragAsk,
   knowledgeSearch: {
     ...en.knowledgeSearch,
+    pdfImageCitation: 'Pagina {page} · Immagine {image}',
+    pdfImageEvidence: 'Immagine incorporata nel PDF',
     title: 'Ricerca semantica',
     openTitle: 'Ricerca semantica…',
     subjectsPlaceholder: 'Inserisci i termini di ricerca',

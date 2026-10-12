@@ -283,6 +283,13 @@ pub enum Provenance {
         /// 0-based index of the text block within the page.
         block_index: u32,
     },
+    /// Reusable embedded JPEG evidence on a PDF page (not a rendered page).
+    PdfImage {
+        /// 1-based PDF page number.
+        page_number: u32,
+        /// 1-based image number on the page.
+        image_index: u32,
+    },
     /// A shape's text on a 1-based slide.
     Slide {
         /// 1-based slide number in presentation order.

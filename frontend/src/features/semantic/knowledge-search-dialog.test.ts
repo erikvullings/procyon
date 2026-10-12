@@ -820,6 +820,58 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     );
   });
 
+  it('shows page-specific PDF image evidence without pretending the whole PDF is an image', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) return result;
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            title: 'scanned.pdf',
+            mediaType: 'application/pdf',
+            chunkKind: 'pdf_image',
+            excerpt: 'PDF page 3, image 1',
+            content: '',
+            sectionPath: [],
+            provenance:
+              '{"kind":"exact","value":{"kind":"pdfImage","page_number":3,"image_index":1}}',
+            unavailable: false,
+          },
+        ],
+      };
+    });
+    const onOpenSource = vi.fn();
+    mount({ client, initialSubject: 'retrieval', onOpenSource });
+    await ready();
+    await search();
+
+    expect(root.querySelector('.fm-knowledge-pdf-image-evidence')?.textContent).toBe(
+      'Embedded PDF image',
+    );
+    const page = root.querySelector<HTMLButtonElement>('.fm-knowledge-page-link');
+    expect(page?.textContent).toBe('Page 3 · Image 1');
+    expect(root.querySelector('.fm-knowledge-result-markdown')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-image-preview')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-media-copy')).toBeNull();
+    page?.click();
+    expect(onOpenSource).toHaveBeenCalledWith(
+      expect.objectContaining({ chunkKind: 'pdf_image', mediaType: 'application/pdf' }),
+    );
+    setLocale('nl');
+    m.redraw.sync();
+    expect(root.querySelector('.fm-knowledge-pdf-image-evidence')?.textContent).toBe(
+      'Ingesloten PDF-afbeelding',
+    );
+    expect(root.querySelector('.fm-knowledge-page-link')?.textContent).toBe(
+      'Pagina 3 · Afbeelding 1',
+    );
+  });
+
   it('decodes PDF entities as selectable text and opens only valid web links externally', async () => {
     const client = new MockFileManagerClient();
     const original = client.executeKnowledgeSearch.bind(client);

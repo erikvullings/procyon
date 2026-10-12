@@ -6,6 +6,7 @@
 //! bounded file bytes.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::io::SeekFrom;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
@@ -22,14 +23,14 @@ use fm_vfs::{
 };
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::time::{Instant, MissedTickBehavior, interval_at, sleep};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::semantic::{
-    DocumentId, DocumentIngestion, LibraryId, SemanticError, SemanticIngestionState,
-    SemanticOperationId, SemanticScope, SemanticService, TenantId,
+    DocumentId, DocumentIngestion, LibraryId, PdfStreamIngestion, SemanticError,
+    SemanticIngestionState, SemanticOperationId, SemanticScope, SemanticService, TenantId,
 };
 use crate::semantic_library::{
     SemanticAccessContext, SemanticEligibilityReasonCount, SemanticFeedCandidate,
@@ -304,9 +305,10 @@ impl SemanticIndexingService {
                         return Err(SemanticIndexingError::LimitExceeded("entry count"));
                     }
                     let candidate = eligibility_candidate(entry.clone());
-                    let plan = library.worker_feed_plan(
+                    let plan = library.worker_feed_plan_with_pdf_limit(
                         access,
                         &[SemanticFeedCandidate { root_id, candidate }],
+                        context.max_pdf_source_bytes,
                     )?;
                     for count in plan.skipped_reason_counts {
                         *skipped.entry(count.reason).or_insert(0) += count.count;
@@ -450,12 +452,12 @@ impl SemanticIndexingService {
             .library
             .ok_or(SemanticLibraryError::Unavailable)?
             .library_id;
-        let max_source_bytes = status
+        let profile_source_bytes = status
             .resource_profile
             .ok_or(SemanticLibraryError::Unavailable)?
             .budgets
-            .max_source_bytes_per_document
-            .min(MAX_SOURCE_BYTES);
+            .max_source_bytes_per_document;
+        let max_source_bytes = profile_source_bytes.min(MAX_SOURCE_BYTES);
         let workspace_ids = root
             .workspace_references
             .iter()
@@ -475,11 +477,22 @@ impl SemanticIndexingService {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
         semantic.health().await?;
+        let max_pdf_source_bytes = semantic.max_pdf_source_bytes().await?;
+        if !(MAX_SOURCE_BYTES..=fm_semantic_protocol::MAX_PDF_INGESTION_BYTES)
+            .contains(&max_pdf_source_bytes)
+        {
+            return Err(SemanticError::InvalidRequest(
+                "semantic capability advertised an invalid PDF source limit".into(),
+            )
+            .into());
+        }
         Ok((
             RootIngestContext {
                 root_id,
                 library_id,
                 max_source_bytes,
+                max_pdf_source_bytes,
+                profile_source_bytes,
                 workspace_ids,
                 location: root.location,
                 recursive: root.recursive,
@@ -508,16 +521,35 @@ impl SemanticIndexingService {
             semantic,
             cancellation,
         } = request;
-        let bytes =
-            match read_bounded(provider, entry, context.max_source_bytes, cancellation).await {
-                Ok(Some(bytes)) => bytes,
-                Ok(None) => return Ok(EntryIngestOutcome::Oversized),
-                Err(SemanticIndexingError::Provider(error)) if is_entry_local_failure(&error) => {
-                    return Ok(EntryIngestOutcome::Unreadable(error));
-                }
-                Err(error) => return Err(error),
-            };
-        let fingerprint = ContentFingerprint::new(sha256_fingerprint(&bytes))
+        let media_type = media_type(entry).ok_or(SemanticLibraryError::InvalidRequest)?;
+        let source = if media_type == "application/pdf"
+            && context.max_pdf_source_bytes > MAX_SOURCE_BYTES
+            && entry.size.is_none_or(|size| size > MAX_SOURCE_BYTES)
+        {
+            read_pdf_snapshot(
+                provider,
+                entry,
+                context
+                    .profile_source_bytes
+                    .min(context.max_pdf_source_bytes),
+                cancellation,
+            )
+            .await
+            .map(|source| source.map(SourceBytes::Pdf))
+        } else {
+            read_bounded(provider, entry, context.max_source_bytes, cancellation)
+                .await
+                .map(|source| source.map(SourceBytes::Buffered))
+        };
+        let mut source = match source {
+            Ok(Some(source)) => source,
+            Ok(None) => return Ok(EntryIngestOutcome::Oversized),
+            Err(SemanticIndexingError::Provider(error)) if is_entry_local_failure(&error) => {
+                return Ok(EntryIngestOutcome::Unreadable(error));
+            }
+            Err(error) => return Err(error),
+        };
+        let fingerprint = ContentFingerprint::new(source.fingerprint())
             .map_err(|_| SemanticLibraryError::InvalidRequest)?;
         let occurrence_id = library.record_indexing_observation(
             access,
@@ -527,17 +559,17 @@ impl SemanticIndexingService {
                 content_fingerprint: fingerprint.clone(),
                 root_id: context.root_id,
                 workspace_ids: context.workspace_ids.clone(),
-                source_bytes: u64::try_from(bytes.len())
-                    .map_err(|_| SemanticIndexingError::LimitExceeded("source bytes"))?,
+                source_bytes: source.len(),
             },
         )?;
 
-        let feed = library.worker_feed_plan(
+        let feed = library.worker_feed_plan_with_pdf_limit(
             access,
             &[SemanticFeedCandidate {
                 root_id: context.root_id,
                 candidate: eligibility_candidate(entry.clone()),
             }],
+            context.max_pdf_source_bytes,
         )?;
         let pdf_images_consented = feed.pdf_images_consented;
         let decision = feed
@@ -557,6 +589,7 @@ impl SemanticIndexingService {
             requires_ocr: false,
         };
         for workspace_id in &context.workspace_ids {
+            check_cancelled(cancellation)?;
             let tenant_id = match access {
                 SemanticAccessContext::Host => workspace_id.to_string(),
                 SemanticAccessContext::Server(_) => access.tenant_id()?,
@@ -569,6 +602,25 @@ impl SemanticIndexingService {
             {
                 return Err(SemanticLibraryError::AccessDenied.into());
             }
+            let content = match &mut source {
+                SourceBytes::Buffered(bytes) => FeedContent::Buffered(bytes.clone()),
+                SourceBytes::Pdf(snapshot) => {
+                    snapshot
+                        .file
+                        .seek(SeekFrom::Start(0))
+                        .await
+                        .map_err(|error| {
+                            SemanticIndexingError::Provider(VfsError::Io {
+                                message: error.to_string(),
+                            })
+                        })?;
+                    FeedContent::Pdf {
+                        reader: &mut snapshot.file,
+                        content_bytes: snapshot.len,
+                        content_sha256: snapshot.digest,
+                    }
+                }
+            };
             match ingest_and_wait(
                 semantic,
                 &decision,
@@ -577,12 +629,12 @@ impl SemanticIndexingService {
                     title: entry.name.clone(),
                     root_id: context.root_id,
                     workspace_id: *workspace_id,
-                    media_type: media_type(entry).ok_or(SemanticLibraryError::InvalidRequest)?,
+                    media_type,
                     pdf_images_consented,
                     modified_at_ms: entry
                         .modified_at
                         .map_or(0, |value| value.timestamp_millis()),
-                    content: bytes.clone(),
+                    content,
                 },
                 cancellation,
             )
@@ -679,12 +731,13 @@ impl SemanticIndexingService {
         annotate_git_ignored(&parent, std::slice::from_mut(&mut entry)).await?;
         // Only remediate files the curated policy would still admit for this
         // root: an unrelated or newly excluded file must never be OCR'd.
-        let plan = library.worker_feed_plan(
+        let plan = library.worker_feed_plan_with_pdf_limit(
             access,
             &[SemanticFeedCandidate {
                 root_id,
                 candidate: eligibility_candidate(entry.clone()),
             }],
+            context.max_pdf_source_bytes,
         )?;
         if plan.eligible_locations.first() != Some(&entry.location) {
             return Ok(SingleFileIngestOutcome::Ineligible);
@@ -729,6 +782,8 @@ struct RootIngestContext {
     root_id: RootId,
     library_id: String,
     max_source_bytes: u64,
+    max_pdf_source_bytes: u64,
+    profile_source_bytes: u64,
     workspace_ids: Vec<WorkspaceId>,
     location: Location,
     recursive: bool,
@@ -920,6 +975,110 @@ async fn read_bounded(
     Ok(Some(bytes))
 }
 
+struct PdfSnapshot {
+    file: tokio::fs::File,
+    len: u64,
+    digest: [u8; 32],
+}
+
+enum SourceBytes {
+    Buffered(Vec<u8>),
+    Pdf(PdfSnapshot),
+}
+
+impl SourceBytes {
+    fn len(&self) -> u64 {
+        match self {
+            Self::Buffered(bytes) => bytes.len() as u64,
+            Self::Pdf(snapshot) => snapshot.len,
+        }
+    }
+
+    fn fingerprint(&self) -> String {
+        match self {
+            Self::Buffered(bytes) => sha256_fingerprint(bytes),
+            Self::Pdf(snapshot) => sha256_fingerprint_digest(&snapshot.digest),
+        }
+    }
+}
+
+async fn read_pdf_snapshot(
+    provider: &dyn FileSystemProvider,
+    entry: &EntrySummary,
+    maximum_bytes: u64,
+    cancellation: &CancellationToken,
+) -> Result<Option<PdfSnapshot>, SemanticIndexingError> {
+    if entry.size.is_some_and(|size| size > maximum_bytes) {
+        return Ok(None);
+    }
+    let deadline = Instant::now() + fm_semantic_protocol::STREAM_DEADLINE;
+    let source = EntryRef {
+        id: entry.id,
+        location: entry.location.clone(),
+    };
+    let mut reader = tokio::select! {
+        () = cancellation.cancelled() => return Err(SemanticIndexingError::Cancelled),
+        () = tokio::time::sleep_until(deadline) =>
+            return Err(SemanticIndexingError::LimitExceeded("PDF source streaming deadline")),
+        result = provider.open_read(&source, cancellation.child_token()) => result?,
+    };
+    let tempfile = tempfile::tempfile().map_err(|error| VfsError::Io {
+        message: error.to_string(),
+    })?;
+    let mut file = tokio::fs::File::from_std(tempfile);
+    let mut digest = Sha256::new();
+    let mut len = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = tokio::select! {
+            () = cancellation.cancelled() => return Err(SemanticIndexingError::Cancelled),
+            () = tokio::time::sleep_until(deadline) =>
+                return Err(SemanticIndexingError::LimitExceeded("PDF source streaming deadline")),
+            result = reader.read(&mut buffer) => result,
+        }
+        .map_err(|error| VfsError::Io {
+            message: error.to_string(),
+        })?;
+        if read == 0 {
+            break;
+        }
+        len = len
+            .checked_add(read as u64)
+            .ok_or(SemanticIndexingError::LimitExceeded("PDF source bytes"))?;
+        if len > maximum_bytes {
+            return Ok(None);
+        }
+        tokio::select! {
+            () = cancellation.cancelled() => return Err(SemanticIndexingError::Cancelled),
+            () = tokio::time::sleep_until(deadline) =>
+                return Err(SemanticIndexingError::LimitExceeded("PDF source streaming deadline")),
+            result = file.write_all(&buffer[..read]) => result,
+        }
+        .map_err(|error| VfsError::Io {
+            message: error.to_string(),
+        })?;
+        digest.update(&buffer[..read]);
+    }
+    check_cancelled(cancellation)?;
+    tokio::time::timeout_at(deadline, file.flush())
+        .await
+        .map_err(|_| SemanticIndexingError::LimitExceeded("PDF source streaming deadline"))?
+        .map_err(|error| VfsError::Io {
+            message: error.to_string(),
+        })?;
+    let digest = digest.finalize().into();
+    Ok(Some(PdfSnapshot { file, len, digest }))
+}
+
+enum FeedContent<'content> {
+    Buffered(Vec<u8>),
+    Pdf {
+        reader: &'content mut tokio::fs::File,
+        content_bytes: u64,
+        content_sha256: [u8; 32],
+    },
+}
+
 struct FeedDocument<'content> {
     tenant_id: String,
     title: String,
@@ -928,7 +1087,7 @@ struct FeedDocument<'content> {
     media_type: &'content str,
     pdf_images_consented: bool,
     modified_at_ms: i64,
-    content: Vec<u8>,
+    content: FeedContent<'content>,
 }
 
 enum IngestionOutcome {
@@ -965,18 +1124,44 @@ async fn ingest_and_wait(
         ),
     ]);
     metadata.insert("title".to_owned(), document.title);
-    let job_id = semantic
-        .ingest(DocumentIngestion {
-            scope: scope.clone(),
-            operation_id: operation_id.clone(),
-            document_id: DocumentId::new(decision.document_id().to_string()),
-            metadata,
-            media_type: document.media_type.to_owned(),
-            pdf_images_consented: document.pdf_images_consented
-                && document.media_type == "application/pdf",
-            content: document.content,
-        })
-        .await?;
+    let document_id = DocumentId::new(decision.document_id().to_string());
+    let pdf_images_consented =
+        document.pdf_images_consented && document.media_type == "application/pdf";
+    let job_id = match document.content {
+        FeedContent::Buffered(content) => {
+            semantic
+                .ingest(DocumentIngestion {
+                    scope: scope.clone(),
+                    operation_id: operation_id.clone(),
+                    document_id,
+                    metadata,
+                    media_type: document.media_type.to_owned(),
+                    pdf_images_consented,
+                    content,
+                })
+                .await?
+        }
+        FeedContent::Pdf {
+            reader,
+            content_bytes,
+            content_sha256,
+        } => {
+            let ingestion = semantic.ingest_pdf_stream(PdfStreamIngestion {
+                scope: scope.clone(),
+                operation_id: operation_id.clone(),
+                document_id,
+                metadata,
+                pdf_images_consented,
+                content_bytes,
+                content_sha256,
+                reader,
+            });
+            tokio::select! {
+                () = cancellation.cancelled() => return Err(SemanticIndexingError::Cancelled),
+                result = ingestion => result?,
+            }
+        }
+    };
     let deadline = Instant::now() + INGESTION_TIMEOUT;
     loop {
         if Instant::now() >= deadline {
@@ -1016,6 +1201,10 @@ async fn ingest_and_wait(
 
 fn sha256_fingerprint(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
+    sha256_fingerprint_digest(&digest.into())
+}
+
+fn sha256_fingerprint_digest(digest: &[u8; 32]) -> String {
     let mut value = String::with_capacity(7 + digest.len() * 2);
     value.push_str("sha256:");
     for byte in digest {
