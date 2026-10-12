@@ -98,6 +98,17 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: A synthetic-only conversion probe
+  (`cargo run -p fm-semantic-conversion --example measure_large_pdf_text -- <fixture>`)
+  checks that the generated 354-page, 188,870,838-byte text fixture
+  (SHA-256 `b1e36f4b3e4664d00e09475372f9e90858aaef0adfab3762aaa0ea98cc4d2285`)
+  yields text on every page with no truncation. On this macOS arm64
+  development host a debug-build process converted it in 234 ms, reaching
+  389,808,128 bytes maximum resident set size (`/usr/bin/time -l`).
+  This is **only a parser baseline**: it excludes IPC, embedding, image
+  extraction, staging, cancellation and a process watchdog. It does not
+  establish a four-target release memory ceiling or permit >64 MiB
+  production admission. Generated fixtures were removed after the run.
 - 2026-10-12 Copilot: Directly drawn 8-bit DeviceRGB/DeviceGray Flate
   images now accept validated PNG predictor parameters (10-15), with
   compressed-row overhead included in the decompression bound. A synthetic
