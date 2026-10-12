@@ -103,12 +103,21 @@ optional Docling ML/PDFium pack is qualified on those targets.
   checks that the generated 354-page, 188,870,838-byte text fixture
   (SHA-256 `b1e36f4b3e4664d00e09475372f9e90858aaef0adfab3762aaa0ea98cc4d2285`)
   yields text on every page with no truncation. On this macOS arm64
-  development host a debug-build process converted it in 234 ms, reaching
-  389,808,128 bytes maximum resident set size (`/usr/bin/time -l`).
-  This is **only a parser baseline**: it excludes IPC, embedding, image
-  extraction, staging, cancellation and a process watchdog. It does not
-  establish a four-target release memory ceiling or permit >64 MiB
-  production admission. Generated fixtures were removed after the run.
+  development host a debug-build direct process converted it in 234 ms,
+  reaching 389,808,128 bytes maximum resident set size (`/usr/bin/time -l`).
+  A follow-up synthetic-only probe now streams the source to a kill-on-drop
+  child without copying it into its parent, checks the digest on both
+  sides, polls child RSS every 10 ms and enforces a 120-second deadline.
+  The full fixture completed in 919 ms parent wall time, with 354/354 text
+  pages and 395,034,624 bytes sampled child peak RSS; `/usr/bin/time -l`
+  reported a 2,949,552-byte peak memory footprint for the parent command.
+  `--verify-kill` confirmed a
+  deliberately low 32-MiB sampled threshold kills and reaps the child.
+  The example is **not the production worker path** and a sampled
+  watchdog is not an instantaneous hard OS memory cap. It excludes IPC,
+  embeddings, image extraction, atomic staging, cancellation and
+  four-target resource qualification; it does not permit >64 MiB
+  production admission. Generated fixtures were removed after the runs.
 - 2026-10-12 Copilot: Directly drawn 8-bit DeviceRGB/DeviceGray Flate
   images now accept validated PNG predictor parameters (10-15), with
   compressed-row overhead included in the decompression bound. A synthetic

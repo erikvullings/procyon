@@ -21,6 +21,7 @@ zip.workspace = true
 [dev-dependencies]
 serde_json.workspace = true
 sha2.workspace = true
+sysinfo = "0.39.6"
 zip.workspace = true
 
 [lints]
