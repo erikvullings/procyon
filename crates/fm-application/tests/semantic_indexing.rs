@@ -280,7 +280,10 @@ impl SemanticCapability for FailingDocumentCapability {
                 ),
                 job_id,
                 state: SemanticIngestionState::Failed,
-                detail: None,
+                detail: Some(
+                    "page 33 image 1 exceeds the PDF visual limit; no partial generation published"
+                        .into(),
+                ),
             });
         }
         if job_id.as_str().starts_with("skipped-") {
@@ -1250,6 +1253,11 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
     assert_eq!(report.observed_files, 2);
     assert_eq!(report.ingested_occurrences, 1);
     assert_eq!(report.failed_occurrences, 1);
+    assert_eq!(
+        report.failure_details,
+        ["page 33 image 1 exceeds the PDF visual limit; no partial generation published"]
+    );
+    assert!(!report.failure_details_truncated);
     let roots = service
         .list_knowledge_roots(
             &HOST,

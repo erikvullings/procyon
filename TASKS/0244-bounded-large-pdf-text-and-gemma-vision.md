@@ -98,6 +98,13 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Host reconciliation now preserves distinct worker
+  failure reasons in `SemanticIndexingReport.failure_details` instead of
+  reporting only a failed-occurrence count. A synthetic page-33 image-limit
+  diagnostic survives the Tauri application feed while other files continue
+  indexing; OCR remediation also retains worker failure detail rather than
+  replacing it with a generic error. The one-shot report is not yet a
+  durable per-page coverage model or an HTTP/Tauri/mock frontend indicator.
 - 2026-10-12 Copilot: Converting a consented PDF with a 33rd supported drawn
   image now fails with its page/image location instead of publishing a
   deceptively complete first-32-image generation. The preferred Docling

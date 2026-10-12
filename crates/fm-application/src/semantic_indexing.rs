@@ -42,6 +42,8 @@ const PAGE_SIZE: usize = 128;
 const MAX_ENTRIES: u64 = 100_000;
 const MAX_DIRECTORIES: u64 = 10_000;
 const MAX_RECURSION_DEPTH: u16 = 64;
+const MAX_FAILURE_DETAILS: usize = 16;
+const MAX_FAILURE_DETAIL_CHARS: usize = 512;
 pub(crate) const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
 const INGESTION_POLL_INTERVAL: Duration = Duration::from_millis(25);
 // Covers conversion, chunking, local CPU embedding, and publication. Durable
@@ -67,6 +69,10 @@ pub struct SemanticIndexingReport {
     pub ingested_occurrences: u64,
     /// Workspace-scoped occurrences whose worker ingestion job failed.
     pub failed_occurrences: u64,
+    /// Sanitized reasons for worker failures, including page-local PDF limits.
+    pub failure_details: Vec<String>,
+    /// Additional or overlong failure reasons were not retained in this report.
+    pub failure_details_truncated: bool,
     /// Workspace-scoped occurrences intentionally excluded during conversion.
     pub excluded_occurrences: u64,
     /// Actionable, sanitized reasons for conversion-time exclusions.
@@ -256,6 +262,8 @@ impl SemanticIndexingService {
         let mut observed_files = 0_u64;
         let mut ingested_occurrences = 0_u64;
         let mut failed_occurrences = 0_u64;
+        let mut failure_details = BTreeSet::new();
+        let mut failure_details_truncated = false;
         let mut excluded_occurrences = 0_u64;
         let mut exclusion_details = BTreeSet::new();
         let mut ocr_required_files = Vec::new();
@@ -355,6 +363,13 @@ impl SemanticIndexingService {
                                         ingested_occurrences.saturating_add(report.ingested);
                                     failed_occurrences =
                                         failed_occurrences.saturating_add(report.failed);
+                                    for detail in report.failure_details {
+                                        retain_failure_detail(
+                                            &mut failure_details,
+                                            &mut failure_details_truncated,
+                                            &detail,
+                                        );
+                                    }
                                     excluded_occurrences =
                                         excluded_occurrences.saturating_add(report.excluded);
                                     for detail in report.exclusion_details {
@@ -406,6 +421,8 @@ impl SemanticIndexingService {
             observed_files,
             ingested_occurrences,
             failed_occurrences,
+            failure_details: failure_details.into_iter().collect(),
+            failure_details_truncated,
             excluded_occurrences,
             exclusion_details: exclusion_details.into_iter().collect(),
             ocr_required_files,
@@ -584,6 +601,7 @@ impl SemanticIndexingService {
             occurrence_id,
             ingested: 0,
             failed: 0,
+            failure_details: Vec::new(),
             excluded: 0,
             exclusion_details: Vec::new(),
             requires_ocr: false,
@@ -649,7 +667,10 @@ impl SemanticIndexingService {
                     )?;
                     report.ingested = report.ingested.saturating_add(1);
                 }
-                IngestionOutcome::Failed => report.failed = report.failed.saturating_add(1),
+                IngestionOutcome::Failed(detail) => {
+                    report.failed = report.failed.saturating_add(1);
+                    report.failure_details.push(detail);
+                }
                 IngestionOutcome::Excluded(detail) => {
                     report.excluded = report.excluded.saturating_add(1);
                     report.requires_ocr |= detail.contains("OCRmyPDF");
@@ -804,6 +825,7 @@ pub(crate) struct EntryIngestReport {
     pub(crate) occurrence_id: OccurrenceId,
     pub(crate) ingested: u64,
     pub(crate) failed: u64,
+    pub(crate) failure_details: Vec<String>,
     pub(crate) excluded: u64,
     pub(crate) exclusion_details: Vec<String>,
     pub(crate) requires_ocr: bool,
@@ -1092,8 +1114,53 @@ struct FeedDocument<'content> {
 
 enum IngestionOutcome {
     Completed,
-    Failed,
+    Failed(String),
     Excluded(String),
+}
+
+fn retain_failure_detail(details: &mut BTreeSet<String>, truncated: &mut bool, detail: &str) {
+    let bounded = detail
+        .chars()
+        .take(MAX_FAILURE_DETAIL_CHARS)
+        .collect::<String>();
+    *truncated |= bounded.len() != detail.len();
+    if details.contains(&bounded) {
+        return;
+    }
+    if details.len() == MAX_FAILURE_DETAILS {
+        *truncated = true;
+        return;
+    }
+    details.insert(bounded);
+}
+
+#[cfg(test)]
+mod failure_detail_tests {
+    use super::*;
+
+    #[test]
+    fn bounds_distinct_worker_diagnostics_and_preserves_utf8() {
+        let mut details = BTreeSet::new();
+        let mut truncated = false;
+        for index in 0..=MAX_FAILURE_DETAILS {
+            retain_failure_detail(
+                &mut details,
+                &mut truncated,
+                &format!("page {index} failed"),
+            );
+        }
+        assert_eq!(details.len(), MAX_FAILURE_DETAILS);
+        assert!(truncated);
+        let long = "€".repeat(MAX_FAILURE_DETAIL_CHARS + 1);
+        let mut details = BTreeSet::new();
+        let mut truncated = false;
+        retain_failure_detail(&mut details, &mut truncated, &long);
+        assert_eq!(
+            details.iter().next().unwrap().chars().count(),
+            MAX_FAILURE_DETAIL_CHARS
+        );
+        assert!(truncated);
+    }
 }
 
 async fn ingest_and_wait(
@@ -1166,7 +1233,9 @@ async fn ingest_and_wait(
     loop {
         if Instant::now() >= deadline {
             semantic.cancel(operation_id).await?;
-            return Ok(IngestionOutcome::Failed);
+            return Ok(IngestionOutcome::Failed(
+                "semantic ingestion exceeded the worker deadline".to_owned(),
+            ));
         }
         let job = tokio::select! {
             () = cancellation.cancelled() => {
@@ -1177,7 +1246,11 @@ async fn ingest_and_wait(
         };
         match job.state {
             SemanticIngestionState::Completed => return Ok(IngestionOutcome::Completed),
-            SemanticIngestionState::Failed => return Ok(IngestionOutcome::Failed),
+            SemanticIngestionState::Failed => {
+                return Ok(IngestionOutcome::Failed(job.detail.unwrap_or_else(|| {
+                    "semantic ingestion failed without a worker reason".to_owned()
+                })));
+            }
             SemanticIngestionState::Skipped => {
                 return Ok(IngestionOutcome::Excluded(job.detail.unwrap_or_else(
                     || "The document was excluded from semantic indexing.".to_owned(),
