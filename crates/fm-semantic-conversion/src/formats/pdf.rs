@@ -21,7 +21,10 @@ use lopdf::{Dictionary, Document, LoadOptions, Object, content::Content};
 use crate::MAX_PDF_STRUCTURAL_STREAM_BYTES;
 use crate::budget::Stop;
 use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
-use crate::model::{MAX_VISUAL_BYTES, Provenance, TopLevelBoundary, UnitKind, VisualProvenance};
+use crate::model::{
+    MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES, Provenance, TopLevelBoundary, UnitKind,
+    VisualProvenance,
+};
 use crate::pdf_toc::{clean_pdf_toc_text, repair_spaced_elsevier_doi};
 
 /// Maximum decompressed content bytes per page.
@@ -231,9 +234,6 @@ fn extract_page_images(
             page_number,
             image_index: image_index as u32,
         };
-        if builder.omit_if_visual_capacity_exhausted(provenance.clone()) {
-            continue;
-        }
         let image = (|| -> lopdf::Result<&lopdf::Stream> {
             let id = image_ref.as_reference()?;
             document.get_object(id)?.as_stream()
@@ -290,6 +290,18 @@ fn extract_page_images(
                 continue;
             }
         };
+        if builder.visual_count_exhausted() {
+            return Err(PdfError::Malformed(format!(
+                "page {page_number} image {} exceeds the {MAX_VISUAL_ATTACHMENTS}-attachment PDF limit; no partial generation published",
+                image_index + 1
+            )));
+        }
+        if data.len() > builder.remaining_visual_bytes() {
+            return Err(PdfError::Malformed(format!(
+                "page {page_number} image {} exceeds the remaining PDF visual byte budget; no partial generation published",
+                image_index + 1
+            )));
+        }
         retained |= builder
             .push_visual(VisualDraft {
                 media_type,
@@ -906,7 +918,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn scan_pages_past_attachment_capacity_keep_page_omissions() {
+    fn scan_pages_past_attachment_capacity_fail_without_partial_generation() {
         let page_count = crate::model::MAX_VISUAL_ATTACHMENTS + 1;
         let empty_page: &[&str] = &[];
         let pages = vec![empty_page; page_count];
@@ -948,24 +960,43 @@ pub(crate) mod tests {
         let mut bytes = Vec::new();
         document.save_to(&mut bytes).expect("save fixture");
 
-        let converted = convert_pdf_with_visuals(&bytes, true).expect("convert PDF");
-        assert_eq!(
-            converted.visuals().len(),
-            crate::model::MAX_VISUAL_ATTACHMENTS
+        assert!(
+            matches!(convert_pdf_with_visuals(&bytes, true), Err(PdfError::Malformed(detail))
+                if detail.contains(&format!("page {page_count} image 1"))
+                    && detail.contains("no partial generation published"))
         );
+
+        let mut document = Document::load_mem(&bytes).expect("load fixture");
+        let last_page = document.get_pages()[&(page_count as u32)];
+        let unsupported = document.add_object(Stream::new(
+            dictionary! {
+                "Type" => "XObject", "Subtype" => "Image", "Width" => 2,
+                "Height" => 1, "Filter" => "JPXDecode",
+            },
+            vec![1, 2, 3],
+        ));
+        document
+            .get_dictionary_mut(last_page)
+            .expect("last page")
+            .set(
+                "Resources",
+                dictionary! {
+                    "XObject" => dictionary! { "Im1" => unsupported }
+                },
+            );
+        let mut bytes = Vec::new();
+        document
+            .save_to(&mut bytes)
+            .expect("save unsupported fixture");
+        let converted = convert_pdf_with_visuals(&bytes, true).expect("unsupported omission");
+        assert_eq!(converted.visuals().len(), MAX_VISUAL_ATTACHMENTS);
         assert!(converted.visual_omissions().iter().any(|omission| {
             omission.provenance
                 == Some(VisualProvenance::PdfImage {
                     page_number: page_count as u32,
                     image_index: 0,
                 })
-                && omission.detail.contains("count exceeds")
-        }));
-        assert!(converted.visual_omissions().iter().any(|omission| {
-            omission.provenance
-                == Some(VisualProvenance::PdfPage {
-                    page_number: page_count as u32,
-                })
+                && omission.detail.contains("encoding")
         }));
     }
 

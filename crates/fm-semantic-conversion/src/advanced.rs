@@ -211,16 +211,21 @@ impl DocumentConverter for OptionalConverter {
                 .convert_with_report(SourceContent::Bytes(&bytes), metadata, context)?
                 .outcome;
             if let ConversionOutcome::Converted(mut document) = advanced_outcome {
-                if context.visual_evidence()
-                    && document.visuals().is_empty()
-                    && let ConversionOutcome::Converted(baseline) =
-                        self.baseline
-                            .convert(SourceContent::Bytes(&bytes), metadata, context)?
-                {
-                    document.replace_visual_evidence(
-                        baseline.visuals().to_vec(),
-                        baseline.visual_omissions().to_vec(),
-                    );
+                if context.visual_evidence() && document.visuals().is_empty() {
+                    match self
+                        .baseline
+                        .convert(SourceContent::Bytes(&bytes), metadata, context)?
+                    {
+                        ConversionOutcome::Converted(baseline) => document.replace_visual_evidence(
+                            baseline.visuals().to_vec(),
+                            baseline.visual_omissions().to_vec(),
+                        ),
+                        failed @ (ConversionOutcome::Malformed { .. }
+                        | ConversionOutcome::OverBudget { .. }
+                        | ConversionOutcome::Cancelled
+                        | ConversionOutcome::Encrypted { .. }) => return Ok(failed),
+                        _ => {}
+                    }
                 }
                 return Ok(ConversionOutcome::Converted(document));
             }

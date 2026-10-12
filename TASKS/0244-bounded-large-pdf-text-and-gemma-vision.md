@@ -98,6 +98,16 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Converting a consented PDF with a 33rd supported drawn
+  image now fails with its page/image location instead of publishing a
+  deceptively complete first-32-image generation. The preferred Docling
+  converter propagates the baseline visual-enrichment failure rather than
+  discarding it after successful text extraction; a worker edit regression
+  checks that the prior complete generation remains visible. Unsupported
+  individual image encodings still carry explicit omissions. This closes
+  one partial-publication path, not the 32-image whole-document limit: a
+  354-page scan still needs bounded page-windowed conversion, coverage
+  accounting, and >64 MiB process isolation before release.
 - 2026-10-12 Copilot: Added an opt-in, pure-Rust path for simple directly drawn
   8-bit Flate RGB/gray PDF XObjects: decode at most 4 MiB of exact-size pixels,
   encode a bounded PNG, and retain `PdfImage` page provenance for Gemma's

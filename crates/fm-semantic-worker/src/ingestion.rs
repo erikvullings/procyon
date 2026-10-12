@@ -1969,6 +1969,33 @@ mod tests {
         result
     }
 
+    fn pdf_over_visual_capacity() -> Vec<u8> {
+        let pages = vec![
+            "q /Figure Do Q\nBT /F1 12 Tf 72 720 Td (Page text) Tj ET";
+            fm_semantic_conversion::MAX_VISUAL_ATTACHMENTS + 1
+        ];
+        let bytes = positioned_pdf_pages(&pages);
+        let mut pdf = Document::load_mem(&bytes).expect("load PDF");
+        let image = pdf.add_object(Stream::new(
+            dictionary! {
+                "Type" => "XObject", "Subtype" => "Image", "Width" => 2,
+                "Height" => 1, "ColorSpace" => "DeviceRGB",
+                "BitsPerComponent" => 8, "Filter" => "DCTDecode",
+            },
+            vec![
+                0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 1, 0, 2, 3, 1, 0x11, 0, 2, 0x11, 0, 3, 0x11,
+                0, 0xff, 0xd9,
+            ],
+        ));
+        let resources_id = pdf.get_page_resources(pdf.get_pages()[&1]).unwrap().1[0];
+        pdf.get_dictionary_mut(resources_id)
+            .expect("inherited resources")
+            .set("XObject", dictionary! { "Figure" => image });
+        let mut result = Vec::new();
+        pdf.save_to(&mut result).expect("save oversized image PDF");
+        result
+    }
+
     #[test]
     fn consented_gemma_pdf_images_publish_with_text_and_disclose_unsupported_pages() {
         let fixture = Fixture::with_model(healthy_resources(), "google-embeddinggemma-2");
@@ -2298,6 +2325,67 @@ mod tests {
             Err(IngestionError::PipelineFailed(detail)) if detail.contains("Gemma")
         ));
         assert!(fixture.index.records.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn pdf_visual_capacity_failure_preserves_previous_complete_generation() {
+        let fixture = Fixture::with_model(healthy_resources(), "google-embeddinggemma-2");
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        document.pdf_images_consented = true;
+        document.bytes = positioned_pdf_pages(&[
+            "BT /F1 12 Tf 72 720 Td (Readable original methods for inventive problem solving.) Tj ET",
+        ]);
+        fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("original complete PDF");
+        let original_ids = fixture
+            .index
+            .records
+            .lock()
+            .expect("index")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+
+        document.job_id = "job-over-visual-capacity".into();
+        document.bytes = pdf_over_visual_capacity();
+        let failed = fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new());
+        assert!(
+            matches!(
+            &failed,
+            Err(IngestionError::PipelineFailed(detail))
+                if detail.contains("page 33 image 1")
+                    && detail.contains("no partial generation published")
+            ),
+            "unexpected capacity result: {failed:?}"
+        );
+        let retained_ids = fixture
+            .index
+            .records
+            .lock()
+            .expect("index")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(retained_ids, original_ids);
+        let evidence = fixture
+            .catalog
+            .begin_read()
+            .expect("read catalog")
+            .filter_visible_candidates(
+                &retained_ids,
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .expect("original evidence");
+        assert!(!evidence.is_empty());
+        assert!(evidence.iter().all(|record| record.generation == 1));
     }
 
     #[test]

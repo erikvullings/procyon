@@ -87,6 +87,14 @@ impl<'a, 'b> DocumentBuilder<'a, 'b> {
         !self.visuals.is_empty()
     }
 
+    pub(crate) fn visual_count_exhausted(&self) -> bool {
+        self.visuals.len() >= MAX_VISUAL_ATTACHMENTS
+    }
+
+    pub(crate) fn remaining_visual_bytes(&self) -> usize {
+        MAX_TOTAL_VISUAL_BYTES.saturating_sub(self.visual_bytes)
+    }
+
     pub(crate) fn checkpoint(&self) -> Result<(), Stop> {
         self.tracker.checkpoint()
     }
