@@ -83,6 +83,7 @@ export interface WorkspacePaneContent {
   readonly thumbnailLoader?: ThumbnailLoader;
   readonly finderTagsLoader?: FinderTagsLoader;
   readonly cursorIndex?: number;
+  readonly contextTargetEntryId?: EntryId;
   readonly platform: SelectionPlatform;
   readonly keybindingRuntime?: KeybindingRuntime;
   readonly actions?: readonly ActionDescriptor[];
@@ -698,6 +699,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             ? {}
             : { keybindingOverrides: content.keybindingOverrides }),
           ...(content.cursorIndex === undefined ? {} : { cursorIndex: content.cursorIndex }),
+          ...(content.contextTargetEntryId === undefined
+            ? {}
+            : { contextTargetEntryId: content.contextTargetEntryId }),
           onOpenEntry: content.onOpenEntry,
           ...(content.onDocumentSummary === undefined
             ? {}

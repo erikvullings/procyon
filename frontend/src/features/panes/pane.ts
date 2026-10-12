@@ -243,6 +243,7 @@ export interface PaneAttrs {
   readonly activeSourceStates?: ReadonlyMap<string, ActiveSourceState>;
   readonly active: boolean;
   readonly cursorIndex?: number;
+  readonly contextTargetEntryId?: EntryId;
   // Keyboard / action dispatch (4)
   readonly platform: SelectionPlatform;
   readonly keybindingRuntime?: KeybindingRuntime;
@@ -1943,6 +1944,9 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                   return;
                 }
                 if (!attrs.selectedEntryIds.has(target.id)) {
+                  if (index !== attrs.cursorIndex) {
+                    attrs.onSelectionAction({ type: 'setCursor', entryId: target.id });
+                  }
                   attrs.onContextMenu([target], x, y);
                   return;
                 }
@@ -2006,6 +2010,9 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               onDrop: (index: number | undefined, event: DropModifiers) =>
                 attrs.onDrop?.(index === undefined ? undefined : attrs.entries[index], event),
               ...(attrs.cursorIndex === undefined ? {} : { cursorIndex: attrs.cursorIndex }),
+              ...(attrs.contextTargetEntryId === undefined
+                ? {}
+                : { contextTargetEntryId: attrs.contextTargetEntryId }),
             };
 
             return isGridView

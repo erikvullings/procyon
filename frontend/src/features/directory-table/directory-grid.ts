@@ -41,6 +41,7 @@ export interface DirectoryGridAttrs {
   readonly state: LoadingState;
   readonly source?: DirectoryEntrySource;
   readonly cursorIndex?: number;
+  readonly contextTargetEntryId?: EntryId;
   readonly selectedEntryIds?: ReadonlySet<EntryId>;
   readonly cutEntryIds?: ReadonlySet<EntryId>;
   readonly activeSourceStates?: ReadonlyMap<string, ActiveSourceState>;
@@ -197,6 +198,7 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
           entry.hidden ? 'fm-hidden-entry' : '',
           cursor ? 'fm-cursor-tile' : '',
           selected ? 'fm-selected-tile' : '',
+          attrs.contextTargetEntryId === entry.id ? 'fm-context-target-tile' : '',
           attrs.cutEntryIds?.has(entry.id) === true ? 'fm-cut-entry' : '',
           activeSource !== undefined ? 'fm-active-source' : '',
         ].join(' '),

@@ -254,6 +254,7 @@ type FlatAttrsInput = Partial<{
   onRename: (entry: EntrySummary, name: string) => void | Promise<void>;
   onMultiRename: (entries: readonly EntrySummary[]) => void;
   onContextMenu: (entries: readonly EntrySummary[], x: number, y: number) => void;
+  contextTargetEntryId: EntryId;
   onDragStart: (entries: readonly EntrySummary[], event: DragEvent) => void;
   onDragOver: (entry: EntrySummary | undefined, event: DropEventState) => boolean;
   onDrop: (entry: EntrySummary | undefined, event: DropModifiers) => void;
@@ -342,6 +343,9 @@ function attrs(input: FlatAttrsInput = {}): PaneAttrs {
     cutEntryIds: input.cutEntryIds ?? new Set<EntryId>(),
     active: input.active ?? true,
     ...(input.cursorIndex === undefined ? {} : { cursorIndex: input.cursorIndex }),
+    ...(input.contextTargetEntryId === undefined
+      ? {}
+      : { contextTargetEntryId: input.contextTargetEntryId }),
     platform: input.platform ?? 'linux',
     keybindingRuntime: input.keybindingRuntime ?? 'desktop',
     actions: input.actions ?? keybindingActions,
@@ -498,23 +502,50 @@ describe('Pane inline rename', () => {
         row?.dispatchEvent(
           new MouseEvent('contextmenu', { bubbles: true, clientX: 12, clientY: 24 }),
         );
-        expect(onSelectionAction).not.toHaveBeenCalled();
+        expect(onSelectionAction).toHaveBeenCalledWith({
+          type: 'setCursor',
+          entryId: entries[1]?.id,
+        });
         expect(selected).toEqual(new Set(['one']));
         expect(onContextMenu).toHaveBeenLastCalledWith([entries[1]], 12, 24);
         expect(root.querySelector(`${rowSelector}[data-entry-index="0"]`)?.className).toContain(
           viewMode === 'grid' ? 'fm-selected-tile' : 'fm-selected-row',
+        );
+        rerender({
+          ...paneAttrs,
+          active: false,
+          cursorIndex: 1,
+          contextTargetEntryId: 'two' as EntryId,
+        });
+        const target = root.querySelector<HTMLElement>(`${rowSelector}[data-entry-index="1"]`);
+        expect(root.querySelector('.fm-pane')?.getAttribute('data-active')).toBe('false');
+        expect(target?.classList).toContain(
+          viewMode === 'grid' ? 'fm-context-target-tile' : 'fm-context-target-row',
+        );
+        expect(target?.getAttribute('aria-selected')).toBe('false');
+        expect(root.querySelector(`${rowSelector}[data-entry-index="0"]`)?.className).toContain(
+          viewMode === 'grid' ? 'fm-selected-tile' : 'fm-selected-row',
+        );
+        rerender({ ...paneAttrs, active: false, cursorIndex: 1 });
+        expect(root.querySelector(`${rowSelector}[data-entry-index="1"]`)?.classList).toContain(
+          viewMode === 'grid' ? 'fm-cursor-tile' : 'fm-cursor-row',
+        );
+        expect(root.querySelector(`${rowSelector}[data-entry-index="1"]`)?.classList).not.toContain(
+          viewMode === 'grid' ? 'fm-context-target-tile' : 'fm-context-target-row',
         );
 
         rerender({
           ...paneAttrs,
           selectedEntryIds: new Set<EntryId>(['one' as EntryId, 'two' as EntryId]),
         });
+        onSelectionAction.mockClear();
         root
           .querySelector<HTMLElement>(`${rowSelector}[data-entry-index="1"]`)
           ?.dispatchEvent(
             new MouseEvent('contextmenu', { bubbles: true, clientX: 12, clientY: 24 }),
           );
         expect(onContextMenu).toHaveBeenLastCalledWith(entries, 12, 24);
+        expect(onSelectionAction).not.toHaveBeenCalled();
       },
     );
 

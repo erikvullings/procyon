@@ -181,6 +181,7 @@ export interface DirectoryTableAttrs {
   readonly state: LoadingState;
   readonly source?: DirectoryEntrySource;
   readonly cursorIndex?: number;
+  readonly contextTargetEntryId?: EntryId;
   readonly centerCursor?: boolean;
   readonly selectedEntryIds?: ReadonlySet<EntryId>;
   readonly cutEntryIds?: ReadonlySet<EntryId>;
@@ -1193,6 +1194,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                   entry.hidden ? 'fm-hidden-entry' : '',
                   cursor && attrs.renamingEntryId !== entry.id ? 'fm-cursor-row' : '',
                   selected ? 'fm-selected-row' : '',
+                  attrs.contextTargetEntryId === entry.id ? 'fm-context-target-row' : '',
                   attrs.cutEntryIds?.has(entry.id) === true ? 'fm-cut-entry' : '',
                   activeSource !== undefined ? 'fm-active-source' : '',
                   dragTargetIndex === entryIndex ? 'fm-drop-target' : '',

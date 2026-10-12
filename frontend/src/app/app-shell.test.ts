@@ -6291,8 +6291,11 @@ describe('AppShell', () => {
           new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }),
         );
         m.redraw.sync();
+        expect(root.querySelector('.fm-context-menu')).not.toBeNull();
         expect(directoryRowNamed(root, '日本語.txt')?.classList).toContain('fm-selected-row');
         expect(directoryRowNamed(root, 'report.pdf')?.classList).not.toContain('fm-selected-row');
+        expect(directoryRowNamed(root, 'report.pdf')?.classList).toContain('fm-context-target-row');
+        expect(directoryRowNamed(root, 'report.pdf')?.getAttribute('aria-selected')).toBe('false');
       };
       const menuAction = (label: string): HTMLButtonElement | undefined =>
         [...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu-item')].find(
@@ -6302,6 +6305,29 @@ describe('AppShell', () => {
       rightClickTarget();
       menuAction('Copy Full Path')?.click();
       await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('/Documents/report.pdf'));
+      m.redraw.sync();
+      expect(directoryRowNamed(root, 'report.pdf')?.classList).toContain('fm-cursor-row');
+      expect(directoryRowNamed(root, 'report.pdf')?.classList).not.toContain(
+        'fm-context-target-row',
+      );
+      expect(directoryRowNamed(root, '日本語.txt')?.classList).toContain('fm-selected-row');
+      const targetIndex = Number(directoryRowNamed(root, 'report.pdf')?.dataset.entryIndex);
+      const nextIndex = targetIndex === 0 ? 1 : targetIndex - 1;
+      directoryRowNamed(root, 'report.pdf')
+        ?.closest<HTMLElement>('.fm-pane')
+        ?.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: targetIndex === 0 ? 'ArrowDown' : 'ArrowUp',
+            bubbles: true,
+          }),
+        );
+      m.redraw.sync();
+      expect(
+        directoryRowNamed(root, 'report.pdf')
+          ?.closest('.fm-pane')
+          ?.querySelector('.fm-cursor-row')
+          ?.getAttribute('data-entry-index'),
+      ).toBe(String(nextIndex));
 
       rightClickTarget();
       menuAction('Open')?.click();
@@ -6337,6 +6363,53 @@ describe('AppShell', () => {
         Reflect.deleteProperty(navigator, 'clipboard');
       }
     }
+  });
+
+  it('identifies an unmarked context target in an inactive pane until its menu closes', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, '日本語.txt')).toBeDefined());
+    const pane = directoryRowNamed(root, '日本語.txt')?.closest<HTMLElement>('.fm-workspace-pane');
+    const paneId = pane?.dataset.paneId;
+    expect(paneId).toBeDefined();
+    directoryRowNamed(pane, '日本語.txt')?.click();
+    pane
+      ?.querySelector<HTMLElement>('.fm-pane')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    const otherPane = [...root.querySelectorAll<HTMLElement>('.fm-workspace-pane')].find(
+      (candidate) => candidate.dataset.paneId !== paneId,
+    );
+    otherPane?.click();
+    m.redraw.sync();
+    const inactive = root.querySelector<HTMLElement>(
+      `.fm-workspace-pane[data-pane-id="${paneId}"]`,
+    );
+    expect(inactive?.getAttribute('data-active')).toBe('false');
+    const targetRow = [
+      ...(inactive?.querySelectorAll<HTMLElement>('.fm-directory-row') ?? []),
+    ].find(
+      (row) =>
+        row.getAttribute('aria-selected') === 'false' &&
+        row.querySelector('.fm-entry-name [title]')?.getAttribute('title') !== '..',
+    );
+    expect(targetRow).toBeDefined();
+    const targetIndex = targetRow?.dataset.entryIndex;
+    targetRow?.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }),
+    );
+    m.redraw.sync();
+    const target = (): HTMLElement | null | undefined =>
+      inactive?.querySelector<HTMLElement>(`.fm-directory-row[data-entry-index="${targetIndex}"]`);
+    expect(directoryRowNamed(inactive, '日本語.txt')?.classList).toContain('fm-selected-row');
+    expect(target()?.classList).toContain('fm-context-target-row');
+    expect(target()?.getAttribute('aria-selected')).toBe('false');
+    root
+      .querySelector<HTMLElement>('.fm-context-menu')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    m.redraw.sync();
+    expect(target()?.classList).not.toContain('fm-context-target-row');
+    expect(target()?.classList).toContain('fm-cursor-row');
+    expect(directoryRowNamed(inactive, '日本語.txt')?.classList).toContain('fm-selected-row');
   });
 
   it('opens the macOS Services submenu from the existing selection context menu', async () => {

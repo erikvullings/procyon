@@ -117,6 +117,9 @@ export interface PaneContentContext {
   getNativeDropInProgress(): boolean;
   getAppState(): AppState | undefined;
   getOperations(): readonly Operation[];
+  getContextMenu():
+    | { readonly paneId: PaneId; readonly entries: readonly EntrySummary[] }
+    | undefined;
   /** Revision bumped when the context menu or palette asks this pane to start renaming. */
   getRenameRequest?(paneId: PaneId): PaneRenameRequest | undefined;
   clipboard(): ClipboardState;
@@ -339,6 +342,12 @@ export function createPaneContentBuilder(
     const cursorIndex =
       selection.cursorEntryId === undefined ? undefined : entryIds.indexOf(selection.cursorEntryId);
     const selectedEntryIds = new Set<EntryId>(selection.selectedEntryIds);
+    const menu = context.getContextMenu();
+    const menuEntry = menu?.paneId === paneId ? menu.entries[0] : undefined;
+    const contextTargetEntryId =
+      menu?.entries.length === 1 && menuEntry !== undefined && !selectedEntryIds.has(menuEntry.id)
+        ? menuEntry.id
+        : undefined;
     // While filtering, the true directory total can't be projected past what's loaded and
     // matched so far; otherwise use the backend's real count (plus the synthetic ".." row)
     // so the scrollbar is sized correctly from the very first page, not just once fully loaded.
@@ -492,6 +501,7 @@ export function createPaneContentBuilder(
       actions: context.getRegisteredActions(),
       keybindingOverrides: currentSettings?.keybindings ?? {},
       ...(cursorIndex === undefined || cursorIndex < 0 ? {} : { cursorIndex }),
+      ...(contextTargetEntryId === undefined ? {} : { contextTargetEntryId }),
       ...(renameRequest === undefined ? {} : { renameRequest }),
       onNavigate: async (path) => {
         if (tab !== undefined) {

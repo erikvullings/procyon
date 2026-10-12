@@ -4067,6 +4067,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       Object.values(operations.byId).filter(
         (operation): operation is Operation => operation !== undefined,
       ),
+    getContextMenu: () => contextMenu,
     clipboard,
     getDirectories: () => directories,
     getSelections: () => selections,
