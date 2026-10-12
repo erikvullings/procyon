@@ -241,6 +241,18 @@ test('354-page installed PDF vision qualification is opt-in and cannot publish',
     JSON.stringify(workflow.jobs['installed-gemma-qualification']),
     /record-pdf-vision-qualification\.mjs/u,
   );
+  assert.match(
+    JSON.stringify(workflow.jobs['installed-gemma-qualification']),
+    /PROCYON_GEMMA_PDF_HOST_TEST/u,
+  );
+  assert.match(
+    JSON.stringify(workflow.jobs['installed-gemma-qualification']),
+    /--features gemma-native/u,
+  );
+  assert.match(
+    JSON.stringify(workflow.jobs['installed-gemma-qualification']),
+    /--test semantic_indexing/u,
+  );
   assert.match(workflow.jobs['semantic-publish'].if, /qualify_pdf_vision != true/u);
   assert.match(workflow.jobs['semantic-payloads'].if, /qualify_pdf_vision != true/u);
 });

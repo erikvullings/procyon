@@ -364,6 +364,9 @@ remains **no-go** without host/VFS, resource-ceiling, fallback, and quality evid
 The experimental Gemma publication check separately requires reviewed four-target installed
 PDF evidence from a successful exact-source qualification run; merely adding signed PDFium
 payloads or a worker-only synthetic report cannot satisfy that gate.
+The read-only PDF qualification also runs a separate one-page enrolled-host smoke through
+the installed worker and records source citation, workspace isolation, and deletion behavior.
+That smoke is not full-scan host coverage or release approval.
 
 ## CI
 

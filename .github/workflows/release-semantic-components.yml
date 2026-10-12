@@ -636,6 +636,31 @@ jobs:
             if (tests.length !== 1) throw new Error(`expected one packaged_production executable, got ${tests.length}`);
             fs.appendFileSync(process.env.GITHUB_ENV, `PROCYON_GEMMA_INSTALLED_TEST=${tests[0].executable}\n`);
           ' "$RUNNER_TEMP/gemma-test-build.json"
+      - name: Build installed application PDF smoke
+        if: inputs.qualify_pdf_vision == true
+        shell: bash
+        run: |
+          if ! cargo test -p fm-application --features gemma-native \
+            --test semantic_indexing --no-run --message-format=json \
+            > "$RUNNER_TEMP/gemma-host-test-build.json"; then
+            node -e '
+              const fs = require("node:fs");
+              for (const line of fs.readFileSync(process.argv[1], "utf8").trim().split("\n")) {
+                const message = JSON.parse(line);
+                if (message.reason === "compiler-message" && message.message.level === "error") {
+                  console.error(message.message.rendered);
+                }
+              }
+            ' "$RUNNER_TEMP/gemma-host-test-build.json"
+            exit 1
+          fi
+          node -e '
+            const fs = require("node:fs");
+            const messages = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").map((line) => JSON.parse(line));
+            const tests = messages.filter((message) => message.reason === "compiler-artifact" && message.target.name === "semantic_indexing" && message.executable);
+            if (tests.length !== 1) throw new Error(`expected one semantic_indexing executable, got ${tests.length}`);
+            fs.appendFileSync(process.env.GITHUB_ENV, `PROCYON_GEMMA_PDF_HOST_TEST=${tests[0].executable}\n`);
+          ' "$RUNNER_TEMP/gemma-host-test-build.json"
       - name: Qualify exact signed installed Gemma lifecycle offline
         shell: bash
         env:
@@ -648,6 +673,7 @@ jobs:
           fi
           if [[ "$QUALIFY_PDF_VISION" == "true" ]]; then
             export PROCYON_GEMMA_PDF_QUALIFICATION_REPORT="$RUNNER_TEMP/gemma-pdf-report.json"
+            export PROCYON_GEMMA_PDF_HOST_REPORT="$RUNNER_TEMP/gemma-pdf-host-smoke.json"
           fi
           cargo run --quiet -p fm-semantic-components \
             --example qualify_semantic_lifecycle -- \
@@ -725,6 +751,7 @@ jobs:
             ${{ runner.temp }}/gemma-installed-report.json
             ${{ runner.temp }}/gemma-pdf-report.json
             ${{ runner.temp }}/gemma-pdf-bound-report.json
+            ${{ runner.temp }}/gemma-pdf-host-smoke.json
             ${{ runner.temp }}/gemma-cpu/*.json
           if-no-files-found: warn
           retention-days: 14

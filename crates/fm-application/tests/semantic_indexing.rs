@@ -11,7 +11,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use fm_application::FileManagerService;
 use fm_application::document_summary::{DocumentSummaryCapability, DocumentSummaryError};
-#[cfg(all(unix, feature = "gemma-native"))]
+#[cfg(feature = "gemma-native")]
 use fm_application::semantic::IpcSemanticCapability;
 use fm_application::semantic::{
     DocumentIngestion, FakeSemanticCapability, PdfStreamIngestion, SemanticCapability,
@@ -40,10 +40,10 @@ use fm_semantic_library::{
 use fm_semantic_worker::document_summary::{
     GeneratedSummary, PrepareDocumentSummary, PreparedDocumentSummary,
 };
-#[cfg(all(unix, feature = "gemma-native"))]
+#[cfg(feature = "gemma-native")]
 use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeFiles};
 use fm_semantic_worker::semantic_storage::StoredDocumentSummary;
-#[cfg(all(unix, feature = "gemma-native"))]
+#[cfg(feature = "gemma-native")]
 use fm_semantic_worker::{ManagedWorkerLaunch, ManagedWorkerResolver};
 #[cfg(unix)]
 use fm_transport_dto::ResolveRagCitationRequestDto;
@@ -953,6 +953,178 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
     })
     .await
     .expect("signed worker stopped before temporary index cleanup");
+}
+
+#[cfg(feature = "gemma-native")]
+#[tokio::test]
+#[ignore = "requires an exact signed PDFium-enabled Gemma worker and verified original model files"]
+async fn enrolled_synthetic_scan_keeps_pdf_page_citation_and_revokes_deleted_source() {
+    let files: BTreeMap<String, std::path::PathBuf> = serde_json::from_str(
+        &std::env::var("PROCYON_GEMMA_PACKAGED_FILES").expect("verified installed original files"),
+    )
+    .unwrap();
+    let model = GemmaNativeFiles::from_original_files(&files).unwrap();
+    let root = project_temp_dir("gemma-host-scan-");
+    let state = project_temp_dir("gemma-host-scan-state-");
+    let runtime = project_temp_dir("gemma-host-scan-runtime-");
+    let source = root.path().join("synthetic-scan.pdf");
+    let generator =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/generate-large-pdf-fixture.mjs");
+    let output = std::process::Command::new("node")
+        .arg(generator)
+        .args(["--variant", "rle-scan", "--pages", "1", "--output"])
+        .arg(&source)
+        .output()
+        .expect("generate synthetic one-page scan");
+    assert!(
+        output.status.success(),
+        "synthetic scan generation failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1913));
+    let library = library_with_model(
+        &state,
+        ModelIdentity::embeddinggemma_2(
+            128,
+            GemmaMediaSelection {
+                images: true,
+                audio: false,
+                video: false,
+            },
+        )
+        .unwrap(),
+    );
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let launch = ManagedWorkerLaunch::new_gemma(
+        std::env::var("PROCYON_SEMANTIC_PRODUCTION_WORKER")
+            .expect("signed installed worker")
+            .into(),
+        state.path().join("worker-data"),
+        std::env::var("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY")
+            .expect("verified native runtime directory")
+            .into(),
+        model,
+        128,
+        GemmaMedia {
+            images: true,
+            audio: false,
+            video: false,
+        },
+    );
+    let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(IpcSemanticCapability::desktop_managed(
+        runtime.path(),
+        resolver,
+    )));
+    let indexed = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .expect("index enrolled synthetic scan");
+    assert_eq!(indexed.ingested_occurrences, 1, "{indexed:?}");
+    assert_eq!(indexed.failed_occurrences, 0, "{indexed:?}");
+    let results = service
+        .semantic_query(SemanticQuery {
+            scope: SemanticScope::new(
+                fm_application::semantic::TenantId::new(workspace_id.to_string()),
+                fm_application::semantic::LibraryId::new(indexed.library_id.clone()),
+            ),
+            request_id: SemanticOperationId::new("host-synthetic-scan-query"),
+            text: "synthetic image page".to_owned(),
+            concept: None,
+            maximum_results: 10,
+        })
+        .await
+        .expect("query indexed PDF image");
+    let image = results
+        .iter()
+        .find(|result| {
+            result
+                .metadata
+                .get("semantic.provenance")
+                .is_some_and(|provenance| provenance.contains("pdfPageRender"))
+        })
+        .unwrap_or_else(|| panic!("PDF image evidence was not returned: {results:?}"));
+    let provenance: serde_json::Value =
+        serde_json::from_str(image.metadata.get("semantic.provenance").unwrap()).unwrap();
+    assert_eq!(provenance["value"]["kind"], "pdfPageRender");
+    assert_eq!(provenance["value"]["page_number"], 1);
+    let source_id = image.metadata.get("semantic.sourceId").unwrap().clone();
+    let outside = service
+        .semantic_query(SemanticQuery {
+            scope: SemanticScope::new(
+                fm_application::semantic::TenantId::new("unenrolled-workspace"),
+                fm_application::semantic::LibraryId::new(indexed.library_id),
+            ),
+            request_id: SemanticOperationId::new("host-scan-outside-query"),
+            text: "synthetic image page".to_owned(),
+            concept: None,
+            maximum_results: 10,
+        })
+        .await
+        .expect("query non-enrolled workspace");
+    assert!(
+        outside.is_empty(),
+        "PDF image escaped its enrolled workspace"
+    );
+    let resolved = service
+        .resolve_rag_citation(
+            &HOST,
+            ResolveRagCitationRequestDto {
+                workspace_id: workspace_id.into_inner(),
+                source_id: source_id.clone(),
+            },
+        )
+        .await
+        .expect("resolve authorized page citation");
+    let location: Location = resolved.location.into();
+    assert_eq!(location, Location::from_native_path(&source).unwrap());
+    assert!(resolved.available);
+    std::fs::remove_file(&source).unwrap();
+    service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .expect("reconcile deleted scan");
+    assert!(matches!(
+        service
+            .resolve_rag_citation(
+                &HOST,
+                ResolveRagCitationRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                    source_id,
+                },
+            )
+            .await,
+        Err(fm_application::ApplicationError::NotFound)
+    ));
+    service
+        .semantic_shutdown(Duration::from_secs(10))
+        .await
+        .unwrap();
+    if let Some(path) = std::env::var_os("PROCYON_GEMMA_PDF_HOST_REPORT") {
+        std::fs::write(
+            path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "scope": "installed-host-vfs-one-page-synthetic-pdf-smoke",
+                "pageCount": 1,
+                "hostVfsVerified": true,
+                "workspaceIsolationVerified": true,
+                "currentContentAndDeletionVerified": true,
+                "limitations": "One-page Tauri application service smoke only; not the 354-page host test, browser-server navigation, resource ceiling, rollback, or CPU fallback qualification."
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
 }
 
 fn enrol(library: &SemanticLibraryService, workspace_id: WorkspaceId, root: Location) -> RootId {

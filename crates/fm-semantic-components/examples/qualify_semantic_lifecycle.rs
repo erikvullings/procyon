@@ -468,10 +468,6 @@ fn qualify_installed_gemma(
         .then(|| installed("procyon.semantic.pdfium-notices"))
         .transpose()?;
     stage_pdfium_payloads(&native, pdfium.as_deref(), notices.as_deref())?;
-    let measure_dir = std::env::var_os("PROCYON_GEMMA_MEASURE_DIR").map(PathBuf::from);
-    if let Some(directory) = &measure_dir {
-        fs::create_dir(directory)?;
-    }
     let loader_variable = if cfg!(target_os = "macos") {
         "DYLD_LIBRARY_PATH"
     } else if cfg!(windows) {
@@ -482,6 +478,30 @@ fn qualify_installed_gemma(
     let mut loader_paths = vec![native.clone()];
     if let Some(existing) = std::env::var_os(loader_variable) {
         loader_paths.extend(std::env::split_paths(&existing));
+    }
+    if let Some(host_test) = std::env::var_os("PROCYON_GEMMA_PDF_HOST_TEST") {
+        let status = std::process::Command::new(host_test)
+            .args([
+                "--exact",
+                "enrolled_synthetic_scan_keeps_pdf_page_citation_and_revokes_deleted_source",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("PROCYON_SEMANTIC_PRODUCTION_WORKER", &launch_worker)
+            .env("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY", &native)
+            .env(loader_variable, std::env::join_paths(&loader_paths)?)
+            .env(
+                "PROCYON_GEMMA_PACKAGED_FILES",
+                serde_json::to_string(&originals)?,
+            )
+            .status()?;
+        if !status.success() {
+            return Err(format!("installed Gemma host PDF smoke failed: {status}").into());
+        }
+    }
+    let measure_dir = std::env::var_os("PROCYON_GEMMA_MEASURE_DIR").map(PathBuf::from);
+    if let Some(directory) = &measure_dir {
+        fs::create_dir(directory)?;
     }
     for dimensions in if measure_dir.is_some() {
         vec![128, 256, 512, 768]

@@ -98,6 +98,23 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-13 Copilot: Added a separate opt-in four-target installed
+  application-service smoke in the read-only PDF qualification. With an
+  installed PDFium-enabled Gemma worker it enrolls only a generated one-page
+  scan, checks image-page provenance and source resolution, excludes an
+  unenrolled workspace, and removes the file to check citation revocation.
+  Its own limited host report is uploaded alongside the worker's 354-page
+  report and cannot satisfy the full-scan release checker. Feature-enabled
+  application test binary compiled locally; the exact signed installed
+  test has not run, so host behavior on the four runners remains unverified.
+  The unignored application integration suite, component library suite,
+  release/workflow script tests, feature-enabled typecheck and workspace
+  lint passed. The full application suite retains its pre-existing
+  `repository_corpus_and_report_are_current` failure (`InvalidIdentity`
+  from the stale checked-in E5 evaluation); all other application tests
+  pass when that one assertion is excluded.
+  Host full-scan, browser-server navigation, fallback, rollback, and
+  absolute resource ceilings are still required.
 - 2026-10-12 Copilot: The installed worker-only 354-page scan now records
   worker peak RSS (kernel high-water on Linux/Windows, 200 ms samples on
   macOS) and isolated worker-data disk high-water (one-second samples) in
