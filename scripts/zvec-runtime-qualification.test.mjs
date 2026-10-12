@@ -232,6 +232,11 @@ test('354-page installed PDF vision qualification is opt-in and cannot publish',
     workflow.jobs['validate-pdf-vision-request'].steps[0].run,
     /INSTALLED_CANDIDATE_SOURCE_REVISION/u,
   );
+  assert.equal(workflow.jobs['installed-gemma-qualification'].needs, 'validate-pdf-vision-request');
+  assert.match(
+    workflow.jobs['installed-gemma-qualification'].if,
+    /validate-pdf-vision-request'\]\.result == 'success'/u,
+  );
   assert.match(workflow.jobs['installed-gemma-qualification'].if, /qualify_installed_gemma/u);
   assert.match(
     JSON.stringify(workflow.jobs['installed-gemma-qualification']),
@@ -255,6 +260,23 @@ test('354-page installed PDF vision qualification is opt-in and cannot publish',
   );
   assert.match(workflow.jobs['semantic-publish'].if, /qualify_pdf_vision != true/u);
   assert.match(workflow.jobs['semantic-payloads'].if, /qualify_pdf_vision != true/u);
+});
+
+test('full enrolled-host PDF qualification is a separate read-only installed run', () => {
+  const workflow = loadYaml(
+    fs.readFileSync(path.resolve('.github/workflows/release-semantic-components.yml'), 'utf8'),
+  );
+  assert.equal(workflow.on.workflow_dispatch.inputs.qualify_pdf_host_full.default, false);
+  assert.match(
+    workflow.jobs['validate-pdf-vision-request'].steps[0].run,
+    /QUALIFY_PDF_VISION" != "\$QUALIFY_PDF_HOST_FULL/u,
+  );
+  const installed = JSON.stringify(workflow.jobs['installed-gemma-qualification']);
+  assert.match(installed, /PROCYON_GEMMA_PDF_HOST_FULL_REPORT/u);
+  assert.match(installed, /gemma-pdf-host-full\.json/u);
+  assert.match(installed, /manifest\.sourceRevision !== process\.env\.GITHUB_SHA/u);
+  assert.match(workflow.jobs['semantic-publish'].if, /qualify_pdf_host_full != true/u);
+  assert.match(workflow.jobs['semantic-payloads'].if, /qualify_pdf_host_full != true/u);
 });
 
 test('private qualification rejects release events and enabled release gates', () => {

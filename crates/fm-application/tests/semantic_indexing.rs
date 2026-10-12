@@ -959,6 +959,18 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
 #[tokio::test]
 #[ignore = "requires an exact signed PDFium-enabled Gemma worker and verified original model files"]
 async fn enrolled_synthetic_scan_keeps_pdf_page_citation_and_revokes_deleted_source() {
+    qualify_enrolled_synthetic_scan(1).await;
+}
+
+#[cfg(feature = "gemma-native")]
+#[tokio::test]
+#[ignore = "requires an exact signed PDFium-enabled Gemma worker and a long-running 354-page synthetic scan"]
+async fn enrolled_large_synthetic_scan_publishes_all_page_citations() {
+    qualify_enrolled_synthetic_scan(354).await;
+}
+
+#[cfg(feature = "gemma-native")]
+async fn qualify_enrolled_synthetic_scan(pages: u32) {
     let files: BTreeMap<String, std::path::PathBuf> = serde_json::from_str(
         &std::env::var("PROCYON_GEMMA_PACKAGED_FILES").expect("verified installed original files"),
     )
@@ -972,7 +984,9 @@ async fn enrolled_synthetic_scan_keeps_pdf_page_citation_and_revokes_deleted_sou
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/generate-large-pdf-fixture.mjs");
     let output = std::process::Command::new("node")
         .arg(generator)
-        .args(["--variant", "rle-scan", "--pages", "1", "--output"])
+        .args(["--variant", "rle-scan", "--pages"])
+        .arg(pages.to_string())
+        .arg("--output")
         .arg(&source)
         .output()
         .expect("generate synthetic one-page scan");
@@ -981,6 +995,31 @@ async fn enrolled_synthetic_scan_keeps_pdf_page_citation_and_revokes_deleted_sou
         "synthetic scan generation failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+    let source_bytes = std::fs::metadata(&source).unwrap().len();
+    if pages == 354 {
+        assert_eq!(source_bytes, 175_530_108);
+    }
+    let mut hasher = Sha256::new();
+    let mut input = std::fs::File::open(&source).unwrap();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = std::io::Read::read(&mut input, &mut buffer).unwrap();
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    let source_sha256 = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    if pages == 354 {
+        assert_eq!(
+            source_sha256,
+            "f2e8e12f962f43b5e384dbb8a2648c8ce88213a9895bd11bb5e6fc7b350d3964"
+        );
+    }
     let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1913));
     let library = library_with_model(
         &state,
@@ -1057,7 +1096,11 @@ async fn enrolled_synthetic_scan_keeps_pdf_page_citation_and_revokes_deleted_sou
     let provenance: serde_json::Value =
         serde_json::from_str(image.metadata.get("semantic.provenance").unwrap()).unwrap();
     assert_eq!(provenance["value"]["kind"], "pdfPageRender");
-    assert_eq!(provenance["value"]["page_number"], 1);
+    let hit_page = provenance["value"]["page_number"].as_u64().unwrap();
+    assert!(hit_page >= 1 && hit_page <= u64::from(pages));
+    if pages == 354 {
+        assert_complete_page_images(&state, pages);
+    }
     let source_id = image.metadata.get("semantic.sourceId").unwrap().clone();
     let outside = service
         .semantic_query(SemanticQuery {
@@ -1110,21 +1153,69 @@ async fn enrolled_synthetic_scan_keeps_pdf_page_citation_and_revokes_deleted_sou
         .semantic_shutdown(Duration::from_secs(10))
         .await
         .unwrap();
-    if let Some(path) = std::env::var_os("PROCYON_GEMMA_PDF_HOST_REPORT") {
+    let report_variable = if pages == 354 {
+        "PROCYON_GEMMA_PDF_HOST_FULL_REPORT"
+    } else {
+        "PROCYON_GEMMA_PDF_HOST_REPORT"
+    };
+    if let Some(path) = std::env::var_os(report_variable) {
         std::fs::write(
             path,
             serde_json::to_vec_pretty(&serde_json::json!({
-                "scope": "installed-host-vfs-one-page-synthetic-pdf-smoke",
-                "pageCount": 1,
+                "scope": if pages == 354 {
+                    "installed-host-vfs-354-page-synthetic-pdf-probe"
+                } else {
+                    "installed-host-vfs-one-page-synthetic-pdf-smoke"
+                },
+                "pageCount": pages,
+                "sourceBytes": source_bytes,
+                "sourceSha256": source_sha256,
                 "hostVfsVerified": true,
                 "workspaceIsolationVerified": true,
                 "currentContentAndDeletionVerified": true,
-                "limitations": "One-page Tauri application service smoke only; not the 354-page host test, browser-server navigation, resource ceiling, rollback, or CPU fallback qualification."
+                "limitations": "Tauri application service probe only; no measured host/worker RSS or anonymous temporary disk, browser-server navigation, rollback, or CPU fallback qualification."
             }))
             .unwrap(),
         )
         .unwrap();
     }
+}
+
+#[cfg(feature = "gemma-native")]
+fn assert_complete_page_images(state: &TempDir, pages: u32) {
+    let indexes = std::fs::read_dir(state.path().join("worker-data/indexes"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path().join("catalog.sqlite"))
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    assert_eq!(indexes.len(), 1, "one isolated installed Gemma index");
+    let catalog = rusqlite::Connection::open(&indexes[0]).unwrap();
+    let mut query = catalog
+        .prepare(
+            "SELECT r.provenance FROM records r
+             JOIN generations g ON g.tenant_id = r.tenant_id
+               AND g.library_id = r.library_id AND g.document_id = r.document_id
+               AND g.generation = r.generation
+             WHERE r.record_kind = 'pdf_image' AND g.state = 'complete'",
+        )
+        .unwrap();
+    let page_numbers = query
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .map(|record| {
+            let provenance: serde_json::Value = serde_json::from_str(&record.unwrap()).unwrap();
+            assert_eq!(provenance["value"]["kind"], "pdfPageRender");
+            provenance["value"]["page_number"].as_u64().unwrap()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(page_numbers.len(), pages as usize);
+    assert_eq!(
+        page_numbers
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>(),
+        (1..=u64::from(pages)).collect(),
+        "all published scan pages have unique citations"
+    );
 }
 
 fn enrol(library: &SemanticLibraryService, workspace_id: WorkspaceId, root: Location) -> RootId {

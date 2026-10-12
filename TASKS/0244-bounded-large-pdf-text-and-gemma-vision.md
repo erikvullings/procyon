@@ -98,6 +98,19 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-13 Copilot: Prepared a separately opt-in installed **host/VFS**
+  354-page scan path against the same SHA-256-pinned synthetic RLE fixture
+  as the worker-only qualifier. The test checks the enrolled application
+  service publishes one complete generation with 354 distinct page-rendered
+  image citations, authorizes only the enrolled workspace, resolves a live
+  source and revokes its citation after deletion. It emits a distinct
+  deliberately non-approving report; the workflow refuses combined
+  worker-only/host-full inputs to avoid two approximately three-hour runs
+  in one six-hour runner. Feature-enabled test binary compiles and the
+  workflow is statically read-only, but the full installed test **has not
+  run** on any target. It does not measure anonymous temporary-disk peak,
+  cross-host navigation, rollback, CPU fallback, or legitimate ceilings;
+  the publication gate remains no-go.
 - 2026-10-13 Copilot: Added a separate opt-in four-target installed
   application-service smoke in the read-only PDF qualification. With an
   installed PDFium-enabled Gemma worker it enrolls only a generated one-page

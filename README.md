@@ -367,6 +367,11 @@ payloads or a worker-only synthetic report cannot satisfy that gate.
 The read-only PDF qualification also runs a separate one-page enrolled-host smoke through
 the installed worker and records source citation, workspace isolation, and deletion behavior.
 That smoke is not full-scan host coverage or release approval.
+A distinct read-only `qualify_pdf_host_full` workflow input can run the 354-page
+synthetic scan through an enrolled host without doubling the worker-only run on
+the same runner. Its page-complete report is deliberately not release approval:
+anonymous temporary-disk peak, cross-host navigation, fallback and rollback
+remain unqualified.
 
 ## CI
 

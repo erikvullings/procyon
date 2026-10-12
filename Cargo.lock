@@ -2853,6 +2853,7 @@ dependencies = [
  "quick-xml 0.41.0",
  "rayon",
  "reqwest",
+ "rusqlite",
  "russh",
  "serde",
  "serde_json",

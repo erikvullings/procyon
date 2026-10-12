@@ -27,6 +27,11 @@ on:
         required: false
         default: false
         type: boolean
+      qualify_pdf_host_full:
+        description: Separately run the read-only 354-page enrolled-host PDF test (does not approve release)
+        required: false
+        default: false
+        type: boolean
       qualify_installed_gemma:
         description: Read-only installed lifecycle against a retained signed candidate
         required: false
@@ -59,25 +64,28 @@ permissions:
 jobs:
   validate-pdf-vision-request:
     name: Validate PDF vision qualification inputs
-    if: inputs.qualify_pdf_vision == true
+    if: inputs.qualify_pdf_vision == true || inputs.qualify_pdf_host_full == true
     runs-on: ubuntu-latest
     steps:
       - name: Require read-only installed qualification
         shell: bash
         env:
           QUALIFY_INSTALLED_GEMMA: ${{ inputs.qualify_installed_gemma }}
+          QUALIFY_PDF_VISION: ${{ inputs.qualify_pdf_vision }}
+          QUALIFY_PDF_HOST_FULL: ${{ inputs.qualify_pdf_host_full }}
           QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
           INSTALLED_CANDIDATE_RUN_ID: ${{ inputs.installed_candidate_run_id }}
           INSTALLED_CANDIDATE_SOURCE_REVISION: ${{ inputs.installed_candidate_source_revision }}
         run: |
           test "$QUALIFY_INSTALLED_GEMMA" == "true"
+          test "$QUALIFY_PDF_VISION" != "$QUALIFY_PDF_HOST_FULL"
           test -z "$QUALIFICATION_RUN_ID"
           [[ "$INSTALLED_CANDIDATE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
           [[ "$INSTALLED_CANDIDATE_SOURCE_REVISION" =~ ^[0-9a-f]{40}$ ]]
 
   semantic-payloads:
     name: Semantic payloads (${{ matrix.target }})
-    if: inputs.qualification_run_id == '' && inputs.qualify_installed_gemma != true && inputs.measure_installed_gemma != true && inputs.qualify_pdf_vision != true
+    if: inputs.qualification_run_id == '' && inputs.qualify_installed_gemma != true && inputs.measure_installed_gemma != true && inputs.qualify_pdf_vision != true && inputs.qualify_pdf_host_full != true
     runs-on: ${{ matrix.runner }}
     environment: desktop-release
     timeout-minutes: 240
@@ -330,7 +338,7 @@ jobs:
 
   semantic-publish:
     name: Publish approved semantic component release
-    if: ${{ inputs.qualification_run_id != '' && inputs.qualify_installed_gemma != true && inputs.measure_installed_gemma != true && inputs.qualify_pdf_vision != true && vars.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true' && (inputs.approve_experimental_gemma != true || vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED == 'true') }}
+    if: ${{ inputs.qualification_run_id != '' && inputs.qualify_installed_gemma != true && inputs.measure_installed_gemma != true && inputs.qualify_pdf_vision != true && inputs.qualify_pdf_host_full != true && vars.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true' && (inputs.approve_experimental_gemma != true || vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED == 'true') }}
     runs-on: ubuntu-latest
     environment: desktop-release
     permissions:
@@ -515,10 +523,11 @@ jobs:
 
   installed-gemma-qualification:
     name: Installed Gemma (${{ matrix.target }})
-    if: inputs.qualify_installed_gemma == true && inputs.qualification_run_id == ''
+    needs: validate-pdf-vision-request
+    if: ${{ always() && inputs.qualify_installed_gemma == true && inputs.qualification_run_id == '' && ((inputs.qualify_pdf_vision != true && inputs.qualify_pdf_host_full != true) || needs['validate-pdf-vision-request'].result == 'success') }}
     runs-on: ${{ matrix.runner }}
     environment: desktop-release
-    timeout-minutes: ${{ inputs.qualify_pdf_vision && 360 || 180 }}
+    timeout-minutes: ${{ (inputs.qualify_pdf_vision || inputs.qualify_pdf_host_full) && 360 || 180 }}
     permissions:
       actions: read
       contents: read
@@ -548,6 +557,7 @@ jobs:
         env:
           CANDIDATE_RUN_ID: ${{ inputs.installed_candidate_run_id }}
           CANDIDATE_SOURCE_REVISION: ${{ inputs.installed_candidate_source_revision }}
+          REQUIRE_EXACT_SOURCE: ${{ inputs.qualify_pdf_vision || inputs.qualify_pdf_host_full }}
         run: |
           node -e '
             const fs = require("node:fs");
@@ -556,6 +566,8 @@ jobs:
                 !/^[0-9a-f]{40}$/.test(process.env.CANDIDATE_SOURCE_REVISION) ||
                 manifest.qualificationRunId !== Number(process.env.CANDIDATE_RUN_ID) ||
                 manifest.sourceRevision !== process.env.CANDIDATE_SOURCE_REVISION ||
+                (process.env.REQUIRE_EXACT_SOURCE === "true" &&
+                  manifest.sourceRevision !== process.env.GITHUB_SHA) ||
                 manifest.sourceRevision === "d3f921fe08e4994a905727a71af102979f4fbe23") {
               throw new Error("installed Gemma requires a new exact retained candidate");
             }
@@ -637,7 +649,7 @@ jobs:
             fs.appendFileSync(process.env.GITHUB_ENV, `PROCYON_GEMMA_INSTALLED_TEST=${tests[0].executable}\n`);
           ' "$RUNNER_TEMP/gemma-test-build.json"
       - name: Build installed application PDF smoke
-        if: inputs.qualify_pdf_vision == true
+        if: inputs.qualify_pdf_vision == true || inputs.qualify_pdf_host_full == true
         shell: bash
         run: |
           if ! cargo test -p fm-application --features gemma-native \
@@ -667,6 +679,7 @@ jobs:
           GEMMA_TARGET: ${{ matrix.target }}
           MEASURE_INSTALLED_GEMMA: ${{ inputs.measure_installed_gemma }}
           QUALIFY_PDF_VISION: ${{ inputs.qualify_pdf_vision }}
+          QUALIFY_PDF_HOST_FULL: ${{ inputs.qualify_pdf_host_full }}
         run: |
           if [[ "$MEASURE_INSTALLED_GEMMA" == "true" ]]; then
             export PROCYON_GEMMA_MEASURE_DIR="$RUNNER_TEMP/gemma-cpu"
@@ -674,6 +687,10 @@ jobs:
           if [[ "$QUALIFY_PDF_VISION" == "true" ]]; then
             export PROCYON_GEMMA_PDF_QUALIFICATION_REPORT="$RUNNER_TEMP/gemma-pdf-report.json"
             export PROCYON_GEMMA_PDF_HOST_REPORT="$RUNNER_TEMP/gemma-pdf-host-smoke.json"
+          fi
+          if [[ "$QUALIFY_PDF_HOST_FULL" == "true" ]]; then
+            export PROCYON_GEMMA_PDF_HOST_REPORT="$RUNNER_TEMP/gemma-pdf-host-smoke.json"
+            export PROCYON_GEMMA_PDF_HOST_FULL_REPORT="$RUNNER_TEMP/gemma-pdf-host-full.json"
           fi
           cargo run --quiet -p fm-semantic-components \
             --example qualify_semantic_lifecycle -- \
@@ -752,6 +769,7 @@ jobs:
             ${{ runner.temp }}/gemma-pdf-report.json
             ${{ runner.temp }}/gemma-pdf-bound-report.json
             ${{ runner.temp }}/gemma-pdf-host-smoke.json
+            ${{ runner.temp }}/gemma-pdf-host-full.json
             ${{ runner.temp }}/gemma-cpu/*.json
           if-no-files-found: warn
           retention-days: 14

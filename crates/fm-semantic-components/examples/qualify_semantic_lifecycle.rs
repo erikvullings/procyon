@@ -480,23 +480,49 @@ fn qualify_installed_gemma(
         loader_paths.extend(std::env::split_paths(&existing));
     }
     if let Some(host_test) = std::env::var_os("PROCYON_GEMMA_PDF_HOST_TEST") {
-        let status = std::process::Command::new(host_test)
-            .args([
-                "--exact",
+        for (report_variable, test_name) in [
+            (
+                "PROCYON_GEMMA_PDF_HOST_REPORT",
                 "enrolled_synthetic_scan_keeps_pdf_page_citation_and_revokes_deleted_source",
-                "--ignored",
-                "--nocapture",
-            ])
-            .env("PROCYON_SEMANTIC_PRODUCTION_WORKER", &launch_worker)
-            .env("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY", &native)
-            .env(loader_variable, std::env::join_paths(&loader_paths)?)
-            .env(
-                "PROCYON_GEMMA_PACKAGED_FILES",
-                serde_json::to_string(&originals)?,
-            )
-            .status()?;
-        if !status.success() {
-            return Err(format!("installed Gemma host PDF smoke failed: {status}").into());
+            ),
+            (
+                "PROCYON_GEMMA_PDF_HOST_FULL_REPORT",
+                "enrolled_large_synthetic_scan_publishes_all_page_citations",
+            ),
+        ] {
+            let Some(report_path) = std::env::var_os(report_variable) else {
+                continue;
+            };
+            let status = std::process::Command::new(&host_test)
+                .args(["--exact", test_name, "--ignored", "--nocapture"])
+                .env("PROCYON_SEMANTIC_PRODUCTION_WORKER", &launch_worker)
+                .env("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY", &native)
+                .env(loader_variable, std::env::join_paths(&loader_paths)?)
+                .env(
+                    "PROCYON_GEMMA_PACKAGED_FILES",
+                    serde_json::to_string(&originals)?,
+                )
+                .status()?;
+            if !status.success() {
+                return Err(
+                    format!("installed Gemma host PDF {test_name} failed: {status}").into(),
+                );
+            }
+            let report: serde_json::Value = serde_json::from_slice(&fs::read(report_path)?)?;
+            let expected_pages = if report_variable == "PROCYON_GEMMA_PDF_HOST_FULL_REPORT" {
+                354
+            } else {
+                1
+            };
+            if report["pageCount"] != expected_pages
+                || report["hostVfsVerified"] != true
+                || report["workspaceIsolationVerified"] != true
+                || report["currentContentAndDeletionVerified"] != true
+            {
+                return Err(
+                    format!("installed Gemma host PDF {test_name} report is incomplete").into(),
+                );
+            }
         }
     }
     let measure_dir = std::env::var_os("PROCYON_GEMMA_MEASURE_DIR").map(PathBuf::from);
