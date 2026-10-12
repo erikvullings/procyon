@@ -829,6 +829,10 @@ impl SemanticCapability for IpcSemanticCapability {
         .map(SemanticJobId::new)
     }
 
+    async fn max_pdf_source_bytes(&self) -> Result<u64, SemanticError> {
+        Ok(self.worker_client().await?.max_pdf_ingestion_bytes())
+    }
+
     async fn query(
         &self,
         query: SemanticQuery,

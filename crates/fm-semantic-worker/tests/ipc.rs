@@ -123,6 +123,7 @@ async fn negotiated_pdf_spool_returns_complete_child_text_to_ingestion_backend()
     );
     wait_for_endpoint(&endpoint).await;
     let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    assert_eq!(client.max_pdf_ingestion_bytes(), 16_384);
     client
         .ingest_pdf_reader(
             "isolated-pdf",
@@ -857,6 +858,7 @@ async fn accepts_an_owner_only_socket_served_by_the_same_effective_user() {
     assert_eq!(metadata.uid(), rustix::process::geteuid().as_raw());
 
     let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    assert_eq!(client.max_pdf_ingestion_bytes(), MAX_STREAM_BYTES);
     assert_eq!(client.health().await.unwrap(), WorkerHealth::Serving);
     client.shutdown(Duration::from_millis(100)).await.unwrap();
     task.await.unwrap().unwrap();

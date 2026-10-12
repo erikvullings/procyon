@@ -2105,6 +2105,12 @@ impl WorkerClient {
         self.capabilities.contains(&capability)
     }
 
+    /// Maximum PDF source bytes offered by this authenticated worker session.
+    #[must_use]
+    pub fn max_pdf_ingestion_bytes(&self) -> u64 {
+        self.inner.limits().max_ingestion_bytes("application/pdf")
+    }
+
     /// Reads authenticated worker health.
     ///
     /// # Errors

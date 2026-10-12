@@ -18,6 +18,8 @@ use fm_semantic_conversion::{ConversionBudgets, STRUCTURAL_CHUNKER_VERSION};
 use fm_semantic_docling::{
     DEFAULT_CONVERTER_PIPELINE_VERSION, OcrMyPdfConfiguration, converter_with_optional_ocr,
 };
+#[cfg(feature = "experimental-large-pdf")]
+use fm_semantic_protocol::{MAX_PDF_INGESTION_BYTES, ProtocolLimits};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
@@ -1049,6 +1051,12 @@ pub async fn run_developer_worker(
         data_directory.display()
     );
     run_desktop_worker_with_factory(runtime_directory, idle_timeout, |config| {
+        #[cfg(feature = "experimental-large-pdf")]
+        let config = config.with_limits(
+            ProtocolLimits::default()
+                .with_pdf_ingestion_bytes(MAX_PDF_INGESTION_BYTES)
+                .expect("fixed PDF ceiling is valid"),
+        );
         let worker = match ocrmypdf_executable {
             Some(executable) => {
                 DeveloperWorker::open_with_ocr(data_directory, model_pack, Some(executable))

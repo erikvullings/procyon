@@ -98,6 +98,16 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: The development-only large-PDF worker now offers
+  the PDF-specific 200 MiB negotiated limit, and the IPC host reads that
+  actual worker offer rather than assuming a 64 MiB ceiling. Default and
+  production workers continue to advertise 64 MiB. A separately identified,
+  unsigned debug review app with its own HOME and WebKit data installed E5
+  components, but the first generated PDF was inside Git-ignored `target/`
+  and was correctly skipped (`gitIgnored: 1`). The identical synthetic
+  354-page fixture was moved to a session-only folder outside Git; it has
+  **not** yet been indexed or verified in the app. Do not present the local
+  review setup as ready or confuse it with release qualification.
 - 2026-10-12 Copilot: The opt-in worker now routes a completed, digest-verified
   >64-MiB anonymous PDF spool through the bounded text child and passes the
   reconstructed report into the normal ingestion coordinator without a
