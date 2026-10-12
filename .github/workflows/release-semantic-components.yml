@@ -379,6 +379,48 @@ jobs:
           path: candidate-lock
           github-token: ${{ github.token }}
           run-id: ${{ inputs.qualification_run_id }}
+      - name: Select exact reviewed PDF vision qualification run
+        if: inputs.approve_experimental_gemma == true
+        id: pdf_vision_run
+        shell: bash
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const approval = require("./docs/evaluations/semantic-gemma-experimental-v1.json");
+            const runId = approval.experimentalGemma?.pdfVisionQualification?.runId;
+            if (!Number.isSafeInteger(runId) || runId <= 0) {
+              throw new Error("a reviewed installed PDF vision run is required");
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `run_id=${runId}\n`);
+          '
+      - name: Download exact installed PDF vision evidence
+        if: inputs.approve_experimental_gemma == true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: installed-gemma-*
+          path: pdf-evidence
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.pdf_vision_run.outputs.run_id }}
+      - name: Verify installed PDF vision run completed on candidate source
+        if: inputs.approve_experimental_gemma == true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PDF_VISION_RUN_ID: ${{ steps.pdf_vision_run.outputs.run_id }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PDF_VISION_RUN_ID" \
+            > "$RUNNER_TEMP/pdf-vision-run.json"
+          node -e '
+            const fs = require("node:fs");
+            const run = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const candidate = require("./candidate-lock/semantic-component-release.json");
+            if (run.conclusion !== "success" ||
+                run.event !== "workflow_dispatch" ||
+                run.head_sha !== candidate.sourceRevision ||
+                run.path !== ".github/workflows/release-semantic-components.yml") {
+              throw new Error("installed PDF vision run is not successful on the exact candidate source");
+            }
+          ' "$RUNNER_TEMP/pdf-vision-run.json"
       - name: Collect exact retained component assets
         run: >
           node scripts/collect-semantic-release-assets.mjs
@@ -415,7 +457,8 @@ jobs:
         run: |
           node scripts/check-experimental-gemma-release.mjs \
             semantic-release-assets candidate-lock \
-            docs/evaluations/semantic-gemma-experimental-v1.json
+            docs/evaluations/semantic-gemma-experimental-v1.json \
+            pdf-evidence
           node -e '
             const approval = require("./docs/evaluations/semantic-gemma-experimental-v1.json");
             if (String(approval.qualificationRunId) !== process.env.QUALIFICATION_RUN_ID ||

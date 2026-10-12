@@ -361,6 +361,9 @@ The separately opt-in `qualify_pdf_vision` input runs a read-only installed Gemm
 a deterministic 354-page synthetic scan when paired with `qualify_installed_gemma` and an exact
 retained signed candidate. It cannot publish a release; its candidate-bound report explicitly
 remains **no-go** without host/VFS, resource-ceiling, fallback, and quality evidence.
+The experimental Gemma publication check separately requires reviewed four-target installed
+PDF evidence from a successful exact-source qualification run; merely adding signed PDFium
+payloads or a worker-only synthetic report cannot satisfy that gate.
 
 ## CI
 

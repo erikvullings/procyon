@@ -98,6 +98,18 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Strengthened the opt-in experimental Gemma publish
+  guard: signed PDFium payloads alone cannot be approved. The release
+  workflow must fetch four exact-run installed PDF reports, check the
+  qualification workflow succeeded on the signed candidate source, match
+  each report's reviewed hash and signed target catalog, and require 354/354
+  synthetic image records, host VFS/current-content/deletion/cross-host
+  evidence, CPU fallback, and measured RSS/temp-disk/time ceilings. A report
+  remains explicitly `noGo` for model-quality disclosure; the separate
+  manual experimental approval is still required. Current worker-only
+  reports intentionally fail this guard, as do missing/tampered/incomplete
+  reports. No four-target host-level qualifying report exists yet, so
+  release remains blocked; no tag or publication was attempted.
 - 2026-10-12 Copilot: Added an opt-in **read-only**, exact-source installed
   Gemma/PDFium four-target qualification path. Its ignored packaged-worker
   test generates only the deterministic 175,530,108-byte synthetic scan,

@@ -19,7 +19,62 @@ function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-export function checkExperimentalGemmaRelease(assetsRoot, candidateRoot, approval) {
+function verifyPdfVisionQualification(consent, candidate, evidenceRoot) {
+  const qualification = consent.pdfVisionQualification;
+  if (
+    !qualification ||
+    !Number.isSafeInteger(qualification.runId) ||
+    qualification.runId <= 0 ||
+    qualification.sourceRevision !== candidate.sourceRevision ||
+    Object.keys(qualification.targets ?? {}).length !== targets.length ||
+    !evidenceRoot
+  ) {
+    throw new Error('experimental Gemma requires exact four-target PDF vision qualification');
+  }
+  for (const target of targets) {
+    const bytes = fs.readFileSync(
+      path.join(evidenceRoot, `installed-gemma-${target}`, 'gemma-pdf-bound-report.json'),
+    );
+    const report = JSON.parse(bytes);
+    if (
+      sha256(bytes) !== qualification.targets[target] ||
+      report.schemaVersion !== 1 ||
+      report.decision !== 'noGo' ||
+      report.scope !== 'installed-host-vfs-synthetic-pdf-vision' ||
+      report.target !== target ||
+      report.qualificationRunId !== String(qualification.runId) ||
+      report.qualificationSourceRevision !== candidate.sourceRevision ||
+      report.candidateRunId !== candidate.qualificationRunId ||
+      report.candidateSourceRevision !== candidate.sourceRevision ||
+      report.catalogSha256 !== candidate.targets[target]?.catalogSha256 ||
+      report.sourceBytes !== 175_530_108 ||
+      report.sourceSha256 !== 'f2e8e12f962f43b5e384dbb8a2648c8ce88213a9895bd11bb5e6fc7b350d3964' ||
+      report.pageCount !== 354 ||
+      report.imageEvidenceCount !== 354 ||
+      report.hostVfsVerified !== true ||
+      report.fallbackVerified !== true ||
+      report.upgradeRollbackVerified !== true ||
+      report.currentContentAndDeletionVerified !== true ||
+      report.crossHostNavigationVerified !== true ||
+      report.resourceCeilingQualified !== true ||
+      !Number.isFinite(report.elapsedSeconds) ||
+      report.elapsedSeconds <= 0 ||
+      !Number.isFinite(report.releaseCeilingSeconds) ||
+      report.releaseCeilingSeconds < report.elapsedSeconds ||
+      !Number.isFinite(report.hostPeakRssBytes) ||
+      report.hostPeakRssBytes <= 0 ||
+      !Number.isFinite(report.workerPeakRssBytes) ||
+      report.workerPeakRssBytes <= 0 ||
+      !Number.isFinite(report.temporaryDiskPeakBytes) ||
+      report.temporaryDiskPeakBytes <= 0 ||
+      report.qualityDisclosure !== 'experimental-unproven'
+    ) {
+      throw new Error(`experimental Gemma ${target} PDF vision qualification is incomplete`);
+    }
+  }
+}
+
+export function checkExperimentalGemmaRelease(assetsRoot, candidateRoot, approval, evidenceRoot) {
   const candidateBytes = fs.readFileSync(
     path.join(candidateRoot, 'semantic-component-release.json'),
   );
@@ -71,6 +126,7 @@ export function checkExperimentalGemmaRelease(assetsRoot, candidateRoot, approva
       throw new Error(`experimental Gemma ${target} catalog differs from signed candidate`);
     }
   }
+  verifyPdfVisionQualification(consent, candidate, evidenceRoot);
   verifySemanticComponentRelease(
     approval,
     assetsRoot,
@@ -149,10 +205,10 @@ export function checkExperimentalGemmaRelease(assetsRoot, candidateRoot, approva
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [, , assetsRoot, candidateRoot, approvalPath] = process.argv;
-  if (!assetsRoot || !candidateRoot || !approvalPath) {
+  const [, , assetsRoot, candidateRoot, approvalPath, evidenceRoot] = process.argv;
+  if (!assetsRoot || !candidateRoot || !approvalPath || !evidenceRoot) {
     throw new Error(
-      'Usage: check-experimental-gemma-release.mjs <assets> <candidate-lock> <approval>',
+      'Usage: check-experimental-gemma-release.mjs <assets> <candidate-lock> <approval> <pdf-evidence>',
     );
   }
   console.log(
@@ -161,6 +217,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         assetsRoot,
         candidateRoot,
         JSON.parse(fs.readFileSync(approvalPath, 'utf8')),
+        evidenceRoot,
       ),
     ),
   );

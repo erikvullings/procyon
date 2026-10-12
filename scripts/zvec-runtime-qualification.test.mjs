@@ -215,6 +215,11 @@ test('Gemma qualification is explicit and uses verified originals on every targe
   );
   assert.match(experimental.if, /approve_experimental_gemma == true/u);
   assert.match(experimental.run, /check-experimental-gemma-release\.mjs/u);
+  assert.match(experimental.run, /pdf-evidence/u);
+  assert.match(
+    JSON.stringify(publish.steps),
+    /Verify installed PDF vision run completed on candidate source/u,
+  );
   assert.match(JSON.stringify(publish), /semantic_production_catalog/u);
 });
 
