@@ -46,6 +46,35 @@ mod tokens;
 /// Maximum eager decompression of one PDF object or xref stream while loading.
 /// This is not a limit on total parser memory or a substitute for isolation.
 pub const MAX_PDF_STRUCTURAL_STREAM_BYTES: usize = 16 * 1024 * 1024;
+/// Checks that an untrusted PDF's loaded page tree matches its declared page count.
+///
+/// `lopdf` can omit an oversized compressed object stream when loading it.
+/// Without this check, its missing page objects could be mistaken for a
+/// shorter, successfully converted document.
+pub fn checked_pdf_pages(
+    document: &lopdf::Document,
+) -> Result<std::collections::BTreeMap<u32, lopdf::ObjectId>, String> {
+    let catalog = document
+        .catalog()
+        .map_err(|error| format!("PDF catalog is unreadable: {error}"))?;
+    let pages_id = catalog
+        .get(b"Pages")
+        .and_then(lopdf::Object::as_reference)
+        .map_err(|error| format!("PDF page tree is unreadable: {error}"))?;
+    let count = document
+        .get_dictionary(pages_id)
+        .and_then(|pages| pages.get(b"Count"))
+        .and_then(lopdf::Object::as_i64)
+        .map_err(|error| format!("PDF page count is unreadable: {error}"))?;
+    let pages = document.get_pages();
+    if count < 1 || usize::try_from(count) != Ok(pages.len()) {
+        return Err(format!(
+            "PDF page tree is incomplete: declared {count} pages, loaded {}",
+            pages.len()
+        ));
+    }
+    Ok(pages)
+}
 
 pub use advanced::{
     AdvancedCapability, AdvancedConversion, AdvancedConverterAdapter, AdvancedConverterBackend,

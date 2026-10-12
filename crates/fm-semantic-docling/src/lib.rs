@@ -1115,12 +1115,10 @@ fn convert_text_layer(
         });
     }
 
-    let total_pages = pdf.get_pages().len();
-    if total_pages == 0 {
-        return conversion(ConversionOutcome::Malformed {
-            detail: "Docling PDF contains no readable pages".into(),
-        });
-    }
+    let total_pages = match fm_semantic_conversion::checked_pdf_pages(&pdf) {
+        Ok(pages) => pages.len(),
+        Err(detail) => return conversion(ConversionOutcome::Malformed { detail }),
+    };
     if total_pages > 0 && context.budgets().max_items == 0 {
         return conversion(ConversionOutcome::OverBudget {
             budget: fm_semantic_conversion::BudgetKind::Items,
@@ -1171,12 +1169,10 @@ fn convert_ml(
             detail: "Docling does not open password-protected PDFs".into(),
         });
     }
-    let total_pages = pdf.get_pages().len();
-    if total_pages == 0 {
-        return conversion(ConversionOutcome::Malformed {
-            detail: "Docling PDF contains no readable pages".into(),
-        });
-    }
+    let total_pages = match fm_semantic_conversion::checked_pdf_pages(&pdf) {
+        Ok(pages) => pages.len(),
+        Err(detail) => return conversion(ConversionOutcome::Malformed { detail }),
+    };
     if total_pages > 0 && context.budgets().max_items == 0 {
         return conversion(ConversionOutcome::OverBudget {
             budget: fm_semantic_conversion::BudgetKind::Items,
@@ -1725,6 +1721,41 @@ mod tests {
         assert!(
             matches!(result, ConversionOutcome::Malformed { .. }),
             "missing page structure must fail, not offer OCR or publish partial evidence"
+        );
+    }
+
+    #[test]
+    fn preferred_converter_cannot_publish_a_remaining_page_after_object_stream_loss() {
+        let mut pdf =
+            lopdf::Document::load_mem(&pdf_with_oversized_page(true)).expect("load fixture");
+        let first = pdf.get_pages()[&1];
+        pdf.get_dictionary_mut(first).expect("page dictionary").set(
+            "LargeStructuralValue",
+            Object::string_literal(vec![
+                b' ';
+                fm_semantic_conversion::MAX_PDF_STRUCTURAL_STREAM_BYTES
+                    + 1
+            ]),
+        );
+        let options = lopdf::SaveOptions::builder()
+            .use_object_streams(true)
+            .use_xref_streams(true)
+            .max_objects_per_stream(1)
+            .build();
+        let mut bytes = Vec::new();
+        pdf.save_with_options(&mut bytes, options)
+            .expect("save split compressed PDF");
+
+        let result = converter_with_baseline_fallback()
+            .convert(
+                SourceContent::Bytes(&bytes),
+                &DocumentMetadata::unknown().with_media_type("application/pdf"),
+                &ConversionContext::new(),
+            )
+            .expect("convert");
+        assert!(
+            matches!(result, ConversionOutcome::Malformed { detail } if detail.contains("declared 2 pages, loaded 1")),
+            "Docling cannot publish only the second page"
         );
     }
 

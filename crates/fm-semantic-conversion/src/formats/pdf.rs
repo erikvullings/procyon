@@ -90,7 +90,7 @@ pub(crate) fn convert(builder: &mut DocumentBuilder<'_, '_>, bytes: &[u8]) -> Re
             "the PDF is encrypted and cannot be read without a password".to_owned(),
         ));
     }
-    let pages = document.get_pages();
+    let pages = crate::checked_pdf_pages(&document).map_err(PdfError::Malformed)?;
     let mut page_numbers: Vec<u32> = pages.keys().copied().collect();
     page_numbers.sort_unstable();
     if page_numbers.is_empty() {
@@ -589,6 +589,40 @@ pub(crate) mod tests {
         assert!(
             matches!(convert_pdf(&bytes), Err(PdfError::Malformed(_))),
             "losing compressed page objects must fail, not publish incomplete evidence"
+        );
+    }
+
+    #[test]
+    fn lost_compressed_page_cannot_publish_the_other_page() {
+        let bytes = text_pdf(&[&["first page"], &["second page"]]);
+        let mut document = Document::load_mem(&bytes).expect("load fixture");
+        let first = document.get_pages()[&1];
+        document.get_dictionary_mut(first).expect("first page").set(
+            "LargeStructuralValue",
+            Object::string_literal(vec![b' '; MAX_PDF_STRUCTURAL_STREAM_BYTES + 1]),
+        );
+        let options = lopdf::SaveOptions::builder()
+            .use_object_streams(true)
+            .use_xref_streams(true)
+            .max_objects_per_stream(1)
+            .build();
+        let mut bytes = Vec::new();
+        document
+            .save_with_options(&mut bytes, options)
+            .expect("save split compressed PDF");
+        let loaded = Document::load_mem_with_options(
+            &bytes,
+            LoadOptions::with_max_decompressed_size(MAX_PDF_STRUCTURAL_STREAM_BYTES),
+        )
+        .expect("load bounded PDF");
+        assert_eq!(
+            loaded.get_pages().len(),
+            1,
+            "fixture must lose only one page"
+        );
+        assert!(
+            matches!(convert_pdf(&bytes), Err(PdfError::Malformed(detail)) if detail.contains("declared 2 pages, loaded 1")),
+            "a remaining readable page cannot mask missing page structure"
         );
     }
 

@@ -112,7 +112,10 @@ optional Docling ML/PDFium pack is qualified on those targets.
 - 2026-10-12 Copilot: Baseline and Docling's initial PDF parse now cap eager
   decompression of each structural object/xref stream at 16 MiB. A synthetic
   sub-MiB PDF with an over-16-MiB compressed page object must fail as malformed,
-  not become an OCR suggestion or publish partial text. This is a parser
+  not become an OCR suggestion or publish partial text. Both converters now
+  verify the declared page-tree count against the loaded pages; a split
+  object-stream fixture that loses one of two pages cannot publish the
+  surviving page as a complete document. This is a parser
   safety prerequisite, not a total memory bound: `lopdf` still materializes the
   source and the full document, and Docling may parse again. Production still
   rejects the >64 MiB spool until a measured, killable, resource-bounded child
