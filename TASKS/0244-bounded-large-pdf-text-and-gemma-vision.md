@@ -98,6 +98,16 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Added a separately callable pinned PDFium input
+  preparation helper for the four supported targets. It checks the exact
+  `chromium/8086` archive before decoding and verifies loader bytes and
+  architecture before use, rejects
+  missing/unsafe archive members, and retains the target's LICENSE and all 17
+  upstream notices beside the loader. Tampered cached loaders/notices fail
+  explicitly. All four locally retained, previously attested upstream
+  archives passed this check. The helper is **not** connected to the
+  production bundle, signed catalog, desktop installation, or release
+  workflow yet; it is an input primitive, not a release qualification.
 - 2026-10-12 Copilot: Added a **separate off-by-default development-only**
   `experimental-pdf-render` worker feature; the production worker recipe is
   unchanged. The supervised child looks only for a PDFium library beside its
