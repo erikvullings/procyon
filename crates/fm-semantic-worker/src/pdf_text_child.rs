@@ -241,10 +241,17 @@ impl StagedPdfVisualPages {
             return Err(io::Error::other("PDF page exceeds image count limit"));
         }
         let mut images = Vec::with_capacity(count);
+        let mut indices = std::collections::HashSet::with_capacity(count);
         let mut retained_bytes = 0_usize;
         for _ in 0..count {
             let image = read_image_report(&mut self.file, self.next_page)?
                 .ok_or_else(|| io::Error::other("PDF page has an empty image record"))?;
+            let VisualProvenance::PdfImage { image_index, .. } = image.provenance else {
+                return Err(io::Error::other("PDF image lacks page provenance"));
+            };
+            if !indices.insert(image_index) {
+                return Err(io::Error::other("PDF page repeats an image citation"));
+            }
             retained_bytes = retained_bytes.saturating_add(image.data.len());
             if retained_bytes > MAX_TOTAL_VISUAL_BYTES {
                 return Err(io::Error::other("PDF page exceeds image byte limit"));
@@ -870,7 +877,42 @@ mod tests {
 
     use sha2::Digest as _;
 
-    use super::read_child_output;
+    use super::{read_child_output, staged_visual_fixture};
+
+    #[test]
+    fn staged_page_rejects_duplicate_citations_and_excess_images() {
+        let data = vec![0xff, 0xd8, 0xff, 0xd9];
+        let image = fm_semantic_conversion::VisualAttachment {
+            id: blake3::hash(&data).to_hex().to_string(),
+            media_type: fm_semantic_conversion::MediaType::parse("image/jpeg"),
+            data,
+            width: 2,
+            height: 1,
+            provenance: fm_semantic_conversion::VisualProvenance::PdfImage {
+                page_number: 1,
+                image_index: 0,
+            },
+            caption: None,
+        };
+        assert!(
+            staged_visual_fixture("synthetic source", &[vec![image.clone(), image.clone()]])
+                .expect_err("duplicate image citation")
+                .to_string()
+                .contains("repeats an image citation")
+        );
+        assert!(
+            staged_visual_fixture(
+                "synthetic source",
+                &[vec![
+                    image;
+                    fm_semantic_conversion::MAX_VISUAL_ATTACHMENTS + 1
+                ]]
+            )
+            .expect_err("too many page images")
+            .to_string()
+            .contains("image count limit")
+        );
+    }
 
     #[test]
     fn page_error_diagnostics_accept_only_bounded_known_codes() {
