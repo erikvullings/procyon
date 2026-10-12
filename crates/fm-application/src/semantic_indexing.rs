@@ -1119,11 +1119,13 @@ enum IngestionOutcome {
 }
 
 fn retain_failure_detail(details: &mut BTreeSet<String>, truncated: &mut bool, detail: &str) {
-    let bounded = detail
+    let sanitized = fm_semantic_conversion::sanitize(detail, 0);
+    let bounded = sanitized
+        .text
         .chars()
         .take(MAX_FAILURE_DETAIL_CHARS)
         .collect::<String>();
-    *truncated |= bounded.len() != detail.len();
+    *truncated |= sanitized.removed > 0 || bounded.len() != sanitized.text.len();
     if details.contains(&bounded) {
         return;
     }
@@ -1132,35 +1134,6 @@ fn retain_failure_detail(details: &mut BTreeSet<String>, truncated: &mut bool, d
         return;
     }
     details.insert(bounded);
-}
-
-#[cfg(test)]
-mod failure_detail_tests {
-    use super::*;
-
-    #[test]
-    fn bounds_distinct_worker_diagnostics_and_preserves_utf8() {
-        let mut details = BTreeSet::new();
-        let mut truncated = false;
-        for index in 0..=MAX_FAILURE_DETAILS {
-            retain_failure_detail(
-                &mut details,
-                &mut truncated,
-                &format!("page {index} failed"),
-            );
-        }
-        assert_eq!(details.len(), MAX_FAILURE_DETAILS);
-        assert!(truncated);
-        let long = "€".repeat(MAX_FAILURE_DETAIL_CHARS + 1);
-        let mut details = BTreeSet::new();
-        let mut truncated = false;
-        retain_failure_detail(&mut details, &mut truncated, &long);
-        assert_eq!(
-            details.iter().next().unwrap().chars().count(),
-            MAX_FAILURE_DETAIL_CHARS
-        );
-        assert!(truncated);
-    }
 }
 
 async fn ingest_and_wait(
@@ -1292,5 +1265,39 @@ fn check_cancelled(cancellation: &CancellationToken) -> Result<(), SemanticIndex
         Err(SemanticIndexingError::Cancelled)
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod failure_detail_tests {
+    use super::*;
+
+    #[test]
+    fn bounds_distinct_worker_diagnostics_and_preserves_utf8() {
+        let mut details = BTreeSet::new();
+        let mut truncated = false;
+        for index in 0..=MAX_FAILURE_DETAILS {
+            retain_failure_detail(
+                &mut details,
+                &mut truncated,
+                &format!("page {index} failed"),
+            );
+        }
+        assert_eq!(details.len(), MAX_FAILURE_DETAILS);
+        assert!(truncated);
+        let long = "€".repeat(MAX_FAILURE_DETAIL_CHARS + 1);
+        let mut details = BTreeSet::new();
+        let mut truncated = false;
+        retain_failure_detail(&mut details, &mut truncated, &long);
+        assert_eq!(
+            details.iter().next().unwrap().chars().count(),
+            MAX_FAILURE_DETAIL_CHARS
+        );
+        assert!(truncated);
+        let mut details = BTreeSet::new();
+        let mut truncated = false;
+        retain_failure_detail(&mut details, &mut truncated, "page 33\u{202e} image 1");
+        assert_eq!(details.iter().next().unwrap(), "page 33 image 1");
+        assert!(truncated);
     }
 }
