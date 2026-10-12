@@ -542,11 +542,11 @@ synthetic PDF evaluation fixture does not raise that host, IPC, or production co
 An off-by-default development worker built with `experimental-large-pdf` instead
 negotiates a PDF-only 200 MiB source stream and converts it from an anonymous
 spool in a supervised child. With an image-enabled Gemma library, a separate
-child stages page-cited extractable rasters on anonymous temporary storage
-and the ingestion pipeline reads them one at a time into the same atomic
-text/image generation. Image-only pages without reusable rasters, unsupported
-encodings, and multi-image pages fail the replacement rather than silently
-publishing partial coverage. This development path has provisional resource
+child stages bounded page-cited extractable rasters on anonymous temporary storage,
+including distinct images on the same page. The ingestion pipeline embeds
+them one at a time into the same atomic text/image generation. Image-only pages
+without reusable rasters and unsupported encodings fail the replacement rather
+than silently publishing partial coverage. This development path has provisional resource
 bounds and no installed page renderer or four-target qualification; it is not
 enabled in the production worker or approved for release.
 

@@ -1003,6 +1003,8 @@ impl IngestionCoordinator {
                 .rewind()
                 .map_err(|error| self.fail(document, attempts, error.to_string()))?;
         }
+        #[cfg(feature = "experimental-large-pdf")]
+        let mut staged_page_images = std::collections::VecDeque::new();
         let mut next_visual =
             || -> Result<Option<std::borrow::Cow<'_, fm_semantic_conversion::VisualAttachment>>, IngestionError> {
                 if let Some(visual) = converted_visuals.next() {
@@ -1010,11 +1012,15 @@ impl IngestionCoordinator {
                 }
                 #[cfg(feature = "experimental-large-pdf")]
                 if let Some(stage) = staged_visuals.as_mut() {
-                    while let Some(image) = stage
+                    if let Some(image) = staged_page_images.pop_front() {
+                        return Ok(Some(std::borrow::Cow::Owned(image)));
+                    }
+                    while let Some(images) = stage
                         .next_page()
                         .map_err(|error| self.fail(document, attempts, error.to_string()))?
                     {
-                        if let Some(image) = image {
+                        staged_page_images.extend(images);
+                        if let Some(image) = staged_page_images.pop_front() {
                             return Ok(Some(std::borrow::Cow::Owned(image)));
                         }
                     }
@@ -2609,7 +2615,7 @@ mod tests {
 
     #[cfg(feature = "experimental-large-pdf")]
     #[test]
-    fn isolated_pdf_images_publish_with_text_or_alone_without_partial_replacement() {
+    fn isolated_pdf_images_publish_distinct_page_images_without_partial_replacement() {
         let fixture = Fixture::with_model(healthy_resources(), "google-embeddinggemma-2");
         let mut document = fixture.document("");
         document.media_type = "application/pdf".into();
@@ -2628,8 +2634,22 @@ mod tests {
             },
             caption: None,
         };
-        let stage = crate::pdf_text_child::staged_visual_fixture(&hash, &[Some(image)])
-            .expect("validated anonymous stage");
+        let second_data = vec![0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9];
+        let second_image = fm_semantic_conversion::VisualAttachment {
+            id: blake3::hash(&second_data).to_hex().to_string(),
+            media_type: fm_semantic_conversion::MediaType::parse("image/jpeg"),
+            data: second_data,
+            width: 2,
+            height: 1,
+            provenance: fm_semantic_conversion::VisualProvenance::PdfImage {
+                page_number: 1,
+                image_index: 1,
+            },
+            caption: None,
+        };
+        let stage =
+            crate::pdf_text_child::staged_visual_fixture(&hash, &[vec![image, second_image]])
+                .expect("validated anonymous stage");
         document.pdf_text = Some(PdfTextSource {
             content_hash: hash,
             converted: fm_semantic_conversion::ConvertedDocument::new(
@@ -2644,7 +2664,7 @@ mod tests {
         fixture
             .coordinator
             .ingest(&document, &CancellationToken::new())
-            .expect("publish scanned PDF image");
+            .expect("publish both scanned PDF images");
         let original = fixture
             .index
             .records
@@ -2653,7 +2673,7 @@ mod tests {
             .keys()
             .cloned()
             .collect::<Vec<_>>();
-        assert_eq!(original.len(), 1);
+        assert_eq!(original.len(), 2);
         let evidence = fixture
             .catalog
             .begin_read()
@@ -2666,8 +2686,26 @@ mod tests {
                 },
             )
             .expect("visible evidence");
-        assert_eq!(evidence[0].record_kind, "pdf_image");
-        assert!(evidence[0].provenance.contains("\"page_number\":1"));
+        assert!(
+            evidence
+                .iter()
+                .all(|record| record.record_kind == "pdf_image")
+        );
+        assert!(
+            evidence
+                .iter()
+                .any(|record| record.provenance.contains("\"image_index\":1"))
+        );
+        assert!(
+            evidence
+                .iter()
+                .any(|record| record.provenance.contains("\"image_index\":2"))
+        );
+        assert!(
+            evidence
+                .iter()
+                .all(|record| record.provenance.contains("\"page_number\":1"))
+        );
 
         document.job_id = "failed-scanned-replacement".into();
         fixture.index.fail_next.store(true, Ordering::Release);

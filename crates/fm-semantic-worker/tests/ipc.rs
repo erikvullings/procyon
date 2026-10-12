@@ -175,7 +175,13 @@ async fn negotiated_pdf_spool_returns_complete_child_text_to_ingestion_backend()
     let mut pages = images.lock().unwrap();
     assert_eq!(pages.page_count(), 3);
     for _ in 0..3 {
-        assert!(pages.next_page().expect("page").expect("present").is_none());
+        assert!(
+            pages
+                .next_page()
+                .expect("page")
+                .expect("present")
+                .is_empty()
+        );
     }
     assert!(pages.next_page().expect("stage end").is_none());
     drop(client);
@@ -310,6 +316,8 @@ async fn consented_synthetic_scan_streams_to_a_complete_page_image_stage() {
             .next_page()
             .expect("bounded page")
             .expect("page")
+            .into_iter()
+            .next()
             .expect("image");
         assert_eq!(
             visual.provenance,

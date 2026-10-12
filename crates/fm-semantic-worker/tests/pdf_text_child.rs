@@ -227,6 +227,8 @@ fn visual_pages_stage_only_complete_page_cited_images() {
             .next_page()
             .expect("image")
             .expect("page")
+            .into_iter()
+            .next()
             .expect("page evidence");
         assert_eq!(
             visual.provenance,
@@ -253,21 +255,22 @@ fn visual_pages_stage_only_complete_page_cited_images() {
             .next_page()
             .expect("text-only page")
             .expect("page 1")
-            .is_none()
+            .is_empty()
     );
     assert!(
         mixed
             .next_page()
             .expect("image page")
             .expect("page 2")
-            .is_some()
+            .len()
+            == 1
     );
     assert!(
         mixed
             .next_page()
             .expect("text-only page")
             .expect("page 3")
-            .is_none()
+            .is_empty()
     );
     assert!(mixed.next_page().expect("end of stage").is_none());
 
@@ -297,6 +300,71 @@ fn visual_pages_stage_only_complete_page_cited_images() {
             .contains("PDF page 1: no usable visual evidence"),
         "unexpected page failure: {error}"
     );
+}
+
+#[test]
+fn visual_stage_keeps_both_distinct_images_on_one_pdf_page() {
+    let mut pdf = Document::load_mem(&synthetic_visual_pdf(&[2])).expect("synthetic PDF");
+    let page = pdf.get_pages()[&2];
+    let second = pdf.add_object(Stream::new(
+        dictionary! {
+            "Type" => "XObject", "Subtype" => "Image", "Width" => 2,
+            "Height" => 1, "ColorSpace" => "DeviceRGB",
+            "BitsPerComponent" => 8, "Filter" => "DCTDecode",
+        },
+        vec![
+            0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 1, 0, 2, 3, 1, 0x11, 0, 2, 0x11, 0, 3, 0x11, 0,
+            0xfe, 0xd9,
+        ],
+    ));
+    pdf.add_xobject(page, b"Second", second)
+        .expect("second image");
+    let content_id = pdf.get_page_contents(page)[0];
+    let content = pdf
+        .get_object_mut(content_id)
+        .expect("page content")
+        .as_stream_mut()
+        .expect("content stream");
+    let mut drawing = content.get_plain_content().expect("content bytes");
+    drawing.extend_from_slice(b"q /Second Do Q\n");
+    content.set_plain_content(drawing);
+    let mut bytes = Vec::new();
+    pdf.save_to(&mut bytes).expect("save PDF");
+    let digest = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let mut spool = tempfile::tempfile().expect("anonymous PDF spool");
+    spool.write_all(&bytes).expect("spool PDF");
+    let mut stage = stage_spool_visual_pages(
+        Path::new(env!("CARGO_BIN_EXE_fm-semantic-worker")),
+        &spool,
+        &digest,
+        &CancellationToken::new(),
+    )
+    .expect("complete multi-image stage");
+    assert!(stage.next_page().expect("page 1").expect("page").is_empty());
+    let figures = stage.next_page().expect("page 2").expect("page");
+    assert_eq!(figures.len(), 2);
+    assert_ne!(figures[0].id, figures[1].id);
+    assert_eq!(
+        figures
+            .iter()
+            .map(|image| image.provenance.clone())
+            .collect::<Vec<_>>(),
+        [
+            VisualProvenance::PdfImage {
+                page_number: 2,
+                image_index: 0
+            },
+            VisualProvenance::PdfImage {
+                page_number: 2,
+                image_index: 1
+            }
+        ]
+    );
+    assert!(stage.next_page().expect("page 3").expect("page").is_empty());
+    assert!(stage.next_page().expect("stage end").is_none());
 }
 
 #[test]
@@ -356,6 +424,8 @@ fn anonymous_spool_extracts_the_final_synthetic_scan_page() {
             .next_page()
             .expect("bounded page")
             .expect("page")
+            .into_iter()
+            .next()
             .expect("image");
         assert_eq!(
             visual.provenance,

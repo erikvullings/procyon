@@ -10,8 +10,9 @@ use std::time::{Duration, Instant};
 
 use fm_semantic_conversion::{
     BaselineConverter, ConversionBudgets, ConversionContext, ConversionOutcome, DocumentConverter,
-    DocumentMetadata, MAX_VISUAL_BYTES, MAX_VISUAL_PIXELS, MediaType, PdfPageWindow, PdfTextReport,
-    SourceContent, VisualAttachment, VisualProvenance, merge_pdf_text_windows,
+    DocumentMetadata, MAX_TOTAL_VISUAL_BYTES, MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES,
+    MAX_VISUAL_PIXELS, MediaType, PdfPageWindow, PdfTextReport, SourceContent, VisualAttachment,
+    VisualProvenance, merge_pdf_text_windows,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -192,7 +193,7 @@ pub fn convert_spool_visual_page(
     Ok(image)
 }
 
-/// Bounded anonymous staging of one optional image per validated PDF page.
+/// Bounded anonymous staging of images per validated PDF page.
 ///
 /// The stage is not a published generation and is deleted when its file closes.
 #[derive(Debug)]
@@ -228,14 +229,30 @@ impl StagedPdfVisualPages {
         Ok(())
     }
 
-    /// Reads one page at a time: `Some(None)` means text but no image on that page.
-    pub fn next_page(&mut self) -> io::Result<Option<Option<VisualAttachment>>> {
+    /// Reads one bounded page at a time; an empty list means text but no images.
+    pub fn next_page(&mut self) -> io::Result<Option<Vec<VisualAttachment>>> {
         if self.next_page > self.page_count {
             return Ok(None);
         }
-        let image = read_image_report(&mut self.file, self.next_page)?;
+        let mut count = [0_u8; 4];
+        self.file.read_exact(&mut count)?;
+        let count = u32::from_be_bytes(count) as usize;
+        if count > MAX_VISUAL_ATTACHMENTS {
+            return Err(io::Error::other("PDF page exceeds image count limit"));
+        }
+        let mut images = Vec::with_capacity(count);
+        let mut retained_bytes = 0_usize;
+        for _ in 0..count {
+            let image = read_image_report(&mut self.file, self.next_page)?
+                .ok_or_else(|| io::Error::other("PDF page has an empty image record"))?;
+            retained_bytes = retained_bytes.saturating_add(image.data.len());
+            if retained_bytes > MAX_TOTAL_VISUAL_BYTES {
+                return Err(io::Error::other("PDF page exceeds image byte limit"));
+            }
+            images.push(image);
+        }
         self.next_page += 1;
-        Ok(Some(image))
+        Ok(Some(images))
     }
 }
 
@@ -288,36 +305,32 @@ fn validated_visual_stage(
 #[cfg(test)]
 pub(crate) fn staged_visual_fixture(
     source_digest: &str,
-    images: &[Option<VisualAttachment>],
+    pages: &[Vec<VisualAttachment>],
 ) -> io::Result<StagedPdfVisualPages> {
     let mut file = tempfile::tempfile()?;
-    let count = u32::try_from(images.len()).map_err(io::Error::other)?;
+    let count = u32::try_from(pages.len()).map_err(io::Error::other)?;
     file.write_all(&count.to_be_bytes())?;
-    for (index, image) in images.iter().enumerate() {
-        let Some(image) = image else {
-            file.write_all(&0_u32.to_be_bytes())?;
-            continue;
-        };
-        let VisualProvenance::PdfImage { image_index, .. } = image.provenance else {
-            return Err(io::Error::other("fixture image lacks PDF provenance"));
-        };
-        let header = PageImageHeader {
-            page_number: u32::try_from(index + 1).map_err(io::Error::other)?,
-            image_index,
-            media_type: image.media_type.as_str().into(),
-            width: image.width,
-            height: image.height,
-            id: image.id.clone(),
-            byte_length: image.data.len(),
-        };
-        let encoded = serde_json::to_vec(&header).map_err(io::Error::other)?;
+    for (index, images) in pages.iter().enumerate() {
         file.write_all(
-            &u32::try_from(encoded.len())
+            &u32::try_from(images.len())
                 .map_err(io::Error::other)?
                 .to_be_bytes(),
         )?;
-        file.write_all(&encoded)?;
-        file.write_all(&image.data)?;
+        for image in images {
+            let VisualProvenance::PdfImage { image_index, .. } = image.provenance else {
+                return Err(io::Error::other("fixture image lacks PDF provenance"));
+            };
+            let header = PageImageHeader {
+                page_number: u32::try_from(index + 1).map_err(io::Error::other)?,
+                image_index,
+                media_type: image.media_type.as_str().into(),
+                width: image.width,
+                height: image.height,
+                id: image.id.clone(),
+                byte_length: image.data.len(),
+            };
+            write_image_report(&mut file, &header, &image.data)?;
+        }
     }
     validated_visual_stage(file, source_digest)
 }
@@ -718,7 +731,7 @@ pub fn run_visual_page(expected_sha256: &str, page_number: u32) -> io::Result<()
         return Err(io::Error::other("PDF page number must be positive"));
     }
     let source = read_verified_source(expected_sha256)?;
-    write_visual_page(&source, page_number, &mut io::stdout().lock())
+    write_visual_page(&source, page_number, &mut io::stdout().lock(), false)
 }
 
 /// Writes complete page-cited image reports, one at a time, without retaining
@@ -745,7 +758,7 @@ pub fn run_visual_pages(expected_sha256: &str) -> io::Result<()> {
     let mut output = io::stdout().lock();
     output.write_all(&count.to_be_bytes())?;
     for page in 1..=count {
-        if let Err(error) = write_visual_page(&source, page, &mut output) {
+        if let Err(error) = write_visual_page(&source, page, &mut output, true) {
             let reason = if error.to_string().contains("has no usable visual evidence") {
                 "no usable visual evidence"
             } else if error
@@ -763,7 +776,12 @@ pub fn run_visual_pages(expected_sha256: &str) -> io::Result<()> {
     Ok(())
 }
 
-fn write_visual_page(source: &[u8], page_number: u32, output: &mut impl Write) -> io::Result<()> {
+fn write_visual_page(
+    source: &[u8],
+    page_number: u32,
+    output: &mut impl Write,
+    staged: bool,
+) -> io::Result<()> {
     let window = PdfPageWindow::new(page_number, page_number).map_err(io::Error::other)?;
     let outcome = BaselineConverter::new()
         .convert(
@@ -783,39 +801,56 @@ fn write_visual_page(source: &[u8], page_number: u32, output: &mut impl Write) -
             "PDF page {page_number} has no usable visual evidence: {outcome:?}"
         )));
     };
-    if document.visuals().is_empty()
-        && !document.units().is_empty()
-        && document.visual_omissions().is_empty()
+    if !document.visual_omissions().is_empty()
+        || (document.visuals().is_empty() && document.units().is_empty())
+        || (!staged && document.visuals().len() > 1)
     {
-        return output.write_all(&0_u32.to_be_bytes());
-    }
-    if document.visuals().len() != 1 || !document.visual_omissions().is_empty() {
         return Err(io::Error::other(format!(
             "PDF page {page_number} has missing or multiple image candidates"
         )));
     }
-    let visual = &document.visuals()[0];
-    let VisualProvenance::PdfImage {
-        page_number: cited_page,
-        image_index,
-    } = visual.provenance
-    else {
-        return Err(io::Error::other("PDF image has no page citation"));
-    };
-    if cited_page != page_number {
-        return Err(io::Error::other("PDF image cites another page"));
+    if staged {
+        output.write_all(
+            &u32::try_from(document.visuals().len())
+                .map_err(io::Error::other)?
+                .to_be_bytes(),
+        )?;
     }
-    let header = PageImageHeader {
-        page_number,
-        image_index,
-        media_type: visual.media_type.as_str().to_owned(),
-        width: visual.width,
-        height: visual.height,
-        id: visual.id.clone(),
-        byte_length: visual.data.len(),
-    };
+    if !staged && document.visuals().is_empty() {
+        return output.write_all(&0_u32.to_be_bytes());
+    }
+    for visual in document.visuals() {
+        let VisualProvenance::PdfImage {
+            page_number: cited_page,
+            image_index,
+        } = visual.provenance
+        else {
+            return Err(io::Error::other("PDF image has no page citation"));
+        };
+        if cited_page != page_number {
+            return Err(io::Error::other("PDF image cites another page"));
+        }
+        let header = PageImageHeader {
+            page_number,
+            image_index,
+            media_type: visual.media_type.as_str().to_owned(),
+            width: visual.width,
+            height: visual.height,
+            id: visual.id.clone(),
+            byte_length: visual.data.len(),
+        };
+        write_image_report(output, &header, &visual.data)?;
+    }
+    Ok(())
+}
+
+fn write_image_report(
+    output: &mut impl Write,
+    header: &PageImageHeader,
+    data: &[u8],
+) -> io::Result<()> {
     let encoded = serde_json::to_vec(&header).map_err(io::Error::other)?;
-    if encoded.len() > 4092 || visual.data.len() > MAX_VISUAL_BYTES {
+    if encoded.len() > 4092 || data.len() > MAX_VISUAL_BYTES {
         return Err(io::Error::other("PDF image report exceeds its byte limit"));
     }
     output.write_all(
@@ -824,7 +859,7 @@ fn write_visual_page(source: &[u8], page_number: u32, output: &mut impl Write) -
             .to_be_bytes(),
     )?;
     output.write_all(&encoded)?;
-    output.write_all(&visual.data)
+    output.write_all(data)
 }
 
 #[cfg(test)]
