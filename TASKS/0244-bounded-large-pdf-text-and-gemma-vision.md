@@ -98,6 +98,21 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-12 Copilot: Worker job progress is now persisted with a backward-
+  compatible catalog schema 7 extension (including old catalogs without
+  progress columns, so the previous worker can still reopen the catalog),
+  reported through the existing scoped
+  IPC `Progress`, and surfaced to the host. Every cached/embedded PDF image
+  increments completed work units; cancellation retains the last visual
+  count. A Gemma image-consented PDF renews its **five-minute idle** deadline
+  only when that count increases, while E5/image-off retains the original
+  five-minute total deadline. Deterministic host tests cover 354 successive
+  28-second page heartbeats, idle expiry, and no renewal for non-image work;
+  a two-page worker fixture confirms durable checkpoints. This removes the
+  guaranteed five-minute failure of actively progressing 354-page Gemma
+  indexing, but is not a four-target **absolute** time ceiling, automated
+  document continuation after shutdown, or installed real-Gemma evidence.
+  Release remains no-go until measured target ceilings and installed checks.
 - 2026-10-12 Copilot: Cancelled and resource-paused worker attempts no longer
   spend the three-attempt **failure** budget; a cancellation during retry
   backoff retains preceding fatal attempts. A two-page distinct-image PDF

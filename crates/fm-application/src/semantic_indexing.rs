@@ -46,9 +46,8 @@ const MAX_FAILURE_DETAILS: usize = 16;
 const MAX_FAILURE_DETAIL_CHARS: usize = 512;
 pub(crate) const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
 const INGESTION_POLL_INTERVAL: Duration = Duration::from_millis(25);
-// Covers conversion, chunking, local CPU embedding, and publication. Durable
-// embedding checkpoints make retries resumable; expiry isolates one stranded
-// document instead of aborting the enrolled-root reconciliation.
+// Ingestion without PDF images has a total deadline. For consented PDF
+// images this is an idle deadline, renewed only by durable worker progress.
 const INGESTION_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 /// Outcome of one complete root enumeration and worker feed.
@@ -1138,6 +1137,28 @@ enum IngestionOutcome {
     Excluded(String),
 }
 
+struct IngestionDeadline {
+    deadline: Instant,
+    observed_progress: u64,
+}
+
+impl IngestionDeadline {
+    fn new(now: Instant) -> Self {
+        Self {
+            deadline: now + INGESTION_TIMEOUT,
+            observed_progress: 0,
+        }
+    }
+
+    fn expired(&mut self, now: Instant, completed_units: u64, pdf_images_consented: bool) -> bool {
+        if pdf_images_consented && completed_units > self.observed_progress {
+            self.observed_progress = completed_units;
+            self.deadline = now + INGESTION_TIMEOUT;
+        }
+        now >= self.deadline
+    }
+}
+
 fn retain_failure_detail(details: &mut BTreeSet<String>, truncated: &mut bool, detail: &str) {
     let sanitized = fm_semantic_conversion::sanitize(detail, 0);
     let bounded = sanitized
@@ -1222,14 +1243,8 @@ async fn ingest_and_wait(
             }
         }
     };
-    let deadline = Instant::now() + INGESTION_TIMEOUT;
+    let mut deadline = IngestionDeadline::new(Instant::now());
     loop {
-        if Instant::now() >= deadline {
-            semantic.cancel(operation_id).await?;
-            return Ok(IngestionOutcome::Failed(
-                "semantic ingestion exceeded the worker deadline".to_owned(),
-            ));
-        }
         let job = tokio::select! {
             () = cancellation.cancelled() => {
                 semantic.cancel(operation_id).await?;
@@ -1255,6 +1270,12 @@ async fn ingest_and_wait(
                 return Err(SemanticIndexingError::Cancelled);
             }
             SemanticIngestionState::Pending | SemanticIngestionState::Running => {
+                if deadline.expired(Instant::now(), job.completed_units, pdf_images_consented) {
+                    semantic.cancel(operation_id).await?;
+                    return Ok(IngestionOutcome::Failed(
+                        "semantic ingestion exceeded the worker deadline".to_owned(),
+                    ));
+                }
                 tokio::select! {
                     () = cancellation.cancelled() => {
                         semantic.cancel(operation_id).await?;
@@ -1321,5 +1342,38 @@ mod failure_detail_tests {
         retain_failure_detail(&mut details, &mut truncated, "page 33\u{202e} image 1");
         assert_eq!(details.iter().next().unwrap(), "page 33 image 1");
         assert!(truncated);
+    }
+
+    #[test]
+    fn pdf_image_heartbeat_renews_idle_deadline_without_renewing_stalled_work() {
+        let start = Instant::now();
+        let mut images = IngestionDeadline::new(start);
+        let later = start + INGESTION_TIMEOUT - Duration::from_secs(1);
+        assert!(!images.expired(later, 2, true));
+        assert!(!images.expired(start + INGESTION_TIMEOUT, 2, true));
+        assert!(images.expired(later + INGESTION_TIMEOUT, 2, true));
+
+        let mut text = IngestionDeadline::new(start);
+        assert!(!text.expired(later, 2, false));
+        assert!(text.expired(start + INGESTION_TIMEOUT, 3, false));
+    }
+
+    #[test]
+    fn three_hundred_fifty_four_page_image_job_outlives_five_minutes_but_stalls() {
+        let start = Instant::now();
+        let mut deadline = IngestionDeadline::new(start);
+        for page in 1..=354 {
+            assert!(!deadline.expired(start + Duration::from_secs(page * 28), page, true));
+        }
+        assert!(!deadline.expired(
+            start + Duration::from_secs(354 * 28) + INGESTION_TIMEOUT - Duration::from_millis(1),
+            354,
+            true
+        ));
+        assert!(deadline.expired(
+            start + Duration::from_secs(354 * 28) + INGESTION_TIMEOUT,
+            354,
+            true
+        ));
     }
 }

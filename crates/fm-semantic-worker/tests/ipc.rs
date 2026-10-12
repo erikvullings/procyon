@@ -47,6 +47,7 @@ impl WorkerQueryBackend for CapturingQueryBackend {
 
 struct SkippingIngestionBackend;
 struct CoverageIngestionBackend;
+struct ProgressIngestionBackend;
 
 #[derive(Default)]
 struct CapturingIngestionBackend {
@@ -622,6 +623,33 @@ impl WorkerIngestionBackend for CoverageIngestionBackend {
     }
 }
 
+impl WorkerIngestionBackend for ProgressIngestionBackend {
+    fn enqueue(
+        &self,
+        input: WorkerIngestionInput,
+        _cancellation: CancellationToken,
+    ) -> Result<String, String> {
+        Ok(input.job_id)
+    }
+
+    fn job(
+        &self,
+        _tenant_id: &str,
+        _library_id: &str,
+        _job_id: &str,
+    ) -> Result<Option<WorkerIngestionJob>, String> {
+        Ok(Some(WorkerIngestionJob {
+            document_id: "scan".into(),
+            state: IngestionState::Running,
+            phase: "embedding".into(),
+            completed: 123,
+            total: 0,
+            error: None,
+            coverage_detail: None,
+        }))
+    }
+}
+
 struct TestDirectory(tempfile::TempDir);
 
 impl Deref for TestDirectory {
@@ -1088,6 +1116,41 @@ async fn completed_image_omissions_cross_ipc_without_becoming_errors() {
         job.detail.as_deref(),
         Some("page 3 has no searchable image evidence")
     );
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn in_progress_pdf_page_count_crosses_authenticated_ipc() {
+    let directory = test_directory("pdf-page-progress");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::generate();
+    let task = tokio::spawn(
+        WorkerServer::with_ingestion_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone()),
+            Arc::new(ProgressIngestionBackend),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    let job_id = client
+        .ingest(
+            "pdf-progress",
+            IngestionScope::new("tenant", "library"),
+            "scan",
+            BTreeMap::new(),
+            "application/pdf",
+            b"%PDF synthetic".to_vec(),
+        )
+        .await
+        .unwrap();
+    let job = client
+        .ingestion_job("tenant", "library", &job_id)
+        .await
+        .unwrap();
+    assert_eq!(job.state, IngestionState::Running);
+    assert_eq!(job.completed_units, 123);
     client.shutdown(Duration::from_millis(100)).await.unwrap();
     task.await.unwrap().unwrap();
 }

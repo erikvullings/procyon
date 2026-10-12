@@ -1447,18 +1447,39 @@ impl SemanticCatalog {
         attempts: u32,
         detail: Option<&str>,
     ) -> Result<(), StorageError> {
+        self.upsert_job_progress(job_id, stage, attempts, detail, 0, 1)
+    }
+
+    /// Persists a job's completed work units with its lifecycle state.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation or database error.
+    pub fn upsert_job_progress(
+        &self,
+        job_id: &str,
+        stage: &str,
+        attempts: u32,
+        detail: Option<&str>,
+        completed: u64,
+        total: u64,
+    ) -> Result<(), StorageError> {
         validate_identifier(job_id, "job_id")?;
         if stage.is_empty() {
             return Err(StorageError::InvalidIdentifier("stage"));
         }
+        let completed = i64::try_from(completed).map_err(|_| StorageError::CorruptCatalog)?;
+        let total = i64::try_from(total).map_err(|_| StorageError::CorruptCatalog)?;
         self.connection()?.execute(
-            "INSERT INTO jobs (job_id, stage, attempts, detail)
-             VALUES (?1, ?2, ?3, ?4)
+            "INSERT INTO jobs (job_id, stage, attempts, detail, completed, total)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT(job_id) DO UPDATE SET
                stage = excluded.stage,
                attempts = excluded.attempts,
-               detail = excluded.detail",
-            params![job_id, stage, i64::from(attempts), detail],
+               detail = excluded.detail,
+               completed = excluded.completed,
+               total = excluded.total",
+            params![job_id, stage, i64::from(attempts), detail, completed, total],
         )?;
         Ok(())
     }
@@ -1498,7 +1519,7 @@ impl SemanticCatalog {
         validate_identifier(job_id, "job_id")?;
         self.connection()?
             .query_row(
-                "SELECT tenant_id, library_id, document_id, stage, attempts, detail
+                "SELECT tenant_id, library_id, document_id, stage, attempts, detail, completed, total
                  FROM jobs WHERE job_id = ?1",
                 [job_id],
                 |row| {
@@ -1509,12 +1530,14 @@ impl SemanticCatalog {
                         row.get::<_, String>(3)?,
                         row.get::<_, i64>(4)?,
                         row.get::<_, Option<String>>(5)?,
+                        row.get::<_, i64>(6)?,
+                        row.get::<_, i64>(7)?,
                     ))
                 },
             )
             .optional()?
             .map(
-                |(tenant_id, library_id, document_id, stage, attempts, detail)| {
+                |(tenant_id, library_id, document_id, stage, attempts, detail, completed, total)| {
                     Ok(StoredJob {
                         job_id: job_id.to_owned(),
                         tenant_id,
@@ -1524,6 +1547,9 @@ impl SemanticCatalog {
                         attempts: u32::try_from(attempts)
                             .map_err(|_| StorageError::CorruptCatalog)?,
                         detail,
+                        completed: u64::try_from(completed)
+                            .map_err(|_| StorageError::CorruptCatalog)?,
+                        total: u64::try_from(total).map_err(|_| StorageError::CorruptCatalog)?,
                     })
                 },
             )
@@ -2242,6 +2268,10 @@ pub struct StoredJob {
     pub attempts: u32,
     /// Sanitized failure, pause, or resume detail.
     pub detail: Option<String>,
+    /// Completed work units in this phase.
+    pub completed: u64,
+    /// Total known work units, or zero when unknown.
+    pub total: u64,
 }
 
 /// Persistent semantic-storage failure.
@@ -2438,7 +2468,9 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
            document_id TEXT,
            stage TEXT NOT NULL,
            attempts INTEGER NOT NULL,
-           detail TEXT
+           detail TEXT,
+           completed INTEGER NOT NULL DEFAULT 0,
+           total INTEGER NOT NULL DEFAULT 1
          );
          CREATE TABLE IF NOT EXISTS component_versions (
            component_id TEXT PRIMARY KEY,
@@ -2561,6 +2593,22 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
             incompatible_fields: vec!["catalog_schema_version"],
         });
     }
+    connection.execute_batch("BEGIN IMMEDIATE;")?;
+    let mut statement = connection.prepare("PRAGMA table_info(jobs)")?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    drop(statement);
+    for (name, definition) in [
+        ("completed", "INTEGER NOT NULL DEFAULT 0"),
+        ("total", "INTEGER NOT NULL DEFAULT 1"),
+    ] {
+        if !columns.iter().any(|column| column == name) {
+            connection
+                .execute_batch(&format!("ALTER TABLE jobs ADD COLUMN {name} {definition}"))?;
+        }
+    }
+    connection.execute_batch("COMMIT;")?;
     Ok(())
 }
 
@@ -3042,7 +3090,7 @@ mod tests {
                 row.get(0)
             })
             .expect("schema version");
-        assert_eq!(version, 7);
+        assert_eq!(version, CATALOG_SCHEMA_VERSION);
         let mut statement = connection
             .prepare("PRAGMA table_info(records)")
             .expect("record columns");
@@ -3287,6 +3335,53 @@ mod tests {
                 .expect("read checkpoint"),
             Some(vec![0.1, 0.2, 0.3])
         );
+    }
+
+    #[test]
+    fn ingestion_progress_survives_reopening_and_old_catalog_upgrade() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("catalog.sqlite");
+        let catalog = SemanticCatalog::open(&path).unwrap();
+        catalog
+            .register_job("job-progress", "tenant-a", "library-a", "document-a")
+            .unwrap();
+        catalog
+            .upsert_job_progress("job-progress", "embedding", 1, None, 3, 8)
+            .unwrap();
+        drop(catalog);
+        let reopened = SemanticCatalog::open(&path).unwrap();
+        let job = reopened.job("job-progress").unwrap().unwrap();
+        assert_eq!((job.completed, job.total), (3, 8));
+        drop(reopened);
+        let rollback = Connection::open(&path).unwrap();
+        assert_eq!(
+            rollback
+                .query_row("SELECT schema_version FROM catalog_meta", [], |row| row
+                    .get::<_, i64>(0))
+                .unwrap(),
+            7,
+            "the previous worker must be able to reopen the upgraded catalog"
+        );
+        rollback
+            .execute(
+                "UPDATE jobs SET stage = 'paused', attempts = 1 WHERE job_id = 'job-progress'",
+                [],
+            )
+            .unwrap();
+        drop(rollback);
+
+        let legacy = Connection::open(&path).unwrap();
+        legacy
+            .execute_batch(
+                "ALTER TABLE jobs DROP COLUMN completed;
+                 ALTER TABLE jobs DROP COLUMN total;
+                 UPDATE catalog_meta SET schema_version = 7;",
+            )
+            .unwrap();
+        drop(legacy);
+        let upgraded = SemanticCatalog::open(&path).unwrap();
+        let job = upgraded.job("job-progress").unwrap().unwrap();
+        assert_eq!((job.completed, job.total), (0, 1));
     }
 
     #[test]

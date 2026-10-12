@@ -316,6 +316,8 @@ pub struct SemanticIngestionJob {
     pub document_id: DocumentId,
     /// Current lifecycle state.
     pub state: SemanticIngestionState,
+    /// Completed phase work units reported by the worker.
+    pub completed_units: u64,
     /// Sanitized failure or exclusion detail, when present.
     pub detail: Option<String>,
 }
@@ -522,6 +524,7 @@ impl SemanticCapability for FakeSemanticCapability {
                     job_id: job_id.clone(),
                     document_id,
                     state: SemanticIngestionState::Completed,
+                    completed_units: 1,
                     detail: None,
                 },
             );
@@ -931,6 +934,7 @@ impl SemanticCapability for IpcSemanticCapability {
                 fm_semantic_worker::IngestionState::Cancelled => SemanticIngestionState::Cancelled,
                 fm_semantic_worker::IngestionState::Skipped => SemanticIngestionState::Skipped,
             },
+            completed_units: job.completed_units,
             detail: job.detail,
         })
     }

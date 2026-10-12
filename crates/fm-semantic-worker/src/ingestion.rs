@@ -535,8 +535,8 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
             document_id: job.document_id.unwrap_or_default(),
             state,
             phase: job.stage,
-            completed: u64::from(state == IngestionState::Completed),
-            total: 1,
+            completed: job.completed,
+            total: job.total,
             error,
             coverage_detail,
         }))
@@ -984,6 +984,7 @@ impl IngestionCoordinator {
             });
         }
         let mut image_embedded = 0;
+        let mut image_progress = 0_u64;
         let mut seen = std::collections::HashSet::new();
         let mut converted_visuals = converted.visuals().iter();
         #[cfg(feature = "experimental-large-pdf")]
@@ -1106,6 +1107,15 @@ impl IngestionCoordinator {
                 content: String::new(),
                 excerpt,
             });
+            image_progress += 1;
+            self.transition(
+                document,
+                IngestionStage::Embedding,
+                attempts,
+                None,
+                chunks.len() as u64 + image_progress,
+                0,
+            )?;
         }
         #[cfg(feature = "experimental-large-pdf")]
         if staged_records.is_empty() && document.pdf_text.is_some() {
@@ -1461,7 +1471,23 @@ impl IngestionCoordinator {
         completed: u64,
         total: u64,
     ) -> Result<(), IngestionError> {
-        self.catalog.upsert_job(
+        let (completed, total) =
+            if matches!(stage, IngestionStage::Paused | IngestionStage::Cancelled)
+                && completed == 0
+                && total == 1
+            {
+                match self.catalog.job(&document.job_id)? {
+                    Some(job)
+                        if job.stage == IngestionStage::Embedding.as_str() && job.total == 0 =>
+                    {
+                        (job.completed, job.total)
+                    }
+                    _ => (completed, total),
+                }
+            } else {
+                (completed, total)
+            };
+        self.catalog.upsert_job_progress(
             &document.job_id,
             stage.as_str(),
             if matches!(stage, IngestionStage::Paused | IngestionStage::Cancelled) {
@@ -1470,6 +1496,8 @@ impl IngestionCoordinator {
                 attempts
             },
             detail,
+            completed,
+            total,
         )?;
         self.events.publish(IngestionProgress {
             job_id: document.job_id.clone(),
@@ -2286,7 +2314,7 @@ mod tests {
         let mut document = fixture.document("");
         document.media_type = "application/pdf".into();
         document.bytes = pdf_with_figures(true);
-        fixture
+        let baseline = fixture
             .coordinator
             .ingest(&document, &CancellationToken::new())
             .expect("initial image-off PDF");
@@ -2312,6 +2340,13 @@ mod tests {
                 .attempts,
             0
         );
+        let interrupted = fixture.catalog.job(&document.job_id).unwrap().unwrap();
+        assert_eq!(
+            interrupted.completed,
+            baseline.chunks as u64 + 1,
+            "first image checkpointed"
+        );
+        assert_eq!(interrupted.total, 0, "visual total remains unknown");
         fixture
             .embedder
             .cancel_after_first_media
@@ -2349,6 +2384,32 @@ mod tests {
             2
         );
         assert!(evidence.iter().all(|record| record.generation == 2));
+    }
+
+    #[test]
+    fn queued_job_reports_persisted_image_progress_to_its_scope() {
+        let fixture = Fixture::with_model(healthy_resources(), "google-embeddinggemma-2");
+        fixture
+            .catalog
+            .register_job("job-image-progress", "tenant-a", "library-a", "document-a")
+            .unwrap();
+        fixture
+            .catalog
+            .upsert_job_progress("job-image-progress", "embedding", 1, None, 2, 0)
+            .unwrap();
+        let backend = PipelineIngestionBackend::new(fixture.coordinator.clone());
+        let job = backend
+            .job("tenant-a", "library-a", "job-image-progress")
+            .unwrap()
+            .unwrap();
+        assert_eq!(job.state, IngestionState::Running);
+        assert_eq!((job.completed, job.total), (2, 0));
+        assert!(
+            backend
+                .job("tenant-b", "library-a", "job-image-progress")
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

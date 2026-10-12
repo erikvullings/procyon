@@ -1740,6 +1740,8 @@ pub struct IngestionJobStatus {
     pub document_id: String,
     /// Current lifecycle state.
     pub state: IngestionState,
+    /// Completed phase work units; zero when progress is not known.
+    pub completed_units: u64,
     /// Failure, exclusion, or completed-job evidence-coverage detail.
     pub detail: Option<String>,
 }
@@ -2665,6 +2667,10 @@ impl WorkerClient {
                         v1::JobState::Skipped => IngestionState::Skipped,
                         v1::JobState::Unspecified => return Err(ClientError::UnexpectedResponse),
                     },
+                    completed_units: job
+                        .progress
+                        .as_ref()
+                        .map_or(0, |progress| progress.completed_units),
                     detail: if completed {
                         job.coverage_detail
                     } else {

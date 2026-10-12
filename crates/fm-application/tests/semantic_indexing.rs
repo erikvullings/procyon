@@ -187,6 +187,7 @@ impl SemanticCapability for RemediatingDocumentCapability {
                 ),
                 job_id,
                 state: SemanticIngestionState::Skipped,
+                completed_units: 0,
                 detail: Some(
                     "Add a searchable text layer with OCRmyPDF, then reindex the file.".into(),
                 ),
@@ -199,6 +200,7 @@ impl SemanticCapability for RemediatingDocumentCapability {
                 ),
                 job_id,
                 state: SemanticIngestionState::Running,
+                completed_units: 0,
                 detail: None,
             });
         }
@@ -385,6 +387,7 @@ impl SemanticCapability for FailingDocumentCapability {
                 ),
                 job_id,
                 state: SemanticIngestionState::Failed,
+                completed_units: 0,
                 detail: Some(
                     "page 33 image 1 exceeds the PDF visual limit; no partial generation published"
                         .into(),
@@ -398,6 +401,7 @@ impl SemanticCapability for FailingDocumentCapability {
                 ),
                 job_id,
                 state: SemanticIngestionState::Skipped,
+                completed_units: 0,
                 detail: Some(
                     "Add a searchable text layer with OCRmyPDF, then reindex the file.".into(),
                 ),
@@ -410,6 +414,7 @@ impl SemanticCapability for FailingDocumentCapability {
                 ),
                 job_id,
                 state: SemanticIngestionState::Completed,
+                completed_units: 1,
                 detail: Some("page 3 has no searchable image evidence".into()),
             });
         }
