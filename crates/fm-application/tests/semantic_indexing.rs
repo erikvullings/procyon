@@ -14,9 +14,9 @@ use fm_application::document_summary::{DocumentSummaryCapability, DocumentSummar
 #[cfg(all(unix, feature = "gemma-native"))]
 use fm_application::semantic::IpcSemanticCapability;
 use fm_application::semantic::{
-    DocumentIngestion, FakeSemanticCapability, SemanticCapability, SemanticError, SemanticHealth,
-    SemanticIngestionJob, SemanticIngestionState, SemanticJobId, SemanticOperationId,
-    SemanticProgressEvent, SemanticQuery, SemanticScope, SemanticSearchResult,
+    DocumentIngestion, FakeSemanticCapability, PdfStreamIngestion, SemanticCapability,
+    SemanticError, SemanticHealth, SemanticIngestionJob, SemanticIngestionState, SemanticJobId,
+    SemanticOperationId, SemanticProgressEvent, SemanticQuery, SemanticScope, SemanticSearchResult,
 };
 #[cfg(unix)]
 use fm_application::semantic::{LibraryId as WorkerLibraryId, TenantId};
@@ -53,7 +53,9 @@ use fm_transport_dto::{
     SearchModeDto, SearchQueryDto, SearchScopeDto, SearchSemanticPredicateDto,
     SemanticSearchScopeDto, StartSearchRequestDto,
 };
+use sha2::{Digest, Sha256};
 use tempfile::TempDir;
+use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -229,6 +231,103 @@ impl SemanticCapability for RemediatingDocumentCapability {
 }
 
 struct AvailableOcrProbe;
+
+struct NegotiatedPdfCapability {
+    inner: FakeSemanticCapability,
+    streamed_bytes: Mutex<Option<u64>>,
+}
+
+#[async_trait]
+impl SemanticCapability for NegotiatedPdfCapability {
+    async fn health(&self) -> Result<SemanticHealth, SemanticError> {
+        self.inner.health().await
+    }
+
+    async fn ingest(&self, ingestion: DocumentIngestion) -> Result<SemanticJobId, SemanticError> {
+        self.inner.ingest(ingestion).await
+    }
+
+    async fn ingest_pdf_stream(
+        &self,
+        ingestion: PdfStreamIngestion<'_>,
+    ) -> Result<SemanticJobId, SemanticError> {
+        let PdfStreamIngestion {
+            scope,
+            operation_id,
+            document_id,
+            metadata,
+            pdf_images_consented,
+            content_bytes,
+            content_sha256,
+            reader,
+        } = ingestion;
+        let mut digest = Sha256::new();
+        let mut total = 0_u64;
+        let mut frame = [0_u8; 64 * 1024];
+        loop {
+            let read = reader
+                .read(&mut frame)
+                .await
+                .map_err(|error| SemanticError::WorkerFailure(error.to_string()))?;
+            if read == 0 {
+                break;
+            }
+            total += read as u64;
+            digest.update(&frame[..read]);
+        }
+        if total != content_bytes || <[u8; 32]>::from(digest.finalize()) != content_sha256 {
+            return Err(SemanticError::InvalidRequest(
+                "streamed PDF source changed".into(),
+            ));
+        }
+        *self.streamed_bytes.lock().unwrap() = Some(total);
+        self.inner
+            .ingest(DocumentIngestion {
+                scope,
+                operation_id,
+                document_id,
+                metadata,
+                media_type: "application/pdf".into(),
+                pdf_images_consented,
+                content: b"bounded synthetic PDF stream".to_vec(),
+            })
+            .await
+    }
+
+    async fn max_pdf_source_bytes(&self) -> Result<u64, SemanticError> {
+        Ok(200 * 1024 * 1024)
+    }
+
+    async fn query(
+        &self,
+        query: SemanticQuery,
+    ) -> Result<Vec<SemanticSearchResult>, SemanticError> {
+        self.inner.query(query).await
+    }
+
+    async fn ingestion_job(
+        &self,
+        scope: SemanticScope,
+        job_id: SemanticJobId,
+    ) -> Result<SemanticIngestionJob, SemanticError> {
+        self.inner.ingestion_job(scope, job_id).await
+    }
+
+    async fn events(
+        &self,
+        scope: SemanticScope,
+    ) -> Result<Vec<SemanticProgressEvent>, SemanticError> {
+        self.inner.events(scope).await
+    }
+
+    async fn cancel(&self, operation_id: SemanticOperationId) -> Result<bool, SemanticError> {
+        self.inner.cancel(operation_id).await
+    }
+
+    async fn shutdown(&self, grace: Duration) -> Result<(), SemanticError> {
+        self.inner.shutdown(grace).await
+    }
+}
 
 impl OcrExecutableProbe for AvailableOcrProbe {
     fn probe(&self) -> OcrAvailability {
@@ -1191,6 +1290,54 @@ async fn recursive_indexing_filters_entries_and_resolves_search_evidence() {
             assert!(resolved.available);
         }
     }
+}
+
+#[tokio::test]
+async fn negotiated_large_pdf_is_streamed_from_enrolled_local_root() {
+    let root = project_temp_dir("large-pdf-stream-root-");
+    let source_bytes = 65 * 1024 * 1024;
+    std::fs::File::create(root.path().join("synthetic.pdf"))
+        .unwrap()
+        .set_len(source_bytes)
+        .unwrap();
+    let state = project_temp_dir("large-pdf-stream-state-");
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1909));
+    let library = library(&state);
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let capability = Arc::new(NegotiatedPdfCapability {
+        inner: FakeSemanticCapability::new(),
+        streamed_bytes: Mutex::new(None),
+    });
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(capability.clone());
+
+    let report = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(report.observed_files, 1);
+    assert_eq!(report.ingested_occurrences, 1);
+    assert_eq!(report.failed_occurrences, 0);
+    assert_eq!(
+        *capability.streamed_bytes.lock().unwrap(),
+        Some(source_bytes)
+    );
+    assert!(
+        report
+            .skipped_reason_counts
+            .iter()
+            .all(|count| count.reason != EligibilityReason::Oversized)
+    );
 }
 
 #[tokio::test]
