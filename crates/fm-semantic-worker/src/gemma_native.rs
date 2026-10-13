@@ -1,8 +1,7 @@
 //! Experimental offline CPU inference for the pinned multimodal checkpoint.
 
-use std::collections::BTreeMap;
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use fm_metadata::{VideoSamplingError, sample_video_frames_cancellable};
 use tokenizers::Tokenizer;
@@ -20,16 +19,7 @@ use crate::gemma_visual::{
     GemmaVisualError, VisualKind, prepare_frame_cancellable, validate_processor_config_file,
 };
 
-/// Which media a caller has explicitly enabled for this encoder.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GemmaMedia {
-    /// Standalone image embeddings.
-    pub images: bool,
-    /// Mono 16-kHz PCM embeddings.
-    pub audio: bool,
-    /// Sampled video-frame embeddings.
-    pub video: bool,
-}
+pub use crate::gemma_launch::{GemmaMedia, GemmaNativeFiles};
 
 /// A video embedding and the sampled source timestamps that support it.
 pub struct GemmaVideoEmbedding {
@@ -37,80 +27,6 @@ pub struct GemmaVideoEmbedding {
     pub vector: Vec<f32>,
     /// Presentation timestamps, in milliseconds, for every retained frame.
     pub timestamps_ms: Vec<u64>,
-}
-
-/// Original, independently verified upstream model files; no repacking or copy is required.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GemmaNativeFiles {
-    /// BF16/F32 safetensors checkpoint.
-    pub weights: PathBuf,
-    /// Hugging Face tokenizer JSON.
-    pub tokenizer: PathBuf,
-    /// EmbeddingGemma 2 model configuration.
-    pub config: PathBuf,
-    /// Image and video processor configuration.
-    pub visual_processor: PathBuf,
-    /// Audio processor configuration.
-    pub audio_processor: PathBuf,
-}
-
-impl GemmaNativeFiles {
-    /// Resolve the complete original-file set returned by the signed component manager.
-    pub fn from_original_files(
-        files: &BTreeMap<String, PathBuf>,
-    ) -> Result<Self, GemmaNativeError> {
-        let required = |name: &str| {
-            files
-                .get(name)
-                .cloned()
-                .ok_or(GemmaNativeError::Input("incomplete original model files"))
-        };
-        Ok(Self {
-            weights: required("model.safetensors")?,
-            tokenizer: required("tokenizer.json")?,
-            config: required("config.json")?,
-            visual_processor: required("processor_config.json")?,
-            audio_processor: required("preprocessor_config.json")?,
-        })
-    }
-
-    /// Resolve the original upstream filenames in a development cache.
-    #[must_use]
-    pub fn from_directory(directory: &Path) -> Self {
-        Self {
-            weights: directory.join("model.safetensors"),
-            tokenizer: directory.join("tokenizer.json"),
-            config: directory.join("config.json"),
-            visual_processor: directory.join("processor_config.json"),
-            audio_processor: directory.join("preprocessor_config.json"),
-        }
-    }
-}
-
-#[cfg(test)]
-mod original_files_tests {
-    use super::*;
-    use std::collections::BTreeMap;
-
-    #[test]
-    fn resolves_original_files_without_repacking_and_rejects_incomplete_installation() {
-        let files: BTreeMap<_, _> = [
-            "model.safetensors",
-            "tokenizer.json",
-            "config.json",
-            "processor_config.json",
-            "preprocessor_config.json",
-        ]
-        .into_iter()
-        .map(|name| (name.to_owned(), PathBuf::from("/verified").join(name)))
-        .collect();
-        let resolved = GemmaNativeFiles::from_original_files(&files).unwrap();
-        assert_eq!(resolved.weights, files["model.safetensors"]);
-        assert_eq!(resolved.audio_processor, files["preprocessor_config.json"]);
-        let mut incomplete = files;
-        incomplete.remove("tokenizer.json");
-        assert!(GemmaNativeFiles::from_original_files(&incomplete).is_err());
-    }
 }
 
 /// Native text and optional media encoder. A single language model serves all modalities.

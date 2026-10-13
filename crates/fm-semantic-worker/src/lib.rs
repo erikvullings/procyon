@@ -22,6 +22,8 @@ mod gemma_compute;
 pub mod gemma_embedding;
 #[cfg(feature = "gemma-probe")]
 pub mod gemma_fusion;
+#[cfg(feature = "gemma-launch")]
+pub mod gemma_launch;
 #[cfg(feature = "gemma-probe")]
 pub mod gemma_multimodal;
 #[cfg(feature = "gemma-probe")]
@@ -482,14 +484,14 @@ pub enum ManagedModel {
     /// Existing production E5 model pack.
     Pack(PathBuf),
     /// Original pinned EmbeddingGemma 2 files with immutable library settings.
-    #[cfg(feature = "gemma-native")]
+    #[cfg(feature = "gemma-launch")]
     Gemma {
         /// The five host-verified original model files.
-        files: crate::gemma_native::GemmaNativeFiles,
+        files: crate::gemma_launch::GemmaNativeFiles,
         /// Supported Matryoshka vector width.
         dimensions: usize,
         /// Enabled media encoders for this library.
-        media: crate::gemma_native::GemmaMedia,
+        media: crate::gemma_launch::GemmaMedia,
     },
 }
 
@@ -501,7 +503,7 @@ pub struct ManagedWorkerLaunch {
     native_library_directory: PathBuf,
     model: ManagedModel,
     ocrmypdf_executable: Option<PathBuf>,
-    #[cfg(feature = "gemma-native")]
+    #[cfg(feature = "gemma-launch")]
     development_cpu_images: bool,
 }
 
@@ -526,21 +528,21 @@ impl ManagedWorkerLaunch {
             native_library_directory,
             model: ManagedModel::Pack(model_pack),
             ocrmypdf_executable: None,
-            #[cfg(feature = "gemma-native")]
+            #[cfg(feature = "gemma-launch")]
             development_cpu_images: false,
         }
     }
 
     /// Construct a managed launch from the five verified original Gemma files.
-    #[cfg(feature = "gemma-native")]
+    #[cfg(feature = "gemma-launch")]
     #[must_use]
     pub fn new_gemma(
         executable: PathBuf,
         data_directory: PathBuf,
         native_library_directory: PathBuf,
-        files: crate::gemma_native::GemmaNativeFiles,
+        files: crate::gemma_launch::GemmaNativeFiles,
         dimensions: usize,
-        media: crate::gemma_native::GemmaMedia,
+        media: crate::gemma_launch::GemmaMedia,
     ) -> Self {
         Self {
             executable,
@@ -571,7 +573,7 @@ impl ManagedWorkerLaunch {
     }
 
     /// Force the development Gemma worker to CPU for baseline measurements.
-    #[cfg(feature = "gemma-native")]
+    #[cfg(feature = "gemma-launch")]
     #[must_use]
     pub fn with_development_cpu_images(mut self) -> Self {
         self.development_cpu_images = true;
@@ -978,11 +980,11 @@ impl WorkerConnector {
                     .stdout(Stdio::null())
                     .stderr(
                         if managed_launch.as_ref().is_some_and(|launch| {
-                            #[cfg(feature = "gemma-native")]
+                            #[cfg(feature = "gemma-launch")]
                             {
                                 matches!(launch.model, ManagedModel::Gemma { .. })
                             }
-                            #[cfg(not(feature = "gemma-native"))]
+                            #[cfg(not(feature = "gemma-launch"))]
                             {
                                 let _ = launch;
                                 false
@@ -1139,7 +1141,7 @@ fn validate_managed_launch(
                 )));
             }
         }
-        #[cfg(feature = "gemma-native")]
+        #[cfg(feature = "gemma-launch")]
         ManagedModel::Gemma {
             files, dimensions, ..
         } => {
@@ -1190,7 +1192,7 @@ fn managed_launch_arguments(launch: &ManagedWorkerLaunch) -> Vec<std::ffi::OsStr
             arguments.push("--semantic-model-pack".into());
             arguments.push(path.clone().into_os_string());
         }
-        #[cfg(feature = "gemma-native")]
+        #[cfg(feature = "gemma-launch")]
         ManagedModel::Gemma {
             files,
             dimensions,
@@ -1350,10 +1352,10 @@ mod developer_connector_tests {
         );
     }
 
-    #[cfg(feature = "gemma-native")]
+    #[cfg(feature = "gemma-launch")]
     #[test]
     fn managed_gemma_launch_passes_five_original_files_and_refuses_missing_files() {
-        use crate::gemma_native::{GemmaMedia, GemmaNativeFiles};
+        use crate::gemma_launch::{GemmaMedia, GemmaNativeFiles};
         let directory = tempfile::tempdir().unwrap();
         let files = GemmaNativeFiles::from_directory(directory.path());
         for path in [
@@ -1467,7 +1469,7 @@ mod developer_connector_tests {
             native_library_directory: native,
             model: ManagedModel::Pack(model),
             ocrmypdf_executable: Some(stale),
-            #[cfg(feature = "gemma-native")]
+            #[cfg(feature = "gemma-launch")]
             development_cpu_images: false,
         };
         let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));

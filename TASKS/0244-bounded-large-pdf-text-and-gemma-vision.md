@@ -98,6 +98,16 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-13 Copilot: Release blocker fixed. The desktop `semantic-gemma`
+  feature enabled `fm-semantic-worker/gemma-native`, linking Zvec's dynamic
+  C library, ONNX Runtime and native inference into the desktop. The bundled
+  desktop app then died at launch with `Library not loaded:
+  @rpath/libzvec_c_api.dylib`; v0.4.2 was built without the feature.
+  The desktop now uses the dependency-free `gemma-launch` feature (launch
+  paths and media flags only). Its fixed debug bundle links no non-system
+  libraries and starts without `DYLD_*`. `workspace_architecture.rs` runs
+  `cargo tree` to keep worker-only native crates out of the desktop.
+  Installed desktop packages on all four targets are still unverified.
 - 2026-10-13 Copilot: The signed candidate's Mac converter children held the
   verified source plus a full `lopdf` copy of every raster body (~380-407 MB
   RSS locally), close to the unchanged 512 MiB watchdog. PDF structure loads

@@ -26,7 +26,7 @@ use fm_semantic_components::{
     embedded_production_verifying_key, production_pipeline_identity,
 };
 #[cfg(feature = "semantic-gemma")]
-use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeFiles};
+use fm_semantic_worker::gemma_launch::{GemmaMedia, GemmaNativeFiles};
 
 const ARTIFACT_CHUNK_BYTES: u64 = 8 * 1024 * 1024;
 const SMALL_MEMBER_VERIFICATION_BYTES: u64 = 32 * 1024 * 1024;

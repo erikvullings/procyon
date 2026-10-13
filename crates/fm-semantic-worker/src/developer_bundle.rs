@@ -914,6 +914,12 @@ impl DeveloperWorker {
                 dimensions,
                 media,
             } => DeveloperModel::resolve_gemma(files, *dimensions, *media, force_cpu_images)?,
+            #[cfg(all(feature = "gemma-launch", not(feature = "gemma-native")))]
+            ManagedModel::Gemma { .. } => {
+                return Err(DeveloperBundleError::Gemma(
+                    "this worker was built without native Gemma support".to_owned(),
+                ));
+            }
         };
         Self::open_with_model(
             data_directory,
@@ -1157,7 +1163,7 @@ enum DeveloperBundleError {
     #[cfg(feature = "gemma-native")]
     #[error("Gemma original file must be an absolute regular file: {0}")]
     InvalidGemmaFile(PathBuf),
-    #[cfg(feature = "gemma-native")]
+    #[cfg(feature = "gemma-launch")]
     #[error("native Gemma checkpoint failed: {0}")]
     Gemma(String),
     #[cfg(feature = "gemma-native")]

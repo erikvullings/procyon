@@ -21,7 +21,7 @@ use fm_semantic_components::{
     SemanticStateStore, SignedCatalogManifest, TargetTriple, TrustedCatalog,
 };
 #[cfg(feature = "semantic-gemma")]
-use fm_semantic_worker::gemma_native::GemmaNativeFiles;
+use fm_semantic_worker::gemma_launch::GemmaNativeFiles;
 
 const DEVELOPMENT_SIGNING_KEY: [u8; 32] = [0x19; 32];
 /// Largest model pack member re-hashed during activation.

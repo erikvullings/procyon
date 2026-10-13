@@ -23,7 +23,10 @@ developer-bundle = ["semantic-runtime"]
 # Native CPU dependencies stay out of the E5-only runtime. Optional Gemma
 # worker binaries must be built with gemma-native.
 gemma-native = ["semantic-runtime", "gemma-probe"]
-gemma-probe = ["dep:fm-metadata", "dep:image", "dep:lattice-inference", "dep:symphonia", "dep:tokenizers"]
+# Host-side Gemma launch description only: no native inference, Zvec or ONNX
+# Runtime, so a desktop host can opt in without linking worker-only libraries.
+gemma-launch = []
+gemma-probe = ["gemma-launch", "dep:fm-metadata", "dep:image", "dep:lattice-inference", "dep:symphonia", "dep:tokenizers"]
 # Explicit development-worker FP32 Metal image offload; not in release bundles.
 gemma-metal = ["gemma-probe", "lattice-inference/metal-gpu"]
 # Development-only child isolation path; not included in release worker recipes.
