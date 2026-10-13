@@ -518,6 +518,7 @@ fn qualify_installed_gemma(
                 || report["hostVfsVerified"] != true
                 || report["workspaceIsolationVerified"] != true
                 || report["deletionVerified"] != true
+                || report["onePageSourceEditReindexVerified"] != (expected_pages == 1)
                 || report["currentContentAndDeletionVerified"] != false
             {
                 return Err(

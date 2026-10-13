@@ -365,8 +365,9 @@ The experimental Gemma publication check separately requires reviewed four-targe
 PDF evidence from a successful exact-source qualification run; merely adding signed PDFium
 payloads or a worker-only synthetic report cannot satisfy that gate.
 The read-only PDF qualification also runs a separate one-page enrolled-host smoke through
-the installed worker and records source citation, workspace isolation, and deletion behavior.
-That smoke is not full-scan host coverage or release approval.
+the installed worker, replaces that synthetic file with a two-page scan, and checks that
+the edited source's two page citations replace the old generation before checking deletion.
+That smoke is not full-scan current-content coverage or release approval.
 A distinct read-only `qualify_pdf_host_full` workflow input can run the 354-page
 synthetic scan through an enrolled host without doubling the worker-only run on
 the same runner. Its page-complete report is deliberately not release approval:

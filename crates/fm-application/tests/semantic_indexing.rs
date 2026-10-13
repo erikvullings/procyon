@@ -1054,7 +1054,7 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
     let generator =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/generate-large-pdf-fixture.mjs");
     let output = std::process::Command::new("node")
-        .arg(generator)
+        .arg(&generator)
         .args(["--variant", "rle-scan", "--pages"])
         .arg(pages.to_string())
         .arg("--output")
@@ -1177,7 +1177,7 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
     if pages == 354 {
         assert_complete_page_images(&state, pages);
     }
-    let source_id = image.metadata.get("semantic.sourceId").unwrap().clone();
+    let mut source_id = image.metadata.get("semantic.sourceId").unwrap().clone();
     let outside = service
         .semantic_query(SemanticQuery {
             scope: SemanticScope::new(
@@ -1208,6 +1208,71 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
     let location: Location = resolved.location.into();
     assert_eq!(location, Location::from_native_path(&source).unwrap());
     assert!(resolved.available);
+    if pages == 1 {
+        let replacement = state.path().join("replacement-synthetic-scan.pdf");
+        let output = std::process::Command::new("node")
+            .arg(&generator)
+            .args(["--variant", "rle-scan", "--pages", "2", "--output"])
+            .arg(&replacement)
+            .output()
+            .expect("generate edited synthetic scan");
+        assert!(
+            output.status.success(),
+            "edited scan generation failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        std::fs::copy(replacement, &source).expect("replace synthetic scan before reconciliation");
+        let updated = service
+            .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+            .await
+            .expect("reindex edited synthetic scan");
+        assert_eq!(updated.ingested_occurrences, 1, "{updated:?}");
+        assert_eq!(updated.failed_occurrences, 0, "{updated:?}");
+        let results = service
+            .semantic_query(SemanticQuery {
+                scope: SemanticScope::new(
+                    fm_application::semantic::TenantId::new(workspace_id.to_string()),
+                    fm_application::semantic::LibraryId::new(updated.library_id),
+                ),
+                request_id: SemanticOperationId::new("host-edited-scan-query"),
+                text: "synthetic image page".to_owned(),
+                concept: None,
+                maximum_results: 10,
+            })
+            .await
+            .expect("query edited PDF images");
+        let published = results
+            .iter()
+            .filter(|result| result.metadata.contains_key("semantic.provenance"))
+            .map(|result| {
+                let value = result.metadata.get("semantic.provenance").unwrap();
+                let provenance: serde_json::Value =
+                    serde_json::from_str(value).expect("valid edited PDF provenance");
+                assert_eq!(provenance["value"]["kind"], "pdfPageRender");
+                (
+                    provenance["value"]["page_number"]
+                        .as_u64()
+                        .expect("edited scan page citation"),
+                    result.metadata.get("semantic.sourceId").unwrap().clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(published.len(), 2, "one current record per edited page");
+        assert_eq!(
+            published
+                .iter()
+                .map(|(page, _)| *page)
+                .collect::<std::collections::BTreeSet<_>>(),
+            [1, 2].into_iter().collect(),
+            "only current edited scan pages are searchable"
+        );
+        source_id = published
+            .iter()
+            .find(|(page, _)| *page == 2)
+            .unwrap()
+            .1
+            .clone();
+    }
     std::fs::remove_file(&source).unwrap();
     service
         .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
@@ -1233,6 +1298,13 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
     let (host_peak_rss_bytes, worker_peak_rss_bytes) = sampler.await.unwrap();
     assert!(host_peak_rss_bytes > 0, "host RSS was not sampled");
     assert!(worker_peak_rss_bytes > 0, "worker RSS was not sampled");
+    tokio::time::timeout(Duration::from_secs(12), async {
+        while runtime.path().join("worker.pid").exists() {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("installed worker exited before isolated index cleanup");
     let report_variable = if pages == 354 {
         "PROCYON_GEMMA_PDF_HOST_FULL_REPORT"
     } else {
@@ -1257,8 +1329,13 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
                 "hostVfsVerified": true,
                 "workspaceIsolationVerified": true,
                 "deletionVerified": true,
+                "onePageSourceEditReindexVerified": pages == 1,
                 "currentContentAndDeletionVerified": false,
-                "limitations": "Tauri application service probe verifies deletion, not source edits; no measured anonymous temporary disk, browser-server navigation, rollback, or CPU fallback qualification."
+                "limitations": if pages == 354 {
+                    "Tauri full-scan probe verifies deletion, not source edits; no measured anonymous temporary disk, browser-server navigation, rollback, or CPU fallback qualification."
+                } else {
+                    "Tauri one-page probe checks a two-page replacement and deletion, not full-scan source edits; no measured anonymous temporary disk, browser-server navigation, rollback, or CPU fallback qualification."
+                }
             }))
             .unwrap(),
         )

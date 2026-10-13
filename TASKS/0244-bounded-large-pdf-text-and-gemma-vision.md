@@ -98,6 +98,28 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-13 Copilot: An isolated **local development** Gemma+Metal+PDFium
+  application-service test found small consented synthetic scan PDFs were
+  sent through the ordinary in-memory converter, never the supervised
+  renderer, and excluded as unsupported image-only pages. With the optional
+  PDF renderer feature, image-consented PDFs now use the bounded anonymous
+  spool even below 64 MiB; the worker computes a stream digest when an old
+  small-PDF client did not declare one, while a mismatched declared digest
+  still fails. E5/image-off and renderer-free builds retain their existing
+  path. The separate host smoke replaces its one-page scan with a generated
+  two-page scan, reconciles the same enrolled source, requires exactly two
+  current page-cited results, and checks deletion of the updated source.
+  The local real-Gemma diagnostic passed in 115.47 s with 43 MB sampled host
+  and 2.48 GB sampled worker RSS. An authenticated feature-enabled IPC
+  regression verifies digest-derived small-PDF visual staging and the
+  unchanged image-off path; both renderer-enabled and default IPC suites
+  passed, as did the full affected application package and renderer-enabled
+  worker library suite. The
+  diagnostic was **not a signed installed candidate**,
+  so neither this RSS figure nor the one-page edit proves four-target
+  resource ceilings, full 354-page current-content behavior, or cross-host
+  navigation. A new exact-source signed candidate is still required; release
+  remains no-go.
 - 2026-10-13 Copilot: Exact-source four-target read-only signed Gemma/PDFium
   candidate run 38384221704 failed on Windows before signing: its PDFium
   archive verifier passed a `D:\...` absolute path to GNU tar, which parsed

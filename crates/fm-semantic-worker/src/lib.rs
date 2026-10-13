@@ -3760,46 +3760,50 @@ async fn handle_frame(
                         .await;
                         return;
                     };
-                    let (content, pdf_spool_permit) =
-                        if start.expected_content_bytes > state.config.limits.max_stream_bytes() {
-                            let Ok(spool_permit) =
-                                Arc::clone(&state.pdf_spool_concurrency).try_acquire_owned()
-                            else {
+                    let (content, pdf_spool_permit) = if start.expected_content_bytes
+                        > state.config.limits.max_stream_bytes()
+                        || (cfg!(feature = "experimental-pdf-render")
+                            && start.media_type == "application/pdf"
+                            && start.pdf_images_consented)
+                    {
+                        let Ok(spool_permit) =
+                            Arc::clone(&state.pdf_spool_concurrency).try_acquire_owned()
+                        else {
+                            send_error(
+                                &writer,
+                                correlation_id,
+                                protocol_error(
+                                    v1::ErrorCode::LimitExceeded,
+                                    "PDF spool is occupied",
+                                ),
+                                state.config.limits,
+                            )
+                            .await;
+                            return;
+                        };
+                        let file = match tempfile::tempfile() {
+                            Ok(file) => file,
+                            Err(error) => {
                                 send_error(
                                     &writer,
                                     correlation_id,
                                     protocol_error(
-                                        v1::ErrorCode::LimitExceeded,
-                                        "PDF spool is occupied",
+                                        v1::ErrorCode::Internal,
+                                        format!("PDF spool creation failed: {error}"),
                                     ),
                                     state.config.limits,
                                 )
                                 .await;
                                 return;
-                            };
-                            let file = match tempfile::tempfile() {
-                                Ok(file) => file,
-                                Err(error) => {
-                                    send_error(
-                                        &writer,
-                                        correlation_id,
-                                        protocol_error(
-                                            v1::ErrorCode::Internal,
-                                            format!("PDF spool creation failed: {error}"),
-                                        ),
-                                        state.config.limits,
-                                    )
-                                    .await;
-                                    return;
-                                }
-                            };
-                            (
-                                PendingContent::PdfSpool(tokio::fs::File::from_std(file)),
-                                Some(spool_permit),
-                            )
-                        } else {
-                            (PendingContent::Memory(Vec::new()), None)
+                            }
                         };
+                        (
+                            PendingContent::PdfSpool(tokio::fs::File::from_std(file)),
+                            Some(spool_permit),
+                        )
+                    } else {
+                        (PendingContent::Memory(Vec::new()), None)
+                    };
                     let Some(cancellation) =
                         register_cancellation(&connection, &request.request_id)
                     else {
@@ -3822,7 +3826,9 @@ async fn handle_frame(
                     let budget = StreamBudget::new(
                         state.config.limits.max_ingestion_bytes(&start.media_type),
                     );
-                    let digest = (!start.expected_sha256.is_empty()).then(Sha256::new);
+                    let digest = (!start.expected_sha256.is_empty()
+                        || matches!(content, PendingContent::PdfSpool(_)))
+                    .then(Sha256::new);
                     connection.ingestions.lock().await.insert(
                         correlation_id,
                         PendingIngestion {
@@ -4770,7 +4776,7 @@ async fn expire_pending_ingestion(expiration: PendingIngestionExpiration) {
 }
 
 async fn complete_ingestion(
-    pending: PendingIngestion,
+    mut pending: PendingIngestion,
     correlation_id: u64,
     state: Arc<RuntimeState>,
     connection: Arc<ConnectionState>,
@@ -4817,21 +4823,40 @@ async fn complete_ingestion(
         .await;
         return;
     }
-    if pending
-        .digest
-        .is_some_and(|digest| digest.finalize().as_slice() != pending.start.expected_sha256)
-    {
-        send_error(
-            &writer,
-            correlation_id,
-            protocol_error(
-                v1::ErrorCode::InvalidRequest,
-                "PDF SHA-256 does not match declaration",
-            ),
-            state.config.limits,
-        )
-        .await;
-        return;
+    if let Some(digest) = pending.digest.take() {
+        let actual = digest.finalize();
+        if pending.start.expected_sha256.is_empty() {
+            if !cfg!(feature = "experimental-pdf-render")
+                || !pending.start.pdf_images_consented
+                || pending.start.media_type != "application/pdf"
+                || pending.start.expected_content_bytes > state.config.limits.max_stream_bytes()
+            {
+                send_error(
+                    &writer,
+                    correlation_id,
+                    protocol_error(
+                        v1::ErrorCode::InvalidRequest,
+                        "PDF spool requires a declared SHA-256 digest",
+                    ),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            }
+            pending.start.expected_sha256 = actual.to_vec();
+        } else if actual.as_slice() != pending.start.expected_sha256 {
+            send_error(
+                &writer,
+                correlation_id,
+                protocol_error(
+                    v1::ErrorCode::InvalidRequest,
+                    "PDF SHA-256 does not match declaration",
+                ),
+                state.config.limits,
+            )
+            .await;
+            return;
+        }
     }
     tokio::select! {
         () = connection.disconnected.cancelled() => return,

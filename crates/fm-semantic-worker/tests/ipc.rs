@@ -429,7 +429,7 @@ async fn pdf_reader_requires_exact_digest_length_and_eof_before_publication() {
             scope(),
             "valid",
             BTreeMap::new(),
-            true,
+            false,
             std::io::Cursor::new(content.clone()),
             content.len() as u64,
             digest,
@@ -438,7 +438,7 @@ async fn pdf_reader_requires_exact_digest_length_and_eof_before_publication() {
         .unwrap();
     let accepted = capture.input.lock().unwrap().take().unwrap();
     assert_eq!(accepted.content, content);
-    assert!(accepted.pdf_images_consented);
+    assert!(!accepted.pdf_images_consented);
     drop(client);
     task.abort();
 }
@@ -983,6 +983,7 @@ async fn accepts_an_owner_only_socket_served_by_the_same_effective_user() {
     task.await.unwrap().unwrap();
 }
 
+#[cfg(not(feature = "experimental-pdf-render"))]
 #[tokio::test]
 async fn pdf_image_consent_crosses_ipc_only_for_pdfs() {
     let directory = test_directory("pdf-image-consent");
@@ -1016,6 +1017,117 @@ async fn pdf_image_consent_crosses_ipc_only_for_pdfs() {
         let captured = backend.input.lock().unwrap();
         assert!(captured.as_ref().unwrap().pdf_images_consented);
     }
+
+    let rejected = client
+        .ingest_with_pdf_images(
+            "not-a-pdf",
+            IngestionScope::new("tenant", "library"),
+            "image",
+            BTreeMap::new(),
+            IngestionMedia {
+                media_type: "image/png",
+                pdf_images_consented: true,
+            },
+            b"\x89PNG".to_vec(),
+        )
+        .await;
+    assert!(matches!(
+        rejected,
+        Err(ClientError::Remote {
+            code: v1::ErrorCode::InvalidRequest,
+            ..
+        })
+    ));
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[cfg(feature = "experimental-pdf-render")]
+#[tokio::test]
+async fn small_consented_pdf_uses_verified_visual_stage_without_a_declared_digest() {
+    let mut pdf = Document::with_version("1.5");
+    let pages_id = pdf.new_object_id();
+    let content_id = pdf.add_object(Stream::new(
+        dictionary! {},
+        b"BT /F1 12 Tf 72 720 Td (Synthetic searchable PDF page text.) Tj ET".to_vec(),
+    ));
+    let font_id = pdf.add_object(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
+    });
+    let page_id = pdf.add_object(dictionary! {
+        "Type" => "Page",
+        "Parent" => pages_id,
+        "Contents" => content_id,
+        "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        "Resources" => dictionary! { "Font" => dictionary! { "F1" => font_id } },
+    });
+    pdf.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages", "Count" => 1, "Kids" => vec![Object::Reference(page_id)],
+        }),
+    );
+    let catalog_id = pdf.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    pdf.trailer.set("Root", catalog_id);
+    let mut bytes = Vec::new();
+    pdf.save_to(&mut bytes).unwrap();
+    let expected_digest = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+
+    let directory = test_directory("small-consented-pdf");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::generate();
+    let backend = Arc::new(CapturingIngestionBackend::default());
+    let task = tokio::spawn(
+        WorkerServer::with_ingestion_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone())
+                .with_pdf_child_executable(PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker"))),
+            backend.clone(),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    client
+        .ingest_with_pdf_images(
+            "consented-pdf",
+            IngestionScope::new("tenant", "library"),
+            "document",
+            BTreeMap::new(),
+            IngestionMedia {
+                media_type: "application/pdf",
+                pdf_images_consented: true,
+            },
+            bytes.clone(),
+        )
+        .await
+        .expect("small consented PDF uses the supervised stage");
+    let input = backend.input.lock().unwrap().take().unwrap();
+    assert!(input.content.is_empty());
+    let staged = input.pdf_text.expect("page-complete PDF visual stage");
+    assert_eq!(staged.content_hash, expected_digest);
+    assert!(staged.visual_stage.is_some());
+    assert_eq!(staged.converted.units().len(), 1);
+
+    client
+        .ingest_with_pdf_images(
+            "image-off-pdf",
+            IngestionScope::new("tenant", "library"),
+            "document-off",
+            BTreeMap::new(),
+            IngestionMedia {
+                media_type: "application/pdf",
+                pdf_images_consented: false,
+            },
+            bytes,
+        )
+        .await
+        .expect("image-off PDF retains the ordinary path");
+    let input = backend.input.lock().unwrap().take().unwrap();
+    assert!(input.pdf_text.is_none());
+    assert!(!input.content.is_empty());
 
     let rejected = client
         .ingest_with_pdf_images(
