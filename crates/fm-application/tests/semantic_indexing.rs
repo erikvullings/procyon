@@ -45,7 +45,7 @@ use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeFiles};
 use fm_semantic_worker::semantic_storage::StoredDocumentSummary;
 #[cfg(feature = "gemma-native")]
 use fm_semantic_worker::{ManagedWorkerLaunch, ManagedWorkerResolver};
-#[cfg(unix)]
+#[cfg(any(unix, feature = "gemma-native"))]
 use fm_transport_dto::ResolveRagCitationRequestDto;
 use fm_transport_dto::RuntimeKindDto;
 #[cfg(all(unix, feature = "gemma-native"))]

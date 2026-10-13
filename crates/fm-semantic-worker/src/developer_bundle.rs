@@ -1096,6 +1096,12 @@ pub async fn run_managed_worker(
     force_cpu_images: bool,
 ) -> Result<(), ServerError> {
     run_desktop_worker_with_factory(runtime_directory, idle_timeout, |config| {
+        #[cfg(feature = "experimental-large-pdf")]
+        let config = config.with_limits(
+            ProtocolLimits::default()
+                .with_pdf_ingestion_bytes(MAX_PDF_INGESTION_BYTES)
+                .expect("fixed PDF ceiling is valid"),
+        );
         #[cfg(feature = "gemma-native")]
         let status = runtime_directory.join("gemma-backend");
         #[cfg(feature = "gemma-native")]

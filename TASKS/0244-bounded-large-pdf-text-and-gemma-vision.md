@@ -98,6 +98,22 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-13 Copilot: The read-only signed four-target Gemma/PDFium candidate
+  38404060213 succeeded at exact source 9269025f, but the separate installed
+  worker (38411021474) and enrolled-host (38411021468) runs both failed
+  without qualifying PDF evidence. The managed worker did not offer the
+  optional PDF-only 200 MiB protocol limit (unlike its developer counterpart);
+  the installed host rejected the 175.5 MB scan as oversized. The managed
+  worker now offers that limit only in an explicitly feature-enabled build,
+  retaining the ordinary stream cap. The lifecycle interruption probe picked
+  the first artifact even on targets where it fit in one 1 MiB chunk, never
+  triggering its offset-based interruption; it now picks an actual multichunk
+  artifact and checks that artifact's resumed offsets. Windows installed-host
+  tests additionally failed to compile due to a Unix-only citation DTO import;
+  the import now covers the Gemma feature on Windows too. Feature-enabled
+  local worker IPC/library and host-indexing tests pass, but these changes
+  require new latest-head CI and a NEW exact-source signed four-target
+  candidate before either installed run may count. Release stays no-go.
 - 2026-10-13 Copilot: The complete script suite's native SPA smoke
   consistently failed on macOS while an app-spawned cache writer was still
   exiting: stopping the app alone did not wait for descendants in its process

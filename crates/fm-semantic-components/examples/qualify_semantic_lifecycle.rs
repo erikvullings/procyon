@@ -189,7 +189,16 @@ fn run() -> Result<(), Box<dyn Error>> {
     ));
     fs::remove_dir_all(corrupt_root)?;
 
-    let source = LocalArtifactSource::interrupt_once(&artifacts, first_artifact);
+    let mut interrupted_artifact = None;
+    for id in &selected {
+        if fs::metadata(artifacts.join(id.as_str()))?.len() > CHUNK_BYTES as u64 {
+            interrupted_artifact = Some(id.clone());
+            break;
+        }
+    }
+    let interrupted_artifact =
+        interrupted_artifact.ok_or("installation plan has no multi-chunk artifact to interrupt")?;
+    let source = LocalArtifactSource::interrupt_once(&artifacts, interrupted_artifact.clone());
     let interrupted = manager.install(
         offer(&catalog, &selected, &target, semantic_root.path(), profile)?.consent(),
         &catalog,
@@ -211,11 +220,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         &FixedFreeSpace(u64::MAX),
         &VerifyActivation,
     )?;
-    let resume_offsets = source.offsets_for(
-        selected
-            .first()
-            .ok_or("installation plan was empty after resume")?,
-    );
+    let resume_offsets = source.offsets_for(&interrupted_artifact);
     if resume_offsets.iter().filter(|offset| **offset == 0).count() != 1
         || !resume_offsets.iter().any(|offset| *offset > 0)
     {
