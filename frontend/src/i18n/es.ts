@@ -632,6 +632,7 @@ export const es = {
     loading: 'Cargando…',
     loadingDirectory: 'Cargando directorio…',
     unableToLoad: 'No se puede cargar el directorio.',
+    unableToLoadNamed: 'No se puede cargar el directorio «{name}».',
     retry: 'Reiniciar análisis',
     notLoaded: 'No hay contenido cargado.',
     rename: 'Renombrar {name}',

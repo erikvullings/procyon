@@ -39,6 +39,8 @@ export type GridIconSize = ThumbnailSize;
  * rows) differs. */
 export interface DirectoryGridAttrs {
   readonly state: LoadingState;
+  /** Display name of the directory being listed, used to name it in load errors. */
+  readonly directoryName?: string;
   readonly source?: DirectoryEntrySource;
   readonly cursorIndex?: number;
   readonly contextTargetEntryId?: EntryId;
@@ -90,7 +92,10 @@ function stateView(attrs: DirectoryGridAttrs): m.Children | undefined {
     );
   }
   if (attrs.state.type === 'error') {
-    const genericMessage = t('table', 'unableToLoad');
+    const genericMessage =
+      attrs.directoryName === undefined || attrs.directoryName.length === 0
+        ? t('table', 'unableToLoad')
+        : t('table', 'unableToLoadNamed', { name: attrs.directoryName });
     const detail = attrs.state.message.trim();
     return m('.fm-directory-state.fm-directory-error', { role: 'alert' }, [
       m('strong', genericMessage),

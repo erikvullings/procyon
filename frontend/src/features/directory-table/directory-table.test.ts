@@ -255,6 +255,20 @@ describe('DirectoryTable states', () => {
 
     expect(root.querySelector('[role="alert"]')?.textContent).toBe('Unable to load directory.');
   });
+
+  it('names the directory that could not be loaded', () => {
+    mount({
+      state: { type: 'error', message: 'permission denied' },
+      directoryName: 'Downloads',
+      viewportHeight: 120,
+    });
+
+    const alert = root.querySelector('[role="alert"]');
+    expect(alert?.querySelector('strong')?.textContent).toBe(
+      'Unable to load directory “Downloads”.',
+    );
+    expect(alert?.textContent).toContain('permission denied');
+  });
 });
 
 describe('DirectoryTable rows', () => {

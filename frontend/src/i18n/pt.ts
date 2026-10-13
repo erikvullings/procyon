@@ -634,6 +634,7 @@ export const pt = {
     loading: 'A carregar…',
     loadingDirectory: 'A carregar pasta…',
     unableToLoad: 'Não é possível carregar a pasta.',
+    unableToLoadNamed: 'Não é possível carregar a pasta “{name}”.',
     retry: 'Reiniciar análise',
     notLoaded: 'Nenhum conteúdo carregado.',
     rename: 'Renomear {name}',

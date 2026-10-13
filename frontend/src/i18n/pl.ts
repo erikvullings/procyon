@@ -630,6 +630,7 @@ export const pl = {
     loading: 'Wczytywanie…',
     loadingDirectory: 'Wczytywanie katalogu…',
     unableToLoad: 'Nie można wczytać katalogu.',
+    unableToLoadNamed: 'Nie można wczytać katalogu „{name}”.',
     retry: 'Uruchom skanowanie ponownie',
     notLoaded: 'Nie wczytano żadnej zawartości.',
     rename: 'Zmień nazwę {name}',

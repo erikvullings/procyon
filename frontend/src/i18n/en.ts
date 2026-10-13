@@ -650,6 +650,7 @@ export const en = {
     loading: 'Loading…',
     loadingDirectory: 'Loading directory…',
     unableToLoad: 'Unable to load directory.',
+    unableToLoadNamed: 'Unable to load directory “{name}”.',
     retry: 'Restart scan',
     notLoaded: 'No content loaded.',
     rename: 'Rename {name}',

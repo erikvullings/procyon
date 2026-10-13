@@ -1919,6 +1919,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
             );
             const sharedListAttrs = {
               state: attrs.state,
+              directoryName: attrs.tabTitle,
               source: entryArraySource(attrs.entries, ds.totalKnownEntries),
               selectedEntryIds: attrs.selectedEntryIds,
               cutEntryIds: attrs.cutEntryIds,
