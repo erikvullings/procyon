@@ -3305,6 +3305,7 @@ version = "0.5.0"
 dependencies = [
  "blake3",
  "caseless",
+ "dunce",
  "fm-metadata",
  "fm-semantic-components",
  "fm-semantic-conversion",

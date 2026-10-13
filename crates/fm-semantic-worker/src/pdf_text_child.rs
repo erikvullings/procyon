@@ -507,6 +507,7 @@ fn run_spool_child_with_output<S: Write + Send + 'static>(
     let pid = Pid::from_u32(child.0.id());
     let mut system = System::new();
     let mut sampled = false;
+    let mut maximum_sampled_rss = 0;
     loop {
         if cancellation.is_cancelled() {
             return Err(io::Error::other("PDF conversion cancelled"));
@@ -521,10 +522,11 @@ fn run_spool_child_with_output<S: Write + Send + 'static>(
         );
         if let Some(process) = system.process(pid) {
             sampled = true;
-            if process.memory() > MAX_SAMPLED_RSS {
-                return Err(io::Error::other(
-                    "PDF converter exceeded sampled memory ceiling",
-                ));
+            maximum_sampled_rss = maximum_sampled_rss.max(process.memory());
+            if maximum_sampled_rss > MAX_SAMPLED_RSS {
+                return Err(io::Error::other(format!(
+                    "PDF converter exceeded sampled memory ceiling (sampled {maximum_sampled_rss} bytes; ceiling {MAX_SAMPLED_RSS} bytes)"
+                )));
             }
         } else if child.0.try_wait()?.is_none() && started.elapsed() > Duration::from_millis(100) {
             return Err(io::Error::other(

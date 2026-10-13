@@ -98,6 +98,21 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-13 Copilot: Reproduced the 354-page RLE scan with the exact worker,
+  PDFium and Zvec binaries extracted from signed candidate run 38425160493
+  and verified against their catalog hashes. The supervised renderer passed
+  all 354 page citations, staged 139,500,666 bytes, and stayed below the
+  unchanged 512 MiB watchdog; direct OS high-water RSS was 395,001,856 bytes.
+  The initial local child failure was a test-install omission: its temporary
+  runtime copied the worker and PDFium but not the worker's adjacent Zvec
+  library. The ignored installed-renderer test now stages that exact adjacent
+  macOS dependency, and watchdog failures report sampled RSS and the ceiling.
+  This is local worker-only evidence, not installed-host or four-target
+  qualification. The earlier signed installed run still reports Mac memory
+  and Windows Zvec path failures; Linux jobs have not completed. Windows
+  Zvec calls now simplify safe extended paths at the SDK boundary, but the
+  Windows-only regression still requires CI. No ceiling or release gate was
+  relaxed.
 - 2026-10-13 Copilot: Latest-head CI 38414827109 failed Linux's default
   worker IPC test at `WorkerClient::connect`: a single-request-capacity
   worker rejected a handshake frame with `concurrent request limit

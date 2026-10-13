@@ -815,7 +815,9 @@ fn acquire_writer_lock(path: &Path) -> Result<File, ZvecStorageError> {
 }
 
 fn path_string(path: &Path) -> Result<&str, ZvecStorageError> {
-    path.to_str().ok_or(ZvecStorageError::InvalidPath)
+    dunce::simplified(path)
+        .to_str()
+        .ok_or(ZvecStorageError::InvalidPath)
 }
 
 fn classify_collection_schema(
@@ -988,6 +990,19 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn zvec_path_conversion_strips_a_safe_extended_windows_prefix() {
+        let path = Path::new(
+            r"\\?\C:\Users\runneradmin\AppData\Local\Temp\gemma-host-scan-state\worker-data\indexes\library\zvec.fts-v2-staging",
+        );
+
+        assert_eq!(
+            path_string(path).expect("Zvec path is UTF-8"),
+            r"C:\Users\runneradmin\AppData\Local\Temp\gemma-host-scan-state\worker-data\indexes\library\zvec.fts-v2-staging"
+        );
+    }
 
     fn record(id: &str, tenant: &str, category: &str, vector: Vec<f32>) -> ZvecRecord {
         ZvecRecord {

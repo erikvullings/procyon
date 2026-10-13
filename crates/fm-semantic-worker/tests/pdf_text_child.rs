@@ -158,7 +158,26 @@ fn installed_renderer_worker() -> (tempfile::TempDir, std::path::PathBuf) {
     } else {
         "fm-semantic-worker"
     });
-    std::fs::copy(env!("CARGO_BIN_EXE_fm-semantic-worker"), &worker).expect("copy worker");
+    let candidate_worker =
+        std::env::var_os("PROCYON_TEST_PDFIUM_WORKER").map(std::path::PathBuf::from);
+    let worker_source = candidate_worker
+        .clone()
+        .unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker")));
+    std::fs::copy(&worker_source, &worker).expect("copy worker");
+    #[cfg(target_os = "macos")]
+    if candidate_worker.is_some() {
+        let zvec_runtime = worker
+            .parent()
+            .expect("isolated worker directory")
+            .join("libzvec_c_api.dylib");
+        let source_zvec = candidate_worker
+            .as_deref()
+            .and_then(Path::parent)
+            .map(|parent| parent.join("libzvec_c_api.dylib"))
+            .expect("candidate worker runtime directory");
+        std::fs::copy(source_zvec, zvec_runtime)
+            .expect("install candidate worker's adjacent Zvec runtime");
+    }
     std::fs::copy(
         library,
         pdfium_render::prelude::Pdfium::pdfium_platform_library_name_at_path(directory.path()),

@@ -35,6 +35,7 @@ experimental-pdf-render = ["experimental-large-pdf", "dep:pdfium-render", "dep:i
 [dependencies]
 blake3.workspace = true
 caseless.workspace = true
+dunce.workspace = true
 fm-semantic-components = {workspace = true, optional = true}
 fm-semantic-conversion.workspace = true
 fm-semantic-docling.workspace = true
