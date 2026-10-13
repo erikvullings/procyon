@@ -517,7 +517,8 @@ fn qualify_installed_gemma(
             if report["pageCount"] != expected_pages
                 || report["hostVfsVerified"] != true
                 || report["workspaceIsolationVerified"] != true
-                || report["currentContentAndDeletionVerified"] != true
+                || report["deletionVerified"] != true
+                || report["currentContentAndDeletionVerified"] != false
             {
                 return Err(
                     format!("installed Gemma host PDF {test_name} report is incomplete").into(),

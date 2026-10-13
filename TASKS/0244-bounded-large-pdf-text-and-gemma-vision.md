@@ -98,6 +98,14 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-13 Copilot: Corrected the installed host PDF qualifier's
+  evidence claim: it proves enrolled source resolution and deletion, **not
+  an edited source's current-content check**. The separate candidate-bound
+  report now requires `deletionVerified: true` and
+  `currentContentAndDeletionVerified: false`; attempts to promote the
+  untested combined claim fail. A content-edit/reindex and stale-citation
+  qualification is still required before a release-qualified report can
+  truthfully set that field to true.
 - 2026-10-13 Copilot: The separate installed full-host synthetic PDF
   qualifier now samples host and worker process RSS with the same
   cross-platform `sysinfo` API every 200 ms while the enrolled source is

@@ -108,13 +108,16 @@ test('full enrolled-host PDF evidence binds exact candidate but remains no-go', 
     peakRssMethod: '200ms sysinfo host and worker RSS samples; transient peaks may be missed',
     hostVfsVerified: true,
     workspaceIsolationVerified: true,
-    currentContentAndDeletionVerified: true,
+    deletionVerified: true,
+    currentContentAndDeletionVerified: false,
   };
   const report = recordPdfHostQualification(fullHost, lifecycle, candidate, identity);
   assert.equal(report.candidateSourceRevision, sourceRevision);
   assert.equal(report.catalogSha256, catalogSha256);
   assert.equal(report.decision, 'noGo');
   assert.equal(report.hostVfsVerified, true);
+  assert.equal(report.deletionVerified, true);
+  assert.equal(report.currentContentAndDeletionVerified, false);
   assert.equal(report.hostPeakRssBytes, fullHost.hostPeakRssBytes);
   assert.equal(report.workerPeakRssBytes, fullHost.workerPeakRssBytes);
   assert.equal(report.resourceCeilingQualified, false);
@@ -140,6 +143,26 @@ test('full enrolled-host PDF evidence binds exact candidate but remains no-go', 
     () =>
       recordPdfHostQualification(
         { ...fullHost, hostPeakRssBytes: 0 },
+        lifecycle,
+        candidate,
+        identity,
+      ),
+    /exact signed installed candidate/u,
+  );
+  assert.throws(
+    () =>
+      recordPdfHostQualification(
+        { ...fullHost, deletionVerified: false },
+        lifecycle,
+        candidate,
+        identity,
+      ),
+    /exact signed installed candidate/u,
+  );
+  assert.throws(
+    () =>
+      recordPdfHostQualification(
+        { ...fullHost, currentContentAndDeletionVerified: true },
         lifecycle,
         candidate,
         identity,

@@ -86,7 +86,8 @@ export function recordPdfHostQualification(measured, lifecycle, candidate, ident
     !measured.peakRssMethod ||
     measured.hostVfsVerified !== true ||
     measured.workspaceIsolationVerified !== true ||
-    measured.currentContentAndDeletionVerified !== true
+    measured.deletionVerified !== true ||
+    measured.currentContentAndDeletionVerified !== false
   ) {
     throw new Error('PDF host evidence does not match the exact signed installed candidate');
   }
@@ -106,14 +107,15 @@ export function recordPdfHostQualification(measured, lifecycle, candidate, ident
     imageEvidenceCount: measured.imageEvidenceCount,
     hostVfsVerified: true,
     workspaceIsolationVerified: true,
-    currentContentAndDeletionVerified: true,
+    deletionVerified: true,
+    currentContentAndDeletionVerified: false,
     resourceCeilingQualified: false,
     hostPeakRssBytes: measured.hostPeakRssBytes,
     workerPeakRssBytes: measured.workerPeakRssBytes,
     peakRssMethod: measured.peakRssMethod,
     temporaryDiskPeakBytes: null,
     limitations:
-      'One installed Tauri application-service full-scan fixture; sampled RSS can miss transient peaks, and anonymous temporary-disk peak, cross-host navigation, upgrade/rollback and CPU fallback remain unqualified.',
+      'One installed Tauri application-service full-scan fixture verifies deletion but not source edits. Sampled RSS can miss transient peaks; anonymous temporary-disk peak, cross-host navigation, upgrade/rollback and CPU fallback remain unqualified.',
   };
 }
 

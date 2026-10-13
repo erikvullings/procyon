@@ -376,6 +376,8 @@ candidate and installed qualification run; the publication gate still
 rejects it as incomplete.
 The full-host report samples host and worker RSS but does not claim a
 hard peak or a temporary-disk ceiling.
+It verifies source deletion, not edited-source reindexing or a full
+current-content guarantee.
 
 ## CI
 

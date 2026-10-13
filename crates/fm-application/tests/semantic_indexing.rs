@@ -1256,8 +1256,9 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
                 "peakRssMethod": "200ms sysinfo host and worker RSS samples; transient peaks may be missed",
                 "hostVfsVerified": true,
                 "workspaceIsolationVerified": true,
-                "currentContentAndDeletionVerified": true,
-                "limitations": "Tauri application service probe only; no measured host/worker RSS or anonymous temporary disk, browser-server navigation, rollback, or CPU fallback qualification."
+                "deletionVerified": true,
+                "currentContentAndDeletionVerified": false,
+                "limitations": "Tauri application service probe verifies deletion, not source edits; no measured anonymous temporary disk, browser-server navigation, rollback, or CPU fallback qualification."
             }))
             .unwrap(),
         )
