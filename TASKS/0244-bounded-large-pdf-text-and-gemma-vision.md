@@ -98,6 +98,16 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-13 Copilot: Exact-source four-target read-only signed Gemma/PDFium
+  candidate run 38384221704 failed on Windows before signing: its PDFium
+  archive verifier passed a `D:\...` absolute path to GNU tar, which parsed
+  `D:` as a remote host. Both tar listing and member extraction now use an
+  archive basename relative to its containing directory, including when
+  the archive is on a different drive from the repository. The pinned
+  four-target local archive tests and script checks pass; the failed
+  candidate is **not** complete evidence and cannot be reused. A new
+  exact-source four-target signed candidate and installed tests are needed
+  after latest-head CI; no publication or approval was attempted.
 - 2026-10-13 Copilot: Corrected the installed host PDF qualifier's
   evidence claim: it proves enrolled source resolution and deletion, **not
   an edited source's current-content check**. The separate candidate-bound

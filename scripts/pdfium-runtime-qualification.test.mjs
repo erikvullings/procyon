@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  pdfiumTarArchive,
   pdfiumTarget,
   preparePinnedPdfium,
   verifyPdfiumArchive,
@@ -50,6 +51,14 @@ test('rejects a changed archive before extraction', () => {
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('opens PDFium tar archives by local filename on any drive', () => {
+  const archive = path.resolve('target', 'pdfium-audit', 'pdfium-win-x64.tgz');
+  assert.deepEqual(pdfiumTarArchive(archive), {
+    cwd: path.dirname(archive),
+    archive: './pdfium-win-x64.tgz',
+  });
 });
 
 test('verifies pinned local four-target archives and preserves target-specific notices', async (context) => {

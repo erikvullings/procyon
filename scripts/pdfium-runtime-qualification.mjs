@@ -105,12 +105,25 @@ export function pdfiumTarget(platform = process.platform, architecture = process
   return descriptor;
 }
 
-function tar(archive, args, options = {}) {
-  return execFileSync('tar', [...args, archive], { maxBuffer: 16 * 1024 * 1024, ...options });
+export function pdfiumTarArchive(archive) {
+  const resolved = path.resolve(archive);
+  return { cwd: path.dirname(resolved), archive: `./${path.basename(resolved)}` };
+}
+
+function tar(archive, args) {
+  const local = pdfiumTarArchive(archive);
+  return execFileSync('tar', [...args, local.archive], {
+    cwd: local.cwd,
+    maxBuffer: 16 * 1024 * 1024,
+  });
 }
 
 function memberBytes(archive, member) {
-  return execFileSync('tar', ['-xOzf', archive, member], { maxBuffer: 16 * 1024 * 1024 });
+  const local = pdfiumTarArchive(archive);
+  return execFileSync('tar', ['-xOzf', local.archive, member], {
+    cwd: local.cwd,
+    maxBuffer: 16 * 1024 * 1024,
+  });
 }
 
 export function verifyPdfiumMembers(members, descriptor) {
