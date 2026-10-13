@@ -16,7 +16,7 @@ use std::collections::HashSet;
 use std::io::{self, Write};
 
 use image::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
-use lopdf::{Dictionary, Document, LoadOptions, Object, content::Content};
+use lopdf::{Dictionary, Document, Object, content::Content};
 
 use crate::MAX_PDF_STRUCTURAL_STREAM_BYTES;
 use crate::budget::ConversionBudgets;
@@ -188,11 +188,8 @@ pub(crate) fn convert(
     bytes: &[u8],
     window: Option<PdfPageWindow>,
 ) -> Result<(), PdfError> {
-    let document = Document::load_mem_with_options(
-        bytes,
-        LoadOptions::with_max_decompressed_size(MAX_PDF_STRUCTURAL_STREAM_BYTES),
-    )
-    .map_err(|error| PdfError::Malformed(format!("the PDF is not readable: {error}")))?;
+    let document = crate::load_pdf_structure(bytes)
+        .map_err(|error| PdfError::Malformed(format!("the PDF is not readable: {error}")))?;
     if document.is_encrypted() {
         return Err(PdfError::Encrypted(
             "the PDF is encrypted and cannot be read without a password".to_owned(),
@@ -274,7 +271,7 @@ pub(crate) fn convert(
             continue;
         };
         let retained_image = if builder.visuals_enabled() {
-            extract_page_images(builder, &document, page_id, page_number)?
+            extract_page_images(builder, bytes, &document, page_id, page_number)?
         } else {
             false
         };
@@ -302,8 +299,66 @@ pub(crate) fn convert(
     Ok(())
 }
 
+/// Load filter that keeps image XObject dictionaries but drops their bodies.
+///
+/// Clearing `start_position` stops `lopdf` from re-reading the now-empty
+/// stream after the filter runs. `lopdf` keeps the mutated top-level object and
+/// uses the returned value only for object-stream members, which cannot be
+/// streams, so streams are not cloned.
+pub(crate) fn defer_image_body(
+    id: lopdf::ObjectId,
+    object: &mut Object,
+) -> Option<(lopdf::ObjectId, Object)> {
+    let Object::Stream(stream) = object else {
+        return Some((id, object.clone()));
+    };
+    if matches!(
+        stream.dict.get(b"Subtype").and_then(Object::as_name),
+        Ok(b"Image")
+    ) {
+        stream.content = Vec::new();
+        stream.start_position = None;
+    }
+    Some((id, Object::Null))
+}
+
+/// Re-reads one image XObject whose body [`defer_image_body`] dropped.
+fn load_image_body(
+    bytes: &[u8],
+    document: &Document,
+    id: lopdf::ObjectId,
+) -> lopdf::Result<lopdf::Stream> {
+    // Matches the header offset `lopdf` strips before resolving xref offsets.
+    let offset = bytes
+        .windows(5)
+        .position(|window| window == b"%PDF-")
+        .unwrap_or(0);
+    let mut structure = Document::new();
+    structure.reference_table = document.reference_table.clone();
+    let reader = lopdf::Reader {
+        buffer: &bytes[offset..],
+        document: structure,
+        encryption_state: None,
+        raw_objects: std::collections::BTreeMap::new(),
+        password: None,
+        strict: false,
+        max_decompressed_size: Some(MAX_PDF_STRUCTURAL_STREAM_BYTES),
+    };
+    let stream = reader
+        .get_object(id, &mut HashSet::new())?
+        .as_stream()?
+        .clone();
+    if stream.content.is_empty() {
+        return Err(lopdf::Error::InvalidStream(
+            "image body is empty or unreadable".to_owned(),
+        ));
+    }
+    Ok(stream)
+}
+
 fn extract_page_images(
     builder: &mut DocumentBuilder<'_, '_>,
+    bytes: &[u8],
     document: &Document,
     page_id: lopdf::ObjectId,
     page_number: u32,
@@ -369,11 +424,11 @@ fn extract_page_images(
             page_number,
             image_index: image_index as u32,
         };
-        let image = (|| -> lopdf::Result<&lopdf::Stream> {
+        let image = (|| -> lopdf::Result<(lopdf::ObjectId, &lopdf::Stream)> {
             let id = image_ref.as_reference()?;
-            document.get_object(id)?.as_stream()
+            Ok((id, document.get_object(id)?.as_stream()?))
         })();
-        let image = match image {
+        let (image_id, image) = match image {
             Ok(image) => image,
             Err(error) => {
                 builder.omit_visual(
@@ -394,6 +449,17 @@ fn extract_page_images(
                 continue;
             }
         }
+        let image = match load_image_body(bytes, document, image_id) {
+            Ok(image) => image,
+            Err(error) => {
+                builder.omit_visual(
+                    Some(provenance),
+                    format!("PDF image body could not be read: {error}"),
+                );
+                continue;
+            }
+        };
+        let image = &image;
         let filter = match image.dict.get(b"Filter") {
             Ok(Object::Name(filter)) => Some(filter.as_slice()),
             Ok(Object::Array(filters)) if filters.len() == 1 => filters[0].as_name().ok(),
@@ -974,7 +1040,7 @@ pub(crate) mod tests {
             .expect("save split compressed PDF");
         let loaded = Document::load_mem_with_options(
             &bytes,
-            LoadOptions::with_max_decompressed_size(MAX_PDF_STRUCTURAL_STREAM_BYTES),
+            lopdf::LoadOptions::with_max_decompressed_size(MAX_PDF_STRUCTURAL_STREAM_BYTES),
         )
         .expect("load bounded PDF");
         assert_eq!(
@@ -1049,7 +1115,7 @@ pub(crate) mod tests {
                 "BitsPerComponent" => 8,
                 "Filter" => "DCTDecode",
             },
-            jpeg,
+            jpeg.clone(),
         ));
         let resources_id = document.get_page_resources(page_id).unwrap().1[0];
         document
@@ -1058,6 +1124,22 @@ pub(crate) mod tests {
             .set("XObject", dictionary! { "Im1" => image_id });
         let mut bytes = Vec::new();
         document.save_to(&mut bytes).expect("save fixture");
+
+        let structure = crate::load_pdf_structure(&bytes).expect("structure");
+        let deferred = structure
+            .get_object(image_id)
+            .and_then(Object::as_stream)
+            .expect("image dictionary");
+        assert!(deferred.content.is_empty());
+        assert!(deferred.dict.has(b"Width"));
+        assert!(
+            !structure
+                .get_object(content_id)
+                .and_then(Object::as_stream)
+                .expect("page content")
+                .content
+                .is_empty()
+        );
 
         let converted = convert_pdf_with_visuals(&bytes, true).expect("conversion");
 
@@ -1069,6 +1151,7 @@ pub(crate) mod tests {
                 image_index: 0
             }
         );
+        assert_eq!(converted.visuals()[0].data, jpeg);
     }
 
     #[test]

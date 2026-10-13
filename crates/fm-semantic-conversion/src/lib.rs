@@ -47,6 +47,19 @@ mod tokens;
 /// Maximum eager decompression of one PDF object or xref stream while loading.
 /// This is not a limit on total parser memory or a substitute for isolation.
 pub const MAX_PDF_STRUCTURAL_STREAM_BYTES: usize = 16 * 1024 * 1024;
+
+/// Loads an untrusted PDF's object graph without retaining image XObject bodies.
+///
+/// Scanned PDFs are dominated by raster payloads, so retaining them would hold
+/// a second source-sized copy in memory. Image dictionaries stay available;
+/// callers that need a drawn raster re-read that one object from `bytes`.
+pub fn load_pdf_structure(bytes: &[u8]) -> lopdf::Result<lopdf::Document> {
+    let mut options =
+        lopdf::LoadOptions::with_max_decompressed_size(MAX_PDF_STRUCTURAL_STREAM_BYTES);
+    options.filter = Some(formats::pdf::defer_image_body);
+    lopdf::Document::load_mem_with_options(bytes, options)
+}
+
 /// Checks that an untrusted PDF's loaded page tree matches its declared page count.
 ///
 /// `lopdf` can omit an oversized compressed object stream when loading it.

@@ -98,6 +98,21 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-13 Copilot: The signed candidate's Mac converter children held the
+  verified source plus a full `lopdf` copy of every raster body (~380-407 MB
+  RSS locally), close to the unchanged 512 MiB watchdog. PDF structure loads
+  now keep image XObject dictionaries but drop their bodies; the converter
+  re-reads only drawn image objects from the verified source, and the source
+  buffer is preallocated from the spool length. On the synthetic fixtures,
+  macOS arm64 high-water RSS fell to 215,744,512 bytes (visual pages, RLE
+  scan), 206,749,696 bytes (text-with-visuals) and 224,411,648 bytes (354-page
+  text). Both RLE child outputs and the text-child output are byte-identical
+  to the exact signed candidate's. All ignored 354-page worker spool/renderer
+  tests and the scan-evidence test pass; the stale text-fixture pin now
+  matches the current marker generator (189,239,712 bytes). This needs a new
+  exact-source signed candidate and installed four-target runs; it is not
+  qualification and no ceiling or release gate changed.
+
 - 2026-10-13 Copilot: Reproduced the 354-page RLE scan with the exact worker,
   PDFium and Zvec binaries extracted from signed candidate run 38425160493
   and verified against their catalog hashes. The supervised renderer passed

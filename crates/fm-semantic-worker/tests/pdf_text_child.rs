@@ -759,7 +759,7 @@ fn anonymous_spool_extracts_the_final_synthetic_scan_page() {
 }
 
 #[test]
-#[ignore = "requires the generated 188.9 MB synthetic fixture"]
+#[ignore = "requires the generated 189.2 MB synthetic fixture"]
 fn anonymous_spool_converts_every_page_of_the_large_synthetic_text_pdf() {
     let path = std::env::var_os("PROCYON_SYNTHETIC_PDF")
         .map(std::path::PathBuf::from)
@@ -770,10 +770,10 @@ fn anonymous_spool_converts_every_page_of_the_large_synthetic_text_pdf() {
         "only the generated fixture may be tested"
     );
     let mut source = std::fs::File::open(&path).unwrap();
-    assert_eq!(source.metadata().unwrap().len(), 188_870_838);
+    assert_eq!(source.metadata().unwrap().len(), 189_239_712);
     let mut spool = tempfile::tempfile().unwrap();
     std::io::copy(&mut source, &mut spool).unwrap();
-    let expected_digest = "b1e36f4b3e4664d00e09475372f9e90858aaef0adfab3762aaa0ea98cc4d2285";
+    let expected_digest = "770f11fae38fc7deea630ea3a8e5d149c754c305d9379a28cddd36ede9228f9b";
     let converted = convert_spool(
         Path::new(env!("CARGO_BIN_EXE_fm-semantic-worker")),
         &spool,
@@ -797,9 +797,9 @@ fn anonymous_spool_converts_every_page_of_the_large_synthetic_text_pdf() {
         let Provenance::PdfBlock { page_number, .. } = unit.provenance else {
             panic!("missing PDF page citation");
         };
-        assert!(
-            unit.text
-                .contains(&format!("Synthetic page {page_number} of 354:"))
+        assert_eq!(
+            unit.text.trim(),
+            format!("Synthetic search marker on page {page_number}")
         );
     }
 }

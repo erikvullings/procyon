@@ -633,12 +633,40 @@ pub async fn convert_spool_in_worker(
     })
 }
 
+/// Sizes the source buffer for a spool-file stdin so reading it never doubles
+/// the buffer and transiently holds two partial copies.
+fn stdin_length_hint() -> usize {
+    #[cfg(unix)]
+    let handle = {
+        use std::os::fd::AsFd;
+        io::stdin()
+            .as_fd()
+            .try_clone_to_owned()
+            .map(std::fs::File::from)
+    };
+    #[cfg(windows)]
+    let handle = {
+        use std::os::windows::io::AsHandle;
+        io::stdin()
+            .as_handle()
+            .try_clone_to_owned()
+            .map(std::fs::File::from)
+    };
+    handle
+        .and_then(|file| file.metadata())
+        .ok()
+        .filter(std::fs::Metadata::is_file)
+        .map_or(0, |metadata| {
+            usize::try_from(metadata.len().min(MAX_SOURCE_BYTES + 1)).unwrap_or(0)
+        })
+}
+
 fn read_verified_source(expected_sha256: &str) -> io::Result<Vec<u8>> {
     if expected_sha256.len() != 64 || !expected_sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
     {
         return Err(io::Error::other("invalid PDF source digest"));
     }
-    let mut source = Vec::new();
+    let mut source = Vec::with_capacity(stdin_length_hint());
     io::stdin()
         .take(MAX_SOURCE_BYTES + 1)
         .read_to_end(&mut source)?;
@@ -674,13 +702,8 @@ fn run_text(expected_sha256: &str, allow_empty: bool) -> io::Result<()> {
         ..ConversionBudgets::default()
     };
     let total_pages = {
-        let document = lopdf::Document::load_mem_with_options(
-            &source,
-            lopdf::LoadOptions::with_max_decompressed_size(
-                fm_semantic_conversion::MAX_PDF_STRUCTURAL_STREAM_BYTES,
-            ),
-        )
-        .map_err(io::Error::other)?;
+        let document =
+            fm_semantic_conversion::load_pdf_structure(&source).map_err(io::Error::other)?;
         u32::try_from(
             fm_semantic_conversion::checked_pdf_pages(&document)
                 .map_err(io::Error::other)?
@@ -764,13 +787,7 @@ pub fn run_visual_page(expected_sha256: &str, page_number: u32) -> io::Result<()
 /// the previous pages' encoded bytes.
 pub fn run_visual_pages(expected_sha256: &str) -> io::Result<()> {
     let source = read_verified_source(expected_sha256)?;
-    let document = lopdf::Document::load_mem_with_options(
-        &source,
-        lopdf::LoadOptions::with_max_decompressed_size(
-            fm_semantic_conversion::MAX_PDF_STRUCTURAL_STREAM_BYTES,
-        ),
-    )
-    .map_err(io::Error::other)?;
+    let document = fm_semantic_conversion::load_pdf_structure(&source).map_err(io::Error::other)?;
     let count = u32::try_from(
         fm_semantic_conversion::checked_pdf_pages(&document)
             .map_err(io::Error::other)?
