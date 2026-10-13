@@ -107,7 +107,12 @@ optional Docling ML/PDFium pack is qualified on those targets.
   paths and media flags only). Its fixed debug bundle links no non-system
   libraries and starts without `DYLD_*`. `workspace_architecture.rs` runs
   `cargo tree` to keep worker-only native crates out of the desktop.
-  Installed desktop packages on all four targets are still unverified.
+  CI job `gemma-desktop` now builds the unsigned `semantic-gemma` installers
+  (macOS arm64 DMG, Windows MSI/NSIS, Linux DEB/AppImage) and launch-tests
+  them installed. Release-desktop ships no Linux arm64 desktop package, so
+  that fourth worker target has worker/host evidence but no desktop
+  installer. Candidate run 38466934221 is pinned at `6e4164b9` on branch
+  `gemma-candidate-6e4164b9` for exact-source installed qualification.
 - 2026-10-13 Copilot: The signed candidate's Mac converter children held the
   verified source plus a full `lopdf` copy of every raster body (~380-407 MB
   RSS locally), close to the unchanged 512 MiB watchdog. PDF structure loads
