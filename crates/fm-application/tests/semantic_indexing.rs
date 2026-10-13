@@ -481,14 +481,39 @@ async fn sample_installed_pdf_processes(
 
 #[cfg(feature = "gemma-native")]
 #[tokio::test]
-async fn installed_pdf_resource_sampler_observes_host_memory() {
+async fn installed_pdf_resource_sampler_observes_host_and_worker_processes() {
+    let runtime = project_temp_dir("gemma-resource-sampler-");
+    std::fs::write(
+        runtime.path().join("worker.pid"),
+        std::process::id().to_string(),
+    )
+    .unwrap();
     let stop = Arc::new(AtomicBool::new(false));
-    let sampler = tokio::spawn(sample_installed_pdf_processes(None, Arc::clone(&stop)));
+    let sampler = tokio::spawn(sample_installed_pdf_processes(
+        Some(runtime.path().join("worker.pid")),
+        Arc::clone(&stop),
+    ));
     tokio::time::sleep(Duration::from_millis(500)).await;
     stop.store(true, Ordering::Release);
     let (host, worker) = sampler.await.unwrap();
     assert!(host > 0, "host RSS sampler produced no samples");
-    assert_eq!(worker, 0, "no worker was configured for this sampler");
+    assert_eq!(
+        worker, host,
+        "synthetic worker PID points at the host process"
+    );
+    std::fs::remove_file(runtime.path().join("worker.pid")).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let sampler = tokio::spawn(sample_installed_pdf_processes(
+        Some(runtime.path().join("worker.pid")),
+        Arc::clone(&stop),
+    ));
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    stop.store(true, Ordering::Release);
+    let (_, missing_worker) = sampler.await.unwrap();
+    assert_eq!(
+        missing_worker, 0,
+        "missing worker PID must not fabricate RSS"
+    );
 }
 
 fn library(directory: &TempDir) -> SemanticLibraryService {
