@@ -632,6 +632,7 @@ export const de = {
     loading: 'Wird geladen…',
     loadingDirectory: 'Verzeichnis wird geladen…',
     unableToLoad: 'Verzeichnis kann nicht geladen werden.',
+    unableToLoadNamed: 'Verzeichnis „{name}“ kann nicht geladen werden.',
     retry: 'Scan neu starten',
     notLoaded: 'Kein Inhalt geladen.',
     rename: '{name} umbenennen',

@@ -629,6 +629,7 @@ export const it = {
     loading: 'Caricamento…',
     loadingDirectory: 'Caricamento cartella…',
     unableToLoad: 'Impossibile caricare la cartella.',
+    unableToLoadNamed: 'Impossibile caricare la cartella «{name}».',
     retry: 'Riavvia scansione',
     notLoaded: 'Nessun contenuto caricato.',
     rename: 'Rinomina {name}',

@@ -189,6 +189,14 @@ describe('DirectoryGrid', () => {
     expect(onRetry).toHaveBeenCalled();
   });
 
+  it('names the directory that could not be loaded', () => {
+    mount({ state: { type: 'error', message: 'permission denied' }, directoryName: 'Downloads' });
+
+    expect(root.querySelector('[role="alert"] strong')?.textContent).toBe(
+      'Unable to load directory “Downloads”.',
+    );
+  });
+
   it('renders an empty-directory message once loaded with no entries', () => {
     mount({ state: { type: 'loaded' }, source: entryArraySource([]) });
     expect(root.querySelector('[role="status"]')?.textContent).toBe('This directory is empty.');

@@ -633,6 +633,7 @@ export const nl = {
     loading: 'Laden…',
     loadingDirectory: 'Map laden…',
     unableToLoad: 'Map laden mislukt.',
+    unableToLoadNamed: 'Map ‘{name}’ laden mislukt.',
     retry: 'Scan opnieuw starten',
     notLoaded: 'Geen inhoud geladen.',
     rename: 'Hernoem {name}',

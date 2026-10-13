@@ -632,6 +632,7 @@ export const fr = {
     loading: 'Chargement…',
     loadingDirectory: 'Chargement du répertoire…',
     unableToLoad: 'Impossible de charger le répertoire.',
+    unableToLoadNamed: 'Impossible de charger le répertoire « {name} ».',
     retry: "Relancer l'analyse",
     notLoaded: 'Aucun contenu chargé.',
     rename: 'Renommer {name}',
