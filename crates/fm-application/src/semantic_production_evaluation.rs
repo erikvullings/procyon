@@ -2633,7 +2633,7 @@ mod tests {
     }
 
     #[test]
-    fn repository_corpus_and_report_are_current() {
+    fn repository_corpus_is_current_but_historical_release_report_is_not() {
         let corpus = ProductionEvaluationCorpus::parse(include_str!(
             "../tests/fixtures/semantic-evaluation-v1.json"
         ))
@@ -2655,16 +2655,22 @@ mod tests {
             .as_str()
             .expect("component lock candidate fingerprint");
         assert_eq!(report.release_candidate_fingerprint, approved_candidate);
-        report
-            .validate_for_policy_and_candidate(
+        assert!(report.production_measurement);
+        assert_eq!(report.decision, ProductionEvaluationDecision::Go);
+        assert!(
+            report
+                .measurements
+                .iter()
+                .all(|measurement| measurement.identity.pipeline != production_pipeline_identity()),
+            "historical E5 measurements must not be relabeled as the current pipeline"
+        );
+        assert!(matches!(
+            report.validate_for_policy_and_candidate(
                 &corpus,
                 ProductionEvidencePolicy::ExperimentalAlpha,
                 approved_candidate,
-            )
-            .expect("approved independent semantic release report");
-        assert_eq!(
-            report.production_measurement,
-            report.decision == ProductionEvaluationDecision::Go
-        );
+            ),
+            Err(ProductionEvaluationError::InvalidIdentity)
+        ));
     }
 }

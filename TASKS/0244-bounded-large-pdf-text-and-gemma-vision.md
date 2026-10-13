@@ -98,6 +98,18 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-13 Copilot: PR #115 CI's Rust Test jobs on Linux, macOS, and
+  Windows all failed the same repository E5 evaluation assertion:
+  `repository_corpus_and_report_are_current` assumed the historical,
+  four-target signed E5 report described the current converter/chunker.
+  The stored measurements identify `docling-pdf/1036000+baseline/2` and
+  `structural/3`, while the current pipeline identifies
+  `docling-pdf/1036001+baseline/3` and `structural/4`. The repository test
+  now asserts that this historical GO is **rejected** as `InvalidIdentity`
+  for the current pipeline, preserving the old report and release
+  precondition validator unchanged. This fixes CI's incorrect expectation,
+  **not** the missing current-source E5/Gemma qualification: an actual new
+  four-target measurement is still required before release GO.
 - 2026-10-13 Copilot: Prepared a separately opt-in installed **host/VFS**
   354-page scan path against the same SHA-256-pinned synthetic RLE fixture
   as the worker-only qualifier. The test checks the enrolled application
