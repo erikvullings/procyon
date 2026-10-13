@@ -445,6 +445,52 @@ fn project_temp_dir(prefix: &str) -> TempDir {
         .unwrap()
 }
 
+#[cfg(feature = "gemma-native")]
+async fn sample_installed_pdf_processes(
+    worker_pid_file: Option<std::path::PathBuf>,
+    stop: Arc<AtomicBool>,
+) -> (u64, u64) {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+
+    let host_pid = Pid::from_u32(std::process::id());
+    let mut system = System::new();
+    let mut host_peak = 0;
+    let mut worker_peak = 0;
+    while !stop.load(Ordering::Acquire) {
+        let worker_pid = worker_pid_file
+            .as_ref()
+            .and_then(|file| std::fs::read_to_string(file).ok())
+            .and_then(|pid| pid.trim().parse::<u32>().ok())
+            .map(Pid::from_u32);
+        let pids = worker_pid.map_or_else(|| vec![host_pid], |pid| vec![host_pid, pid]);
+        system.refresh_processes_specifics(
+            ProcessesToUpdate::Some(&pids),
+            false,
+            ProcessRefreshKind::nothing().with_memory(),
+        );
+        if let Some(host) = system.process(host_pid) {
+            host_peak = host_peak.max(host.memory());
+        }
+        if let Some(worker) = worker_pid.and_then(|pid| system.process(pid)) {
+            worker_peak = worker_peak.max(worker.memory());
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    (host_peak, worker_peak)
+}
+
+#[cfg(feature = "gemma-native")]
+#[tokio::test]
+async fn installed_pdf_resource_sampler_observes_host_memory() {
+    let stop = Arc::new(AtomicBool::new(false));
+    let sampler = tokio::spawn(sample_installed_pdf_processes(None, Arc::clone(&stop)));
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    stop.store(true, Ordering::Release);
+    let (host, worker) = sampler.await.unwrap();
+    assert!(host > 0, "host RSS sampler produced no samples");
+    assert_eq!(worker, 0, "no worker was configured for this sampler");
+}
+
 fn library(directory: &TempDir) -> SemanticLibraryService {
     library_with_model(
         directory,
@@ -1065,6 +1111,11 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
         runtime.path(),
         resolver,
     )));
+    let sampler_stop = Arc::new(AtomicBool::new(false));
+    let sampler = tokio::spawn(sample_installed_pdf_processes(
+        Some(runtime.path().join("worker.pid")),
+        Arc::clone(&sampler_stop),
+    ));
     let indexed = service
         .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
         .await
@@ -1153,6 +1204,10 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
         .semantic_shutdown(Duration::from_secs(10))
         .await
         .unwrap();
+    sampler_stop.store(true, Ordering::Release);
+    let (host_peak_rss_bytes, worker_peak_rss_bytes) = sampler.await.unwrap();
+    assert!(host_peak_rss_bytes > 0, "host RSS was not sampled");
+    assert!(worker_peak_rss_bytes > 0, "worker RSS was not sampled");
     let report_variable = if pages == 354 {
         "PROCYON_GEMMA_PDF_HOST_FULL_REPORT"
     } else {
@@ -1171,6 +1226,9 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
                 "imageEvidenceCount": pages,
                 "sourceBytes": source_bytes,
                 "sourceSha256": source_sha256,
+                "hostPeakRssBytes": host_peak_rss_bytes,
+                "workerPeakRssBytes": worker_peak_rss_bytes,
+                "peakRssMethod": "200ms sysinfo host and worker RSS samples; transient peaks may be missed",
                 "hostVfsVerified": true,
                 "workspaceIsolationVerified": true,
                 "currentContentAndDeletionVerified": true,

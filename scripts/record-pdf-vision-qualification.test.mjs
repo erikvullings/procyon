@@ -103,6 +103,9 @@ test('full enrolled-host PDF evidence binds exact candidate but remains no-go', 
     imageEvidenceCount: 354,
     sourceBytes: measured.sourceBytes,
     sourceSha256: measured.sourceSha256,
+    hostPeakRssBytes: 600_000_000,
+    workerPeakRssBytes: 1_300_000_000,
+    peakRssMethod: '200ms sysinfo host and worker RSS samples; transient peaks may be missed',
     hostVfsVerified: true,
     workspaceIsolationVerified: true,
     currentContentAndDeletionVerified: true,
@@ -112,6 +115,8 @@ test('full enrolled-host PDF evidence binds exact candidate but remains no-go', 
   assert.equal(report.catalogSha256, catalogSha256);
   assert.equal(report.decision, 'noGo');
   assert.equal(report.hostVfsVerified, true);
+  assert.equal(report.hostPeakRssBytes, fullHost.hostPeakRssBytes);
+  assert.equal(report.workerPeakRssBytes, fullHost.workerPeakRssBytes);
   assert.equal(report.resourceCeilingQualified, false);
   assert.throws(
     () =>
@@ -129,6 +134,16 @@ test('full enrolled-host PDF evidence binds exact candidate but remains no-go', 
         ...identity,
         qualificationSourceRevision: 'c'.repeat(40),
       }),
+    /exact signed installed candidate/u,
+  );
+  assert.throws(
+    () =>
+      recordPdfHostQualification(
+        { ...fullHost, hostPeakRssBytes: 0 },
+        lifecycle,
+        candidate,
+        identity,
+      ),
     /exact signed installed candidate/u,
   );
 });

@@ -98,6 +98,15 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-13 Copilot: The separate installed full-host synthetic PDF
+  qualifier now samples host and worker process RSS with the same
+  cross-platform `sysinfo` API every 200 ms while the enrolled source is
+  indexed. Its exact-run bound no-go report requires positive measured
+  values and explicitly warns that transient peaks may be missed.
+  Anonymous source/visual-stage spool disk usage is still unmeasured;
+  **no memory/disk ceiling or release approval is inferred** from sampled
+  numbers. The local sampler regression observes host RSS, but a signed
+  four-target full-host run remains pending.
 - 2026-10-13 Copilot: PR #115 CI's Rust Test jobs on Linux, macOS, and
   Windows all failed the same repository E5 evaluation assertion:
   `repository_corpus_and_report_are_current` assumed the historical,

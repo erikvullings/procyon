@@ -78,6 +78,12 @@ export function recordPdfHostQualification(measured, lifecycle, candidate, ident
     measured.sourceSha256 !== sourceHash ||
     measured.pageCount !== 354 ||
     measured.imageEvidenceCount !== 354 ||
+    !Number.isSafeInteger(measured.hostPeakRssBytes) ||
+    measured.hostPeakRssBytes <= 0 ||
+    !Number.isSafeInteger(measured.workerPeakRssBytes) ||
+    measured.workerPeakRssBytes <= 0 ||
+    typeof measured.peakRssMethod !== 'string' ||
+    !measured.peakRssMethod ||
     measured.hostVfsVerified !== true ||
     measured.workspaceIsolationVerified !== true ||
     measured.currentContentAndDeletionVerified !== true
@@ -102,10 +108,12 @@ export function recordPdfHostQualification(measured, lifecycle, candidate, ident
     workspaceIsolationVerified: true,
     currentContentAndDeletionVerified: true,
     resourceCeilingQualified: false,
-    hostPeakRssBytes: null,
+    hostPeakRssBytes: measured.hostPeakRssBytes,
+    workerPeakRssBytes: measured.workerPeakRssBytes,
+    peakRssMethod: measured.peakRssMethod,
     temporaryDiskPeakBytes: null,
     limitations:
-      'One installed Tauri application-service full-scan fixture; no measured host RSS, anonymous temporary-disk peak, cross-host navigation, upgrade/rollback or CPU fallback.',
+      'One installed Tauri application-service full-scan fixture; sampled RSS can miss transient peaks, and anonymous temporary-disk peak, cross-host navigation, upgrade/rollback and CPU fallback remain unqualified.',
   };
 }
 

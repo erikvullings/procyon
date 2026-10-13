@@ -2859,6 +2859,7 @@ dependencies = [
  "serde_json",
  "sevenz-rust2",
  "sha2 0.11.0",
+ "sysinfo",
  "tar",
  "tempfile",
  "thiserror 2.0.20",

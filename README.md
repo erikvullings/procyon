@@ -374,6 +374,8 @@ anonymous temporary-disk peak, cross-host navigation, fallback and rollback
 remain unqualified. The report is separately bound to the exact signed
 candidate and installed qualification run; the publication gate still
 rejects it as incomplete.
+The full-host report samples host and worker RSS but does not claim a
+hard peak or a temporary-disk ceiling.
 
 ## CI
 
