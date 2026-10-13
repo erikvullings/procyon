@@ -98,6 +98,22 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-13 Copilot: The complete script suite's native SPA smoke
+  consistently failed on macOS while an app-spawned cache writer was still
+  exiting: stopping the app alone did not wait for descendants in its process
+  group, so deletion of its **isolated test HOME** raced a live writer. The
+  smoke teardown now waits for the group to exit after SIGKILL (with a bounded
+  failure), and both its targeted regression and the complete script suite
+  pass locally. This is CI fixture cleanup, not permission to touch the
+  user's review app or HOME.
+- 2026-10-13 Copilot: Added a deterministic `--edit-page` variant for
+  non-reusable RLE scans as a fixture prerequisite for a future 354-page
+  source-edit/reindex qualification. Only the selected page's raster seed
+  changes; unchanged pages retain byte-identical embedded rasters and the
+  original unedited 354-page SHA-256 remains pinned. A three-page fixture
+  regression checks both neighboring pages, the edited page, xref validity,
+  and repeatability. This supplies an edit input, **not** installed
+  354-page current-content proof or release approval.
 - 2026-10-13 Copilot: An isolated **local development** Gemma+Metal+PDFium
   application-service test found small consented synthetic scan PDFs were
   sent through the ordinary in-memory converter, never the supervised

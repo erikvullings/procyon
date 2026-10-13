@@ -129,6 +129,29 @@ test('an edit changes only the selected page marker, not its neighbors', () => {
   assertPdfXref(edited);
 });
 
+test('a scanned-page edit changes only that page image and preserves the other page bytes', () => {
+  const original = generate('original-scan.pdf', 'rle-scan', 3);
+  const edited = generate('edited-scan.pdf', 'rle-scan', 3, 32, 24, ['--edit-page', '2']);
+  const image = (pdf, page) => {
+    const objectId = 6 + (page - 1) * 3;
+    const objectStart = pdf.indexOf(Buffer.from(`${objectId} 0 obj\n`));
+    assert.ok(objectStart >= 0);
+    const stream = pdf.indexOf(Buffer.from('\nstream\n'), objectStart);
+    const header = pdf.subarray(objectStart, stream).toString('latin1');
+    const length = Number(header.match(/\/Length (\d+)/u)?.[1]);
+    assert.ok(length > 0);
+    return pdf.subarray(stream + 8, stream + 8 + length);
+  };
+  assertPdfXref(edited);
+  assert.deepEqual(image(edited, 1), image(original, 1));
+  assert.notDeepEqual(image(edited, 2), image(original, 2));
+  assert.deepEqual(image(edited, 3), image(original, 3));
+  assert.deepEqual(
+    edited,
+    generate('edited-scan-again.pdf', 'rle-scan', 3, 32, 24, ['--edit-page', '2']),
+  );
+});
+
 test('malformed xref and small-source expansion bomb remain distinct negative fixtures', () => {
   const malformed = generate('malformed.pdf', 'malformed');
   const declaredXref = Number(malformed.toString('latin1').match(/startxref\n(\d+)/)?.[1]);

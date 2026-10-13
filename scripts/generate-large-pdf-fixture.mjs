@@ -35,8 +35,8 @@ if (variant === 'mixed' && pages !== 3) {
   throw new Error('The mixed vision fixture has exactly three distinct pages');
 }
 const editPage = options.has('--edit-page') ? dimension('--edit-page', 1, pages) : undefined;
-if (editPage !== undefined && variant !== 'text') {
-  throw new Error('--edit-page requires --variant text');
+if (editPage !== undefined && variant !== 'text' && variant !== 'rle-scan') {
+  throw new Error('--edit-page requires --variant text or rle-scan');
 }
 const width = dimension('--width', variant === 'text' ? 536 : 512, 2048);
 const height = dimension('--height', variant === 'text' ? 332 : 320, 2048);
@@ -84,7 +84,8 @@ function stream(id, dictionary, bytes) {
 }
 function image(page) {
   const pixels = Buffer.allocUnsafe(width * height * 3);
-  let state = (0x9e3779b9 ^ page) >>> 0;
+  let state =
+    (0x9e3779b9 ^ page ^ (variant === 'rle-scan' && page === editPage ? 0x13579bdf : 0)) >>> 0;
   for (let i = 0; i < pixels.length; i++) {
     state ^= state << 13;
     state ^= state >>> 17;

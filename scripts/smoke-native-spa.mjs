@@ -71,6 +71,18 @@ async function stopChild() {
       throw new Error('native SPA app did not exit after SIGKILL');
     }
   }
+  if (group) {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      try {
+        process.kill(-child.pid, 0);
+      } catch (error) {
+        if (error.code === 'ESRCH') return;
+        throw error;
+      }
+      await new Promise((done) => setTimeout(done, 50));
+    }
+    throw new Error('native SPA process group did not exit after SIGKILL');
+  }
 }
 try {
   const env = {
