@@ -98,6 +98,18 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-13 Copilot: Latest-head CI 38414827109 failed Linux's default
+  worker IPC test at `WorkerClient::connect`: a single-request-capacity
+  worker rejected a handshake frame with `concurrent request limit
+  reached`. The server previously spawned negotiation and authentication
+  handlers while immediately reading the next frame, so the client could
+  receive a response and send its next handshake frame before the previous
+  handler released its one permit. Handshake frames now complete inline,
+  retaining semaphore admission and concurrent handling for normal work.
+  Added repeated one-capacity connection coverage. The test's standalone
+  stress loop did not reproduce the CI scheduling race in 5,000 attempts;
+  default and feature-enabled IPC suites pass locally, but a green
+  latest-head CI run is still required before a new signed candidate.
 - 2026-10-13 Copilot: The read-only signed four-target Gemma/PDFium candidate
   38404060213 succeeded at exact source 9269025f, but the separate installed
   worker (38411021474) and enrolled-host (38411021468) runs both failed

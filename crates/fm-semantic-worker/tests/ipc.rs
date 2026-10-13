@@ -1573,6 +1573,38 @@ async fn duplicate_active_query_identifiers_remain_rejected() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn single_request_capacity_allows_repeated_handshakes() {
+    let directory = test_directory("single-capacity-handshakes");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([83; 32]);
+    let limits = ProtocolLimits::new(
+        512,
+        1024,
+        1,
+        Duration::from_secs(1),
+        Duration::from_secs(2),
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    let task = tokio::spawn(
+        WorkerServer::new(WorkerConfig::new(endpoint.clone(), secret.clone()).with_limits(limits))
+            .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+
+    for attempt in 0..100 {
+        let client = WorkerClient::connect(&endpoint, secret.clone())
+            .await
+            .unwrap_or_else(|error| panic!("handshake {attempt} failed: {error}"));
+        drop(client);
+    }
+
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn aborting_a_query_future_cancels_work_without_closing_the_client_connection() {
     let directory = test_directory("aborted-query");
     let endpoint = Endpoint::for_runtime_directory(&directory);

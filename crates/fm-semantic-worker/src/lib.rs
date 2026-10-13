@@ -3435,7 +3435,14 @@ async fn serve_connection(stream: BoxedIo, state: Arc<RuntimeState>) -> Result<(
                 }
                 _ => RequestRegistration::Unregistered,
             };
-            tokio::spawn(async move {
+            let handshake = matches!(
+                &frame.payload,
+                Some(
+                    v1::client_frame::Payload::Negotiate(_)
+                        | v1::client_frame::Payload::OpenSession(_)
+                )
+            );
+            let handle = async move {
                 handle_frame(
                     frame,
                     connection_state,
@@ -3445,7 +3452,13 @@ async fn serve_connection(stream: BoxedIo, state: Arc<RuntimeState>) -> Result<(
                     request_registration,
                 )
                 .await;
-            });
+            };
+            if handshake {
+                // Release the permit before reading the next handshake frame.
+                handle.await;
+            } else {
+                tokio::spawn(handle);
+            }
         }
     }
 }
