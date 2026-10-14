@@ -266,7 +266,7 @@ async fn packaged_gemma_indexes_sampled_synthetic_scan_pages_offline() {
         )
         .await
         .expect("authenticated PDF stream");
-    let mut last_progress = 0;
+    let mut max_progress = 0;
     let mut worker_data_disk_peak_bytes = 0;
     let completed_units = loop {
         let job = client
@@ -275,16 +275,15 @@ async fn packaged_gemma_indexes_sampled_synthetic_scan_pages_offline() {
             .expect("signed worker job progress");
         assert_ne!(job.state, IngestionState::Failed, "{:?}", job.detail);
         assert_ne!(job.state, IngestionState::Cancelled);
-        assert!(job.completed_units >= last_progress || job.state == IngestionState::Completed);
-        if job.completed_units > last_progress {
+        if job.completed_units > max_progress {
+            max_progress = job.completed_units;
             eprintln!(
                 "synthetic installed scan progress: {}/{} units after {:.0}s",
-                job.completed_units,
+                max_progress,
                 PDF_VISION_SAMPLE_PAGES,
                 started.elapsed().as_secs_f64()
             );
         }
-        last_progress = job.completed_units;
         if report_path.is_some() {
             worker_data_disk_peak_bytes =
                 worker_data_disk_peak_bytes.max(owned_disk_bytes(data.path()));
@@ -294,7 +293,7 @@ async fn packaged_gemma_indexes_sampled_synthetic_scan_pages_offline() {
         }
         assert!(
             started.elapsed() < Duration::from_secs(15 * 60),
-            "synthetic installed qualification exceeded the 15-minute sample limit after {last_progress}/{PDF_VISION_SAMPLE_PAGES} units"
+            "synthetic installed qualification exceeded the 15-minute sample limit after {max_progress}/{PDF_VISION_SAMPLE_PAGES} units"
         );
         tokio::time::sleep(Duration::from_secs(1)).await;
     };

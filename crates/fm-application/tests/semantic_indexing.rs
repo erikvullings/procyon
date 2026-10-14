@@ -1285,21 +1285,37 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
             .expect("query edited PDF images");
         let published = results
             .iter()
-            .filter(|result| result.metadata.contains_key("semantic.provenance"))
-            .map(|result| {
-                let value = result.metadata.get("semantic.provenance").unwrap();
-                let provenance: serde_json::Value =
-                    serde_json::from_str(value).expect("valid edited PDF provenance");
+            .flat_map(|result| {
+                serde_json::from_str::<serde_json::Value>(
+                    result
+                        .metadata
+                        .get("semantic.evidence")
+                        .expect("file result includes supporting evidence"),
+                )
+                .expect("valid semantic evidence")
+                .as_array()
+                .expect("semantic evidence is an array")
+                .clone()
+            })
+            .map(|evidence| {
+                let provenance = &evidence["provenance"];
                 assert_eq!(provenance["value"]["kind"], "pdfPageRender");
                 (
                     provenance["value"]["page_number"]
                         .as_u64()
                         .expect("edited scan page citation"),
-                    result.metadata.get("semantic.sourceId").unwrap().clone(),
+                    evidence["sourceId"]
+                        .as_str()
+                        .expect("edited scan source id")
+                        .to_owned(),
                 )
             })
             .collect::<Vec<_>>();
-        assert_eq!(published.len(), 2, "one current record per edited page");
+        assert_eq!(
+            published.len(),
+            2,
+            "one current evidence item per edited page"
+        );
         assert_eq!(
             published
                 .iter()

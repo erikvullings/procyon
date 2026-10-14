@@ -1012,3 +1012,15 @@ optional Docling ML/PDFium pack is qualified on those targets.
   page with a non-reusable Flate XObject. The repeatable fixture and its six generator tests
   establish inputs for future provenance, opt-in, deduplication, and renderer checks; they do
   not establish that any of those three image pages is embedded or searchable yet.
+- 2026-10-14 Copilot: The exact-source installed sample from candidate run 38573089809
+  exposed two test-contract issues, not a release approval. Windows worker progress can reset
+  between ingestion stages, so the sample now tracks the greatest observed unit count for
+  timeout diagnostics while retaining the final exact CPU/Metal completion-budget assertion.
+  The enrolled-host replacement test previously counted top-level rows as page records, but
+  semantic search intentionally returns one file-primary PDF row with page citations under
+  `semantic.evidence`; it now validates the supporting citations and source IDs. The prior
+  four-target run still needs to be repeated against a new exact-source candidate to confirm
+  both adjustments. The Gemma-only folder dialog already implements the requested PDF-image
+  choice: CPU off by default with the four-page cap warning when enabled, Metal on by default,
+  and no E5 control. PDF text indexing remains independent, and file/Knowledge evidence surface
+  actual budget-skipped pages. Related consent and media UI suites pass. Release remains no-go.
