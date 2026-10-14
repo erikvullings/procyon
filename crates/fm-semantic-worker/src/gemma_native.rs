@@ -61,6 +61,12 @@ impl GemmaNativeEncoder {
         self.dimensions
     }
 
+    /// Whether this worker initialized a Metal compute backend.
+    #[must_use]
+    pub(crate) fn uses_metal_compute(&self) -> bool {
+        self.compute.uses_metal()
+    }
+
     /// Number of FP32 GEMM dispatches actually executed on the GPU.
     #[must_use]
     pub fn metal_dispatches(&self) -> usize {

@@ -18,6 +18,14 @@ pub(crate) struct MetalStats {
 }
 
 impl GemmaCompute {
+    pub(crate) fn uses_metal(&self) -> bool {
+        #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+        if matches!(self, Self::Metal(_)) {
+            return true;
+        }
+        false
+    }
+
     #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
     pub(crate) fn metal() -> Option<Self> {
         lattice_inference::forward::metal_gemm::is_available()
@@ -80,6 +88,7 @@ mod tests {
     #[test]
     fn cpu_is_the_default_backend() {
         let compute = GemmaCompute::default();
+        assert!(!compute.uses_metal());
         let mut output = [0.0; 2];
         compute.matmul_bt(&[1.0, 2.0], &[3.0, 4.0, 5.0, 6.0], &mut output, 1, 2, 2);
         assert_eq!(output, [11.0, 17.0]);

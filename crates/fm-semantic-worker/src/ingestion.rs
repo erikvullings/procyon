@@ -221,6 +221,14 @@ pub struct MediaEmbedding {
 pub trait EmbeddingProvider: Send + Sync {
     /// Exact immutable model identity.
     fn identity(&self) -> &EmbeddingModelIdentity;
+    /// Maximum PDF page-image scope when this provider actually runs on CPU.
+    ///
+    /// A host may have enabled images using a target-level accelerator default,
+    /// while the worker has discovered that the accelerator is unavailable.
+    /// The worker applies this cap independently of host-provided preferences.
+    fn cpu_pdf_image_page_budget(&self) -> Option<u32> {
+        None
+    }
     /// Versioned input transformation used by this model's cache and index.
     fn preprocessing_version(&self) -> &'static str {
         EMBEDDING_PREPROCESSING_VERSION
@@ -442,7 +450,7 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
                     .parse::<i64>()
                     .map_err(|_| "ingestion metadata `modified_at_ms` is invalid".to_owned())
             })?;
-        let pdf_image_page_budget = input
+        let requested_pdf_image_page_budget = input
             .metadata
             .get("pdf_image_page_budget")
             .map(|value| {
@@ -455,7 +463,7 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
                     })
             })
             .transpose()?;
-        if pdf_image_page_budget.is_some() && !input.pdf_images_consented {
+        if requested_pdf_image_page_budget.is_some() && !input.pdf_images_consented {
             return Err("PDF image budget requires host-authorized image consent".into());
         }
         let document = IngestionDocument {
@@ -478,7 +486,7 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
                 .cloned(),
             media_type: input.media_type,
             pdf_images_consented: input.pdf_images_consented,
-            pdf_image_page_budget,
+            pdf_image_page_budget: requested_pdf_image_page_budget,
             modified_at_ms,
             bytes: input.content,
             #[cfg(feature = "experimental-large-pdf")]
@@ -715,6 +723,18 @@ impl IngestionCoordinator {
         document: &IngestionDocument,
         cancellation: &CancellationToken,
     ) -> Result<IngestionReceipt, IngestionError> {
+        let pdf_image_page_budget = if document.pdf_images_consented
+            && document.media_type == "application/pdf"
+            && let Some(cpu_budget) = self.embedder.cpu_pdf_image_page_budget()
+        {
+            Some(
+                document
+                    .pdf_image_page_budget
+                    .map_or(cpu_budget, |requested| requested.min(cpu_budget)),
+            )
+        } else {
+            document.pdf_image_page_budget
+        };
         let previous_attempts = self
             .catalog
             .job(&document.job_id)?
@@ -778,7 +798,7 @@ impl IngestionCoordinator {
         if (document.pdf_images_consented
             && (document.media_type != "application/pdf"
                 || self.embedder.identity().model_id != "google-embeddinggemma-2"))
-            || (document.pdf_image_page_budget.is_some()
+            || (pdf_image_page_budget.is_some()
                 && (!document.pdf_images_consented || document.media_type != "application/pdf"))
         {
             return Err(self.fail(
@@ -1073,10 +1093,7 @@ impl IngestionCoordinator {
                 ),
                 _ => continue,
             };
-            if document
-                .pdf_image_page_budget
-                .is_some_and(|page_budget| page_number > page_budget)
-            {
+            if pdf_image_page_budget.is_some_and(|page_budget| page_number > page_budget) {
                 image_pages_skipped.insert(page_number);
                 continue;
             }
@@ -1182,7 +1199,7 @@ impl IngestionCoordinator {
                 if omitted_images == 1 { "omission" } else { "omissions" },
             ));
         }
-        if let Some(page_budget) = document.pdf_image_page_budget
+        if let Some(page_budget) = pdf_image_page_budget
             && !image_pages_skipped.is_empty()
         {
             coverage_details.push(format!(
@@ -1703,6 +1720,7 @@ mod tests {
 
     struct FakeEmbedder {
         identity: EmbeddingModelIdentity,
+        cpu_pdf_image_page_budget: Mutex<Option<u32>>,
         calls: Mutex<usize>,
         media_calls: Mutex<usize>,
         fail_media: AtomicBool,
@@ -1713,6 +1731,13 @@ mod tests {
     impl EmbeddingProvider for FakeEmbedder {
         fn identity(&self) -> &EmbeddingModelIdentity {
             &self.identity
+        }
+
+        fn cpu_pdf_image_page_budget(&self) -> Option<u32> {
+            *self
+                .cpu_pdf_image_page_budget
+                .lock()
+                .expect("CPU page budget")
         }
 
         fn embed(
@@ -1844,6 +1869,7 @@ mod tests {
                     dimensions: 3,
                     max_input_tokens: 512,
                 },
+                cpu_pdf_image_page_budget: Mutex::new(None),
                 calls: Mutex::new(0),
                 media_calls: Mutex::new(0),
                 fail_media: AtomicBool::new(false),
@@ -3017,7 +3043,11 @@ mod tests {
         let mut document = fixture.document("");
         document.media_type = "application/pdf".into();
         document.pdf_images_consented = true;
-        document.pdf_image_page_budget = Some(4);
+        *fixture
+            .embedder
+            .cpu_pdf_image_page_budget
+            .lock()
+            .expect("CPU page budget") = Some(4);
 
         let page_contents = (1..=6)
             .map(|page| {

@@ -12,6 +12,7 @@ use crate::ingestion::{DocumentEmbeddingInput, EmbeddingProvider, MediaEmbedding
 /// Case-sensitive model input, distinct from E5's case-folded cache space.
 pub const GEMMA_PREPROCESSING_VERSION: &str = "preserve-case/embeddinggemma-2-v1";
 const MAX_TEXT_BYTES: usize = 256 * 1024;
+const CPU_PDF_IMAGE_PAGE_BUDGET: u32 = 4;
 
 /// An explicit text intent using one shared native multimodal encoder.
 pub struct GemmaTextEmbeddingProvider {
@@ -43,6 +44,10 @@ impl GemmaTextEmbeddingProvider {
 impl EmbeddingProvider for GemmaTextEmbeddingProvider {
     fn identity(&self) -> &EmbeddingModelIdentity {
         &self.identity
+    }
+
+    fn cpu_pdf_image_page_budget(&self) -> Option<u32> {
+        (!self.encoder.uses_metal_compute()).then_some(CPU_PDF_IMAGE_PAGE_BUDGET)
     }
 
     fn preprocessing_version(&self) -> &'static str {

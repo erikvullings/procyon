@@ -130,6 +130,15 @@ optional Docling ML/PDFium pack is qualified on those targets.
   for `0cf04cba` is still in progress; CPU fallback qualification and a new
   exact-source candidate/installed run remain outstanding. Release remains
   no-go.
+- 2026-10-14 Copilot: The worker now independently enforces the four-page
+  image cap whenever its active Gemma encoder is CPU, even if the host selected
+  image consent from a Metal-capable target and supplied no cap. Explicit
+  host budgets are only allowed to narrow that worker cap. Gemma derives this
+  from the encoder actually initialized (Metal versus CPU), not the package
+  target; non-Gemma providers are unchanged. The deterministic ingestion test
+  exercises CPU fallback with consent enabled and no host page budget, while
+  confirming text indexing and the durable skipped count. Cross-target runtime
+  fallback qualification is still required; release remains no-go.
 - 2026-10-13 Copilot: Release blocker fixed. The desktop `semantic-gemma`
   feature enabled `fm-semantic-worker/gemma-native`, linking Zvec's dynamic
   C library, ONNX Runtime and native inference into the desktop. The bundled
