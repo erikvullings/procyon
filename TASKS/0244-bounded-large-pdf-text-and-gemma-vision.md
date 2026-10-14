@@ -1024,3 +1024,21 @@ optional Docling ML/PDFium pack is qualified on those targets.
   choice: CPU off by default with the four-page cap warning when enabled, Metal on by default,
   and no E5 control. PDF text indexing remains independent, and file/Knowledge evidence surface
   actual budget-skipped pages. Related consent and media UI suites pass. Release remains no-go.
+- 2026-10-14 Copilot: Latest-head CI 38587820380 passed on `f771a25f`. New exact-source
+  read-only four-target signed candidate 38594921903 passed on that SHA; publication was
+  skipped, and its candidate artifact is retained until 2026-10-28 17:00 UTC. Candidate-bound
+  worker-only sample 38608153836 passed on all targets: CPU indexed four of eight image pages,
+  with measured throughput of 80.8-125.9 seconds per indexed image page and 2.17-2.23 GB worker
+  RSS; macOS ARM Metal indexed eight of eight at 21.6 seconds per page and 2.38 GB worker RSS.
+  Enrolled-host sample 38608153717 passed on all targets, including exact current-content,
+  page-citation, replacement and deletion checks. Its CPU rate was 83.8-106.1 seconds per
+  indexed image page (2.10-2.16 GB worker RSS and 37.5-71.9 MB sampled host RSS); Metal was
+  16.3 seconds per page (2.39 GB worker RSS, 53.3 MB host RSS). Worker-data samples were
+  5.59-5.66 MB but exclude the anonymous PDF spool; total temporary-disk peak remains unknown.
+  These measurements update the estimated 354-image CPU duration to roughly 8.2-10.4 hours
+  by linear extrapolation, not a measured full scan. The folder warning is being adjusted to
+  use the 107-second maximum observed in the enrolled-host CPU sample, yielding an eight-minute
+  estimate for the four-page budget. No resource ceiling, CPU fallback, cross-host navigation,
+  upgrade/rollback or model-quality claim is qualified; all reports remain no-go. Because this
+  disclosure correction changes the final source SHA, the edited source still needs CI and a
+  new exact-source candidate before it can be treated as final.
