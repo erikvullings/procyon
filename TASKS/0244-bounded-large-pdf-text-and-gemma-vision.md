@@ -154,7 +154,9 @@ optional Docling ML/PDFium pack is qualified on those targets.
   gate. The folder-dialog disclosure now conservatively reports up to about
   seven minutes even for the eight-page CPU sample and warns that larger PDFs
   may take longer. The new exact-source four-target sample and current-source CI
-  are not yet complete.
+  are not yet complete. CI 38565097390 also reported a Biome formatting failure
+  in the new binder regression test before the run was cancelled by a later push;
+  that file is now formatted.
 - 2026-10-14 Copilot: Added opt-in per-root Gemma PDF-page-image consent. CPU
   targets default off; opting in caps image embeddings at the first four pages
   per PDF and warns about roughly two minutes per PDF at the observed CPU rate.
