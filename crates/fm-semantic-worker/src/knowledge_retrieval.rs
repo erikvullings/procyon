@@ -342,6 +342,9 @@ pub struct KnowledgeEvidence {
     pub indexed_content_hash: String,
     /// Published generation.
     pub generation: u64,
+    /// PDF pages omitted by the configured page-image budget.
+    #[serde(default)]
+    pub pdf_image_skipped_pages: Option<u32>,
     /// Document order.
     pub source_position: u32,
     /// Generated rather than extracted evidence.
@@ -1236,6 +1239,7 @@ fn build_evidence(
         modified_at_ms: (evidence.modified_at_ms != 0).then_some(evidence.modified_at_ms),
         indexed_content_hash: evidence.content_hash,
         generation: evidence.generation,
+        pdf_image_skipped_pages: evidence.pdf_image_skipped_pages,
         source_position: evidence.source_position,
         generated: evidence.generated,
         unavailable: !evidence.available,
@@ -1541,6 +1545,7 @@ mod tests {
                 document_id: document_id.into(),
                 content_hash: format!("hash-{document_id}"),
                 source_complete: true,
+                pdf_image_skipped_pages: None,
                 generation: 1,
                 occurrences,
                 records,

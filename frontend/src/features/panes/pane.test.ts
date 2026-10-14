@@ -1198,6 +1198,7 @@ describe('Pane search breadcrumb rendering', () => {
                 provenanceJson: '{}',
                 indexedContentHash: 'sha256:fixture',
                 generation: 2,
+                pdfImageSkippedPages: 2,
                 available: true,
                 stale: false,
                 generated: false,
@@ -1214,6 +1215,9 @@ describe('Pane search breadcrumb rendering', () => {
     expect(root.querySelector('.fm-semantic-pdf-image-evidence')?.textContent).toContain(
       'first 4 pages per PDF',
     );
+    const coverage = root.querySelectorAll('.fm-semantic-pdf-image-evidence');
+    expect(coverage).toHaveLength(2);
+    expect(coverage[1]?.textContent).toContain('2 PDF page image(s) were skipped');
   });
 
   it.each([

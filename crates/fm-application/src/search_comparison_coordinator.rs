@@ -881,6 +881,7 @@ fn semantic_evidence_dto(
         stale: evidence.stale,
         generated: evidence.generated,
         source_position: evidence.source_position,
+        pdf_image_skipped_pages: evidence.pdf_image_skipped_pages,
     })
 }
 

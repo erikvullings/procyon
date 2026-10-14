@@ -1641,6 +1641,8 @@ export const en = {
     pdfImagesAllPages: 'PDF page images are enabled for all pages in this folder.',
     pdfImagesPageBudget:
       'PDF page images are limited to the first {pages} pages per PDF on this CPU device; PDF text remains indexed.',
+    pdfImagesSkippedPages:
+      '{pages} PDF page image(s) were skipped by the per-file page budget; PDF text remains indexed.',
     lastWorkerDevice: 'Last worker launch: {device}',
     metal: 'Metal',
     cpu: 'CPU',

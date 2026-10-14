@@ -1096,6 +1096,7 @@ mod tests {
             modified_at_ms: Some(10),
             indexed_content_hash: "sha256:rotor".to_owned(),
             generation: 1,
+            pdf_image_skipped_pages: None,
             source_position: 0,
             generated: false,
             unavailable: false,

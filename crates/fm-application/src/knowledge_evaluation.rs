@@ -2036,6 +2036,7 @@ fn stage_and_publish(
         document_id: document.document_id.clone(),
         content_hash: content_hash(&document.document_id),
         source_complete: true,
+        pdf_image_skipped_pages: None,
         generation,
         occurrences,
         records,

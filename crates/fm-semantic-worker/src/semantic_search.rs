@@ -101,6 +101,9 @@ pub struct SemanticEvidence {
     pub indexed_content_hash: String,
     /// Published generation.
     pub generation: u64,
+    /// PDF pages omitted by the configured page-image budget.
+    #[serde(default)]
+    pub pdf_image_skipped_pages: Option<u32>,
     /// Source is currently unavailable.
     pub unavailable: bool,
     /// Current known bytes differ from the indexed generation.
@@ -452,6 +455,7 @@ impl SemanticSearchService {
                             provenance,
                             indexed_content_hash: item.content_hash,
                             generation: item.generation,
+                            pdf_image_skipped_pages: item.pdf_image_skipped_pages,
                             unavailable: !item.available,
                             stale,
                             generated: item.generated,
@@ -691,6 +695,7 @@ mod tests {
                 }),
                 indexed_content_hash: "hash".into(),
                 generation: 1,
+                pdf_image_skipped_pages: None,
                 unavailable: false,
                 stale: false,
                 generated,

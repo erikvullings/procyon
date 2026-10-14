@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::embedding::{EmbeddingCacheKey, VectorNormalization};
 
-const CATALOG_SCHEMA_VERSION: i64 = 7;
+const CATALOG_SCHEMA_VERSION: i64 = 8;
 /// Maximum untrusted derived-index candidates re-authorized in one call.
 const MAX_VISIBILITY_CANDIDATES: usize = 4_096;
 
@@ -352,6 +352,8 @@ pub struct StagedGeneration {
     pub content_hash: String,
     /// Old or partially converted documents must never be presented as whole-source summaries.
     pub source_complete: bool,
+    /// PDF pages omitted by the configured page-image budget.
+    pub pdf_image_skipped_pages: Option<u32>,
     /// Monotonically increasing generation.
     pub generation: u64,
     /// Current source occurrences represented by this generation.
@@ -447,6 +449,8 @@ pub struct QueryEvidence {
     pub provenance: String,
     /// Published generation.
     pub generation: u64,
+    /// PDF pages omitted by the configured page-image budget.
+    pub pdf_image_skipped_pages: Option<u32>,
     /// Semantic record kind (`chunk`, `summary`, or a future versioned kind).
     pub record_kind: String,
     /// Bounded display excerpt.
@@ -750,17 +754,20 @@ impl SemanticCatalog {
         )?;
         transaction.execute(
             "INSERT INTO generations
-             (tenant_id, library_id, document_id, generation, state, source_complete)
-             VALUES (?1, ?2, ?3, ?4, 'staging', ?5)
+             (tenant_id, library_id, document_id, generation, state, source_complete,
+              pdf_image_skipped_pages)
+             VALUES (?1, ?2, ?3, ?4, 'staging', ?5, ?6)
              ON CONFLICT(tenant_id, library_id, document_id, generation)
-             DO UPDATE SET source_complete = excluded.source_complete
+             DO UPDATE SET source_complete = excluded.source_complete,
+               pdf_image_skipped_pages = excluded.pdf_image_skipped_pages
                WHERE generations.state = 'staging'",
             params![
                 staged.tenant_id,
                 staged.library_id,
                 staged.document_id,
                 i64_generation(staged.generation)?,
-                staged.source_complete
+                staged.source_complete,
+                staged.pdf_image_skipped_pages.map(i64::from)
             ],
         )?;
 
@@ -1979,6 +1986,7 @@ impl CatalogReader {
                     o.source_id, r.provenance, r.generation, r.record_kind,
                     r.excerpt, r.content, r.token_count, r.section_path_json,
                     r.source_position, r.generated, d.content_hash,
+                    g.pdf_image_skipped_pages,
                     o.available, o.media_type, o.modified_at_ms
              FROM records r
              JOIN generations g
@@ -2040,9 +2048,10 @@ impl CatalogReader {
                             row.get::<_, i64>(12)?,
                             row.get::<_, i64>(13)?,
                             row.get::<_, String>(14)?,
-                            row.get::<_, i64>(15)?,
-                            row.get::<_, String>(16)?,
-                            row.get::<_, i64>(17)?,
+                            row.get::<_, Option<i64>>(15)?,
+                            row.get::<_, i64>(16)?,
+                            row.get::<_, String>(17)?,
+                            row.get::<_, i64>(18)?,
                         ))
                     },
                 )
@@ -2063,6 +2072,7 @@ impl CatalogReader {
                 source_position,
                 generated,
                 content_hash,
+                pdf_image_skipped_pages,
                 available,
                 media_type,
                 modified_at_ms,
@@ -2076,6 +2086,10 @@ impl CatalogReader {
                     source_id,
                     provenance,
                     generation: u64::try_from(generation)
+                        .map_err(|_| StorageError::CorruptCatalog)?,
+                    pdf_image_skipped_pages: pdf_image_skipped_pages
+                        .map(u32::try_from)
+                        .transpose()
                         .map_err(|_| StorageError::CorruptCatalog)?,
                     record_kind,
                     excerpt,
@@ -2588,6 +2602,16 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
         )?;
         version = 7;
     }
+    if version == 7 {
+        connection.execute_batch(
+            "BEGIN IMMEDIATE;
+             ALTER TABLE generations
+               ADD COLUMN pdf_image_skipped_pages INTEGER;
+             UPDATE catalog_meta SET schema_version = 8;
+             COMMIT;",
+        )?;
+        version = 8;
+    }
     if version != CATALOG_SCHEMA_VERSION {
         return Err(StorageError::MigrationRequired {
             incompatible_fields: vec!["catalog_schema_version"],
@@ -2912,6 +2936,7 @@ mod tests {
             document_id: document.into(),
             content_hash: format!("hash-{generation}"),
             source_complete: true,
+            pdf_image_skipped_pages: None,
             generation,
             occurrences,
             records,
@@ -3343,6 +3368,22 @@ mod tests {
         let path = directory.path().join("catalog.sqlite");
         let catalog = SemanticCatalog::open(&path).unwrap();
         catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .unwrap();
+        let generation = generation(
+            "tenant-a",
+            "library-a",
+            "document-a",
+            1,
+            vec![occurrence("occurrence-a", "root-a")],
+            "legacy PDF text",
+        );
+        let record_id = generation.records[0].record_id.clone();
+        catalog.stage_generation(&generation).unwrap();
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-a", 1)
+            .unwrap();
+        catalog
             .register_job("job-progress", "tenant-a", "library-a", "document-a")
             .unwrap();
         catalog
@@ -3359,8 +3400,8 @@ mod tests {
                 .query_row("SELECT schema_version FROM catalog_meta", [], |row| row
                     .get::<_, i64>(0))
                 .unwrap(),
-            7,
-            "the previous worker must be able to reopen the upgraded catalog"
+            8,
+            "the new coverage field is part of the current catalog schema"
         );
         rollback
             .execute(
@@ -3375,6 +3416,7 @@ mod tests {
             .execute_batch(
                 "ALTER TABLE jobs DROP COLUMN completed;
                  ALTER TABLE jobs DROP COLUMN total;
+                 ALTER TABLE generations DROP COLUMN pdf_image_skipped_pages;
                  UPDATE catalog_meta SET schema_version = 7;",
             )
             .unwrap();
@@ -3382,6 +3424,18 @@ mod tests {
         let upgraded = SemanticCatalog::open(&path).unwrap();
         let job = upgraded.job("job-progress").unwrap().unwrap();
         assert_eq!((job.completed, job.total), (0, 1));
+        let evidence = upgraded
+            .begin_read()
+            .unwrap()
+            .filter_visible_candidates(
+                &[record_id],
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(evidence[0].pdf_image_skipped_pages, None);
     }
 
     #[test]
@@ -3696,6 +3750,7 @@ mod tests {
                  ALTER TABLE document_summaries DROP COLUMN authors_json;
                  ALTER TABLE document_summaries DROP COLUMN selection_chunk_ids_json;
                  ALTER TABLE generations DROP COLUMN source_complete;
+                 ALTER TABLE generations DROP COLUMN pdf_image_skipped_pages;
                  UPDATE catalog_meta SET schema_version = 5;",
             )
             .unwrap();

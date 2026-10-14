@@ -599,6 +599,7 @@ mod tests {
                 document_id: "document-a".into(),
                 content_hash: "hash-a".into(),
                 source_complete: true,
+                pdf_image_skipped_pages: None,
                 generation: 1,
                 occurrences: vec![occurrence],
                 records,
@@ -711,6 +712,7 @@ mod tests {
                 document_id: "document-a".into(),
                 content_hash: "partial-hash".into(),
                 source_complete: false,
+                pdf_image_skipped_pages: None,
                 generation: 2,
                 occurrences: vec![Occurrence {
                     occurrence_id: "occurrence-a".into(),

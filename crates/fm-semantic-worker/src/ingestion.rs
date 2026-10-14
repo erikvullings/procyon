@@ -1208,6 +1208,10 @@ impl IngestionCoordinator {
             source_complete: !converted.is_partial()
                 && excluded_chunks == 0
                 && converted.visual_omissions().is_empty(),
+            pdf_image_skipped_pages: Some(
+                u32::try_from(image_pages_skipped.len())
+                    .map_err(|_| IngestionError::InvalidImageCoverage)?,
+            ),
             generation,
             occurrences: vec![occurrence],
             records: staged_records,
@@ -1340,6 +1344,7 @@ impl IngestionCoordinator {
             document_id: document.document_id.clone(),
             content_hash,
             source_complete: false,
+            pdf_image_skipped_pages: None,
             generation,
             occurrences: vec![occurrence],
             records: vec![StagedRecord {
@@ -1598,6 +1603,9 @@ pub enum IngestionError {
     /// Backend omitted an expected output.
     #[error("embedding backend omitted an output vector")]
     EmbeddingOutputMissing,
+    /// PDF image coverage exceeded its public count representation.
+    #[error("PDF image coverage count is invalid")]
+    InvalidImageCoverage,
 }
 
 struct TokenSignal(CancellationToken);
@@ -3088,6 +3096,31 @@ mod tests {
             job.detail
                 .as_deref()
                 .is_some_and(|detail| detail.contains("images on 2 page(s) after the first 4"))
+        );
+        let record_ids = fixture
+            .index
+            .records
+            .lock()
+            .expect("index")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        let evidence = fixture
+            .catalog
+            .begin_read()
+            .expect("reader")
+            .filter_visible_candidates(
+                &record_ids,
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .expect("visible PDF evidence");
+        assert!(
+            evidence
+                .iter()
+                .all(|item| item.pdf_image_skipped_pages == Some(2))
         );
     }
 

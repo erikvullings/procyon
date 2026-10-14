@@ -556,6 +556,7 @@ message KnowledgeEvidence {
   bool stale = 20;
   bool adjacent = 21;
   uint32 final_rank = 22;
+  optional uint32 pdf_image_skipped_pages = 23;
 }
 
 // One route/query rank that contributed to a fused candidate.

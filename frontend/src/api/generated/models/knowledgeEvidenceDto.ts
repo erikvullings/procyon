@@ -45,6 +45,12 @@ export interface KnowledgeEvidenceDto {
      * @nullable
      */
   modifiedAtMs?: number | null;
+  /**
+     * PDF pages omitted by the configured page-image budget.
+     * @minimum 0
+     * @nullable
+     */
+  pdfImageSkippedPages?: number | null;
   /** Serialized structural provenance. */
   provenance: string;
   /** Route/query ranks that produced this row. */

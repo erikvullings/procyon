@@ -1897,6 +1897,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       row.stale === true ? t('knowledgeSearch', 'staleEvidence') : undefined,
       row.stale == null ? t('knowledgeSearch', 'unknownFreshness') : undefined,
       row.unavailable ? t('knowledgeSearch', 'unavailableEvidence') : undefined,
+      (row.pdfImageSkippedPages ?? 0) > 0
+        ? t('semanticLibrary', 'pdfImagesSkippedPages', {
+            pages: row.pdfImageSkippedPages ?? 0,
+          })
+        : undefined,
       row.duplicateSourceIds.length === 0
         ? undefined
         : t('knowledgeSearch', 'duplicateSources', { count: row.duplicateSourceIds.length }),

@@ -114,10 +114,22 @@ optional Docling ML/PDFium pack is qualified on those targets.
   Existing policy schema v3 roots migrate with the new choice off, and the
   worker retains PDF text while recording pages skipped by the cap. Folder,
   file-result, and Knowledge UI explain the configured cap and unchanged text
-  coverage. Still outstanding: expose actual per-document skipped-page
-  coverage durably in the file/Knowledge UI, qualify CPU fallback behavior,
-  run current-source CI, then dispatch new exact-source candidate-bound
-  installed tests. Release remains no-go.
+  coverage. At that point the UI only showed the configured cap; the
+  follow-up below records the durable actual per-document coverage. Remaining
+  gates include CPU fallback qualification, current-source CI and new
+  exact-source candidate-bound installed tests. Release remains no-go.
+- 2026-10-14 Copilot: Actual budget-skipped page counts are now persisted on
+  the atomically published generation (catalog schema v8; legacy generations
+  retain unknown/null coverage rather than being misreported as zero) and
+  projected through semantic search evidence and Knowledge evidence, including
+  the worker IPC schema and generated HTTP DTOs. File and Knowledge results
+  show a localized notice only when that PDF generation actually skipped
+  pages; configured caps remain a separate notice. The page-budget ingestion
+  test verifies the retrieved evidence carries the count, migration and IPC
+  tests pass, and the two frontend suites pass (288 tests). Current-source CI
+  for `0cf04cba` is still in progress; CPU fallback qualification and a new
+  exact-source candidate/installed run remain outstanding. Release remains
+  no-go.
 - 2026-10-13 Copilot: Release blocker fixed. The desktop `semantic-gemma`
   feature enabled `fm-semantic-worker/gemma-native`, linking Zvec's dynamic
   C library, ONNX Runtime and native inference into the desktop. The bundled

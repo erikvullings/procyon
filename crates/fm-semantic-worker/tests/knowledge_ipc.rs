@@ -90,6 +90,7 @@ fn evidence() -> KnowledgeEvidence {
         indexed_content_hash: "sha256:rotor".to_owned(),
         generation: 2,
         source_position: 4,
+        pdf_image_skipped_pages: Some(2),
         generated: false,
         unavailable: false,
         stale: true,

@@ -19,6 +19,12 @@ export interface SemanticEvidenceDto {
      * @nullable
      */
   mediaType?: string | null;
+  /**
+     * PDF pages omitted by the configured page-image budget.
+     * @minimum 0
+     * @nullable
+     */
+  pdfImageSkippedPages?: number | null;
   /** Versioned JSON emitted by `fm-semantic-conversion`. */
   provenanceJson: string;
   recordId: string;

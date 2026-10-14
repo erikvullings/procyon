@@ -501,6 +501,15 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
               }),
         )
       : undefined,
+    (selected.bestEvidence.pdfImageSkippedPages ?? 0) > 0
+      ? m(
+          '.fm-semantic-pdf-image-evidence',
+          { role: 'status' },
+          t('semanticLibrary', 'pdfImagesSkippedPages', {
+            pages: selected.bestEvidence.pdfImageSkippedPages ?? 0,
+          }),
+        )
+      : undefined,
     m('details', [
       m(
         'summary',

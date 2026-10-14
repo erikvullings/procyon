@@ -275,6 +275,9 @@ pub struct SemanticEvidenceDto {
     pub stale: bool,
     pub generated: bool,
     pub source_position: u32,
+    /// PDF pages omitted by the configured page-image budget.
+    #[serde(default)]
+    pub pdf_image_skipped_pages: Option<u32>,
 }
 
 /// Evidence attached to one actionable file-primary search row.

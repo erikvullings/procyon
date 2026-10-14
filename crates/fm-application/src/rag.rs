@@ -161,6 +161,8 @@ struct IpcSemanticEvidence {
     provenance: serde_json::Value,
     indexed_content_hash: String,
     generation: u64,
+    #[serde(default)]
+    pdf_image_skipped_pages: Option<u32>,
     unavailable: bool,
     stale: bool,
     generated: bool,
@@ -349,6 +351,7 @@ fn knowledge_evidence_to_chunk(
             source_id: evidence.source_id,
             provenance: serde_json::to_string(&evidence.provenance)?,
             generation: evidence.generation,
+            pdf_image_skipped_pages: evidence.pdf_image_skipped_pages,
             record_kind: evidence.chunk_kind,
             excerpt: evidence.excerpt,
             content: evidence.content,
@@ -425,6 +428,7 @@ fn semantic_results_to_candidates(
                 source_id: item.source_id,
                 provenance: serde_json::to_string(&item.provenance)?,
                 generation: item.generation,
+                pdf_image_skipped_pages: item.pdf_image_skipped_pages,
                 record_kind: item.chunk_kind,
                 excerpt: item.excerpt.clone(),
                 content: item.excerpt,
@@ -484,6 +488,10 @@ fn fallback_evidence(result: &SemanticSearchResult) -> IpcSemanticEvidence {
             .get("semantic.generation")
             .and_then(|value| value.parse().ok())
             .unwrap_or_default(),
+        pdf_image_skipped_pages: result
+            .metadata
+            .get("semantic.pdfImageSkippedPages")
+            .and_then(|value| value.parse().ok()),
         unavailable: false,
         stale: false,
         generated: false,
@@ -1457,6 +1465,7 @@ mod tests {
                 source_id: "source-a".into(),
                 provenance: r#"{"kind":"textLines","start_line":3,"end_line":5}"#.into(),
                 generation: 2,
+                pdf_image_skipped_pages: None,
                 record_kind: if generated { "summary" } else { "chunk" }.into(),
                 excerpt: content.into(),
                 content: content.into(),

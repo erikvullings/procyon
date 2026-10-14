@@ -1650,6 +1650,8 @@ export const nl = {
     pdfImagesAllPages: 'PDF-pagina-afbeeldingen zijn voor alle pagina’s in deze map ingeschakeld.',
     pdfImagesPageBudget:
       'Op dit CPU-apparaat worden per pdf alleen de eerste {pages} pagina-afbeeldingen geïndexeerd; pdf-tekst blijft behouden.',
+    pdfImagesSkippedPages:
+      '{pages} PDF-pagina-afbeelding(en) zijn overgeslagen vanwege het maximum per bestand; PDF-tekst blijft behouden.',
     lastWorkerDevice: 'Laatste workerstart: {device}',
     metal: 'Metal',
     cpu: 'CPU',

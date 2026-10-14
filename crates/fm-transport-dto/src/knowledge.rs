@@ -631,6 +631,9 @@ pub struct KnowledgeEvidenceDto {
     pub modified_at_ms: Option<i64>,
     /// Document order.
     pub source_position: u32,
+    /// PDF pages omitted by the configured page-image budget.
+    #[serde(default)]
+    pub pdf_image_skipped_pages: Option<u32>,
     /// Generated rather than extracted evidence.
     pub generated: bool,
     /// Source is currently unavailable, as of a fresh host snapshot.

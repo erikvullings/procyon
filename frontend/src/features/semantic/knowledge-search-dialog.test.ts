@@ -753,6 +753,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
             provenance:
               '{"kind":"exact","value":{"kind":"pdfBlock","page_number":167,"block_index":3}}',
             unavailable: false,
+            pdfImageSkippedPages: 2,
           },
           {
             ...first,
@@ -785,6 +786,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.querySelector('.fm-knowledge-section-title')?.textContent).toBe(
       'Standards / Su-Field synthesis',
     );
+    expect(root.textContent).toContain('2 PDF page image(s) were skipped');
     const pages = root.querySelectorAll<HTMLButtonElement>('.fm-knowledge-page-link');
     expect(pages[0]?.textContent).toBe('Page 167');
     expect(pages[1]?.textContent).toBe('Page 168');

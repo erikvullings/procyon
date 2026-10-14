@@ -11742,6 +11742,15 @@
             "format": "int64",
             "description": "Indexed source modification time."
           },
+          "pdfImageSkippedPages": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "PDF pages omitted by the configured page-image budget.",
+            "minimum": 0
+          },
           "provenance": {
             "type": "string",
             "description": "Serialized structural provenance."
@@ -18206,6 +18215,15 @@
               "null"
             ],
             "description": "Indexed IANA media type."
+          },
+          "pdfImageSkippedPages": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "PDF pages omitted by the configured page-image budget.",
+            "minimum": 0
           },
           "provenanceJson": {
             "type": "string",
