@@ -113,6 +113,12 @@ optional Docling ML/PDFium pack is qualified on those targets.
   that fourth worker target has worker/host evidence but no desktop
   installer. Candidate run 38466934221 is pinned at `6e4164b9` on branch
   `gemma-candidate-6e4164b9` for exact-source installed qualification.
+  Installed vision run 38474993570: macOS arm64 passed (354/354 images,
+  FP32 Metal, 5,630 s, worker peak 2.19 GB). Linux x64, Linux arm64 and
+  Windows x64 (CPU) hit the test's own 4 h limit with no failed or crashed
+  job, so the 354-page CPU image qualification is not done.
+  The test now logs progress every 25 units and reports units completed at
+  timeout, so a rerun measures CPU throughput.
 - 2026-10-13 Copilot: The signed candidate's Mac converter children held the
   verified source plus a full `lopdf` copy of every raster body (~380-407 MB
   RSS locally), close to the unchanged 512 MiB watchdog. PDF structure loads

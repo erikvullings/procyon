@@ -260,6 +260,13 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
         assert_ne!(job.state, IngestionState::Failed, "{:?}", job.detail);
         assert_ne!(job.state, IngestionState::Cancelled);
         assert!(job.completed_units >= last_progress || job.state == IngestionState::Completed);
+        if job.completed_units / 25 > last_progress / 25 {
+            eprintln!(
+                "synthetic installed scan progress: {}/354 units after {:.0}s",
+                job.completed_units,
+                started.elapsed().as_secs_f64()
+            );
+        }
         last_progress = job.completed_units;
         if report_path.is_some() {
             worker_data_disk_peak_bytes =
@@ -271,7 +278,7 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
         }
         assert!(
             started.elapsed() < Duration::from_secs(4 * 60 * 60),
-            "synthetic installed qualification exceeded the test-runner limit"
+            "synthetic installed qualification exceeded the test-runner limit after {last_progress}/354 units"
         );
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
