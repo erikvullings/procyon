@@ -119,6 +119,10 @@ optional Docling ML/PDFium pack is qualified on those targets.
   job, so the 354-page CPU image qualification is not done.
   The test now logs progress every 25 units and reports units completed at
   timeout, so a rerun measures CPU throughput.
+  Host-full run 38475007559: macOS arm64 passed (354/354, isolation and
+  deletion verified). The three CPU jobs were cancelled at the 360 min job
+  timeout inside `enrolled_large_synthetic_scan_publishes_all_page_citations`.
+  Parent asked to choose: CPU infeasible, bounded CPU sample, or longer limit.
 - 2026-10-13 Copilot: The signed candidate's Mac converter children held the
   verified source plus a full `lopdf` copy of every raster body (~380-407 MB
   RSS locally), close to the unchanged 512 MiB watchdog. PDF structure loads
