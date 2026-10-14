@@ -748,6 +748,11 @@ test('Gemma desktop packaging requires a separately approved signed four-target 
   }
 });
 
+test('Gemma desktop package smoke covers the Linux ARM worker target', () => {
+  const ci = workflow('ci.yml');
+  assert.ok(ci.jobs['gemma-desktop'].strategy.matrix.os.includes('ubuntu-24.04-arm'));
+});
+
 test('knowledge qualification exporter compiles the flag only for an exact visibility decision', () => {
   const outputRoot = scratchDirectory('knowledge-qualification-');
 
