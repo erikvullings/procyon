@@ -1646,7 +1646,7 @@ export const nl = {
     },
     indexPdfPageImages: 'PDF-pagina-afbeeldingen indexeren',
     cpuPdfImageBudgetWarning:
-      'Traag op CPU: dit kan ongeveer {minutes} minuten per pdf duren. Alleen de eerste {pages} pagina-afbeeldingen worden geïndexeerd; pdf-tekst blijft behouden.',
+      'Traag op CPU: het indexeren van de eerste {pages} pagina-afbeeldingen duurde in tests tot ongeveer {minutes} minuten voor een scan van 8 pagina’s; grotere pdf’s kunnen langer duren. Pdf-tekst blijft behouden.',
     pdfImagesAllPages: 'PDF-pagina-afbeeldingen zijn voor alle pagina’s in deze map ingeschakeld.',
     pdfImagesPageBudget:
       'Op dit CPU-apparaat worden per pdf alleen de eerste {pages} pagina-afbeeldingen geïndexeerd; pdf-tekst blijft behouden.',

@@ -140,10 +140,21 @@ optional Docling ML/PDFium pack is qualified on those targets.
   normal CI limits. It must report measured seconds/page and host/worker
   resource peaks while exercising atomic publication, citations, replacement
   and deletion. Earlier macOS 354/354 scans remain supplementary evidence; they
-  do not replace the new exact-source four-target sample. The observed CPU rate
-  is approximately 28 seconds per image page (about 2 h 45 min for 354 pages
-  before overhead), a documented performance limitation rather than a release
-  gate. The new four-target sample and current-source CI are not yet complete.
+  do not replace the new exact-source four-target sample. An earlier CPU-only
+  encoder microbenchmark measured approximately 28 seconds per image page, but
+  installed worker-only samples on candidate source `190f3ac3` took 40.3-51.3
+  seconds per source page (80.6-102.6 seconds per indexed image page, four
+  indexed and four budget-skipped), with 2.17-2.23 GB worker RSS and about
+  5.59 MB sampled worker-data disk. Metal indexed all eight pages in 24.5
+  seconds per page with 2.40 GB sampled worker RSS. The CPU report binder
+  rejected those reports because their `pageCount` field was mislabeled; the
+  corrected report shape still needs a new exact-source run. Linear extrapolation
+  of this small CPU sample is roughly 7.9-10.1 hours for 354 image pages, not a
+  full-scan measurement; treat it as a performance limitation, not a release
+  gate. The folder-dialog disclosure now conservatively reports up to about
+  seven minutes even for the eight-page CPU sample and warns that larger PDFs
+  may take longer. The new exact-source four-target sample and current-source CI
+  are not yet complete.
 - 2026-10-14 Copilot: Added opt-in per-root Gemma PDF-page-image consent. CPU
   targets default off; opting in caps image embeddings at the first four pages
   per PDF and warns about roughly two minutes per PDF at the observed CPU rate.

@@ -1637,7 +1637,7 @@ export const en = {
     },
     indexPdfPageImages: 'Index PDF page images',
     cpuPdfImageBudgetWarning:
-      'Slow on CPU: this can take about {minutes} minutes per PDF. Only the first {pages} page images are indexed; PDF text is unaffected.',
+      'Slow on CPU: indexing the first {pages} page images took up to about {minutes} minutes for an 8-page scan in testing; larger PDFs may take longer. PDF text is unaffected.',
     pdfImagesAllPages: 'PDF page images are enabled for all pages in this folder.',
     pdfImagesPageBudget:
       'PDF page images are limited to the first {pages} pages per PDF on this CPU device; PDF text remains indexed.',

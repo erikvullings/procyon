@@ -59,6 +59,8 @@ const SAFE_OVERRIDE_REASONS = [
   'gitIgnored',
 ] as const satisfies readonly SemanticEligibilityReason[];
 
+const CPU_PDF_IMAGE_SECONDS_PER_PAGE = 103;
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (
@@ -263,7 +265,7 @@ function estimateView(
             { role: 'status' },
             t('semanticLibrary', 'cpuPdfImageBudgetWarning', {
               pages: pdfImageOption.pageBudget,
-              minutes: Math.ceil((pdfImageOption.pageBudget * 28) / 60),
+              minutes: Math.ceil((pdfImageOption.pageBudget * CPU_PDF_IMAGE_SECONDS_PER_PAGE) / 60),
             }),
           )
         : undefined,

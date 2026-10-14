@@ -247,6 +247,7 @@ describe('SemanticLibraryManagement', () => {
       }),
     );
     await vi.waitFor(() => expect(root.textContent).toContain('first 4 page images'));
+    expect(root.textContent).toContain('about 7 minutes for an 8-page scan');
     expect(root.textContent).toContain('PDF text is unaffected');
     button('Include and index folder').click();
     await vi.waitFor(() => expect(root.textContent).toContain('first 4 pages per PDF'));
