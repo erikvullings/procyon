@@ -98,6 +98,16 @@ test('installed evidence cannot be bound to a different source, target or incomp
   assert.throws(
     () =>
       recordPdfVisionQualification(
+        { ...measured, pageCount: 4 },
+        lifecycle,
+        candidate,
+        identity,
+      ),
+    /exact signed installed candidate/u,
+  );
+  assert.throws(
+    () =>
+      recordPdfVisionQualification(
         { ...measured, workerPeakRssBytes: 0 },
         lifecycle,
         candidate,

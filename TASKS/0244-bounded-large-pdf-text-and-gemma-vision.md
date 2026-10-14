@@ -107,9 +107,14 @@ optional Docling ML/PDFium pack is qualified on those targets.
   evidence because candidate visibility joined occurrences by occurrence ID and
   generation without requiring the record's document ID to match. The visibility join
   now checks document identity, and the host qualification coverage query counts only
-  records still linked to the current occurrence. The regression and storage test suite
-  pass locally; this fix still needs latest-head CI and a new exact-source candidate
-  plus installed reruns. Release remains no-go.
+  records still linked to the current occurrence. The worker-only run 38559891753 also
+  exercised all four targets; the Metal worker passed, while CPU reports were rejected
+  by the binder because `pageCount` incorrectly recorded the four embedded images
+  instead of the eight source pages. The measured CPU reports did contain four images
+  and four skipped pages. The report now records the source-page count, with a binder
+  regression for the rejected shape. The regression and worker storage suite pass
+  locally; these fixes still need latest-head CI and a new exact-source candidate plus
+  installed reruns. Release remains no-go.
 - 2026-10-14 Copilot: Latest-head CI run 38545281651 exposed two blockers:
   host-wide occurrence lookup authorized a cross-workspace PDF result but then
   tried to resolve its root from the unrelated active workspace, and the new

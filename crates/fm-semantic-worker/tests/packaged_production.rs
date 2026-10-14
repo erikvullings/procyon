@@ -397,7 +397,7 @@ async fn packaged_gemma_indexes_sampled_synthetic_scan_pages_offline() {
             serde_json::to_vec_pretty(&json!({
                 "sourceBytes": bytes,
                 "sourceSha256": digest_hex,
-                "pageCount": pages.len(),
+                "pageCount": PDF_VISION_SAMPLE_PAGES,
                 "imageEvidenceCount": pages.len(),
                 "pdfImageSkippedPages": skipped_pages,
                 "completeGenerationVerified": true,
