@@ -1997,6 +1997,7 @@ impl CatalogReader {
              JOIN occurrences o
                ON o.occurrence_id = r.occurrence_id
               AND o.generation = r.generation
+              AND o.document_id = r.document_id
              JOIN documents d ON d.document_id = r.document_id
              WHERE r.record_id = ?1
                AND r.tenant_id = ?2
@@ -3047,6 +3048,60 @@ mod tests {
             catalog.derived_index_record_batch(None, 0),
             Err(StorageError::InvalidLimit)
         ));
+    }
+
+    #[test]
+    fn changed_content_does_not_return_records_from_the_previous_document() {
+        let (_directory, catalog) = catalog();
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .expect("register");
+        let previous = generation(
+            "tenant-a",
+            "library-a",
+            "document-old",
+            1,
+            vec![occurrence("occurrence-a", "root-a")],
+            "previous content",
+        );
+        catalog.stage_generation(&previous).expect("stage previous");
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-old", 1)
+            .expect("publish previous");
+
+        let current = generation(
+            "tenant-a",
+            "library-a",
+            "document-current",
+            1,
+            vec![occurrence("occurrence-a", "root-a")],
+            "current content",
+        );
+        catalog.stage_generation(&current).expect("stage current");
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-current", 1)
+            .expect("publish current");
+
+        let candidates = previous
+            .records
+            .iter()
+            .chain(&current.records)
+            .map(|record| record.record_id.clone())
+            .collect::<Vec<_>>();
+        let reader = catalog.begin_read().expect("reader");
+        let visible = reader
+            .filter_visible_candidates(
+                &candidates,
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .expect("filter current source evidence");
+
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].document_id, "document-current");
+        assert_eq!(visible[0].content, "current content");
     }
 
     #[test]

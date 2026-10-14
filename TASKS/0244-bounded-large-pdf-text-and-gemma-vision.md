@@ -98,6 +98,18 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-14 Copilot: The exact-source four-target candidate run 38552685958
+  completed successfully at `190f3ac3fbaecdd9f367bd3fe6fe994ce44f39db`; signing and
+  asset collection passed, while publish remained skipped. The separately dispatched
+  enrolled-host sample run 38559891804 failed on all four targets after replacement:
+  its coverage assertion counted the old content-addressed document's complete records
+  alongside the replacement. A deterministic storage regression reproduced stale
+  evidence because candidate visibility joined occurrences by occurrence ID and
+  generation without requiring the record's document ID to match. The visibility join
+  now checks document identity, and the host qualification coverage query counts only
+  records still linked to the current occurrence. The regression and storage test suite
+  pass locally; this fix still needs latest-head CI and a new exact-source candidate
+  plus installed reruns. Release remains no-go.
 - 2026-10-14 Copilot: Latest-head CI run 38545281651 exposed two blockers:
   host-wide occurrence lookup authorized a cross-workspace PDF result but then
   tried to resolve its root from the unrelated active workspace, and the new

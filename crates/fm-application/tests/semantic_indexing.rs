@@ -1408,6 +1408,10 @@ fn assert_page_image_coverage(state: &TempDir, expected_images: u32, expected_sk
              JOIN generations g ON g.tenant_id = r.tenant_id
                AND g.library_id = r.library_id AND g.document_id = r.document_id
                AND g.generation = r.generation
+             JOIN occurrences o ON o.tenant_id = r.tenant_id
+               AND o.library_id = r.library_id AND o.document_id = r.document_id
+               AND o.occurrence_id = r.occurrence_id
+               AND o.generation = r.generation
              WHERE r.record_kind = 'pdf_image' AND g.state = 'complete'",
         )
         .unwrap();
