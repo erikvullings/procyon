@@ -771,11 +771,46 @@ impl SemanticCatalog {
             ],
         )?;
 
+        let generation = i64_generation(staged.generation)?;
+        let mut previous_documents = Vec::new();
         for occurrence in &staged.occurrences {
+            if let Some(previous) = transaction
+                .query_row(
+                    "SELECT tenant_id, library_id, document_id, generation
+                     FROM occurrences
+                     WHERE occurrence_id = ?1 AND generation = ?2",
+                    params![occurrence.occurrence_id, generation],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, i64>(3)?,
+                        ))
+                    },
+                )
+                .optional()?
+                && !previous_documents.contains(&previous)
+            {
+                previous_documents.push(previous);
+            }
             insert_occurrence(&transaction, staged, occurrence)?;
         }
         for record in &staged.records {
             insert_record(&transaction, staged, record)?;
+        }
+        for (tenant_id, library_id, document_id, generation) in previous_documents {
+            transaction.execute(
+                "UPDATE generations SET state = 'superseded'
+                 WHERE tenant_id = ?1 AND library_id = ?2 AND document_id = ?3
+                   AND generation = ?4 AND state = 'complete'
+                   AND NOT EXISTS (
+                     SELECT 1 FROM occurrences o
+                     WHERE o.tenant_id = ?1 AND o.library_id = ?2
+                       AND o.document_id = ?3 AND o.generation = ?4
+                   )",
+                params![tenant_id, library_id, document_id, generation],
+            )?;
         }
         transaction.commit()?;
         Ok(())
@@ -3102,6 +3137,84 @@ mod tests {
         assert_eq!(visible.len(), 1);
         assert_eq!(visible[0].document_id, "document-current");
         assert_eq!(visible[0].content, "current content");
+        drop(reader);
+        assert_eq!(
+            catalog
+                .reclaim_superseded()
+                .expect("reclaim replaced content"),
+            ReclaimStats {
+                records: 1,
+                vectors: 1,
+                record_ids: vec![previous.records[0].record_id.clone()],
+            }
+        );
+    }
+
+    #[test]
+    fn replacing_one_shared_content_occurrence_keeps_the_other_occurrence() {
+        let (_directory, catalog) = catalog();
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .expect("register");
+        let shared = generation(
+            "tenant-a",
+            "library-a",
+            "document-shared",
+            1,
+            vec![
+                occurrence("occurrence-a", "root-a"),
+                occurrence("occurrence-b", "root-b"),
+            ],
+            "shared content",
+        );
+        catalog.stage_generation(&shared).expect("stage shared");
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-shared", 1)
+            .expect("publish shared");
+
+        let replacement = generation(
+            "tenant-a",
+            "library-a",
+            "document-replacement",
+            1,
+            vec![occurrence("occurrence-a", "root-a")],
+            "replacement content",
+        );
+        catalog
+            .stage_generation(&replacement)
+            .expect("stage replacement");
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-replacement", 1)
+            .expect("publish replacement");
+
+        let reader = catalog.begin_read().expect("reader");
+        let evidence = reader
+            .filter_visible_candidates(
+                &shared
+                    .records
+                    .iter()
+                    .chain(&replacement.records)
+                    .map(|record| record.record_id.clone())
+                    .collect::<Vec<_>>(),
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .expect("filter shared and replacement evidence");
+        assert_eq!(evidence.len(), 2);
+        assert!(evidence.iter().any(|item| {
+            item.occurrence_id == "occurrence-b" && item.document_id == "document-shared"
+        }));
+        drop(reader);
+        assert_eq!(
+            catalog.reclaim_superseded().expect("keep shared content"),
+            ReclaimStats {
+                records: 0,
+                vectors: 0,
+                record_ids: vec![],
+            }
+        );
     }
 
     #[test]

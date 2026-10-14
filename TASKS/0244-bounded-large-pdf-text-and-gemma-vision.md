@@ -112,9 +112,14 @@ optional Docling ML/PDFium pack is qualified on those targets.
   by the binder because `pageCount` incorrectly recorded the four embedded images
   instead of the eight source pages. The measured CPU reports did contain four images
   and four skipped pages. The report now records the source-page count, with a binder
-  regression for the rejected shape. The regression and worker storage suite pass
-  locally; these fixes still need latest-head CI and a new exact-source candidate plus
-  installed reruns. Release remains no-go.
+  regression for the rejected shape. Further inspection showed that moving an
+  occurrence to a different content-addressed document left the prior document
+  generation complete, retaining its records and vectors. Staging now marks that
+  generation superseded only when no other occurrence still references it; reclamation
+  then removes its derived records while preserving shared content. Regressions cover
+  both cases. The worker library suite (131 tests), binder tests, and packaged-test
+  compilation pass locally; these fixes still need latest-head CI and a new exact-source
+  candidate plus installed reruns. Release remains no-go.
 - 2026-10-14 Copilot: Latest-head CI run 38545281651 exposed two blockers:
   host-wide occurrence lookup authorized a cross-workspace PDF result but then
   tried to resolve its root from the unrelated active workspace, and the new
