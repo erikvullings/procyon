@@ -98,6 +98,13 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-14 Copilot: Added `ubuntu-24.04-arm` to the Gemma desktop CI
+  package/install/launch smoke matrix so the Linux arm64 worker target gets
+  app-level launch coverage. This is CI-only and unsigned; the desktop release
+  workflow still does not publish a Linux arm64 installer. The desktop
+  packaging suite passes locally, while CI for the updated matrix is pending.
+  This closes a coverage gap only if the new Linux ARM job passes; release
+  remains no-go.
 - 2026-10-14 Copilot: User-directed installed vision qualification now uses an
   eight-page deterministic sample on all four worker targets so CPU jobs fit
   normal CI limits. It must report measured seconds/page and host/worker
