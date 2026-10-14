@@ -139,6 +139,18 @@ optional Docling ML/PDFium pack is qualified on those targets.
   exercises CPU fallback with consent enabled and no host page budget, while
   confirming text indexing and the durable skipped count. Cross-target runtime
   fallback qualification is still required; release remains no-go.
+- 2026-10-14 Copilot: The exact-source eight-page installed sample now honors
+  that same runtime policy: CPU runs must publish page-image evidence for only
+  the first four pages and persist four skipped pages; Metal runs must publish
+  all eight. The enrolled-host sample explicitly opts the synthetic root into
+  PDF images, verifies the selected worker backend and durable skipped-page
+  count, and checks replacement/deletion without counting unindexed pages as
+  image evidence. Candidate-bound reports record source-page and image-page
+  throughput separately, and the experimental release checker rejects CPU
+  evidence that bypasses the four-page cap. Worker and host qualification test
+  binaries compile; their unignored suites and the exact release/report tests
+  pass. No exact-source installed candidate has been dispatched for this
+  change; release remains no-go.
 - 2026-10-13 Copilot: Release blocker fixed. The desktop `semantic-gemma`
   feature enabled `fm-semantic-worker/gemma-native`, linking Zvec's dynamic
   C library, ONNX Runtime and native inference into the desktop. The bundled

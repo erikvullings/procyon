@@ -139,6 +139,11 @@ function fixture(context, { pdfRenderer = true, pdfEvidence = true } = {}) {
     for (const target of targets) {
       const directory = join(evidenceRoot, `installed-gemma-${target}`);
       mkdirSync(directory);
+      const backend =
+        target === 'macos-aarch64'
+          ? 'google/embeddinggemma-2 (FP32 Metal)'
+          : 'google/embeddinggemma-2 (native CPU FP32)';
+      const imageEvidenceCount = backend.includes('CPU') ? 4 : 8;
       const evidence = {
         schemaVersion: 1,
         decision: 'noGo',
@@ -152,7 +157,9 @@ function fixture(context, { pdfRenderer = true, pdfEvidence = true } = {}) {
         sourceBytes: 3_967_050,
         sourceSha256: '6fd090eee5fcdd7e547c8787f8ada4465e896fcff190b84e2b2f49e9c5b3d690',
         pageCount: 8,
-        imageEvidenceCount: 8,
+        imageEvidenceCount,
+        pdfImageSkippedPages: 8 - imageEvidenceCount,
+        backend,
         completeGenerationVerified: true,
         hostVfsVerified: true,
         replacementVerified: true,
@@ -164,6 +171,8 @@ function fixture(context, { pdfRenderer = true, pdfEvidence = true } = {}) {
         elapsedSeconds: 10_000,
         secondsPerPage: 1_250,
         pagesPerSecond: 8 / 10_000,
+        secondsPerImagePage: 10_000 / imageEvidenceCount,
+        imagePagesPerSecond: imageEvidenceCount / 10_000,
         releaseCeilingSeconds: 12_000,
         hostPeakRssBytes: 200_000_000,
         workerPeakRssBytes: 800_000_000,
@@ -274,6 +283,33 @@ test('signed PDFium alone cannot authorize a Gemma release without installed sam
   assert.throws(
     () => checkExperimentalGemmaRelease(assets, candidateRoot, approval),
     /PDF vision qualification/u,
+  );
+});
+
+test('CPU release evidence must honor the four-page cap and report skipped pages', (context) => {
+  const { assets, candidateRoot, evidenceRoot, approval } = fixture(context);
+  const file = join(evidenceRoot, 'installed-gemma-linux-aarch64', 'gemma-pdf-bound-report.json');
+  const report = JSON.parse(readFileSync(file));
+  report.imageEvidenceCount = 8;
+  report.pdfImageSkippedPages = 0;
+  const bytes = `${JSON.stringify(report)}\n`;
+  writeFileSync(file, bytes);
+  const changedApproval = {
+    ...approval,
+    experimentalGemma: {
+      ...approval.experimentalGemma,
+      pdfVisionQualification: {
+        ...approval.experimentalGemma.pdfVisionQualification,
+        targets: {
+          ...approval.experimentalGemma.pdfVisionQualification.targets,
+          'linux-aarch64': sha(bytes),
+        },
+      },
+    },
+  };
+  assert.throws(
+    () => checkExperimentalGemmaRelease(assets, candidateRoot, changedApproval, evidenceRoot),
+    /PDF vision qualification is incomplete/u,
   );
 });
 

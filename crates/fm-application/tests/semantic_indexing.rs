@@ -1134,7 +1134,7 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
         )
         .unwrap(),
     );
-    let root_id = enrol(
+    let root_id = enrol_with_pdf_image_policy(
         &library,
         workspace_id,
         Location::from_native_path(root.path()).unwrap(),
@@ -1179,6 +1179,16 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
     assert_eq!(indexed.ingested_occurrences, 1, "{indexed:?}");
     assert_eq!(indexed.failed_occurrences, 0, "{indexed:?}");
     let elapsed_seconds = started.elapsed().as_secs_f64();
+    let backend = std::fs::read_to_string(runtime.path().join("gemma-backend"))
+        .expect("installed worker reports selected compute backend");
+    let expected_image_pages = if backend.contains("CPU") {
+        pages.min(fm_semantic_library::CPU_PDF_IMAGE_PAGE_BUDGET)
+    } else if backend.contains("Metal") {
+        pages
+    } else {
+        panic!("installed worker reported an unknown compute backend: {backend}");
+    };
+    let expected_skipped_pages = pages - expected_image_pages;
     let results = service
         .semantic_query(SemanticQuery {
             scope: SemanticScope::new(
@@ -1206,7 +1216,7 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
     assert_eq!(provenance["value"]["kind"], "pdfPageRender");
     let hit_page = provenance["value"]["page_number"].as_u64().unwrap();
     assert!(hit_page >= 1 && hit_page <= u64::from(pages));
-    assert_complete_page_images(&state, pages);
+    assert_page_image_coverage(&state, expected_image_pages, expected_skipped_pages);
     let mut source_id = image.metadata.get("semantic.sourceId").unwrap().clone();
     let outside = service
         .semantic_query(SemanticQuery {
@@ -1259,7 +1269,7 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
             .expect("reindex edited synthetic scan");
         assert_eq!(updated.ingested_occurrences, 1, "{updated:?}");
         assert_eq!(updated.failed_occurrences, 0, "{updated:?}");
-        assert_complete_page_images(&state, 2);
+        assert_page_image_coverage(&state, 2, 0);
         let results = service
             .semantic_query(SemanticQuery {
                 scope: SemanticScope::new(
@@ -1352,13 +1362,17 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
                     "installed-host-vfs-one-page-synthetic-pdf-smoke"
                 },
                 "pageCount": pages,
-                "imageEvidenceCount": pages,
+                "imageEvidenceCount": expected_image_pages,
+                "pdfImageSkippedPages": expected_skipped_pages,
+                "backend": backend.trim(),
                 "completeGenerationVerified": true,
                 "sourceBytes": source_bytes,
                 "sourceSha256": source_sha256,
                 "elapsedSeconds": elapsed_seconds,
                 "secondsPerPage": elapsed_seconds / f64::from(pages),
                 "pagesPerSecond": f64::from(pages) / elapsed_seconds,
+                "secondsPerImagePage": elapsed_seconds / f64::from(expected_image_pages),
+                "imagePagesPerSecond": f64::from(expected_image_pages) / elapsed_seconds,
                 "hostPeakRssBytes": host_peak_rss_bytes,
                 "workerPeakRssBytes": worker_peak_rss_bytes,
                 "peakRssMethod": "200ms sysinfo host and worker RSS samples; transient peaks may be missed",
@@ -1368,7 +1382,7 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
                 "deletionVerified": true,
                 "currentContentAndDeletionVerified": replacement_verified,
                 "limitations": if pages == 8 {
-                    "Eight-page Tauri sample verifies replacement, page citations and deletion; full 354-page CPU throughput is not release-gating. No measured anonymous temporary disk, browser-server navigation, rollback, or CPU fallback qualification."
+                    "Eight-page Tauri sample verifies replacement, page citations and deletion. CPU fallback indexes only the first four page images and discloses skipped pages; PDF text remains indexed. Full 354-page CPU throughput is a known limitation, not release-gating. No measured anonymous temporary disk, browser-server navigation, rollback, or query-quality approval."
                 } else {
                     "One-page Tauri smoke checks deletion; no measured anonymous temporary disk, browser-server navigation, rollback, or CPU fallback qualification."
                 }
@@ -1380,7 +1394,7 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
 }
 
 #[cfg(feature = "gemma-native")]
-fn assert_complete_page_images(state: &TempDir, pages: u32) {
+fn assert_page_image_coverage(state: &TempDir, expected_images: u32, expected_skipped: u32) {
     let indexes = std::fs::read_dir(state.path().join("worker-data/indexes"))
         .unwrap()
         .map(|entry| entry.unwrap().path().join("catalog.sqlite"))
@@ -1406,14 +1420,56 @@ fn assert_complete_page_images(state: &TempDir, pages: u32) {
             provenance["value"]["page_number"].as_u64().unwrap()
         })
         .collect::<Vec<_>>();
-    assert_eq!(page_numbers.len(), pages as usize);
+    assert_eq!(page_numbers.len(), expected_images as usize);
     assert_eq!(
         page_numbers
             .into_iter()
             .collect::<std::collections::BTreeSet<_>>(),
-        (1..=u64::from(pages)).collect(),
-        "all published scan pages have unique citations"
+        (1..=u64::from(expected_images)).collect(),
+        "published scan pages follow the active CPU/Metal image budget"
     );
+    let skipped_pages: Option<i64> = catalog
+        .query_row(
+            "SELECT pdf_image_skipped_pages FROM generations WHERE state = 'complete'
+             ORDER BY generation DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(skipped_pages, Some(i64::from(expected_skipped)));
+}
+
+#[cfg(feature = "gemma-native")]
+fn enrol_with_pdf_image_policy(
+    library: &SemanticLibraryService,
+    workspace_id: WorkspaceId,
+    root: Location,
+) -> RootId {
+    let context = SemanticFolderContext::new(workspace_id, root.clone());
+    let budget = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        None
+    } else {
+        Some(fm_semantic_library::CPU_PDF_IMAGE_PAGE_BUDGET)
+    };
+    let preview = library
+        .preview_enrolment_with_pdf_image_policy(&HOST, context.clone(), true, true, budget)
+        .unwrap();
+    let status = library
+        .confirm_enrolment(
+            &HOST,
+            &preview.confirmation_id,
+            preview.policy_revision,
+            &context,
+        )
+        .unwrap();
+    status
+        .roots
+        .iter()
+        .find(|candidate| candidate.location == root)
+        .expect("newly enrolled root")
+        .id
+        .parse()
+        .unwrap()
 }
 
 fn enrol(library: &SemanticLibraryService, workspace_id: WorkspaceId, root: Location) -> RootId {

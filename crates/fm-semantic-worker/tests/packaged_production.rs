@@ -239,6 +239,15 @@ async fn packaged_gemma_indexes_sampled_synthetic_scan_pages_offline() {
         .connect()
         .await
         .expect("start signed installed Gemma worker");
+    let backend = std::fs::read_to_string(runtime.path().join("gemma-backend"))
+        .expect("installed worker reports selected compute backend");
+    let expected_image_pages = if backend.contains("CPU") {
+        4
+    } else if backend.contains("Metal") {
+        PDF_VISION_SAMPLE_PAGES
+    } else {
+        panic!("installed worker reported an unknown compute backend: {backend}");
+    };
     let started = Instant::now();
     let job_id = client
         .ingest_pdf_reader(
@@ -259,7 +268,7 @@ async fn packaged_gemma_indexes_sampled_synthetic_scan_pages_offline() {
         .expect("authenticated PDF stream");
     let mut last_progress = 0;
     let mut worker_data_disk_peak_bytes = 0;
-    loop {
+    let completed_units = loop {
         let job = client
             .ingestion_job("qualification-tenant", "qualification-library", &job_id)
             .await
@@ -281,15 +290,19 @@ async fn packaged_gemma_indexes_sampled_synthetic_scan_pages_offline() {
                 worker_data_disk_peak_bytes.max(owned_disk_bytes(data.path()));
         }
         if job.state == IngestionState::Completed {
-            assert_eq!(job.completed_units, u64::from(PDF_VISION_SAMPLE_PAGES));
-            break;
+            break job.completed_units;
         }
         assert!(
             started.elapsed() < Duration::from_secs(15 * 60),
             "synthetic installed qualification exceeded the 15-minute sample limit after {last_progress}/{PDF_VISION_SAMPLE_PAGES} units"
         );
         tokio::time::sleep(Duration::from_secs(1)).await;
-    }
+    };
+    assert_eq!(
+        completed_units,
+        u64::from(expected_image_pages),
+        "worker completed the backend-appropriate image budget"
+    );
     let index_root = data.path().join("indexes");
     let catalogs = std::fs::read_dir(index_root)
         .unwrap()
@@ -320,16 +333,35 @@ async fn packaged_gemma_indexes_sampled_synthetic_scan_pages_offline() {
         .collect::<Vec<_>>();
     assert_eq!(
         records.len(),
-        PDF_VISION_SAMPLE_PAGES as usize,
-        "one image record per sampled synthetic page"
+        expected_image_pages as usize,
+        "image record count follows the active Gemma backend policy"
     );
     let pages = records
         .into_iter()
         .collect::<std::collections::BTreeSet<_>>();
-    assert_eq!(pages, (1..=u64::from(PDF_VISION_SAMPLE_PAGES)).collect());
+    assert_eq!(
+        pages,
+        (1..=u64::from(expected_image_pages)).collect(),
+        "CPU fallback indexes only the first four pages"
+    );
+    let skipped_pages: i64 = catalog
+        .query_row(
+            "SELECT pdf_image_skipped_pages FROM generations
+             WHERE document_id = 'synthetic-8-page-scan' AND state = 'complete'
+             ORDER BY generation DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        skipped_pages,
+        i64::from(PDF_VISION_SAMPLE_PAGES - expected_image_pages),
+        "published coverage records pages omitted by the CPU cap"
+    );
     if let Some(report) = report_path {
         let elapsed_seconds = started.elapsed().as_secs_f64();
         let seconds_per_page = elapsed_seconds / f64::from(PDF_VISION_SAMPLE_PAGES);
+        let seconds_per_image_page = elapsed_seconds / f64::from(expected_image_pages);
         #[cfg(target_os = "macos")]
         let (worker_peak_rss_bytes, worker_peak_method) = {
             let (stop, task) = sampler.expect("macOS RSS sampler");
@@ -360,7 +392,6 @@ async fn packaged_gemma_indexes_sampled_synthetic_scan_pages_offline() {
             worker_data_disk_peak_bytes > 0,
             "worker data disk use was not observed"
         );
-        let backend = std::fs::read_to_string(runtime.path().join("gemma-backend")).unwrap();
         std::fs::write(
             report,
             serde_json::to_vec_pretty(&json!({
@@ -368,12 +399,14 @@ async fn packaged_gemma_indexes_sampled_synthetic_scan_pages_offline() {
                 "sourceSha256": digest_hex,
                 "pageCount": pages.len(),
                 "imageEvidenceCount": pages.len(),
+                "pdfImageSkippedPages": skipped_pages,
                 "completeGenerationVerified": true,
                 "elapsedSeconds": elapsed_seconds,
                 "secondsPerPage": seconds_per_page,
                 "pagesPerSecond": f64::from(PDF_VISION_SAMPLE_PAGES) / elapsed_seconds,
+                "secondsPerImagePage": seconds_per_image_page,
+                "imagePagesPerSecond": f64::from(expected_image_pages) / elapsed_seconds,
                 "backend": backend.trim(),
-                "elapsedSeconds": started.elapsed().as_secs_f64(),
                 "workerPeakRssBytes": worker_peak_rss_bytes,
                 "workerPeakMethod": worker_peak_method,
                 "workerDataDiskPeakBytes": worker_data_disk_peak_bytes,

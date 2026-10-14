@@ -14,6 +14,28 @@ function hasMeasuredThroughput(measured) {
   );
 }
 
+function hasExpectedImageCoverage(measured) {
+  const backend = measured.backend;
+  if (typeof backend !== 'string') return false;
+  const isCpu = backend.includes('CPU');
+  const isMetal = backend.includes('Metal');
+  if (isCpu === isMetal) return false;
+  const expectedImages = isCpu ? 4 : samplePages;
+  const expectedSkipped = samplePages - expectedImages;
+  return (
+    measured.imageEvidenceCount === expectedImages &&
+    measured.pdfImageSkippedPages === expectedSkipped
+  );
+}
+
+function hasMeasuredImageThroughput(measured) {
+  return (
+    Number.isFinite(measured.secondsPerImagePage) &&
+    measured.secondsPerImagePage === measured.elapsedSeconds / measured.imageEvidenceCount &&
+    measured.imagePagesPerSecond === measured.imageEvidenceCount / measured.elapsedSeconds
+  );
+}
+
 function exactCandidateTarget(lifecycle, candidate, identity) {
   const { target, qualificationRunId, qualificationSourceRevision, candidateRunId } = identity;
   const approvedTarget = candidate.targets?.[target];
@@ -37,9 +59,10 @@ export function recordPdfVisionQualification(measured, lifecycle, candidate, ide
     measured.sourceBytes !== sourceBytes ||
     measured.sourceSha256 !== sourceHash ||
     measured.pageCount !== samplePages ||
-    measured.imageEvidenceCount !== samplePages ||
+    !hasExpectedImageCoverage(measured) ||
     measured.completeGenerationVerified !== true ||
     !hasMeasuredThroughput(measured) ||
+    !hasMeasuredImageThroughput(measured) ||
     !Number.isSafeInteger(measured.workerPeakRssBytes) ||
     measured.workerPeakRssBytes <= 0 ||
     !Number.isSafeInteger(measured.workerDataDiskPeakBytes) ||
@@ -67,10 +90,13 @@ export function recordPdfVisionQualification(measured, lifecycle, candidate, ide
     sourceSha256: measured.sourceSha256,
     pageCount: measured.pageCount,
     imageEvidenceCount: measured.imageEvidenceCount,
+    pdfImageSkippedPages: measured.pdfImageSkippedPages,
     completeGenerationVerified: true,
     elapsedSeconds: measured.elapsedSeconds,
     secondsPerPage: measured.secondsPerPage,
     pagesPerSecond: measured.pagesPerSecond,
+    secondsPerImagePage: measured.secondsPerImagePage,
+    imagePagesPerSecond: measured.imagePagesPerSecond,
     backend: measured.backend,
     resourceCeilingQualified: false,
     hostPeakRssBytes: null,
@@ -91,9 +117,10 @@ export function recordPdfHostQualification(measured, lifecycle, candidate, ident
     measured.sourceBytes !== sourceBytes ||
     measured.sourceSha256 !== sourceHash ||
     measured.pageCount !== samplePages ||
-    measured.imageEvidenceCount !== samplePages ||
+    !hasExpectedImageCoverage(measured) ||
     measured.completeGenerationVerified !== true ||
     !hasMeasuredThroughput(measured) ||
+    !hasMeasuredImageThroughput(measured) ||
     !Number.isSafeInteger(measured.hostPeakRssBytes) ||
     measured.hostPeakRssBytes <= 0 ||
     !Number.isSafeInteger(measured.workerPeakRssBytes) ||
@@ -122,10 +149,14 @@ export function recordPdfHostQualification(measured, lifecycle, candidate, ident
     sourceSha256: measured.sourceSha256,
     pageCount: measured.pageCount,
     imageEvidenceCount: measured.imageEvidenceCount,
+    pdfImageSkippedPages: measured.pdfImageSkippedPages,
+    backend: measured.backend,
     completeGenerationVerified: true,
     elapsedSeconds: measured.elapsedSeconds,
     secondsPerPage: measured.secondsPerPage,
     pagesPerSecond: measured.pagesPerSecond,
+    secondsPerImagePage: measured.secondsPerImagePage,
+    imagePagesPerSecond: measured.imagePagesPerSecond,
     hostVfsVerified: true,
     workspaceIsolationVerified: true,
     replacementVerified: true,

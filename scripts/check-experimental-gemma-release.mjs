@@ -39,6 +39,10 @@ function verifyPdfVisionQualification(consent, candidate, evidenceRoot) {
       path.join(evidenceRoot, `installed-gemma-${target}`, 'gemma-pdf-bound-report.json'),
     );
     const report = JSON.parse(bytes);
+    const isCpu = typeof report.backend === 'string' && report.backend.includes('CPU');
+    const isMetal = typeof report.backend === 'string' && report.backend.includes('Metal');
+    const expectedImageCount = isCpu ? 4 : isMetal ? pdfVisionSamplePages : 0;
+    const expectedSkippedPages = pdfVisionSamplePages - expectedImageCount;
     if (
       sha256(bytes) !== qualification.targets[target] ||
       report.schemaVersion !== 1 ||
@@ -53,7 +57,10 @@ function verifyPdfVisionQualification(consent, candidate, evidenceRoot) {
       report.sourceBytes !== pdfVisionSampleBytes ||
       report.sourceSha256 !== pdfVisionSampleHash ||
       report.pageCount !== pdfVisionSamplePages ||
-      report.imageEvidenceCount !== pdfVisionSamplePages ||
+      isCpu === isMetal ||
+      !report.backend.startsWith('google/embeddinggemma-2 (') ||
+      report.imageEvidenceCount !== expectedImageCount ||
+      report.pdfImageSkippedPages !== expectedSkippedPages ||
       report.completeGenerationVerified !== true ||
       report.hostVfsVerified !== true ||
       report.replacementVerified !== true ||
@@ -66,6 +73,8 @@ function verifyPdfVisionQualification(consent, candidate, evidenceRoot) {
       report.elapsedSeconds <= 0 ||
       report.secondsPerPage !== report.elapsedSeconds / pdfVisionSamplePages ||
       report.pagesPerSecond !== pdfVisionSamplePages / report.elapsedSeconds ||
+      report.secondsPerImagePage !== report.elapsedSeconds / expectedImageCount ||
+      report.imagePagesPerSecond !== expectedImageCount / report.elapsedSeconds ||
       !Number.isFinite(report.releaseCeilingSeconds) ||
       report.releaseCeilingSeconds < report.elapsedSeconds ||
       !Number.isFinite(report.hostPeakRssBytes) ||
