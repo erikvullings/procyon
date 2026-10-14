@@ -9,12 +9,15 @@ import {
 const sourceRevision = 'a'.repeat(40);
 const catalogSha256 = 'b'.repeat(64);
 const measured = {
-  sourceBytes: 175_530_108,
-  sourceSha256: 'f2e8e12f962f43b5e384dbb8a2648c8ce88213a9895bd11bb5e6fc7b350d3964',
-  pageCount: 354,
-  imageEvidenceCount: 354,
+  sourceBytes: 3_967_050,
+  sourceSha256: '6fd090eee5fcdd7e547c8787f8ada4465e896fcff190b84e2b2f49e9c5b3d690',
+  pageCount: 8,
+  imageEvidenceCount: 8,
+  completeGenerationVerified: true,
   backend: 'google/embeddinggemma-2 (native CPU FP32)',
-  elapsedSeconds: 12_345,
+  elapsedSeconds: 240,
+  secondsPerPage: 30,
+  pagesPerSecond: 1 / 30,
   workerPeakRssBytes: 1_234_567_890,
   workerPeakMethod: 'kernel VmHWM for worker process',
   workerDataDiskPeakBytes: 234_567_890,
@@ -39,7 +42,10 @@ test('a complete installed synthetic report stays no-go without measured resourc
   assert.equal(report.decision, 'noGo');
   assert.equal(report.candidateRunId, 100);
   assert.equal(report.catalogSha256, catalogSha256);
-  assert.equal(report.pageCount, 354);
+  assert.equal(report.pageCount, 8);
+  assert.equal(report.completeGenerationVerified, true);
+  assert.equal(report.secondsPerPage, 30);
+  assert.equal(report.pagesPerSecond, 1 / 30);
   assert.equal(report.resourceCeilingQualified, false);
   assert.equal(report.workerPeakRssBytes, measured.workerPeakRssBytes);
   assert.equal(report.workerDataDiskPeakBytes, measured.workerDataDiskPeakBytes);
@@ -58,6 +64,16 @@ test('installed evidence cannot be bound to a different source, target or incomp
   );
   assert.throws(
     () =>
+      recordPdfVisionQualification(
+        { ...measured, secondsPerPage: 31 },
+        lifecycle,
+        candidate,
+        identity,
+      ),
+    /exact signed installed candidate/u,
+  );
+  assert.throws(
+    () =>
       recordPdfVisionQualification(measured, lifecycle, candidate, {
         ...identity,
         target: 'windows-x86_64',
@@ -67,7 +83,7 @@ test('installed evidence cannot be bound to a different source, target or incomp
   assert.throws(
     () =>
       recordPdfVisionQualification(
-        { ...measured, imageEvidenceCount: 353 },
+        { ...measured, imageEvidenceCount: 7 },
         lifecycle,
         candidate,
         identity,
@@ -96,35 +112,42 @@ test('installed evidence cannot be bound to a different source, target or incomp
   );
 });
 
-test('full enrolled-host PDF evidence binds exact candidate but remains no-go', () => {
-  const fullHost = {
-    scope: 'installed-host-vfs-354-page-synthetic-pdf-probe',
-    pageCount: 354,
-    imageEvidenceCount: 354,
+test('sampled enrolled-host PDF evidence includes replacement and deletion and remains no-go', () => {
+  const sampledHost = {
+    scope: 'installed-host-vfs-8-page-synthetic-pdf-sample',
+    pageCount: 8,
+    imageEvidenceCount: 8,
+    completeGenerationVerified: true,
     sourceBytes: measured.sourceBytes,
     sourceSha256: measured.sourceSha256,
+    elapsedSeconds: 300,
+    secondsPerPage: 37.5,
+    pagesPerSecond: 1 / 37.5,
     hostPeakRssBytes: 600_000_000,
     workerPeakRssBytes: 1_300_000_000,
     peakRssMethod: '200ms sysinfo host and worker RSS samples; transient peaks may be missed',
     hostVfsVerified: true,
     workspaceIsolationVerified: true,
+    replacementVerified: true,
     deletionVerified: true,
-    currentContentAndDeletionVerified: false,
+    currentContentAndDeletionVerified: true,
   };
-  const report = recordPdfHostQualification(fullHost, lifecycle, candidate, identity);
+  const report = recordPdfHostQualification(sampledHost, lifecycle, candidate, identity);
   assert.equal(report.candidateSourceRevision, sourceRevision);
   assert.equal(report.catalogSha256, catalogSha256);
   assert.equal(report.decision, 'noGo');
   assert.equal(report.hostVfsVerified, true);
   assert.equal(report.deletionVerified, true);
-  assert.equal(report.currentContentAndDeletionVerified, false);
-  assert.equal(report.hostPeakRssBytes, fullHost.hostPeakRssBytes);
-  assert.equal(report.workerPeakRssBytes, fullHost.workerPeakRssBytes);
+  assert.equal(report.currentContentAndDeletionVerified, true);
+  assert.equal(report.secondsPerPage, sampledHost.secondsPerPage);
+  assert.equal(report.pagesPerSecond, sampledHost.pagesPerSecond);
+  assert.equal(report.hostPeakRssBytes, sampledHost.hostPeakRssBytes);
+  assert.equal(report.workerPeakRssBytes, sampledHost.workerPeakRssBytes);
   assert.equal(report.resourceCeilingQualified, false);
   assert.throws(
     () =>
       recordPdfHostQualification(
-        { ...fullHost, imageEvidenceCount: 353 },
+        { ...sampledHost, imageEvidenceCount: 7 },
         lifecycle,
         candidate,
         identity,
@@ -133,7 +156,7 @@ test('full enrolled-host PDF evidence binds exact candidate but remains no-go', 
   );
   assert.throws(
     () =>
-      recordPdfHostQualification(fullHost, lifecycle, candidate, {
+      recordPdfHostQualification(sampledHost, lifecycle, candidate, {
         ...identity,
         qualificationSourceRevision: 'c'.repeat(40),
       }),
@@ -142,7 +165,7 @@ test('full enrolled-host PDF evidence binds exact candidate but remains no-go', 
   assert.throws(
     () =>
       recordPdfHostQualification(
-        { ...fullHost, hostPeakRssBytes: 0 },
+        { ...sampledHost, hostPeakRssBytes: 0 },
         lifecycle,
         candidate,
         identity,
@@ -152,7 +175,7 @@ test('full enrolled-host PDF evidence binds exact candidate but remains no-go', 
   assert.throws(
     () =>
       recordPdfHostQualification(
-        { ...fullHost, deletionVerified: false },
+        { ...sampledHost, deletionVerified: false },
         lifecycle,
         candidate,
         identity,
@@ -162,7 +185,7 @@ test('full enrolled-host PDF evidence binds exact candidate but remains no-go', 
   assert.throws(
     () =>
       recordPdfHostQualification(
-        { ...fullHost, currentContentAndDeletionVerified: true },
+        { ...sampledHost, currentContentAndDeletionVerified: false },
         lifecycle,
         candidate,
         identity,

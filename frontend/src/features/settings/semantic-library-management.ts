@@ -43,6 +43,12 @@ type BusyAction =
   | 'cleanup'
   | 'override';
 
+interface PdfImageConsentOption {
+  readonly enabled: boolean;
+  readonly pageBudget: number | null;
+  readonly onChange: (enabled: boolean) => void;
+}
+
 const SAFE_OVERRIDE_REASONS = [
   'hidden',
   'system',
@@ -150,6 +156,7 @@ function estimateView(
   onEnrol: () => void,
   onCancel: () => void,
   actionLabel: string,
+  pdfImageOption?: PdfImageConsentOption,
 ): Vnode {
   const estimate = preview.estimate;
   const hasEstimate =
@@ -238,6 +245,28 @@ function estimateView(
               budgets: estimate.exceededBudgets.map((budget) => budgetLabels[budget]).join(', '),
             }),
           ),
+      pdfImageOption === undefined
+        ? undefined
+        : m('label.fm-semantic-library-pdf-images', [
+            m('input', {
+              type: 'checkbox',
+              checked: pdfImageOption.enabled,
+              disabled: busy !== undefined,
+              onchange: (event: Event) =>
+                pdfImageOption.onChange((event.currentTarget as HTMLInputElement).checked),
+            }),
+            t('semanticLibrary', 'indexPdfPageImages'),
+          ]),
+      pdfImageOption?.enabled && pdfImageOption.pageBudget !== null
+        ? m(
+            'p.fm-semantic-library-disclosure',
+            { role: 'status' },
+            t('semanticLibrary', 'cpuPdfImageBudgetWarning', {
+              pages: pdfImageOption.pageBudget,
+              minutes: Math.ceil((pdfImageOption.pageBudget * 28) / 60),
+            }),
+          )
+        : undefined,
       m('p.fm-semantic-library-disclosure', t('semanticLibrary', 'normalizedExcerptsDisclosure')),
       m('.fm-semantic-library-actions', [
         m(
@@ -262,15 +291,34 @@ export const SemanticFolderEnrolmentPrompt: FactoryComponent<
   let preview: SemanticEnrolmentPreview | undefined;
   let busy: 'preview' | 'enrol' | undefined;
   let error: string | undefined;
+  let showPdfImageOption = false;
+  let pdfImageEnabled = false;
+  let pdfImagePageBudget: number | null = null;
 
-  async function load(attrs: SemanticFolderEnrolmentPromptAttrs): Promise<void> {
+  async function load(
+    attrs: SemanticFolderEnrolmentPromptAttrs,
+    selectedPdfImages?: boolean,
+  ): Promise<void> {
     busy = 'preview';
     error = undefined;
+    preview = undefined;
     try {
+      const component = await attrs.client.getSemanticComponentStatus();
+      const setup =
+        component.activeModel?.profile === 'embeddingGemma2'
+          ? await attrs.client.getGemmaLibrarySetup()
+          : null;
+      showPdfImageOption = setup?.images === true;
+      pdfImagePageBudget = setup?.pdfImagePageBudget ?? null;
+      pdfImageEnabled = showPdfImageOption
+        ? (selectedPdfImages ?? setup?.imageDevice === 'metal')
+        : false;
       preview = await attrs.client.previewSemanticEnrolment({
         workspaceId: attrs.workspaceId,
         location: attrs.location,
         recursive: true,
+        pdfImagesEnabled: pdfImageEnabled,
+        pdfImagePageBudget: pdfImageEnabled ? pdfImagePageBudget : null,
       });
     } catch (cause) {
       error = errorMessage(cause);
@@ -320,6 +368,13 @@ export const SemanticFolderEnrolmentPrompt: FactoryComponent<
                 () => void enrol(attrs),
                 attrs.onCancel,
                 t('semanticLibrary', 'confirmInclusion'),
+                showPdfImageOption
+                  ? {
+                      enabled: preview.pdfImagesEnabled ?? false,
+                      pageBudget: preview.pdfImagePageBudget ?? null,
+                      onChange: (enabled) => void load(attrs, enabled),
+                    }
+                  : undefined,
               ),
         preview === undefined && busy !== 'preview'
           ? m(
@@ -422,6 +477,17 @@ function rootStatusView(
       ? m(
           'p.fm-semantic-library-ocr-needed',
           t('semanticLibrary', 'ocrNeededCount', { count: root.ocrRequiredFiles.length }),
+        )
+      : undefined,
+    root.pdfImagesEnabled
+      ? m(
+          'p.fm-semantic-library-disclosure',
+          { role: 'status' },
+          root.pdfImagePageBudget == null
+            ? t('semanticLibrary', 'pdfImagesAllPages')
+            : t('semanticLibrary', 'pdfImagesPageBudget', {
+                pages: root.pdfImagePageBudget,
+              }),
         )
       : undefined,
     oversizedCount > 0
@@ -586,6 +652,9 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
   let status: SemanticLibraryStatus | undefined;
   let indexedRoots: readonly KnowledgeRoot[] = [];
   let gemmaActive = false;
+  let showPdfImageOption = false;
+  let pdfImageEnabled = false;
+  let pdfImagePageBudget: number | null = null;
   let lastWorkerDevice: 'metal' | 'cpu' | null | undefined;
   const scannedRoots = new Map<string, number>();
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
@@ -629,9 +698,11 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
           : await attrs.client.listKnowledgeRoots({ workspaceId: attrs.workspaceId });
       const component = await attrs.client.getSemanticComponentStatus();
       gemmaActive = component.activeModel?.profile === 'embeddingGemma2';
-      lastWorkerDevice = gemmaActive
-        ? (await attrs.client.getGemmaLibrarySetup())?.lastWorkerDevice
-        : undefined;
+      const gemmaSetup = gemmaActive ? await attrs.client.getGemmaLibrarySetup() : null;
+      lastWorkerDevice = gemmaSetup?.lastWorkerDevice;
+      showPdfImageOption = gemmaSetup?.images === true;
+      pdfImagePageBudget = gemmaSetup?.pdfImagePageBudget ?? null;
+      pdfImageEnabled = showPdfImageOption && gemmaSetup?.imageDevice === 'metal';
       folder =
         attrs.workspaceId === undefined || attrs.location === undefined || !nextStatus.available
           ? undefined
@@ -714,13 +785,19 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
     return capabilities?.operations.includes(operation) ?? false;
   }
 
-  function previewInclusion(attrs: SemanticLibraryManagementAttrs): void {
+  function previewInclusion(
+    attrs: SemanticLibraryManagementAttrs,
+    selectedPdfImages = pdfImageEnabled,
+  ): void {
     if (attrs.workspaceId === undefined || attrs.location === undefined) return;
     void action(attrs, 'preview', async () => {
+      pdfImageEnabled = showPdfImageOption && selectedPdfImages;
       preview = await attrs.client.previewSemanticEnrolment({
         workspaceId: attrs.workspaceId as WorkspaceId,
         location: attrs.location as Location,
         recursive: true,
+        pdfImagesEnabled: pdfImageEnabled,
+        pdfImagePageBudget: pdfImageEnabled ? pdfImagePageBudget : null,
       });
     });
   }
@@ -1041,6 +1118,13 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
                   preview = undefined;
                 },
                 t('semanticLibrary', 'includeFolder'),
+                showPdfImageOption
+                  ? {
+                      enabled: preview.pdfImagesEnabled ?? false,
+                      pageBudget: preview.pdfImagePageBudget ?? null,
+                      onChange: (enabled) => previewInclusion(attrs, enabled),
+                    }
+                  : undefined,
               ),
           exclusionPlan === undefined
             ? undefined

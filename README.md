@@ -358,9 +358,10 @@ Qualification emits a reviewed fingerprint lock; publication reuses the exact re
 Desktop releases only fetch catalogs named by that lock, so semantic component failures do not
 block base application packaging and application failures do not rebuild component assets.
 The separately opt-in `qualify_pdf_vision` input runs a read-only installed Gemma worker test on
-a deterministic 354-page synthetic scan when paired with `qualify_installed_gemma` and an exact
-retained signed candidate. It cannot publish a release; its candidate-bound report explicitly
-remains **no-go** without host/VFS, resource-ceiling, fallback, and quality evidence.
+an eight-page deterministic synthetic scan when paired with `qualify_installed_gemma` and an exact
+retained signed candidate. It runs on all four worker targets, reports per-page throughput and
+measured worker peaks, and cannot publish a release; its candidate-bound report explicitly remains
+**no-go** without host/VFS, resource-ceiling, fallback, and quality evidence.
 The experimental Gemma publication check separately requires reviewed four-target installed
 PDF evidence from a successful exact-source qualification run; merely adding signed PDFium
 payloads or a worker-only synthetic report cannot satisfy that gate.
@@ -368,17 +369,15 @@ The read-only PDF qualification also runs a separate one-page enrolled-host smok
 the installed worker, replaces that synthetic file with a two-page scan, and checks that
 the edited source's two page citations replace the old generation before checking deletion.
 That smoke is not full-scan current-content coverage or release approval.
-A distinct read-only `qualify_pdf_host_full` workflow input can run the 354-page
-synthetic scan through an enrolled host without doubling the worker-only run on
-the same runner. Its page-complete report is deliberately not release approval:
-anonymous temporary-disk peak, cross-host navigation, fallback and rollback
-remain unqualified. The report is separately bound to the exact signed
-candidate and installed qualification run; the publication gate still
-rejects it as incomplete.
-The full-host report samples host and worker RSS but does not claim a
-hard peak or a temporary-disk ceiling.
-It verifies source deletion, not edited-source reindexing or a full
-current-content guarantee.
+A distinct read-only `qualify_pdf_host_sample` workflow input runs the same
+eight-page synthetic scan through the enrolled host, then replaces it with a
+two-page scan and verifies current page citations and deletion. Its report
+includes per-page throughput and sampled host/worker RSS; it does not claim a
+hard peak or temporary-disk ceiling. A previous full 354-page scan remains
+supplementary macOS evidence; full-scan CPU throughput is documented as a
+known limitation, not a release gate. Anonymous temporary-disk peak,
+cross-host navigation, fallback, rollback, and release resource ceilings
+remain unqualified, so these reports do not approve a release.
 
 ## CI
 

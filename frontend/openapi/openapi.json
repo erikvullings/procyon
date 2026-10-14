@@ -12140,6 +12140,19 @@
             "$ref": "#/components/schemas/LocationDto",
             "description": "Provider-neutral location already visible in the file manager."
           },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Maximum PDF page images embedded per document, or `None` for no cap.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Whether this root separately consents to PDF page-image embeddings."
+          },
           "recursive": {
             "type": "boolean",
             "description": "Whether descendants inherit consent."
@@ -15075,6 +15088,19 @@
           "location": {
             "$ref": "#/components/schemas/LocationDto",
             "description": "Active folder."
+          },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Per-document page-image budget; `None` allows every page on Metal.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Additional per-root PDF page-image consent; defaults safely to off."
           },
           "recursive": {
             "type": "boolean",
@@ -18102,6 +18128,19 @@
             "type": "boolean",
             "description": "Explicit local normalized-excerpt retention disclosure."
           },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Maximum PDF page images embedded per document, or `None` for no cap.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Whether this root separately consents to PDF page-image embeddings."
+          },
           "policyRevision": {
             "type": "integer",
             "format": "int64",
@@ -18160,6 +18199,13 @@
           },
           "indexedContentHash": {
             "type": "string"
+          },
+          "mediaType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Indexed IANA media type."
           },
           "provenanceJson": {
             "type": "string",
@@ -19297,6 +19343,19 @@
             },
             "description": "Files whose latest completed reconciliation requires OCR."
           },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Maximum PDF page images embedded per document, or `None` for no cap.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Whether this root separately consents to PDF page-image embeddings."
+          },
           "reconciliationGeneration": {
             "type": "integer",
             "format": "int64",
@@ -19425,6 +19484,19 @@
           },
           "location": {
             "$ref": "#/components/schemas/LocationDto"
+          },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Per-document page-image budget, or `None` for all pages.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Whether the primary PDF root consents to page-image indexing."
           },
           "score": {
             "type": "number",

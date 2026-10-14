@@ -278,53 +278,80 @@ impl SearchComparisonCoordinator {
         let mut entries = Vec::new();
         let mut semantic_results = Vec::new();
         let mut coverage = None;
+        let root_pdf_image_policies = if let Some(library) = semantic_library {
+            library
+                .status(&crate::semantic_library::SemanticAccessContext::Host)
+                .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?
+                .roots
+                .into_iter()
+                .map(|root| (root.id, root.pdf_images_enabled, root.pdf_image_page_budget))
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        fn semantic_source_ids(result: &crate::semantic::SemanticSearchResult) -> Vec<String> {
+            serde_json::from_str::<Vec<fm_semantic_worker::semantic_search::SemanticEvidence>>(
+                result
+                    .metadata
+                    .get("semantic.evidence")
+                    .map(String::as_str)
+                    .unwrap_or("[]"),
+            )
+            .unwrap_or_default()
+            .into_iter()
+            .map(|evidence| evidence.source_id)
+            .chain(
+                result
+                    .metadata
+                    .get("semantic.additionalSourceIds")
+                    .and_then(|value| serde_json::from_str::<Vec<String>>(value).ok())
+                    .unwrap_or_default(),
+            )
+            .collect()
+        }
         for mut result in results {
-            if !result.metadata.contains_key("uri")
-                && let Some(library) = semantic_library
+            if let Some(library) = semantic_library
                 && let Some(source_id) = semantic_source_ids(&result).into_iter().next()
-                && let Ok(Some(occurrence)) = library.resolve_occurrence(
-                    &crate::semantic_library::SemanticAccessContext::Host,
-                    workspace_id.into(),
-                    &source_id,
-                )
+                && let Some(occurrence) = library
+                    .resolve_occurrence(
+                        &crate::semantic_library::SemanticAccessContext::Host,
+                        workspace_id.into(),
+                        &source_id,
+                    )
+                    .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?
             {
-                result.metadata.insert(
-                    "provider_id".to_owned(),
-                    occurrence.location.provider_id.as_str().to_owned(),
-                );
-                result
-                    .metadata
-                    .insert("uri".to_owned(), occurrence.location.uri.clone());
-                result
-                    .metadata
-                    .insert("entry_id".to_owned(), occurrence.entry_id.to_string());
-                result
-                    .metadata
-                    .insert("available".to_owned(), occurrence.available.to_string());
+                if !result.metadata.contains_key("uri") {
+                    result.metadata.insert(
+                        "provider_id".to_owned(),
+                        occurrence.location.provider_id.as_str().to_owned(),
+                    );
+                    result
+                        .metadata
+                        .insert("uri".to_owned(), occurrence.location.uri.clone());
+                    result
+                        .metadata
+                        .insert("entry_id".to_owned(), occurrence.entry_id.to_string());
+                    result
+                        .metadata
+                        .insert("available".to_owned(), occurrence.available.to_string());
+                }
+                if let Some((_, enabled, page_budget)) = root_pdf_image_policies
+                    .iter()
+                    .find(|(root_id, _, _)| root_id == &occurrence.root_id.to_string())
+                {
+                    result
+                        .metadata
+                        .insert("semantic.pdfImagesEnabled".to_owned(), enabled.to_string());
+                    if let Some(page_budget) = page_budget {
+                        result.metadata.insert(
+                            "semantic.pdfImagePageBudget".to_owned(),
+                            page_budget.to_string(),
+                        );
+                    }
+                }
             }
             if coverage.is_none() {
                 coverage = semantic_coverage(&result);
-            }
-
-            fn semantic_source_ids(result: &crate::semantic::SemanticSearchResult) -> Vec<String> {
-                serde_json::from_str::<Vec<fm_semantic_worker::semantic_search::SemanticEvidence>>(
-                    result
-                        .metadata
-                        .get("semantic.evidence")
-                        .map(String::as_str)
-                        .unwrap_or("[]"),
-                )
-                .unwrap_or_default()
-                .into_iter()
-                .map(|evidence| evidence.source_id)
-                .chain(
-                    result
-                        .metadata
-                        .get("semantic.additionalSourceIds")
-                        .and_then(|value| serde_json::from_str::<Vec<String>>(value).ok())
-                        .unwrap_or_default(),
-                )
-                .collect()
             }
             if let Some(entry) = semantic_result_entry(&result, query, &roots) {
                 if let Some(evidence) =
@@ -807,12 +834,24 @@ fn semantic_result_dto(
 ) -> Option<SemanticSearchResultDto> {
     let evidence: Vec<fm_semantic_worker::semantic_search::SemanticEvidence> =
         serde_json::from_str(result.metadata.get("semantic.evidence")?).ok()?;
+    let has_pdf_evidence = evidence
+        .iter()
+        .any(|item| item.media_type.as_deref() == Some("application/pdf"));
     let mut evidence = evidence.into_iter();
     let best_evidence = semantic_evidence_dto(evidence.next()?)?;
     Some(SemanticSearchResultDto {
         entry_id: entry_id.into_inner(),
         location: location.into(),
         score: result.score as f32,
+        pdf_images_enabled: has_pdf_evidence
+            && result
+                .metadata
+                .get("semantic.pdfImagesEnabled")
+                .is_some_and(|enabled| enabled == "true"),
+        pdf_image_page_budget: result
+            .metadata
+            .get("semantic.pdfImagePageBudget")
+            .and_then(|budget| budget.parse().ok()),
         best_evidence,
         additional_evidence: evidence
             .map(semantic_evidence_dto)
@@ -833,6 +872,7 @@ fn semantic_evidence_dto(
         source_id: evidence.source_id,
         score: evidence.score,
         chunk_kind: evidence.chunk_kind,
+        media_type: evidence.media_type,
         excerpt: evidence.excerpt,
         provenance_json: serde_json::to_string(&evidence.provenance).ok()?,
         indexed_content_hash: evidence.indexed_content_hash,

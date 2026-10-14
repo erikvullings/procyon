@@ -2169,6 +2169,8 @@ export class MockFileManagerClient implements FileManagerClient {
         policyRevision: this.semanticLibrary.revision,
         location: structuredClone(request.location),
         recursive: request.recursive,
+        pdfImagesEnabled: request.pdfImagesEnabled ?? false,
+        pdfImagePageBudget: request.pdfImagePageBudget ?? null,
         normalizedExcerptsRetainedLocally: true,
         estimate: {
           completeness: 'partial',
@@ -2221,6 +2223,8 @@ export class MockFileManagerClient implements FileManagerClient {
           id: `00000000-0000-0000-0000-${String(this.semanticLibrarySequence).padStart(12, '0')}`,
           location: structuredClone(request.location),
           recursive: preview.recursive,
+          pdfImagesEnabled: preview.pdfImagesEnabled ?? false,
+          pdfImagePageBudget: preview.pdfImagePageBudget ?? null,
           stableIdentityVerified: true,
           workspaceReferences: [request.workspaceId],
           eligibilityOverrides: [],
@@ -2235,8 +2239,12 @@ export class MockFileManagerClient implements FileManagerClient {
           indexedGeneration: 0,
           exclusions: [],
         });
-      } else if (!existing.workspaceReferences.includes(request.workspaceId)) {
-        existing.workspaceReferences.push(request.workspaceId);
+      } else {
+        existing.pdfImagesEnabled = preview.pdfImagesEnabled ?? false;
+        existing.pdfImagePageBudget = preview.pdfImagePageBudget ?? null;
+        if (!existing.workspaceReferences.includes(request.workspaceId)) {
+          existing.workspaceReferences.push(request.workspaceId);
+        }
       }
       this.advanceSemanticLibraryRevision();
       return structuredClone(this.semanticLibrary);

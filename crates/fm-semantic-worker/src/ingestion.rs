@@ -141,6 +141,8 @@ pub struct IngestionDocument {
     pub media_type: String,
     /// Host-authorized PDF image consent for a Gemma library.
     pub pdf_images_consented: bool,
+    /// Per-document PDF page-image limit; absent means all eligible pages.
+    pub pdf_image_page_budget: Option<u32>,
     /// Source modification time in Unix milliseconds.
     pub modified_at_ms: i64,
     /// Bounded source bytes streamed by the host.
@@ -440,6 +442,22 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
                     .parse::<i64>()
                     .map_err(|_| "ingestion metadata `modified_at_ms` is invalid".to_owned())
             })?;
+        let pdf_image_page_budget = input
+            .metadata
+            .get("pdf_image_page_budget")
+            .map(|value| {
+                value
+                    .parse::<u32>()
+                    .ok()
+                    .filter(|budget| *budget > 0)
+                    .ok_or_else(|| {
+                        "ingestion metadata `pdf_image_page_budget` is invalid".to_owned()
+                    })
+            })
+            .transpose()?;
+        if pdf_image_page_budget.is_some() && !input.pdf_images_consented {
+            return Err("PDF image budget requires host-authorized image consent".into());
+        }
         let document = IngestionDocument {
             job_id: input.job_id.clone(),
             tenant_id: input.tenant_id,
@@ -460,6 +478,7 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
                 .cloned(),
             media_type: input.media_type,
             pdf_images_consented: input.pdf_images_consented,
+            pdf_image_page_budget,
             modified_at_ms,
             bytes: input.content,
             #[cfg(feature = "experimental-large-pdf")]
@@ -756,9 +775,11 @@ impl IngestionCoordinator {
         if is_media_type(&document.media_type) {
             return self.ingest_media(document, attempts, content_hash, cancellation);
         }
-        if document.pdf_images_consented
+        if (document.pdf_images_consented
             && (document.media_type != "application/pdf"
-                || self.embedder.identity().model_id != "google-embeddinggemma-2")
+                || self.embedder.identity().model_id != "google-embeddinggemma-2"))
+            || (document.pdf_image_page_budget.is_some()
+                && (!document.pdf_images_consented || document.media_type != "application/pdf"))
         {
             return Err(self.fail(
                 document,
@@ -986,6 +1007,7 @@ impl IngestionCoordinator {
         let mut image_embedded = 0;
         let mut image_progress = 0_u64;
         let mut seen = std::collections::HashSet::new();
+        let mut image_pages_skipped = std::collections::HashSet::new();
         let mut converted_visuals = converted.visuals().iter();
         #[cfg(feature = "experimental-large-pdf")]
         let mut staged_visuals = document
@@ -1051,6 +1073,13 @@ impl IngestionCoordinator {
                 ),
                 _ => continue,
             };
+            if document
+                .pdf_image_page_budget
+                .is_some_and(|page_budget| page_number > page_budget)
+            {
+                image_pages_skipped.insert(page_number);
+                continue;
+            }
             self.check_cancelled(document, attempts, cancellation)?;
             if !seen.insert((page_number, visual.id.clone())) {
                 continue;
@@ -1126,7 +1155,8 @@ impl IngestionCoordinator {
             ));
         }
         self.check_cancelled(document, attempts, cancellation)?;
-        let omission_detail = (!converted.visual_omissions().is_empty()).then(|| {
+        let mut coverage_details = Vec::new();
+        if !converted.visual_omissions().is_empty() {
             let omitted_pages = converted
                 .visual_omissions()
                 .iter()
@@ -1145,13 +1175,22 @@ impl IngestionCoordinator {
                 .map(|omission| omission.detail.as_str())
                 .collect::<Vec<_>>()
                 .join("; ");
-            format!(
+            coverage_details.push(format!(
                 "{} PDF image/page omissions ({omitted_pages} {} with missing visual evidence, {omitted_images} image/XObject {}): {examples}",
                 converted.visual_omissions().len(),
                 if omitted_pages == 1 { "page" } else { "pages" },
                 if omitted_images == 1 { "omission" } else { "omissions" },
-            )
-        });
+            ));
+        }
+        if let Some(page_budget) = document.pdf_image_page_budget
+            && !image_pages_skipped.is_empty()
+        {
+            coverage_details.push(format!(
+                "PDF images partially indexed (slow device): images on {} page(s) after the first {page_budget} were skipped; PDF text remains indexed.",
+                image_pages_skipped.len(),
+            ));
+        }
+        let omission_detail = (!coverage_details.is_empty()).then(|| coverage_details.join("; "));
 
         self.transition(
             document,
@@ -1834,6 +1873,7 @@ mod tests {
                 workspace_id: Some("workspace-a".into()),
                 media_type: "text/plain".into(),
                 pdf_images_consented: false,
+                pdf_image_page_budget: None,
                 modified_at_ms: 1_000,
                 bytes: body.as_bytes().to_vec(),
                 #[cfg(feature = "experimental-large-pdf")]
@@ -2960,6 +3000,95 @@ mod tests {
                 .contains("\"kind\":\"pdfPageRender\"")
         );
         assert!(!evidence[0].provenance.contains("\"kind\":\"pdfImage\""));
+    }
+
+    #[cfg(feature = "experimental-large-pdf")]
+    #[test]
+    fn cpu_page_budget_limits_pdf_images_without_dropping_pdf_text() {
+        let fixture = Fixture::with_model(healthy_resources(), "google-embeddinggemma-2");
+        let mut document = fixture.document("");
+        document.media_type = "application/pdf".into();
+        document.pdf_images_consented = true;
+        document.pdf_image_page_budget = Some(4);
+
+        let page_contents = (1..=6)
+            .map(|page| {
+                format!(
+                    "BT /F1 12 Tf 72 720 Td (Synthetic text remains indexed on page {page}.) Tj ET"
+                )
+            })
+            .collect::<Vec<_>>();
+        let page_contents = page_contents.iter().map(String::as_str).collect::<Vec<_>>();
+        let source = positioned_pdf_pages(&page_contents);
+        let converted = match fm_semantic_conversion::BaselineConverter::new()
+            .convert(
+                SourceContent::Bytes(&source),
+                &DocumentMetadata::unknown().with_media_type("application/pdf"),
+                &ConversionContext::new(),
+            )
+            .expect("convert PDF text")
+        {
+            ConversionOutcome::Converted(converted) => converted,
+            outcome => panic!("unexpected conversion outcome: {outcome:?}"),
+        };
+        let hash = sha256_hex(&source);
+        let pages = (1..=6)
+            .map(|page| {
+                let data = vec![0xff, 0xd8, 0xff, page as u8, 0xd9];
+                vec![fm_semantic_conversion::VisualAttachment {
+                    id: blake3::hash(&data).to_hex().to_string(),
+                    media_type: fm_semantic_conversion::MediaType::parse("image/jpeg"),
+                    data,
+                    width: 2,
+                    height: 1,
+                    provenance: fm_semantic_conversion::VisualProvenance::PdfImage {
+                        page_number: page,
+                        image_index: 0,
+                    },
+                    caption: None,
+                }]
+            })
+            .collect::<Vec<_>>();
+        let stage = crate::pdf_text_child::staged_visual_fixture(&hash, &pages)
+            .expect("validated anonymous stage");
+        document.pdf_text = Some(PdfTextSource {
+            content_hash: hash,
+            converted,
+            visual_stage: Some(Arc::new(Mutex::new(stage))),
+        });
+
+        fixture
+            .coordinator
+            .ingest(&document, &CancellationToken::new())
+            .expect("publish text and bounded page images");
+        assert_eq!(
+            *fixture.embedder.media_calls.lock().expect("media calls"),
+            4
+        );
+        let records = fixture.index.records.lock().expect("index");
+        assert_eq!(
+            records
+                .values()
+                .filter(|record| record.content.is_empty())
+                .count(),
+            4
+        );
+        assert!(
+            records
+                .values()
+                .any(|record| record.content.contains("page 6"))
+        );
+        drop(records);
+        let job = fixture
+            .catalog
+            .job("job-a")
+            .expect("read job")
+            .expect("completed job");
+        assert!(
+            job.detail
+                .as_deref()
+                .is_some_and(|detail| detail.contains("images on 2 page(s) after the first 4"))
+        );
     }
 
     #[cfg(feature = "experimental-large-pdf")]

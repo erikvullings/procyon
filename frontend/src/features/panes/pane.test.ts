@@ -1165,6 +1165,57 @@ describe('Pane search breadcrumb rendering', () => {
     expect(onOpenEntry).toHaveBeenCalledWith(selectedEntry, 'Beste bewijs voor het rapport.');
   });
 
+  it('discloses the PDF page-image cap alongside the matching file result', () => {
+    const source = entries[0];
+    if (source === undefined) throw new Error('missing entry fixture');
+    const entry: EntrySummary = {
+      ...source,
+      name: 'scan.pdf',
+      extension: 'pdf',
+      mimeType: 'application/pdf',
+    };
+    mount(
+      attrs({
+        entries: [entry],
+        selectedEntryIds: new Set([entry.id]),
+        searchPresentation: {
+          kind: 'semantic',
+          term: 'page image',
+          executionMode: 'semantic',
+          semanticResults: [
+            {
+              entryId: entry.id,
+              location: entry.location,
+              score: 0.91,
+              pdfImagesEnabled: true,
+              pdfImagePageBudget: 4,
+              bestEvidence: {
+                recordId: 'record-1',
+                sourceId: 'source-1',
+                score: 0.91,
+                chunkKind: 'pdf_image',
+                excerpt: 'PDF page evidence',
+                provenanceJson: '{}',
+                indexedContentHash: 'sha256:fixture',
+                generation: 2,
+                available: true,
+                stale: false,
+                generated: false,
+                sourcePosition: 0,
+              },
+              additionalEvidence: [],
+              additionalSourceIds: [],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(root.querySelector('.fm-semantic-pdf-image-evidence')?.textContent).toContain(
+      'first 4 pages per PDF',
+    );
+  });
+
   it.each([
     ['image/png', 'Image', 'Open image', true],
     ['audio/mpeg', 'Audio', 'Open audio', false],

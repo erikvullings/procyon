@@ -7,6 +7,9 @@ import { verifySemanticComponentRelease } from './verify-semantic-component-rele
 
 const targets = ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'];
 const preIntegrationSource = 'd3f921fe08e4994a905727a71af102979f4fbe23';
+const pdfVisionSamplePages = 8;
+const pdfVisionSampleBytes = 3_967_050;
+const pdfVisionSampleHash = '6fd090eee5fcdd7e547c8787f8ada4465e896fcff190b84e2b2f49e9c5b3d690';
 const gemmaFiles = [
   'embeddinggemma2-original',
   'embeddinggemma2-file-1',
@@ -40,18 +43,20 @@ function verifyPdfVisionQualification(consent, candidate, evidenceRoot) {
       sha256(bytes) !== qualification.targets[target] ||
       report.schemaVersion !== 1 ||
       report.decision !== 'noGo' ||
-      report.scope !== 'installed-host-vfs-synthetic-pdf-vision' ||
+      report.scope !== 'installed-host-vfs-8-page-synthetic-pdf-sample' ||
       report.target !== target ||
       report.qualificationRunId !== String(qualification.runId) ||
       report.qualificationSourceRevision !== candidate.sourceRevision ||
       report.candidateRunId !== candidate.qualificationRunId ||
       report.candidateSourceRevision !== candidate.sourceRevision ||
       report.catalogSha256 !== candidate.targets[target]?.catalogSha256 ||
-      report.sourceBytes !== 175_530_108 ||
-      report.sourceSha256 !== 'f2e8e12f962f43b5e384dbb8a2648c8ce88213a9895bd11bb5e6fc7b350d3964' ||
-      report.pageCount !== 354 ||
-      report.imageEvidenceCount !== 354 ||
+      report.sourceBytes !== pdfVisionSampleBytes ||
+      report.sourceSha256 !== pdfVisionSampleHash ||
+      report.pageCount !== pdfVisionSamplePages ||
+      report.imageEvidenceCount !== pdfVisionSamplePages ||
+      report.completeGenerationVerified !== true ||
       report.hostVfsVerified !== true ||
+      report.replacementVerified !== true ||
       report.fallbackVerified !== true ||
       report.upgradeRollbackVerified !== true ||
       report.currentContentAndDeletionVerified !== true ||
@@ -59,6 +64,8 @@ function verifyPdfVisionQualification(consent, candidate, evidenceRoot) {
       report.resourceCeilingQualified !== true ||
       !Number.isFinite(report.elapsedSeconds) ||
       report.elapsedSeconds <= 0 ||
+      report.secondsPerPage !== report.elapsedSeconds / pdfVisionSamplePages ||
+      report.pagesPerSecond !== pdfVisionSamplePages / report.elapsedSeconds ||
       !Number.isFinite(report.releaseCeilingSeconds) ||
       report.releaseCeilingSeconds < report.elapsedSeconds ||
       !Number.isFinite(report.hostPeakRssBytes) ||

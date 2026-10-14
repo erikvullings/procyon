@@ -490,6 +490,17 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
   const modifiedLabel = mediaModifiedLabel(entry?.modifiedAt);
   return m('.fm-semantic-evidence', [
     coverageLabel === undefined ? undefined : m('div', { role: 'status' }, coverageLabel),
+    selected.pdfImagesEnabled
+      ? m(
+          '.fm-semantic-pdf-image-evidence',
+          { role: 'status' },
+          selected.pdfImagePageBudget == null
+            ? t('semanticLibrary', 'pdfImagesAllPages')
+            : t('semanticLibrary', 'pdfImagesPageBudget', {
+                pages: selected.pdfImagePageBudget,
+              }),
+        )
+      : undefined,
     m('details', [
       m(
         'summary',

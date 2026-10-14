@@ -29,6 +29,14 @@ export interface KnowledgeRootDto {
   label: string;
   /** Provider-neutral location already visible in the file manager. */
   location: LocationDto;
+  /**
+     * Maximum PDF page images embedded per document, or `None` for no cap.
+     * @minimum 0
+     * @nullable
+     */
+  pdfImagePageBudget?: number | null;
+  /** Whether this root separately consents to PDF page-image embeddings. */
+  pdfImagesEnabled?: boolean;
   /** Whether descendants inherit consent. */
   recursive: boolean;
   /** Stable path-independent root identity. */

@@ -14,5 +14,13 @@ export interface SemanticSearchResultDto {
   bestEvidence: SemanticEvidenceDto;
   entryId: string;
   location: LocationDto;
+  /**
+     * Per-document page-image budget, or `None` for all pages.
+     * @minimum 0
+     * @nullable
+     */
+  pdfImagePageBudget?: number | null;
+  /** Whether the primary PDF root consents to page-image indexing. */
+  pdfImagesEnabled?: boolean;
   score: number;
 }

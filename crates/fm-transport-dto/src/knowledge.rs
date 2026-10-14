@@ -224,6 +224,12 @@ pub struct KnowledgeRootDto {
     pub label: String,
     /// Whether descendants inherit consent.
     pub recursive: bool,
+    /// Whether this root separately consents to PDF page-image embeddings.
+    #[serde(default)]
+    pub pdf_images_enabled: bool,
+    /// Maximum PDF page images embedded per document, or `None` for no cap.
+    #[serde(default)]
+    pub pdf_image_page_budget: Option<u32>,
     /// Whether the indexed source is currently reachable.
     pub available: bool,
     /// Last generation committed to runtime state.

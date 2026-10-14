@@ -223,7 +223,7 @@ test('Gemma qualification is explicit and uses verified originals on every targe
   assert.match(JSON.stringify(publish), /semantic_production_catalog/u);
 });
 
-test('354-page installed PDF vision qualification is opt-in and cannot publish', () => {
+test('sampled installed PDF vision qualification is opt-in and cannot publish', () => {
   const workflow = loadYaml(
     fs.readFileSync(path.resolve('.github/workflows/release-semantic-components.yml'), 'utf8'),
   );
@@ -262,23 +262,23 @@ test('354-page installed PDF vision qualification is opt-in and cannot publish',
   assert.match(workflow.jobs['semantic-payloads'].if, /qualify_pdf_vision != true/u);
 });
 
-test('full enrolled-host PDF qualification is a separate read-only installed run', () => {
+test('sampled enrolled-host PDF qualification is a separate read-only installed run', () => {
   const workflow = loadYaml(
     fs.readFileSync(path.resolve('.github/workflows/release-semantic-components.yml'), 'utf8'),
   );
-  assert.equal(workflow.on.workflow_dispatch.inputs.qualify_pdf_host_full.default, false);
+  assert.equal(workflow.on.workflow_dispatch.inputs.qualify_pdf_host_sample.default, false);
   assert.match(
     workflow.jobs['validate-pdf-vision-request'].steps[0].run,
-    /QUALIFY_PDF_VISION" != "\$QUALIFY_PDF_HOST_FULL/u,
+    /QUALIFY_PDF_VISION" != "\$QUALIFY_PDF_HOST_SAMPLE/u,
   );
   const installed = JSON.stringify(workflow.jobs['installed-gemma-qualification']);
-  assert.match(installed, /PROCYON_GEMMA_PDF_HOST_FULL_REPORT/u);
-  assert.match(installed, /gemma-pdf-host-full\.json/u);
+  assert.match(installed, /PROCYON_GEMMA_PDF_HOST_SAMPLE_REPORT/u);
+  assert.match(installed, /gemma-pdf-host-sample\.json/u);
   assert.match(installed, /gemma-pdf-host-bound-report\.json/u);
   assert.match(installed, /record-pdf-vision-qualification\.mjs/u);
   assert.match(installed, /manifest\.sourceRevision !== process\.env\.GITHUB_SHA/u);
-  assert.match(workflow.jobs['semantic-publish'].if, /qualify_pdf_host_full != true/u);
-  assert.match(workflow.jobs['semantic-payloads'].if, /qualify_pdf_host_full != true/u);
+  assert.match(workflow.jobs['semantic-publish'].if, /qualify_pdf_host_sample != true/u);
+  assert.match(workflow.jobs['semantic-payloads'].if, /qualify_pdf_host_sample != true/u);
 });
 
 test('private qualification rejects release events and enabled release gates', () => {

@@ -49,9 +49,10 @@ pub use journal::{
 };
 pub use lock::LibraryLockGuard;
 pub use policy::{
-    CURRENT_POLICY_SCHEMA_VERSION, DescendantExclusion, DeviceLibraryIdentity, EnrolledRoot,
-    ExclusionCleanupStatus, FilesystemIdentity, GemmaMediaSelection, ModelIdentity, PolicyError,
-    ResourceBudgets, ResourceProfile, ResourceProfileKind, SemanticLibraryPolicy,
+    CPU_PDF_IMAGE_PAGE_BUDGET, CURRENT_POLICY_SCHEMA_VERSION, DescendantExclusion,
+    DeviceLibraryIdentity, EnrolledRoot, ExclusionCleanupStatus, FilesystemIdentity,
+    GemmaMediaSelection, ModelIdentity, PolicyError, ResourceBudgets, ResourceProfile,
+    ResourceProfileKind, SemanticLibraryPolicy,
 };
 pub use preview::{
     BudgetAssessment, BudgetKind, EnrolmentEstimate, EnrolmentEstimator, EnrolmentPreview,

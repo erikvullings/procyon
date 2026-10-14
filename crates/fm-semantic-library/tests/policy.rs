@@ -54,6 +54,48 @@ fn policy_round_trips_atomically_with_stable_library_and_model_identity() {
 }
 
 #[test]
+fn v3_roots_migrate_with_pdf_page_images_disabled() {
+    let directory = project_temp_dir("policy-v3-pdf-images-");
+    let store = SemanticLibraryPolicyStore::new(directory.path());
+    let mut legacy = policy();
+    let root_id = RootId::new();
+    legacy
+        .enrol_root(EnrolledRoot::new(
+            root_id,
+            Location::try_new(fm_domain::ProviderId::new("local"), "file:///docs")
+                .expect("valid location"),
+            None,
+            true,
+        ))
+        .expect("enrol legacy root");
+    let mut legacy_json = serde_json::to_value(legacy).expect("serialize policy");
+    legacy_json["schemaVersion"] = serde_json::Value::from(3);
+    let root = legacy_json["roots"]
+        .as_object_mut()
+        .expect("roots object")
+        .values_mut()
+        .next()
+        .expect("legacy root")
+        .as_object_mut()
+        .expect("root object");
+    root.remove("pdfImagesEnabled");
+    root.remove("pdfImagePageBudget");
+    std::fs::create_dir_all(store.path().parent().expect("policy parent"))
+        .expect("create policy directory");
+    std::fs::write(
+        store.path(),
+        serde_json::to_vec(&legacy_json).expect("encode legacy policy"),
+    )
+    .expect("write legacy policy");
+
+    let migrated = store.load().expect("migrate v3 policy");
+    let root = migrated.root(root_id).expect("migrated root");
+    assert_eq!(migrated.schema_version(), CURRENT_POLICY_SCHEMA_VERSION);
+    assert!(!root.pdf_images_enabled());
+    assert_eq!(root.pdf_image_page_budget(), None);
+}
+
+#[test]
 fn new_gemma_library_persists_immutable_dimensions_and_independent_media_consent() {
     let media = GemmaMediaSelection {
         images: false,

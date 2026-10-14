@@ -202,9 +202,15 @@ impl FileManagerService {
         self.ensure_semantic_library_operation(access, SemanticLibraryOperation::PreviewEnrolment)
             .await?;
         let context = semantic_folder_context(request.workspace_id, request.location)?;
-        self.semantic_library_preview_enrolment(access, context, request.recursive)
-            .await
-            .map(semantic_enrolment_preview_to_dto)
+        self.semantic_library_preview_enrolment_with_pdf_image_policy(
+            access,
+            context,
+            request.recursive,
+            request.pdf_images_enabled,
+            request.pdf_image_page_budget,
+        )
+        .await
+        .map(semantic_enrolment_preview_to_dto)
     }
 
     /// Confirms one live enrolment disclosure.
@@ -420,6 +426,8 @@ fn semantic_root_status_to_dto(root: SemanticRootStatus) -> SemanticRootStatusDt
         id: root.id,
         location: root.location.into(),
         recursive: root.recursive,
+        pdf_images_enabled: root.pdf_images_enabled,
+        pdf_image_page_budget: root.pdf_image_page_budget,
         stable_identity_verified: root.stable_identity_verified,
         workspace_references: root.workspace_references,
         eligibility_overrides: root
@@ -531,6 +539,8 @@ fn semantic_enrolment_preview_to_dto(
         policy_revision: preview.policy_revision,
         location: preview.location.into(),
         recursive: preview.recursive,
+        pdf_images_enabled: preview.pdf_images_enabled,
+        pdf_image_page_budget: preview.pdf_image_page_budget,
         estimate: semantic_estimate_to_dto(preview.estimate),
         normalized_excerpts_retained_locally: preview.normalized_excerpts_retained_locally,
     }

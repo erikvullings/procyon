@@ -897,7 +897,10 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
           };
           await client.initializeGemmaLibrary(selected);
           if (loaded !== undefined) {
-            loaded = { ...loaded, gemmaSetup: selected };
+            loaded = {
+              ...loaded,
+              gemmaSetup: await client.getGemmaLibrarySetup(),
+            };
           }
         }
         await client.acceptSemanticComponentInstallationOffer({ offerId: acceptedOffer.offerId });

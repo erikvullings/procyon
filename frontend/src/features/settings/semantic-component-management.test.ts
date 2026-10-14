@@ -212,6 +212,8 @@ describe('SemanticComponentManagement', () => {
       images: false,
       audio: true,
       video: false,
+      imageDevice: 'cpu',
+      pdfImagePageBudget: 4,
     });
     const initialize = vi.spyOn(client, 'initializeGemmaLibrary');
     mountComponent(client);

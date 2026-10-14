@@ -14,6 +14,11 @@ export interface SemanticEvidenceDto {
   /** @minimum 0 */
   generation: number;
   indexedContentHash: string;
+  /**
+     * Indexed IANA media type.
+     * @nullable
+     */
+  mediaType?: string | null;
   /** Versioned JSON emitted by `fm-semantic-conversion`. */
   provenanceJson: string;
   recordId: string;

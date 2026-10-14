@@ -142,24 +142,28 @@ function fixture(context, { pdfRenderer = true, pdfEvidence = true } = {}) {
       const evidence = {
         schemaVersion: 1,
         decision: 'noGo',
-        scope: 'installed-host-vfs-synthetic-pdf-vision',
+        scope: 'installed-host-vfs-8-page-synthetic-pdf-sample',
         target,
         qualificationRunId: '456',
         qualificationSourceRevision: sourceRevision,
         candidateRunId: 123,
         candidateSourceRevision: sourceRevision,
         catalogSha256: candidate.targets[target].catalogSha256,
-        sourceBytes: 175_530_108,
-        sourceSha256: 'f2e8e12f962f43b5e384dbb8a2648c8ce88213a9895bd11bb5e6fc7b350d3964',
-        pageCount: 354,
-        imageEvidenceCount: 354,
+        sourceBytes: 3_967_050,
+        sourceSha256: '6fd090eee5fcdd7e547c8787f8ada4465e896fcff190b84e2b2f49e9c5b3d690',
+        pageCount: 8,
+        imageEvidenceCount: 8,
+        completeGenerationVerified: true,
         hostVfsVerified: true,
+        replacementVerified: true,
         fallbackVerified: true,
         upgradeRollbackVerified: true,
         currentContentAndDeletionVerified: true,
         crossHostNavigationVerified: true,
         resourceCeilingQualified: true,
         elapsedSeconds: 10_000,
+        secondsPerPage: 1_250,
+        pagesPerSecond: 8 / 10_000,
         releaseCeilingSeconds: 12_000,
         hostPeakRssBytes: 200_000_000,
         workerPeakRssBytes: 800_000_000,
@@ -265,7 +269,7 @@ test('experimental Gemma refuses signed candidates without PDF renderer and noti
   );
 });
 
-test('signed PDFium alone cannot authorize a Gemma release without installed full-scan evidence', (context) => {
+test('signed PDFium alone cannot authorize a Gemma release without installed sampled evidence', (context) => {
   const { assets, candidateRoot, approval } = fixture(context, { pdfEvidence: false });
   assert.throws(
     () => checkExperimentalGemmaRelease(assets, candidateRoot, approval),

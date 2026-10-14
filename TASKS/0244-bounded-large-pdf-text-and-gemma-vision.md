@@ -98,6 +98,26 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-14 Copilot: User-directed installed vision qualification now uses an
+  eight-page deterministic sample on all four worker targets so CPU jobs fit
+  normal CI limits. It must report measured seconds/page and host/worker
+  resource peaks while exercising atomic publication, citations, replacement
+  and deletion. Earlier macOS 354/354 scans remain supplementary evidence; they
+  do not replace the new exact-source four-target sample. The observed CPU rate
+  is approximately 28 seconds per image page (about 2 h 45 min for 354 pages
+  before overhead), a documented performance limitation rather than a release
+  gate. The new four-target sample and current-source CI are not yet complete.
+- 2026-10-14 Copilot: Added opt-in per-root Gemma PDF-page-image consent. CPU
+  targets default off; opting in caps image embeddings at the first four pages
+  per PDF and warns about roughly two minutes per PDF at the observed CPU rate.
+  Metal targets default on and may opt out; E5 does not offer the control.
+  Existing policy schema v3 roots migrate with the new choice off, and the
+  worker retains PDF text while recording pages skipped by the cap. Folder,
+  file-result, and Knowledge UI explain the configured cap and unchanged text
+  coverage. Still outstanding: expose actual per-document skipped-page
+  coverage durably in the file/Knowledge UI, qualify CPU fallback behavior,
+  run current-source CI, then dispatch new exact-source candidate-bound
+  installed tests. Release remains no-go.
 - 2026-10-13 Copilot: Release blocker fixed. The desktop `semantic-gemma`
   feature enabled `fm-semantic-worker/gemma-native`, linking Zvec's dynamic
   C library, ONNX Runtime and native inference into the desktop. The bundled

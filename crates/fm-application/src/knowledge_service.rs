@@ -218,6 +218,8 @@ impl KnowledgeService {
                 root_id: root.id,
                 location: root.location.into(),
                 recursive: root.recursive,
+                pdf_images_enabled: root.pdf_images_enabled,
+                pdf_image_page_budget: root.pdf_image_page_budget,
                 available: matches!(root.availability, SemanticRootAvailability::Available),
                 indexed_generation: root.indexed_generation,
                 indexed_sources: root.indexed_occurrences,

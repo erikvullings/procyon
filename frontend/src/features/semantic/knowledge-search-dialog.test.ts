@@ -2110,6 +2110,35 @@ function scopeSelect(): HTMLSelectElement {
 }
 
 describe('KnowledgeSearchDialog canonical query state (task 0206)', () => {
+  it('discloses capped PDF page-image coverage for enrolled roots', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([
+      {
+        rootId: 'limited-root',
+        label: 'Scans',
+        location: { providerId: 'local', uri: 'file:///documents/scans' },
+        recursive: true,
+        available: true,
+        indexedSources: 2,
+        confirmedCompletedSources: 2,
+        unverifiedLegacySources: 0,
+        indexedGeneration: 1,
+        pdfImagesEnabled: true,
+        pdfImagePageBudget: 4,
+      },
+    ]);
+    mount({ client });
+    await ready();
+    scopeSelect().value = 'enrolledRoots';
+    scopeSelect().dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain(
+        'Some included folders limit PDF page-image indexing to the first 4 pages per PDF',
+      ),
+    );
+    expect(root.textContent).toContain('Text remains indexed');
+  });
+
   it('keeps a quoted subject as one element through both editors', async () => {
     const client = new MockFileManagerClient();
     const execute = vi.spyOn(client, 'executeKnowledgeSearch');

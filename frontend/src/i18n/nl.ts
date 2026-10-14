@@ -1055,6 +1055,8 @@ export const nl = {
     pdfImageResult: 'Ingesloten PDF-afbeelding · Pagina {page} · Afbeelding {image}',
     pdfPageRenderEvidence: 'Gerenderde PDF-pagina (geen ingesloten afbeelding)',
     pdfPageRenderResult: 'Gerenderde PDF-pagina · Pagina {page}',
+    pdfImagesLimitedNotice:
+      'In sommige opgenomen mappen worden per pdf alleen de eerste {pages} pagina-afbeeldingen geïndexeerd. Tekst blijft geïndexeerd.',
     groupBy: 'Resultaatweergave',
     groupByNeed: 'Per kennisbehoefte',
     groupByDocument: 'Per document',
@@ -1642,6 +1644,12 @@ export const nl = {
       1: '1 bestand overschrijdt de indexeringslimiet van 64 MiB en is niet doorzoekbaar. Zie Indexeringsdetails.',
       n: '{n} bestanden overschrijden de indexeringslimiet van 64 MiB en zijn niet doorzoekbaar. Zie Indexeringsdetails.',
     },
+    indexPdfPageImages: 'PDF-pagina-afbeeldingen indexeren',
+    cpuPdfImageBudgetWarning:
+      'Traag op CPU: dit kan ongeveer {minutes} minuten per pdf duren. Alleen de eerste {pages} pagina-afbeeldingen worden geïndexeerd; pdf-tekst blijft behouden.',
+    pdfImagesAllPages: 'PDF-pagina-afbeeldingen zijn voor alle pagina’s in deze map ingeschakeld.',
+    pdfImagesPageBudget:
+      'Op dit CPU-apparaat worden per pdf alleen de eerste {pages} pagina-afbeeldingen geïndexeerd; pdf-tekst blijft behouden.',
     lastWorkerDevice: 'Laatste workerstart: {device}',
     metal: 'Metal',
     cpu: 'CPU',

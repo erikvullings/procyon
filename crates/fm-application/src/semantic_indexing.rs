@@ -527,6 +527,8 @@ impl SemanticIndexingService {
                 workspace_ids,
                 location: root.location,
                 recursive: root.recursive,
+                pdf_images_enabled: root.pdf_images_enabled,
+                pdf_image_page_budget: root.pdf_image_page_budget,
             },
             provider,
             semantic,
@@ -602,7 +604,9 @@ impl SemanticIndexingService {
             }],
             context.max_pdf_source_bytes,
         )?;
-        let pdf_images_consented = feed.pdf_images_consented;
+        let pdf_images_consented = feed.pdf_images_consented
+            && context.pdf_images_enabled
+            && media_type == "application/pdf";
         let decision = feed
             .decisions
             .into_iter()
@@ -664,6 +668,9 @@ impl SemanticIndexingService {
                     workspace_id: *workspace_id,
                     media_type,
                     pdf_images_consented,
+                    pdf_image_page_budget: pdf_images_consented
+                        .then_some(context.pdf_image_page_budget)
+                        .flatten(),
                     modified_at_ms: entry
                         .modified_at
                         .map_or(0, |value| value.timestamp_millis()),
@@ -826,6 +833,8 @@ struct RootIngestContext {
     workspace_ids: Vec<WorkspaceId>,
     location: Location,
     recursive: bool,
+    pdf_images_enabled: bool,
+    pdf_image_page_budget: Option<u32>,
 }
 
 struct EntryIngestRequest<'a> {
@@ -1127,6 +1136,7 @@ struct FeedDocument<'content> {
     workspace_id: WorkspaceId,
     media_type: &'content str,
     pdf_images_consented: bool,
+    pdf_image_page_budget: Option<u32>,
     modified_at_ms: i64,
     content: FeedContent<'content>,
 }
@@ -1205,6 +1215,9 @@ async fn ingest_and_wait(
         ),
     ]);
     metadata.insert("title".to_owned(), document.title);
+    if let Some(page_budget) = document.pdf_image_page_budget {
+        metadata.insert("pdf_image_page_budget".to_owned(), page_budget.to_string());
+    }
     let document_id = DocumentId::new(decision.document_id().to_string());
     let pdf_images_consented =
         document.pdf_images_consented && document.media_type == "application/pdf";

@@ -317,6 +317,10 @@ pub struct SemanticEnrolmentPreview {
     pub location: Location,
     /// Whether consent is recursive.
     pub recursive: bool,
+    /// Whether this root separately consents to PDF page-image embeddings.
+    pub pdf_images_enabled: bool,
+    /// Per-document page-image budget, or `None` for no cap.
+    pub pdf_image_page_budget: Option<u32>,
     /// Bounded estimate projection.
     pub estimate: SemanticEnrolmentEstimateStatus,
     /// Explicit retention disclosure.
@@ -420,6 +424,10 @@ pub struct SemanticRootStatus {
     pub location: Location,
     /// Whether descendants inherit consent.
     pub recursive: bool,
+    /// Whether this root separately consents to PDF page-image embeddings.
+    pub pdf_images_enabled: bool,
+    /// Per-document page-image budget, or `None` for no cap.
+    pub pdf_image_page_budget: Option<u32>,
     /// Whether the provider supplied stable filesystem identity.
     pub stable_identity_verified: bool,
     /// Workspaces referring to this global consent.
@@ -1247,6 +1255,24 @@ impl SemanticLibraryService {
         context: SemanticFolderContext,
         recursive: bool,
     ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
+        self.preview_enrolment_with_pdf_image_policy(access, context, recursive, false, None)
+    }
+
+    /// Creates a bounded enrolment disclosure with an additional, validated
+    /// per-root PDF page-image choice.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, request-validation, lock, or
+    /// persistence failure.
+    pub fn preview_enrolment_with_pdf_image_policy(
+        &self,
+        access: &SemanticAccessContext,
+        context: SemanticFolderContext,
+        recursive: bool,
+        pdf_images_enabled: bool,
+        pdf_image_page_budget: Option<u32>,
+    ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
         self.ensure_operation_allowed(access, SemanticLibraryOperation::PreviewEnrolment)?;
         let managed = self.managed_backend()?;
         managed.authorize(access)?;
@@ -1254,7 +1280,7 @@ impl SemanticLibraryService {
             return Err(SemanticLibraryError::InvalidRequest);
         }
         let mut locked = managed.lock()?;
-        let (existing_root, revision, budgets) = {
+        let (existing_root, revision, budgets, gemma_images_allowed) = {
             let data = locked.data()?;
             data.policy
                 .consent_state(&context.location)
@@ -1267,8 +1293,24 @@ impl SemanticLibraryService {
                     .cloned(),
                 data.policy.revision(),
                 data.policy.resource_profile().budgets,
+                data.policy
+                    .library()
+                    .model()
+                    .gemma_media()
+                    .is_some_and(|media| media.images),
             )
         };
+        let expected_budget = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            None
+        } else {
+            Some(core::CPU_PDF_IMAGE_PAGE_BUDGET)
+        };
+        if (pdf_images_enabled
+            && (!gemma_images_allowed || pdf_image_page_budget != expected_budget))
+            || (!pdf_images_enabled && pdf_image_page_budget.is_some())
+        {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
         let deterministic = managed.deterministic;
         let root_id = match existing_root.as_ref() {
             Some(root) => root.id(),
@@ -1291,6 +1333,8 @@ impl SemanticLibraryService {
                 recursive,
             )
         });
+        root.set_pdf_image_policy(pdf_images_enabled, pdf_image_page_budget)
+            .map_err(map_policy_error)?;
         root.attach_workspace(context.workspace_id);
         let confirmation_id = next_confirmation(&mut locked.cache, deterministic, "enrol");
         locked.cache.enrolment_confirmations.insert(
@@ -1307,6 +1351,8 @@ impl SemanticLibraryService {
             policy_revision: revision,
             location: context.location,
             recursive,
+            pdf_images_enabled,
+            pdf_image_page_budget,
             estimate: project_estimate(&estimate, budgets),
             normalized_excerpts_retained_locally: true,
         })
@@ -1346,10 +1392,16 @@ impl SemanticLibraryService {
             .find(|root| root.location() == &context.location)
             .map(core::EnrolledRoot::id)
         {
-            next.policy
+            let root = next
+                .policy
                 .root_mut(existing)
-                .ok_or(SemanticLibraryError::NotFound)?
-                .attach_workspace(context.workspace_id);
+                .ok_or(SemanticLibraryError::NotFound)?;
+            root.attach_workspace(context.workspace_id);
+            root.set_pdf_image_policy(
+                pending.root.pdf_images_enabled(),
+                pending.root.pdf_image_page_budget(),
+            )
+            .map_err(map_policy_error)?;
             existing
         } else {
             let root_id = pending.root.id();
@@ -2131,6 +2183,12 @@ impl SemanticLibraryService {
         Ok(Some(ResolvedSemanticOccurrence {
             entry_id: occurrence.entry_id(),
             location: occurrence.location().clone(),
+            root_id: occurrence
+                .scopes()
+                .iter()
+                .find(|scope| scope.workspace_id() == workspace_id)
+                .map(|scope| scope.root_id())
+                .ok_or(SemanticLibraryError::NotFound)?,
             available: data.catalog.source_availability(occurrence_id)
                 == Some(core::SourceAvailability::Available),
         }))
@@ -2499,6 +2557,7 @@ pub struct SemanticWorkerFeedPlan {
 pub(crate) struct ResolvedSemanticOccurrence {
     pub(crate) entry_id: fm_domain::EntryId,
     pub(crate) location: Location,
+    pub(crate) root_id: core::RootId,
     pub(crate) available: bool,
 }
 
@@ -3469,6 +3528,8 @@ fn project_root(
         id: root.id().to_string(),
         location: root.location().clone(),
         recursive: root.recursive(),
+        pdf_images_enabled: root.pdf_images_enabled(),
+        pdf_image_page_budget: root.pdf_image_page_budget(),
         stable_identity_verified: root.filesystem_identity().is_some(),
         workspace_references: root
             .workspace_references()
@@ -3882,6 +3943,10 @@ pub struct GemmaLibrarySetup {
     pub dimensions: u32,
     /// Fixed media permissions.
     pub media: core::GemmaMediaSelection,
+    /// Default page-image device selected by the signed worker target.
+    pub image_device: &'static str,
+    /// Default CPU page-image budget; absent for the Metal target.
+    pub pdf_image_page_budget: Option<u32>,
 }
 
 impl SemanticLibraryComposition {
@@ -3923,6 +3988,19 @@ impl SemanticLibraryComposition {
                     media: model
                         .gemma_media()
                         .ok_or(SemanticLibraryError::IncompatibleLibraryIdentity)?,
+                    image_device: if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+                        "metal"
+                    } else {
+                        "cpu"
+                    },
+                    pdf_image_page_budget: if cfg!(all(
+                        target_os = "macos",
+                        target_arch = "aarch64"
+                    )) {
+                        None
+                    } else {
+                        Some(core::CPU_PDF_IMAGE_PAGE_BUDGET)
+                    },
                 })
             })
             .transpose()

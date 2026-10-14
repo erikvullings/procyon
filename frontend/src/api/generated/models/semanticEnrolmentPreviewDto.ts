@@ -18,6 +18,14 @@ export interface SemanticEnrolmentPreviewDto {
   /** Explicit local normalized-excerpt retention disclosure. */
   normalizedExcerptsRetainedLocally: boolean;
   /**
+     * Maximum PDF page images embedded per document, or `None` for no cap.
+     * @minimum 0
+     * @nullable
+     */
+  pdfImagePageBudget?: number | null;
+  /** Whether this root separately consents to PDF page-image embeddings. */
+  pdfImagesEnabled?: boolean;
+  /**
      * Optimistic policy revision.
      * @minimum 0
      */

@@ -83,6 +83,8 @@ describe('SemanticLibraryManagement', () => {
       images: true,
       audio: true,
       video: true,
+      imageDevice: 'metal',
+      pdfImagePageBudget: null,
       lastWorkerDevice: 'metal',
     });
     let indexedSources = 0;
@@ -178,6 +180,8 @@ describe('SemanticLibraryManagement', () => {
       workspaceId: workspace.id,
       location,
       recursive: true,
+      pdfImagesEnabled: false,
+      pdfImagePageBudget: null,
     });
 
     button('Cancel').click();
@@ -199,6 +203,89 @@ describe('SemanticLibraryManagement', () => {
       }),
     );
     expect(confirm.mock.calls[0]?.[0]).not.toHaveProperty('estimatedFiles');
+  });
+
+  it('requires explicit CPU PDF-image consent and explains the four-page budget', async () => {
+    const component = await client.getSemanticComponentStatus();
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...component,
+      activeModel: {
+        profile: 'embeddingGemma2',
+        identity: { modelId: 'gemma', revision: 'test' },
+      },
+    });
+    vi.spyOn(client, 'getGemmaLibrarySetup').mockResolvedValue({
+      dimensions: 512,
+      images: true,
+      audio: false,
+      video: false,
+      imageDevice: 'cpu',
+      pdfImagePageBudget: 4,
+    });
+    const preview = vi.spyOn(client, 'previewSemanticEnrolment');
+    mountComponent(client);
+    await waitForLoaded();
+
+    button('Review indexing').click();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLInputElement>('.fm-semantic-library-pdf-images input'),
+      ).not.toBeNull(),
+    );
+    const checkbox = root.querySelector<HTMLInputElement>('.fm-semantic-library-pdf-images input');
+    expect(checkbox?.checked).toBe(false);
+    expect(root.textContent).not.toContain('Slow on CPU');
+
+    checkbox?.click();
+    await vi.waitFor(() =>
+      expect(preview).toHaveBeenLastCalledWith({
+        workspaceId: workspace.id,
+        location,
+        recursive: true,
+        pdfImagesEnabled: true,
+        pdfImagePageBudget: 4,
+      }),
+    );
+    await vi.waitFor(() => expect(root.textContent).toContain('first 4 page images'));
+    expect(root.textContent).toContain('PDF text is unaffected');
+    button('Include and index folder').click();
+    await vi.waitFor(() => expect(root.textContent).toContain('first 4 pages per PDF'));
+  });
+
+  it('defaults PDF-image consent on for a Metal target without a CPU warning', async () => {
+    const component = await client.getSemanticComponentStatus();
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...component,
+      activeModel: {
+        profile: 'embeddingGemma2',
+        identity: { modelId: 'gemma', revision: 'test' },
+      },
+    });
+    vi.spyOn(client, 'getGemmaLibrarySetup').mockResolvedValue({
+      dimensions: 512,
+      images: true,
+      audio: false,
+      video: false,
+      imageDevice: 'metal',
+      pdfImagePageBudget: null,
+    });
+    const preview = vi.spyOn(client, 'previewSemanticEnrolment');
+    mountComponent(client);
+    await waitForLoaded();
+
+    button('Review indexing').click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-library-plan')).not.toBeNull());
+    expect(
+      root.querySelector<HTMLInputElement>('.fm-semantic-library-pdf-images input')?.checked,
+    ).toBe(true);
+    expect(root.textContent).not.toContain('Slow on CPU');
+    expect(preview).toHaveBeenLastCalledWith({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+      pdfImagesEnabled: true,
+      pdfImagePageBudget: null,
+    });
   });
 
   it('lists every destructive category before exclusion confirmation', async () => {
@@ -239,6 +326,25 @@ describe('SemanticLibraryManagement', () => {
     await vi.waitFor(() => expect(root.textContent).toContain('Excluded'));
     expect(root.textContent).toContain('Cleanup complete');
     expect(confirm.mock.calls[0]?.[0]).not.toHaveProperty('categories');
+  });
+
+  it('hides PDF-image consent and skips Gemma setup for an E5 library', async () => {
+    const component = await client.getSemanticComponentStatus();
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...component,
+      activeModel: {
+        profile: 'compactMultilingual',
+        identity: { modelId: 'e5', revision: 'test' },
+      },
+    });
+    const setup = vi.spyOn(client, 'getGemmaLibrarySetup');
+    mountComponent(client);
+    await waitForLoaded();
+
+    button('Review indexing').click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-library-plan')).not.toBeNull());
+    expect(root.querySelector('.fm-semantic-library-pdf-images')).toBeNull();
+    expect(setup).not.toHaveBeenCalled();
   });
 
   it('removes a listed folder without navigating to it, while retaining the source files', async () => {

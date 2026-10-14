@@ -1000,11 +1000,37 @@ impl FileManagerService {
         context: SemanticFolderContext,
         recursive: bool,
     ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
+        self.semantic_library_preview_enrolment_with_pdf_image_policy(
+            access, context, recursive, false, None,
+        )
+        .await
+    }
+
+    /// Creates an enrolment disclosure with additional per-root PDF image consent.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, lock, or persistence
+    /// failure.
+    pub async fn semantic_library_preview_enrolment_with_pdf_image_policy(
+        &self,
+        access: &SemanticAccessContext,
+        context: SemanticFolderContext,
+        recursive: bool,
+        pdf_images_enabled: bool,
+        pdf_image_page_budget: Option<u32>,
+    ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
         let library = self.semantic_library().await;
         library.ensure_operation_allowed(access, SemanticLibraryOperation::PreviewEnrolment)?;
         self.ensure_active_semantic_folder(&context).await?;
         let context = self.semantic_consent_context(context).await;
-        library.preview_enrolment(access, context, recursive)
+        library.preview_enrolment_with_pdf_image_policy(
+            access,
+            context,
+            recursive,
+            pdf_images_enabled,
+            pdf_image_page_budget,
+        )
     }
 
     /// Confirms one live enrolment disclosure for the still-active folder.

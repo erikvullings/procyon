@@ -491,8 +491,8 @@ fn qualify_installed_gemma(
                 "enrolled_synthetic_scan_keeps_pdf_page_citation_and_revokes_deleted_source",
             ),
             (
-                "PROCYON_GEMMA_PDF_HOST_FULL_REPORT",
-                "enrolled_large_synthetic_scan_publishes_all_page_citations",
+                "PROCYON_GEMMA_PDF_HOST_SAMPLE_REPORT",
+                "enrolled_synthetic_scan_sample_reindexes_and_revokes_deleted_source",
             ),
         ] {
             let Some(report_path) = std::env::var_os(report_variable) else {
@@ -514,8 +514,8 @@ fn qualify_installed_gemma(
                 );
             }
             let report: serde_json::Value = serde_json::from_slice(&fs::read(report_path)?)?;
-            let expected_pages = if report_variable == "PROCYON_GEMMA_PDF_HOST_FULL_REPORT" {
-                354
+            let expected_pages = if report_variable == "PROCYON_GEMMA_PDF_HOST_SAMPLE_REPORT" {
+                8
             } else {
                 1
             };
@@ -523,8 +523,8 @@ fn qualify_installed_gemma(
                 || report["hostVfsVerified"] != true
                 || report["workspaceIsolationVerified"] != true
                 || report["deletionVerified"] != true
-                || report["onePageSourceEditReindexVerified"] != (expected_pages == 1)
-                || report["currentContentAndDeletionVerified"] != false
+                || report["replacementVerified"] != (expected_pages == 8)
+                || report["currentContentAndDeletionVerified"] != (expected_pages == 8)
             {
                 return Err(
                     format!("installed Gemma host PDF {test_name} report is incomplete").into(),
@@ -576,7 +576,7 @@ fn qualify_installed_gemma(
         let status = std::process::Command::new(test)
             .args([
                 "--exact",
-                "packaged_gemma_indexes_all_synthetic_scan_pages_offline",
+                "packaged_gemma_indexes_sampled_synthetic_scan_pages_offline",
                 "--ignored",
                 "--nocapture",
             ])
@@ -590,7 +590,7 @@ fn qualify_installed_gemma(
             .env("PROCYON_GEMMA_PDF_QUALIFICATION_REPORT", report)
             .status()?;
         if !status.success() {
-            return Err(format!("installed 354-page Gemma scan failed: {status}").into());
+            return Err(format!("installed sampled Gemma scan failed: {status}").into());
         }
     }
     Ok(())

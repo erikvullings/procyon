@@ -7,6 +7,8 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+#[cfg(feature = "gemma-native")]
+use std::time::Instant;
 
 use async_trait::async_trait;
 use fm_application::FileManagerService;
@@ -33,9 +35,9 @@ use fm_application::semantic_ocr::{
 use fm_domain::{Location, WorkspaceId};
 use fm_events::{BackendEventPayload, SessionId, SubscriptionEvent};
 use fm_semantic_library::{
-    DeviceLibraryIdentity, EligibilityOverride, EligibilityReason, EligibilityReasonCounts,
-    GemmaMediaSelection, LibraryId, ModelIdentity, ResourceBudgets, ResourceProfile,
-    ResourceProfileKind, RootId,
+    CPU_PDF_IMAGE_PAGE_BUDGET, DeviceLibraryIdentity, EligibilityOverride, EligibilityReason,
+    EligibilityReasonCounts, GemmaMediaSelection, LibraryId, ModelIdentity, ResourceBudgets,
+    ResourceProfile, ResourceProfileKind, RootId,
 };
 use fm_semantic_worker::document_summary::{
     GeneratedSummary, PrepareDocumentSummary, PreparedDocumentSummary,
@@ -739,11 +741,39 @@ async fn reconciliation_scopes_pdf_image_consent_to_the_selected_gemma_library()
             )
             .unwrap(),
         );
-        let root_id = enrol(
-            &library,
-            WorkspaceId::from(Uuid::from_u128(0x1912)),
-            Location::from_native_path(root.path()).unwrap(),
-        );
+        let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1912));
+        let location = Location::from_native_path(root.path()).unwrap();
+        let context = SemanticFolderContext::new(workspace_id, location.clone());
+        let page_budget = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            None
+        } else {
+            Some(CPU_PDF_IMAGE_PAGE_BUDGET)
+        };
+        let preview = library
+            .preview_enrolment_with_pdf_image_policy(
+                &HOST,
+                context.clone(),
+                true,
+                images,
+                if images { page_budget } else { None },
+            )
+            .unwrap();
+        let status = library
+            .confirm_enrolment(
+                &HOST,
+                &preview.confirmation_id,
+                preview.policy_revision,
+                &context,
+            )
+            .unwrap();
+        let root_id = status
+            .roots
+            .iter()
+            .find(|candidate| candidate.location == location)
+            .expect("newly enrolled root")
+            .id
+            .parse()
+            .unwrap();
         let capability = Arc::new(RemediatingDocumentCapability::new());
         let service = FileManagerService::new(
             RuntimeKindDto::Tauri,
@@ -1035,9 +1065,9 @@ async fn enrolled_synthetic_scan_keeps_pdf_page_citation_and_revokes_deleted_sou
 
 #[cfg(feature = "gemma-native")]
 #[tokio::test]
-#[ignore = "requires an exact signed PDFium-enabled Gemma worker and a long-running 354-page synthetic scan"]
-async fn enrolled_large_synthetic_scan_publishes_all_page_citations() {
-    qualify_enrolled_synthetic_scan(354).await;
+#[ignore = "requires an exact signed PDFium-enabled Gemma worker and installed Gemma originals"]
+async fn enrolled_synthetic_scan_sample_reindexes_and_revokes_deleted_source() {
+    qualify_enrolled_synthetic_scan(8).await;
 }
 
 #[cfg(feature = "gemma-native")]
@@ -1060,15 +1090,15 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
         .arg("--output")
         .arg(&source)
         .output()
-        .expect("generate synthetic one-page scan");
+        .expect("generate synthetic scan sample");
     assert!(
         output.status.success(),
         "synthetic scan generation failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
     let source_bytes = std::fs::metadata(&source).unwrap().len();
-    if pages == 354 {
-        assert_eq!(source_bytes, 175_530_108);
+    if pages == 8 {
+        assert_eq!(source_bytes, 3_967_050);
     }
     let mut hasher = Sha256::new();
     let mut input = std::fs::File::open(&source).unwrap();
@@ -1085,10 +1115,10 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
-    if pages == 354 {
+    if pages == 8 {
         assert_eq!(
             source_sha256,
-            "f2e8e12f962f43b5e384dbb8a2648c8ce88213a9895bd11bb5e6fc7b350d3964"
+            "6fd090eee5fcdd7e547c8787f8ada4465e896fcff190b84e2b2f49e9c5b3d690"
         );
     }
     let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1913));
@@ -1141,12 +1171,14 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
         Some(runtime.path().join("worker.pid")),
         Arc::clone(&sampler_stop),
     ));
+    let started = Instant::now();
     let indexed = service
         .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
         .await
         .expect("index enrolled synthetic scan");
     assert_eq!(indexed.ingested_occurrences, 1, "{indexed:?}");
     assert_eq!(indexed.failed_occurrences, 0, "{indexed:?}");
+    let elapsed_seconds = started.elapsed().as_secs_f64();
     let results = service
         .semantic_query(SemanticQuery {
             scope: SemanticScope::new(
@@ -1174,9 +1206,7 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
     assert_eq!(provenance["value"]["kind"], "pdfPageRender");
     let hit_page = provenance["value"]["page_number"].as_u64().unwrap();
     assert!(hit_page >= 1 && hit_page <= u64::from(pages));
-    if pages == 354 {
-        assert_complete_page_images(&state, pages);
-    }
+    assert_complete_page_images(&state, pages);
     let mut source_id = image.metadata.get("semantic.sourceId").unwrap().clone();
     let outside = service
         .semantic_query(SemanticQuery {
@@ -1208,7 +1238,8 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
     let location: Location = resolved.location.into();
     assert_eq!(location, Location::from_native_path(&source).unwrap());
     assert!(resolved.available);
-    if pages == 1 {
+    let replacement_verified = pages > 1;
+    if replacement_verified {
         let replacement = state.path().join("replacement-synthetic-scan.pdf");
         let output = std::process::Command::new("node")
             .arg(&generator)
@@ -1228,6 +1259,7 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
             .expect("reindex edited synthetic scan");
         assert_eq!(updated.ingested_occurrences, 1, "{updated:?}");
         assert_eq!(updated.failed_occurrences, 0, "{updated:?}");
+        assert_complete_page_images(&state, 2);
         let results = service
             .semantic_query(SemanticQuery {
                 scope: SemanticScope::new(
@@ -1305,8 +1337,8 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
     })
     .await
     .expect("installed worker exited before isolated index cleanup");
-    let report_variable = if pages == 354 {
-        "PROCYON_GEMMA_PDF_HOST_FULL_REPORT"
+    let report_variable = if pages == 8 {
+        "PROCYON_GEMMA_PDF_HOST_SAMPLE_REPORT"
     } else {
         "PROCYON_GEMMA_PDF_HOST_REPORT"
     };
@@ -1314,27 +1346,31 @@ async fn qualify_enrolled_synthetic_scan(pages: u32) {
         std::fs::write(
             path,
             serde_json::to_vec_pretty(&serde_json::json!({
-                "scope": if pages == 354 {
-                    "installed-host-vfs-354-page-synthetic-pdf-probe"
+                "scope": if pages == 8 {
+                    "installed-host-vfs-8-page-synthetic-pdf-sample"
                 } else {
                     "installed-host-vfs-one-page-synthetic-pdf-smoke"
                 },
                 "pageCount": pages,
                 "imageEvidenceCount": pages,
+                "completeGenerationVerified": true,
                 "sourceBytes": source_bytes,
                 "sourceSha256": source_sha256,
+                "elapsedSeconds": elapsed_seconds,
+                "secondsPerPage": elapsed_seconds / f64::from(pages),
+                "pagesPerSecond": f64::from(pages) / elapsed_seconds,
                 "hostPeakRssBytes": host_peak_rss_bytes,
                 "workerPeakRssBytes": worker_peak_rss_bytes,
                 "peakRssMethod": "200ms sysinfo host and worker RSS samples; transient peaks may be missed",
                 "hostVfsVerified": true,
                 "workspaceIsolationVerified": true,
+                "replacementVerified": replacement_verified,
                 "deletionVerified": true,
-                "onePageSourceEditReindexVerified": pages == 1,
-                "currentContentAndDeletionVerified": false,
-                "limitations": if pages == 354 {
-                    "Tauri full-scan probe verifies deletion, not source edits; no measured anonymous temporary disk, browser-server navigation, rollback, or CPU fallback qualification."
+                "currentContentAndDeletionVerified": replacement_verified,
+                "limitations": if pages == 8 {
+                    "Eight-page Tauri sample verifies replacement, page citations and deletion; full 354-page CPU throughput is not release-gating. No measured anonymous temporary disk, browser-server navigation, rollback, or CPU fallback qualification."
                 } else {
-                    "Tauri one-page probe checks a two-page replacement and deletion, not full-scan source edits; no measured anonymous temporary disk, browser-server navigation, rollback, or CPU fallback qualification."
+                    "One-page Tauri smoke checks deletion; no measured anonymous temporary disk, browser-server navigation, rollback, or CPU fallback qualification."
                 }
             }))
             .unwrap(),

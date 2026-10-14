@@ -11,7 +11,10 @@ use crate::{
 };
 
 /// Current durable semantic-library policy schema.
-pub const CURRENT_POLICY_SCHEMA_VERSION: u32 = 3;
+pub const CURRENT_POLICY_SCHEMA_VERSION: u32 = 4;
+
+/// CPU page-image budget used when opting in on a host without Metal.
+pub const CPU_PDF_IMAGE_PAGE_BUDGET: u32 = 4;
 
 const GEMMA_MODEL_ID: &str = "google-embeddinggemma-2";
 const GEMMA_REVISION: &str = "914f7f89142e33e77833254d9c9b90c3cef7303b";
@@ -373,6 +376,10 @@ pub struct EnrolledRoot {
     filesystem_identity: Option<FilesystemIdentity>,
     recursive: bool,
     #[serde(default)]
+    pdf_images_enabled: bool,
+    #[serde(default)]
+    pdf_image_page_budget: Option<u32>,
+    #[serde(default)]
     exclusions: Vec<DescendantExclusion>,
     #[serde(default)]
     eligibility_overrides: BTreeMap<EligibilityReason, EligibilityOverride>,
@@ -396,6 +403,8 @@ impl EnrolledRoot {
             location,
             filesystem_identity,
             recursive,
+            pdf_images_enabled: false,
+            pdf_image_page_budget: None,
             exclusions: Vec::new(),
             eligibility_overrides: BTreeMap::new(),
             vocabulary_ids: BTreeSet::new(),
@@ -442,6 +451,39 @@ impl EnrolledRoot {
     #[must_use]
     pub const fn recursive(&self) -> bool {
         self.recursive
+    }
+
+    /// Whether this root separately consents to PDF page-image embeddings.
+    #[must_use]
+    pub const fn pdf_images_enabled(&self) -> bool {
+        self.pdf_images_enabled
+    }
+
+    /// Maximum PDF page images embedded per document, or `None` for no cap.
+    #[must_use]
+    pub const fn pdf_image_page_budget(&self) -> Option<u32> {
+        self.pdf_image_page_budget
+    }
+
+    /// Sets the additional per-root PDF page-image choice.
+    ///
+    /// A page budget is meaningful only when page images are enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PolicyError::InvalidPdfImagePolicy`] for a zero budget or a
+    /// budget supplied while page images are disabled.
+    pub fn set_pdf_image_policy(
+        &mut self,
+        enabled: bool,
+        page_budget: Option<u32>,
+    ) -> Result<(), PolicyError> {
+        if page_budget == Some(0) || (!enabled && page_budget.is_some()) {
+            return Err(PolicyError::InvalidPdfImagePolicy);
+        }
+        self.pdf_images_enabled = enabled;
+        self.pdf_image_page_budget = page_budget;
+        Ok(())
     }
 
     /// Adds a workspace reference without creating another root consent.
@@ -848,6 +890,11 @@ impl SemanticLibraryPolicy {
                 return Err(PolicyError::InvalidRootKey);
             }
             validate_location(&root.location)?;
+            if root.pdf_image_page_budget == Some(0)
+                || (!root.pdf_images_enabled && root.pdf_image_page_budget.is_some())
+            {
+                return Err(PolicyError::InvalidPdfImagePolicy);
+            }
             if root.eligibility_overrides.iter().any(|(reason, action)| {
                 *action == EligibilityOverride::Include && !reason.can_be_explicitly_included()
             }) {
@@ -902,6 +949,9 @@ pub enum PolicyError {
     /// Reconciliation must occur between once per minute and once per day.
     #[error("semantic reconciliation interval is invalid")]
     InvalidReconciliationInterval,
+    /// Per-root PDF page-image policy is internally inconsistent.
+    #[error("PDF page-image policy is invalid")]
+    InvalidPdfImagePolicy,
     /// The persisted schema cannot be loaded.
     #[error("unsupported semantic policy schema version {0}")]
     UnsupportedSchema(u32),

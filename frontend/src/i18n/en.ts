@@ -1040,6 +1040,8 @@ export const en = {
     pdfImageResult: 'Embedded PDF image · Page {page} · Image {image}',
     pdfPageRenderEvidence: 'Rendered PDF page (not an embedded image)',
     pdfPageRenderResult: 'Rendered PDF page · Page {page}',
+    pdfImagesLimitedNotice:
+      'Some included folders limit PDF page-image indexing to the first {pages} pages per PDF. Text remains indexed.',
     groupBy: 'Result layout',
     groupByNeed: 'By knowledge need',
     groupByDocument: 'By document',
@@ -1633,6 +1635,12 @@ export const en = {
       1: '1 file exceeds the 64 MiB indexing limit and is not searchable. See Indexing details.',
       n: '{n} files exceed the 64 MiB indexing limit and are not searchable. See Indexing details.',
     },
+    indexPdfPageImages: 'Index PDF page images',
+    cpuPdfImageBudgetWarning:
+      'Slow on CPU: this can take about {minutes} minutes per PDF. Only the first {pages} page images are indexed; PDF text is unaffected.',
+    pdfImagesAllPages: 'PDF page images are enabled for all pages in this folder.',
+    pdfImagesPageBudget:
+      'PDF page images are limited to the first {pages} pages per PDF on this CPU device; PDF text remains indexed.',
     lastWorkerDevice: 'Last worker launch: {device}',
     metal: 'Metal',
     cpu: 'CPU',

@@ -1,7 +1,18 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const sourceHash = 'f2e8e12f962f43b5e384dbb8a2648c8ce88213a9895bd11bb5e6fc7b350d3964';
+const samplePages = 8;
+const sourceBytes = 3_967_050;
+const sourceHash = '6fd090eee5fcdd7e547c8787f8ada4465e896fcff190b84e2b2f49e9c5b3d690';
+
+function hasMeasuredThroughput(measured) {
+  return (
+    Number.isFinite(measured.elapsedSeconds) &&
+    measured.elapsedSeconds > 0 &&
+    measured.secondsPerPage === measured.elapsedSeconds / samplePages &&
+    measured.pagesPerSecond === samplePages / measured.elapsedSeconds
+  );
+}
 
 function exactCandidateTarget(lifecycle, candidate, identity) {
   const { target, qualificationRunId, qualificationSourceRevision, candidateRunId } = identity;
@@ -23,12 +34,12 @@ export function recordPdfVisionQualification(measured, lifecycle, candidate, ide
   exactCandidateTarget(lifecycle, candidate, identity);
   const { target, qualificationRunId, qualificationSourceRevision, candidateRunId } = identity;
   if (
-    measured.sourceBytes !== 175_530_108 ||
+    measured.sourceBytes !== sourceBytes ||
     measured.sourceSha256 !== sourceHash ||
-    measured.pageCount !== 354 ||
-    measured.imageEvidenceCount !== 354 ||
-    !Number.isFinite(measured.elapsedSeconds) ||
-    measured.elapsedSeconds <= 0 ||
+    measured.pageCount !== samplePages ||
+    measured.imageEvidenceCount !== samplePages ||
+    measured.completeGenerationVerified !== true ||
+    !hasMeasuredThroughput(measured) ||
     !Number.isSafeInteger(measured.workerPeakRssBytes) ||
     measured.workerPeakRssBytes <= 0 ||
     !Number.isSafeInteger(measured.workerDataDiskPeakBytes) ||
@@ -45,7 +56,7 @@ export function recordPdfVisionQualification(measured, lifecycle, candidate, ide
   return {
     schemaVersion: 1,
     decision: 'noGo',
-    scope: 'installed-worker-ipc-synthetic-pdf-vision',
+    scope: 'installed-worker-ipc-8-page-synthetic-pdf-sample',
     target,
     qualificationRunId,
     qualificationSourceRevision,
@@ -56,8 +67,11 @@ export function recordPdfVisionQualification(measured, lifecycle, candidate, ide
     sourceSha256: measured.sourceSha256,
     pageCount: measured.pageCount,
     imageEvidenceCount: measured.imageEvidenceCount,
-    backend: measured.backend,
+    completeGenerationVerified: true,
     elapsedSeconds: measured.elapsedSeconds,
+    secondsPerPage: measured.secondsPerPage,
+    pagesPerSecond: measured.pagesPerSecond,
+    backend: measured.backend,
     resourceCeilingQualified: false,
     hostPeakRssBytes: null,
     workerPeakRssBytes: measured.workerPeakRssBytes,
@@ -66,18 +80,20 @@ export function recordPdfVisionQualification(measured, lifecycle, candidate, ide
     workerDataDiskPeakMethod: measured.workerDataDiskPeakMethod,
     temporaryDiskPeakBytes: null,
     limitations:
-      'Signed installed worker/IPC synthetic fixture only; linked worker-data sampling excludes anonymous PDF spools and transient disk peaks. No host memory, total temporary disk ceiling, CPU fallback, or query-quality approval.',
+      'Eight-page signed installed worker/IPC sample; linked worker-data sampling excludes anonymous PDF spools and transient disk peaks. Full 354-page CPU indexing is a known throughput limitation, not a qualification gate. No host memory, total temporary disk ceiling, CPU fallback, or query-quality approval.',
   };
 }
 
 export function recordPdfHostQualification(measured, lifecycle, candidate, identity) {
   exactCandidateTarget(lifecycle, candidate, identity);
   if (
-    measured.scope !== 'installed-host-vfs-354-page-synthetic-pdf-probe' ||
-    measured.sourceBytes !== 175_530_108 ||
+    measured.scope !== 'installed-host-vfs-8-page-synthetic-pdf-sample' ||
+    measured.sourceBytes !== sourceBytes ||
     measured.sourceSha256 !== sourceHash ||
-    measured.pageCount !== 354 ||
-    measured.imageEvidenceCount !== 354 ||
+    measured.pageCount !== samplePages ||
+    measured.imageEvidenceCount !== samplePages ||
+    measured.completeGenerationVerified !== true ||
+    !hasMeasuredThroughput(measured) ||
     !Number.isSafeInteger(measured.hostPeakRssBytes) ||
     measured.hostPeakRssBytes <= 0 ||
     !Number.isSafeInteger(measured.workerPeakRssBytes) ||
@@ -86,8 +102,9 @@ export function recordPdfHostQualification(measured, lifecycle, candidate, ident
     !measured.peakRssMethod ||
     measured.hostVfsVerified !== true ||
     measured.workspaceIsolationVerified !== true ||
+    measured.replacementVerified !== true ||
     measured.deletionVerified !== true ||
-    measured.currentContentAndDeletionVerified !== false
+    measured.currentContentAndDeletionVerified !== true
   ) {
     throw new Error('PDF host evidence does not match the exact signed installed candidate');
   }
@@ -105,17 +122,22 @@ export function recordPdfHostQualification(measured, lifecycle, candidate, ident
     sourceSha256: measured.sourceSha256,
     pageCount: measured.pageCount,
     imageEvidenceCount: measured.imageEvidenceCount,
+    completeGenerationVerified: true,
+    elapsedSeconds: measured.elapsedSeconds,
+    secondsPerPage: measured.secondsPerPage,
+    pagesPerSecond: measured.pagesPerSecond,
     hostVfsVerified: true,
     workspaceIsolationVerified: true,
+    replacementVerified: true,
     deletionVerified: true,
-    currentContentAndDeletionVerified: false,
+    currentContentAndDeletionVerified: true,
     resourceCeilingQualified: false,
     hostPeakRssBytes: measured.hostPeakRssBytes,
     workerPeakRssBytes: measured.workerPeakRssBytes,
     peakRssMethod: measured.peakRssMethod,
     temporaryDiskPeakBytes: null,
     limitations:
-      'One installed Tauri application-service full-scan fixture verifies deletion but not source edits. Sampled RSS can miss transient peaks; anonymous temporary-disk peak, cross-host navigation, upgrade/rollback and CPU fallback remain unqualified.',
+      'Eight-page installed Tauri application-service sample verifies replacement and deletion. Sampled RSS can miss transient peaks; anonymous temporary-disk peak, full 354-page CPU throughput, cross-host navigation, upgrade/rollback and CPU fallback remain unqualified.',
   };
 }
 

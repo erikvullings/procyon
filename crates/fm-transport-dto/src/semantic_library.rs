@@ -172,6 +172,12 @@ pub struct SemanticEnrolmentPreviewDto {
     pub location: LocationDto,
     /// Whether descendants will inherit consent.
     pub recursive: bool,
+    /// Whether this root separately consents to PDF page-image embeddings.
+    #[serde(default)]
+    pub pdf_images_enabled: bool,
+    /// Maximum PDF page images embedded per document, or `None` for no cap.
+    #[serde(default)]
+    pub pdf_image_page_budget: Option<u32>,
     /// Bounded estimate; values are never represented as exact promises.
     pub estimate: SemanticEnrolmentEstimateDto,
     /// Explicit local normalized-excerpt retention disclosure.
@@ -354,6 +360,12 @@ pub struct SemanticRootStatusDto {
     pub location: LocationDto,
     /// Whether descendants inherit consent.
     pub recursive: bool,
+    /// Whether this root separately consents to PDF page-image embeddings.
+    #[serde(default)]
+    pub pdf_images_enabled: bool,
+    /// Maximum PDF page images embedded per document, or `None` for no cap.
+    #[serde(default)]
+    pub pdf_image_page_budget: Option<u32>,
     /// Whether a provider supplied stable identity.
     pub stable_identity_verified: bool,
     /// Workspaces attached to this global consent.
@@ -418,6 +430,12 @@ pub struct PreviewSemanticEnrolmentRequestDto {
     pub location: LocationDto,
     /// Whether descendants inherit consent.
     pub recursive: bool,
+    /// Additional per-root PDF page-image consent; defaults safely to off.
+    #[serde(default)]
+    pub pdf_images_enabled: bool,
+    /// Per-document page-image budget; `None` allows every page on Metal.
+    #[serde(default)]
+    pub pdf_image_page_budget: Option<u32>,
 }
 
 /// Confirms one live enrolment preview.

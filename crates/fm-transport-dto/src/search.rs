@@ -264,6 +264,8 @@ pub struct SemanticEvidenceDto {
     pub source_id: String,
     pub score: f32,
     pub chunk_kind: String,
+    /// Indexed IANA media type.
+    pub media_type: Option<String>,
     pub excerpt: String,
     /// Versioned JSON emitted by `fm-semantic-conversion`.
     pub provenance_json: String,
@@ -282,6 +284,12 @@ pub struct SemanticSearchResultDto {
     pub entry_id: Uuid,
     pub location: LocationDto,
     pub score: f32,
+    /// Whether the primary PDF root consents to page-image indexing.
+    #[serde(default)]
+    pub pdf_images_enabled: bool,
+    /// Per-document page-image budget, or `None` for all pages.
+    #[serde(default)]
+    pub pdf_image_page_budget: Option<u32>,
     pub best_evidence: SemanticEvidenceDto,
     pub additional_evidence: Vec<SemanticEvidenceDto>,
     pub additional_source_ids: Vec<String>,

@@ -19,6 +19,14 @@ use serde_json::json;
 #[cfg(feature = "gemma-native")]
 use sha2::{Digest, Sha256};
 
+#[cfg(feature = "gemma-native")]
+const PDF_VISION_SAMPLE_PAGES: u32 = 8;
+#[cfg(feature = "gemma-native")]
+const PDF_VISION_SAMPLE_BYTES: u64 = 3_967_050;
+#[cfg(feature = "gemma-native")]
+const PDF_VISION_SAMPLE_SHA256: &str =
+    "6fd090eee5fcdd7e547c8787f8ada4465e896fcff190b84e2b2f49e9c5b3d690";
+
 fn required_path(variable: &str) -> PathBuf {
     PathBuf::from(std::env::var_os(variable).unwrap_or_else(|| panic!("{variable} is required")))
 }
@@ -149,8 +157,8 @@ fn isolated_worker_disk_accounting_excludes_symlink_targets() {
 
 #[cfg(feature = "gemma-native")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "requires an exact signed PDFium-enabled Gemma worker, installed originals, and a long-running isolated synthetic fixture"]
-async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
+#[ignore = "requires an exact signed PDFium-enabled Gemma worker and installed originals"]
+async fn packaged_gemma_indexes_sampled_synthetic_scan_pages_offline() {
     let original_files: BTreeMap<String, PathBuf> = serde_json::from_str(
         &std::env::var("PROCYON_GEMMA_PACKAGED_FILES").expect("verified installed original files"),
     )
@@ -167,7 +175,7 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
     assert!(native.join(pdfium_name).is_file());
     assert!(native.join("pdfium-licenses.txt").is_file());
     let fixture_root = tempfile::tempdir().unwrap();
-    let source = fixture_root.path().join("synthetic-354-page-rle-scan.pdf");
+    let source = fixture_root.path().join("synthetic-8-page-rle-scan.pdf");
     let generator = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../scripts/generate-large-pdf-fixture.mjs");
     let output = std::process::Command::new("node")
@@ -176,6 +184,8 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
             generator.to_str().unwrap(),
             "--variant",
             "rle-scan",
+            "--pages",
+            &PDF_VISION_SAMPLE_PAGES.to_string(),
             "--output",
         ])
         .arg(&source)
@@ -188,7 +198,7 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
     );
     let mut input = std::fs::File::open(&source).unwrap();
     let bytes = input.metadata().unwrap().len();
-    assert_eq!(bytes, 175_530_108);
+    assert_eq!(bytes, PDF_VISION_SAMPLE_BYTES);
     let mut hasher = Sha256::new();
     let mut chunk = [0_u8; 64 * 1024];
     loop {
@@ -203,10 +213,7 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
-    assert_eq!(
-        digest_hex,
-        "f2e8e12f962f43b5e384dbb8a2648c8ce88213a9895bd11bb5e6fc7b350d3964"
-    );
+    assert_eq!(digest_hex, PDF_VISION_SAMPLE_SHA256);
     let runtime = tempfile::tempdir().unwrap();
     let data = tempfile::tempdir().unwrap();
     let launch = ManagedWorkerLaunch::new_gemma(
@@ -235,9 +242,9 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
     let started = Instant::now();
     let job_id = client
         .ingest_pdf_reader(
-            "qualify-354-page-scan",
+            "qualify-8-page-scan",
             IngestionScope::new("qualification-tenant", "qualification-library"),
-            "synthetic-354-page-scan",
+            "synthetic-8-page-scan",
             BTreeMap::from([
                 ("occurrence_id".into(), "synthetic-scan-occurrence".into()),
                 ("source_id".into(), "synthetic-scan-source".into()),
@@ -260,10 +267,11 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
         assert_ne!(job.state, IngestionState::Failed, "{:?}", job.detail);
         assert_ne!(job.state, IngestionState::Cancelled);
         assert!(job.completed_units >= last_progress || job.state == IngestionState::Completed);
-        if job.completed_units / 25 > last_progress / 25 {
+        if job.completed_units > last_progress {
             eprintln!(
-                "synthetic installed scan progress: {}/354 units after {:.0}s",
+                "synthetic installed scan progress: {}/{} units after {:.0}s",
                 job.completed_units,
+                PDF_VISION_SAMPLE_PAGES,
                 started.elapsed().as_secs_f64()
             );
         }
@@ -273,12 +281,12 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
                 worker_data_disk_peak_bytes.max(owned_disk_bytes(data.path()));
         }
         if job.state == IngestionState::Completed {
-            assert_eq!(job.completed_units, 354);
+            assert_eq!(job.completed_units, u64::from(PDF_VISION_SAMPLE_PAGES));
             break;
         }
         assert!(
-            started.elapsed() < Duration::from_secs(4 * 60 * 60),
-            "synthetic installed qualification exceeded the test-runner limit after {last_progress}/354 units"
+            started.elapsed() < Duration::from_secs(15 * 60),
+            "synthetic installed qualification exceeded the 15-minute sample limit after {last_progress}/{PDF_VISION_SAMPLE_PAGES} units"
         );
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
@@ -296,7 +304,7 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
              JOIN generations g ON g.tenant_id = r.tenant_id
                AND g.library_id = r.library_id AND g.document_id = r.document_id
                AND g.generation = r.generation
-             WHERE r.document_id = 'synthetic-354-page-scan'
+             WHERE r.document_id = 'synthetic-8-page-scan'
                AND r.record_kind = 'pdf_image' AND g.state = 'complete'",
         )
         .unwrap();
@@ -310,12 +318,18 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
             provenance["value"]["page_number"].as_u64().unwrap()
         })
         .collect::<Vec<_>>();
-    assert_eq!(records.len(), 354, "one image record per synthetic page");
+    assert_eq!(
+        records.len(),
+        PDF_VISION_SAMPLE_PAGES as usize,
+        "one image record per sampled synthetic page"
+    );
     let pages = records
         .into_iter()
         .collect::<std::collections::BTreeSet<_>>();
-    assert_eq!(pages, (1..=354).collect());
+    assert_eq!(pages, (1..=u64::from(PDF_VISION_SAMPLE_PAGES)).collect());
     if let Some(report) = report_path {
+        let elapsed_seconds = started.elapsed().as_secs_f64();
+        let seconds_per_page = elapsed_seconds / f64::from(PDF_VISION_SAMPLE_PAGES);
         #[cfg(target_os = "macos")]
         let (worker_peak_rss_bytes, worker_peak_method) = {
             let (stop, task) = sampler.expect("macOS RSS sampler");
@@ -354,6 +368,10 @@ async fn packaged_gemma_indexes_all_synthetic_scan_pages_offline() {
                 "sourceSha256": digest_hex,
                 "pageCount": pages.len(),
                 "imageEvidenceCount": pages.len(),
+                "completeGenerationVerified": true,
+                "elapsedSeconds": elapsed_seconds,
+                "secondsPerPage": seconds_per_page,
+                "pagesPerSecond": f64::from(PDF_VISION_SAMPLE_PAGES) / elapsed_seconds,
                 "backend": backend.trim(),
                 "elapsedSeconds": started.elapsed().as_secs_f64(),
                 "workerPeakRssBytes": worker_peak_rss_bytes,

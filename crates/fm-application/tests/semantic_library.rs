@@ -26,13 +26,13 @@ use fm_application::semantic_library::{
 };
 use fm_domain::{EntryId, Location, WorkspaceId};
 use fm_semantic_library::{
-    CatalogObservation, CommitStep, ContentFingerprint, ConversationEvidencePin, ConversationPinId,
-    DeletionPlanId, DerivedArtifactId, DeviceLibraryIdentity, DocumentArtifacts,
-    DocumentMeasurement, EligibilityCandidate, EligibilityDecision, EligibilityEntryKind,
-    EligibilityReason, EligibilityReasonCounts, EnrolledRoot, FilesystemIdentity,
-    GemmaMediaSelection, HardQuotas, LibraryId, LibraryOperation, ModelIdentity,
-    ObservedRootIdentity, OccurrenceScope, ResourceBudgets, ResourceProfile, ResourceProfileKind,
-    RootId, RootMoveResolution, RootUnavailabilityReason, SemanticCatalog,
+    CPU_PDF_IMAGE_PAGE_BUDGET, CatalogObservation, CommitStep, ContentFingerprint,
+    ConversationEvidencePin, ConversationPinId, DeletionPlanId, DerivedArtifactId,
+    DeviceLibraryIdentity, DocumentArtifacts, DocumentMeasurement, EligibilityCandidate,
+    EligibilityDecision, EligibilityEntryKind, EligibilityReason, EligibilityReasonCounts,
+    EnrolledRoot, FilesystemIdentity, GemmaMediaSelection, HardQuotas, LibraryId, LibraryOperation,
+    ModelIdentity, ObservedRootIdentity, OccurrenceScope, ResourceBudgets, ResourceProfile,
+    ResourceProfileKind, RootId, RootMoveResolution, RootUnavailabilityReason, SemanticCatalog,
     SemanticLibraryCoordinator, SemanticLibraryPolicy, SemanticLibraryState, ServerEnrolmentPolicy,
 };
 use fm_transport_dto::RuntimeKindDto;
@@ -1198,6 +1198,72 @@ fn a_gemma_library_feeds_only_media_selected_at_creation() {
 }
 
 #[test]
+fn per_root_pdf_image_policy_is_validated_and_persisted_with_enrolment() {
+    let directory = project_temp_dir("gemma-pdf-page-policy-");
+    let config = SemanticLibraryConfiguration::embeddinggemma_2(
+        directory.path().join("config"),
+        directory.path().join("semantic-data"),
+        Uuid::new_v4(),
+        256,
+        GemmaMediaSelection {
+            images: true,
+            audio: false,
+            video: false,
+        },
+    )
+    .unwrap();
+    let service = SemanticLibraryService::desktop_managed(
+        config,
+        Arc::new(FixedSemanticEnrolmentEstimator::new(estimate())),
+    )
+    .unwrap();
+    let context = SemanticFolderContext::new(workspace(10), location("file:///docs"));
+    let page_budget = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        None
+    } else {
+        Some(CPU_PDF_IMAGE_PAGE_BUDGET)
+    };
+    let preview = service
+        .preview_enrolment_with_pdf_image_policy(&HOST, context.clone(), true, true, page_budget)
+        .unwrap();
+    assert!(preview.pdf_images_enabled);
+    assert_eq!(preview.pdf_image_page_budget, page_budget);
+    service
+        .confirm_enrolment(
+            &HOST,
+            &preview.confirmation_id,
+            preview.policy_revision,
+            &context,
+        )
+        .unwrap();
+    let root = service.status(&HOST).unwrap().roots.remove(0);
+    assert!(root.pdf_images_enabled);
+    assert_eq!(root.pdf_image_page_budget, page_budget);
+
+    let invalid_budget = if page_budget.is_some() { None } else { Some(4) };
+    assert!(matches!(
+        service.preview_enrolment_with_pdf_image_policy(
+            &HOST,
+            context.clone(),
+            true,
+            true,
+            invalid_budget,
+        ),
+        Err(SemanticLibraryError::InvalidRequest)
+    ));
+    assert!(matches!(
+        service.preview_enrolment_with_pdf_image_policy(
+            &HOST,
+            context,
+            true,
+            false,
+            Some(CPU_PDF_IMAGE_PAGE_BUDGET),
+        ),
+        Err(SemanticLibraryError::InvalidRequest)
+    ));
+}
+
+#[test]
 fn pdf_image_consent_stays_off_for_a_text_only_gemma_library() {
     let directory = project_temp_dir("gemma-text-only-pdf-feed-");
     let config = SemanticLibraryConfiguration::embeddinggemma_2(
@@ -1321,6 +1387,8 @@ async fn quarantined_roots_are_only_restored_by_a_proven_identity_observation() 
                 workspace_id: workspace_dto.id,
                 location: tab.location.clone(),
                 recursive: true,
+                pdf_images_enabled: false,
+                pdf_image_page_budget: None,
             },
         )
         .await
@@ -1523,6 +1591,8 @@ async fn facade_requires_the_active_folder_and_workspace_deletion_only_detaches_
                 workspace_id: workspace_dto.id,
                 location: tab.location.clone(),
                 recursive: true,
+                pdf_images_enabled: false,
+                pdf_image_page_budget: None,
             },
         )
         .await
@@ -1551,6 +1621,8 @@ async fn facade_requires_the_active_folder_and_workspace_deletion_only_detaches_
                     uri: "file:///not-active".to_owned(),
                 },
                 recursive: true,
+                pdf_images_enabled: false,
+                pdf_image_page_budget: None,
             },
         )
         .await;
@@ -1624,6 +1696,8 @@ async fn facade_removes_an_enrolled_root_even_when_another_folder_is_active() {
                 workspace_id: workspace.id,
                 location: root.clone(),
                 recursive: true,
+                pdf_images_enabled: false,
+                pdf_image_page_budget: None,
             },
         )
         .await
@@ -2325,6 +2399,8 @@ async fn the_reconciliation_facade_is_reachable_through_the_file_manager_service
                 workspace_id: workspace_dto.id,
                 location: tab.location.clone(),
                 recursive: true,
+                pdf_images_enabled: false,
+                pdf_image_page_budget: None,
             },
         )
         .await

@@ -735,6 +735,8 @@ pub(crate) struct GemmaLibrarySetup {
     images: bool,
     audio: bool,
     video: bool,
+    image_device: &'static str,
+    pdf_image_page_budget: Option<u32>,
     last_worker_device: Option<&'static str>,
 }
 
@@ -787,6 +789,8 @@ pub(crate) async fn get_semantic_gemma_library_setup(
                 images: setup.media.images,
                 audio: setup.media.audio,
                 video: setup.media.video,
+                image_device: setup.image_device,
+                pdf_image_page_budget: setup.pdf_image_page_budget,
                 last_worker_device,
             })
         })

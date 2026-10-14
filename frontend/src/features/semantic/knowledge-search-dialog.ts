@@ -2903,6 +2903,25 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     scopeKind === 'enrolledRoots'
                       ? m('fieldset.fm-knowledge-roots', [
                           m('legend', t('knowledgeSearch', 'roots')),
+                          roots.some(
+                            (root) => root.pdfImagesEnabled && root.pdfImagePageBudget !== null,
+                          )
+                            ? m(
+                                'p.fm-knowledge-hint',
+                                { role: 'status' },
+                                t('knowledgeSearch', 'pdfImagesLimitedNotice', {
+                                  pages: Math.min(
+                                    ...roots
+                                      .filter(
+                                        (root) =>
+                                          root.pdfImagesEnabled && root.pdfImagePageBudget !== null,
+                                      )
+                                      .map((root) => root.pdfImagePageBudget)
+                                      .filter((budget): budget is number => budget !== null),
+                                  ),
+                                }),
+                              )
+                            : undefined,
                           roots.length === 0
                             ? m('p.fm-knowledge-hint', t('knowledgeSearch', 'rootsEmpty'))
                             : roots.map((root) =>
