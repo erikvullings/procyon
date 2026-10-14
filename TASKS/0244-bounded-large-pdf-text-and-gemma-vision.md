@@ -98,6 +98,14 @@ optional Docling ML/PDFium pack is qualified on those targets.
 
 ## Agent Notes
 
+- 2026-10-14 Copilot: Latest-head CI run 38545281651 exposed two blockers:
+  host-wide occurrence lookup authorized a cross-workspace PDF result but then
+  tried to resolve its root from the unrelated active workspace, and the new
+  Linux arm64 desktop smoke runner lacked `xdg-open` for AppImage packaging.
+  Occurrence resolution now returns the root of the scope that actually
+  authorized the source; the regression asserts that root. The Linux Gemma CI
+  setup now installs `xdg-utils`. Both fixes pass targeted local checks, but
+  need a new green latest-head CI run; release remains no-go.
 - 2026-10-14 Copilot: Added `ubuntu-24.04-arm` to the Gemma desktop CI
   package/install/launch smoke matrix so the Linux arm64 worker target gets
   app-level launch coverage. This is CI-only and unsigned; the desktop release

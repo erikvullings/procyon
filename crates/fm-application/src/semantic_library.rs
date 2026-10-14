@@ -2153,6 +2153,7 @@ impl SemanticLibraryService {
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let data = locked.data()?;
+        let mut authorized_root_id = None;
         let occurrence = if matches!(access, SemanticAccessContext::Host) {
             let candidate = data
                 .catalog
@@ -2166,6 +2167,7 @@ impl SemanticLibraryService {
                         .authorized_occurrence(&data.policy, scope.workspace_id(), occurrence_id)
                         .map_err(|_| SemanticLibraryError::InvalidRequest)?
                     {
+                        authorized_root_id = Some(scope.root_id());
                         authorized = Some(occurrence);
                         break;
                     }
@@ -2180,15 +2182,20 @@ impl SemanticLibraryService {
         let Some(occurrence) = occurrence else {
             return Ok(None);
         };
-        Ok(Some(ResolvedSemanticOccurrence {
-            entry_id: occurrence.entry_id(),
-            location: occurrence.location().clone(),
-            root_id: occurrence
+        let root_id = if matches!(access, SemanticAccessContext::Host) {
+            authorized_root_id.ok_or(SemanticLibraryError::NotFound)?
+        } else {
+            occurrence
                 .scopes()
                 .iter()
                 .find(|scope| scope.workspace_id() == workspace_id)
                 .map(|scope| scope.root_id())
-                .ok_or(SemanticLibraryError::NotFound)?,
+                .ok_or(SemanticLibraryError::NotFound)?
+        };
+        Ok(Some(ResolvedSemanticOccurrence {
+            entry_id: occurrence.entry_id(),
+            location: occurrence.location().clone(),
+            root_id,
             available: data.catalog.source_availability(occurrence_id)
                 == Some(core::SourceAvailability::Available),
         }))
@@ -2825,6 +2832,7 @@ mod tenant_tests {
             )
             .unwrap()
             .expect("host-wide evidence remains openable after workspace replacement");
+        assert_eq!(opened.root_id, root_id);
         assert_eq!(opened.location.uri, "file:///semantic-library/turbines.md");
 
         // A root enrolled through another workspace cannot be named as a scope.
