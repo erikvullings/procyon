@@ -615,6 +615,20 @@ describe('theme stylesheet', () => {
     );
   });
 
+  it('blinks the operation-centre icon while busy instead of drawing an underline', () => {
+    expect(themeCss).not.toMatch(/\.fm-operations-busy[^{]*::after/);
+    expect(themeCss).toMatch(
+      /\.fm-operation-centre-button\.fm-operations-busy\s*\{[^}]*color:\s*var\(--fm-accent\)/s,
+    );
+    expect(themeCss).toMatch(
+      /\.fm-operation-centre-button\.fm-operations-busy \.fm-icon\s*\{[^}]*animation:\s*fm-operation-icon-blink [^;}]+ infinite/s,
+    );
+    expect(themeCss).toMatch(/@keyframes fm-operation-icon-blink/);
+    expect(themeCss).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.fm-operation-centre-button\.fm-operations-busy \.fm-icon\s*\{[^}]*animation:\s*none[^}]*opacity:\s*1/s,
+    );
+  });
+
   it('keeps knowledge results below the tab strip without horizontal overflow', () => {
     expect(paneCss).toMatch(
       /\.fm-pane-viewer > \.fm-pane-tabs\s*\{[^}]*flex:\s*0 0 var\(--fm-header-height\)/s,
