@@ -234,8 +234,36 @@ test('protected release workflow signs updater artifacts and notarizes macOS pac
   const releaseText = workflowText('release-desktop.yml');
   const release = workflow('release-desktop.yml');
   assert.deepEqual(release.on.push.tags, ['v*']);
-  assert.equal(release.on.workflow_dispatch, undefined);
+  assert.equal(release.on.workflow_dispatch.inputs.release_tag.required, true);
+  assert.equal(release.on.workflow_dispatch.inputs.release_tag.type, 'string');
   assert.equal(release.on.pull_request, undefined);
+
+  assert.equal(
+    release.jobs.release.outputs.release_commit,
+    `\${{ steps.validate-release-tag.outputs.commit }}`,
+  );
+  assert.equal(release.jobs.release.steps[0].with.ref, 'main');
+  assert.equal(release.jobs.release.steps[0].with['fetch-depth'], 0);
+  const validateTag = release.jobs.release.steps[1];
+  assert.equal(validateTag.id, 'validate-release-tag');
+  assert.match(validateTag.run, /git merge-base --is-ancestor/u);
+  assert.equal(
+    release.jobs.release.steps[2].with.ref,
+    `\${{ steps.validate-release-tag.outputs.commit }}`,
+  );
+  assert.equal(release.jobs.release.steps[2].with.path, 'release-source');
+  assert.equal(release.jobs.release.steps[3]['working-directory'], 'release-source');
+  assert.match(release.jobs.release.steps[3].run, /check-desktop-release\.mjs/u);
+
+  for (const jobName of ['macos', 'linux', 'windows', 'updater-manifest', 'homebrew']) {
+    const checkout = release.jobs[jobName].steps.find((step) =>
+      step.uses?.startsWith('actions/checkout@'),
+    );
+    assert.equal(checkout?.with?.ref, `\${{ needs.release.outputs.release_commit }}`);
+  }
+  const createRelease = release.jobs.release.steps.at(-1);
+  assert.equal(createRelease.with.tag_name, `\${{ env.RELEASE_TAG }}`);
+  assert.match(createRelease.with.body, /EXPERIMENTAL OPT-IN:/u);
 
   for (const jobName of ['macos', 'windows', 'linux']) {
     assert.equal(release.jobs[jobName].environment, 'desktop-release');
@@ -300,16 +328,19 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   assert.deepEqual(release.jobs.homebrew.needs, ['macos', 'linux']);
   assert.equal(
     release.jobs.homebrew.if,
-    `\${{ always() && github.event_name == 'push' && needs.macos.result == 'success' && needs.linux.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' }}`,
+    `\${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.macos.result == 'success' && needs.linux.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' }}`,
   );
   assert.equal(release.jobs.homebrew.environment, 'desktop-release');
   assert.equal(release.jobs.chocolatey.needs, 'windows');
   assert.equal(
     release.jobs.chocolatey.if,
-    `\${{ always() && github.event_name == 'push' && needs.windows.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' }}`,
+    `\${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.windows.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' }}`,
   );
   assert.equal(release.jobs.chocolatey.uses, './.github/workflows/publish-chocolatey.yml');
-  assert.equal(release.jobs.chocolatey.with.release_tag, `\${{ github.ref_name }}`);
+  assert.equal(
+    release.jobs.chocolatey.with.release_tag,
+    `\${{ inputs.release_tag || github.ref_name }}`,
+  );
   assert.equal(chocolatey.jobs.chocolatey.environment, 'desktop-release');
   assert.ok(chocolatey.on.workflow_dispatch);
   assert.ok(chocolatey.on.workflow_call);
