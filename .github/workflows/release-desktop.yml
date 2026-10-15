@@ -16,7 +16,7 @@ permissions:
 jobs:
   release:
     name: Create GitHub prerelease
-    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     environment: desktop-release
     outputs:
@@ -26,6 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: main
           fetch-depth: 0
       - name: Validate the release tag and its source commit
         id: validate-release-tag

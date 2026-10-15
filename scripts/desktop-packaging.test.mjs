@@ -242,6 +242,7 @@ test('protected release workflow signs updater artifacts and notarizes macOS pac
     release.jobs.release.outputs.release_commit,
     `\${{ steps.validate-release-tag.outputs.commit }}`,
   );
+  assert.equal(release.jobs.release.steps[0].with.ref, 'main');
   assert.equal(release.jobs.release.steps[0].with['fetch-depth'], 0);
   const validateTag = release.jobs.release.steps[1];
   assert.equal(validateTag.id, 'validate-release-tag');
