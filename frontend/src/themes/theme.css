@@ -5276,7 +5276,7 @@ button.fm-activity-count {
   padding: 1px 6px;
   color: var(--fm-accent);
   background: transparent;
-  border: 1px solid var(--fm-border);
+  border: 0;
   border-radius: 2px;
   cursor: pointer;
 }
@@ -5288,7 +5288,6 @@ button.fm-activity-count {
 /* Running work: the activity icon itself pulses in amber, distinct from the blue accent. */
 .fm-activity-count.fm-activity-busy {
   color: var(--fm-warning);
-  border-color: color-mix(in srgb, var(--fm-warning) 55%, var(--fm-border));
 }
 
 .fm-activity-count.fm-activity-busy .fm-activity-icon {
@@ -5297,7 +5296,6 @@ button.fm-activity-count {
 
 .fm-activity-count.fm-activity-failed {
   color: var(--fm-error);
-  border-color: color-mix(in srgb, var(--fm-error) 55%, var(--fm-border));
 }
 
 .fm-activity-count.fm-activity-failed .fm-activity-icon {
