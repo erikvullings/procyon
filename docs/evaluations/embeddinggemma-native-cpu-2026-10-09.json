@@ -1,0 +1,1076 @@
+{
+  "model": "google/embeddinggemma-2",
+  "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "runtime": "native-rust-cpu-fp32",
+  "os": "macos",
+  "architecture": "aarch64",
+  "modelLoadSeconds": 0.691213542,
+  "measurementWidth": 768,
+  "dimensionMethod": "truncate and L2 renormalize both sides",
+  "knowledge": {
+    "corpusSha256": "c4591389db16b6ba91dba1b4795f9a903ae038b27dccc7aeba852c497f502abb",
+    "documentCount": 30,
+    "queryCount": 13,
+    "documentSeconds": 2.577766084,
+    "documentsPerSecond": 11.637983828791814,
+    "queryLatencyMedianMs": 30.353291000000002,
+    "queryLatencyP95Ms": 45.959541,
+    "dimensions": {
+      "128": {
+        "positiveCases": 10,
+        "negativeControlsWithoutThreshold": 3,
+        "hitAt1": 0.9,
+        "hitAt3": 1.0,
+        "recallAt2": 0.9,
+        "mrr": 0.95,
+        "cases": [
+          {
+            "id": "specialist-term-nacelle-suppression",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-nacelle-procedure",
+              "source-nacelle-example",
+              "source-decommissioned-note"
+            ]
+          },
+          {
+            "id": "multilingual-gondelbrandblussysteem",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-gondel-procedure",
+              "source-nacelle-procedure",
+              "source-glossary"
+            ]
+          },
+          {
+            "id": "procedure-isolationswiderstand",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-wechselrichter-verfahren",
+              "source-wechselrichter-grenzen",
+              "source-nacelle-limitations"
+            ]
+          },
+          {
+            "id": "example-batterie-securite",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-batterie-procedure",
+              "source-batterie-exemple",
+              "source-nacelle-procedure"
+            ]
+          },
+          {
+            "id": "limitations-cold-weather-suppression",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-nacelle-limitations",
+              "source-nacelle-procedure",
+              "source-checklist-engineering"
+            ]
+          },
+          {
+            "id": "match-sorting-regression",
+            "firstRelevantRank": 1,
+            "recallAt2": 0.5,
+            "topIds": [
+              "source-blade-sorting-procedure",
+              "source-pane-sorting-reference",
+              "source-blade-sorting-example"
+            ]
+          },
+          {
+            "id": "application-context-distraction",
+            "firstRelevantRank": 2,
+            "recallAt2": 0.5,
+            "topIds": [
+              "source-pane-sorting-reference",
+              "source-checklist-engineering",
+              "source-checklist-operations"
+            ]
+          },
+          {
+            "id": "duplicate-checklist-collapse",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-checklist-engineering",
+              "source-checklist-operations",
+              "source-retention-policy"
+            ]
+          },
+          {
+            "id": "updated-retention-period",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-retention-policy",
+              "source-nacelle-procedure",
+              "source-search-reference"
+            ]
+          },
+          {
+            "id": "deleted-rotor-note",
+            "negativeControl": true,
+            "topIds": [
+              "source-decommissioned-note",
+              "source-nacelle-example",
+              "source-blade-sorting-example"
+            ]
+          },
+          {
+            "id": "scope-isolated-fatigue-analysis",
+            "negativeControl": true,
+            "topIds": [
+              "source-blade-sorting-example",
+              "source-blade-sorting-procedure",
+              "source-decommissioned-note"
+            ]
+          },
+          {
+            "id": "negative-control-unrelated-domain",
+            "negativeControl": true,
+            "topIds": [
+              "source-nacelle-procedure",
+              "source-gondel-procedure",
+              "source-retention-policy"
+            ]
+          },
+          {
+            "id": "definition-gondel-glossary",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-glossary",
+              "source-gondel-procedure",
+              "source-blade-sorting-procedure"
+            ]
+          }
+        ]
+      },
+      "256": {
+        "positiveCases": 10,
+        "negativeControlsWithoutThreshold": 3,
+        "hitAt1": 0.9,
+        "hitAt3": 1.0,
+        "recallAt2": 0.9,
+        "mrr": 0.95,
+        "cases": [
+          {
+            "id": "specialist-term-nacelle-suppression",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-nacelle-procedure",
+              "source-nacelle-example",
+              "source-checklist-engineering"
+            ]
+          },
+          {
+            "id": "multilingual-gondelbrandblussysteem",
+            "firstRelevantRank": 1,
+            "recallAt2": 0.5,
+            "topIds": [
+              "source-gondel-procedure",
+              "source-glossary",
+              "source-nacelle-procedure"
+            ]
+          },
+          {
+            "id": "procedure-isolationswiderstand",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-wechselrichter-verfahren",
+              "source-wechselrichter-grenzen",
+              "source-nacelle-limitations"
+            ]
+          },
+          {
+            "id": "example-batterie-securite",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-batterie-procedure",
+              "source-batterie-exemple",
+              "source-nacelle-procedure"
+            ]
+          },
+          {
+            "id": "limitations-cold-weather-suppression",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-nacelle-limitations",
+              "source-nacelle-procedure",
+              "source-nacelle-example"
+            ]
+          },
+          {
+            "id": "match-sorting-regression",
+            "firstRelevantRank": 2,
+            "recallAt2": 0.5,
+            "topIds": [
+              "source-pane-sorting-reference",
+              "source-blade-sorting-procedure",
+              "source-blade-sorting-example"
+            ]
+          },
+          {
+            "id": "application-context-distraction",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-checklist-engineering",
+              "source-checklist-operations",
+              "source-pane-sorting-reference"
+            ]
+          },
+          {
+            "id": "duplicate-checklist-collapse",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-checklist-engineering",
+              "source-checklist-operations",
+              "source-nacelle-procedure"
+            ]
+          },
+          {
+            "id": "updated-retention-period",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-retention-policy",
+              "source-nacelle-procedure",
+              "source-nacelle-example"
+            ]
+          },
+          {
+            "id": "deleted-rotor-note",
+            "negativeControl": true,
+            "topIds": [
+              "source-decommissioned-note",
+              "source-nacelle-example",
+              "source-checklist-engineering"
+            ]
+          },
+          {
+            "id": "scope-isolated-fatigue-analysis",
+            "negativeControl": true,
+            "topIds": [
+              "source-checklist-engineering",
+              "source-checklist-operations",
+              "source-decommissioned-note"
+            ]
+          },
+          {
+            "id": "negative-control-unrelated-domain",
+            "negativeControl": true,
+            "topIds": [
+              "source-gondel-procedure",
+              "source-nacelle-procedure",
+              "source-nacelle-limitations"
+            ]
+          },
+          {
+            "id": "definition-gondel-glossary",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-glossary",
+              "source-gondel-procedure",
+              "source-nacelle-procedure"
+            ]
+          }
+        ]
+      },
+      "512": {
+        "positiveCases": 10,
+        "negativeControlsWithoutThreshold": 3,
+        "hitAt1": 0.9,
+        "hitAt3": 1.0,
+        "recallAt2": 0.95,
+        "mrr": 0.95,
+        "cases": [
+          {
+            "id": "specialist-term-nacelle-suppression",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-nacelle-procedure",
+              "source-gondel-procedure",
+              "source-nacelle-example"
+            ]
+          },
+          {
+            "id": "multilingual-gondelbrandblussysteem",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-gondel-procedure",
+              "source-nacelle-procedure",
+              "source-glossary"
+            ]
+          },
+          {
+            "id": "procedure-isolationswiderstand",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-wechselrichter-verfahren",
+              "source-wechselrichter-grenzen",
+              "source-nacelle-limitations"
+            ]
+          },
+          {
+            "id": "example-batterie-securite",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-batterie-procedure",
+              "source-batterie-exemple",
+              "source-nacelle-procedure"
+            ]
+          },
+          {
+            "id": "limitations-cold-weather-suppression",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-nacelle-limitations",
+              "source-nacelle-procedure",
+              "source-nacelle-example"
+            ]
+          },
+          {
+            "id": "match-sorting-regression",
+            "firstRelevantRank": 2,
+            "recallAt2": 0.5,
+            "topIds": [
+              "source-pane-sorting-reference",
+              "source-blade-sorting-procedure",
+              "source-blade-sorting-example"
+            ]
+          },
+          {
+            "id": "application-context-distraction",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-checklist-engineering",
+              "source-checklist-operations",
+              "source-nacelle-procedure"
+            ]
+          },
+          {
+            "id": "duplicate-checklist-collapse",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-checklist-engineering",
+              "source-checklist-operations",
+              "source-nacelle-procedure"
+            ]
+          },
+          {
+            "id": "updated-retention-period",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-retention-policy",
+              "source-checklist-engineering",
+              "source-checklist-operations"
+            ]
+          },
+          {
+            "id": "deleted-rotor-note",
+            "negativeControl": true,
+            "topIds": [
+              "source-decommissioned-note",
+              "source-nacelle-example",
+              "source-checklist-engineering"
+            ]
+          },
+          {
+            "id": "scope-isolated-fatigue-analysis",
+            "negativeControl": true,
+            "topIds": [
+              "source-checklist-engineering",
+              "source-checklist-operations",
+              "source-blade-sorting-example"
+            ]
+          },
+          {
+            "id": "negative-control-unrelated-domain",
+            "negativeControl": true,
+            "topIds": [
+              "source-nacelle-procedure",
+              "source-gondel-procedure",
+              "source-nacelle-example"
+            ]
+          },
+          {
+            "id": "definition-gondel-glossary",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-glossary",
+              "source-gondel-procedure",
+              "source-nacelle-procedure"
+            ]
+          }
+        ]
+      },
+      "768": {
+        "positiveCases": 10,
+        "negativeControlsWithoutThreshold": 3,
+        "hitAt1": 0.9,
+        "hitAt3": 1.0,
+        "recallAt2": 0.95,
+        "mrr": 0.95,
+        "cases": [
+          {
+            "id": "specialist-term-nacelle-suppression",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-nacelle-procedure",
+              "source-gondel-procedure",
+              "source-nacelle-example"
+            ]
+          },
+          {
+            "id": "multilingual-gondelbrandblussysteem",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-gondel-procedure",
+              "source-nacelle-procedure",
+              "source-glossary"
+            ]
+          },
+          {
+            "id": "procedure-isolationswiderstand",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-wechselrichter-verfahren",
+              "source-wechselrichter-grenzen",
+              "source-nacelle-limitations"
+            ]
+          },
+          {
+            "id": "example-batterie-securite",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-batterie-procedure",
+              "source-batterie-exemple",
+              "source-nacelle-procedure"
+            ]
+          },
+          {
+            "id": "limitations-cold-weather-suppression",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-nacelle-limitations",
+              "source-nacelle-procedure",
+              "source-gondel-procedure"
+            ]
+          },
+          {
+            "id": "match-sorting-regression",
+            "firstRelevantRank": 2,
+            "recallAt2": 0.5,
+            "topIds": [
+              "source-pane-sorting-reference",
+              "source-blade-sorting-procedure",
+              "source-blade-sorting-example"
+            ]
+          },
+          {
+            "id": "application-context-distraction",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-checklist-engineering",
+              "source-checklist-operations",
+              "source-nacelle-procedure"
+            ]
+          },
+          {
+            "id": "duplicate-checklist-collapse",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-checklist-engineering",
+              "source-checklist-operations",
+              "source-nacelle-procedure"
+            ]
+          },
+          {
+            "id": "updated-retention-period",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-retention-policy",
+              "source-checklist-engineering",
+              "source-checklist-operations"
+            ]
+          },
+          {
+            "id": "deleted-rotor-note",
+            "negativeControl": true,
+            "topIds": [
+              "source-decommissioned-note",
+              "source-nacelle-example",
+              "source-checklist-engineering"
+            ]
+          },
+          {
+            "id": "scope-isolated-fatigue-analysis",
+            "negativeControl": true,
+            "topIds": [
+              "source-checklist-engineering",
+              "source-checklist-operations",
+              "source-blade-sorting-example"
+            ]
+          },
+          {
+            "id": "negative-control-unrelated-domain",
+            "negativeControl": true,
+            "topIds": [
+              "source-gondel-procedure",
+              "source-nacelle-procedure",
+              "source-nacelle-example"
+            ]
+          },
+          {
+            "id": "definition-gondel-glossary",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "source-glossary",
+              "source-gondel-procedure",
+              "source-nacelle-procedure"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "code": {
+    "corpusSha256": "c2420e55dabdbecacba39542b33ce483e988e74c33495c5e44121a190c558bac",
+    "documentCount": 12,
+    "queryCount": 6,
+    "documentSeconds": 0.8364975,
+    "documentsPerSecond": 14.34553002250455,
+    "queryLatencyMedianMs": 23.949000500000004,
+    "queryLatencyP95Ms": 27.526333,
+    "dimensions": {
+      "128": {
+        "positiveCases": 6,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 1.0,
+        "hitAt3": 1.0,
+        "recallAt2": 1.0,
+        "mrr": 1.0,
+        "cases": [
+          {
+            "id": "retry",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "retry-after",
+              "backoff",
+              "scope-display"
+            ]
+          },
+          {
+            "id": "isolation",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "scope",
+              "scope-display",
+              "cancel"
+            ]
+          },
+          {
+            "id": "digest",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "hash",
+              "checksum",
+              "backoff"
+            ]
+          },
+          {
+            "id": "cancellation",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "cancel",
+              "copy",
+              "scope"
+            ]
+          },
+          {
+            "id": "unit-vector",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "normalize",
+              "truncate",
+              "hash"
+            ]
+          },
+          {
+            "id": "traversal",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "archive",
+              "archive-list",
+              "scope-display"
+            ]
+          }
+        ]
+      },
+      "256": {
+        "positiveCases": 6,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 1.0,
+        "hitAt3": 1.0,
+        "recallAt2": 1.0,
+        "mrr": 1.0,
+        "cases": [
+          {
+            "id": "retry",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "retry-after",
+              "backoff",
+              "scope-display"
+            ]
+          },
+          {
+            "id": "isolation",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "scope",
+              "scope-display",
+              "archive-list"
+            ]
+          },
+          {
+            "id": "digest",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "hash",
+              "checksum",
+              "normalize"
+            ]
+          },
+          {
+            "id": "cancellation",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "cancel",
+              "copy",
+              "archive"
+            ]
+          },
+          {
+            "id": "unit-vector",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "normalize",
+              "truncate",
+              "hash"
+            ]
+          },
+          {
+            "id": "traversal",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "archive",
+              "archive-list",
+              "scope-display"
+            ]
+          }
+        ]
+      },
+      "512": {
+        "positiveCases": 6,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 1.0,
+        "hitAt3": 1.0,
+        "recallAt2": 1.0,
+        "mrr": 1.0,
+        "cases": [
+          {
+            "id": "retry",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "retry-after",
+              "backoff",
+              "scope-display"
+            ]
+          },
+          {
+            "id": "isolation",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "scope",
+              "scope-display",
+              "archive-list"
+            ]
+          },
+          {
+            "id": "digest",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "hash",
+              "checksum",
+              "normalize"
+            ]
+          },
+          {
+            "id": "cancellation",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "cancel",
+              "copy",
+              "archive"
+            ]
+          },
+          {
+            "id": "unit-vector",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "normalize",
+              "truncate",
+              "checksum"
+            ]
+          },
+          {
+            "id": "traversal",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "archive",
+              "archive-list",
+              "scope-display"
+            ]
+          }
+        ]
+      },
+      "768": {
+        "positiveCases": 6,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 1.0,
+        "hitAt3": 1.0,
+        "recallAt2": 1.0,
+        "mrr": 1.0,
+        "cases": [
+          {
+            "id": "retry",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "retry-after",
+              "backoff",
+              "scope"
+            ]
+          },
+          {
+            "id": "isolation",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "scope",
+              "scope-display",
+              "archive-list"
+            ]
+          },
+          {
+            "id": "digest",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "hash",
+              "checksum",
+              "normalize"
+            ]
+          },
+          {
+            "id": "cancellation",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "cancel",
+              "copy",
+              "archive"
+            ]
+          },
+          {
+            "id": "unit-vector",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "normalize",
+              "truncate",
+              "checksum"
+            ]
+          },
+          {
+            "id": "traversal",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "archive",
+              "archive-list",
+              "scope-display"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "images": {
+    "fixture": "eight generated PNG color/shape subjects; distractors share color or shape",
+    "imageCount": 8,
+    "imagesPerSecond": 0.0393435316904068,
+    "queryLatencyMedianMs": 22.2975835,
+    "dimensions": {
+      "128": {
+        "positiveCases": 4,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 1.0,
+        "hitAt3": 1.0,
+        "recallAt2": 1.0,
+        "mrr": 1.0,
+        "cases": [
+          {
+            "id": "red-circle",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "red-circle",
+              "red-square",
+              "blue-circle"
+            ]
+          },
+          {
+            "id": "blue-square",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "blue-square",
+              "blue-circle",
+              "red-square"
+            ]
+          },
+          {
+            "id": "green-triangle",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "green-triangle",
+              "green-circle",
+              "red-square"
+            ]
+          },
+          {
+            "id": "yellow-circle",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "yellow-circle",
+              "yellow-square",
+              "red-circle"
+            ]
+          }
+        ]
+      },
+      "256": {
+        "positiveCases": 4,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 1.0,
+        "hitAt3": 1.0,
+        "recallAt2": 1.0,
+        "mrr": 1.0,
+        "cases": [
+          {
+            "id": "red-circle",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "red-circle",
+              "red-square",
+              "yellow-circle"
+            ]
+          },
+          {
+            "id": "blue-square",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "blue-square",
+              "blue-circle",
+              "red-square"
+            ]
+          },
+          {
+            "id": "green-triangle",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "green-triangle",
+              "green-circle",
+              "yellow-square"
+            ]
+          },
+          {
+            "id": "yellow-circle",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "yellow-circle",
+              "yellow-square",
+              "red-circle"
+            ]
+          }
+        ]
+      },
+      "512": {
+        "positiveCases": 4,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 1.0,
+        "hitAt3": 1.0,
+        "recallAt2": 1.0,
+        "mrr": 1.0,
+        "cases": [
+          {
+            "id": "red-circle",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "red-circle",
+              "red-square",
+              "yellow-circle"
+            ]
+          },
+          {
+            "id": "blue-square",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "blue-square",
+              "blue-circle",
+              "red-square"
+            ]
+          },
+          {
+            "id": "green-triangle",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "green-triangle",
+              "green-circle",
+              "yellow-square"
+            ]
+          },
+          {
+            "id": "yellow-circle",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "yellow-circle",
+              "yellow-square",
+              "red-circle"
+            ]
+          }
+        ]
+      },
+      "768": {
+        "positiveCases": 4,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 1.0,
+        "hitAt3": 1.0,
+        "recallAt2": 1.0,
+        "mrr": 1.0,
+        "cases": [
+          {
+            "id": "red-circle",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "red-circle",
+              "red-square",
+              "yellow-circle"
+            ]
+          },
+          {
+            "id": "blue-square",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "blue-square",
+              "blue-circle",
+              "red-square"
+            ]
+          },
+          {
+            "id": "green-triangle",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "green-triangle",
+              "green-circle",
+              "yellow-square"
+            ]
+          },
+          {
+            "id": "yellow-circle",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "yellow-circle",
+              "yellow-square",
+              "red-circle"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "hostMeasurement": {
+    "cpu": "Apple M4 Max",
+    "installedMemoryBytes": 137438953472,
+    "peakProcessRssBytes": 2583347200,
+    "wallSeconds": 209.07,
+    "candidateRunId": 37974984924,
+    "candidateArtifactId": 11640886748
+  }
+}

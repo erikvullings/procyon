@@ -118,6 +118,8 @@ pub enum NativeMenuRole {
     BringAllToFront,
     /// Copy selected text through the native responder chain.
     Copy,
+    /// Cut selected text through the native responder chain.
+    Cut,
     /// Paste text through the native responder chain.
     Paste,
     /// Select all text through the native responder chain.

@@ -1,9 +1,11 @@
+import m from 'mithril';
 import { describe, expect, it } from 'vitest';
 import { archiveIcon, fileIcon, folderIcon, imageIcon, symlinkIcon } from '../../components/icons';
 import type { EntrySummary } from '../../models';
 import {
   createDefaultEntryIconRegistry,
   entryIcon,
+  entryIconRegistry,
   hasSpecificEntryIcon,
   resolveEntryIcon,
 } from './entry-icons';
@@ -91,8 +93,32 @@ describe('resolveEntryIcon', () => {
 });
 
 describe('entryIcon', () => {
-  it('renders using the shared default registry', () => {
-    const rendered = entryIcon(entry({ kind: 'directory' }), { className: 'fm-entry-icon' });
-    expect(rendered).toEqual(folderIcon({ className: 'fm-entry-icon' }));
+  it('marks only the built-in directory glyph for tinting in list and grid', () => {
+    for (const className of ['fm-entry-icon', 'fm-grid-icon']) {
+      const rendered = entryIcon(entry({ kind: 'directory' }), { className });
+      expect(rendered).toEqual(folderIcon({ className: `${className} fm-default-folder-icon` }));
+    }
+    expect(entryIcon(entry(), { className: 'fm-entry-icon' })).toEqual(
+      fileIcon({ className: 'fm-entry-icon' }),
+    );
+  });
+
+  it('does not mark plugin directory icons or files using the folder renderer', () => {
+    const themedFolder = (_attrs?: { className?: string }) => m('svg.fm-icon-folder.fm-entry-icon');
+    const previous = entryIconRegistry.kindIcons.get('directory');
+    try {
+      entryIconRegistry.kindIcons.set('directory', themedFolder);
+      expect(entryIcon(entry({ kind: 'directory' }), { className: 'fm-entry-icon' })).toEqual(
+        themedFolder({ className: 'fm-entry-icon' }),
+      );
+      entryIconRegistry.kindIcons.set('directory', folderIcon);
+      entryIconRegistry.fileNameIcons.set('report.txt', folderIcon);
+      expect(entryIcon(entry(), { className: 'fm-entry-icon' })).toEqual(
+        folderIcon({ className: 'fm-entry-icon' }),
+      );
+    } finally {
+      if (previous !== undefined) entryIconRegistry.kindIcons.set('directory', previous);
+      entryIconRegistry.fileNameIcons.delete('report.txt');
+    }
   });
 });

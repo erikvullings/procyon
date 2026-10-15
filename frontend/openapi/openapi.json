@@ -3094,6 +3094,53 @@
         }
       }
     },
+    "/api/v1/llm-profiles/discover-model-limits": {
+      "post": {
+        "operationId": "discoverLlmProfileDraftModelLimits",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveLlmProfileRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded advertised limits for the selected model; null fields are unknown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmModelLimitsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid provider configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Host denied by administrator policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/llm-profiles/discover-models": {
       "post": {
         "operationId": "discoverLlmProfileDraftModels",
@@ -9660,6 +9707,13 @@
           "stale"
         ],
         "properties": {
+          "authors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SummaryAttributionDto"
+            },
+            "description": "Explicit or evidence-backed author names."
+          },
           "brief": {
             "type": "string",
             "description": "Concise overview."
@@ -9709,6 +9763,17 @@
               "format": "float"
             },
             "description": "Population weights aligned with supporting chunks."
+          },
+          "title": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SummaryAttributionDto",
+                "description": "Optional verified title (not inferred from the file name)."
+              }
+            ]
           }
         }
       },
@@ -9718,14 +9783,27 @@
         "required": [
           "selectionFingerprint",
           "representativeTokens",
+          "sourceTokens",
+          "textPreview",
+          "textPreviewTruncated",
           "selectionMode",
           "imageInputAvailable",
           "includedImageCount",
           "omittedImageCount",
           "keyPassages",
-          "reusedSelection"
+          "reusedSelection",
+          "sourcePassCount"
         ],
         "properties": {
+          "effectiveContextWindow": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Context window used for summary budgeting; may be trusted from the saved profile.",
+            "minimum": 0
+          },
           "imageInputAvailable": {
             "type": "boolean",
             "description": "Whether the selected model and document support bounded image input."
@@ -9760,6 +9838,10 @@
               }
             ]
           },
+          "providerLimitVerified": {
+            "type": "boolean",
+            "description": "Whether the provider's context limit was verified."
+          },
           "representativeTokens": {
             "type": "integer",
             "format": "int32",
@@ -9777,6 +9859,26 @@
           "selectionMode": {
             "$ref": "#/components/schemas/DocumentSummarySelectionModeDto",
             "description": "Whether the preview contains the complete extracted text or selected passages."
+          },
+          "sourcePassCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of bounded generation passes over complete source evidence.",
+            "minimum": 0
+          },
+          "sourceTokens": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Estimated tokens across the entire extracted text, including passages not previewed.",
+            "minimum": 0
+          },
+          "textPreview": {
+            "type": "string",
+            "description": "First bounded characters of extracted text in source order, not representative chunks."
+          },
+          "textPreviewTruncated": {
+            "type": "boolean",
+            "description": "Whether the source contains more extracted text than the visible preview."
           }
         }
       },
@@ -11640,6 +11742,15 @@
             "format": "int64",
             "description": "Indexed source modification time."
           },
+          "pdfImageSkippedPages": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "PDF pages omitted by the configured page-image budget.",
+            "minimum": 0
+          },
           "provenance": {
             "type": "string",
             "description": "Serialized structural provenance."
@@ -12003,12 +12114,20 @@
           "recursive",
           "available",
           "indexedGeneration",
-          "indexedSources"
+          "indexedSources",
+          "confirmedCompletedSources",
+          "unverifiedLegacySources"
         ],
         "properties": {
           "available": {
             "type": "boolean",
             "description": "Whether the indexed source is currently reachable."
+          },
+          "confirmedCompletedSources": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Document occurrences with an acknowledged worker completion in this workspace/root.",
+            "minimum": 0
           },
           "indexedGeneration": {
             "type": "integer",
@@ -12019,7 +12138,7 @@
           "indexedSources": {
             "type": "integer",
             "format": "int64",
-            "description": "Indexed sources already searchable, even before a full pass completes.",
+            "description": "Observed occurrences; not proof of completed worker ingestion.",
             "minimum": 0
           },
           "label": {
@@ -12030,6 +12149,19 @@
             "$ref": "#/components/schemas/LocationDto",
             "description": "Provider-neutral location already visible in the file manager."
           },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Maximum PDF page images embedded per document, or `None` for no cap.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Whether this root separately consents to PDF page-image embeddings."
+          },
           "recursive": {
             "type": "boolean",
             "description": "Whether descendants inherit consent."
@@ -12037,6 +12169,12 @@
           "rootId": {
             "type": "string",
             "description": "Stable path-independent root identity."
+          },
+          "unverifiedLegacySources": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Pre-upgrade occurrences whose earlier worker completion cannot yet be verified.",
+            "minimum": 0
           }
         }
       },
@@ -12849,6 +12987,42 @@
           "cloud"
         ]
       },
+      "LlmModelLimitsDto": {
+        "type": "object",
+        "description": "Effective model-advertised generation limits, or null when undiscoverable.",
+        "required": [
+          "contextWindowCap",
+          "maximumAnswerTokensCap"
+        ],
+        "properties": {
+          "contextWindow": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "contextWindowCap": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "maximumAnswerTokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "maximumAnswerTokensCap": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "LlmPresetDto": {
         "type": "string",
         "enum": [
@@ -12857,6 +13031,7 @@
           "vllm",
           "sglang",
           "omlx",
+          "mlxServe",
           "openAiCompatible",
           "azureOpenAi"
         ]
@@ -14923,6 +15098,19 @@
             "$ref": "#/components/schemas/LocationDto",
             "description": "Active folder."
           },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Per-document page-image budget; `None` allows every page on Metal.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Additional per-root PDF page-image consent; defaults safely to off."
+          },
           "recursive": {
             "type": "boolean",
             "description": "Whether descendants inherit consent."
@@ -16838,6 +17026,22 @@
           }
         }
       },
+      "SearchSemanticConceptSourceDto": {
+        "type": "object",
+        "description": "Identity of the concept used to compose an exploratory similarity query.",
+        "required": [
+          "vocabularyId",
+          "conceptUri"
+        ],
+        "properties": {
+          "conceptUri": {
+            "type": "string"
+          },
+          "vocabularyId": {
+            "type": "string"
+          }
+        }
+      },
       "SearchSemanticPredicateDto": {
         "type": "object",
         "required": [
@@ -16860,6 +17064,16 @@
           },
           "scope": {
             "$ref": "#/components/schemas/SemanticSearchScopeDto"
+          },
+          "selectedConcept": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SearchSemanticConceptSourceDto"
+              }
+            ]
           }
         }
       },
@@ -17923,6 +18137,19 @@
             "type": "boolean",
             "description": "Explicit local normalized-excerpt retention disclosure."
           },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Maximum PDF page images embedded per document, or `None` for no cap.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Whether this root separately consents to PDF page-image embeddings."
+          },
           "policyRevision": {
             "type": "integer",
             "format": "int64",
@@ -17981,6 +18208,22 @@
           },
           "indexedContentHash": {
             "type": "string"
+          },
+          "mediaType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Indexed IANA media type."
+          },
+          "pdfImageSkippedPages": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "PDF pages omitted by the configured page-image budget.",
+            "minimum": 0
           },
           "provenanceJson": {
             "type": "string",
@@ -19118,6 +19361,19 @@
             },
             "description": "Files whose latest completed reconciliation requires OCR."
           },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Maximum PDF page images embedded per document, or `None` for no cap.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Whether this root separately consents to PDF page-image embeddings."
+          },
           "reconciliationGeneration": {
             "type": "integer",
             "format": "int64",
@@ -19246,6 +19502,19 @@
           },
           "location": {
             "$ref": "#/components/schemas/LocationDto"
+          },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Per-document page-image budget, or `None` for all pages.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Whether the primary PDF root consents to page-image indexing."
           },
           "score": {
             "type": "number",
@@ -20368,6 +20637,54 @@
             "description": "Explicit provider or format limitation shown to the user."
           }
         }
+      },
+      "SummaryAttributionDto": {
+        "type": "object",
+        "description": "Source-backed title or author name, with optional passage identity.",
+        "required": [
+          "value",
+          "source"
+        ],
+        "properties": {
+          "provenance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Structured source position of that passage."
+          },
+          "quote": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Exact supplied source excerpt establishing an AI-extracted value."
+          },
+          "source": {
+            "$ref": "#/components/schemas/SummaryAttributionSourceDto",
+            "description": "Explicit or AI-extracted origin."
+          },
+          "supportingChunkId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Extracted passage identity when sourced from document text."
+          },
+          "value": {
+            "type": "string",
+            "description": "Exact document title or person name."
+          }
+        }
+      },
+      "SummaryAttributionSourceDto": {
+        "type": "string",
+        "description": "Origin of a document title or author name.",
+        "enum": [
+          "metadata",
+          "byline",
+          "aiExtracted"
+        ]
       },
       "SummaryKeyPassageDto": {
         "type": "object",

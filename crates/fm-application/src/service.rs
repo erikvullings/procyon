@@ -34,12 +34,13 @@ use fm_transport_dto::{
     FinderTagsDto, GenerateRagAnswerRequestDto, GenerateRagAnswerResponseDto,
     GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
     InvokeActionRequestDto, LinkOptionsDto, LinkOptionsRequestDto, ListDirectoryRequest,
-    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
-    NavigateRequest, OperationDto, PluginDescriptorDto, PluginLogEntryDto, PreviewRagRequestDto,
-    RagPreviewDto, RagScopeDto, RagScopeKindDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    RemoveApplicationDockIconRequestDto, RemoveApplicationDockIconResponseDto,
-    RenderChecksumFileRequestDto, ResolveOperationConflictRequestDto, ResolveRagCitationRequestDto,
-    ResolvedRagCitationDto, RuntimeCapabilitiesDto, RuntimeKindDto, SaveLlmProfileRequestDto,
+    LlmModelLimitsDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
+    LlmProfileTestResultDto, NavigateRequest, OperationDto, PluginDescriptorDto, PluginLogEntryDto,
+    PreviewRagRequestDto, RagPreviewDto, RagScopeDto, RagScopeKindDto, ReadFileRangeRequestDto,
+    ReadFileRangeResponseDto, RemoveApplicationDockIconRequestDto,
+    RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
+    ResolveOperationConflictRequestDto, ResolveRagCitationRequestDto, ResolvedRagCitationDto,
+    RuntimeCapabilitiesDto, RuntimeKindDto, SaveLlmProfileRequestDto,
     SaveRagConversationRequestDto, SavedRagConversationDto, SearchInFileRequestDto,
     SearchInFileResponseDto, SetPaneActivityRequest, SettingsDto, SpotlightCommentDto,
     StartChecksumRequestDto, StartChecksumResponseDto, StartComparisonRequestDto,
@@ -76,8 +77,8 @@ use crate::knowledge_search::{
 };
 use crate::knowledge_service::KnowledgeService;
 use crate::llm_profile_mapping::{
-    disposition_from_dto, draft_from_dto, preset_to_profile_dto, profile_to_dto,
-    profile_to_export_dto, test_result_to_dto,
+    disposition_from_dto, draft_from_dto, model_limits_to_dto, preset_to_profile_dto,
+    profile_to_dto, profile_to_export_dto, test_result_to_dto,
 };
 use crate::llm_profiles::{
     LlmHostPolicy, LlmImageAttachment, LlmProfileService, ReqwestLlmProbeTransport,
@@ -562,6 +563,7 @@ impl FileManagerService {
             comparison_store,
             events.clone(),
             semantic.clone(),
+            providers.clone(),
         );
         let checksum_store = Arc::new(ChecksumResultsStore::new());
         let duplicate_store = Arc::new(DuplicateResultsStore::new());
@@ -998,11 +1000,37 @@ impl FileManagerService {
         context: SemanticFolderContext,
         recursive: bool,
     ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
+        self.semantic_library_preview_enrolment_with_pdf_image_policy(
+            access, context, recursive, false, None,
+        )
+        .await
+    }
+
+    /// Creates an enrolment disclosure with additional per-root PDF image consent.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, lock, or persistence
+    /// failure.
+    pub async fn semantic_library_preview_enrolment_with_pdf_image_policy(
+        &self,
+        access: &SemanticAccessContext,
+        context: SemanticFolderContext,
+        recursive: bool,
+        pdf_images_enabled: bool,
+        pdf_image_page_budget: Option<u32>,
+    ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
         let library = self.semantic_library().await;
         library.ensure_operation_allowed(access, SemanticLibraryOperation::PreviewEnrolment)?;
         self.ensure_active_semantic_folder(&context).await?;
         let context = self.semantic_consent_context(context).await;
-        library.preview_enrolment(access, context, recursive)
+        library.preview_enrolment_with_pdf_image_policy(
+            access,
+            context,
+            recursive,
+            pdf_images_enabled,
+            pdf_image_page_budget,
+        )
     }
 
     /// Confirms one live enrolment disclosure for the still-active folder.
@@ -1815,7 +1843,10 @@ impl FileManagerService {
                 .await
             {
                 Ok(preview) => Ok(preview_to_dto(preview)),
-                Err(crate::document_summary::DocumentSummaryError::Unavailable) => {
+                Err(
+                    crate::document_summary::DocumentSummaryError::Unavailable
+                    | crate::document_summary::DocumentSummaryError::NotFound,
+                ) => {
                     self.preview_ephemeral_document_summary(
                         target,
                         request.input_token_budget,
@@ -1879,7 +1910,10 @@ impl FileManagerService {
                     .await
                 {
                     Ok(summary) => return Ok(summary_to_dto(summary, false)),
-                    Err(crate::document_summary::DocumentSummaryError::Unavailable) => {}
+                    Err(
+                        crate::document_summary::DocumentSummaryError::Unavailable
+                        | crate::document_summary::DocumentSummaryError::NotFound,
+                    ) => {}
                     Err(error) => return Err(summary_error_to_application(error)),
                 }
             }
@@ -1914,7 +1948,10 @@ impl FileManagerService {
         };
         match self.document_summaries.current(&worker_request).await {
             Ok(summary) => Ok(summary.map(|(stored, stale)| summary_to_dto(stored, stale))),
-            Err(crate::document_summary::DocumentSummaryError::Unavailable) => Ok(None),
+            Err(
+                crate::document_summary::DocumentSummaryError::Unavailable
+                | crate::document_summary::DocumentSummaryError::NotFound,
+            ) => Ok(None),
             Err(error) => Err(summary_error_to_application(error)),
         }
     }
@@ -1931,7 +1968,14 @@ impl FileManagerService {
             .prepare_ephemeral_document_summary(target, input_token_budget, cancellation)
             .await?;
         self.document_summaries
-            .preview_ephemeral(&prepared, profile_id, &self.llm_profiles, image_evidence)
+            .preview_ephemeral(
+                &prepared,
+                profile_id,
+                &self.llm_profiles,
+                image_evidence,
+                cancellation,
+            )
+            .await
             .map(preview_to_dto)
             .map_err(summary_error_to_application)
     }
@@ -1966,20 +2010,25 @@ impl FileManagerService {
             profile_id: generated.profile_id,
             model_id: generated.model_id,
             supporting_chunk_ids: prepared
-                .selection
-                .representatives
+                .source_chunks
                 .iter()
-                .map(|representative| representative.source.chunk_id.clone())
+                .map(|source| source.chunk_id.clone())
                 .collect(),
-            supporting_weights: prepared
-                .selection
-                .representatives
-                .iter()
-                .map(|representative| representative.cluster_weight)
-                .collect(),
+            supporting_weights: vec![
+                1.0 / prepared.source_chunks.len() as f32;
+                prepared.source_chunks.len()
+            ],
             created_at_ms: generated.created_at_ms,
             brief: generated.brief_text,
             full: generated.full_text,
+            title: generated
+                .title
+                .map(crate::document_summary_mapping::attribution_to_dto),
+            authors: generated
+                .authors
+                .into_iter()
+                .map(crate::document_summary_mapping::attribution_to_dto)
+                .collect(),
             stale: false,
         })
     }
@@ -2060,14 +2109,6 @@ impl FileManagerService {
             return Err(ApplicationError::InvalidRequest(
                 "summary input token budget is outside the supported range".into(),
             ));
-        }
-        let health = self
-            .semantic
-            .health()
-            .await
-            .map_err(|_| ApplicationError::ProviderUnavailable)?;
-        if health != SemanticHealth::Serving {
-            return Err(ApplicationError::ProviderUnavailable);
         }
         let outcome = self
             .document_conversion
@@ -3852,6 +3893,19 @@ impl FileManagerService {
             .llm_profiles
             .discover_draft_models(draft_from_dto(request), &cancellation)
             .await?)
+    }
+
+    /// Discovers bounded advertised limits for an unsaved draft's selected model.
+    pub async fn discover_llm_profile_draft_model_limits(
+        &self,
+        request: SaveLlmProfileRequestDto,
+    ) -> Result<LlmModelLimitsDto, ApplicationError> {
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        Ok(model_limits_to_dto(
+            self.llm_profiles
+                .discover_draft_model_limits(draft_from_dto(request), &cancellation)
+                .await?,
+        ))
     }
 
     /// Lists every stored connection profile with its current runtime status

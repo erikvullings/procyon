@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::embedding::{EmbeddingCacheKey, VectorNormalization};
 
-const CATALOG_SCHEMA_VERSION: i64 = 5;
+const CATALOG_SCHEMA_VERSION: i64 = 8;
 /// Maximum untrusted derived-index candidates re-authorized in one call.
 const MAX_VISIBILITY_CANDIDATES: usize = 4_096;
 
@@ -230,6 +230,37 @@ pub struct SummarySourceSet {
     pub modified_at_ms: i64,
     /// Extracted non-generated source chunks.
     pub chunks: Vec<StoredSourceChunk>,
+    /// Whether conversion retained all source text and no unreadable chunks were discarded.
+    pub source_complete: bool,
+}
+
+/// Durable generated-summary metadata and provenance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SummaryAttributionSource {
+    /// Explicit document metadata, not inferred by a model.
+    Metadata,
+    /// An explicit byline in the extracted document.
+    Byline,
+    /// A name extracted from document evidence by a model.
+    AiExtracted,
+}
+
+/// One title or author name with its source identity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SummaryAttribution {
+    /// Exact document title or person name.
+    pub value: String,
+    /// Explicit or AI-extracted origin.
+    pub source: SummaryAttributionSource,
+    /// Source passage identity, required for bylines and AI extraction.
+    pub supporting_chunk_id: Option<String>,
+    /// Structured source position of that passage.
+    pub provenance: Option<String>,
+    /// Exact supplied source span establishing an AI-extracted name.
+    #[serde(default)]
+    pub quote: Option<String>,
 }
 
 /// Durable generated-summary metadata and provenance.
@@ -253,6 +284,9 @@ pub struct StoredDocumentSummary {
     pub selection_fingerprint: String,
     /// Supporting extracted chunk identities.
     pub supporting_chunk_ids: Vec<String>,
+    /// Representative identities used for selection reuse, independent of consumed evidence.
+    #[serde(default)]
+    pub selection_chunk_ids: Option<Vec<String>>,
     /// Population weights aligned with `supporting_chunk_ids`.
     pub supporting_weights: Vec<f32>,
     /// Creation time in Unix milliseconds.
@@ -261,6 +295,12 @@ pub struct StoredDocumentSummary {
     pub brief_text: String,
     /// Full generated structured summary.
     pub full_text: String,
+    /// Optional source-backed title; absent rather than invented.
+    #[serde(default)]
+    pub title: Option<SummaryAttribution>,
+    /// Source-backed author names; empty when no author is established.
+    #[serde(default)]
+    pub authors: Vec<SummaryAttribution>,
 }
 
 /// Complete summary publication using a local embedding.
@@ -310,6 +350,10 @@ pub struct StagedGeneration {
     pub document_id: String,
     /// Streamed source-content digest.
     pub content_hash: String,
+    /// Old or partially converted documents must never be presented as whole-source summaries.
+    pub source_complete: bool,
+    /// PDF pages omitted by the configured page-image budget.
+    pub pdf_image_skipped_pages: Option<u32>,
     /// Monotonically increasing generation.
     pub generation: u64,
     /// Current source occurrences represented by this generation.
@@ -405,6 +449,8 @@ pub struct QueryEvidence {
     pub provenance: String,
     /// Published generation.
     pub generation: u64,
+    /// PDF pages omitted by the configured page-image budget.
+    pub pdf_image_skipped_pages: Option<u32>,
     /// Semantic record kind (`chunk`, `summary`, or a future versioned kind).
     pub record_kind: String,
     /// Bounded display excerpt.
@@ -708,23 +754,63 @@ impl SemanticCatalog {
         )?;
         transaction.execute(
             "INSERT INTO generations
-             (tenant_id, library_id, document_id, generation, state)
-             VALUES (?1, ?2, ?3, ?4, 'staging')
+             (tenant_id, library_id, document_id, generation, state, source_complete,
+              pdf_image_skipped_pages)
+             VALUES (?1, ?2, ?3, ?4, 'staging', ?5, ?6)
              ON CONFLICT(tenant_id, library_id, document_id, generation)
-             DO NOTHING",
+             DO UPDATE SET source_complete = excluded.source_complete,
+               pdf_image_skipped_pages = excluded.pdf_image_skipped_pages
+               WHERE generations.state = 'staging'",
             params![
                 staged.tenant_id,
                 staged.library_id,
                 staged.document_id,
-                i64_generation(staged.generation)?
+                i64_generation(staged.generation)?,
+                staged.source_complete,
+                staged.pdf_image_skipped_pages.map(i64::from)
             ],
         )?;
 
+        let generation = i64_generation(staged.generation)?;
+        let mut previous_documents = Vec::new();
         for occurrence in &staged.occurrences {
+            if let Some(previous) = transaction
+                .query_row(
+                    "SELECT tenant_id, library_id, document_id, generation
+                     FROM occurrences
+                     WHERE occurrence_id = ?1 AND generation = ?2",
+                    params![occurrence.occurrence_id, generation],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, i64>(3)?,
+                        ))
+                    },
+                )
+                .optional()?
+                && !previous_documents.contains(&previous)
+            {
+                previous_documents.push(previous);
+            }
             insert_occurrence(&transaction, staged, occurrence)?;
         }
         for record in &staged.records {
             insert_record(&transaction, staged, record)?;
+        }
+        for (tenant_id, library_id, document_id, generation) in previous_documents {
+            transaction.execute(
+                "UPDATE generations SET state = 'superseded'
+                 WHERE tenant_id = ?1 AND library_id = ?2 AND document_id = ?3
+                   AND generation = ?4 AND state = 'complete'
+                   AND NOT EXISTS (
+                     SELECT 1 FROM occurrences o
+                     WHERE o.tenant_id = ?1 AND o.library_id = ?2
+                       AND o.document_id = ?3 AND o.generation = ?4
+                   )",
+                params![tenant_id, library_id, document_id, generation],
+            )?;
         }
         transaction.commit()?;
         Ok(())
@@ -908,7 +994,7 @@ impl SemanticCatalog {
         let header = connection
             .query_row(
                 "SELECT d.content_hash, g.generation, o.occurrence_id, o.root_id,
-                        o.workspace_id, o.media_type, o.modified_at_ms
+                        o.workspace_id, o.media_type, o.modified_at_ms, g.source_complete
                  FROM generations g
                  JOIN documents d ON d.document_id = g.document_id
                  JOIN occurrences o
@@ -930,6 +1016,7 @@ impl SemanticCatalog {
                         row.get::<_, Option<String>>(4)?,
                         row.get::<_, String>(5)?,
                         row.get::<_, i64>(6)?,
+                        row.get::<_, bool>(7)?,
                     ))
                 },
             )
@@ -998,6 +1085,7 @@ impl SemanticCatalog {
             media_type: header.5,
             modified_at_ms: header.6,
             chunks,
+            source_complete: header.7,
         })
     }
 
@@ -1031,8 +1119,10 @@ impl SemanticCatalog {
             || publication.summary.brief_text.len() > 16 * 1024
             || publication.summary.full_text.len() > 256 * 1024
             || publication.summary.supporting_chunk_ids.is_empty()
+            || publication.summary.supporting_chunk_ids.len() > 16_384
             || publication.summary.supporting_chunk_ids.len()
                 != publication.summary.supporting_weights.len()
+            || publication.summary.authors.len() > 32
             || publication
                 .summary
                 .supporting_weights
@@ -1081,6 +1171,57 @@ impl SemanticCatalog {
             )?;
             if !exists {
                 return Err(StorageError::InvalidSummary);
+            }
+        }
+        for attribution in publication
+            .summary
+            .title
+            .iter()
+            .chain(&publication.summary.authors)
+        {
+            if attribution.value.trim().is_empty()
+                || attribution.value.len() > 512
+                || attribution
+                    .provenance
+                    .as_ref()
+                    .is_some_and(|value| value.len() > 4_096)
+                || attribution.supporting_chunk_id.is_some() != attribution.provenance.is_some()
+                || attribution
+                    .quote
+                    .as_ref()
+                    .is_some_and(|quote| quote.len() > 512 || !quote.contains(&attribution.value))
+                || (attribution.source == SummaryAttributionSource::AiExtracted
+                    && attribution.quote.is_none())
+                || (attribution.source != SummaryAttributionSource::Metadata
+                    && attribution.supporting_chunk_id.is_none())
+            {
+                return Err(StorageError::InvalidSummary);
+            }
+            if let (Some(chunk_id), Some(provenance)) =
+                (&attribution.supporting_chunk_id, &attribution.provenance)
+            {
+                let source_passage = transaction
+                    .query_row(
+                        "SELECT provenance, content FROM records
+                         WHERE record_id = ?1 AND tenant_id = ?2 AND library_id = ?3
+                           AND document_id = ?4 AND generation = ?5
+                           AND record_kind = 'chunk' AND generated = 0",
+                        params![chunk_id, tenant_id, library_id, document_id, current.1],
+                        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                    )
+                    .optional()?;
+                if !source_passage.as_ref().is_some_and(|(actual, content)| {
+                    actual == provenance
+                        && (attribution.source == SummaryAttributionSource::Metadata
+                            || content.contains(
+                                attribution
+                                    .quote
+                                    .as_deref()
+                                    .unwrap_or(attribution.value.trim()),
+                            ))
+                }) {
+                    return Err(StorageError::InvalidSummary);
+                }
             }
         }
         let old = transaction
@@ -1156,9 +1297,10 @@ impl SemanticCatalog {
              (tenant_id, library_id, document_id, record_id, source_generation,
               source_content_hash, profile_id, model_id, algorithm_version,
               prompt_version, selection_fingerprint, supporting_chunk_ids_json,
-              supporting_weights_json, created_at_ms, brief_text, full_text)
+              supporting_weights_json, created_at_ms, brief_text, full_text,
+              title_json, authors_json, selection_chunk_ids_json)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-                     ?13, ?14, ?15, ?16)",
+                     ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
             params![
                 tenant_id,
                 library_id,
@@ -1176,6 +1318,19 @@ impl SemanticCatalog {
                 publication.summary.created_at_ms,
                 publication.summary.brief_text,
                 publication.summary.full_text,
+                publication
+                    .summary
+                    .title
+                    .as_ref()
+                    .map(serde_json::to_string)
+                    .transpose()?,
+                serde_json::to_string(&publication.summary.authors)?,
+                publication
+                    .summary
+                    .selection_chunk_ids
+                    .as_ref()
+                    .map(serde_json::to_string)
+                    .transpose()?,
             ],
         )?;
         transaction.execute("DELETE FROM vectors WHERE reference_count <= 0", [])?;
@@ -1204,6 +1359,9 @@ impl SemanticCatalog {
             created_at_ms: i64,
             brief_text: String,
             full_text: String,
+            title_json: Option<String>,
+            authors_json: String,
+            selection_chunk_ids_json: Option<String>,
         }
         let connection = self.connection()?;
         connection
@@ -1211,7 +1369,8 @@ impl SemanticCatalog {
                 "SELECT record_id, source_generation, source_content_hash,
                         profile_id, model_id, algorithm_version, prompt_version,
                         selection_fingerprint, supporting_chunk_ids_json,
-                        supporting_weights_json, created_at_ms, brief_text, full_text
+                        supporting_weights_json, created_at_ms, brief_text, full_text,
+                        title_json, authors_json, selection_chunk_ids_json
                  FROM document_summaries
                  WHERE tenant_id = ?1 AND library_id = ?2 AND document_id = ?3",
                 params![tenant_id, library_id, document_id],
@@ -1230,6 +1389,9 @@ impl SemanticCatalog {
                         created_at_ms: row.get(10)?,
                         brief_text: row.get(11)?,
                         full_text: row.get(12)?,
+                        title_json: row.get(13)?,
+                        authors_json: row.get(14)?,
+                        selection_chunk_ids_json: row.get(15)?,
                     })
                 },
             )
@@ -1250,6 +1412,17 @@ impl SemanticCatalog {
                     created_at_ms: raw.created_at_ms,
                     brief_text: raw.brief_text,
                     full_text: raw.full_text,
+                    title: raw
+                        .title_json
+                        .as_deref()
+                        .map(serde_json::from_str)
+                        .transpose()?,
+                    authors: serde_json::from_str(&raw.authors_json)?,
+                    selection_chunk_ids: raw
+                        .selection_chunk_ids_json
+                        .as_deref()
+                        .map(serde_json::from_str)
+                        .transpose()?,
                 })
             })
             .transpose()
@@ -1316,18 +1489,39 @@ impl SemanticCatalog {
         attempts: u32,
         detail: Option<&str>,
     ) -> Result<(), StorageError> {
+        self.upsert_job_progress(job_id, stage, attempts, detail, 0, 1)
+    }
+
+    /// Persists a job's completed work units with its lifecycle state.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation or database error.
+    pub fn upsert_job_progress(
+        &self,
+        job_id: &str,
+        stage: &str,
+        attempts: u32,
+        detail: Option<&str>,
+        completed: u64,
+        total: u64,
+    ) -> Result<(), StorageError> {
         validate_identifier(job_id, "job_id")?;
         if stage.is_empty() {
             return Err(StorageError::InvalidIdentifier("stage"));
         }
+        let completed = i64::try_from(completed).map_err(|_| StorageError::CorruptCatalog)?;
+        let total = i64::try_from(total).map_err(|_| StorageError::CorruptCatalog)?;
         self.connection()?.execute(
-            "INSERT INTO jobs (job_id, stage, attempts, detail)
-             VALUES (?1, ?2, ?3, ?4)
+            "INSERT INTO jobs (job_id, stage, attempts, detail, completed, total)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT(job_id) DO UPDATE SET
                stage = excluded.stage,
                attempts = excluded.attempts,
-               detail = excluded.detail",
-            params![job_id, stage, i64::from(attempts), detail],
+               detail = excluded.detail,
+               completed = excluded.completed,
+               total = excluded.total",
+            params![job_id, stage, i64::from(attempts), detail, completed, total],
         )?;
         Ok(())
     }
@@ -1367,7 +1561,7 @@ impl SemanticCatalog {
         validate_identifier(job_id, "job_id")?;
         self.connection()?
             .query_row(
-                "SELECT tenant_id, library_id, document_id, stage, attempts, detail
+                "SELECT tenant_id, library_id, document_id, stage, attempts, detail, completed, total
                  FROM jobs WHERE job_id = ?1",
                 [job_id],
                 |row| {
@@ -1378,12 +1572,14 @@ impl SemanticCatalog {
                         row.get::<_, String>(3)?,
                         row.get::<_, i64>(4)?,
                         row.get::<_, Option<String>>(5)?,
+                        row.get::<_, i64>(6)?,
+                        row.get::<_, i64>(7)?,
                     ))
                 },
             )
             .optional()?
             .map(
-                |(tenant_id, library_id, document_id, stage, attempts, detail)| {
+                |(tenant_id, library_id, document_id, stage, attempts, detail, completed, total)| {
                     Ok(StoredJob {
                         job_id: job_id.to_owned(),
                         tenant_id,
@@ -1393,6 +1589,9 @@ impl SemanticCatalog {
                         attempts: u32::try_from(attempts)
                             .map_err(|_| StorageError::CorruptCatalog)?,
                         detail,
+                        completed: u64::try_from(completed)
+                            .map_err(|_| StorageError::CorruptCatalog)?,
+                        total: u64::try_from(total).map_err(|_| StorageError::CorruptCatalog)?,
                     })
                 },
             )
@@ -1822,6 +2021,7 @@ impl CatalogReader {
                     o.source_id, r.provenance, r.generation, r.record_kind,
                     r.excerpt, r.content, r.token_count, r.section_path_json,
                     r.source_position, r.generated, d.content_hash,
+                    g.pdf_image_skipped_pages,
                     o.available, o.media_type, o.modified_at_ms
              FROM records r
              JOIN generations g
@@ -1832,6 +2032,7 @@ impl CatalogReader {
              JOIN occurrences o
                ON o.occurrence_id = r.occurrence_id
               AND o.generation = r.generation
+              AND o.document_id = r.document_id
              JOIN documents d ON d.document_id = r.document_id
              WHERE r.record_id = ?1
                AND r.tenant_id = ?2
@@ -1883,9 +2084,10 @@ impl CatalogReader {
                             row.get::<_, i64>(12)?,
                             row.get::<_, i64>(13)?,
                             row.get::<_, String>(14)?,
-                            row.get::<_, i64>(15)?,
-                            row.get::<_, String>(16)?,
-                            row.get::<_, i64>(17)?,
+                            row.get::<_, Option<i64>>(15)?,
+                            row.get::<_, i64>(16)?,
+                            row.get::<_, String>(17)?,
+                            row.get::<_, i64>(18)?,
                         ))
                     },
                 )
@@ -1906,6 +2108,7 @@ impl CatalogReader {
                 source_position,
                 generated,
                 content_hash,
+                pdf_image_skipped_pages,
                 available,
                 media_type,
                 modified_at_ms,
@@ -1919,6 +2122,10 @@ impl CatalogReader {
                     source_id,
                     provenance,
                     generation: u64::try_from(generation)
+                        .map_err(|_| StorageError::CorruptCatalog)?,
+                    pdf_image_skipped_pages: pdf_image_skipped_pages
+                        .map(u32::try_from)
+                        .transpose()
                         .map_err(|_| StorageError::CorruptCatalog)?,
                     record_kind,
                     excerpt,
@@ -2033,6 +2240,9 @@ impl CatalogReader {
         if radius > 4 {
             return Err(StorageError::InvalidIdentifier("adjacent_radius"));
         }
+        if anchor.record_kind == "pdf_image" {
+            return Ok(Vec::new());
+        }
         let lower = anchor.source_position.saturating_sub(radius);
         let upper = anchor.source_position.saturating_add(radius);
         let mut statement = self.connection.prepare(
@@ -2044,6 +2254,7 @@ impl CatalogReader {
                AND occurrence_id = ?4
                AND generation = ?5
                AND generated = 0
+               AND record_kind != 'pdf_image'
                AND source_position BETWEEN ?6 AND ?7
              ORDER BY source_position, record_id",
         )?;
@@ -2107,6 +2318,10 @@ pub struct StoredJob {
     pub attempts: u32,
     /// Sanitized failure, pause, or resume detail.
     pub detail: Option<String>,
+    /// Completed work units in this phase.
+    pub completed: u64,
+    /// Total known work units, or zero when unknown.
+    pub total: u64,
 }
 
 /// Persistent semantic-storage failure.
@@ -2202,7 +2417,7 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
            schema_version INTEGER NOT NULL
          );
          INSERT INTO catalog_meta (schema_version)
-           SELECT 5 WHERE NOT EXISTS (SELECT 1 FROM catalog_meta);
+           SELECT 6 WHERE NOT EXISTS (SELECT 1 FROM catalog_meta);
          CREATE TABLE IF NOT EXISTS libraries (
            tenant_id TEXT NOT NULL,
            library_id TEXT NOT NULL,
@@ -2290,6 +2505,9 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
            created_at_ms INTEGER NOT NULL,
            brief_text TEXT NOT NULL,
            full_text TEXT NOT NULL,
+           title_json TEXT,
+           authors_json TEXT NOT NULL DEFAULT '[]',
+           selection_chunk_ids_json TEXT,
            PRIMARY KEY (tenant_id, library_id, document_id),
            FOREIGN KEY (record_id) REFERENCES records (record_id) ON DELETE CASCADE
          );
@@ -2300,7 +2518,9 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
            document_id TEXT,
            stage TEXT NOT NULL,
            attempts INTEGER NOT NULL,
-           detail TEXT
+           detail TEXT,
+           completed INTEGER NOT NULL DEFAULT 0,
+           total INTEGER NOT NULL DEFAULT 1
          );
          CREATE TABLE IF NOT EXISTS component_versions (
            component_id TEXT PRIMARY KEY,
@@ -2398,11 +2618,57 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
         )?;
         version = 5;
     }
+    if version == 5 {
+        connection.execute_batch(
+            "BEGIN IMMEDIATE;
+             ALTER TABLE document_summaries ADD COLUMN title_json TEXT;
+             ALTER TABLE document_summaries ADD COLUMN authors_json TEXT NOT NULL DEFAULT '[]';
+             ALTER TABLE document_summaries ADD COLUMN selection_chunk_ids_json TEXT;
+             UPDATE catalog_meta SET schema_version = 6;
+             COMMIT;",
+        )?;
+        version = 6;
+    }
+    if version == 6 {
+        connection.execute_batch(
+            "BEGIN IMMEDIATE;
+             ALTER TABLE generations ADD COLUMN source_complete INTEGER NOT NULL DEFAULT 0;
+             UPDATE catalog_meta SET schema_version = 7;
+             COMMIT;",
+        )?;
+        version = 7;
+    }
+    if version == 7 {
+        connection.execute_batch(
+            "BEGIN IMMEDIATE;
+             ALTER TABLE generations
+               ADD COLUMN pdf_image_skipped_pages INTEGER;
+             UPDATE catalog_meta SET schema_version = 8;
+             COMMIT;",
+        )?;
+        version = 8;
+    }
     if version != CATALOG_SCHEMA_VERSION {
         return Err(StorageError::MigrationRequired {
             incompatible_fields: vec!["catalog_schema_version"],
         });
     }
+    connection.execute_batch("BEGIN IMMEDIATE;")?;
+    let mut statement = connection.prepare("PRAGMA table_info(jobs)")?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    drop(statement);
+    for (name, definition) in [
+        ("completed", "INTEGER NOT NULL DEFAULT 0"),
+        ("total", "INTEGER NOT NULL DEFAULT 1"),
+    ] {
+        if !columns.iter().any(|column| column == name) {
+            connection
+                .execute_batch(&format!("ALTER TABLE jobs ADD COLUMN {name} {definition}"))?;
+        }
+    }
+    connection.execute_batch("COMMIT;")?;
     Ok(())
 }
 
@@ -2705,6 +2971,8 @@ mod tests {
             library_id: library.into(),
             document_id: document.into(),
             content_hash: format!("hash-{generation}"),
+            source_complete: true,
+            pdf_image_skipped_pages: None,
             generation,
             occurrences,
             records,
@@ -2818,6 +3086,138 @@ mod tests {
     }
 
     #[test]
+    fn changed_content_does_not_return_records_from_the_previous_document() {
+        let (_directory, catalog) = catalog();
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .expect("register");
+        let previous = generation(
+            "tenant-a",
+            "library-a",
+            "document-old",
+            1,
+            vec![occurrence("occurrence-a", "root-a")],
+            "previous content",
+        );
+        catalog.stage_generation(&previous).expect("stage previous");
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-old", 1)
+            .expect("publish previous");
+
+        let current = generation(
+            "tenant-a",
+            "library-a",
+            "document-current",
+            1,
+            vec![occurrence("occurrence-a", "root-a")],
+            "current content",
+        );
+        catalog.stage_generation(&current).expect("stage current");
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-current", 1)
+            .expect("publish current");
+
+        let candidates = previous
+            .records
+            .iter()
+            .chain(&current.records)
+            .map(|record| record.record_id.clone())
+            .collect::<Vec<_>>();
+        let reader = catalog.begin_read().expect("reader");
+        let visible = reader
+            .filter_visible_candidates(
+                &candidates,
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .expect("filter current source evidence");
+
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].document_id, "document-current");
+        assert_eq!(visible[0].content, "current content");
+        drop(reader);
+        assert_eq!(
+            catalog
+                .reclaim_superseded()
+                .expect("reclaim replaced content"),
+            ReclaimStats {
+                records: 1,
+                vectors: 1,
+                record_ids: vec![previous.records[0].record_id.clone()],
+            }
+        );
+    }
+
+    #[test]
+    fn replacing_one_shared_content_occurrence_keeps_the_other_occurrence() {
+        let (_directory, catalog) = catalog();
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .expect("register");
+        let shared = generation(
+            "tenant-a",
+            "library-a",
+            "document-shared",
+            1,
+            vec![
+                occurrence("occurrence-a", "root-a"),
+                occurrence("occurrence-b", "root-b"),
+            ],
+            "shared content",
+        );
+        catalog.stage_generation(&shared).expect("stage shared");
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-shared", 1)
+            .expect("publish shared");
+
+        let replacement = generation(
+            "tenant-a",
+            "library-a",
+            "document-replacement",
+            1,
+            vec![occurrence("occurrence-a", "root-a")],
+            "replacement content",
+        );
+        catalog
+            .stage_generation(&replacement)
+            .expect("stage replacement");
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-replacement", 1)
+            .expect("publish replacement");
+
+        let reader = catalog.begin_read().expect("reader");
+        let evidence = reader
+            .filter_visible_candidates(
+                &shared
+                    .records
+                    .iter()
+                    .chain(&replacement.records)
+                    .map(|record| record.record_id.clone())
+                    .collect::<Vec<_>>(),
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .expect("filter shared and replacement evidence");
+        assert_eq!(evidence.len(), 2);
+        assert!(evidence.iter().any(|item| {
+            item.occurrence_id == "occurrence-b" && item.document_id == "document-shared"
+        }));
+        drop(reader);
+        assert_eq!(
+            catalog.reclaim_superseded().expect("keep shared content"),
+            ReclaimStats {
+                records: 0,
+                vectors: 0,
+                record_ids: vec![],
+            }
+        );
+    }
+
+    #[test]
     fn completes_only_a_schema_only_manifest_migration() {
         let (_directory, catalog) = catalog();
         catalog
@@ -2856,6 +3256,7 @@ mod tests {
             .execute_batch(
                 "CREATE TABLE catalog_meta (schema_version INTEGER NOT NULL);
                  INSERT INTO catalog_meta VALUES (3);
+                 CREATE TABLE document_summaries (record_id TEXT PRIMARY KEY);
                  CREATE TABLE records (
                    record_id TEXT PRIMARY KEY,
                    tenant_id TEXT NOT NULL,
@@ -2882,7 +3283,7 @@ mod tests {
                 row.get(0)
             })
             .expect("schema version");
-        assert_eq!(version, 5);
+        assert_eq!(version, CATALOG_SCHEMA_VERSION);
         let mut statement = connection
             .prepare("PRAGMA table_info(records)")
             .expect("record columns");
@@ -3130,6 +3531,82 @@ mod tests {
     }
 
     #[test]
+    fn ingestion_progress_survives_reopening_and_old_catalog_upgrade() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("catalog.sqlite");
+        let catalog = SemanticCatalog::open(&path).unwrap();
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .unwrap();
+        let generation = generation(
+            "tenant-a",
+            "library-a",
+            "document-a",
+            1,
+            vec![occurrence("occurrence-a", "root-a")],
+            "legacy PDF text",
+        );
+        let record_id = generation.records[0].record_id.clone();
+        catalog.stage_generation(&generation).unwrap();
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-a", 1)
+            .unwrap();
+        catalog
+            .register_job("job-progress", "tenant-a", "library-a", "document-a")
+            .unwrap();
+        catalog
+            .upsert_job_progress("job-progress", "embedding", 1, None, 3, 8)
+            .unwrap();
+        drop(catalog);
+        let reopened = SemanticCatalog::open(&path).unwrap();
+        let job = reopened.job("job-progress").unwrap().unwrap();
+        assert_eq!((job.completed, job.total), (3, 8));
+        drop(reopened);
+        let rollback = Connection::open(&path).unwrap();
+        assert_eq!(
+            rollback
+                .query_row("SELECT schema_version FROM catalog_meta", [], |row| row
+                    .get::<_, i64>(0))
+                .unwrap(),
+            8,
+            "the new coverage field is part of the current catalog schema"
+        );
+        rollback
+            .execute(
+                "UPDATE jobs SET stage = 'paused', attempts = 1 WHERE job_id = 'job-progress'",
+                [],
+            )
+            .unwrap();
+        drop(rollback);
+
+        let legacy = Connection::open(&path).unwrap();
+        legacy
+            .execute_batch(
+                "ALTER TABLE jobs DROP COLUMN completed;
+                 ALTER TABLE jobs DROP COLUMN total;
+                 ALTER TABLE generations DROP COLUMN pdf_image_skipped_pages;
+                 UPDATE catalog_meta SET schema_version = 7;",
+            )
+            .unwrap();
+        drop(legacy);
+        let upgraded = SemanticCatalog::open(&path).unwrap();
+        let job = upgraded.job("job-progress").unwrap().unwrap();
+        assert_eq!((job.completed, job.total), (0, 1));
+        let evidence = upgraded
+            .begin_read()
+            .unwrap()
+            .filter_visible_candidates(
+                &[record_id],
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(evidence[0].pdf_image_skipped_pages, None);
+    }
+
+    #[test]
     fn publication_is_old_or_new_and_reclamation_waits_for_readers() {
         let (_directory, catalog) = catalog();
         catalog
@@ -3342,6 +3819,7 @@ mod tests {
 
         assert_eq!(source.content_hash, "hash-1");
         assert_eq!(source.generation, 1);
+        assert!(source.source_complete);
         assert_eq!(source.occurrence_id, "occurrence-a");
         assert_eq!(source.chunks.len(), 1);
         assert_eq!(source.chunks[0].content, "complete source content");
@@ -3350,8 +3828,35 @@ mod tests {
     }
 
     #[test]
-    fn generated_summary_retains_supporting_provenance_across_stale_rollover_and_deletion() {
+    fn partial_source_is_not_attested_as_complete_for_summary() {
         let (_directory, catalog) = catalog();
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .expect("register");
+        let mut staged = generation(
+            "tenant-a",
+            "library-a",
+            "document-a",
+            1,
+            vec![occurrence("occurrence-a", "root-a")],
+            "visible source fragment",
+        );
+        staged.source_complete = false;
+        catalog.stage_generation(&staged).expect("stage");
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-a", 1)
+            .expect("publish");
+        assert!(
+            !catalog
+                .summary_source_chunks("tenant-a", "library-a", "document-a")
+                .expect("summary source")
+                .source_complete
+        );
+    }
+
+    #[test]
+    fn generated_summary_retains_supporting_provenance_across_stale_rollover_and_deletion() {
+        let (directory, catalog) = catalog();
         catalog
             .register_library("tenant-a", "library-a", &manifest())
             .expect("register");
@@ -3378,10 +3883,13 @@ mod tests {
             prompt_version: "document-summary/1".into(),
             selection_fingerprint: "selection-a".into(),
             supporting_chunk_ids: vec![supporting_id],
+            selection_chunk_ids: None,
             supporting_weights: vec![1.0],
             created_at_ms: 1_000,
             brief_text: "Brief.".into(),
             full_text: "Full summary.".into(),
+            title: None,
+            authors: vec![],
         };
         catalog
             .publish_summary(
@@ -3403,6 +3911,25 @@ mod tests {
                 .expect("summary"),
             Some(summary.clone())
         );
+        let legacy = Connection::open(directory.path().join("catalog.sqlite")).unwrap();
+        legacy
+            .execute_batch(
+                "ALTER TABLE document_summaries DROP COLUMN title_json;
+                 ALTER TABLE document_summaries DROP COLUMN authors_json;
+                 ALTER TABLE document_summaries DROP COLUMN selection_chunk_ids_json;
+                 ALTER TABLE generations DROP COLUMN source_complete;
+                 ALTER TABLE generations DROP COLUMN pdf_image_skipped_pages;
+                 UPDATE catalog_meta SET schema_version = 5;",
+            )
+            .unwrap();
+        drop(legacy);
+        let migrated = SemanticCatalog::open(directory.path().join("catalog.sqlite")).unwrap();
+        assert_eq!(
+            migrated
+                .document_summary("tenant-a", "library-a", "document-a")
+                .unwrap(),
+            Some(summary.clone())
+        );
 
         let second = generation(
             "tenant-a",
@@ -3410,7 +3937,7 @@ mod tests {
             "document-a",
             2,
             vec![occurrence("occurrence-a", "root-a")],
-            "changed body",
+            "Ada Lovelace",
         );
         catalog.stage_generation(&second).expect("stage second");
         catalog
@@ -3436,6 +3963,84 @@ mod tests {
                 .unwrap()
                 .source_generation,
             1
+        );
+
+        let mut attributed = summary.clone();
+        attributed.record_id = "summary-document-a-v2".into();
+        attributed.source_generation = 2;
+        attributed.source_content_hash = "hash-2".into();
+        attributed.supporting_chunk_ids = vec![second.records[0].record_id.clone()];
+        attributed.title = Some(SummaryAttribution {
+            value: "Document title".into(),
+            source: SummaryAttributionSource::Metadata,
+            supporting_chunk_id: None,
+            provenance: None,
+            quote: None,
+        });
+        attributed.authors = vec![SummaryAttribution {
+            value: "Ada Lovelace".into(),
+            source: SummaryAttributionSource::Byline,
+            supporting_chunk_id: Some(second.records[0].record_id.clone()),
+            provenance: Some(second.records[0].provenance.clone()),
+            quote: None,
+        }];
+        let publication = SummaryPublication {
+            summary: attributed.clone(),
+            occurrence_id: "occurrence-a".into(),
+            cache_key: key("Full summary."),
+            vector: vec![0.0, 0.6, 0.8],
+            provenance: second.records[0].provenance.clone(),
+        };
+        let mut unsupported = publication.clone();
+        unsupported.summary.authors[0].supporting_chunk_id = Some("missing".into());
+        assert!(matches!(
+            catalog.publish_summary("tenant-a", "library-a", "document-a", &unsupported),
+            Err(StorageError::InvalidSummary)
+        ));
+        let mut invented = publication.clone();
+        invented.summary.authors[0].value = " ".into();
+        assert!(matches!(
+            catalog.publish_summary("tenant-a", "library-a", "document-a", &invented),
+            Err(StorageError::InvalidSummary)
+        ));
+        invented.summary.authors[0].value = "Invented Author".into();
+        assert!(matches!(
+            catalog.publish_summary("tenant-a", "library-a", "document-a", &invented),
+            Err(StorageError::InvalidSummary)
+        ));
+        let mut extracted = publication.clone();
+        extracted.summary.authors[0].source = SummaryAttributionSource::AiExtracted;
+        assert!(matches!(
+            catalog.publish_summary("tenant-a", "library-a", "document-a", &extracted),
+            Err(StorageError::InvalidSummary)
+        ));
+        extracted.summary.authors[0].quote = Some("Invented Author".into());
+        assert!(matches!(
+            catalog.publish_summary("tenant-a", "library-a", "document-a", &extracted),
+            Err(StorageError::InvalidSummary)
+        ));
+        extracted.summary.authors[0].quote = Some("Ada Lovelace".into());
+        catalog
+            .publish_summary("tenant-a", "library-a", "document-a", &extracted)
+            .expect("publish supported AI extraction");
+        assert_eq!(
+            catalog
+                .document_summary("tenant-a", "library-a", "document-a")
+                .unwrap()
+                .unwrap()
+                .authors[0]
+                .quote
+                .as_deref(),
+            Some("Ada Lovelace")
+        );
+        catalog
+            .publish_summary("tenant-a", "library-a", "document-a", &publication)
+            .expect("publish attributed summary");
+        assert_eq!(
+            catalog
+                .document_summary("tenant-a", "library-a", "document-a")
+                .unwrap(),
+            Some(attributed)
         );
 
         catalog

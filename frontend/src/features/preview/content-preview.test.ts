@@ -37,15 +37,18 @@ describe('resolvePreviewKind', () => {
     expect(resolvePreviewKind(entry({ name: 'photo.png', extension: 'png' }))).toBe('image');
     expect(resolvePreviewKind(entry({ name: 'photo.JPEG', extension: 'JPEG' }))).toBe('image');
     expect(resolvePreviewKind(entry({ name: 'favicon.ico', extension: 'ico' }))).toBe('image');
+    expect(resolvePreviewKind(entry({ name: 'page_000.png' }))).toBe('image');
   });
 
   it('resolves an audio extension to audio', () => {
     expect(resolvePreviewKind(entry({ name: 'song.mp3', extension: 'mp3' }))).toBe('audio');
     expect(resolvePreviewKind(entry({ name: 'song.FLAC', extension: 'FLAC' }))).toBe('audio');
+    expect(resolvePreviewKind(entry({ name: 'song.mp3' }))).toBe('audio');
   });
 
   it.each(VIDEO_EXTENSIONS)('resolves the .%s video extension to video', (extension) => {
     expect(resolvePreviewKind(entry({ name: `clip.${extension}`, extension }))).toBe('video');
+    expect(resolvePreviewKind(entry({ name: `clip.${extension}` }))).toBe('video');
   });
 
   it('resolves any other file extension to text', () => {
@@ -83,6 +86,9 @@ describe('imageMimeTypeFor', () => {
     expect(
       imageMimeTypeFor(entry({ extension: 'ico', mimeType: 'application/octet-stream' })),
     ).toBe('image/x-icon');
+    expect(
+      imageMimeTypeFor(entry({ name: 'page_000.png', mimeType: 'application/octet-stream' })),
+    ).toBe('image/png');
   });
 
   it('falls back to the reported mimeType for an unknown extension', () => {
@@ -101,6 +107,7 @@ describe('audioMimeTypeFor', () => {
     expect(
       audioMimeTypeFor(entry({ extension: 'mp3', mimeType: 'application/octet-stream' })),
     ).toBe('audio/mpeg');
+    expect(audioMimeTypeFor(entry({ name: 'song.mp3' }))).toBe('audio/mpeg');
   });
 
   describe('videoMimeTypeFor', () => {
@@ -114,6 +121,7 @@ describe('audioMimeTypeFor', () => {
       expect(videoMimeTypeFor(entry({ extension, mimeType: 'application/octet-stream' }))).toBe(
         mimeType,
       );
+      expect(videoMimeTypeFor(entry({ name: `clip.${extension}` }))).toBe(mimeType);
     });
   });
 

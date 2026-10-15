@@ -91,6 +91,7 @@ import type {
   ListKnowledgeRootsRequestDto,
   ListOperationsParams,
   ListSavedRagConversationsRequestDto,
+  LlmModelLimitsDto,
   LlmProfileDto,
   LlmProfileExportDto,
   LlmProfilePresetDto,
@@ -4003,6 +4004,65 @@ export const createLlmProfile = async (saveLlmProfileRequestDto: SaveLlmProfileR
     return headers;
   };
 return fetchMutator<createLlmProfileResponse>(getCreateLlmProfileUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(saveLlmProfileRequestDto)
+  }
+);}
+
+
+
+export type discoverLlmProfileDraftModelLimitsResponse200 = {
+  data: LlmModelLimitsDto
+  status: 200
+}
+
+export type discoverLlmProfileDraftModelLimitsResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type discoverLlmProfileDraftModelLimitsResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type discoverLlmProfileDraftModelLimitsResponseSuccess = (discoverLlmProfileDraftModelLimitsResponse200) & {
+  headers: Headers;
+};
+export type discoverLlmProfileDraftModelLimitsResponseError = (discoverLlmProfileDraftModelLimitsResponse400 | discoverLlmProfileDraftModelLimitsResponse403) & {
+  headers: Headers;
+};
+
+export type discoverLlmProfileDraftModelLimitsResponse = (discoverLlmProfileDraftModelLimitsResponseSuccess | discoverLlmProfileDraftModelLimitsResponseError)
+
+export const getDiscoverLlmProfileDraftModelLimitsUrl = () => {
+
+
+
+
+  return `/api/v1/llm-profiles/discover-model-limits`
+}
+
+export const discoverLlmProfileDraftModelLimits = async (saveLlmProfileRequestDto: SaveLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<discoverLlmProfileDraftModelLimitsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<discoverLlmProfileDraftModelLimitsResponse>(getDiscoverLlmProfileDraftModelLimitsUrl(),
   {
     ...options,
     method: 'POST',

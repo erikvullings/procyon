@@ -4,8 +4,9 @@ use axum::Json;
 use axum::extract::{Extension, Path, State};
 use axum::http::StatusCode;
 use fm_transport_dto::{
-    ActivateLlmProfileRequestDto, ApplicationErrorDto, DeleteLlmProfileRequestDto, LlmProfileDto,
-    LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, SaveLlmProfileRequestDto,
+    ActivateLlmProfileRequestDto, ApplicationErrorDto, DeleteLlmProfileRequestDto,
+    LlmModelLimitsDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
+    LlmProfileTestResultDto, SaveLlmProfileRequestDto,
 };
 use tower_http::request_id::RequestId;
 use uuid::Uuid;
@@ -270,6 +271,32 @@ pub(crate) async fn discover_llm_profile_draft_models(
         state
             .service
             .discover_llm_profile_draft_models(request)
+            .await
+            .map_err(|error| ApiError::new(error, request_id))?,
+    ))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/llm-profiles/discover-model-limits",
+    operation_id = "discoverLlmProfileDraftModelLimits",
+    request_body = SaveLlmProfileRequestDto,
+    responses(
+        (status = 200, description = "Bounded advertised limits for the selected model; null fields are unknown", body = LlmModelLimitsDto),
+        (status = 400, description = "Invalid provider configuration", body = ApplicationErrorDto),
+        (status = 403, description = "Host denied by administrator policy", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn discover_llm_profile_draft_model_limits(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<SaveLlmProfileRequestDto>,
+) -> Result<Json<LlmModelLimitsDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    Ok(Json(
+        state
+            .service
+            .discover_llm_profile_draft_model_limits(request)
             .await
             .map_err(|error| ApiError::new(error, request_id))?,
     ))

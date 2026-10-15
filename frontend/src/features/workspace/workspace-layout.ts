@@ -83,6 +83,7 @@ export interface WorkspacePaneContent {
   readonly thumbnailLoader?: ThumbnailLoader;
   readonly finderTagsLoader?: FinderTagsLoader;
   readonly cursorIndex?: number;
+  readonly contextTargetEntryId?: EntryId;
   readonly platform: SelectionPlatform;
   readonly keybindingRuntime?: KeybindingRuntime;
   readonly actions?: readonly ActionDescriptor[];
@@ -116,7 +117,11 @@ export interface WorkspacePaneContent {
   readonly onBack: () => void | Promise<void>;
   readonly onForward: () => void | Promise<void>;
   readonly onParent: () => void | Promise<void>;
-  readonly onOpenEntry: (entry: EntrySummary, evidenceQuery?: string) => void | Promise<void>;
+  readonly onOpenEntry: (
+    entry: EntrySummary,
+    evidenceQuery?: string,
+    initialPage?: number,
+  ) => void | Promise<void>;
   readonly onDocumentSummary?: (entry: EntrySummary) => void;
   readonly onSearchKnowledge?: () => void;
   readonly onSelectionAction: (action: SelectionAction) => void;
@@ -698,6 +703,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             ? {}
             : { keybindingOverrides: content.keybindingOverrides }),
           ...(content.cursorIndex === undefined ? {} : { cursorIndex: content.cursorIndex }),
+          ...(content.contextTargetEntryId === undefined
+            ? {}
+            : { contextTargetEntryId: content.contextTargetEntryId }),
           onOpenEntry: content.onOpenEntry,
           ...(content.onDocumentSummary === undefined
             ? {}

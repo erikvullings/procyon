@@ -86,6 +86,7 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmModelLimits,
   LlmProfile,
   LlmProfileExport,
   LlmProfilePreset,
@@ -386,6 +387,7 @@ export type MockClientMethod =
   | 'testLlmProfile'
   | 'discoverLlmProfileModels'
   | 'discoverLlmProfileDraftModels'
+  | 'discoverLlmProfileDraftModelLimits'
   | 'previewDocumentSummary'
   | 'generateDocumentSummary'
   | 'getDocumentSummary'
@@ -2167,6 +2169,8 @@ export class MockFileManagerClient implements FileManagerClient {
         policyRevision: this.semanticLibrary.revision,
         location: structuredClone(request.location),
         recursive: request.recursive,
+        pdfImagesEnabled: request.pdfImagesEnabled ?? false,
+        pdfImagePageBudget: request.pdfImagePageBudget ?? null,
         normalizedExcerptsRetainedLocally: true,
         estimate: {
           completeness: 'partial',
@@ -2219,6 +2223,8 @@ export class MockFileManagerClient implements FileManagerClient {
           id: `00000000-0000-0000-0000-${String(this.semanticLibrarySequence).padStart(12, '0')}`,
           location: structuredClone(request.location),
           recursive: preview.recursive,
+          pdfImagesEnabled: preview.pdfImagesEnabled ?? false,
+          pdfImagePageBudget: preview.pdfImagePageBudget ?? null,
           stableIdentityVerified: true,
           workspaceReferences: [request.workspaceId],
           eligibilityOverrides: [],
@@ -2233,8 +2239,12 @@ export class MockFileManagerClient implements FileManagerClient {
           indexedGeneration: 0,
           exclusions: [],
         });
-      } else if (!existing.workspaceReferences.includes(request.workspaceId)) {
-        existing.workspaceReferences.push(request.workspaceId);
+      } else {
+        existing.pdfImagesEnabled = preview.pdfImagesEnabled ?? false;
+        existing.pdfImagePageBudget = preview.pdfImagePageBudget ?? null;
+        if (!existing.workspaceReferences.includes(request.workspaceId)) {
+          existing.workspaceReferences.push(request.workspaceId);
+        }
       }
       this.advanceSemanticLibraryRevision();
       return structuredClone(this.semanticLibrary);
@@ -4279,6 +4289,13 @@ export class MockFileManagerClient implements FileManagerClient {
         },
         {
           ...defaults,
+          name: 'mlx-serve',
+          preset: 'mlxServe',
+          baseUrl: 'http://127.0.0.1:11234',
+          redactFilenames: false,
+        },
+        {
+          ...defaults,
           name: 'OpenAI-compatible',
           preset: 'openAiCompatible',
           baseUrl: 'https://api.openai.com',
@@ -4334,14 +4351,15 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('updateLlmProfile', signal, () => {
       const current = this.requireLlmProfile(profileId);
       const host = new URL(request.baseUrl).hostname.toLowerCase();
-      const oldHost = new URL(current.baseUrl).hostname.toLowerCase();
+      const endpoint = new URL(request.baseUrl).href.replace(/\/$/u, '');
+      const oldEndpoint = new URL(current.baseUrl).href.replace(/\/$/u, '');
       const profile: LlmProfile = {
         ...structuredClone(request),
         id: profileId,
         hasCredential: request.credential != null || current.hasCredential,
         locality:
           host === 'localhost' || host === '127.0.0.1' || host === '::1' ? 'loopback' : 'cloud',
-        consentedHost: host === oldHost ? (current.consentedHost ?? null) : null,
+        consentedHost: endpoint === oldEndpoint ? (current.consentedHost ?? null) : null,
       };
       this.llmProfiles.set(profileId, profile);
       return structuredClone(profile);
@@ -4402,13 +4420,13 @@ export class MockFileManagerClient implements FileManagerClient {
   ): Promise<LlmProfile> {
     return this.perform('activateLlmProfile', signal, () => {
       const profile = this.requireLlmProfile(profileId);
-      if (profile.locality === 'cloud' && !consent && profile.consentedHost == null) {
+      const endpoint = new URL(profile.baseUrl).href.replace(/\/$/u, '');
+      if (profile.locality === 'cloud' && !consent && profile.consentedHost !== endpoint) {
         throw new MockClientError('invalidRequest', 'Cloud consent is required');
       }
       const activated: LlmProfile = {
         ...profile,
-        consentedHost:
-          profile.locality === 'cloud' ? new URL(profile.baseUrl).hostname.toLowerCase() : null,
+        consentedHost: profile.locality === 'cloud' ? endpoint : null,
       };
       this.llmProfiles.set(profileId, activated);
       this.activeLlmProfileId = profileId;
@@ -4458,6 +4476,18 @@ export class MockFileManagerClient implements FileManagerClient {
     );
   }
 
+  discoverLlmProfileDraftModelLimits(
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmModelLimits> {
+    return this.perform('discoverLlmProfileDraftModelLimits', signal, () => ({
+      contextWindow: request.model === 'model-a' ? 131_072 : null,
+      maximumAnswerTokens: request.model === 'model-a' ? 8_192 : null,
+      contextWindowCap: 1_048_576,
+      maximumAnswerTokensCap: 16_384,
+    }));
+  }
+
   previewDocumentSummary(
     request: PreviewDocumentSummaryRequest,
     signal?: AbortSignal,
@@ -4470,7 +4500,16 @@ export class MockFileManagerClient implements FileManagerClient {
       return {
         selectionFingerprint: `mock-summary-${request.target.entryId}`,
         representativeTokens: Math.min(request.inputTokenBudget, 72),
-        selectionMode: request.inputTokenBudget > 4_096 ? 'fullDocument' : 'representativePassages',
+        sourceTokens: request.target.location.uri.includes('large-report') ? 12_288 : 72,
+        textPreview: 'Overview\n\nA representative passage from the selected document.',
+        textPreviewTruncated: request.target.location.uri.includes('large-report'),
+        selectionMode:
+          request.inputTokenBudget > 4_096 && !request.target.location.uri.includes('large-report')
+            ? 'fullDocument'
+            : 'representativePassages',
+        sourcePassCount: request.target.location.uri.includes('large-report') ? 2 : 1,
+        effectiveContextWindow: profile?.advanced.contextWindow ?? null,
+        providerLimitVerified: profile?.preset === 'ollama',
         imageInputAvailable,
         includedImageCount: request.includeImages && imageInputAvailable ? visualCount : 0,
         omittedImageCount: 0,
@@ -4478,7 +4517,7 @@ export class MockFileManagerClient implements FileManagerClient {
           {
             label: 'S1',
             chunkId: `mock-chunk-${request.target.entryId}`,
-            content: 'A representative passage from the selected document.',
+            content: 'Overview\n\nA representative passage from the selected document.',
             sectionPath: ['Overview'],
             provenance: '{"kind":"textLines","start_line":1,"end_line":3}',
             clusterPopulation: 1,

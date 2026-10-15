@@ -1,0 +1,53 @@
+{
+  "model": "intfloat/multilingual-e5-small",
+  "revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+  "runtime": "Python onnxruntime 1.22.1 CPU mean-pooling",
+  "dimensions": 384,
+  "corpusSha256": "60d5ad35065df87d93fcb9f07b992e2384276dd55a752f5c0a7eac33254a4cee",
+  "documentCount": 17,
+  "queryCount": 4,
+  "result": {
+    "positiveCases": 4,
+    "hitAt1": 1.0,
+    "hitAt3": 1.0,
+    "mrr": 1.0,
+    "cases": [
+      {
+        "id": "priority queue",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "b42dac123f3fe541",
+          "419978abfd98cf87",
+          "a91ba7ed7bdcdc58"
+        ]
+      },
+      {
+        "id": "how to reverse a string",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "c31b47b47b659f10",
+          "1a1eefbbd197f1b9",
+          "2d6dc771926419a6"
+        ]
+      },
+      {
+        "id": "buffered file reader read text",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2152878b12c30fa8",
+          "418d32ab415de93b",
+          "615285a138219d91"
+        ]
+      },
+      {
+        "id": "parse binary file to custom class",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "d3350195deecd134",
+          "021a51e9a03e6b18",
+          "e25e416f64381ca6"
+        ]
+      }
+    ]
+  }
+}

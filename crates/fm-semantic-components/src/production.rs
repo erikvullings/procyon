@@ -18,9 +18,9 @@ pub const PRODUCTION_SIGNING_KEY_FILE_ENV: &str = "PROCYON_SEMANTIC_CATALOG_SIGN
 /// Compile-time variable containing the trusted public key as 64 lowercase hex digits.
 pub const PRODUCTION_VERIFYING_KEY_HEX_ENV: &str = "PROCYON_SEMANTIC_CATALOG_VERIFYING_KEY_HEX";
 /// Converter pipeline compiled into the production semantic worker.
-pub const PRODUCTION_CONVERTER_IDENTITY: &str = "docling-pdf/1036000+baseline/2";
+pub const PRODUCTION_CONVERTER_IDENTITY: &str = "docling-pdf/1036001+baseline/3";
 /// Structural chunker compiled into the production semantic worker.
-pub const PRODUCTION_CHUNKER_IDENTITY: &str = "structural/3";
+pub const PRODUCTION_CHUNKER_IDENTITY: &str = "structural/4";
 /// Unicode normalization applied symmetrically before production embeddings.
 pub const PRODUCTION_EMBEDDING_PREPROCESSING_IDENTITY: &str = "unicode-default-case-fold/1";
 /// Logical component identity of the production semantic worker.
@@ -29,6 +29,10 @@ pub const PRODUCTION_WORKER_COMPONENT_ID: &str = "procyon.semantic.worker";
 pub const PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID: &str = "procyon.semantic.zvec-runtime";
 /// Logical component identity of the production ONNX Runtime loader.
 pub const PRODUCTION_ONNX_RUNTIME_COMPONENT_ID: &str = "procyon.semantic.onnx-runtime";
+/// Logical component identity of the optional, experimental PDFium loader.
+pub const PRODUCTION_PDFIUM_RUNTIME_COMPONENT_ID: &str = "procyon.semantic.pdfium-runtime";
+/// Logical component identity of its complete target-specific license notices.
+pub const PRODUCTION_PDFIUM_NOTICES_COMPONENT_ID: &str = "procyon.semantic.pdfium-notices";
 /// Logical component identity of the production multilingual model package.
 pub const PRODUCTION_MODEL_COMPONENT_ID: &str = "procyon.semantic.model.multilingual-e5-small";
 /// Exact upstream model identity selected for the first production profile.

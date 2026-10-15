@@ -11,12 +11,17 @@ export interface KnowledgeRootDto {
   /** Whether the indexed source is currently reachable. */
   available: boolean;
   /**
+     * Document occurrences with an acknowledged worker completion in this workspace/root.
+     * @minimum 0
+     */
+  confirmedCompletedSources: number;
+  /**
      * Last generation committed to runtime state.
      * @minimum 0
      */
   indexedGeneration: number;
   /**
-     * Indexed sources already searchable, even before a full pass completes.
+     * Observed occurrences; not proof of completed worker ingestion.
      * @minimum 0
      */
   indexedSources: number;
@@ -24,8 +29,21 @@ export interface KnowledgeRootDto {
   label: string;
   /** Provider-neutral location already visible in the file manager. */
   location: LocationDto;
+  /**
+     * Maximum PDF page images embedded per document, or `None` for no cap.
+     * @minimum 0
+     * @nullable
+     */
+  pdfImagePageBudget?: number | null;
+  /** Whether this root separately consents to PDF page-image embeddings. */
+  pdfImagesEnabled?: boolean;
   /** Whether descendants inherit consent. */
   recursive: boolean;
   /** Stable path-independent root identity. */
   rootId: string;
+  /**
+     * Pre-upgrade occurrences whose earlier worker completion cannot yet be verified.
+     * @minimum 0
+     */
+  unverifiedLegacySources: number;
 }

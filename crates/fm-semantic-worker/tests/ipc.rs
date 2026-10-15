@@ -14,11 +14,14 @@ use fm_semantic_protocol::{
     write_frame,
 };
 use fm_semantic_worker::{
-    ClientError, ConceptFolderQuery, Endpoint, IngestionScope, IngestionState, LaunchSecret,
-    ManagedWorkerLaunch, ManagedWorkerResolver, SearchResult, WorkerClient, WorkerConfig,
-    WorkerConnector, WorkerHealth, WorkerIngestionBackend, WorkerIngestionInput,
+    ClientError, ConceptFolderQuery, Endpoint, IngestionMedia, IngestionScope, IngestionState,
+    LaunchSecret, ManagedWorkerLaunch, ManagedWorkerResolver, SearchResult, WorkerClient,
+    WorkerConfig, WorkerConnector, WorkerHealth, WorkerIngestionBackend, WorkerIngestionInput,
     WorkerIngestionJob, WorkerQueryBackend, WorkerQueryInput, WorkerServer,
 };
+#[cfg(feature = "experimental-large-pdf")]
+use lopdf::{Document, Object, Stream, dictionary};
+use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
 #[derive(Default)]
@@ -43,6 +46,528 @@ impl WorkerQueryBackend for CapturingQueryBackend {
 }
 
 struct SkippingIngestionBackend;
+struct CoverageIngestionBackend;
+struct ProgressIngestionBackend;
+
+#[derive(Default)]
+struct CapturingIngestionBackend {
+    input: Mutex<Option<WorkerIngestionInput>>,
+}
+
+#[cfg(feature = "experimental-large-pdf")]
+#[tokio::test]
+async fn negotiated_pdf_spool_returns_complete_child_text_to_ingestion_backend() {
+    let mut document = Document::with_version("1.5");
+    let pages_id = document.new_object_id();
+    let font_id = document.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type1",
+        "BaseFont" => "Helvetica",
+    });
+    let resources_id = document.add_object(dictionary! {
+        "Font" => dictionary! { "F1" => font_id },
+    });
+    let mut page_ids = Vec::new();
+    for page in 1..=3 {
+        let text = format!("Synthetic page {page} {}", "x".repeat(2_000));
+        let content = format!("BT /F1 12 Tf 72 720 Td ({text}) Tj ET\n");
+        let content_id = document.add_object(Stream::new(dictionary! {}, content.into_bytes()));
+        page_ids.push(document.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "Contents" => content_id,
+            "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        }));
+    }
+    let kids: Vec<Object> = page_ids.into_iter().map(Object::Reference).collect();
+    document.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages",
+            "Count" => kids.len() as i64,
+            "Kids" => kids,
+            "Resources" => resources_id,
+        }),
+    );
+    let catalog_id = document.add_object(dictionary! {
+        "Type" => "Catalog",
+        "Pages" => pages_id,
+    });
+    document.trailer.set("Root", catalog_id);
+    let mut bytes = Vec::new();
+    document.save_to(&mut bytes).expect("save synthetic PDF");
+    assert!(bytes.len() > 4_096);
+    let digest: [u8; 32] = Sha256::digest(&bytes).into();
+    let directory = test_directory("pdf-child-ipc");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([124; 32]);
+    let limits = ProtocolLimits::new(
+        4_096,
+        4_096,
+        MAX_CONCURRENT_REQUESTS,
+        REQUEST_DEADLINE,
+        STREAM_DEADLINE,
+        SHUTDOWN_DEADLINE,
+    )
+    .unwrap()
+    .with_pdf_ingestion_bytes(16_384)
+    .unwrap();
+    let capture = Arc::new(CapturingIngestionBackend::default());
+    let task = tokio::spawn(
+        WorkerServer::with_ingestion_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone())
+                .with_limits(limits)
+                .with_pdf_child_executable(PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker"))),
+            capture.clone(),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    assert_eq!(client.max_pdf_ingestion_bytes(), 16_384);
+    client
+        .ingest_pdf_reader(
+            "isolated-pdf",
+            IngestionScope::new("tenant", "library"),
+            "document",
+            BTreeMap::new(),
+            false,
+            std::io::Cursor::new(bytes.clone()),
+            bytes.len() as u64,
+            digest,
+        )
+        .await
+        .expect("spooled PDF text accepted");
+    let input = capture.input.lock().unwrap().take().expect("queued input");
+    assert!(input.content.is_empty());
+    let converted = input.pdf_text.expect("verified child report").converted;
+    assert!(!converted.is_partial());
+    assert_eq!(converted.units().len(), 3);
+    for (index, unit) in converted.units().iter().enumerate() {
+        assert_eq!(
+            unit.provenance,
+            fm_semantic_conversion::Provenance::PdfBlock {
+                page_number: index as u32 + 1,
+                block_index: 0,
+            }
+        );
+        assert!(unit.text.contains(&format!("Synthetic page {}", index + 1)));
+    }
+    client
+        .ingest_pdf_reader(
+            "consented-images",
+            IngestionScope::new("tenant", "library"),
+            "document",
+            BTreeMap::new(),
+            true,
+            std::io::Cursor::new(bytes.clone()),
+            bytes.len() as u64,
+            digest,
+        )
+        .await
+        .expect("consented text-only pages have a complete visual stage");
+    let input = capture.input.lock().unwrap().take().expect("queued input");
+    assert!(input.pdf_images_consented);
+    let pdf = input
+        .pdf_text
+        .expect("verified same-source text and page stage");
+    assert_eq!(pdf.converted.units().len(), 3);
+    let images = pdf.visual_stage.expect("completed image stage");
+    let mut pages = images.lock().unwrap();
+    assert_eq!(pages.page_count(), 3);
+    for _ in 0..3 {
+        assert!(
+            pages
+                .next_page()
+                .expect("page")
+                .expect("present")
+                .is_empty()
+        );
+    }
+    assert!(pages.next_page().expect("stage end").is_none());
+    drop(client);
+    task.abort();
+}
+
+#[cfg(feature = "experimental-large-pdf")]
+#[tokio::test]
+#[ignore = "requires the generated 188.9 MB synthetic PDF"]
+async fn large_synthetic_pdf_streams_from_host_to_child_with_complete_page_evidence() {
+    let path = std::env::var_os("PROCYON_SYNTHETIC_PDF")
+        .map(PathBuf::from)
+        .expect("set PROCYON_SYNTHETIC_PDF to the generated text fixture");
+    assert_eq!(path.file_name().unwrap(), "synthetic-354-page-text.pdf");
+    let source = tokio::fs::File::open(&path).await.unwrap();
+    let length = source.metadata().await.unwrap().len();
+    assert_eq!(length, 188_870_838);
+    let expected = "b1e36f4b3e4664d00e09475372f9e90858aaef0adfab3762aaa0ea98cc4d2285";
+    let digest: [u8; 32] = std::array::from_fn(|index| {
+        u8::from_str_radix(&expected[2 * index..2 * index + 2], 16).unwrap()
+    });
+    let directory = test_directory("large-pdf-child-ipc");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([125; 32]);
+    let capture = Arc::new(CapturingIngestionBackend::default());
+    let config = WorkerConfig::new(endpoint.clone(), secret.clone())
+        .with_limits(
+            ProtocolLimits::default()
+                .with_pdf_ingestion_bytes(200 * 1024 * 1024)
+                .unwrap(),
+        )
+        .with_pdf_child_executable(PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker")));
+    let task = tokio::spawn(WorkerServer::with_ingestion_backend(config, capture.clone()).run());
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    client
+        .ingest_pdf_reader(
+            "synthetic-354-page-text",
+            IngestionScope::new("tenant", "library"),
+            "synthetic-document",
+            BTreeMap::new(),
+            false,
+            source,
+            length,
+            digest,
+        )
+        .await
+        .expect("large synthetic PDF streamed");
+    let captured = capture
+        .input
+        .lock()
+        .unwrap()
+        .take()
+        .expect("queued child output");
+    assert!(captured.content.is_empty());
+    let document = captured.pdf_text.expect("text-only child output").converted;
+    assert!(!document.is_partial());
+    let pages = document
+        .units()
+        .iter()
+        .filter_map(|unit| match unit.provenance {
+            fm_semantic_conversion::Provenance::PdfBlock { page_number, .. } => Some(page_number),
+            _ => None,
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(pages.len(), 354);
+    assert_eq!(pages.first(), Some(&1));
+    assert_eq!(pages.last(), Some(&354));
+    drop(client);
+    task.abort();
+}
+
+#[cfg(feature = "experimental-large-pdf")]
+#[tokio::test]
+#[ignore = "requires the generated 174.2 MB synthetic scanned PDF"]
+async fn consented_synthetic_scan_streams_to_a_complete_page_image_stage() {
+    let path = std::env::var_os("PROCYON_SYNTHETIC_SCAN_PDF")
+        .map(PathBuf::from)
+        .expect("set PROCYON_SYNTHETIC_SCAN_PDF to the generated scan fixture");
+    assert_eq!(path.file_name().unwrap(), "synthetic-354-page-scan.pdf");
+    let source = tokio::fs::File::open(&path).await.expect("synthetic scan");
+    let length = source.metadata().await.expect("source size").len();
+    assert_eq!(length, 174_224_803);
+    let expected = "d85243b5afaeb10f44e9f73f87424c656c53147d706e4a4643e2268c3bcb2e3e";
+    let digest: [u8; 32] = std::array::from_fn(|index| {
+        u8::from_str_radix(&expected[2 * index..2 * index + 2], 16).expect("digest byte")
+    });
+    let directory = test_directory("large-scan-child-ipc");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([126; 32]);
+    let capture = Arc::new(CapturingIngestionBackend::default());
+    let config = WorkerConfig::new(endpoint.clone(), secret.clone())
+        .with_limits(
+            ProtocolLimits::default()
+                .with_pdf_ingestion_bytes(200 * 1024 * 1024)
+                .expect("PDF-specific offer"),
+        )
+        .with_pdf_child_executable(PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker")));
+    let task = tokio::spawn(WorkerServer::with_ingestion_backend(config, capture.clone()).run());
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret)
+        .await
+        .expect("client");
+    client
+        .ingest_pdf_reader(
+            "synthetic-354-page-scan",
+            IngestionScope::new("tenant", "library"),
+            "synthetic-scan",
+            BTreeMap::new(),
+            true,
+            source,
+            length,
+            digest,
+        )
+        .await
+        .expect("consented scan accepted");
+    let input = capture
+        .input
+        .lock()
+        .expect("capture")
+        .take()
+        .expect("queued scan");
+    assert!(input.content.is_empty());
+    assert!(input.pdf_images_consented);
+    let pdf = input.pdf_text.expect("verified image-backed text");
+    assert!(pdf.converted.units().is_empty());
+    let images = pdf.visual_stage.expect("completed visual stage");
+    let mut pages = images.lock().expect("stage lock");
+    assert_eq!(pages.page_count(), 354);
+    for page in 1..=354 {
+        let visual = pages
+            .next_page()
+            .expect("bounded page")
+            .expect("page")
+            .into_iter()
+            .next()
+            .expect("image");
+        assert_eq!(
+            visual.provenance,
+            fm_semantic_conversion::VisualProvenance::PdfImage {
+                page_number: page,
+                image_index: 0,
+            }
+        );
+    }
+    assert!(pages.next_page().expect("stage end").is_none());
+    drop(client);
+    task.abort();
+}
+
+impl WorkerIngestionBackend for CapturingIngestionBackend {
+    fn enqueue(
+        &self,
+        input: WorkerIngestionInput,
+        _cancellation: CancellationToken,
+    ) -> Result<String, String> {
+        let job_id = input.job_id.clone();
+        *self.input.lock().expect("ingestion capture lock") = Some(input);
+        Ok(job_id)
+    }
+
+    fn job(
+        &self,
+        _tenant_id: &str,
+        _library_id: &str,
+        _job_id: &str,
+    ) -> Result<Option<WorkerIngestionJob>, String> {
+        Ok(None)
+    }
+}
+
+#[tokio::test]
+async fn pdf_reader_requires_exact_digest_length_and_eof_before_publication() {
+    let directory = test_directory("pdf-reader-integrity");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([91; 32]);
+    let capture = Arc::new(CapturingIngestionBackend::default());
+    let task = tokio::spawn(
+        WorkerServer::with_ingestion_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone()),
+            capture.clone(),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    let content = b"%PDF-1.7 synthetic fixture".to_vec();
+    let digest: [u8; 32] = Sha256::digest(&content).into();
+    let scope = || IngestionScope::new("tenant", "library");
+    assert!(matches!(
+        client
+            .ingest_pdf_reader(
+                "over-limit",
+                scope(),
+                "over-limit",
+                BTreeMap::new(),
+                false,
+                tokio::io::empty(),
+                MAX_STREAM_BYTES + 1,
+                [0; 32],
+            )
+            .await,
+        Err(ClientError::Remote {
+            code: v1::ErrorCode::LimitExceeded,
+            ..
+        })
+    ));
+    for (id, bytes, declared, expected_digest) in [
+        (
+            "wrong-digest",
+            content.clone(),
+            content.len() as u64,
+            [0; 32],
+        ),
+        ("short", content[..5].to_vec(), content.len() as u64, digest),
+        (
+            "extra",
+            [content.as_slice(), b"!"].concat(),
+            content.len() as u64,
+            digest,
+        ),
+    ] {
+        assert!(
+            client
+                .ingest_pdf_reader(
+                    id,
+                    scope(),
+                    id,
+                    BTreeMap::new(),
+                    false,
+                    std::io::Cursor::new(bytes),
+                    declared,
+                    expected_digest,
+                )
+                .await
+                .is_err(),
+            "{id} must fail"
+        );
+        assert!(capture.input.lock().unwrap().is_none(), "{id} published");
+    }
+    client
+        .ingest_pdf_reader(
+            "valid",
+            scope(),
+            "valid",
+            BTreeMap::new(),
+            false,
+            std::io::Cursor::new(content.clone()),
+            content.len() as u64,
+            digest,
+        )
+        .await
+        .unwrap();
+    let accepted = capture.input.lock().unwrap().take().unwrap();
+    assert_eq!(accepted.content, content);
+    assert!(!accepted.pdf_images_consented);
+    drop(client);
+    task.abort();
+}
+
+#[tokio::test]
+async fn reader_uses_pdf_only_negotiated_spool_without_publishing_unconverted_content() {
+    let directory = test_directory("reader-pdf-spool");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([92; 32]);
+    let limits = ProtocolLimits::new(
+        4096,
+        4096,
+        MAX_CONCURRENT_REQUESTS,
+        REQUEST_DEADLINE,
+        STREAM_DEADLINE,
+        SHUTDOWN_DEADLINE,
+    )
+    .unwrap()
+    .with_pdf_ingestion_bytes(8192)
+    .unwrap();
+    let task = tokio::spawn(
+        WorkerServer::new(WorkerConfig::new(endpoint.clone(), secret.clone()).with_limits(limits))
+            .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    let pdf = vec![42; 4608];
+    let digest = Sha256::digest(&pdf).into();
+    let response = client
+        .ingest_pdf_reader(
+            "pdf-spool",
+            IngestionScope::new("tenant", "library"),
+            "document",
+            BTreeMap::new(),
+            false,
+            std::io::Cursor::new(pdf),
+            4608,
+            digest,
+        )
+        .await;
+    assert!(matches!(
+        response,
+        Err(ClientError::Remote {
+            code: v1::ErrorCode::LimitExceeded,
+            ..
+        })
+    ));
+    let ordinary = client
+        .ingest(
+            "non-pdf",
+            IngestionScope::new("tenant", "library"),
+            "image",
+            BTreeMap::new(),
+            "image/png",
+            vec![1; 4608],
+        )
+        .await;
+    assert!(matches!(
+        ordinary,
+        Err(ClientError::Remote {
+            code: v1::ErrorCode::LimitExceeded,
+            ..
+        })
+    ));
+    drop(client);
+    task.abort();
+}
+
+#[tokio::test]
+async fn worker_rejects_pdf_bytes_that_disagree_with_declared_sha256() {
+    let directory = test_directory("pdf-digest-mismatch");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([93; 32]);
+    let capture = Arc::new(CapturingIngestionBackend::default());
+    let task = tokio::spawn(
+        WorkerServer::with_ingestion_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone()),
+            capture.clone(),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let (mut raw, session) = raw_authenticated_stream(&endpoint, &secret).await;
+    write_frame(
+        &mut raw,
+        &v1::ClientFrame {
+            correlation_id: 184,
+            payload: Some(v1::client_frame::Payload::Ingestion(v1::IngestionRequest {
+                session: Some(session.clone()),
+                scope: Some(v1::ResourceScope {
+                    tenant_id: "tenant".into(),
+                    library_id: "library".into(),
+                }),
+                request_id: "tampered-pdf".into(),
+                payload: Some(v1::ingestion_request::Payload::Start(v1::IngestionStart {
+                    document_id: "document".into(),
+                    metadata: vec![],
+                    media_type: "application/pdf".into(),
+                    expected_content_bytes: 4,
+                    pdf_images_consented: false,
+                    expected_sha256: Sha256::digest(b"good").to_vec(),
+                })),
+            })),
+        },
+        MAX_MESSAGE_BYTES,
+    )
+    .await
+    .unwrap();
+    write_ingestion_chunk(
+        &mut raw,
+        184,
+        session,
+        "tampered-pdf",
+        ("tenant", "library"),
+        (0, b"evil", true),
+    )
+    .await;
+    let response = read_frame::<_, v1::ServerFrame>(&mut raw, MAX_MESSAGE_BYTES)
+        .await
+        .unwrap();
+    assert!(matches!(
+        response.payload,
+        Some(v1::server_frame::Payload::Error(v1::ProtocolError { code, .. }))
+            if code == v1::ErrorCode::InvalidRequest as i32
+    ));
+    assert!(capture.input.lock().unwrap().is_none());
+    drop(raw);
+    task.abort();
+}
 
 impl WorkerIngestionBackend for SkippingIngestionBackend {
     fn enqueue(
@@ -66,6 +591,61 @@ impl WorkerIngestionBackend for SkippingIngestionBackend {
             completed: 0,
             total: 1,
             error: Some("Add a text layer with OCRmyPDF, then reindex the file.".into()),
+            coverage_detail: None,
+        }))
+    }
+}
+
+impl WorkerIngestionBackend for CoverageIngestionBackend {
+    fn enqueue(
+        &self,
+        input: WorkerIngestionInput,
+        _cancellation: CancellationToken,
+    ) -> Result<String, String> {
+        Ok(input.job_id)
+    }
+
+    fn job(
+        &self,
+        _tenant_id: &str,
+        _library_id: &str,
+        _job_id: &str,
+    ) -> Result<Option<WorkerIngestionJob>, String> {
+        Ok(Some(WorkerIngestionJob {
+            document_id: "scan".into(),
+            state: IngestionState::Completed,
+            phase: "complete".into(),
+            completed: 1,
+            total: 1,
+            error: None,
+            coverage_detail: Some("page 3 has no searchable image evidence".into()),
+        }))
+    }
+}
+
+impl WorkerIngestionBackend for ProgressIngestionBackend {
+    fn enqueue(
+        &self,
+        input: WorkerIngestionInput,
+        _cancellation: CancellationToken,
+    ) -> Result<String, String> {
+        Ok(input.job_id)
+    }
+
+    fn job(
+        &self,
+        _tenant_id: &str,
+        _library_id: &str,
+        _job_id: &str,
+    ) -> Result<Option<WorkerIngestionJob>, String> {
+        Ok(Some(WorkerIngestionJob {
+            document_id: "scan".into(),
+            state: IngestionState::Running,
+            phase: "embedding".into(),
+            completed: 123,
+            total: 0,
+            error: None,
+            coverage_detail: None,
         }))
     }
 }
@@ -397,7 +977,178 @@ async fn accepts_an_owner_only_socket_served_by_the_same_effective_user() {
     assert_eq!(metadata.uid(), rustix::process::geteuid().as_raw());
 
     let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    assert_eq!(client.max_pdf_ingestion_bytes(), MAX_STREAM_BYTES);
     assert_eq!(client.health().await.unwrap(), WorkerHealth::Serving);
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[cfg(not(feature = "experimental-pdf-render"))]
+#[tokio::test]
+async fn pdf_image_consent_crosses_ipc_only_for_pdfs() {
+    let directory = test_directory("pdf-image-consent");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::generate();
+    let backend = Arc::new(CapturingIngestionBackend::default());
+    let task = tokio::spawn(
+        WorkerServer::with_ingestion_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone()),
+            backend.clone(),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    client
+        .ingest_with_pdf_images(
+            "pdf-consent",
+            IngestionScope::new("tenant", "library"),
+            "document",
+            BTreeMap::new(),
+            IngestionMedia {
+                media_type: "application/pdf",
+                pdf_images_consented: true,
+            },
+            b"%PDF-1.7".to_vec(),
+        )
+        .await
+        .unwrap();
+    {
+        let captured = backend.input.lock().unwrap();
+        assert!(captured.as_ref().unwrap().pdf_images_consented);
+    }
+
+    let rejected = client
+        .ingest_with_pdf_images(
+            "not-a-pdf",
+            IngestionScope::new("tenant", "library"),
+            "image",
+            BTreeMap::new(),
+            IngestionMedia {
+                media_type: "image/png",
+                pdf_images_consented: true,
+            },
+            b"\x89PNG".to_vec(),
+        )
+        .await;
+    assert!(matches!(
+        rejected,
+        Err(ClientError::Remote {
+            code: v1::ErrorCode::InvalidRequest,
+            ..
+        })
+    ));
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[cfg(feature = "experimental-pdf-render")]
+#[tokio::test]
+async fn small_consented_pdf_uses_verified_visual_stage_without_a_declared_digest() {
+    let mut pdf = Document::with_version("1.5");
+    let pages_id = pdf.new_object_id();
+    let content_id = pdf.add_object(Stream::new(
+        dictionary! {},
+        b"BT /F1 12 Tf 72 720 Td (Synthetic searchable PDF page text.) Tj ET".to_vec(),
+    ));
+    let font_id = pdf.add_object(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
+    });
+    let page_id = pdf.add_object(dictionary! {
+        "Type" => "Page",
+        "Parent" => pages_id,
+        "Contents" => content_id,
+        "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        "Resources" => dictionary! { "Font" => dictionary! { "F1" => font_id } },
+    });
+    pdf.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages", "Count" => 1, "Kids" => vec![Object::Reference(page_id)],
+        }),
+    );
+    let catalog_id = pdf.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    pdf.trailer.set("Root", catalog_id);
+    let mut bytes = Vec::new();
+    pdf.save_to(&mut bytes).unwrap();
+    let expected_digest = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+
+    let directory = test_directory("small-consented-pdf");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::generate();
+    let backend = Arc::new(CapturingIngestionBackend::default());
+    let task = tokio::spawn(
+        WorkerServer::with_ingestion_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone())
+                .with_pdf_child_executable(PathBuf::from(env!("CARGO_BIN_EXE_fm-semantic-worker"))),
+            backend.clone(),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    client
+        .ingest_with_pdf_images(
+            "consented-pdf",
+            IngestionScope::new("tenant", "library"),
+            "document",
+            BTreeMap::new(),
+            IngestionMedia {
+                media_type: "application/pdf",
+                pdf_images_consented: true,
+            },
+            bytes.clone(),
+        )
+        .await
+        .expect("small consented PDF uses the supervised stage");
+    let input = backend.input.lock().unwrap().take().unwrap();
+    assert!(input.content.is_empty());
+    let staged = input.pdf_text.expect("page-complete PDF visual stage");
+    assert_eq!(staged.content_hash, expected_digest);
+    assert!(staged.visual_stage.is_some());
+    assert_eq!(staged.converted.units().len(), 1);
+
+    client
+        .ingest_with_pdf_images(
+            "image-off-pdf",
+            IngestionScope::new("tenant", "library"),
+            "document-off",
+            BTreeMap::new(),
+            IngestionMedia {
+                media_type: "application/pdf",
+                pdf_images_consented: false,
+            },
+            bytes,
+        )
+        .await
+        .expect("image-off PDF retains the ordinary path");
+    let input = backend.input.lock().unwrap().take().unwrap();
+    assert!(input.pdf_text.is_none());
+    assert!(!input.content.is_empty());
+
+    let rejected = client
+        .ingest_with_pdf_images(
+            "not-a-pdf",
+            IngestionScope::new("tenant", "library"),
+            "image",
+            BTreeMap::new(),
+            IngestionMedia {
+                media_type: "image/png",
+                pdf_images_consented: true,
+            },
+            b"\x89PNG".to_vec(),
+        )
+        .await;
+    assert!(matches!(
+        rejected,
+        Err(ClientError::Remote {
+            code: v1::ErrorCode::InvalidRequest,
+            ..
+        })
+    ));
     client.shutdown(Duration::from_millis(100)).await.unwrap();
     task.await.unwrap().unwrap();
 }
@@ -439,6 +1190,79 @@ async fn skipped_ingestion_and_ocr_guidance_cross_the_ipc_boundary() {
             .as_deref()
             .is_some_and(|detail| detail.contains("OCRmyPDF"))
     );
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn completed_image_omissions_cross_ipc_without_becoming_errors() {
+    let directory = test_directory("completed-coverage");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::generate();
+    let task = tokio::spawn(
+        WorkerServer::with_ingestion_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone()),
+            Arc::new(CoverageIngestionBackend),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    let job_id = client
+        .ingest(
+            "coverage-scan",
+            IngestionScope::new("tenant", "library"),
+            "scan",
+            BTreeMap::new(),
+            "application/pdf",
+            b"%PDF scan".to_vec(),
+        )
+        .await
+        .unwrap();
+    let job = client
+        .ingestion_job("tenant", "library", &job_id)
+        .await
+        .unwrap();
+    assert_eq!(job.state, IngestionState::Completed);
+    assert_eq!(
+        job.detail.as_deref(),
+        Some("page 3 has no searchable image evidence")
+    );
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn in_progress_pdf_page_count_crosses_authenticated_ipc() {
+    let directory = test_directory("pdf-page-progress");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::generate();
+    let task = tokio::spawn(
+        WorkerServer::with_ingestion_backend(
+            WorkerConfig::new(endpoint.clone(), secret.clone()),
+            Arc::new(ProgressIngestionBackend),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    let job_id = client
+        .ingest(
+            "pdf-progress",
+            IngestionScope::new("tenant", "library"),
+            "scan",
+            BTreeMap::new(),
+            "application/pdf",
+            b"%PDF synthetic".to_vec(),
+        )
+        .await
+        .unwrap();
+    let job = client
+        .ingestion_job("tenant", "library", &job_id)
+        .await
+        .unwrap();
+    assert_eq!(job.state, IngestionState::Running);
+    assert_eq!(job.completed_units, 123);
     client.shutdown(Duration::from_millis(100)).await.unwrap();
     task.await.unwrap().unwrap();
 }
@@ -744,6 +1568,38 @@ async fn duplicate_active_query_identifiers_remain_rejected() {
         })
     ));
 
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn single_request_capacity_allows_repeated_handshakes() {
+    let directory = test_directory("single-capacity-handshakes");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([83; 32]);
+    let limits = ProtocolLimits::new(
+        512,
+        1024,
+        1,
+        Duration::from_secs(1),
+        Duration::from_secs(2),
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    let task = tokio::spawn(
+        WorkerServer::new(WorkerConfig::new(endpoint.clone(), secret.clone()).with_limits(limits))
+            .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+
+    for attempt in 0..100 {
+        let client = WorkerClient::connect(&endpoint, secret.clone())
+            .await
+            .unwrap_or_else(|error| panic!("handshake {attempt} failed: {error}"));
+        drop(client);
+    }
+
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
     client.shutdown(Duration::from_millis(100)).await.unwrap();
     task.await.unwrap().unwrap();
 }
@@ -1456,6 +2312,8 @@ async fn pending_ingestion_expires_without_another_chunk_and_releases_capacity()
                     metadata: Vec::new(),
                     media_type: "text/plain".to_owned(),
                     expected_content_bytes: 1,
+                    pdf_images_consented: false,
+                    expected_sha256: Vec::new(),
                 })),
             })),
         },
@@ -1550,6 +2408,8 @@ async fn ingestion_operation_can_be_cancelled_before_content_arrives() {
                     metadata: Vec::new(),
                     media_type: "text/plain".to_owned(),
                     expected_content_bytes: 1,
+                    pdf_images_consented: false,
+                    expected_sha256: Vec::new(),
                 })),
             })),
         },
@@ -1602,6 +2462,190 @@ async fn ingestion_operation_can_be_cancelled_before_content_arrives() {
     drop(raw);
     observer.shutdown(Duration::from_millis(100)).await.unwrap();
     task.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn negotiated_large_pdf_stream_can_be_cancelled_without_publishing_a_document() {
+    let directory = test_directory("large-pdf-pending-cancellation");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([67; 32]);
+    let limits = ProtocolLimits::default()
+        .with_pdf_ingestion_bytes(200 * 1024 * 1024)
+        .unwrap();
+    let task = tokio::spawn(
+        WorkerServer::new(WorkerConfig::new(endpoint.clone(), secret.clone()).with_limits(limits))
+            .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let observer = WorkerClient::connect(&endpoint, secret.clone())
+        .await
+        .unwrap();
+    let (mut raw, session) = raw_authenticated_stream(&endpoint, &secret).await;
+    let scope = v1::ResourceScope {
+        tenant_id: "tenant".into(),
+        library_id: "library".into(),
+    };
+    write_frame(
+        &mut raw,
+        &v1::ClientFrame {
+            correlation_id: 181,
+            payload: Some(v1::client_frame::Payload::Ingestion(v1::IngestionRequest {
+                session: Some(session.clone()),
+                scope: Some(scope.clone()),
+                request_id: "cancel-large-pdf".into(),
+                payload: Some(v1::ingestion_request::Payload::Start(v1::IngestionStart {
+                    document_id: "document".into(),
+                    metadata: Vec::new(),
+                    media_type: "application/pdf".into(),
+                    expected_content_bytes: MAX_STREAM_BYTES + 1,
+                    pdf_images_consented: false,
+                    expected_sha256: vec![0; 32],
+                })),
+            })),
+        },
+        MAX_MESSAGE_BYTES,
+    )
+    .await
+    .unwrap();
+    write_frame(
+        &mut raw,
+        &v1::ClientFrame {
+            correlation_id: 181,
+            payload: Some(v1::client_frame::Payload::Ingestion(v1::IngestionRequest {
+                session: Some(session.clone()),
+                scope: Some(scope),
+                request_id: "cancel-large-pdf".into(),
+                payload: Some(v1::ingestion_request::Payload::Chunk(
+                    v1::FileContentChunk {
+                        sequence: 0,
+                        content: vec![42; 1024],
+                        end_of_stream: false,
+                    },
+                )),
+            })),
+        },
+        MAX_MESSAGE_BYTES,
+    )
+    .await
+    .unwrap();
+    write_frame(
+        &mut raw,
+        &v1::ClientFrame {
+            correlation_id: 182,
+            payload: Some(v1::client_frame::Payload::Cancel(v1::CancelRequest {
+                session: Some(session),
+                request_id: "cancel-large-pdf".into(),
+            })),
+        },
+        MAX_MESSAGE_BYTES,
+    )
+    .await
+    .unwrap();
+    let mut cancelled = false;
+    for _ in 0..4 {
+        let frame = read_frame::<_, v1::ServerFrame>(&mut raw, MAX_MESSAGE_BYTES)
+            .await
+            .unwrap();
+        if matches!(frame.payload, Some(v1::server_frame::Payload::Error(v1::ProtocolError { code, .. })) if code == v1::ErrorCode::Cancelled as i32)
+        {
+            cancelled = true;
+        }
+    }
+    assert!(cancelled);
+    assert!(
+        observer
+            .query("tenant", "library", "document", 1)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    drop(raw);
+    drop(observer);
+    task.abort();
+}
+
+#[tokio::test]
+async fn completed_pdf_spool_does_not_publish_until_large_pdf_conversion_is_supported() {
+    let directory = test_directory("large-pdf-spool-without-converter");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([68; 32]);
+    let limits = ProtocolLimits::new(
+        4096,
+        4096,
+        MAX_CONCURRENT_REQUESTS,
+        REQUEST_DEADLINE,
+        STREAM_DEADLINE,
+        SHUTDOWN_DEADLINE,
+    )
+    .unwrap()
+    .with_pdf_ingestion_bytes(8192)
+    .unwrap();
+    let task = tokio::spawn(
+        WorkerServer::new(WorkerConfig::new(endpoint.clone(), secret.clone()).with_limits(limits))
+            .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let (mut raw, session) = raw_authenticated_stream(&endpoint, &secret).await;
+    let scope = ("tenant", "library");
+    write_frame(
+        &mut raw,
+        &v1::ClientFrame {
+            correlation_id: 183,
+            payload: Some(v1::client_frame::Payload::Ingestion(v1::IngestionRequest {
+                session: Some(session.clone()),
+                scope: Some(v1::ResourceScope {
+                    tenant_id: scope.0.into(),
+                    library_id: scope.1.into(),
+                }),
+                request_id: "complete-large-pdf".into(),
+                payload: Some(v1::ingestion_request::Payload::Start(v1::IngestionStart {
+                    document_id: "document".into(),
+                    metadata: vec![],
+                    media_type: "application/pdf".into(),
+                    expected_content_bytes: 4608,
+                    pdf_images_consented: false,
+                    expected_sha256: Sha256::digest([42; 4608]).to_vec(),
+                })),
+            })),
+        },
+        MAX_MESSAGE_BYTES,
+    )
+    .await
+    .unwrap();
+    for sequence in 0..9 {
+        write_ingestion_chunk(
+            &mut raw,
+            183,
+            session.clone(),
+            "complete-large-pdf",
+            scope,
+            (sequence, &[42; 512], sequence == 8),
+        )
+        .await;
+    }
+    assert!(
+        !task.is_finished(),
+        "worker server exited while streaming PDF"
+    );
+    let response = read_frame::<_, v1::ServerFrame>(&mut raw, MAX_MESSAGE_BYTES)
+        .await
+        .unwrap();
+    assert!(matches!(
+        response.payload,
+        Some(v1::server_frame::Payload::Error(v1::ProtocolError { code, .. }))
+            if code == v1::ErrorCode::LimitExceeded as i32
+    ));
+    let observer = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    assert!(
+        observer
+            .query("tenant", "library", "document", 1)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    drop(raw);
+    drop(observer);
+    task.abort();
 }
 
 #[tokio::test]
@@ -2214,6 +3258,8 @@ async fn malformed_frame_disconnect_cancels_connection_owned_ingestion() {
                     metadata: Vec::new(),
                     media_type: "text/plain".to_owned(),
                     expected_content_bytes: 6,
+                    pdf_images_consented: false,
+                    expected_sha256: Vec::new(),
                 })),
             })),
         },
@@ -2372,6 +3418,7 @@ async fn client_write_backpressure_is_bounded_for_the_writer_and_waiters() {
                             request_deadline_ms: 100,
                             stream_deadline_ms: 40,
                             shutdown_deadline_ms: 100,
+                            maximum_pdf_ingestion_bytes: 0,
                         }),
                     },
                 )),
@@ -2590,6 +3637,7 @@ async fn rejects_malicious_negotiated_limits_before_sending_the_launch_secret() 
                             request_deadline_ms: REQUEST_DEADLINE.as_millis() as u64,
                             stream_deadline_ms: STREAM_DEADLINE.as_millis() as u64,
                             shutdown_deadline_ms: SHUTDOWN_DEADLINE.as_millis() as u64,
+                            maximum_pdf_ingestion_bytes: 0,
                         }),
                     },
                 )),
@@ -2655,6 +3703,7 @@ async fn rejects_an_out_of_range_selected_version_before_sending_the_launch_secr
                             request_deadline_ms: REQUEST_DEADLINE.as_millis() as u64,
                             stream_deadline_ms: STREAM_DEADLINE.as_millis() as u64,
                             shutdown_deadline_ms: SHUTDOWN_DEADLINE.as_millis() as u64,
+                            maximum_pdf_ingestion_bytes: 0,
                         }),
                     },
                 )),
@@ -2721,6 +3770,7 @@ async fn client_rejects_a_peer_that_exceeds_the_negotiated_stream_budget() {
                             request_deadline_ms: 1_000,
                             stream_deadline_ms: 1_000,
                             shutdown_deadline_ms: 1_000,
+                            maximum_pdf_ingestion_bytes: 0,
                         }),
                     },
                 )),
@@ -2970,6 +4020,8 @@ async fn write_ingestion_start(
                     metadata: Vec::new(),
                     media_type: "text/plain".to_owned(),
                     expected_content_bytes,
+                    pdf_images_consented: false,
+                    expected_sha256: Vec::new(),
                 })),
             })),
         },

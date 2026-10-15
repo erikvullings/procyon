@@ -11,6 +11,7 @@ use fm_semantic_worker::gemma_fusion::GemmaFusionEncoder;
 use fm_semantic_worker::gemma_fusion::GemmaFusionError;
 use fm_semantic_worker::gemma_multimodal::{GemmaModality, GemmaProjection};
 use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeEncoder, GemmaNativeError};
+use fm_semantic_worker::gemma_probe::GemmaTextTask;
 use fm_semantic_worker::gemma_vision::{GemmaVisionError, GemmaVisionTower};
 use fm_semantic_worker::gemma_visual::{GemmaVisualError, VisualKind, prepare_frame};
 use image::{ImageBuffer, ImageFormat, Rgb};
@@ -36,6 +37,249 @@ fn patterned_png() -> Vec<u8> {
     let mut png = std::io::Cursor::new(Vec::new());
     image.write_to(&mut png, ImageFormat::Png).expect("PNG");
     png.into_inner()
+}
+
+#[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+#[test]
+fn metal_probe_accepts_all_media_selections_before_loading_weights() {
+    for media in [
+        GemmaMedia {
+            images: false,
+            audio: false,
+            video: false,
+        },
+        GemmaMedia {
+            images: true,
+            audio: true,
+            video: true,
+        },
+    ] {
+        assert!(matches!(
+            GemmaNativeEncoder::open_metal(std::path::Path::new("/nonexistent"), 768, media),
+            Err(GemmaNativeError::Io(_))
+        ));
+    }
+}
+
+#[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned checkpoint and Apple Metal"]
+fn metal_image_matches_cpu_and_upstream_at_every_dimension() {
+    use std::time::Instant;
+
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let reference: Reference =
+        serde_json::from_str(include_str!("embeddinggemma-image-reference-v1.json"))
+            .expect("Python reference");
+    assert_eq!(
+        reference.revision,
+        "914f7f89142e33e77833254d9c9b90c3cef7303b"
+    );
+    let media = GemmaMedia {
+        images: true,
+        audio: false,
+        video: false,
+    };
+    let png = patterned_png();
+    for dimensions in [128, 256, 512, 768] {
+        let cpu = GemmaNativeEncoder::open(&directory, dimensions, media).expect("CPU encoder");
+        let start = Instant::now();
+        let expected = cpu.encode_image(&png).expect("CPU image vector");
+        let cpu_time = start.elapsed();
+        assert_eq!(cpu.metal_dispatches(), 0);
+        drop(cpu);
+        let metal =
+            GemmaNativeEncoder::open_metal(&directory, dimensions, media).expect("Metal encoder");
+        let before = metal.metal_dispatches();
+        let start = Instant::now();
+        let actual = metal.encode_image(&png).expect("Metal image vector");
+        let metal_time = start.elapsed();
+        let dispatches = metal.metal_dispatches() - before;
+        drop(metal);
+        assert_eq!(
+            dispatches, 1004,
+            "vision attention, projection and fusion must dispatch on Metal at dimension {dimensions}"
+        );
+        assert_eq!(actual.len(), dimensions);
+        let cosine = |a: &[f32], b: &[f32]| -> f64 {
+            a.iter()
+                .zip(b)
+                .map(|(a, b)| f64::from(*a) * f64::from(*b))
+                .sum()
+        };
+        let mut upstream = reference.vector[..dimensions].to_vec();
+        let norm = upstream
+            .iter()
+            .map(|x| f64::from(*x).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        for value in &mut upstream {
+            *value = (f64::from(*value) / norm) as f32;
+        }
+        let cpu_cosine = cosine(&expected, &upstream);
+        let metal_cosine = cosine(&actual, &upstream);
+        let parity = cosine(&expected, &actual);
+        eprintln!(
+            "image dimension={dimensions} CPU={cpu_time:?} Metal={metal_time:?} dispatches={dispatches} CPU/reference={cpu_cosine:.9} Metal/reference={metal_cosine:.9} Metal/CPU={parity:.9}"
+        );
+        assert!(cpu_cosine > 0.99999);
+        assert!(metal_cosine > 0.99999);
+        assert!(parity > 0.99999);
+    }
+}
+
+#[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned checkpoint and Apple Metal"]
+fn metal_mixed_library_matches_cpu_and_upstream_for_every_modality() {
+    use std::time::Instant;
+
+    #[derive(Deserialize)]
+    struct AudioReference {
+        revision: String,
+        samples: usize,
+        vector: Vec<f32>,
+    }
+    #[derive(Deserialize)]
+    struct TextReference {
+        revision: String,
+        cases: Vec<TextCase>,
+    }
+    #[derive(Deserialize)]
+    struct TextCase {
+        task: String,
+        dimensions: usize,
+        text: String,
+        title: Option<String>,
+        vector: Vec<f32>,
+    }
+    fn cosine(left: &[f32], right: &[f32]) -> f64 {
+        left.iter()
+            .zip(right)
+            .map(|(left, right)| f64::from(*left) * f64::from(*right))
+            .sum()
+    }
+    fn truncated(reference: &[f32], dimensions: usize) -> Vec<f32> {
+        let mut result = reference[..dimensions].to_vec();
+        let norm = result
+            .iter()
+            .map(|value| f64::from(*value).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        for value in &mut result {
+            *value = (f64::from(*value) / norm) as f32;
+        }
+        result
+    }
+
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let image: Reference =
+        serde_json::from_str(include_str!("embeddinggemma-image-reference-v1.json")).unwrap();
+    let video: Reference =
+        serde_json::from_str(include_str!("embeddinggemma-video-reference-v1.json")).unwrap();
+    let audio: AudioReference = serde_json::from_str(include_str!(
+        "embeddinggemma-audio-vector-reference-v1.json"
+    ))
+    .unwrap();
+    let text: TextReference =
+        serde_json::from_str(include_str!("embeddinggemma-reference-v1.json")).unwrap();
+    for revision in [
+        &image.revision,
+        &video.revision,
+        &audio.revision,
+        &text.revision,
+    ] {
+        assert_eq!(revision, "914f7f89142e33e77833254d9c9b90c3cef7303b");
+    }
+    let png = patterned_png();
+    let pcm: Vec<_> = (0..audio.samples)
+        .map(|sample| {
+            let t = sample as f32 / 16_000.0;
+            0.3 * (std::f32::consts::TAU * 440.0 * t).sin()
+                + 0.1 * (std::f32::consts::TAU * 880.0 * t).sin()
+        })
+        .collect();
+    let frames = [(png.as_slice(), 0)];
+    let media = GemmaMedia {
+        images: true,
+        audio: true,
+        video: true,
+    };
+    for dimensions in [128, 256, 512, 768] {
+        let text_case = text
+            .cases
+            .iter()
+            .find(|case| case.dimensions == dimensions)
+            .expect("pinned text vector at each width");
+        let text_task = match text_case.task.as_str() {
+            "document" => GemmaTextTask::Document,
+            "code" => GemmaTextTask::Code,
+            "question" => GemmaTextTask::Question,
+            "search" => GemmaTextTask::Search,
+            task => panic!("unknown pinned text task: {task}"),
+        };
+        let cpu = GemmaNativeEncoder::open(&directory, dimensions, media).expect("CPU encoder");
+        let metal =
+            GemmaNativeEncoder::open_metal(&directory, dimensions, media).expect("Metal encoder");
+        for (modality, reference, encode) in [
+            (
+                "text",
+                text_case.vector.as_slice(),
+                Box::new(|encoder: &GemmaNativeEncoder| {
+                    encoder.encode_text(text_task, &text_case.text, text_case.title.as_deref())
+                })
+                    as Box<dyn Fn(&GemmaNativeEncoder) -> Result<Vec<f32>, GemmaNativeError> + '_>,
+            ),
+            (
+                "image",
+                image.vector.as_slice(),
+                Box::new(|encoder: &GemmaNativeEncoder| encoder.encode_image(&png)),
+            ),
+            (
+                "audio",
+                audio.vector.as_slice(),
+                Box::new(|encoder: &GemmaNativeEncoder| encoder.encode_audio_pcm16k(&pcm)),
+            ),
+            (
+                "video",
+                video.vector.as_slice(),
+                Box::new(|encoder: &GemmaNativeEncoder| encoder.encode_video_frames(&frames)),
+            ),
+        ] {
+            let start = Instant::now();
+            let expected = encode(&cpu).expect("CPU vector");
+            let cpu_time = start.elapsed();
+            let before = metal.metal_dispatches();
+            let start = Instant::now();
+            let actual = encode(&metal).expect("Metal vector");
+            let metal_time = start.elapsed();
+            let dispatches = metal.metal_dispatches() - before;
+            let upstream = truncated(reference, dimensions);
+            let parity = cosine(&expected, &actual);
+            let agreement = cosine(&actual, &upstream);
+            eprintln!(
+                "{modality} dimension={dimensions} CPU={cpu_time:?} Metal={metal_time:?} dispatches={dispatches} Metal/CPU={parity:.9} Metal/reference={agreement:.9}"
+            );
+            assert!(
+                dispatches > 0,
+                "{modality} at {dimensions} did not use Metal"
+            );
+            assert!(
+                parity > 0.99999,
+                "{modality} at {dimensions} CPU/Metal cosine {parity}"
+            );
+            assert!(
+                agreement > 0.99999,
+                "{modality} at {dimensions} Metal/reference cosine {agreement}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -232,6 +476,62 @@ fn cancelled_image_request_does_not_decode_or_infer() {
         encoder.encode_image_cancellable(&patterned_png(), &cancellation),
         Err(GemmaNativeError::Cancelled)
     ));
+    #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+    {
+        drop(encoder);
+        let encoder = GemmaNativeEncoder::open_metal(
+            &directory,
+            768,
+            GemmaMedia {
+                images: true,
+                audio: false,
+                video: false,
+            },
+        )
+        .expect("Metal image encoder");
+        assert!(matches!(
+            encoder.encode_image_cancellable(&patterned_png(), &cancellation),
+            Err(GemmaNativeError::Cancelled)
+        ));
+        assert_eq!(encoder.metal_dispatches(), 0);
+    }
+}
+
+#[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+#[test]
+#[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned checkpoint"]
+fn concurrent_metal_images_match_sequential_embedding() {
+    let directory = PathBuf::from(
+        std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR")
+            .expect("set PROCYON_GEMMA_PROBE_MODEL_DIR"),
+    );
+    let encoder = GemmaNativeEncoder::open_metal(
+        &directory,
+        128,
+        GemmaMedia {
+            images: true,
+            audio: false,
+            video: false,
+        },
+    )
+    .expect("Metal image encoder");
+    let png = patterned_png();
+    let expected = encoder.encode_image(&png).unwrap();
+    std::thread::scope(|scope| {
+        let results: Vec<_> = (0..2)
+            .map(|_| scope.spawn(|| encoder.encode_image(&png).unwrap()))
+            .collect();
+        for result in results {
+            let actual = result.join().unwrap();
+            let cosine: f64 = actual
+                .iter()
+                .zip(&expected)
+                .map(|(a, b)| f64::from(*a) * f64::from(*b))
+                .sum();
+            assert!(cosine > 0.99999, "concurrent image cosine {cosine}");
+        }
+    });
+    assert_eq!(encoder.metal_dispatches(), 3 * 1004);
 }
 
 #[test]

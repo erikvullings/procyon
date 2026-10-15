@@ -1,4 +1,5 @@
 import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
+import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import { filterIcon } from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import './quick-filter.css';
@@ -18,6 +19,7 @@ export const QuickFilterInput: FactoryComponent<QuickFilterInputAttrs> = () => {
       m('.fm-quick-filter', [
         filterIcon({ className: 'fm-quick-filter-icon', size: 14 }),
         m('input.fm-quick-filter-input', {
+          ...technicalTextInputAttrs,
           type: 'text',
           value: attrs.query,
           placeholder: t('quickFilter', 'placeholder'),

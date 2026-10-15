@@ -77,6 +77,119 @@ fn artifacts(seed: u128) -> DocumentArtifacts {
 }
 
 #[test]
+fn completed_count_requires_current_content_and_authorized_scope() {
+    let (policy, root_id, _) = policy_with_overlapping_roots();
+    let mut catalog = SemanticCatalog::new(policy.library().id());
+    let entry = EntryId::from(Uuid::from_u128(350));
+    let source = location("file:///docs/photo.png");
+    let first = ContentFingerprint::new("sha256:image-one").unwrap();
+    let changed = ContentFingerprint::new("sha256:image-two").unwrap();
+    let owner = OccurrenceScope::new(workspace(20), root_id);
+    let other = OccurrenceScope::new(workspace(21), root_id);
+    let observe = |fingerprint: ContentFingerprint, scope| {
+        CatalogObservation::new(
+            entry,
+            source.clone(),
+            fingerprint,
+            scope,
+            DocumentArtifacts::default(),
+            measurement(),
+        )
+    };
+    catalog
+        .upsert_observations(
+            &policy,
+            &active(&policy),
+            [observe(first.clone(), owner), observe(first.clone(), other)],
+        )
+        .unwrap();
+    let occurrence_id = catalog.occurrence_at(entry, &source).unwrap().id();
+    assert_eq!(catalog.root_occurrence_count(root_id), 1);
+    assert_eq!(catalog.root_completed_count(owner), 0);
+    assert!(catalog.confirm_indexed(occurrence_id, &first, owner));
+    assert!(catalog.confirm_indexed(occurrence_id, &first, owner));
+    assert_eq!(catalog.root_completed_count(owner), 1);
+    assert_eq!(catalog.root_completed_count(other), 0);
+
+    catalog
+        .upsert_observations(&policy, &active(&policy), [observe(first.clone(), owner)])
+        .unwrap();
+    assert_eq!(catalog.root_completed_count(owner), 1);
+    catalog
+        .upsert_observations(&policy, &active(&policy), [observe(changed.clone(), owner)])
+        .unwrap();
+    assert_eq!(catalog.root_completed_count(owner), 0);
+    assert!(!catalog.confirm_indexed(occurrence_id, &first, owner));
+    assert!(catalog.confirm_indexed(occurrence_id, &changed, owner));
+    catalog.remove_workspace_scopes(workspace(20));
+    assert_eq!(catalog.root_completed_count(owner), 0);
+}
+
+#[test]
+fn pre_receipt_catalog_remains_unverified_until_worker_completion() {
+    let (policy, root_id, _) = policy_with_overlapping_roots();
+    let mut catalog = SemanticCatalog::new(policy.library().id());
+    let entry = EntryId::from(Uuid::from_u128(351));
+    let source = location("file:///docs/older.png");
+    let fingerprint = ContentFingerprint::new("sha256:older").unwrap();
+    let scope = OccurrenceScope::new(workspace(20), root_id);
+    catalog
+        .upsert_observations(
+            &policy,
+            &active(&policy),
+            [CatalogObservation::new(
+                entry,
+                source.clone(),
+                fingerprint.clone(),
+                scope,
+                DocumentArtifacts::default(),
+                measurement(),
+            )],
+        )
+        .unwrap();
+    let mut legacy = serde_json::to_value(&catalog).unwrap();
+    let occurrences = legacy["occurrences"].as_object_mut().unwrap();
+    let occurrence = occurrences
+        .values_mut()
+        .next()
+        .unwrap()
+        .as_object_mut()
+        .unwrap();
+    occurrence.remove("completedScopes");
+    occurrence.remove("legacyReceiptsUnverified");
+    occurrence.remove("legacyUnverifiedScopes");
+    let mut reopened: SemanticCatalog = serde_json::from_value(legacy).unwrap();
+    assert_eq!(reopened.root_occurrence_count(root_id), 1);
+    assert_eq!(reopened.root_completed_count(scope), 0);
+    assert_eq!(reopened.root_unverified_legacy_count(scope), 1);
+    let new_scope = OccurrenceScope::new(workspace(21), root_id);
+    reopened
+        .upsert_observations(
+            &policy,
+            &active(&policy),
+            [CatalogObservation::new(
+                entry,
+                source.clone(),
+                fingerprint.clone(),
+                new_scope,
+                DocumentArtifacts::default(),
+                measurement(),
+            )],
+        )
+        .unwrap();
+    assert_eq!(reopened.root_unverified_legacy_count(scope), 1);
+    assert_eq!(
+        reopened.root_unverified_legacy_count(new_scope),
+        0,
+        "a newly attached workspace has no pre-upgrade worker vectors"
+    );
+    let id = reopened.occurrence_at(entry, &source).unwrap().id();
+    assert!(reopened.confirm_indexed(id, &fingerprint, scope));
+    assert_eq!(reopened.root_completed_count(scope), 1);
+    assert_eq!(reopened.root_unverified_legacy_count(scope), 0);
+}
+
+#[test]
 fn unsorted_interleaved_overlapping_roots_deduplicate_content_and_preserve_scopes() {
     let (policy, parent, nested) = policy_with_overlapping_roots();
     let mut catalog = SemanticCatalog::new(policy.library().id());

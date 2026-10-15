@@ -56,6 +56,17 @@ function desktopConfig() {
           }
         : {}),
     },
+    ...(process.env.GEMMA_DESKTOP_EXPERIMENTAL === 'true'
+      ? {
+          plugins: {
+            updater: {
+              endpoints: [
+                'https://github.com/erikvullings/procyon/releases/download/updater-gemma-experimental/latest.json',
+              ],
+            },
+          },
+        }
+      : {}),
   };
 }
 

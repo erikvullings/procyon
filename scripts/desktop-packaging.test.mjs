@@ -13,6 +13,17 @@ import { generateUpdaterManifest } from './generate-updater-manifest.mjs';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
+test('native web links allow only HTTP and HTTPS in the system browser', () => {
+  const capability = JSON.parse(
+    read('apps', 'fm-desktop', 'src-tauri', 'capabilities', 'default.json'),
+  );
+  const opener = capability.permissions.find(
+    (permission) => permission.identifier === 'opener:allow-open-url',
+  );
+  assert.deepEqual(opener?.allow, [{ url: 'https://*' }, { url: 'http://*' }]);
+  assert.ok(!capability.permissions.includes('opener:default'));
+});
+
 function read(...segments) {
   return readFileSync(join(repoRoot, ...segments), 'utf8');
 }
@@ -268,6 +279,14 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   const chocolatey = workflow('publish-chocolatey.yml');
 
   assert.match(releaseText, /build:tauri --target universal-apple-darwin/);
+  assert.match(releaseText, /build:tauri --target aarch64-apple-darwin --features semantic-gemma/);
+  const macBuild = release.jobs.macos.steps.find(
+    (step) => step.name === 'Build signed macOS bundles',
+  );
+  assert.match(macBuild.run, /GEMMA_DESKTOP_EXPERIMENTAL.*true/su);
+  assert.match(releaseText, /lipo -archs/);
+  assert.match(releaseText, /arm64/);
+  assert.match(releaseText, /x86_64/);
   assert.equal(release.jobs.linux['runs-on'], 'ubuntu-22.04');
   assert.match(releaseText, /libwebkit2gtk-4\.1-dev/);
   assert.match(releaseText, /bundle\/deb\/\*\.deb/);
@@ -277,17 +296,17 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   assert.match(releaseText, /bundle\/nsis\/\*-setup\.exe\.sig/);
   assert.deepEqual(release.jobs['updater-manifest'].needs, ['macos', 'linux', 'windows']);
   assert.match(releaseText, /generate-updater-manifest\.mjs/);
-  assert.match(releaseText, /gh release upload updater-latest latest\.json --clobber/);
+  assert.match(releaseText, /gh release upload "\$UPDATE_TAG" latest\.json --clobber/u);
   assert.deepEqual(release.jobs.homebrew.needs, ['macos', 'linux']);
   assert.equal(
     release.jobs.homebrew.if,
-    `\${{ always() && github.event_name == 'push' && needs.macos.result == 'success' && needs.linux.result == 'success' }}`,
+    `\${{ always() && github.event_name == 'push' && needs.macos.result == 'success' && needs.linux.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' }}`,
   );
   assert.equal(release.jobs.homebrew.environment, 'desktop-release');
   assert.equal(release.jobs.chocolatey.needs, 'windows');
   assert.equal(
     release.jobs.chocolatey.if,
-    `\${{ always() && github.event_name == 'push' && needs.windows.result == 'success' }}`,
+    `\${{ always() && github.event_name == 'push' && needs.windows.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' }}`,
   );
   assert.equal(release.jobs.chocolatey.uses, './.github/workflows/publish-chocolatey.yml');
   assert.equal(release.jobs.chocolatey.with.release_tag, `\${{ github.ref_name }}`);
@@ -336,6 +355,99 @@ test('updater manifest embeds signed versioned artifacts for every supported tar
     /v0\.2\.0\/Procyon_0\.2\.0_amd64\.AppImage$/,
   );
   assert.equal(manifest.platforms['windows-x86_64'].signature, 'windows-signature');
+
+  const experimental = generateUpdaterManifest({
+    assetsDirectory: assets,
+    repository: 'erikvullings/procyon',
+    tag: 'v0.5.0-1',
+    version: '0.5.0-1',
+    experimentalGemma: true,
+  });
+  assert.deepEqual(Object.keys(experimental.platforms).sort(), [
+    'darwin-aarch64',
+    'linux-x86_64',
+    'windows-x86_64',
+  ]);
+  assert.equal(experimental.platforms['darwin-aarch64'].signature, 'mac-signature');
+  assert.equal(experimental.platforms['darwin-x86_64'], undefined);
+
+  const output = join(assets, 'latest.json');
+  execFileSync(
+    'node',
+    [
+      'scripts/generate-updater-manifest.mjs',
+      '--assets',
+      assets,
+      '--repository',
+      'erikvullings/procyon',
+      '--tag',
+      'v0.5.0-1',
+      '--version',
+      '0.5.0-1',
+      '--output',
+      output,
+      '--experimental-gemma',
+    ],
+    { cwd: repoRoot },
+  );
+  assert.deepEqual(JSON.parse(readFileSync(output)), experimental);
+});
+
+test('experimental updater and package managers never replace stable Intel channels', () => {
+  const release = workflow('release-desktop.yml');
+  for (const job of [
+    release.jobs.release,
+    release.jobs.macos,
+    release.jobs.linux,
+    release.jobs.windows,
+  ]) {
+    const guard = job.steps.find((step) =>
+      /Require exact experimental Gemma/.test(step.name ?? ''),
+    );
+    assert.match(guard.run, /check-desktop-gemma-release\.mjs --macos-arm64-only/u);
+  }
+  const macBuild = release.jobs.macos.steps.find(
+    (step) => step.name === 'Build signed macOS bundles',
+  );
+  const macVerify = release.jobs.macos.steps.find((step) =>
+    /Verify signature, notarization/.test(step.name ?? ''),
+  );
+  assert.match(macBuild.run, /--target aarch64-apple-darwin --features semantic-gemma/u);
+  assert.match(macBuild.run, /--target universal-apple-darwin\s*$/mu);
+  assert.match(macVerify.run, /test "\$ARCHITECTURES" == "arm64"/u);
+  assert.match(macVerify.run, /basename "\$DMG_PATH".*aarch64/u);
+  assert.match(macVerify.run, /grep -qw x86_64 <<< "\$ARCHITECTURES"/u);
+  assert.match(
+    release.jobs.macos.env.MACOS_TARGET,
+    /aarch64-apple-darwin.*universal-apple-darwin/u,
+  );
+  const description = release.jobs.release.steps.find(
+    (step) => step.uses === 'softprops/action-gh-release@v3',
+  ).with;
+  assert.match(description.prerelease, /SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL/u);
+  assert.match(description.body, /Apple Silicon \(arm64\)/u);
+  const updater = release.jobs['updater-manifest'];
+  const publish = updater.steps.find((step) => step.name === 'Publish selected update endpoint');
+  assert.match(publish.run, /updater-gemma-experimental/u);
+  assert.match(publish.run, /updater-latest/u);
+  assert.match(
+    updater.steps.find((step) => step.name === 'Generate signed update metadata').run,
+    /--experimental-gemma/u,
+  );
+  assert.match(release.jobs.homebrew.if, /SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true'/u);
+  assert.match(release.jobs.chocolatey.if, /SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true'/u);
+  const stable = JSON.parse(read('apps', 'fm-desktop', 'src-tauri', 'tauri.conf.json'));
+  assert.match(stable.plugins.updater.endpoints[0], /updater-latest\/latest\.json$/u);
+  const generated = JSON.parse(
+    execFileSync('node', ['scripts/build-tauri.mjs', '--print-config'], {
+      cwd: repoRoot,
+      env: { ...process.env, GEMMA_DESKTOP_EXPERIMENTAL: 'true' },
+      encoding: 'utf8',
+    }),
+  );
+  assert.deepEqual(generated.plugins.updater.endpoints, [
+    'https://github.com/erikvullings/procyon/releases/download/updater-gemma-experimental/latest.json',
+  ]);
 });
 
 test('desktop releases consume one approved semantic component release without rebuilding it', () => {
@@ -378,6 +490,8 @@ test('semantic components qualify and publish exact retained artifacts independe
   assert.ok(component.on.workflow_dispatch);
   assert.ok(component.on.workflow_dispatch.inputs.release_tag.required);
   assert.ok(component.on.workflow_dispatch.inputs.qualification_run_id);
+  assert.ok(component.on.workflow_dispatch.inputs.qualify_installed_gemma);
+  assert.ok(component.on.workflow_dispatch.inputs.measure_installed_gemma);
 
   const payloads = component.jobs['semantic-payloads'];
   const catalogs = component.jobs['semantic-catalogs'];
@@ -385,6 +499,8 @@ test('semantic components qualify and publish exact retained artifacts independe
   const publish = component.jobs['semantic-publish'];
 
   assert.match(payloads.if, /inputs\.qualification_run_id == ''/);
+  assert.match(payloads.if, /inputs\.qualify_installed_gemma != true/);
+  assert.match(payloads.if, /inputs\.measure_installed_gemma != true/);
   assert.deepEqual(payloads.strategy.matrix.include.map(({ target }) => target).sort(), [
     'linux-aarch64',
     'linux-x86_64',
@@ -416,11 +532,45 @@ test('semantic components qualify and publish exact retained artifacts independe
   assert.match(JSON.stringify(collect), /create-semantic-component-release-manifest\.mjs/);
   assert.match(publish.if, /vars\.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true'/);
   assert.match(publish.if, /inputs\.qualification_run_id != ''/);
+  assert.match(publish.if, /vars\.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED == 'true'/);
+  assert.equal(component.on.workflow_dispatch.inputs.approve_experimental_gemma.default, false);
+  assert.match(publish.if, /inputs\.qualify_installed_gemma != true/);
+  assert.match(publish.if, /inputs\.measure_installed_gemma != true/);
   assert.match(JSON.stringify(publish), /run-id/);
   assert.match(JSON.stringify(publish), /verify-semantic-component-release\.mjs/);
   assert.match(JSON.stringify(publish), /gh release create/);
   assert.match(JSON.stringify(publish), /--latest=false/);
+  const candidateSelection = publish.steps.find(
+    (step) => step.name === 'Select exact reviewed Gemma candidate',
+  );
+  const candidateDownload = publish.steps.find(
+    (step) => step.name === 'Download exact Gemma candidate fingerprint lock',
+  );
+  assert.match(candidateSelection.run, /manifest\.decision !== "go"/u);
+  assert.match(candidateSelection.run, /manifest\.sourceRevision === "d3f921f/u);
+  assert.match(candidateDownload.with.name, /steps\.gemma_candidate\.outputs\.source_revision/u);
   assert.match(componentText, /semantic-component-release-v1\.json/);
+  assert.match(componentText, /semantic-gemma-experimental-v1\.json/);
+
+  const installed = component.jobs['installed-gemma-qualification'];
+  assert.match(installed.if, /inputs\.qualify_installed_gemma == true/);
+  assert.deepEqual(installed.strategy.matrix.include.map(({ target }) => target).sort(), [
+    'linux-aarch64',
+    'linux-x86_64',
+    'macos-aarch64',
+    'windows-x86_64',
+  ]);
+  assert.match(JSON.stringify(installed), /run-id.*installed_candidate_run_id/u);
+  assert.match(
+    JSON.stringify(installed),
+    /semantic-component-candidate-.*installed_candidate_source_revision/u,
+  );
+  assert.match(JSON.stringify(installed), /qualify_semantic_lifecycle/u);
+  assert.match(JSON.stringify(installed), /semantic_production_catalog/u);
+  assert.match(JSON.stringify(installed), /ORT_LIB_PATH/u);
+  assert.match(JSON.stringify(installed), /gemma-cpu\/\*\.json/u);
+  assert.match(JSON.stringify(installed), /workerPeakRssBytes/u);
+  assert.doesNotMatch(JSON.stringify(installed), /gh release create|SEMANTIC_CATALOG_SIGNING_KEY/u);
 });
 
 test('semantic release preconditions require a current four-target measured go', () => {
@@ -559,6 +709,52 @@ test('release desktop builds fail closed without a measured knowledge-search go 
   // The existing semantic gate keeps its own, separate variable and behaviour.
   assert.match(releaseText, /vars\.SEMANTIC_RELEASE_QUALIFIED == 'true'/);
   assert.match(releaseText, /vars\.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED/);
+});
+
+test('Gemma desktop packaging requires a separately approved signed four-target candidate', () => {
+  const release = workflow('release-desktop.yml');
+  assert.equal(release.jobs.release.environment, 'desktop-release');
+  const releaseSteps = release.jobs.release.steps;
+  const releaseApproval = releaseSteps.findIndex((step) =>
+    /check-desktop-gemma-release\.mjs/u.test(step.run ?? ''),
+  );
+  const publish = releaseSteps.findIndex((step) => step.uses === 'softprops/action-gh-release@v3');
+  assert.ok(releaseApproval >= 0 && releaseApproval < publish);
+  assert.equal(
+    releaseSteps[releaseApproval].if,
+    "vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'",
+  );
+  for (const jobName of ['macos', 'linux', 'windows']) {
+    const steps = release.jobs[jobName].steps;
+    const approval = steps.findIndex((step) =>
+      /check-desktop-gemma-release\.mjs/u.test(step.run ?? ''),
+    );
+    const experimental = steps.findIndex((step) =>
+      /fetch-approved-semantic-catalog\.mjs[\s\S]*semantic-gemma-experimental-v1\.json/u.test(
+        step.run ?? '',
+      ),
+    );
+    const signature = steps.findIndex((step) =>
+      /semantic_production_catalog[\s\S]*verify-signature/u.test(step.run ?? ''),
+    );
+    const build = steps.findIndex((step) => /build:tauri/u.test(step.run ?? ''));
+    assert.ok(
+      approval >= 0 && approval < experimental && experimental < signature && signature < build,
+    );
+    assert.equal(steps[approval].if, "vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'");
+    assert.match(steps[build].run, /--features semantic-gemma/u);
+    assert.match(steps[build].run, /GEMMA_DESKTOP_EXPERIMENTAL.*true/u);
+    assert.match(steps[experimental].if, /SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL/u);
+  }
+});
+
+test('Gemma desktop package smoke covers the Linux ARM worker target', () => {
+  const ci = workflow('ci.yml');
+  assert.ok(ci.jobs['gemma-desktop'].strategy.matrix.os.includes('ubuntu-24.04-arm'));
+  const linuxDependencies = ci.jobs['gemma-desktop'].steps.find(
+    (step) => step.name === 'Install Linux build and virtual-display dependencies',
+  );
+  assert.match(linuxDependencies.run, /\bxdg-utils\b/u);
 });
 
 test('knowledge qualification exporter compiles the flag only for an exact visibility decision', () => {

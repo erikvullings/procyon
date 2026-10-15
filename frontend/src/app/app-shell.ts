@@ -7,6 +7,7 @@ import packageJson from '../../package.json' with { type: 'json' };
 
 import type { FileManagerClient } from '../api/client/file-manager-client';
 import {
+  activityIcon,
   arrowLeftIcon,
   arrowRightIcon,
   basketIcon,
@@ -173,6 +174,11 @@ import {
   reduceSelection,
   type SelectionState,
 } from '../features/selection/selection';
+import {
+  knowledgeEvidencePage,
+  pdfImageProvenance,
+  pdfPageRenderProvenance,
+} from '../features/semantic/evidence-provenance';
 import { AppUpdateDialog } from '../features/settings/app-update-dialog';
 import { SemanticFolderEnrolmentPrompt } from '../features/settings/semantic-library-management';
 import {
@@ -296,27 +302,7 @@ interface KnowledgeSearchTabEntry {
   readonly initialSubject: string | undefined;
 }
 
-/** Returns the one-based preview page encoded by structural knowledge provenance. */
-export function knowledgeEvidencePage(provenance: string): number | undefined {
-  let value: unknown;
-  try {
-    value = JSON.parse(provenance);
-  } catch {
-    return undefined;
-  }
-  const pageFrom = (candidate: unknown): number | undefined => {
-    if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
-      return undefined;
-    }
-    const fields = candidate as Record<string, unknown>;
-    if (fields.kind === 'exact') return pageFrom(fields.value);
-    if (fields.kind === 'span') return pageFrom(fields.first) ?? pageFrom(fields.last);
-    const page =
-      fields.page_number ?? fields.pageNumber ?? fields.slide_number ?? fields.slideNumber;
-    return typeof page === 'number' && Number.isInteger(page) && page > 0 ? page : undefined;
-  };
-  return pageFrom(value);
-}
+export { knowledgeEvidencePage } from '../features/semantic/evidence-provenance';
 
 const DEFAULT_THEME: Theme = 'auto';
 
@@ -444,6 +430,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let settingsUpdateQueue = Promise.resolve();
   let settingsDisclosureElement: HTMLDetailsElement | undefined;
   let settingsDialogOpen = false;
+  let semanticInstallation:
+    | { state: 'installing' | 'succeeded' | 'failed'; message: string }
+    | undefined;
   let activityOpen = false;
   function closeActivityOnOutsidePointer(event: PointerEvent): void {
     if (!activityOpen || (event.target as Element).closest('.fm-activity-anchor')) return;
@@ -473,6 +462,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let semanticAssistantAvailable = false;
   let knowledgeSearchAvailable = false;
   let knowledgeSearchChecked = false;
+  let knowledgeAnswerRevision = 0;
   let semanticEnrolmentRequest:
     | { readonly workspaceId: WorkspaceId; readonly location: Location }
     | undefined;
@@ -880,6 +870,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       readonly paneId: PaneId;
       readonly tabId: TabId;
       readonly controller: FileViewerController;
+      readonly knowledgeSourceId?: string;
       state: FileViewerState;
     }
   >();
@@ -1011,7 +1002,16 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   function closeSettingsDialog(): void {
+    const wasOpen = settingsDialogOpen;
     settingsController.closeSettingsDialog();
+    if (wasOpen) settingsClosed();
+  }
+
+  function settingsClosed(): void {
+    knowledgeAnswerRevision++;
+    void refreshSemanticAssistantAvailability();
+    void refreshKnowledgeSearchAvailability();
+    m.redraw();
   }
 
   /** Opens the Settings dialog (Cmd+,/Ctrl+,) - mirrors the settings toolbar button's "open"
@@ -1207,6 +1207,22 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     };
   }
 
+  function pdfImagePageForEntry(locationUri: string, entry: EntrySummary): number | undefined {
+    if (!locationUri.startsWith('search://') || entry.mimeType !== 'application/pdf') {
+      return undefined;
+    }
+    const result = findFilesPresentationsByLocationUri
+      .get(locationUri)
+      ?.semanticResults?.find((candidate) => candidate.entryId === entry.id);
+    const evidence = result?.bestEvidence;
+    return evidence?.chunkKind === 'pdf_image' && evidence.available && !evidence.stale
+      ? (
+          pdfImageProvenance(evidence.provenanceJson) ??
+          pdfPageRenderProvenance(evidence.provenanceJson)
+        )?.page
+      : undefined;
+  }
+
   /** Recursively sums `entry`'s size (task 0071's Total Commander-style folder-size key, Ctrl+.)
    * and patches its row's `size` field locally once the walk completes - no backend event/delta is
    * involved, so a result that arrives after the user has navigated elsewhere (the entry no longer
@@ -1291,6 +1307,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     },
     openMetadata?: boolean,
     initialPage?: number,
+    knowledgeSourceId?: string,
   ): void {
     if (entry.kind === 'symlink') {
       // View what the link points at: the target's kind and extension pick the viewer.
@@ -1324,7 +1341,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             );
             return;
           }
-          openViewer(client, paneId, resolved, initialSearch, openMetadata, initialPage);
+          openViewer(
+            client,
+            paneId,
+            resolved,
+            initialSearch,
+            openMetadata,
+            initialPage,
+            knowledgeSourceId,
+          );
         })
         .catch(unavailable);
       return;
@@ -1361,6 +1386,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         paneId: viewer.paneId,
         tabId: viewer.tabId,
         controller,
+        ...(knowledgeSourceId === undefined ? {} : { knowledgeSourceId }),
         state: { status: 'loading', entry },
       });
       tabController.activateTab(viewer.paneId, viewer.tabId);
@@ -1403,6 +1429,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           paneId,
           tabId,
           controller,
+          ...(knowledgeSourceId === undefined ? {} : { knowledgeSourceId }),
           state: { status: 'loading', entry },
         });
         m.redraw();
@@ -2306,6 +2333,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       undefined,
       false,
       knowledgeEvidencePage(evidence.provenance),
+      evidence.sourceId,
     );
   }
 
@@ -2875,11 +2903,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       }
       const entries = directories.get(activeTabKey(paneId))?.entries ?? [];
       if (entries.length > 0) return;
+      if (findFilesPresentationsByLocationUri.get(searchUri)?.conceptSearch) return;
       toast({ html: t('search', 'noResultsToast') });
       const root = findFilesRootsByLocationUri.get(searchUri);
       if (root !== undefined) void navigation.navigate(paneId, root);
     },
-    reportSearchWithoutResults: () => {
+    reportSearchWithoutResults: (searchId) => {
+      if (findFilesPresentationsByLocationUri.get(`search://local/${searchId}`)?.conceptSearch) {
+        return;
+      }
       toast({ html: t('search', 'noResultsToast') });
     },
     applyDiskUsageProgress,
@@ -3652,6 +3684,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     commandAvailabilityContext: (selectedEntries, paneId) =>
       actionCommandController.commandAvailabilityContext(selectedEntries, paneId),
     contentSearchInitialQuery,
+    pdfImagePageForEntry,
     refetchAffectedPanes,
     platformActionParameters: (actionId, selectedEntries, directoryLocation) =>
       actionCommandController.platformActionParameters(
@@ -3876,6 +3909,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     setFindFilesSearchStartPending: (pending) => {
       pendingFindFilesStarts = Math.max(0, pendingFindFilesStarts + (pending ? 1 : -1));
       if (pendingFindFilesStarts === 0) deferredSearchResultBatches.clear();
+      m.redraw();
     },
     getFindFilesError: () => findFilesError,
     setFindFilesError: (error) => {
@@ -4035,6 +4069,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       Object.values(operations.byId).filter(
         (operation): operation is Operation => operation !== undefined,
       ),
+    getContextMenu: () => contextMenu,
     clipboard,
     getDirectories: () => directories,
     getSelections: () => selections,
@@ -4047,6 +4082,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getPluginByPane: () => pluginByPane,
     getDiskUsageByTab: () => diskUsageByTab,
     getKnowledgeSearchByTab: () => knowledgeSearchByTab,
+    getKnowledgeAnswerRevision: () => knowledgeAnswerRevision,
     setConnections: (conns) => {
       connections = conns;
     },
@@ -4101,8 +4137,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getWorkspaceController: () => workspaceController,
     getOpsController: () => opsController,
     openSavedSearch: (saved) => findFilesController.startSavedSearch(saved, 'currentPane'),
-    openViewer: (paneId, entry, initialSearch, openMetadata) =>
-      openViewer(attrsClient, paneId, entry, initialSearch, openMetadata),
+    openViewer: (paneId, entry, initialSearch, openMetadata, initialPage) =>
+      openViewer(attrsClient, paneId, entry, initialSearch, openMetadata, initialPage),
     closeViewer,
     isDocumentSummaryAvailable: () => semanticAssistantAvailable,
     openDocumentSummary: (_paneId, entry) => {
@@ -4112,8 +4148,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       m.redraw();
     },
     openKnowledgeSearch,
+    openKnowledgeAnswerSettings: () => openSettingsDialog('semantic'),
     closeKnowledgeSearch: (paneId, tabId) => tabController.performCloseTab(paneId, tabId),
     openKnowledgeSource,
+    isKnowledgeSourceOpen: (evidence) =>
+      [...viewerByTab.values()].some(
+        (viewer) =>
+          viewer.knowledgeSourceId === evidence.sourceId &&
+          workspace?.panesById[viewer.paneId]?.activeTabId === viewer.tabId,
+      ),
     closeEditor,
     updateLocationSettings,
     invokeActionById: (actionId, parameters, context) =>
@@ -4328,6 +4371,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getFindFilesOpen: () => findFilesOpen,
     getFindFilesRoot: () => findFilesRoot,
     getFindFilesError: () => findFilesError,
+    getFindFilesSearchPending: () => pendingFindFilesStarts > 0,
     getCloseTabConfirmation: () => closeTabConfirmation,
     setCloseTabConfirmation: (conf) => {
       closeTabConfirmation = conf;
@@ -4359,6 +4403,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     },
     getFocusPane: () => focusPane,
     getSettings: () => currentSettings,
+    getWorkspaceId: () => workspace?.id,
     updateSettings: (update) => updateLocationSettings(attrsClient, update),
     includeCurrentSemanticFolder: (workspaceId, location) => {
       semanticEnrolmentRequest = { workspaceId, location };
@@ -5140,12 +5185,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                         'aria-label': activityStatusLabel,
                         'aria-expanded': String(activityOpen),
                         'aria-controls': 'fm-activity-popover',
-                        title: activityStatusLabel,
+                        title: `${t('shell', 'showActivity')}: ${activityStatusLabel}`,
                         onclick: () => {
                           activityOpen = !activityOpen;
                         },
                       },
-                      activityCount,
+                      [activityIcon({ size: 16 }), m('span', activityCount)],
                     )
                   : undefined,
                 activityOpen && activityCount > 0
@@ -5198,14 +5243,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                               m(
                                 'span',
                                 job.stage === 'failed'
-                                  ? t('shell', 'indexingFailed')
+                                  ? job.errors > 0
+                                    ? t('shell', 'indexingFailures', job.errors)
+                                    : t('shell', 'indexingFailed')
                                   : t('shell', 'indexingActivity'),
                               ),
                               job.stage === 'failed'
                                 ? undefined
                                 : m(
                                     'span',
-                                    t('shell', 'indexingScanned', { count: job.completed }),
+                                    job.completed === 1
+                                      ? t('shell', 'indexingScannedOne')
+                                      : t('shell', 'indexingScanned', { count: job.completed }),
                                   ),
                               m('span.fm-activity-target', t('shell', 'openSemanticStatus')),
                             ],
@@ -5216,6 +5265,23 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   : undefined,
               ],
             ),
+            semanticInstallation === undefined
+              ? undefined
+              : m(
+                  'button.fm-semantic-install-status',
+                  {
+                    type: 'button',
+                    className: `fm-semantic-install-${semanticInstallation.state}`,
+                    title: semanticInstallation.message,
+                    'aria-label': semanticInstallation.message,
+                    onclick: () => openSettingsDialog('semantic'),
+                  },
+                  activityIcon({ size: 16 }),
+                ),
+            m('.fm-toolbar-separator', {
+              role: 'separator',
+              'aria-orientation': 'vertical',
+            }),
             tooltip(
               labelWithShortcut(
                 t('shell', 'openSettings'),
@@ -5233,6 +5299,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     settingsDialogOpen = settingsDisclosureElement.open;
                     if (!settingsDialogOpen && currentSettings !== undefined) {
                       applyAppearance(currentSettings);
+                      settingsClosed();
                     }
                     m.redraw();
                   },
@@ -5255,8 +5322,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   settingsDialogOpen = open;
                   if (!open && currentSettings !== undefined) {
                     applyAppearance(currentSettings);
-                    void refreshSemanticAssistantAvailability();
-                    void refreshKnowledgeSearchAvailability();
+                    settingsClosed();
                   }
                   m.redraw();
                 },
@@ -5339,6 +5405,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                               onSemanticStatusChange: (status) => {
                                 void refreshSemanticAssistantAvailability(status);
                                 void refreshKnowledgeSearchAvailability();
+                              },
+                              semanticInstallInProgress:
+                                semanticInstallation?.state === 'installing',
+                              onSemanticInstallationChange: (state, message) => {
+                                semanticInstallation = { state, message };
+                                if (state !== 'installing') {
+                                  const text = document.createElement('span');
+                                  text.textContent = message;
+                                  toast({
+                                    html: text.outerHTML,
+                                    className: `fm-semantic-install-${state}`,
+                                  });
+                                }
+                                m.redraw();
                               },
                             })
                           : undefined,
@@ -5822,12 +5902,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   ? basketSourcePaneId() !== undefined
                   : binding.actionAvailable;
                 return m(
-                  'span.fm-function-key',
+                  'button.fm-function-key',
                   {
                     key: binding.actionId,
-                    role: 'button',
-                    tabindex: available ? 0 : -1,
-                    'aria-disabled': available ? undefined : 'true',
+                    type: 'button',
+                    disabled: !available,
                     onclick: available
                       ? () => invokeFunctionKeyShortcut(binding.shortcut)
                       : undefined,

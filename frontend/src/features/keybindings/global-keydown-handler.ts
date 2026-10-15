@@ -126,6 +126,7 @@ export interface GlobalKeydownContext {
     entry: EntrySummary,
     initialSearch?: InitialSearch,
     openMetadata?: boolean,
+    initialPage?: number,
   ): void;
   openEditor(paneId: PaneId, entry: EntrySummary): void;
   /** Recursively sums a directory's total size and fills in its Size cell once known (task 0071's
@@ -140,6 +141,7 @@ export interface GlobalKeydownContext {
     paneId?: PaneId,
   ): CommandAvailabilityContext;
   contentSearchInitialQuery(locationUri: string, entry: EntrySummary): InitialSearch | undefined;
+  pdfImagePageForEntry?(locationUri: string, entry: EntrySummary): number | undefined;
   refetchAffectedPanes(paneId?: PaneId): void;
   platformActionParameters(
     actionId: string,
@@ -203,6 +205,13 @@ function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
+function isEditableEvent(event: KeyboardEvent): boolean {
+  return (
+    isEditableTarget(event.target) ||
+    event.composedPath().some((target) => isEditableTarget(target))
+  );
+}
+
 function isWithinModal(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.closest('[role="dialog"]') !== null;
 }
@@ -254,6 +263,7 @@ function resolveViewTarget(context: GlobalKeydownContext):
       readonly paneId: PaneId;
       readonly entry: EntrySummary;
       readonly initialSearch?: InitialSearch;
+      readonly initialPage?: number;
     }
   | undefined {
   const workspace = context.getWorkspace();
@@ -283,10 +293,15 @@ function resolveViewTarget(context: GlobalKeydownContext):
     active === undefined
       ? undefined
       : context.contentSearchInitialQuery(active.location.uri, viewEntry);
+  const initialPage =
+    active === undefined || viewEntry.mimeType !== 'application/pdf'
+      ? undefined
+      : context.pdfImagePageForEntry?.(active.location.uri, viewEntry);
   return {
     paneId: otherPaneId,
     entry: viewEntry,
     ...(initialSearch === undefined ? {} : { initialSearch }),
+    ...(initialPage === undefined ? {} : { initialPage }),
   };
 }
 
@@ -470,7 +485,7 @@ const ACTION_KEYDOWN_ROUTES = [
     id: 'viewer-paged',
     tryHandle: (context, event) => {
       if (
-        !isEditableTarget(event.target) &&
+        !isEditableEvent(event) &&
         !event.altKey &&
         !event.ctrlKey &&
         !event.metaKey &&
@@ -687,7 +702,7 @@ const ACTION_KEYDOWN_ROUTES = [
   {
     id: 'alt-space',
     tryHandle: (context, event) => {
-      if (!isEditableTarget(event.target) && event.altKey && event.code === 'Space') {
+      if (!isEditableEvent(event) && event.altKey && event.code === 'Space') {
         const active = context.activeDirectory();
         const selection =
           active === undefined
@@ -720,7 +735,17 @@ const ACTION_KEYDOWN_ROUTES = [
         const target = resolveViewTarget(context);
         if (target !== undefined) {
           event.preventDefault();
-          context.openViewer(target.paneId, target.entry, target.initialSearch, true);
+          if (target.initialPage === undefined) {
+            context.openViewer(target.paneId, target.entry, target.initialSearch, true);
+          } else {
+            context.openViewer(
+              target.paneId,
+              target.entry,
+              target.initialSearch,
+              true,
+              target.initialPage,
+            );
+          }
           return;
         }
       }
@@ -759,7 +784,7 @@ const ACTION_KEYDOWN_ROUTES = [
     id: 'primary-modifier',
     tryHandle: (context, event) => {
       if (
-        !isEditableTarget(event.target) &&
+        !isEditableEvent(event) &&
         hasPrimaryModifier(event, context.getPlatform()) &&
         !event.altKey
       ) {
@@ -843,7 +868,7 @@ const ACTION_KEYDOWN_ROUTES = [
         event.ctrlKey ||
         event.metaKey ||
         event.shiftKey ||
-        isEditableTarget(event.target)
+        isEditableEvent(event)
       ) {
         return false;
       }
@@ -862,7 +887,7 @@ const ACTION_KEYDOWN_ROUTES = [
           !event.ctrlKey &&
           !event.metaKey &&
           !event.shiftKey &&
-          !isEditableTarget(event.target) &&
+          !isEditableEvent(event) &&
           context.collectIntoBasketIfVisible()
         ) {
           event.preventDefault();
@@ -1586,7 +1611,17 @@ const ACTION_KEYDOWN_ROUTES = [
         const target = resolveViewTarget(context);
         if (target !== undefined) {
           event.preventDefault();
-          context.openViewer(target.paneId, target.entry, target.initialSearch);
+          if (target.initialPage === undefined) {
+            context.openViewer(target.paneId, target.entry, target.initialSearch);
+          } else {
+            context.openViewer(
+              target.paneId,
+              target.entry,
+              target.initialSearch,
+              undefined,
+              target.initialPage,
+            );
+          }
           return;
         }
       }
@@ -1813,7 +1848,7 @@ export function dispatchGlobalKeydown(
   let dispatchedAction = dispatchKeybinding(
     event,
     {
-      scope: isEditableTarget(event.target) ? 'pathInput' : 'table',
+      scope: isEditableEvent(event) ? 'pathInput' : 'table',
       platform: context.getPlatform(),
       runtime: context.getKeybindingRuntime(),
     },
@@ -1821,7 +1856,7 @@ export function dispatchGlobalKeydown(
     context.getCurrentSettings()?.keybindings ?? {},
   );
   if (
-    !isEditableTarget(event.target) &&
+    !isEditableEvent(event) &&
     !event.altKey &&
     !event.ctrlKey &&
     !event.metaKey &&
@@ -1841,10 +1876,9 @@ export function dispatchGlobalKeydown(
   // platform fallback to preserve the established external-view behaviour.
   const state: KeydownRouteState = {
     dispatchedAction,
-    forceSystemView:
-      !isEditableTarget(event.target) && event.altKey && event.key.toUpperCase() === 'F3',
+    forceSystemView: !isEditableEvent(event) && event.altKey && event.key.toUpperCase() === 'F3',
     forceSystemEdit:
-      !isEditableTarget(event.target) &&
+      !isEditableEvent(event) &&
       event.shiftKey &&
       event.altKey &&
       !event.ctrlKey &&

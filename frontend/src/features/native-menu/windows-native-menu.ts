@@ -22,6 +22,7 @@ function itemLabel(item: NativeMenuItem): string {
       zoom: t('menu', 'maximize'),
       bringAllToFront: t('menu', 'bringAllToFront'),
       copy: t('action', 'copy'),
+      cut: t('menu', 'cutText'),
       paste: t('action', 'paste'),
       selectAll: t('action', 'selectAll'),
     };

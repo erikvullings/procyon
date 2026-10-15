@@ -5,6 +5,8 @@ use std::path::Path;
 
 use lattice_inference::weights::{SafetensorsFile, TensorSource};
 
+use crate::gemma_compute::GemmaCompute;
+
 const TEXT_HIDDEN_SIZE: usize = 512;
 
 /// The encoder whose soft tokens are projected into Gemma's text hidden space.
@@ -34,6 +36,7 @@ impl GemmaModality {
 
 /// Projects an already encoded vision or audio soft token to a text hidden state.
 pub struct GemmaProjection {
+    compute: GemmaCompute,
     weights: Vec<f32>,
     modality: GemmaModality,
     eps: f32,
@@ -54,6 +57,15 @@ impl GemmaProjection {
         config_path: &Path,
         weights_path: &Path,
         modality: GemmaModality,
+    ) -> Result<Self, GemmaProjectionError> {
+        Self::open_files_with_compute(config_path, weights_path, modality, GemmaCompute::Cpu)
+    }
+
+    pub(crate) fn open_files_with_compute(
+        config_path: &Path,
+        weights_path: &Path,
+        modality: GemmaModality,
+        compute: GemmaCompute,
     ) -> Result<Self, GemmaProjectionError> {
         let config: serde_json::Value = serde_json::from_reader(File::open(config_path)?)?;
         let tower = &config[format!("{}_config", modality.name())];
@@ -86,6 +98,7 @@ impl GemmaProjection {
             return Err(GemmaProjectionError::NonFinite);
         }
         Ok(Self {
+            compute,
             weights,
             modality,
             eps: eps.expect("validated finite epsilon"),
@@ -109,16 +122,32 @@ impl GemmaProjection {
             return Err(GemmaProjectionError::NonFinite);
         }
         let inverse_rms = (mean_square + self.eps).sqrt().recip();
-        let output: Vec<f32> = self
-            .weights
-            .chunks_exact(width)
-            .map(|row| {
-                row.iter()
-                    .zip(token)
-                    .map(|(weight, value)| weight * (value * inverse_rms))
-                    .sum()
-            })
-            .collect();
+        let output: Vec<f32> = match self.compute {
+            GemmaCompute::Cpu => self
+                .weights
+                .chunks_exact(width)
+                .map(|row| {
+                    row.iter()
+                        .zip(token)
+                        .map(|(weight, value)| weight * (value * inverse_rms))
+                        .sum()
+                })
+                .collect(),
+            #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+            GemmaCompute::Metal(_) => {
+                let normalized: Vec<f32> = token.iter().map(|value| value * inverse_rms).collect();
+                let mut output = vec![0.0; TEXT_HIDDEN_SIZE];
+                self.compute.matmul_bt(
+                    &normalized,
+                    &self.weights,
+                    &mut output,
+                    1,
+                    width,
+                    TEXT_HIDDEN_SIZE,
+                );
+                output
+            }
+        };
         if output.iter().any(|value| !value.is_finite()) {
             return Err(GemmaProjectionError::NonFinite);
         }
@@ -163,6 +192,7 @@ pub enum GemmaProjectionError {
 #[cfg(test)]
 mod tests {
     use super::{GemmaModality, GemmaProjection, GemmaProjectionError};
+    use crate::gemma_compute::GemmaCompute;
 
     #[test]
     fn fp16_checkpoint_is_rejected_before_inference() {
@@ -196,6 +226,7 @@ mod tests {
     #[test]
     fn malformed_soft_tokens_fail_explicitly() {
         let projection = GemmaProjection {
+            compute: GemmaCompute::Cpu,
             weights: vec![0.0; 512 * 768],
             modality: GemmaModality::Vision,
             eps: 1e-6,

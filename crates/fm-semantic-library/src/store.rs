@@ -54,6 +54,10 @@ impl VersionedDocument for SemanticLibraryPolicy {
                 value["schemaVersion"] = Value::from(CURRENT_POLICY_SCHEMA_VERSION);
                 Ok(value)
             }
+            3 => {
+                value["schemaVersion"] = Value::from(CURRENT_POLICY_SCHEMA_VERSION);
+                Ok(value)
+            }
             CURRENT_POLICY_SCHEMA_VERSION => Ok(value),
             unsupported => Err(PolicyError::UnsupportedSchema(unsupported)),
         }

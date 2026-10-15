@@ -226,7 +226,7 @@ describe('buildNativeMenuSpec', () => {
     });
   });
 
-  it('uses native responder-chain Copy and Paste roles on macOS', () => {
+  it('uses native responder-chain Cut, Copy and Paste roles on macOS', () => {
     const editMenu = buildNativeMenuSpec(
       inputs({
         actions: [action('core.copy', 'Copy'), action('core.paste', 'Paste')],
@@ -235,6 +235,7 @@ describe('buildNativeMenuSpec', () => {
     ).menus.find((menu) => menu.title === 'Edit');
 
     expect(editMenu?.items).toEqual([
+      { kind: 'role', role: 'cut' },
       { kind: 'role', role: 'copy' },
       { kind: 'role', role: 'paste' },
       { kind: 'role', role: 'selectAll' },

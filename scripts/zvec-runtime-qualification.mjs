@@ -500,12 +500,13 @@ function catalogSha256(value) {
   return Buffer.from(value).toString('hex');
 }
 
-function notarizedArtifactEvidence(bundle, manifest) {
+export function notarizedArtifactEvidence(bundle, manifest) {
   const evidence = manifest.catalog.artifacts
     .filter(
       (artifact) =>
         artifact.component_id === 'procyon.semantic.worker' ||
-        artifact.component_id === 'procyon.semantic.zvec-runtime',
+        artifact.component_id === 'procyon.semantic.zvec-runtime' ||
+        artifact.component_id === 'procyon.semantic.pdfium-runtime',
     )
     .map((artifact) => {
       const file = artifactPath(bundle, artifact);
@@ -520,8 +521,16 @@ function notarizedArtifactEvidence(bundle, manifest) {
       return { artifactId: artifact.id, byteLength, sha256 };
     })
     .sort((left, right) => left.artifactId.localeCompare(right.artifactId));
-  if (evidence.length !== 2) {
-    throw new Error('notarization requires exactly one worker and one Zvec runtime artifact');
+  if (
+    evidence.length < 2 ||
+    evidence.length > 3 ||
+    !['procyon.semantic.worker', 'procyon.semantic.zvec-runtime'].every(
+      (componentId) =>
+        manifest.catalog.artifacts.filter((artifact) => artifact.component_id === componentId)
+          .length === 1,
+    )
+  ) {
+    throw new Error('notarization requires one worker, Zvec, and optional PDFium runtime');
   }
   return evidence;
 }

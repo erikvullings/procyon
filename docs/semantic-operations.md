@@ -57,6 +57,18 @@ content search, and baseline document viewing available.
   provenance. Ollama profiles use its native generation endpoint with hidden reasoning disabled so
   reasoning-capable models spend the configured answer allowance on visible output; any response
   that still reaches its length limit is rejected rather than presented as a complete answer.
+- **Settings > Semantic > AI summaries and answers** connects a local or cloud generation service for
+  document summaries and grounded answers; semantic search itself does not need one. Select a
+  provider preset and model, then review the advanced context and answer token limits. Procyon
+  loads Semantic Settings in the background when Settings opens. The first discovered model is
+  selected in the draft without requiring another click, but the profile must still be saved with
+  the Settings Save button before Ask becomes available. Procyon suggests model-reported limits
+  when available; otherwise the initial limits are conservative.
+  The selectable values are caps, not a promise that the provider accepts a request of that size;
+  Procyon itself caps context at 1,048,576 tokens and answers at 16,384 tokens, so there is no
+  unlimited option. Existing saved profiles keep their configured limits until edited. The
+  **mlx-serve** preset uses its OpenAI-compatible API at `http://127.0.0.1:11234`. A cloud profile
+  requires consent for its destination host before activation.
 - Local enrolments persist an opaque device/inode identity on Unix or volume/file identity on
   Windows. This lets Procyon distinguish a moved root from a different folder at the old path.
   Desktop startup safely fills this identity for legacy reachable local roots that lack it, without
@@ -220,7 +232,11 @@ SHA-256 prefix; development IDs and the public developer key are never accepted 
 The production identity contract pins `intfloat/multilingual-e5-small` at revision
 `614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
 `xlm-roberta-sentencepiece.614241f6`, converter
-`docling-pdf/1036000+baseline/2`, chunker `structural/3`, worker protocol 1, and index schema 2.
+`docling-pdf/1036001+baseline/3`, chunker `structural/3`, worker protocol 1, and index schema 2.
+This converter revision repairs a narrowly identified PDF text-layout gap inside Elsevier DOI
+links; it invalidates derived PDF vectors and requires a new signed, measured qualification.
+The previously recorded `docling-pdf/1036000+baseline/2` evaluation remains historical evidence,
+not approval for this revision.
 Manual dispatches of `.github/workflows/release-semantic-components.yml` qualify components against
 their final `semantic-v*` public URLs without publishing them. The run emits a reviewable lock with
 the exact run ID, source revision, evaluation fingerprint, catalog revisions, and
@@ -322,6 +338,66 @@ unreadable path, symbolic link, stale capture, or evidence change fails the targ
 
 Remote LLM requests always show their profile, locality, scope, minimized metadata, and exact
 content preview before transmission. The semantic worker itself has no network authority.
+
+## Optional SKOS starter vocabularies
+
+**Find Files > Find by concept** offers five opt-in English-language excerpts:
+**Climate and renewable energy** from GEMET 4.2.3; **Natural sciences**, **Information technology**,
+**Psychology**, and **Defence and military engineering** from the UNESCO Thesaurus. These are
+selections of real SKOS concepts, not complete copies of either thesaurus or generic taxonomies.
+The defence excerpt is limited to those UNESCO subjects, not a military-wide vocabulary.
+Each concept retains its original stable URI; only links between included concepts are retained.
+The picker shows source, snapshot/version and license; selecting one does not import or attach it.
+**Settings > Semantic > Concept vocabularies** is for importing your own `procyon-skos-1` JSON
+and managing imported vocabularies. Imported vocabularies also appear in the picker without
+attachment. Attachment remains available for the separate annotation and review workflows.
+Locally extracted terms enter the review queue of an existing vocabulary; they do not create a
+SKOS source or become authoritative automatically. The Find by concept tab is visible only when
+semantic components are enabled and the active workspace has an indexed document in an available
+root. The vocabulary selector defaults to **All vocabularies**; choose one to filter the concept
+choices without importing or attaching it. Type a label and select a bundled or imported concept
+(recent selections appear before typing). This runs a similarity search of indexed document chunks
+across the active workspace regardless of which vocabulary supplied the query concept;
+**Current folder only** is an optional checkbox. Results are *related to* the concept, not authoritative
+concept assignments. **Save as smart folder** pins this similarity search in Smart folders using
+the selected label and definition as a snapshot; the saved query also retains the vocabulary ID
+and stable concept URI as source provenance, not as an exact-concept filter. The suggested name uses
+the preferred label and a short source name (for example, `Mental stress (UNESCO)`). Search shows
+progress without resizing the dialog while the request starts, a visible error if it fails, and
+opens a results tab even when no documents match. An empty tab names the concept and displays
+`No matches`; the search does not assign labels to files. Recreate the saved search if the
+concept's text changes. Only indexed/authorized documents can appear.
+Previously saved exact-concept folders remain readable, but are not created by this discovery
+flow; they require separately published concept annotations to return documents.
+
+The [GEMET 4.2.3 RDF export](https://www.eionet.europa.eu/gemet/en/exports/rdf/4.2.3)
+is © European Environment Agency (EEA), licensed
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+The [UNESCO Thesaurus RDF export](https://vocabularies.unesco.org/exports/thesaurus/latest/unesco-thesaurus.rdf)
+is © UNESCO, licensed [CC BY-SA 3.0 IGO](https://creativecommons.org/licenses/by-sa/3.0/igo/).
+The adapted UNESCO excerpt JSON files in `frontend/src/features/settings/skos-starters/`
+are distributed **under CC BY-SA 3.0 IGO**, not under Procyon's code license; no UNESCO endorsement
+is implied. Adaptations retain English labels only, filter relationships to selected concepts,
+and convert RDF to `procyon-skos-1`. The source has no immutable versioned download URL: the
+bundled snapshot was retrieved 2026-10-11, its concept scheme reports modification date
+2026-08-31, and its exact bytes are pinned by SHA-256 in `scripts/generate-skos-starters.py`.
+If UNESCO updates `/latest/`, regeneration deliberately fails until the snapshot and provenance
+are reviewed and refreshed.
+
+The script selects the UNESCO `mt2.75` natural-sciences members (53 concepts), `mt5.40` and
+`mt5.45` information-technology members (98), and `mt4.10` psychology members (53).
+For defence and military engineering it selects two narrower levels from UNESCO `concept2877`,
+`concept613`, and `concept652` (16). The GEMET excerpt selects two narrower levels from
+`concept/1471` and `concept/15271` (17). The script verifies the official download checksums and
+supports `--check` to compare bundled JSON content to pinned sources (format generated JSON with
+Biome before committing). Original RDF downloads are not bundled; the attributed excerpts work
+offline at runtime.
+
+The separate `erikvullings/rag` project's task 0103 builds project-specific SKOS-like terms
+from its indexed chunks. It does not ship an external generic SKOS dataset that can be reused
+here; its older task 0026's military/research predicate groups are extraction predicates, not a
+published SKOS thesaurus. Other possible sources such as EuroVoc, AGROVOC and LCSH are not bundled
+without verifying exact source bytes, permission to redistribute, and a compatible SKOS export.
 
 ## Backup and recovery
 
@@ -432,14 +508,65 @@ text-layer encodings Docling cannot yet read) before publication. Successful rem
 only those requested files from the backend's OCR-required report; failures remain visible for a
 later retry. Unsupported, encrypted, malformed, and over-budget documents remain visible as typed
 skip or omission reasons. Browser/server mode exposes OCR as unavailable and has no OCR mutation
-routes.
+routes. A PDF whose page content cannot be decompressed within the page limit reports the
+unreadable page and limit instead of incorrectly offering OCR guidance.
+If any selected PDF page fails conversion, baseline and optional ML conversion fail that
+replacement instead of publishing only readable pages. The prior complete generation remains
+searchable, and the failed job names the unreadable page. This does not make pages with no
+extractable text searchable or lift the 64 MiB production source limit.
+
+PDF text-layer conversion removes whitespace-delimited dot leaders of at least four dots before
+embedding and labels the affected blocks (and recognized Contents sections) as navigation;
+ordinary three-dot ellipses in prose remain unchanged. Knowledge fusion and file-primary semantic
+ranking weight these navigational hits at one quarter of their normal score, **not** zero: a
+contents entry can still guide a search when no stronger body passage is available. Previously
+indexed PDF evidence is also cleaned and deprioritized at retrieval, but its stored vectors retain
+their original text until that PDF is reindexed. An open Knowledge tab refreshes answer/profile
+availability after Settings closes, so saving a local Ollama generation profile reveals Ask without
+discarding inspected search results; merely selecting its preset in the Settings editor does not
+activate generation. Removing generation availability disables Ask without hiding Search. The
+docked Ask location remains discoverable when there is no saved profile, with a Settings action
+explaining that a model must be chosen and its profile saved. PDF excerpts render as selectable text,
+decode HTML entities without interpreting markup, and open validated web links using the host's
+external-browser adapter. Already-indexed PDF excerpts repair a narrowly identified space in
+Elsevier DOI links for display; newly derived embeddings use that repair only after the updated
+converter is installed and the PDF is reindexed. Answer generation shows a circular activity
+indicator and a cancellable status without moving keyboard focus to the answer when it completes.
 
 Local embedding work is checkpointed in small durable batches. Interrupted ingestion reuses those
 vectors without exposing them to search until the complete document generation is published.
 Publication respects Zvec's 1,024-document write limit, and one document that exceeds the
 five-minute ingestion fail-safe is recorded as failed without aborting reconciliation of the rest
-of the enrolled root. Source conversion remains bounded at 64 MiB per document. Once a replacement
-generation is published, superseded catalogue and Zvec records are reclaimed in bounded batches.
+of the enrolled root. Source conversion remains bounded at 64 MiB per document; the larger
+synthetic PDF evaluation fixture does not raise that host, IPC, or production conversion limit.
+An off-by-default development worker built with `experimental-large-pdf` instead
+negotiates a PDF-only 200 MiB source stream and converts it from an anonymous
+spool in a supervised child. With an image-enabled Gemma library, a separate
+child stages bounded page-cited extractable rasters on anonymous temporary storage,
+including distinct images on the same page. The ingestion pipeline embeds
+them one at a time into the same atomic text/image generation. Image-only pages
+beyond reusable rasters, inline images and unsupported encodings fail the replacement
+rather than silently publishing partial coverage. A separate development-only
+`experimental-pdf-render` feature can load a PDFium library strictly beside the
+supervised worker binary and render an otherwise unsupported page as a bounded
+whole-page JPEG. Its provenance distinguishes a rendered page from an embedded
+image; the resulting vector still requires immutable Gemma image consent. For
+ordinary small-PDF ingestion, an inline figure on a text page is reported as
+missing visual evidence without mislabeling its searchable text as absent.
+The default production worker still excludes both experimental PDF features.
+An explicit Gemma-only PDF-render qualification recipe can now build a worker
+with the features, sign a target-specific PDFium loader and its separate
+complete license-notices artifact into the semantic catalog, and assemble the
+verified payloads beside the worker. On macOS the loader joins the Developer ID
+signing and notarization submission. This is **not** installed or release-qualified
+on all four targets. A qualification-only packaged-worker smoke requires a
+bounded `pdfPageRender` JPEG from a one-page synthetic non-reusable scan and
+compares the bundled license terms with the pinned target-specific archive.
+Resource ceilings, installed real-Gemma behavior, host
+navigation, rollback, and review remain outstanding. No release is approved.
+
+Once a replacement generation is published, superseded catalogue and Zvec records are reclaimed
+in bounded batches.
 
 ## Optional advanced packs
 

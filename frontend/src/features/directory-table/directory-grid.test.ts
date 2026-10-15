@@ -51,6 +51,24 @@ afterEach(() => {
 });
 
 describe('DirectoryGrid', () => {
+  it('marks built-in folder glyphs but not files or native icon images', () => {
+    const folder = entry({ kind: 'directory', name: 'Project' });
+    mount({ state: { type: 'loaded' }, source: entryArraySource([folder, entry()]) });
+    expect(root.querySelectorAll('svg.fm-grid-icon.fm-default-folder-icon')).toHaveLength(1);
+    expect(root.querySelectorAll('svg.fm-grid-icon:not(.fm-default-folder-icon)')).toHaveLength(1);
+
+    const nativeIconLoader = {
+      iconDataUri: vi.fn().mockReturnValue('data:image/png;base64,iVBORw=='),
+    } as unknown as NativeIconLoader;
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource([folder]),
+      nativeIconLoader,
+    });
+    expect(root.querySelector('img.fm-native-grid-icon')).not.toBeNull();
+    expect(root.querySelector('.fm-default-folder-icon')).toBeNull();
+  });
+
   it('overlays a loaded thumbnail and otherwise keeps the themed icon', () => {
     const thumbnailLoader = thumbnailLoaderReturning('data:image/jpeg;base64,/9j/4A==');
     mount({
@@ -187,6 +205,14 @@ describe('DirectoryGrid', () => {
     expect(alert?.textContent).toContain('network down');
     root.querySelector<HTMLButtonElement>('.fm-directory-retry')?.click();
     expect(onRetry).toHaveBeenCalled();
+  });
+
+  it('names the directory that could not be loaded', () => {
+    mount({ state: { type: 'error', message: 'permission denied' }, directoryName: 'Downloads' });
+
+    expect(root.querySelector('[role="alert"] strong')?.textContent).toBe(
+      'Unable to load directory “Downloads”.',
+    );
   });
 
   it('renders an empty-directory message once loaded with no entries', () => {

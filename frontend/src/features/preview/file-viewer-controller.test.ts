@@ -100,6 +100,60 @@ function textOf(state: FileViewerState | undefined): string | undefined {
 }
 
 describe('file viewer controller', () => {
+  it('previews a materialized PNG hit whose metadata omitted the extension', async () => {
+    const context = setup();
+    const location = { providerId: 'local', uri: 'file:///library/page_000.png' };
+    vi.mocked(context.client.readFileRange).mockResolvedValue({
+      data: [137, 80, 78, 71, 13, 10, 26, 10],
+      offset: 0,
+      length: 8,
+      eof: true,
+      probablyBinary: true,
+    });
+    createFileViewerController({
+      client: context.client,
+      entry: entry({
+        id: 'indexed-page',
+        location,
+        name: 'page_000.png',
+        mimeType: 'image/png',
+      }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        status: 'ready',
+        content: { kind: 'image', dataUri: expect.stringContaining('data:image/png;base64,') },
+      }),
+    );
+    expect(context.client.readFileRange).toHaveBeenCalledWith(
+      { location, offset: 0, length: expect.any(Number) },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('reports an unavailable materialized image as a read error, not an unsupported format', async () => {
+    const context = setup();
+    vi.mocked(context.client.readFileRange).mockRejectedValue(
+      new Error('Synthetic source file is unavailable'),
+    );
+    createFileViewerController({
+      client: context.client,
+      entry: entry({
+        location: { providerId: 'local', uri: 'file:///library/page_000.png' },
+        name: 'page_000.png',
+        mimeType: 'image/png',
+      }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        status: 'error',
+        message: 'Synthetic source file is unavailable',
+      }),
+    );
+  });
+
   it('shows the first PPTX slide before the complete presentation is ready', async () => {
     const context = setup();
     let resolveFullPdf:

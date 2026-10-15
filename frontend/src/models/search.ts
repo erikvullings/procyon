@@ -51,6 +51,8 @@ export interface SearchQuery {
     readonly libraryId: string;
     readonly scope: SemanticSearchScope;
     readonly enrolledRootIds: string[];
+    /** Source identity for an exploratory similarity query, not a concept filter. */
+    readonly selectedConcept?: { readonly vocabularyId: string; readonly conceptUri: string };
   };
   readonly concept?: {
     readonly vocabularyId: string;

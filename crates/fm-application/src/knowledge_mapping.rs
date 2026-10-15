@@ -553,6 +553,7 @@ pub(crate) fn evidence_to_dto(
         media_type: evidence.media_type,
         modified_at_ms: evidence.modified_at_ms,
         source_position: evidence.source_position,
+        pdf_image_skipped_pages: evidence.pdf_image_skipped_pages,
         generated: evidence.generated,
         unavailable: evidence.unavailable,
         stale,

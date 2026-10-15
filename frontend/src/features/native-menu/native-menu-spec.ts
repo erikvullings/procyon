@@ -161,14 +161,13 @@ function fileMenu(actions: readonly ActionDescriptor[], canOpenNewWindow: boolea
   };
 }
 
-/** Only Copy/Paste/Select All: this app has no Undo/Redo feature and no Cut action anywhere in
- * the registry. Native AppKit already gives Cut/Copy/Paste/Undo inside text fields (e.g. the
- * Preferences dialog) for free via the standard responder chain - no menu wiring needed there. */
+/** Native Edit roles act on focused text fields, not on selected files. */
 function editMenu(actions: readonly ActionDescriptor[], useNativeEditRoles: boolean): NativeMenu {
   return {
     title: t('menu', 'edit'),
     items: useNativeEditRoles
       ? [
+          { kind: 'role', role: 'cut' },
           { kind: 'role', role: 'copy' },
           { kind: 'role', role: 'paste' },
           { kind: 'role', role: 'selectAll' },

@@ -265,3 +265,7 @@ the app's capabilities and which text fields/inputs rely on for their built-in E
 - 2026-09-03 copilot: Status corrected to `in_progress`. macOS has been manually verified, but the
   acceptance criterion requires both platforms and the Windows menu remains compile-/unit-tested
   only.
+- 2026-10-12 Copilot: Added a text-only macOS Cut responder-chain Edit item after a user
+  report; this does not create a file-cut action or change the Windows Edit menu.
+  The frontend menu-spec and macOS/platform role tests pass. Live clipboard
+  operation in the isolated native review window remains unverified.

@@ -49,6 +49,16 @@ pub struct SearchSemanticPredicate {
     pub scope: SemanticSearchScope,
     #[serde(default)]
     pub enrolled_root_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_concept: Option<SearchSemanticConceptSource>,
+}
+
+/// Provenance for a similarity query chosen from a vocabulary, not an annotation filter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchSemanticConceptSource {
+    pub vocabulary_id: String,
+    pub concept_uri: String,
 }
 
 /// Relationship expansion applied to a concept virtual folder.

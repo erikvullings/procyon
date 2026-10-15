@@ -12,6 +12,11 @@ import {
   writeOnnxRuntimeQualification,
 } from './onnx-runtime-qualification.mjs';
 import {
+  pdfiumTarget,
+  preparePinnedPdfium,
+  writePdfiumNotices,
+} from './pdfium-runtime-qualification.mjs';
+import {
   nativeLibraryNames,
   preparePinnedZvecRuntime,
   verifyMacDeveloperIdSignature,
@@ -24,12 +29,21 @@ export { nativeLibraryNames };
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-export const PRODUCTION_CHUNKER_IDENTITY = 'structural/3';
-export const PRODUCTION_CONVERTER_IDENTITY = 'docling-pdf/1036000+baseline/2';
+export const PRODUCTION_CHUNKER_IDENTITY = 'structural/4';
+export const PRODUCTION_CONVERTER_IDENTITY = 'docling-pdf/1036001+baseline/3';
 
 export function supportedSemanticTarget(platform = process.platform, architecture = process.arch) {
   const target = zvecRuntimeTarget(platform, architecture);
   return { os: target.operatingSystem, arch: target.architecture, rust: target.rustTarget };
+}
+
+export function productionWorkerFeatures(target, gemmaOriginalFiles, pdfRender = false) {
+  if (!gemmaOriginalFiles) return 'semantic-runtime';
+  const base =
+    target.os === 'macos' && target.arch === 'aarch64'
+      ? 'gemma-native,gemma-metal'
+      : 'gemma-native';
+  return pdfRender ? `${base},experimental-pdf-render` : base;
 }
 
 function run(command, args, options = {}) {
@@ -45,7 +59,7 @@ function run(command, args, options = {}) {
   }
 }
 
-function applyPlatformSigning(target, executable, runtime) {
+function applyPlatformSigning(target, executable, runtime, pdfium) {
   if (target.os === 'windows') {
     return { signingStatus: 'unsigned', notarizationStatus: 'not-applicable' };
   }
@@ -63,7 +77,7 @@ function applyPlatformSigning(target, executable, runtime) {
     return { signingStatus: 'unsigned-local-build', notarizationStatus: 'not-requested' };
   }
 
-  for (const payload of [runtime, executable]) {
+  for (const payload of [runtime, executable, ...(pdfium ? [pdfium] : [])]) {
     run('codesign', [
       '--force',
       '--options',
@@ -129,9 +143,13 @@ export function parseProductionBundleArguments(args) {
       );
     }
     if (
-      !['--output', '--release-base-url', '--source-revision', '--gemma-original-files'].includes(
-        name,
-      )
+      ![
+        '--output',
+        '--release-base-url',
+        '--source-revision',
+        '--gemma-original-files',
+        '--experimental-pdf-render',
+      ].includes(name)
     ) {
       throw new Error(`unknown semantic bundle argument: ${name}`);
     }
@@ -139,6 +157,14 @@ export function parseProductionBundleArguments(args) {
   }
   for (const required of ['--output', '--release-base-url', '--source-revision']) {
     if (!values.has(required)) throw new Error(`${required} is required`);
+  }
+  if (values.has('--experimental-pdf-render')) {
+    if (values.get('--experimental-pdf-render') !== 'true') {
+      throw new Error('--experimental-pdf-render accepts only true');
+    }
+    if (!values.has('--gemma-original-files')) {
+      throw new Error('experimental PDF rendering requires opt-in Gemma original files');
+    }
   }
   return values;
 }
@@ -247,6 +273,13 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
     : undefined;
   const modelCache = await fetchMultilingualModel(path.join(cargoTarget, 'semantic-model-cache'));
   const gemmaOriginalFiles = values.get('--gemma-original-files');
+  const experimentalPdfRender = values.get('--experimental-pdf-render') === 'true';
+  const preparedPdfium = experimentalPdfRender
+    ? await preparePinnedPdfium(
+        pdfiumTarget(),
+        path.join(cargoTarget, 'semantic-pdfium-runtime-cache'),
+      )
+    : undefined;
   run('rustup', ['target', 'add', target.rust]);
   run(
     'cargo',
@@ -259,7 +292,7 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
       '-p',
       'fm-semantic-worker',
       '--features',
-      gemmaOriginalFiles ? 'gemma-native' : 'semantic-runtime',
+      productionWorkerFeatures(target, gemmaOriginalFiles, experimentalPdfRender),
       '--bin',
       'fm-semantic-worker',
     ],
@@ -299,7 +332,17 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
       path.join(runtimeDirectory, onnxDescriptor.loader.name),
     );
   }
-  const trust = applyPlatformSigning(target, executable, runtime);
+  const pdfiumRuntime = preparedPdfium
+    ? path.join(runtimeDirectory, path.basename(preparedPdfium.library))
+    : undefined;
+  const pdfiumNotices = preparedPdfium
+    ? path.join(runtimeDirectory, 'pdfium-licenses.txt')
+    : undefined;
+  if (preparedPdfium) {
+    fs.copyFileSync(preparedPdfium.library, pdfiumRuntime);
+    writePdfiumNotices(preparedPdfium, pdfiumNotices);
+  }
+  const trust = applyPlatformSigning(target, executable, runtime, pdfiumRuntime);
   const dependencyEvidence = verifyRuntimeBinary(runtime, runtimeTarget);
   smokeExecutable(executable, [runtimeDirectory]);
 
@@ -323,6 +366,7 @@ export async function buildSemanticProductionBundle(args = process.argv.slice(2)
     PRODUCTION_CONVERTER_IDENTITY,
     PRODUCTION_CHUNKER_IDENTITY,
     ...(gemmaOriginalFiles ? [path.resolve(gemmaOriginalFiles)] : []),
+    ...(pdfiumRuntime ? [pdfiumRuntime, pdfiumNotices] : []),
   ]);
   const output = path.resolve(values.get('--output'));
   smokePackagedExecutableOffline(

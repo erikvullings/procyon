@@ -177,5 +177,13 @@ export function resolveEntryIcon(
 
 /** Renders the themed icon shown ahead of the entry name in the directory table. */
 export function entryIcon(entry: EntrySummary, attrs?: IconAttrs): m.Children {
-  return resolveEntryIcon(entry)(attrs);
+  const renderer = resolveEntryIcon(entry);
+  return renderer(
+    entry.kind === 'directory' && renderer === folderIcon
+      ? {
+          ...attrs,
+          className: [attrs?.className, 'fm-default-folder-icon'].filter(Boolean).join(' '),
+        }
+      : attrs,
+  );
 }

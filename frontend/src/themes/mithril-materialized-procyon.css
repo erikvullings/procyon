@@ -237,6 +237,7 @@
 .fm-app-shell .input-field input[type="number"] {
   appearance: textfield;
   -moz-appearance: textfield;
+  width: 100%;
   padding-right: 1.75rem;
 }
 
@@ -525,12 +526,16 @@
 
 .fm-app-shell .input-field .number-input-controls {
   top: calc(0.82rem * 1.15 + 0.2rem);
-  right: 0.25rem;
+  right: 0.35rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
   height: calc(var(--fm-row-height) - 2px);
   pointer-events: none;
+}
+
+.fm-app-shell .input-field.col .number-input-controls {
+  right: 1.1rem;
 }
 
 .fm-app-shell .input-field .number-input-control {

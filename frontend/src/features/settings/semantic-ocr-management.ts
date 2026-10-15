@@ -13,6 +13,7 @@ import type {
 
 export interface SemanticOcrManagementAttrs {
   readonly client: FileManagerClient;
+  readonly hideHeading?: boolean;
 }
 
 type BusyAction = 'consent' | 'start' | 'cancel';
@@ -396,13 +397,20 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
       const current = status;
       const available = current.availability.state === 'available';
       return m(
-        'section.fm-semantic-ocr-management.col.s12',
+        'section.fm-semantic-ocr-management',
         {
-          'aria-labelledby': 'fm-semantic-ocr-heading',
+          ...(attrs.hideHeading
+            ? { 'aria-label': t('semanticOcr', 'title') }
+            : { 'aria-labelledby': 'fm-semantic-ocr-heading' }),
           'aria-busy': busy === undefined ? 'false' : 'true',
         },
         [
-          m('h4.fm-settings-section-heading#fm-semantic-ocr-heading', t('semanticOcr', 'title')),
+          attrs.hideHeading
+            ? undefined
+            : m(
+                'h4.fm-settings-section-heading#fm-semantic-ocr-heading',
+                t('semanticOcr', 'title'),
+              ),
           m('p.fm-semantic-ocr-description', t('semanticOcr', 'description')),
           available
             ? m('dl.fm-semantic-ocr-availability', [

@@ -1,0 +1,89 @@
+{
+  "model": "intfloat/multilingual-e5-small",
+  "revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+  "runtime": "Python onnxruntime 1.22.1 CPU mean-pooling",
+  "dimensions": 384,
+  "corpusSha256": "bd63545ded82c77669444f64df4b89c562ff6e49e9da625d89e166a74c71933c",
+  "documentCount": 35,
+  "queryCount": 8,
+  "result": {
+    "positiveCases": 8,
+    "hitAt1": 0.875,
+    "hitAt3": 1.0,
+    "mrr": 0.9375,
+    "cases": [
+      {
+        "id": "swahili-6",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "1676#23",
+          "8408#2",
+          "16282#6"
+        ]
+      },
+      {
+        "id": "swahili-8",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "4281#15",
+          "9802#0",
+          "90189#0"
+        ]
+      },
+      {
+        "id": "swahili-12",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "56960#0",
+          "5825#4",
+          "95325#1"
+        ]
+      },
+      {
+        "id": "swahili-13",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "3638#4",
+          "96018#1",
+          "57404#5"
+        ]
+      },
+      {
+        "id": "swahili-22",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2633#5",
+          "9266#1",
+          "33370#8"
+        ]
+      },
+      {
+        "id": "swahili-27",
+        "firstRelevantRank": 2,
+        "topIds": [
+          "64652#5",
+          "64652#0",
+          "81194#2"
+        ]
+      },
+      {
+        "id": "swahili-29",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "8390#3",
+          "8302#1",
+          "70148#7"
+        ]
+      },
+      {
+        "id": "swahili-32",
+        "firstRelevantRank": 1,
+        "topIds": [
+          "2173#26",
+          "87579#1",
+          "86166#0"
+        ]
+      }
+    ]
+  }
+}

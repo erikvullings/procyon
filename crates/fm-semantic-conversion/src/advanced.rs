@@ -1,5 +1,6 @@
 //! Optional advanced converter adapter and baseline-safe fallback chain.
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::io::Read;
 use std::sync::Arc;
@@ -204,6 +205,11 @@ impl DocumentConverter for OptionalConverter {
             BoundedBytes::Bytes(bytes) => bytes,
             BoundedBytes::Outcome(outcome) => return Ok(outcome),
         };
+        if context.pdf_page_window().is_some() {
+            return self
+                .baseline
+                .convert(SourceContent::Bytes(&bytes), metadata, context);
+        }
         if self.selection == AdvancedSelection::Preferred
             && let Some(advanced) = &self.advanced
         {
@@ -211,27 +217,45 @@ impl DocumentConverter for OptionalConverter {
                 .convert_with_report(SourceContent::Bytes(&bytes), metadata, context)?
                 .outcome;
             if let ConversionOutcome::Converted(mut document) = advanced_outcome {
-                if context.visual_evidence()
-                    && document.visuals().is_empty()
-                    && let ConversionOutcome::Converted(baseline) =
-                        self.baseline
-                            .convert(SourceContent::Bytes(&bytes), metadata, context)?
-                {
-                    document.replace_visual_evidence(
-                        baseline.visuals().to_vec(),
-                        baseline.visual_omissions().to_vec(),
-                    );
+                if context.visual_evidence() && document.visuals().is_empty() {
+                    match self
+                        .baseline
+                        .convert(SourceContent::Bytes(&bytes), metadata, context)?
+                    {
+                        ConversionOutcome::Converted(baseline) => document.replace_visual_evidence(
+                            baseline.visuals().to_vec(),
+                            baseline.visual_omissions().to_vec(),
+                        ),
+                        failed @ (ConversionOutcome::Malformed { .. }
+                        | ConversionOutcome::OverBudget { .. }
+                        | ConversionOutcome::Cancelled
+                        | ConversionOutcome::Encrypted { .. }) => return Ok(failed),
+                        _ => {}
+                    }
                 }
                 return Ok(ConversionOutcome::Converted(document));
             }
-            if context.visual_evidence()
-                && matches!(advanced_outcome, ConversionOutcome::NoTextLayer { .. })
-                && let ConversionOutcome::Converted(document) =
-                    self.baseline
-                        .convert(SourceContent::Bytes(&bytes), metadata, context)?
-                && !document.visuals().is_empty()
+            if matches!(advanced_outcome, ConversionOutcome::NoTextLayer { .. })
+                && bytes.starts_with(b"%PDF-")
             {
-                return Ok(ConversionOutcome::Converted(document));
+                let baseline =
+                    self.baseline
+                        .convert(SourceContent::Bytes(&bytes), metadata, context)?;
+                match baseline {
+                    ConversionOutcome::Converted(document)
+                        if context.visual_evidence() && !document.visuals().is_empty() =>
+                    {
+                        return Ok(ConversionOutcome::Converted(document));
+                    }
+                    ConversionOutcome::Malformed { .. }
+                    | ConversionOutcome::OverBudget { .. }
+                    | ConversionOutcome::Cancelled
+                    | ConversionOutcome::Encrypted { .. } => return Ok(baseline),
+                    ConversionOutcome::NoTextLayer { .. } if context.visual_evidence() => {
+                        return Ok(baseline);
+                    }
+                    _ => {}
+                }
             }
             if matches!(
                 advanced_outcome,
@@ -269,16 +293,16 @@ impl DocumentConverter for OptionalConverter {
     }
 }
 
-enum BoundedBytes {
-    Bytes(Vec<u8>),
+enum BoundedBytes<'a> {
+    Bytes(Cow<'a, [u8]>),
     Outcome(ConversionOutcome),
 }
 
-fn bounded_bytes(
-    content: SourceContent<'_>,
+fn bounded_bytes<'a>(
+    content: SourceContent<'a>,
     metadata: &DocumentMetadata,
     context: &ConversionContext,
-) -> Result<BoundedBytes, ConversionError> {
+) -> Result<BoundedBytes<'a>, ConversionError> {
     let maximum = context.budgets().max_source_bytes;
     if metadata
         .byte_length()
@@ -290,13 +314,13 @@ fn bounded_bytes(
         }));
     }
     let bytes = match content {
-        SourceContent::Bytes(bytes) => bytes.to_vec(),
+        SourceContent::Bytes(bytes) => Cow::Borrowed(bytes),
         SourceContent::Reader(reader) => {
             let mut bytes = Vec::new();
             reader
                 .take(maximum.saturating_add(1))
                 .read_to_end(&mut bytes)?;
-            bytes
+            Cow::Owned(bytes)
         }
     };
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > maximum {
@@ -369,5 +393,28 @@ fn malformed(detail: &str) -> AdvancedConversion {
             detail: detail.to_owned(),
         },
         provenance_precision: ProvenancePrecision::FileOnly,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn already_bounded_source_bytes_are_borrowed_without_another_copy() {
+        let bytes = b"%PDF-1.7 synthetic text";
+        let metadata = DocumentMetadata::unknown().with_media_type("application/pdf");
+        let context = ConversionContext::new();
+        match bounded_bytes(SourceContent::Bytes(bytes), &metadata, &context).unwrap() {
+            BoundedBytes::Bytes(Cow::Borrowed(borrowed)) => {
+                assert_eq!(borrowed.as_ptr(), bytes.as_ptr());
+            }
+            _ => panic!("borrowed PDF source was cloned"),
+        }
+        let mut reader = std::io::Cursor::new(bytes);
+        assert!(matches!(
+            bounded_bytes(SourceContent::Reader(&mut reader), &metadata, &context).unwrap(),
+            BoundedBytes::Bytes(Cow::Owned(_))
+        ));
     }
 }

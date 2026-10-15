@@ -307,6 +307,7 @@ impl KnowledgeAnswerCoordinator {
                     user_prompt,
                     images: Vec::new(),
                     maximum_tokens: MAX_ANSWER_TOKENS,
+                    context_window: None,
                     temperature: ANSWER_TEMPERATURE,
                 },
                 &cancellation,

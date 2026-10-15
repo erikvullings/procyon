@@ -148,6 +148,13 @@ semantic components are not installed.
 - [x] 0227 Multiformat summary visual evidence *(needs 0180, 0184, 0185, 0192)*
 - [ ] 0239 Optional EmbeddingGemma 2 semantic package *(needs 0195, 0196;
   separately installed alongside default E5, with measured qualification)*
+- [x] 0241 Restore Include folder in semantic search *(consent copy simplified; native manual preflight remains open)*
+- [x] 0242 Curated SKOS starter vocabularies *(needs 0187; opt-in, independent of release gates)*
+- [x] 0243 Generation profile UX and model limits *(needs 0184; independent follow-up)*
+- [ ] 0244 Bounded large-PDF text and Gemma page vision *(needs 0177, 0179, 0180, 0182, 0183,
+  0192, 0194, 0195, 0227; release prerequisite of 0239)*
+- [ ] 0245 PDF footnote reading order and separation *(needs 0180, 0192; tracked follow-up,
+  not an experimental release gate)*
 
 ## Structured knowledge search
 

@@ -31,6 +31,14 @@ describe('knowledgeEvidencePage', () => {
     ).toBe(37);
     expect(
       knowledgeEvidencePage(
+        '{"kind":"exact","value":{"kind":"pdfImage","page_number":3,"image_index":1}}',
+      ),
+    ).toBe(3);
+    expect(
+      knowledgeEvidencePage('{"kind":"exact","value":{"kind":"pdfPageRender","page_number":3}}'),
+    ).toBe(3);
+    expect(
+      knowledgeEvidencePage(
         '{"kind":"span","first":{"kind":"pdfBlock","page_number":41,"block_index":3},' +
           '"last":{"kind":"pdfBlock","page_number":42,"block_index":0}}',
       ),
@@ -1575,7 +1583,7 @@ describe('AppShell', () => {
     const toolbar = root.querySelector('.fm-workspace-toolbar');
     expect(toolbar).not.toBeNull();
     expect(root.querySelector('.fm-navigation-controls')).not.toBeNull();
-    expect(toolbar?.querySelectorAll('.fm-toolbar-separator')).toHaveLength(4);
+    expect(toolbar?.querySelectorAll('.fm-toolbar-separator')).toHaveLength(5);
     expect(toolbar?.querySelector('.fm-search-controls')).not.toBeNull();
     expect(toolbar?.querySelector('.fm-toolbar-spacer')).not.toBeNull();
     expect(
@@ -1920,6 +1928,15 @@ describe('AppShell', () => {
       'F7 New folder',
       'F8 Delete',
     ]);
+    const keys = [
+      ...root.querySelectorAll<HTMLButtonElement>('.fm-function-key-list .fm-function-key'),
+    ];
+    expect(keys).toHaveLength(8);
+    expect(keys.every((key) => key instanceof HTMLButtonElement && key.type === 'button')).toBe(
+      true,
+    );
+    expect(keys[0]?.tabIndex).toBe(0);
+    expect(keys[0]?.disabled).toBe(false);
   });
 
   it('toggles and persists the hidden operation centre from the toolbar and Alt+Z', async () => {
@@ -2018,7 +2035,7 @@ describe('AppShell', () => {
         type: 'semantic.ingestionProgress',
         jobId: 'root:one',
         stage: 'reconciling',
-        completed: 64,
+        completed: 1,
         total: 0,
         errors: 0,
       },
@@ -2026,17 +2043,46 @@ describe('AppShell', () => {
     await vi.waitFor(() =>
       expect(root.querySelector<HTMLButtonElement>('.fm-activity-count')?.textContent).toBe('1'),
     );
+    expect(root.querySelector('.fm-activity-count .fm-icon-activity')).not.toBeNull();
+    expect(root.querySelector('.fm-activity-count')?.getAttribute('title')).toContain(
+      'Show background activity',
+    );
+    const lastSeparator = [...root.querySelectorAll('.fm-toolbar-separator')].at(-1);
+    const settingsButton = root.querySelector('.fm-settings-button');
+    if (lastSeparator === undefined || settingsButton === null) {
+      throw new Error('Missing activity separator or Settings button');
+    }
+    expect(
+      lastSeparator.compareDocumentPosition(settingsButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     root.querySelector<HTMLButtonElement>('.fm-activity-count')?.click();
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-activity-popover')?.textContent).toContain(
-        '64 entries scanned',
-      ),
+      expect(root.querySelector('.fm-activity-popover')?.textContent).toContain('1 entry scanned'),
     );
+    expect(root.querySelector('.fm-activity-count')?.getAttribute('aria-label')).toContain(
+      '1 background activity',
+    );
+    const activity = root.querySelector<HTMLButtonElement>('.fm-activity-item');
+    expect(activity?.textContent).toContain('Semantic indexing');
+    expect(activity?.textContent).toContain('Open Semantic settings');
+    client.emit({
+      eventId: 802,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: 'root:one',
+        stage: 'embedding',
+        completed: 64,
+        total: 0,
+        errors: 0,
+      },
+    });
+    await vi.waitFor(() => expect(activity?.textContent).toContain('64 entries scanned'));
     expect(root.querySelector('.fm-activity-popover')?.textContent).toContain(
       'Open Semantic settings',
     );
     client.emit({
-      eventId: 802,
+      eventId: 803,
       timestamp: new Date().toISOString(),
       payload: {
         type: 'semantic.ingestionProgress',
@@ -2102,10 +2148,10 @@ describe('AppShell', () => {
       },
     });
     await vi.waitFor(() => expect(root.querySelector('.fm-activity-failed')).not.toBeNull());
-    root.querySelector<HTMLButtonElement>('.fm-activity-count')?.click();
+    root.querySelector<HTMLButtonElement>('.fm-activity-failed')?.click();
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-activity-popover')?.textContent).toContain(
-        'Semantic indexing failed',
+        '1 source failed to index',
       ),
     );
     root.querySelector<HTMLButtonElement>('.fm-activity-item')?.click();
@@ -2520,7 +2566,7 @@ describe('AppShell', () => {
       span.textContent?.includes('F5 Copy'),
     );
     expect(footerKey).not.toBeUndefined();
-    footerKey?.click();
+    footerKey?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 1 }));
 
     expect(startOperation).not.toHaveBeenCalled();
     await confirmRoutineOperation('Copy');
@@ -2531,6 +2577,35 @@ describe('AppShell', () => {
       destination: { uri: 'mock:///Documents' },
       conflictPolicy: 'ask',
     });
+  });
+
+  it('routes a click in the neighboring F6 button cell to Move, not Copy', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('.env'));
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    [...(activePane?.querySelectorAll<HTMLElement>('.fm-directory-row') ?? [])]
+      .find((row) => row.textContent?.includes('.env'))
+      ?.click();
+    m.redraw.sync();
+    const keys = [...root.querySelectorAll<HTMLButtonElement>('.fm-function-key')];
+    const move = keys.find((key) => key.textContent?.includes('F6 Move'));
+    expect(move?.previousElementSibling?.textContent).toContain('F5 Copy');
+    move?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 9999 }));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-operation-confirmation-modal.active')).not.toBeNull(),
+    );
+    const modal = root.querySelector('.fm-operation-confirmation-modal.active');
+    expect(
+      [...(modal?.querySelectorAll<HTMLButtonElement>('button') ?? [])].some(
+        (button) => button.textContent?.trim() === 'Move',
+      ),
+    ).toBe(true);
+    expect(
+      [...(modal?.querySelectorAll<HTMLButtonElement>('button') ?? [])].some(
+        (button) => button.textContent?.trim() === 'Copy',
+      ),
+    ).toBe(false);
   });
 
   it('trashes the selected file with F8 when core.trash owns the shortcut (task 0043)', async () => {
@@ -3073,13 +3148,8 @@ describe('AppShell', () => {
       [...(activePane()?.querySelectorAll('.fm-breadcrumb-segment') ?? [])].map(
         (segment) => segment.textContent,
       ),
-    ).toEqual(['/', 'search', 'local', 'content: ERROR']);
-    // The search:// pane's first row is a synthetic ".." parent entry (for backing out of the
-    // virtual search results location) - skip it to select an actual result.
-    const resultRow = () =>
-      [...(activePane()?.querySelectorAll<HTMLElement>('.fm-directory-row') ?? [])].find(
-        (row) => !row.textContent?.includes('..'),
-      );
+    ).toEqual(['Search results · ERROR']);
+    const resultRow = () => activePane()?.querySelector<HTMLElement>('.fm-grouped-entry');
     await vi.waitFor(() => expect(resultRow()).not.toBeUndefined());
     resultRow()?.click();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F3', bubbles: true }));
@@ -3089,6 +3159,225 @@ describe('AppShell', () => {
     const searchInput = root.querySelector<HTMLInputElement>('.fm-file-viewer input[type="text"]');
     expect(searchInput).not.toBeNull();
     expect(searchInput?.value).toBe('ERROR');
+  });
+
+  it('handles failed, empty, and matched searches from a selected bundled concept', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    const workspace = await client.startWorkspace();
+    const status = await client.getSemanticLibraryStatus();
+    const [indexed] = await client.listKnowledgeRoots({ workspaceId: workspace.id });
+    if (!indexed) throw new Error('Missing indexed mock root');
+    vi.spyOn(client, 'getSemanticLibraryStatus').mockResolvedValue({
+      ...status,
+      roots: [
+        {
+          id: indexed.rootId,
+          location: indexed.location,
+          recursive: true,
+          stableIdentityVerified: true,
+          workspaceReferences: [workspace.id],
+          eligibilityOverrides: [],
+          eligibilityReasonCounts: [],
+          ocrRequiredFiles: [],
+          availability: { state: 'available' },
+          reconciliationGeneration: 4,
+          indexedGeneration: 4,
+          exclusions: [],
+          attachedVocabularyIds: [],
+        },
+      ],
+    });
+    vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([{ ...indexed, indexedSources: 3 }]);
+    let rejectStart: ((error: Error) => void) | undefined;
+    const startSearch = vi.spyOn(client, 'startSearch').mockImplementation(
+      () =>
+        new Promise<never>((_resolve, reject) => {
+          rejectStart = reject;
+        }),
+    );
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F7', altKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-files-modal.active')).not.toBeNull(),
+    );
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelector('#find-files-concept')).not.toBeNull());
+    const filter = root.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!filter) throw new Error('Concept filter missing');
+    filter.value = 'Mental stress';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-concept-choice')?.textContent).toContain('Mental stress'),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
+    m.redraw.sync();
+    const submit = [
+      ...root.querySelectorAll<HTMLButtonElement>(
+        '.fm-find-files-modal.active .modal-footer button',
+      ),
+    ].find((button) => button.textContent?.trim() === 'Search');
+    expect(submit?.disabled).toBe(false);
+    submit?.click();
+    await vi.waitFor(() => expect(startSearch).toHaveBeenCalledOnce());
+    expect(startSearch.mock.calls[0]?.[0].structuredQuery?.semantic?.query).toContain(
+      'Mental stress',
+    );
+    expect(startSearch.mock.calls[0]?.[0].structuredQuery?.semantic?.selectedConcept).toEqual({
+      vocabularyId: 'unesco-psychology',
+      conceptUri: 'http://vocabularies.unesco.org/thesaurus/concept13013',
+    });
+    const syntheticQuery = startSearch.mock.calls[0]?.[0].structuredQuery?.semantic?.query;
+    if (!syntheticQuery) throw new Error('Missing synthetic concept query');
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-files-body [role="status"]')?.textContent).toContain(
+        'Starting search',
+      ),
+    );
+    rejectStart?.(new Error('Synthetic worker unavailable'));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-files-body [role="alert"]')?.textContent).toContain(
+        'Synthetic worker unavailable',
+      ),
+    );
+    startSearch.mockRestore();
+    const retry = vi.spyOn(client, 'startSearch');
+    const syntheticPngSnapshot = (snapshot: Awaited<ReturnType<typeof client.navigatePane>>) =>
+      !snapshot.location.uri.startsWith('search://')
+        ? snapshot
+        : {
+            ...snapshot,
+            entries: snapshot.entries.map((hit) => {
+              const { extension: _extension, ...withoutExtension } = hit;
+              return {
+                ...withoutExtension,
+                id: 'synthetic-page-000',
+                location: { providerId: 'mock', uri: 'mock:///Documents/page_000.png' },
+                name: 'page_000.png',
+                mimeType: 'image/png',
+              };
+            }),
+          };
+    const navigatePane = client.navigatePane.bind(client);
+    vi.spyOn(client, 'navigatePane').mockImplementation(async (request, signal) => {
+      return syntheticPngSnapshot(await navigatePane(request, signal));
+    });
+    const listDirectory = client.listDirectory.bind(client);
+    vi.spyOn(client, 'listDirectory').mockImplementation(async (request, signal) => {
+      return syntheticPngSnapshot(await listDirectory(request, signal));
+    });
+    const readFileRange = vi.spyOn(client, 'readFileRange').mockResolvedValue({
+      data: [137, 80, 78, 71, 13, 10, 26, 10],
+      offset: 0,
+      length: 8,
+      eof: true,
+      probablyBinary: true,
+    });
+    [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
+      .find((button) => button.textContent?.trim() === 'Search')
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-files-modal.active')).toBeNull());
+    await vi.waitFor(() =>
+      expect(
+        [...root.querySelectorAll('.fm-semantic-evidence[role="status"]')].some((element) =>
+          element.textContent?.includes('No matches'),
+        ),
+      ).toBe(true),
+    );
+    expect(retry).toHaveBeenCalledOnce();
+    expect((await retry.mock.results[0]?.value)?.executionMode).toBe('semantic');
+    expect(root.querySelector('.fm-find-files-modal.active')).toBeNull();
+    expect(
+      [...root.querySelectorAll('.fm-breadcrumb')].some((breadcrumb) =>
+        breadcrumb.textContent?.includes('Mental stress (UNESCO)'),
+      ),
+    ).toBe(true);
+
+    const location = { providerId: 'mock', uri: 'mock:///Documents/report.pdf' };
+    const file = await client.loadEditableFile({ location });
+    await client.saveEditableFile({
+      location,
+      content: syntheticQuery,
+      expectedRevision: file.revision,
+      overwriteConflict: false,
+    });
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'F7', altKey: true, bubbles: true }),
+    );
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-files-modal.active')).not.toBeNull(),
+    );
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelector('#find-files-concept')).not.toBeNull());
+    const nextFilter = root.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!nextFilter) throw new Error('Concept filter missing on retry');
+    nextFilter.value = 'Mental stress';
+    nextFilter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-concept-choice')).not.toBeNull());
+    root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
+    m.redraw.sync();
+    const retrySubmit = [
+      ...root.querySelectorAll<HTMLButtonElement>(
+        '.fm-find-files-modal.active .modal-footer button',
+      ),
+    ].find((button) => button.textContent?.trim() === 'Search');
+    expect(retrySubmit?.disabled).toBe(false);
+    retrySubmit?.click();
+    await vi.waitFor(() => expect(retry).toHaveBeenCalledTimes(2));
+    const matchResponse = await retry.mock.results[1]?.value;
+    expect(matchResponse?.semanticResults).toHaveLength(1);
+    await vi.waitFor(() =>
+      expect(
+        [...root.querySelectorAll('.fm-pane-tab')].filter((tab) =>
+          tab.textContent?.includes('Related to Mental stress (UNESCO)'),
+        ),
+      ).toHaveLength(2),
+    );
+    const latestTab = [...root.querySelectorAll('.fm-pane-tab')]
+      .filter((tab) => tab.textContent?.includes('Related to Mental stress (UNESCO)'))
+      .at(-1);
+    const resultsPane = latestTab?.closest('.fm-pane');
+    await vi.waitFor(() => {
+      expect(
+        [...(resultsPane?.querySelectorAll('.fm-directory-row') ?? [])].some((row) =>
+          row.textContent?.includes('page_000'),
+        ),
+      ).toBe(true);
+      expect(resultsPane?.querySelector('.fm-semantic-evidence')).toBeNull();
+    });
+    expect(retry).toHaveBeenCalledTimes(2);
+    expect(resultsPane?.querySelector('.fm-search-results-title')?.textContent).toBe(
+      'Search results · Mental stress (UNESCO)',
+    );
+    expect(resultsPane?.querySelector('.fm-search-result-scope')?.textContent).toBe(
+      'All enrolled folders',
+    );
+    const pngRow = [
+      ...(resultsPane?.querySelectorAll<HTMLElement>('.fm-grouped-entry') ?? []),
+    ].find((row) => row.textContent?.includes('page_000'));
+    pngRow?.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F3', bubbles: true }));
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector('.fm-file-viewer img[src^="data:image/png;base64,"]'),
+      ).not.toBeNull(),
+    );
+    expect(readFileRange).toHaveBeenCalledWith(
+      {
+        location: { providerId: 'mock', uri: 'mock:///Documents/page_000.png' },
+        offset: 0,
+        length: expect.any(Number),
+      },
+      expect.any(AbortSignal),
+    );
   });
 
   it('closes the Lister viewer via its close button', async () => {
@@ -4631,7 +4920,7 @@ describe('AppShell', () => {
     expect(themeButton('Light')).toBeInstanceOf(HTMLButtonElement);
     expect(themeButton('Dark')).toBeInstanceOf(HTMLButtonElement);
     expect(themeButton('Auto')).toBeInstanceOf(HTMLButtonElement);
-    openSettingsSection('Semantic');
+    openSettingsSection('Semantic (RAG)');
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-semantic-management')?.textContent).toContain('Not installed'),
     );
@@ -4671,7 +4960,7 @@ describe('AppShell', () => {
     expect(root.querySelector('button[aria-label="Semantic Search…"]')).toBeNull();
 
     await openAppearanceSettings();
-    openSettingsSection('Semantic');
+    openSettingsSection('Semantic (RAG)');
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-semantic-management')?.textContent).toContain('Not installed'),
     );
@@ -4694,6 +4983,74 @@ describe('AppShell', () => {
     );
     expect(root.querySelector<HTMLDetailsElement>('.fm-settings-disclosure')?.open).toBe(true);
   });
+
+  it.each([
+    { outcome: 'succeeded', failure: undefined },
+    { outcome: 'failed', failure: new Error('Download rejected <script>') },
+  ] as const)(
+    'keeps the installation running after Settings closes and reports $outcome in the toolbar',
+    async ({ outcome, failure }) => {
+      const client = new MockFileManagerClient();
+      let finishInstall: (() => void) | undefined;
+      const install = vi.spyOn(client, 'acceptSemanticComponentInstallationOffer');
+      install.mockImplementation(
+        () =>
+          new Promise((resolve, reject) => {
+            finishInstall = () => {
+              if (failure === undefined) {
+                resolve({ installedArtifactIds: [] });
+              } else {
+                reject(failure);
+              }
+            };
+          }),
+      );
+      m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+      await openAppearanceSettings();
+      openSettingsSection('Semantic (RAG)');
+      await vi.waitFor(() => expect(root.textContent).toContain('Not installed'));
+      const semanticButton = (label: string): HTMLButtonElement => {
+        const button = [
+          ...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-management button'),
+        ].find((candidate) => candidate.textContent?.trim() === label);
+        if (button === undefined) throw new Error(`Missing semantic button: ${label}`);
+        return button;
+      };
+      semanticButton('Review installation').click();
+      await vi.waitFor(() => expect(root.textContent).toContain('Installation disclosure'));
+      semanticButton('Accept and install').click();
+      await vi.waitFor(() => expect(finishInstall).toBeTypeOf('function'));
+
+      root.querySelector<HTMLButtonElement>('.fm-settings-button')?.click();
+      m.redraw.sync();
+      expect(root.querySelector<HTMLDetailsElement>('.fm-settings-disclosure')?.open).toBe(false);
+      expect(root.querySelector('.fm-semantic-management')).toBeNull();
+      expect(root.querySelector('.fm-semantic-install-status')?.getAttribute('aria-label')).toBe(
+        'Installing…',
+      );
+      expect(root.querySelector('.fm-semantic-install-status svg')).not.toBeNull();
+      const status = root.querySelector<HTMLButtonElement>('.fm-semantic-install-status');
+      status?.click();
+      m.redraw.sync();
+      expect(root.querySelector<HTMLDetailsElement>('.fm-settings-disclosure')?.open).toBe(true);
+      expect(root.querySelector('.fm-semantic-install button')).toBeNull();
+      root.querySelector<HTMLButtonElement>('.fm-settings-button')?.click();
+      m.redraw.sync();
+      expect(root.querySelector('.fm-semantic-management')).toBeNull();
+
+      finishInstall?.();
+      const selector = `.fm-semantic-install-${outcome}`;
+      await vi.waitFor(() => expect(root.querySelector(selector)).not.toBeNull());
+      expect(install).toHaveBeenCalledOnce();
+      expect(
+        root.querySelector('.fm-semantic-install-status')?.getAttribute('aria-label'),
+      ).toContain(failure === undefined ? 'Installed and enabled' : 'Installation failed');
+      expect(document.querySelector(`.toast${selector}`)?.textContent).toContain(
+        failure === undefined ? 'Installed and enabled' : 'Download rejected <script>',
+      );
+      expect(document.querySelector('.toast script')).toBeNull();
+    },
+  );
 
   it('shows one disabled search control immediately while worker availability is checked', async () => {
     const client = new MockFileManagerClient();
@@ -4915,7 +5272,10 @@ describe('AppShell', () => {
     );
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-workspace')).not.toBeNull());
     expect(root.querySelector('.fm-rag-ask-modal')).toBeNull();
-    root.querySelector<HTMLInputElement>('.fm-knowledge-include-folder input')?.click();
+    expect(root.querySelector('.fm-knowledge-include-folder-action')?.textContent).toBe(
+      'Include folder for semantic search',
+    );
+    root.querySelector<HTMLButtonElement>('.fm-knowledge-include-folder-action')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
     [...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-enrolment-modal button')]
       .find((button) => button.textContent?.trim() === 'Cancel')
@@ -4925,7 +5285,7 @@ describe('AppShell', () => {
         'true',
       ),
     );
-    root.querySelector<HTMLInputElement>('.fm-knowledge-include-folder input')?.click();
+    root.querySelector<HTMLButtonElement>('.fm-knowledge-include-folder-action')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
     expect(root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')).toBeNull();
     const includeButton = await vi.waitFor(() => {
@@ -4937,12 +5297,58 @@ describe('AppShell', () => {
     });
     includeButton?.click();
 
-    await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-include-folder')).toBeNull());
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-knowledge-include-folder-action')).toBeNull(),
+    );
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-semantic-enrolment-modal')?.getAttribute('aria-hidden')).toBe(
         'true',
       ),
     );
+  });
+
+  it('reveals Ask in an already-open Knowledge tab after selecting Ollama in Settings', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    (await toolbarButton('Semantic Search…')).click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-workspace')).not.toBeNull());
+    const configure = await vi.waitFor(() => {
+      const candidate = root.querySelector<HTMLButtonElement>('.fm-knowledge-configure-answers');
+      expect(candidate).not.toBeNull();
+      return candidate as HTMLButtonElement;
+    });
+    expect(root.querySelector('#fm-knowledge-question')).toBeNull();
+    configure.click();
+    expect(root.querySelector('.fm-settings-editor')?.getAttribute('role')).toBe('dialog');
+
+    const profile = await client.createLlmProfile({
+      name: 'Local Ollama',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'mock-model',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
+    await client.activateLlmProfile(profile.id, false);
+    root.querySelector<HTMLButtonElement>('.fm-settings-button')?.click();
+    m.redraw.sync();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-knowledge-ask-bar #fm-knowledge-question')).not.toBeNull(),
+    );
+    expect(root.querySelectorAll('.fm-knowledge-workspace')).toHaveLength(1);
+    expect(await toolbarButton('Semantic search & Ask')).not.toBeNull();
   });
 
   it('focuses the existing Knowledge tab instead of creating another Ask tab', async () => {
@@ -5490,10 +5896,12 @@ describe('AppShell', () => {
 
     await vi.waitFor(() => {
       expect(
-        [...root.querySelectorAll('.fm-search-result-name')].map((name) => name.textContent),
+        [...root.querySelectorAll('.fm-grouped-entry .fm-entry-name')].map(
+          (name) => name.textContent,
+        ),
       ).toContain('report');
       expect(
-        [...root.querySelectorAll('.fm-search-result-parent')].map((path) => path.textContent),
+        [...root.querySelectorAll('.fm-directory-group-row')].map((row) => row.textContent),
       ).toContain('/Documents');
     });
     document.dispatchEvent(
@@ -5507,10 +5915,10 @@ describe('AppShell', () => {
       ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     m.redraw.sync();
     const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
-    const rows = activePane?.querySelectorAll<HTMLElement>('.fm-directory-row');
-    expect(rows?.item(0).textContent).toContain('..');
+    const rows = activePane?.querySelectorAll<HTMLElement>('.fm-grouped-entry');
+    expect(activePane?.querySelector('.fm-directory-row')?.textContent).toContain('..');
     rows
-      ?.item(1)
+      ?.item(0)
       .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
     m.redraw.sync();
     const searchResultActions = [
@@ -5528,7 +5936,7 @@ describe('AppShell', () => {
     ).toBe(false);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     m.redraw.sync();
-    rows?.item(1).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    rows?.item(0).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
 
     await vi.waitFor(() =>
       expect(navigatePane).toHaveBeenCalledWith(
@@ -5619,7 +6027,7 @@ describe('AppShell', () => {
       [...(activePane?.querySelectorAll('.fm-breadcrumb-segment') ?? [])].map(
         (segment) => segment.textContent,
       ),
-    ).toEqual(['/', 'search', 'local', 'file: e']);
+    ).toEqual(['Search results · e']);
 
     // Focus lands in the pane (not e.g. document.body) so keyboard cursor
     // navigation works immediately, without an extra click. This happens after an
@@ -5657,7 +6065,7 @@ describe('AppShell', () => {
 
     const resultRow = () =>
       root
-        .querySelector<HTMLElement>('[data-active="true"] .fm-search-result-name')
+        .querySelector<HTMLElement>('[data-active="true"] .fm-grouped-entry .fm-entry-name')
         ?.closest<HTMLElement>('.fm-directory-row');
     await vi.waitFor(() => expect(resultRow()).not.toBeUndefined());
     resultRow()?.click();
@@ -5863,6 +6271,153 @@ describe('AppShell', () => {
         }),
       ),
     );
+  });
+
+  it('targets a right-clicked unmarked file for Copy, Open, and Delete without clearing marks', async () => {
+    const client = new MockFileManagerClient();
+    const invokeAction = vi.spyOn(client, 'invokeAction');
+    const startOperation = vi.spyOn(client, 'startOperation');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    try {
+      m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+      await vi.waitFor(() => expect(directoryRowNamed(root, '日本語.txt')).toBeDefined());
+      const marked = directoryRowNamed(root, '日本語.txt');
+      marked?.click();
+      marked
+        ?.closest<HTMLElement>('.fm-pane')
+        ?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      m.redraw.sync();
+      expect(directoryRowNamed(root, '日本語.txt')?.classList).toContain('fm-selected-row');
+
+      const rightClickTarget = (): void => {
+        directoryRowNamed(root, 'report.pdf')?.dispatchEvent(
+          new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }),
+        );
+        m.redraw.sync();
+        expect(root.querySelector('.fm-context-menu')).not.toBeNull();
+        expect(directoryRowNamed(root, '日本語.txt')?.classList).toContain('fm-selected-row');
+        expect(directoryRowNamed(root, 'report.pdf')?.classList).not.toContain('fm-selected-row');
+        expect(directoryRowNamed(root, 'report.pdf')?.classList).toContain('fm-context-target-row');
+        expect(directoryRowNamed(root, 'report.pdf')?.getAttribute('aria-selected')).toBe('false');
+      };
+      const menuAction = (label: string): HTMLButtonElement | undefined =>
+        [...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu-item')].find(
+          (button) => button.querySelector('.fm-context-menu-label')?.textContent === label,
+        );
+
+      rightClickTarget();
+      menuAction('Copy Full Path')?.click();
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('/Documents/report.pdf'));
+      m.redraw.sync();
+      expect(directoryRowNamed(root, 'report.pdf')?.classList).toContain('fm-cursor-row');
+      expect(directoryRowNamed(root, 'report.pdf')?.classList).not.toContain(
+        'fm-context-target-row',
+      );
+      expect(directoryRowNamed(root, '日本語.txt')?.classList).toContain('fm-selected-row');
+      const targetIndex = Number(directoryRowNamed(root, 'report.pdf')?.dataset.entryIndex);
+      const nextIndex = targetIndex === 0 ? 1 : targetIndex - 1;
+      directoryRowNamed(root, 'report.pdf')
+        ?.closest<HTMLElement>('.fm-pane')
+        ?.dispatchEvent(
+          new KeyboardEvent('keydown', {
+            key: targetIndex === 0 ? 'ArrowDown' : 'ArrowUp',
+            bubbles: true,
+          }),
+        );
+      m.redraw.sync();
+      expect(
+        directoryRowNamed(root, 'report.pdf')
+          ?.closest('.fm-pane')
+          ?.querySelector('.fm-cursor-row')
+          ?.getAttribute('data-entry-index'),
+      ).toBe(String(nextIndex));
+
+      rightClickTarget();
+      menuAction('Open')?.click();
+      await vi.waitFor(() =>
+        expect(invokeAction).toHaveBeenCalledWith(
+          expect.objectContaining({
+            actionId: 'core.open',
+            parameters: { uri: 'mock:///Documents/report.pdf' },
+          }),
+        ),
+      );
+
+      rightClickTarget();
+      menuAction('Delete')?.click();
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-permanent-delete-modal.active')).not.toBeNull(),
+      );
+      expect(root.querySelector('.fm-permanent-delete-modal.active')?.textContent).toContain(
+        'report.pdf',
+      );
+      expect(root.querySelector('.fm-permanent-delete-modal.active')?.textContent).not.toContain(
+        '日本語.txt',
+      );
+      root.querySelector<HTMLButtonElement>('.fm-permanent-delete-confirm')?.click();
+      await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
+      expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
+        sources: [{ uri: 'mock:///Documents/report.pdf' }],
+      });
+    } finally {
+      if (clipboard !== undefined) {
+        Object.defineProperty(navigator, 'clipboard', clipboard);
+      } else {
+        Reflect.deleteProperty(navigator, 'clipboard');
+      }
+    }
+  });
+
+  it('identifies an unmarked context target in an inactive pane until its menu closes', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(directoryRowNamed(root, '日本語.txt')).toBeDefined());
+    const pane = directoryRowNamed(root, '日本語.txt')?.closest<HTMLElement>('.fm-workspace-pane');
+    const paneId = pane?.dataset.paneId;
+    expect(paneId).toBeDefined();
+    directoryRowNamed(pane, '日本語.txt')?.click();
+    pane
+      ?.querySelector<HTMLElement>('.fm-pane')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    const otherPane = [...root.querySelectorAll<HTMLElement>('.fm-workspace-pane')].find(
+      (candidate) => candidate.dataset.paneId !== paneId,
+    );
+    otherPane?.click();
+    m.redraw.sync();
+    const inactive = root.querySelector<HTMLElement>(
+      `.fm-workspace-pane[data-pane-id="${paneId}"]`,
+    );
+    expect(inactive?.getAttribute('data-active')).toBe('false');
+    const targetRow = [
+      ...(inactive?.querySelectorAll<HTMLElement>('.fm-directory-row') ?? []),
+    ].find(
+      (row) =>
+        row.getAttribute('aria-selected') === 'false' &&
+        row.querySelector('.fm-entry-name [title]')?.getAttribute('title') !== '..',
+    );
+    expect(targetRow).toBeDefined();
+    const targetIndex = targetRow?.dataset.entryIndex;
+    targetRow?.dispatchEvent(
+      new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }),
+    );
+    m.redraw.sync();
+    const target = (): HTMLElement | null | undefined =>
+      inactive?.querySelector<HTMLElement>(`.fm-directory-row[data-entry-index="${targetIndex}"]`);
+    expect(directoryRowNamed(inactive, '日本語.txt')?.classList).toContain('fm-selected-row');
+    expect(target()?.classList).toContain('fm-context-target-row');
+    expect(target()?.getAttribute('aria-selected')).toBe('false');
+    root
+      .querySelector<HTMLElement>('.fm-context-menu')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    m.redraw.sync();
+    expect(target()?.classList).not.toContain('fm-context-target-row');
+    expect(target()?.classList).toContain('fm-cursor-row');
+    expect(directoryRowNamed(inactive, '日本語.txt')?.classList).toContain('fm-selected-row');
   });
 
   it('opens the macOS Services submenu from the existing selection context menu', async () => {

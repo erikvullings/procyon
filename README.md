@@ -156,6 +156,10 @@ space for the catalog and installed copies; the UI discloses an 8 GiB RAM
 estimate. The model download may require access to Google's gated Hugging Face
 repository. To build the bundle without launching Tauri, run
 `pnpm semantic:bundle:dev --gemma`.
+On macOS arm64, `pnpm dev:tauri:semantic:gemma:metal` instead compiles the
+experimental image-only Metal path; the worker selects Metal automatically
+when a device is available and falls back to CPU for unavailable devices or
+mixed image/audio/video libraries. Audio and video are CPU-only.
 
 In the desktop, open **Settings → Semantic components**, choose **EmbeddingGemma
 2 (optional)**, select 128/256/512/768 dimensions and the desired image, audio,
@@ -168,7 +172,16 @@ inclusion and choose **Include and index folder**. Once indexing progresses,
 search or Ask within the indexed folder. The selected dimensions and media
 permissions cannot be changed for that Gemma library. Existing E5 data is not
 deleted; no migration or representative quality result is implied by this
-development bundle. Standard release builds remain Gemma-disabled. Included
+development bundle. Standard release builds remain Gemma-disabled unless the
+release owner explicitly approves a **new**, four-target signed Gemma candidate
+and sets both independent semantic approval gates plus
+`SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL=true`. The desktop release then compiles
+`semantic-gemma` and fetches that candidate's reviewed, signed target catalog;
+the historical CPU-only candidate is blocked. Version 0.5.0 source alone is
+**not** a published Gemma package. E5 stays the default, and Gemma's measured
+quality does not establish an improvement over E5. Before a new release is
+approved, verify image acceleration and CPU fallback on supported hardware
+and rerun the integrated mixed-media ingestion/search checks. Included
 folders can be removed directly from **Settings → Semantic library**, even when
 their sources are unavailable; confirm the displayed cleanup inventory to
 remove their local index data without deleting original files. Moving, deleting,
@@ -319,6 +332,12 @@ macOS releases are signed and notarized. Windows releases are currently unsigned
 Microsoft Defender SmartScreen warning. Desktop builds verify signed update artifacts before
 installation. Automatic checks can be disabled in Settings; checks never download, install, or
 restart without user confirmation, and a manual **Check now** action remains available.
+If approved for release, the opt-in experimental Gemma macOS build will be **Apple Silicon
+(arm64) only**; it cannot run on Intel Macs. Its signed updater uses a separate experimental
+channel. The regular non-Gemma universal macOS build and Homebrew cask remain available to
+Intel users; experimental packages would be downloaded directly from their GitHub Release and
+would not replace the stable cask or Chocolatey package. E5 remains the default, and Gemma
+search quality is not established.
 
 ## Desktop releases
 
@@ -338,6 +357,27 @@ Optional semantic workers, native runtimes, models, and signed catalogs use the 
 Qualification emits a reviewed fingerprint lock; publication reuses the exact retained artifacts.
 Desktop releases only fetch catalogs named by that lock, so semantic component failures do not
 block base application packaging and application failures do not rebuild component assets.
+The separately opt-in `qualify_pdf_vision` input runs a read-only installed Gemma worker test on
+an eight-page deterministic synthetic scan when paired with `qualify_installed_gemma` and an exact
+retained signed candidate. It runs on all four worker targets, reports per-page throughput and
+measured worker peaks, and cannot publish a release; its candidate-bound report explicitly remains
+**no-go** without host/VFS, resource-ceiling, fallback, and quality evidence.
+The experimental Gemma publication check separately requires reviewed four-target installed
+PDF evidence from a successful exact-source qualification run; merely adding signed PDFium
+payloads or a worker-only synthetic report cannot satisfy that gate.
+The read-only PDF qualification also runs a separate one-page enrolled-host smoke through
+the installed worker, replaces that synthetic file with a two-page scan, and checks that
+the edited source's two page citations replace the old generation before checking deletion.
+That smoke is not full-scan current-content coverage or release approval.
+A distinct read-only `qualify_pdf_host_sample` workflow input runs the same
+eight-page synthetic scan through the enrolled host, then replaces it with a
+two-page scan and verifies current page citations and deletion. Its report
+includes per-page throughput and sampled host/worker RSS; it does not claim a
+hard peak or temporary-disk ceiling. A previous full 354-page scan remains
+supplementary macOS evidence; full-scan CPU throughput is documented as a
+known limitation, not a release gate. Anonymous temporary-disk peak,
+cross-host navigation, fallback, rollback, and release resource ceilings
+remain unqualified, so these reports do not approve a release.
 
 ## CI
 

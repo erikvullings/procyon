@@ -1,5 +1,6 @@
 import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
 import { IconButton, ModalPanel, toast } from 'mithril-materialized';
+import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import {
   arrowsSortIcon,
   gridDotsIcon,
@@ -15,6 +16,7 @@ import {
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { ActiveSourceState } from '../operations/operation-state';
+import { pdfImageProvenance, pdfPageRenderProvenance } from '../semantic/evidence-provenance';
 
 /** Renders an icon-only toggle button matching `IconButton`'s `.btn-flat.btn-icon` styling, but
  * without mithril-materialized's `waves-effect` ripple, which isn't needed for a plain toggle
@@ -82,7 +84,7 @@ import {
 } from '../directory-table/directory-table';
 import type { FinderTagsLoader } from '../directory-table/finder-tags-loader';
 import type { NativeIconLoader } from '../directory-table/native-icon-loader';
-import type { ThumbnailLoader } from '../directory-table/thumbnail-loader';
+import type { ThumbnailLoader, ThumbnailViewport } from '../directory-table/thumbnail-loader';
 import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
 import { isRestorableRecentLocation, truncateLocationForDisplay } from '../favourites/favourites';
@@ -92,7 +94,13 @@ import type { SearchPresentation } from '../search/search-presentation';
 import { exportSemanticEvaluationCases, recordSemanticFeedback } from '../search/semantic-feedback';
 import type { SelectionPlatform } from '../selection/keybindings';
 import type { SelectionAction } from '../selection/selection';
-import { BreadcrumbTrail, breadcrumbSegments, searchBreadcrumbSegments } from './breadcrumb-view';
+import {
+  mediaDescription,
+  mediaKind,
+  mediaLabel,
+  mediaModifiedLabel,
+} from '../semantic/media-evidence';
+import { BreadcrumbTrail, breadcrumbSegments, searchResultTitle } from './breadcrumb-view';
 import { formatListingSummary, sizeLabel } from './pane-status-summary';
 import { isParentEntry } from './parent-entry';
 import { createRenameEditingController, findRenameCollision } from './rename-edit-controller';
@@ -102,7 +110,7 @@ import { createTypeaheadController } from './typeahead-controller';
 import './pane.css';
 
 export type { BreadcrumbSegment } from './breadcrumb-view';
-export { breadcrumbSegments, searchBreadcrumbSegments } from './breadcrumb-view';
+export { breadcrumbSegments, searchResultTitle } from './breadcrumb-view';
 export type { PaneTab } from './tab-strip';
 
 // ── Sub-object interfaces ──────────────────────────────────────────────────────
@@ -236,13 +244,18 @@ export interface PaneAttrs {
   readonly activeSourceStates?: ReadonlyMap<string, ActiveSourceState>;
   readonly active: boolean;
   readonly cursorIndex?: number;
+  readonly contextTargetEntryId?: EntryId;
   // Keyboard / action dispatch (4)
   readonly platform: SelectionPlatform;
   readonly keybindingRuntime?: KeybindingRuntime;
   readonly actions?: readonly ActionDescriptor[];
   readonly keybindingOverrides?: Readonly<Record<string, string>>;
   // Entry operations (8)
-  readonly onOpenEntry: (entry: EntrySummary, evidenceQuery?: string) => void | Promise<void>;
+  readonly onOpenEntry: (
+    entry: EntrySummary,
+    evidenceQuery?: string,
+    initialPage?: number,
+  ) => void | Promise<void>;
   readonly onDocumentSummary?: (entry: EntrySummary) => void;
   /** Opens search-only knowledge search scoped to this semantic result set (task 0206). */
   readonly onSearchKnowledge?: () => void;
@@ -386,18 +399,43 @@ function recentLocationDisplayName(
   return truncateLocationForDisplay(location.uri);
 }
 
-function searchExecutionModeLabel(mode: SearchPresentation['executionMode']): string {
-  switch (mode) {
-    case 'indexed':
-      return t('search', 'executionIndexed');
-    case 'liveRecursive':
-      return t('search', 'executionLive');
-    case 'mixed':
-      return t('search', 'executionMixed');
-    case 'semantic':
-      return t('search', 'executionSemantic');
-  }
+function searchScopeLabel(presentation: SearchPresentation | undefined): string | undefined {
+  const scope = presentation?.scope;
+  if (scope === undefined) return undefined;
+  if (scope.kind === 'allEnrolled') return t('search', 'allEnrolledFolders');
+  const uri = scope.location.uri;
+  const path = uri.startsWith('file://')
+    ? decodeURIComponent(new URL(uri).pathname)
+    : decodeURIComponent(uri);
+  return t('search', 'folderScope', { path });
 }
+
+const SemanticMediaPreview: FactoryComponent<{
+  entry: EntrySummary;
+  loader: ThumbnailLoader;
+}> = () => {
+  let loader: ThumbnailLoader | undefined;
+  let viewport: ThumbnailViewport | undefined;
+  return {
+    onremove: () => viewport?.dispose(),
+    view: ({ attrs }) => {
+      if (loader !== attrs.loader) {
+        viewport?.dispose();
+        loader = attrs.loader;
+        viewport = loader.createViewport();
+      }
+      viewport?.beginFrame();
+      const src = viewport?.thumbnailDataUri(attrs.entry, 'medium');
+      viewport?.endFrame();
+      return m(
+        'span.fm-semantic-media-preview',
+        src === undefined
+          ? undefined
+          : m('img.fm-semantic-media-thumbnail', { src, alt: '', 'aria-hidden': 'true' }),
+      );
+    },
+  };
+};
 
 function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
   const presentation = attrs.searchPresentation;
@@ -410,7 +448,9 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
       (entry) => attrs.selectedEntryIds.has(entry.id) && entry.id === result.entryId,
     ),
   );
-  const coverage = presentation?.semanticCoverage;
+  const coverage = (attrs.locationUri ?? attrs.path).startsWith('search://')
+    ? undefined
+    : presentation?.semanticCoverage;
   const coverageLabel =
     coverage === undefined
       ? undefined
@@ -418,6 +458,17 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
           indexed: coverage.indexed,
           eligible: coverage.eligible,
         });
+  if (
+    presentation?.conceptSearch &&
+    attrs.state.type === 'loaded' &&
+    attrs.entries.every((entry) => isParentEntry(entry.id))
+  ) {
+    return m('.fm-semantic-evidence', { role: 'status' }, [
+      m('strong', presentation.label ?? query),
+      m('div', t('search', 'noMatches')),
+      coverageLabel === undefined ? undefined : m('div', coverageLabel),
+    ]);
+  }
   if (selected === undefined) {
     return coverageLabel === undefined
       ? undefined
@@ -426,8 +477,39 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
 
   const entry = attrs.entries.find((candidate) => candidate.id === selected.entryId);
   const evidence = [selected.bestEvidence, ...selected.additionalEvidence];
+  const kind = mediaKind(entry?.mimeType);
+  const pdfImage =
+    entry?.mimeType === 'application/pdf' && selected.bestEvidence.chunkKind === 'pdf_image'
+      ? pdfImageProvenance(selected.bestEvidence.provenanceJson)
+      : undefined;
+  const renderedPage =
+    entry?.mimeType === 'application/pdf' && selected.bestEvidence.chunkKind === 'pdf_image'
+      ? pdfPageRenderProvenance(selected.bestEvidence.provenanceJson)
+      : undefined;
+  const mediaAvailable = selected.bestEvidence.available && !selected.bestEvidence.stale;
+  const modifiedLabel = mediaModifiedLabel(entry?.modifiedAt);
   return m('.fm-semantic-evidence', [
     coverageLabel === undefined ? undefined : m('div', { role: 'status' }, coverageLabel),
+    selected.pdfImagesEnabled
+      ? m(
+          '.fm-semantic-pdf-image-evidence',
+          { role: 'status' },
+          selected.pdfImagePageBudget == null
+            ? t('semanticLibrary', 'pdfImagesAllPages')
+            : t('semanticLibrary', 'pdfImagesPageBudget', {
+                pages: selected.pdfImagePageBudget,
+              }),
+        )
+      : undefined,
+    (selected.bestEvidence.pdfImageSkippedPages ?? 0) > 0
+      ? m(
+          '.fm-semantic-pdf-image-evidence',
+          { role: 'status' },
+          t('semanticLibrary', 'pdfImagesSkippedPages', {
+            pages: selected.bestEvidence.pdfImageSkippedPages ?? 0,
+          }),
+        )
+      : undefined,
     m('details', [
       m(
         'summary',
@@ -436,9 +518,52 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
           score: selected.score.toFixed(2),
         }),
       ),
-      evidence.map((item) =>
-        m('.fm-semantic-evidence-item', [
-          m('p', item.excerpt),
+      kind === undefined
+        ? renderedPage !== undefined
+          ? m(
+              '.fm-semantic-pdf-image-evidence',
+              t('knowledgeSearch', 'pdfPageRenderResult', renderedPage),
+            )
+          : pdfImage === undefined
+            ? undefined
+            : m('.fm-semantic-pdf-image-evidence', t('knowledgeSearch', 'pdfImageResult', pdfImage))
+        : m('.fm-semantic-media', [
+            kind !== 'audio' &&
+            mediaAvailable &&
+            entry !== undefined &&
+            attrs.tableConfig.thumbnailLoader !== undefined
+              ? m(SemanticMediaPreview, {
+                  entry,
+                  loader: attrs.tableConfig.thumbnailLoader,
+                })
+              : undefined,
+            m('.fm-semantic-media-description', [
+              m('strong', mediaLabel(kind)),
+              modifiedLabel === undefined ? undefined : m('small', modifiedLabel),
+            ]),
+          ]),
+      evidence.map((item) => {
+        const image =
+          item.chunkKind === 'pdf_image' && entry?.mimeType === 'application/pdf'
+            ? pdfImageProvenance(item.provenanceJson)
+            : undefined;
+        const rendered =
+          item.chunkKind === 'pdf_image' && entry?.mimeType === 'application/pdf'
+            ? pdfPageRenderProvenance(item.provenanceJson)
+            : undefined;
+        return m('.fm-semantic-evidence-item', [
+          m(
+            'p',
+            item.chunkKind === 'pdf_image' && entry?.mimeType === 'application/pdf'
+              ? rendered !== undefined
+                ? t('knowledgeSearch', 'pdfPageRenderResult', rendered)
+                : image === undefined
+                  ? t('knowledgeSearch', 'pdfImageEvidence')
+                  : t('knowledgeSearch', 'pdfImageCitation', image)
+              : kind === undefined
+                ? item.excerpt
+                : mediaDescription(item.excerpt),
+          ),
           m(
             'small',
             [
@@ -449,19 +574,32 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
               .filter((label): label is string => label !== undefined)
               .join(' · '),
           ),
-        ]),
-      ),
+        ]);
+      }),
       m('.fm-semantic-evidence-actions', [
         m(
           'button',
           {
             type: 'button',
-            disabled: entry === undefined,
+            disabled: entry === undefined || !selected.bestEvidence.available,
             onclick: () => {
-              if (entry !== undefined) void attrs.onOpenEntry(entry, selected.bestEvidence.excerpt);
+              if (entry !== undefined && selected.bestEvidence.available) {
+                if (pdfImage !== undefined || renderedPage !== undefined) {
+                  void attrs.onOpenEntry(entry, undefined, (pdfImage ?? renderedPage)?.page);
+                } else {
+                  void attrs.onOpenEntry(
+                    entry,
+                    kind === undefined && selected.bestEvidence.chunkKind !== 'pdf_image'
+                      ? selected.bestEvidence.excerpt
+                      : undefined,
+                  );
+                }
+              }
             },
           },
-          t('search', 'openEvidence'),
+          kind === undefined
+            ? t('search', 'openEvidence')
+            : t('search', 'openMedia', { type: mediaLabel(kind).toLowerCase() }),
         ),
         m(
           'button',
@@ -550,6 +688,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
   let selectionMaskNeedsFocus = false;
   let photoModeByTab = new Map<TabId, boolean>();
   let typeaheadPath: string | undefined;
+  let visibleSearchEntryIndices: readonly number[] | undefined;
   /** The pane's own `section.fm-pane` DOM node - the actual keyboard target (`onkeydown` is bound
    * here, see the view below). Mouse row clicks only ever changed selection *state*; nothing moved
    * real DOM focus here to match, so a keypress immediately after a click could still be racing (or
@@ -558,6 +697,41 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
   let sectionElement: HTMLElement | undefined;
 
   const typeaheadCtrl = createTypeaheadController(() => m.redraw());
+
+  function moveVisibleSearchCursor(
+    attrs: PaneAttrs,
+    offset: number,
+    edge?: 'first' | 'last',
+  ): boolean {
+    if (visibleSearchEntryIndices === undefined || typeaheadCtrl.prefix !== undefined) return false;
+    const indices = visibleSearchEntryIndices;
+    const cursor = attrs.cursorIndex ?? -1;
+    const nextPosition =
+      offset > 0
+        ? indices.findIndex((index) => index > cursor)
+        : indices.findLastIndex((index) => index < cursor);
+    const next =
+      edge === 'first'
+        ? indices[0]
+        : edge === 'last'
+          ? indices.at(-1)
+          : nextPosition < 0
+            ? undefined
+            : indices[
+                Math.max(
+                  0,
+                  Math.min(
+                    nextPosition + (offset > 0 ? offset - 1 : offset + 1),
+                    indices.length - 1,
+                  ),
+                )
+              ];
+    const entry = next === undefined ? undefined : attrs.entries[next];
+    if (entry !== undefined && next !== cursor) {
+      attrs.onSelectionAction({ type: 'positionCursor', entryId: entry.id });
+    }
+    return true;
+  }
   const renameCtrl = createRenameEditingController();
   let renameContext: { readonly path: string; readonly tabId: TabId } | undefined;
   /** Selection just before the current keystroke, for the Numpad `/` "restore" shortcut. */
@@ -764,9 +938,11 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
       if (pathChanged) {
         typeaheadPath = attrs.path;
         typeaheadCtrl.reset();
+        visibleSearchEntryIndices = undefined;
       }
       const activeLocationUri = attrs.locationUri ?? attrs.path;
       const isSearchLocation = activeLocationUri.startsWith('search://');
+      const searchScope = isSearchLocation ? searchScopeLabel(attrs.searchPresentation) : undefined;
       const remoteScheme = /^(sftp|ftp|ftps|onedrive|webdav|s3):\/\//.exec(activeLocationUri)?.[1];
       const activeConnection = connectionForLocation(
         { providerId: remoteScheme ?? '', uri: activeLocationUri },
@@ -932,6 +1108,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               void attrs.navigation.onParent();
             } else if (command?.type === 'moveCursor') {
               event.preventDefault();
+              if (moveVisibleSearchCursor(attrs, command.offset)) return;
               const cursorEntry =
                 attrs.cursorIndex === undefined ? undefined : attrs.entries[attrs.cursorIndex];
               const taResult = typeaheadCtrl.moveWithinMatches(
@@ -949,6 +1126,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
             } else if (command?.type === 'moveCursorByPage') {
               event.preventDefault();
               const offset = command.pages * 10;
+              if (moveVisibleSearchCursor(attrs, offset)) return;
               const cursorEntry =
                 attrs.cursorIndex === undefined ? undefined : attrs.entries[attrs.cursorIndex];
               const taResult = typeaheadCtrl.moveWithinMatches(
@@ -965,6 +1143,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               }
             } else if (command?.type === 'moveCursorTo') {
               event.preventDefault();
+              if (moveVisibleSearchCursor(attrs, 0, command.edge)) return;
               const cursorEntry =
                 attrs.cursorIndex === undefined ? undefined : attrs.entries[attrs.cursorIndex];
               const taResult = typeaheadCtrl.moveWithinMatches(
@@ -1196,6 +1375,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                         },
                         [
                           m('input[type=text]', {
+                            ...technicalTextInputAttrs,
                             value: favouriteLabel,
                             placeholder: t('pane', 'favouriteName'),
                             'aria-label': t('pane', 'favouriteName'),
@@ -1471,6 +1651,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                 : editing
                   ? m('.fm-path-editor', [
                       m('input[type=text].fm-path-input', {
+                        ...technicalTextInputAttrs,
                         value: draftPath,
                         'aria-label': t('pane', 'path'),
                         oncreate: (vnode: VnodeDOM) => {
@@ -1494,9 +1675,12 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                       }),
                     ])
                   : m(
-                      'nav.fm-breadcrumb',
+                      isSearchLocation ? 'div.fm-breadcrumb' : 'nav.fm-breadcrumb',
                       {
-                        'aria-label': t('pane', 'currentPath'),
+                        'aria-label': isSearchLocation
+                          ? t('search', 'resultsTitle')
+                          : t('pane', 'currentPath'),
+                        role: isSearchLocation ? 'group' : undefined,
                         ondblclick: isSearchLocation ? undefined : () => beginEditing(attrs.path),
                       },
                       [
@@ -1523,16 +1707,19 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                             pathKey: `${activeLocationUri}\0${attrs.path}\0${attrs.searchPresentation?.kind ?? ''}\0${attrs.searchPresentation?.label ?? attrs.searchPresentation?.term ?? ''}`,
                           },
                           isSearchLocation
-                            ? searchBreadcrumbSegments(
-                                activeLocationUri,
-                                attrs.searchPresentation,
-                              ).map((segment) =>
+                            ? [
                                 m(
-                                  'span.fm-breadcrumb-segment',
-                                  { key: segment.path },
-                                  segment.label,
+                                  'span.fm-breadcrumb-segment.fm-search-results-title',
+                                  searchResultTitle(attrs.searchPresentation),
                                 ),
-                              )
+                                searchScope === undefined
+                                  ? undefined
+                                  : m(
+                                      'span.fm-search-result-scope',
+                                      { title: searchScope },
+                                      searchScope,
+                                    ),
+                              ]
                             : (remoteScheme !== undefined && attrs.path !== '/'
                                 ? breadcrumbSegments(attrs.path).slice(1)
                                 : breadcrumbSegments(attrs.path)
@@ -1548,13 +1735,6 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                                 ),
                               ),
                         ),
-                        isSearchLocation && attrs.searchPresentation !== undefined
-                          ? m(
-                              'span.fm-search-execution-mode',
-                              { 'aria-label': t('search', 'executionMode') },
-                              searchExecutionModeLabel(attrs.searchPresentation.executionMode),
-                            )
-                          : undefined,
                         isSearchLocation && attrs.onRefreshSearch !== undefined
                           ? tooltip(
                               t('search', 'refresh'),
@@ -1748,8 +1928,18 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
           semanticEvidencePanel(attrs),
           (() => {
             const isGridView = attrs.tableConfig.viewMode === 'grid';
+            const suppressedThumbnails = new Set(
+              attrs.searchPresentation?.semanticResults
+                ?.filter((result) =>
+                  [result.bestEvidence, ...result.additionalEvidence].some(
+                    (evidence) => !evidence.available || evidence.stale,
+                  ),
+                )
+                .map((result) => result.entryId),
+            );
             const sharedListAttrs = {
               state: attrs.state,
+              directoryName: attrs.tabTitle,
               source: entryArraySource(attrs.entries, ds.totalKnownEntries),
               selectedEntryIds: attrs.selectedEntryIds,
               cutEntryIds: attrs.cutEntryIds,
@@ -1762,6 +1952,11 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               ...(attrs.tableConfig.thumbnailLoader === undefined
                 ? {}
                 : { thumbnailLoader: attrs.tableConfig.thumbnailLoader }),
+              ...(attrs.searchPresentation?.semanticResults === undefined
+                ? {}
+                : {
+                    thumbnailAllowed: (entry: EntrySummary) => !suppressedThumbnails.has(entry.id),
+                  }),
               ...(attrs.tableConfig.finderTagsLoader === undefined
                 ? {}
                 : { finderTagsLoader: attrs.tableConfig.finderTagsLoader }),
@@ -1806,12 +2001,18 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                   return;
                 }
                 const target = attrs.entries[index];
-                if (target !== undefined && isParentEntry(target.id)) {
+                if (target === undefined) {
+                  attrs.onContextMenu([], x, y);
+                  return;
+                }
+                if (isParentEntry(target.id)) {
                   attrs.onContextMenu([target], x, y);
                   return;
                 }
-                if (target !== undefined && !attrs.selectedEntryIds.has(target.id)) {
-                  attrs.onSelectionAction({ type: 'selectOnly', entryId: target.id });
+                if (!attrs.selectedEntryIds.has(target.id)) {
+                  if (index !== attrs.cursorIndex) {
+                    attrs.onSelectionAction({ type: 'setCursor', entryId: target.id });
+                  }
                   attrs.onContextMenu([target], x, y);
                   return;
                 }
@@ -1875,6 +2076,9 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               onDrop: (index: number | undefined, event: DropModifiers) =>
                 attrs.onDrop?.(index === undefined ? undefined : attrs.entries[index], event),
               ...(attrs.cursorIndex === undefined ? {} : { cursorIndex: attrs.cursorIndex }),
+              ...(attrs.contextTargetEntryId === undefined
+                ? {}
+                : { contextTargetEntryId: attrs.contextTargetEntryId }),
             };
 
             return isGridView
@@ -1905,7 +2109,38 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                     : { onColumnWidthChange: attrs.tableConfig.onColumnWidthChange }),
                   showGitStatusColumn: attrs.tableConfig.showGitStatusColumn === true,
                   showFullPath: isSearchLocation,
-                  groupByParent: attrs.tableConfig.groupByParent === true,
+                  groupByParent: isSearchLocation || attrs.tableConfig.groupByParent === true,
+                  collapsibleGroups: isSearchLocation,
+                  ...(isSearchLocation ? { groupScope: activeLocationUri } : {}),
+                  ...(isSearchLocation
+                    ? {
+                        onGroupVisibilityChange: (
+                          indices: readonly number[] | undefined,
+                          relocateCursor: boolean,
+                        ) => {
+                          visibleSearchEntryIndices = indices;
+                          const cursor = attrs.cursorIndex;
+                          if (
+                            !relocateCursor ||
+                            indices === undefined ||
+                            cursor === undefined ||
+                            indices.includes(cursor)
+                          ) {
+                            return;
+                          }
+                          const nextIndex =
+                            indices.find((index) => index > cursor) ?? indices.at(-1);
+                          const entry =
+                            nextIndex === undefined ? undefined : attrs.entries[nextIndex];
+                          if (entry !== undefined) {
+                            attrs.onSelectionAction({
+                              type: 'positionCursor',
+                              entryId: entry.id,
+                            });
+                          }
+                        },
+                      }
+                    : {}),
                   ...(renameCtrl.entry === undefined
                     ? {}
                     : { renamingEntryId: renameCtrl.entry.id }),
@@ -1997,6 +2232,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
             description: m('label.fm-selection-mask-field', [
               m('span', t('pane', 'fileMask')),
               m('input[type=text]', {
+                ...technicalTextInputAttrs,
                 value: selectionMask,
                 oninput: (event: InputEvent) => {
                   selectionMask = (event.currentTarget as HTMLInputElement).value;

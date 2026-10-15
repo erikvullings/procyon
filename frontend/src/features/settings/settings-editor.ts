@@ -16,7 +16,6 @@ import type {
   PluginId,
   PluginLogEntry,
   SemanticComponentStatus,
-  SemanticVocabulary,
   Settings,
   WorkspaceId,
 } from '../../models';
@@ -25,7 +24,10 @@ import { PluginManagement } from '../plugin-management/plugin-management';
 import type { SelectionPlatform } from '../selection/keybindings';
 import { AppUpdateSettings } from './app-update-settings';
 import { LlmProfileManagement } from './llm-profile-management';
-import { SemanticComponentManagement } from './semantic-component-management';
+import {
+  SemanticComponentManagement,
+  type SemanticComponentManagementAttrs,
+} from './semantic-component-management';
 import { SemanticLibraryManagement } from './semantic-library-management';
 import { SemanticOcrManagement } from './semantic-ocr-management';
 import { SemanticVocabularyManagement } from './semantic-vocabulary-management';
@@ -92,6 +94,8 @@ export interface SettingsEditorAttrs {
   readonly onTogglePlugin: (pluginId: PluginId, enabled: boolean) => Promise<void>;
   readonly onRequestPluginLogs: (pluginId: PluginId) => Promise<readonly PluginLogEntry[]>;
   readonly onSemanticStatusChange?: (status: SemanticComponentStatus) => void;
+  readonly onSemanticInstallationChange?: SemanticComponentManagementAttrs['onInstallationChange'];
+  readonly semanticInstallInProgress?: boolean;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -113,7 +117,6 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   let saveError: string | undefined;
   let activeSection: SettingsSection = 'appearance';
   let lastInitialSection: SettingsSection | undefined;
-  let semanticVisited = false;
   let semanticStatus: SemanticComponentStatus | undefined;
   let saveLlmProfile: (() => Promise<boolean>) | undefined;
 
@@ -198,7 +201,6 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
       }
       if (current.initialSection !== undefined && current.initialSection !== lastInitialSection) {
         activeSection = current.initialSection;
-        if (activeSection === 'semantic') semanticVisited = true;
         lastInitialSection = current.initialSection;
       }
       const activeDraft = draft as Settings;
@@ -243,7 +245,6 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                   'aria-current': activeSection === section.id ? 'page' : undefined,
                   onclick: () => {
                     activeSection = section.id;
-                    if (section.id === 'semantic') semanticVisited = true;
                   },
                 },
                 section.label,
@@ -589,124 +590,81 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                   ]
                 : undefined,
 
-              semanticVisited
-                ? m('.fm-settings-section-content', { hidden: activeSection !== 'semantic' }, [
-                    m(
-                      '.row',
-                      m('h4.fm-settings-section-heading.col.s12', t('semanticComponents', 'title')),
-                    ),
-                    m(
-                      '.row',
-                      m(SemanticComponentManagement, {
-                        client: current.client,
-                        onStatusChange: (status) => {
-                          semanticStatus = status;
-                          current.onSemanticStatusChange?.(status);
-                          m.redraw();
-                        },
-                      }),
-                    ),
-                    semanticComponentsInstalled(semanticStatus)
-                      ? [
-                          m(
-                            '.row',
-                            m(
-                              'h4.fm-settings-section-heading.col.s12',
-                              t('semanticLibrary', 'title'),
-                            ),
-                          ),
-                          m(
-                            '.row',
-                            m(SemanticLibraryManagement, {
-                              client: current.client,
-                              ...(current.activeWorkspaceId === undefined
-                                ? {}
-                                : { workspaceId: current.activeWorkspaceId }),
-                              ...(current.activeLocation === undefined
-                                ? {}
-                                : { location: current.activeLocation }),
-                            }),
-                          ),
-                          m('details.fm-settings-semantic-tools', [
-                            m('summary', t('semanticLibrary', 'pdfTools')),
-                            m(SemanticOcrManagement, { client: current.client }),
-                          ]),
-                          m('details.fm-settings-semantic-tools', [
-                            m('summary', t('semanticVocabulary', 'title')),
-                            m(
-                              '.row',
-                              m(SemanticVocabularyManagement, {
-                                client: current.client,
-                                ...(current.activeWorkspaceId === undefined
-                                  ? {}
-                                  : { workspaceId: current.activeWorkspaceId }),
-                                onCreateConceptFolder: (
-                                  vocabulary: SemanticVocabulary,
-                                  conceptUri: string,
-                                ): void => {
-                                  if (draft === undefined) return;
-                                  const concept = vocabulary.concepts.find(
-                                    ({ uri }) => uri === conceptUri,
-                                  );
-                                  const label =
-                                    concept?.prefLabels.en ??
-                                    (concept ? Object.values(concept.prefLabels)[0] : undefined) ??
-                                    conceptUri;
-                                  update(current, {
-                                    savedSearches: [
-                                      ...draft.savedSearches,
-                                      {
-                                        id: crypto.randomUUID(),
-                                        name: `${vocabulary.name}: ${label}`,
-                                        pinned: false,
-                                        query: {
-                                          schemaVersion: 3,
-                                          mode: 'concept',
-                                          scope: {
-                                            locations:
-                                              current.activeLocation === undefined
-                                                ? []
-                                                : [current.activeLocation],
-                                            recurse: true,
-                                            showHidden: false,
-                                          },
-                                          entryKinds: ['file'],
-                                          mimeTypes: [],
-                                          concept: {
-                                            vocabularyId: vocabulary.id,
-                                            conceptUri,
-                                            hierarchy: 'exact',
-                                            libraryId: '',
-                                            enrolledRootIds: [],
-                                          },
-                                          gitStatuses: [],
-                                          tags: [],
-                                          metadata: {},
-                                        },
-                                      },
-                                    ],
-                                  });
-                                },
-                              }),
-                            ),
-                          ]),
-                          m(
-                            '.row',
-                            m('h4.fm-settings-section-heading.col.s12', t('llmProfiles', 'title')),
-                          ),
-                          m(
-                            '.row',
-                            m(LlmProfileManagement, {
-                              client: current.client,
-                              onSaveHandlerChange: (handler) => {
-                                saveLlmProfile = handler;
-                              },
-                            }),
-                          ),
-                        ]
-                      : m('p.fm-settings-semantic-gate', t('settings', 'semanticEnableHint')),
-                  ])
-                : undefined,
+              m('.fm-settings-section-content', { hidden: activeSection !== 'semantic' }, [
+                m(
+                  '.row',
+                  m('h4.fm-settings-section-heading.col.s12', t('semanticComponents', 'title')),
+                ),
+                m(
+                  '.row',
+                  m(SemanticComponentManagement, {
+                    client: current.client,
+                    ...(current.onSemanticInstallationChange === undefined
+                      ? {}
+                      : { onInstallationChange: current.onSemanticInstallationChange }),
+                    ...(current.semanticInstallInProgress === undefined
+                      ? {}
+                      : { installInProgress: current.semanticInstallInProgress }),
+                    onStatusChange: (status) => {
+                      semanticStatus = status;
+                      current.onSemanticStatusChange?.(status);
+                      m.redraw();
+                    },
+                  }),
+                ),
+                semanticComponentsInstalled(semanticStatus)
+                  ? [
+                      m(
+                        '.row',
+                        m('h4.fm-settings-section-heading.col.s12', t('semanticLibrary', 'title')),
+                      ),
+                      m(
+                        '.row',
+                        m(SemanticLibraryManagement, {
+                          client: current.client,
+                          ...(current.activeWorkspaceId === undefined
+                            ? {}
+                            : { workspaceId: current.activeWorkspaceId }),
+                          ...(current.activeLocation === undefined
+                            ? {}
+                            : { location: current.activeLocation }),
+                        }),
+                      ),
+                      m('details.fm-settings-semantic-tools', [
+                        m('summary', t('semanticLibrary', 'pdfTools')),
+                        m(SemanticOcrManagement, {
+                          client: current.client,
+                          hideHeading: true,
+                        }),
+                      ]),
+                      m('details.fm-settings-semantic-tools', [
+                        m('summary', t('semanticVocabulary', 'title')),
+                        m(
+                          '.row',
+                          m(SemanticVocabularyManagement, {
+                            client: current.client,
+                            ...(current.activeWorkspaceId === undefined
+                              ? {}
+                              : { workspaceId: current.activeWorkspaceId }),
+                          }),
+                        ),
+                      ]),
+                      m(
+                        '.row',
+                        m('h4.fm-settings-section-heading.col.s12', t('llmProfiles', 'title')),
+                      ),
+                      m(
+                        '.row',
+                        m(LlmProfileManagement, {
+                          client: current.client,
+                          onSaveHandlerChange: (handler) => {
+                            saveLlmProfile = handler;
+                          },
+                        }),
+                      ),
+                    ]
+                  : m('p.fm-settings-semantic-gate', t('settings', 'semanticEnableHint')),
+              ]),
 
               activeSection === 'plugins'
                 ? [

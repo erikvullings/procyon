@@ -30,6 +30,7 @@ use crate::{
     LicenseInfo, ManifestRevision, ModelId, ModelIdentity, ModelManifest, ModelMetadata, ModelPack,
     ModelPackError, ModelPackKind, ModelPackSpec, ModelRevision, PRODUCTION_MODEL_COMPONENT_ID,
     PRODUCTION_MODEL_ID, PRODUCTION_MODEL_REVISION, PRODUCTION_ONNX_RUNTIME_COMPONENT_ID,
+    PRODUCTION_PDFIUM_NOTICES_COMPONENT_ID, PRODUCTION_PDFIUM_RUNTIME_COMPONENT_ID,
     PRODUCTION_TOKENIZER_ID, PRODUCTION_WORKER_COMPONENT_ID, PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID,
     ProductionArtifactProvenance, ProductionCatalogManifest, ProductionPipelineIdentity,
     ProtocolRange, RuntimeCompatibility, SemanticProfile, Sha256Digest, TargetTriple, TokenizerId,
@@ -46,6 +47,9 @@ const PRODUCTION_ZVEC_SOURCE_REVISION: &str = "733e0bc82e02a0c63202bff594a7f4530
 const PRODUCTION_ZVEC_NATIVE_SOURCE_REVISION: &str = "8321c1314a559fd5f909e92498f43e5194bf9b99";
 /// Microsoft ONNX Runtime release used by the Linux x86-64 dynamic loader.
 const PRODUCTION_ONNX_RUNTIME_VERSION: &str = "1.28.0";
+const PRODUCTION_PDFIUM_VERSION: &str = "0.8086.0";
+const PRODUCTION_PDFIUM_SOURCE_URL: &str = "https://github.com/bblanchon/pdfium-binaries";
+const PRODUCTION_PDFIUM_SOURCE_REVISION: &str = "5325fa6d0d9379329f10f98fdc4839b4e40f2e79";
 /// Credential-free public source of the pinned ONNX Runtime release.
 const PRODUCTION_ONNX_RUNTIME_SOURCE_URL: &str = "https://github.com/microsoft/onnxruntime";
 /// Immutable source revision recorded inside the official ONNX Runtime archive.
@@ -76,6 +80,8 @@ const WORKER_RAM_BYTES: u64 = 64 * 1024 * 1024;
 const RUNTIME_RAM_BYTES: u64 = 8 * 1024 * 1024;
 /// Conservative mapped/runtime overhead for the optional ONNX Runtime loader.
 const ONNX_RUNTIME_RAM_BYTES: u64 = 64 * 1024 * 1024;
+// Provisional catalog estimate, not a release-qualified per-process limit.
+const PDFIUM_RUNTIME_RAM_BYTES: u64 = 512 * 1024 * 1024;
 
 const WORKER_PROTOCOL_VERSION: u32 = 1;
 const INDEX_SCHEMA_VERSION: u32 = 2;
@@ -229,6 +235,10 @@ pub struct ProductionBundleSpec {
     pub zvec_runtime_library: PathBuf,
     /// Path to the verified ONNX Runtime loader when this target requires one.
     pub onnx_runtime_library: Option<PathBuf>,
+    /// Optional signed, target-specific PDFium loader for experimental Gemma vision.
+    pub pdfium_runtime_library: Option<PathBuf>,
+    /// Optional concatenated license and target-specific notices accompanying PDFium.
+    pub pdfium_notices: Option<PathBuf>,
     /// Directory containing the verified pinned multilingual-E5 model cache.
     pub model_cache_directory: PathBuf,
     /// Trusted credential-free HTTPS base URL artifacts are distributed from.
@@ -274,6 +284,23 @@ pub enum ProductionBundleError {
         /// Exact filename in the pinned Microsoft release archive.
         expected: &'static str,
         /// Supplied path's filename.
+        actual: String,
+    },
+    /// The experimental renderer must have its loader and complete notices together.
+    #[error("production PDFium loader and license notices must both be provided")]
+    IncompletePdfiumPack,
+    /// PDF vision may be packaged only with the explicitly requested Gemma originals.
+    #[error("production PDFium renderer requires opt-in Gemma originals")]
+    PdfiumRequiresGemma,
+    /// A renderer payload is missing.
+    #[error("production PDFium loader or license notices are unavailable")]
+    PdfiumUnavailable,
+    /// The renderer's native loader has the wrong platform filename.
+    #[error("production PDFium loader filename is `{actual}`; expected `{expected}`")]
+    PdfiumFileNameMismatch {
+        /// Expected platform filename.
+        expected: &'static str,
+        /// Supplied filename.
         actual: String,
     },
     /// A pinned model-cache member was absent from the supplied directory.
@@ -409,6 +436,39 @@ fn build_bundle_with_optional_gemma(
         (false, Some(_)) => return Err(ProductionBundleError::UnexpectedOnnxRuntime),
         (false, None) => None,
     };
+    let pdfium_pack = match (
+        spec.pdfium_runtime_library.as_ref(),
+        spec.pdfium_notices.as_ref(),
+    ) {
+        (None, None) => None,
+        (Some(library), Some(notices)) => {
+            if gemma.is_none() {
+                return Err(ProductionBundleError::PdfiumRequiresGemma);
+            }
+            if !library.is_file() || !notices.is_file() {
+                return Err(ProductionBundleError::PdfiumUnavailable);
+            }
+            if fs::metadata(notices)?.len() == 0 {
+                return Err(ProductionBundleError::PdfiumUnavailable);
+            }
+            let expected = pdfium_library_name(&spec.target_operating_system);
+            let actual = library
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
+            if actual != expected {
+                return Err(ProductionBundleError::PdfiumFileNameMismatch {
+                    expected,
+                    actual: actual.to_owned(),
+                });
+            }
+            if notices.file_name().and_then(|name| name.to_str()) != Some("pdfium-licenses.txt") {
+                return Err(ProductionBundleError::PdfiumUnavailable);
+            }
+            Some((library, notices))
+        }
+        _ => return Err(ProductionBundleError::IncompletePdfiumPack),
+    };
     verify_model_cache(&spec.model_cache_directory, pinned_files)?;
     if let Some((directory, files)) = gemma {
         for file in files {
@@ -457,6 +517,24 @@ fn build_bundle_with_optional_gemma(
         let id = production_artifact_id(&component, Some(&target), &version, checksum)?;
         write_artifact(&staging, &id, &bytes)?;
         Some((component, version, bytes, checksum, id))
+    } else {
+        None
+    };
+    let pdfium_artifacts = if let Some((library, notices)) = pdfium_pack {
+        let version = Version::parse(PRODUCTION_PDFIUM_VERSION).expect("pinned PDFium version");
+        let mut payloads = Vec::new();
+        for (name, path) in [
+            (PRODUCTION_PDFIUM_RUNTIME_COMPONENT_ID, library),
+            (PRODUCTION_PDFIUM_NOTICES_COMPONENT_ID, notices),
+        ] {
+            let component = ComponentId::new(name)?;
+            let bytes = fs::read(path)?;
+            let checksum = Sha256Digest::calculate(&bytes);
+            let id = production_artifact_id(&component, Some(&target), &version, checksum)?;
+            write_artifact(&staging, &id, &bytes)?;
+            payloads.push((component, version.clone(), bytes, checksum, id));
+        }
+        Some(payloads)
     } else {
         None
     };
@@ -509,7 +587,7 @@ fn build_bundle_with_optional_gemma(
     let model_metadata = ModelMetadata::new(
         model_identity.clone(),
         LicenseInfo::new(
-            "MIT",
+            "MIT AND BSD-3-Clause AND LicenseRef-PDFium-Third-Party",
             "intfloat/multilingual-e5-small, MIT licensed, redistributed unmodified \
              at the pinned upstream revision.",
         )?,
@@ -536,6 +614,13 @@ fn build_bundle_with_optional_gemma(
             component.clone(),
             VersionReq::parse(&format!("={version}"))
                 .expect("pinned ONNX Runtime version is a valid requirement"),
+        ));
+    }
+    if let Some(payloads) = &pdfium_artifacts {
+        worker_runtimes.push(RuntimeCompatibility::new(
+            payloads[0].0.clone(),
+            VersionReq::parse(&format!("={PRODUCTION_PDFIUM_VERSION}"))
+                .expect("pinned PDFium version is a valid requirement"),
         ));
     }
 
@@ -605,6 +690,42 @@ fn build_bundle_with_optional_gemma(
             )
         })
         .transpose()?;
+    let pdfium_catalog_artifacts = pdfium_artifacts
+        .as_ref()
+        .map(|payloads| {
+            payloads
+                .iter()
+                .map(|(component, version, bytes, checksum, id)| {
+                    CatalogArtifact::new(
+                        id.clone(),
+                        component.clone(),
+                        ArtifactKind::Runtime,
+                        version.clone(),
+                        distribution_location(&spec.release_base_url, id)?,
+                        LicenseInfo::new(
+                            "MIT",
+                            "Pinned pdfium-binaries chromium/8086 package; PDFium and target-specific third-party terms are included in the separately signed pdfium-licenses.txt artifact.",
+                        )?,
+                        *checksum,
+                        resources(
+                            bytes.len(),
+                            if component.as_str() == PRODUCTION_PDFIUM_RUNTIME_COMPONENT_ID {
+                                PDFIUM_RUNTIME_RAM_BYTES
+                            } else {
+                                1024 * 1024
+                            },
+                        )?,
+                        ArtifactCompatibility::new(
+                            Some(target.clone()),
+                            None,
+                            Vec::new(),
+                            INDEX_SCHEMA_VERSION,
+                        ),
+                    )
+                })
+                .collect::<Result<Vec<_>, CatalogError>>()
+        })
+        .transpose()?;
     let model_artifact = CatalogArtifact::new(
         model_id.clone(),
         model_component,
@@ -633,6 +754,9 @@ fn build_bundle_with_optional_gemma(
     if let Some((_, _, _, checksum, _)) = &onnx_runtime {
         revision_checksums.push(*checksum);
     }
+    if let Some(payloads) = &pdfium_artifacts {
+        revision_checksums.extend(payloads.iter().map(|(_, _, _, checksum, _)| *checksum));
+    }
     revision_checksums.push(model_checksum);
     let mut gemma_records = None;
     if let Some((directory, files)) = gemma {
@@ -653,6 +777,9 @@ fn build_bundle_with_optional_gemma(
     let mut artifacts = vec![worker_artifact, runtime_artifact];
     if let Some(artifact) = onnx_runtime_artifact {
         artifacts.push(artifact);
+    }
+    if let Some(pdfium) = pdfium_catalog_artifacts {
+        artifacts.extend(pdfium);
     }
     artifacts.push(model_artifact);
     let mut models = vec![model_manifest];
@@ -702,6 +829,15 @@ fn build_bundle_with_optional_gemma(
             ArtifactLocation::new(PRODUCTION_ONNX_RUNTIME_SOURCE_URL)?,
             ManifestRevision::new(PRODUCTION_ONNX_RUNTIME_SOURCE_REVISION)?,
         ));
+    }
+    if let Some(payloads) = pdfium_artifacts {
+        for (_, _, _, _, id) in payloads {
+            provenance.push(ProductionArtifactProvenance::new(
+                id,
+                ArtifactLocation::new(PRODUCTION_PDFIUM_SOURCE_URL)?,
+                ManifestRevision::new(PRODUCTION_PDFIUM_SOURCE_REVISION)?,
+            ));
+        }
     }
     provenance.push(ProductionArtifactProvenance::new(
         model_id,
@@ -883,6 +1019,14 @@ fn runtime_library_name(
         "windows" => "zvec_c_api.dll",
         _ => "libzvec_c_api.so",
     })
+}
+
+fn pdfium_library_name(operating_system: &str) -> &'static str {
+    match operating_system {
+        "macos" => "libpdfium.dylib",
+        "windows" => "pdfium.dll",
+        _ => "libpdfium.so",
+    }
 }
 
 fn requires_external_onnx_runtime(operating_system: &str, architecture: &str) -> bool {
@@ -1154,6 +1298,111 @@ mod tests {
     }
 
     #[test]
+    fn experimental_pdfium_is_signed_with_notices_and_required_by_the_worker() {
+        use ed25519_dalek::SigningKey;
+        let directory = tempfile::tempdir().unwrap();
+        let mut spec = base_spec(directory.path());
+        let cache = fixture_gemma_cache(directory.path());
+        let library = directory.path().join("libpdfium.so");
+        let notices = directory.path().join("pdfium-licenses.txt");
+        fs::write(&library, b"fixture-pdfium-library").unwrap();
+        fs::write(&notices, b"fixture-pdfium-license-and-third-party-notices").unwrap();
+        spec.pdfium_runtime_library = Some(library);
+        spec.pdfium_notices = Some(notices);
+        let manifest = build_bundle_with_optional_gemma(
+            &spec,
+            &FIXTURE_MODEL_FILES,
+            Some((&cache, &FIXTURE_GEMMA_FILES)),
+        )
+        .unwrap();
+        let artifacts = manifest.catalog().artifacts();
+        for (component, expected) in [
+            (
+                "procyon.semantic.pdfium-runtime",
+                b"fixture-pdfium-library".as_slice(),
+            ),
+            (
+                "procyon.semantic.pdfium-notices",
+                b"fixture-pdfium-license-and-third-party-notices".as_slice(),
+            ),
+        ] {
+            let artifact = artifacts
+                .iter()
+                .find(|artifact| artifact.component_id().as_str() == component)
+                .expect("PDFium artifact is included in signed catalog input");
+            assert!(matches!(artifact.kind(), ArtifactKind::Runtime));
+            assert_eq!(
+                fs::read(
+                    spec.output_directory
+                        .join("artifacts")
+                        .join(artifact.id().as_str())
+                )
+                .unwrap(),
+                expected
+            );
+        }
+        let worker = artifacts
+            .iter()
+            .find(|artifact| artifact.component_id().as_str() == PRODUCTION_WORKER_COMPONENT_ID)
+            .unwrap();
+        assert!(worker.compatibility().runtimes().iter().any(|runtime| {
+            runtime.component_id().as_str() == "procyon.semantic.pdfium-runtime"
+        }));
+        let key = SigningKey::from_bytes(&[0x42; 32]);
+        let trusted = crate::TrustedCatalog::verify_production(
+            crate::sign_production_catalog(manifest, &key).unwrap(),
+            &key.verifying_key(),
+        )
+        .unwrap();
+        assert!(trusted.artifacts().iter().any(|artifact| {
+            artifact.component_id().as_str() == PRODUCTION_PDFIUM_NOTICES_COMPONENT_ID
+        }));
+    }
+
+    #[test]
+    fn rejects_an_incomplete_pdfium_pack_and_pdfium_without_gemma() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut spec = base_spec(directory.path());
+        let library = directory.path().join("libpdfium.so");
+        let notices = directory.path().join("pdfium-licenses.txt");
+        fs::write(&library, b"fixture-pdfium-library").unwrap();
+        fs::write(&notices, b"fixture notices").unwrap();
+        spec.pdfium_runtime_library = Some(library.clone());
+        assert!(matches!(
+            build_bundle(&spec, &FIXTURE_MODEL_FILES),
+            Err(ProductionBundleError::IncompletePdfiumPack)
+        ));
+        spec.pdfium_notices = Some(notices);
+        assert!(matches!(
+            build_bundle(&spec, &FIXTURE_MODEL_FILES),
+            Err(ProductionBundleError::PdfiumRequiresGemma)
+        ));
+        spec.pdfium_runtime_library = Some(directory.path().join("wrong.so"));
+        let cache = fixture_gemma_cache(directory.path());
+        assert!(matches!(
+            build_bundle_with_optional_gemma(
+                &spec,
+                &FIXTURE_MODEL_FILES,
+                Some((&cache, &FIXTURE_GEMMA_FILES))
+            ),
+            Err(ProductionBundleError::PdfiumUnavailable)
+        ));
+        fs::write(
+            spec.pdfium_runtime_library.as_ref().unwrap(),
+            b"wrong filename",
+        )
+        .unwrap();
+        assert!(matches!(
+            build_bundle_with_optional_gemma(
+                &spec,
+                &FIXTURE_MODEL_FILES,
+                Some((&cache, &FIXTURE_GEMMA_FILES))
+            ),
+            Err(ProductionBundleError::PdfiumFileNameMismatch { .. })
+        ));
+    }
+
+    #[test]
     fn optional_gemma_requires_every_pinned_original_before_replacing_output() {
         let directory = tempfile::tempdir().unwrap();
         let spec = base_spec(directory.path());
@@ -1290,6 +1539,8 @@ mod tests {
             worker_executable: worker,
             zvec_runtime_library: runtime,
             onnx_runtime_library: Some(onnx_runtime),
+            pdfium_runtime_library: None,
+            pdfium_notices: None,
             model_cache_directory: write_fixture_model_cache(directory),
             release_base_url: ArtifactLocation::new("https://cdn.example.com/procyon/releases")
                 .unwrap(),

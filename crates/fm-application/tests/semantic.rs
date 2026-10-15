@@ -10,14 +10,16 @@ use std::time::Duration;
 use fm_application::FileManagerService;
 use fm_application::semantic::{
     DocumentId, DocumentIngestion, FakeSemanticCapability, IpcSemanticCapability, LibraryId,
-    SemanticCapability, SemanticError, SemanticHealth, SemanticIngestionState, SemanticOperationId,
-    SemanticQuery, SemanticScope, SemanticWorkerEndpoint, SemanticWorkerSecret, TenantId,
+    PdfStreamIngestion, SemanticCapability, SemanticError, SemanticHealth, SemanticIngestionState,
+    SemanticOperationId, SemanticQuery, SemanticScope, SemanticWorkerEndpoint,
+    SemanticWorkerSecret, TenantId,
 };
 use fm_semantic_protocol::{FrameError, v1::ErrorCode};
 use fm_semantic_worker::ClientError;
 #[cfg(unix)]
 use fm_semantic_worker::{WorkerConfig, WorkerServer};
 use fm_transport_dto::RuntimeKindDto;
+use sha2::Digest;
 
 struct TestDirectory(PathBuf);
 
@@ -80,6 +82,7 @@ async fn semantic_fake_filters_interleaved_unsorted_documents_before_returning_r
             document_id: DocumentId::new(document_id),
             metadata: BTreeMap::from([("kind".to_owned(), "note".to_owned())]),
             media_type: "text/plain".to_owned(),
+            pdf_images_consented: false,
             content: b"contains needle".to_vec(),
         })
         .await
@@ -107,6 +110,85 @@ async fn semantic_fake_filters_interleaved_unsorted_documents_before_returning_r
 }
 
 #[tokio::test]
+async fn provider_pdf_stream_retains_its_authorized_scope_and_searchable_bytes() {
+    let fake = FakeSemanticCapability::new();
+    let scope = SemanticScope::new(TenantId::new("tenant-a"), LibraryId::new("library-a"));
+    let bytes = b"%PDF-1.7\nsynthetic searchable page".to_vec();
+    let digest: [u8; 32] = sha2::Sha256::digest(&bytes).into();
+    let mut reader = std::io::Cursor::new(bytes.clone());
+    fake.ingest_pdf_stream(PdfStreamIngestion {
+        scope: scope.clone(),
+        operation_id: SemanticOperationId::new("ingest-pdf"),
+        document_id: DocumentId::new("pdf"),
+        metadata: BTreeMap::new(),
+        pdf_images_consented: false,
+        content_bytes: bytes.len() as u64,
+        content_sha256: digest,
+        reader: &mut reader,
+    })
+    .await
+    .expect("stream PDF through fake");
+    assert_eq!(
+        fake.query(SemanticQuery {
+            scope,
+            request_id: SemanticOperationId::new("query"),
+            text: "searchable".into(),
+            concept: None,
+            maximum_results: 5,
+        })
+        .await
+        .unwrap()[0]
+            .document_id,
+        DocumentId::new("pdf")
+    );
+}
+
+#[tokio::test]
+async fn changed_pdf_snapshot_checksum_cannot_replace_previous_complete_document() {
+    let fake = FakeSemanticCapability::new();
+    let scope = SemanticScope::new(TenantId::new("tenant"), LibraryId::new("library"));
+    fake.ingest(DocumentIngestion {
+        scope: scope.clone(),
+        operation_id: SemanticOperationId::new("original"),
+        document_id: DocumentId::new("pdf"),
+        metadata: BTreeMap::new(),
+        media_type: "application/pdf".into(),
+        pdf_images_consented: false,
+        content: b"original searchable text".to_vec(),
+    })
+    .await
+    .unwrap();
+    let changed = b"replacement text".to_vec();
+    let mut reader = std::io::Cursor::new(changed.clone());
+    let error = fake
+        .ingest_pdf_stream(PdfStreamIngestion {
+            scope: scope.clone(),
+            operation_id: SemanticOperationId::new("replacement"),
+            document_id: DocumentId::new("pdf"),
+            metadata: BTreeMap::new(),
+            pdf_images_consented: false,
+            content_bytes: changed.len() as u64,
+            content_sha256: [0; 32],
+            reader: &mut reader,
+        })
+        .await;
+    assert!(matches!(error, Err(SemanticError::InvalidRequest(_))));
+    assert_eq!(
+        fake.query(SemanticQuery {
+            scope,
+            request_id: SemanticOperationId::new("query"),
+            text: "original".into(),
+            concept: None,
+            maximum_results: 5,
+        })
+        .await
+        .unwrap()
+        .len(),
+        1
+    );
+}
+
+#[tokio::test]
 async fn semantic_injected_fake_ingestion_and_query_flow_through_the_facade() {
     let directory = TestDirectory::new("facade");
     let service = FileManagerService::new(
@@ -124,6 +206,7 @@ async fn semantic_injected_fake_ingestion_and_query_flow_through_the_facade() {
             document_id: DocumentId::new("document"),
             metadata: BTreeMap::new(),
             media_type: "text/plain".to_owned(),
+            pdf_images_consented: false,
             content: b"searchable content".to_vec(),
         })
         .await
@@ -159,6 +242,7 @@ async fn semantic_facade_delegates_fake_job_events_cancellation_and_shutdown_lif
             document_id: DocumentId::new("document"),
             metadata: BTreeMap::new(),
             media_type: "text/plain".to_owned(),
+            pdf_images_consented: false,
             content: b"content".to_vec(),
         })
         .await
@@ -322,6 +406,7 @@ async fn semantic_ipc_capability_adapts_worker_operations_to_application_types()
             document_id: DocumentId::new("document"),
             metadata: BTreeMap::from([("kind".to_owned(), "note".to_owned())]),
             media_type: "text/plain".to_owned(),
+            pdf_images_consented: false,
             content: b"semantic bytes".to_vec(),
         })
         .await
@@ -567,6 +652,7 @@ async fn semantic_cancel_targets_an_ingestion_operation_while_it_is_in_flight() 
                 document_id: DocumentId::new("cancelled-document"),
                 metadata: BTreeMap::new(),
                 media_type: "text/plain".to_owned(),
+                pdf_images_consented: false,
                 content: b"must not be committed".to_vec(),
             })
             .await

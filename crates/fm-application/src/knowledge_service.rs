@@ -218,9 +218,21 @@ impl KnowledgeService {
                 root_id: root.id,
                 location: root.location.into(),
                 recursive: root.recursive,
+                pdf_images_enabled: root.pdf_images_enabled,
+                pdf_image_page_budget: root.pdf_image_page_budget,
                 available: matches!(root.availability, SemanticRootAvailability::Available),
                 indexed_generation: root.indexed_generation,
                 indexed_sources: root.indexed_occurrences,
+                confirmed_completed_sources: root
+                    .completed_occurrences_by_workspace
+                    .get(&workspace_id)
+                    .copied()
+                    .unwrap_or(0),
+                unverified_legacy_sources: root
+                    .unverified_legacy_occurrences_by_workspace
+                    .get(&workspace_id)
+                    .copied()
+                    .unwrap_or(0),
             })
             .collect())
     }
@@ -883,7 +895,7 @@ fn scope_label(
     selection: &RagScopeSelection,
 ) -> String {
     match selection {
-        RagScopeSelection::EntireLibrary => "Entire indexed library".to_owned(),
+        RagScopeSelection::EntireLibrary => "All indexed folders in workspace".to_owned(),
         RagScopeSelection::EnrolledRoots(roots) => format!("{} indexed root(s)", roots.len()),
         RagScopeSelection::CurrentFolder(folder) => location_label(&folder.uri),
         RagScopeSelection::SemanticResults(_) => {
@@ -1084,6 +1096,7 @@ mod tests {
             modified_at_ms: Some(10),
             indexed_content_hash: "sha256:rotor".to_owned(),
             generation: 1,
+            pdf_image_skipped_pages: None,
             source_position: 0,
             generated: false,
             unavailable: false,
@@ -1260,13 +1273,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn entire_library_search_keeps_indexed_evidence_after_workspace_replacement() {
+    async fn entire_library_knowledge_search_cannot_cross_workspaces() {
         let capability = Arc::new(RecordingCapability::new(Vec::new()));
         let fixture = fixture(capability.clone());
         capability.set_evidence(vec![evidence("r1", &fixture.source_id)]);
         let replacement_workspace = Uuid::new_v4();
 
-        let result = fixture
+        let error = fixture
             .service
             .execute_knowledge_search(
                 &SemanticAccessContext::Host,
@@ -1280,16 +1293,10 @@ mod tests {
                 },
             )
             .await
-            .expect("host-wide device library search");
+            .expect_err("another workspace's root must not be searched");
 
-        assert_eq!(result.evidence.len(), 1);
-        let requests = capability.requests();
-        assert_eq!(requests.len(), 1);
-        assert_eq!(
-            requests[0].scopes[0].filters.tenant_id,
-            fixture.workspace_id.to_string()
-        );
-        assert!(requests[0].scopes[0].filters.workspace_id.is_none());
+        assert!(matches!(error, ApplicationError::NotFound));
+        assert!(capability.requests().is_empty());
     }
 
     /// A build without a measured go decision must fail closed everywhere the
@@ -1559,7 +1566,7 @@ mod tests {
                 .any(|field| field.field == "constraint")
         );
         assert_eq!(plan.authorized_sources, 1);
-        assert_eq!(plan.scope_label, "Entire indexed library");
+        assert_eq!(plan.scope_label, "All indexed folders in workspace");
     }
 
     #[tokio::test]
@@ -1631,6 +1638,8 @@ mod tests {
         assert_eq!(roots[0].label, "indexed-library");
         assert_eq!(roots[0].indexed_generation, 0);
         assert_eq!(roots[0].indexed_sources, 1);
+        assert_eq!(roots[0].confirmed_completed_sources, 0);
+        assert_eq!(roots[0].unverified_legacy_sources, 0);
 
         let interpretation = fixture
             .service
@@ -2160,6 +2169,63 @@ mod resolved_scope_tests {
         assert_eq!(result.plan.scope.kind, KnowledgeScopeKindDto::CurrentFolder);
         assert!(result.plan.scope_is_exact);
         assert!(result.coverage.scope_is_exact);
+    }
+
+    #[tokio::test]
+    async fn enrolled_workspace_roots_find_the_same_source_from_either_folder() {
+        let capability = Arc::new(RecordingCapability::new(Vec::new()));
+        let fixture = fixture(capability.clone());
+        capability.set_evidence(vec![evidence("r1", &fixture.source_id)]);
+        let request = || ExecuteKnowledgeSearchRequestDto {
+            request_id: Uuid::new_v4(),
+            draft: draft(),
+            scope: KnowledgeScopeDto {
+                kind: KnowledgeScopeKindDto::EnrolledRoots,
+                workspace_id: fixture.workspace_id,
+                enrolled_root_ids: vec![fixture.root_id.clone()],
+                folder: None,
+                semantic_source_ids: Vec::new(),
+            },
+            mode: KnowledgeRetrievalModeDto::FullText,
+            intent: Default::default(),
+            options: None,
+        };
+        for _viewed_folder in ["file:///indexed-library", "file:///indexed-library/other"] {
+            let result = fixture
+                .service
+                .execute_knowledge_search(&SemanticAccessContext::Host, request())
+                .await
+                .expect("root-scoped search is independent of the displayed folder");
+            assert_eq!(result.plan.scope.kind, KnowledgeScopeKindDto::EnrolledRoots);
+            assert!(
+                result
+                    .evidence
+                    .iter()
+                    .any(|row| row.source_id == fixture.source_id)
+            );
+        }
+        assert_eq!(capability.requests().len(), 2);
+        assert!(capability.requests().iter().all(|issued| {
+            issued.scopes[0].filters.root_id.as_deref() == Some(fixture.root_id.as_str())
+                && issued.scopes[0].filters.tenant_id == fixture.workspace_id.to_string()
+        }));
+
+        let mut only_other_folder = request();
+        only_other_folder.scope.kind = KnowledgeScopeKindDto::CurrentFolder;
+        only_other_folder.scope.enrolled_root_ids.clear();
+        only_other_folder.scope.folder = Some(
+            fm_domain::Location::parse("file:///indexed-library/other")
+                .unwrap()
+                .into(),
+        );
+        assert!(matches!(
+            fixture
+                .service
+                .execute_knowledge_search(&SemanticAccessContext::Host, only_other_folder)
+                .await,
+            Err(crate::error::ApplicationError::NotFound)
+        ));
+        assert_eq!(capability.requests().len(), 2);
     }
 
     /// Coverage and evidence state come from a fresh host snapshot: publication

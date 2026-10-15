@@ -98,6 +98,7 @@ export interface PaneContentContext {
   // Scalar state getters
   getWorkspace(): WorkspaceProjection | undefined;
   getCurrentSettings(): Settings | undefined;
+  getKnowledgeAnswerRevision(): number;
   getSystemLocations(): readonly SystemLocation[];
   getSystemLocationsError(): string | undefined;
   getVolumes(): readonly Volume[];
@@ -116,6 +117,9 @@ export interface PaneContentContext {
   getNativeDropInProgress(): boolean;
   getAppState(): AppState | undefined;
   getOperations(): readonly Operation[];
+  getContextMenu():
+    | { readonly paneId: PaneId; readonly entries: readonly EntrySummary[] }
+    | undefined;
   /** Revision bumped when the context menu or palette asks this pane to start renaming. */
   getRenameRequest?(paneId: PaneId): PaneRenameRequest | undefined;
   clipboard(): ClipboardState;
@@ -204,14 +208,17 @@ export interface PaneContentContext {
     entry: EntrySummary,
     initialSearch?: InitialSearch,
     openMetadata?: boolean,
+    initialPage?: number,
   ): void;
   closeViewer(paneId: PaneId): void;
   isDocumentSummaryAvailable?(): boolean;
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
   /** Opens search-only knowledge search defaulted to the visible result set (task 0206). */
   openKnowledgeSearch?(): void;
+  openKnowledgeAnswerSettings?(): void;
   closeKnowledgeSearch(paneId: PaneId, tabId: TabId): void;
   openKnowledgeSource(paneId: PaneId, evidence: KnowledgeEvidence): Promise<void>;
+  isKnowledgeSourceOpen(evidence: KnowledgeEvidence): boolean;
   closeEditor(paneId: PaneId): void;
   updateLocationSettings(
     client: FileManagerClient,
@@ -336,6 +343,12 @@ export function createPaneContentBuilder(
     const cursorIndex =
       selection.cursorEntryId === undefined ? undefined : entryIds.indexOf(selection.cursorEntryId);
     const selectedEntryIds = new Set<EntryId>(selection.selectedEntryIds);
+    const menu = context.getContextMenu();
+    const menuEntry = menu?.paneId === paneId ? menu.entries[0] : undefined;
+    const contextTargetEntryId =
+      menu?.entries.length === 1 && menuEntry !== undefined && !selectedEntryIds.has(menuEntry.id)
+        ? menuEntry.id
+        : undefined;
     // While filtering, the true directory total can't be projected past what's loaded and
     // matched so far; otherwise use the backend's real count (plus the synthetic ".." row)
     // so the scrollbar is sized correctly from the very first page, not just once fully loaded.
@@ -489,6 +502,7 @@ export function createPaneContentBuilder(
       actions: context.getRegisteredActions(),
       keybindingOverrides: currentSettings?.keybindings ?? {},
       ...(cursorIndex === undefined || cursorIndex < 0 ? {} : { cursorIndex }),
+      ...(contextTargetEntryId === undefined ? {} : { contextTargetEntryId }),
       ...(renameRequest === undefined ? {} : { renameRequest }),
       onNavigate: async (path) => {
         if (tab !== undefined) {
@@ -561,13 +575,21 @@ export function createPaneContentBuilder(
         tab?.location.uri.startsWith('search://')
           ? context.getNavigation().back(paneId)
           : context.getNavigation().parent(paneId),
-      onOpenEntry: (entry, evidenceQuery) => {
+      onOpenEntry: (entry, evidenceQuery, initialPage) => {
         if (isParentEntry(entry.id)) {
           return tab?.location.uri.startsWith('search://')
             ? context.getNavigation().back(paneId)
             : context.getNavigation().parent(paneId);
         }
         if (tab?.location.uri.startsWith('search://')) {
+          if (initialPage !== undefined) {
+            const otherPaneId = workspace?.paneOrder.find(
+              (candidatePaneId) => candidatePaneId !== paneId,
+            );
+            if (otherPaneId) {
+              return context.openViewer(otherPaneId, entry, undefined, undefined, initialPage);
+            }
+          }
           const initialSearch =
             evidenceQuery === undefined
               ? context.contentSearchInitialQuery(tab.location.uri, entry)
@@ -986,8 +1008,13 @@ export function createPaneContentBuilder(
                       currentFolder: knowledgeSearch.currentFolder,
                       semanticSourceIds: knowledgeSearch.semanticSourceIds,
                       initialSubject: knowledgeSearch.initialSubject,
+                      profileRevision: context.getKnowledgeAnswerRevision(),
+                      ...(context.openKnowledgeAnswerSettings === undefined
+                        ? {}
+                        : { onConfigureAnswers: context.openKnowledgeAnswerSettings }),
                       onClose: () => context.closeKnowledgeSearch(paneId, knowledgeSearch.tabId),
                       onOpenSource: (evidence) => context.openKnowledgeSource(paneId, evidence),
+                      isSourceOpen: context.isKnowledgeSourceOpen,
                     });
                   }
                   const viewer = context.getViewerByTab().get(key);

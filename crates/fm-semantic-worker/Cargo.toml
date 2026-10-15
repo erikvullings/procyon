@@ -23,10 +23,22 @@ developer-bundle = ["semantic-runtime"]
 # Native CPU dependencies stay out of the E5-only runtime. Optional Gemma
 # worker binaries must be built with gemma-native.
 gemma-native = ["semantic-runtime", "gemma-probe"]
-gemma-probe = ["dep:fm-metadata", "dep:image", "dep:lattice-inference", "dep:symphonia", "dep:tokenizers"]
+# Host-side Gemma launch description only: no native inference, Zvec or ONNX
+# Runtime, so a desktop host can opt in without linking worker-only libraries.
+gemma-launch = []
+gemma-probe = ["gemma-launch", "dep:fm-metadata", "dep:image", "dep:lattice-inference", "dep:symphonia", "dep:tokenizers"]
+# Explicit development-worker FP32 Metal image offload; not in release bundles.
+gemma-metal = ["gemma-probe", "lattice-inference/metal-gpu"]
+# Development-only child isolation path; not included in release worker recipes.
+experimental-large-pdf = ["dep:lopdf", "dep:sysinfo"]
+# Native PDF page rasterization is development-only until signed, installed
+# four-target renderer packs and resource isolation are qualified.
+experimental-pdf-render = ["experimental-large-pdf", "dep:pdfium-render", "dep:image"]
 
 [dependencies]
+blake3.workspace = true
 caseless.workspace = true
+dunce.workspace = true
 fm-semantic-components = {workspace = true, optional = true}
 fm-semantic-conversion.workspace = true
 fm-semantic-docling.workspace = true
@@ -35,7 +47,9 @@ fm-metadata = {workspace = true, optional = true}
 fs2.workspace = true
 image = {workspace = true, optional = true}
 lattice-inference = { git = "https://github.com/ohdearquant/lattice.git", rev = "17915f3748a4047c0af61bd8bc7066d1dccf24b4", default-features = false, features = ["std"], optional = true }
+lopdf = { workspace = true, optional = true }
 ort = {workspace = true, optional = true, features = ["std", "ndarray", "tracing", "api-27"]}
+pdfium-render = { version = "0.8.37", default-features = false, features = ["pdfium_latest", "image"], optional = true }
 prost.workspace = true
 rand.workspace = true
 rusqlite.workspace = true
@@ -43,15 +57,16 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 symphonia = { version = "0.5.5", default-features = false, features = ["aac", "flac", "isomp4", "mp3", "pcm", "wav"], optional = true }
+sysinfo = { version = "0.39.6", optional = true }
 thiserror.workspace = true
 tokenizers = {workspace = true, optional = true}
 tokio.workspace = true
 tokio-util.workspace = true
+tempfile.workspace = true
 zvec-rust = {workspace = true, optional = true}
 
 [dev-dependencies]
 lopdf.workspace = true
-tempfile.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true
@@ -74,3 +89,7 @@ workspace = true
 [[example]]
 name = "embeddinggemma_text_probe"
 required-features = ["gemma-probe"]
+
+[[example]]
+name = "evaluate_gemma_native"
+required-features = ["gemma-native"]

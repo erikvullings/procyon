@@ -38,9 +38,57 @@ mod chunk;
 mod converter;
 mod formats;
 mod model;
+mod pdf_report;
+mod pdf_toc;
 mod sniff;
 mod text;
 mod tokens;
+
+/// Maximum eager decompression of one PDF object or xref stream while loading.
+/// This is not a limit on total parser memory or a substitute for isolation.
+pub const MAX_PDF_STRUCTURAL_STREAM_BYTES: usize = 16 * 1024 * 1024;
+
+/// Loads an untrusted PDF's object graph without retaining image XObject bodies.
+///
+/// Scanned PDFs are dominated by raster payloads, so retaining them would hold
+/// a second source-sized copy in memory. Image dictionaries stay available;
+/// callers that need a drawn raster re-read that one object from `bytes`.
+pub fn load_pdf_structure(bytes: &[u8]) -> lopdf::Result<lopdf::Document> {
+    let mut options =
+        lopdf::LoadOptions::with_max_decompressed_size(MAX_PDF_STRUCTURAL_STREAM_BYTES);
+    options.filter = Some(formats::pdf::defer_image_body);
+    lopdf::Document::load_mem_with_options(bytes, options)
+}
+
+/// Checks that an untrusted PDF's loaded page tree matches its declared page count.
+///
+/// `lopdf` can omit an oversized compressed object stream when loading it.
+/// Without this check, its missing page objects could be mistaken for a
+/// shorter, successfully converted document.
+pub fn checked_pdf_pages(
+    document: &lopdf::Document,
+) -> Result<std::collections::BTreeMap<u32, lopdf::ObjectId>, String> {
+    let catalog = document
+        .catalog()
+        .map_err(|error| format!("PDF catalog is unreadable: {error}"))?;
+    let pages_id = catalog
+        .get(b"Pages")
+        .and_then(lopdf::Object::as_reference)
+        .map_err(|error| format!("PDF page tree is unreadable: {error}"))?;
+    let count = document
+        .get_dictionary(pages_id)
+        .and_then(|pages| pages.get(b"Count"))
+        .and_then(lopdf::Object::as_i64)
+        .map_err(|error| format!("PDF page count is unreadable: {error}"))?;
+    let pages = document.get_pages();
+    if count < 1 || usize::try_from(count) != Ok(pages.len()) {
+        return Err(format!(
+            "PDF page tree is incomplete: declared {count} pages, loaded {}",
+            pages.len()
+        ));
+    }
+    Ok(pages)
+}
 
 pub use advanced::{
     AdvancedCapability, AdvancedConversion, AdvancedConverterAdapter, AdvancedConverterBackend,
@@ -54,14 +102,17 @@ pub use chunk::{
 };
 pub use converter::{
     BASELINE_CONVERTER_VERSION, BaselineConverter, ConversionContext, ConversionError,
-    DocumentConverter, SourceContent,
+    DocumentConverter, InvalidPdfPageWindow, PdfPageWindow, SourceContent,
 };
+pub use formats::pdf::{PdfWindowMergeError, merge_pdf_text_windows};
 pub use model::{
     Completeness, ComponentVersion, ConversionOutcome, ConversionWarning, ConvertedDocument,
     DocumentMetadata, FormatKind, MAX_TOTAL_VISUAL_BYTES, MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES,
     MAX_VISUAL_PIXELS, MediaType, Omission, Provenance, SkipReason, StructuralUnit,
     TopLevelBoundary, UnitKind, VisualAttachment, VisualOmission, VisualProvenance,
 };
+pub use pdf_report::{InvalidPdfTextReport, PdfTextReport};
+pub use pdf_toc::{clean_pdf_toc_text, is_pdf_toc_section, repair_spaced_elsevier_doi};
 pub use sniff::{ResolvedFormat, resolve_format};
 pub use text::{
     DecodedText, SanitizedText, SourceMap, SourceSegment, decode, instruction_like_excerpt,

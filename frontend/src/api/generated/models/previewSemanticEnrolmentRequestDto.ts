@@ -10,6 +10,14 @@ import type { LocationDto } from './locationDto.ts';
 export interface PreviewSemanticEnrolmentRequestDto {
   /** Active folder. */
   location: LocationDto;
+  /**
+     * Per-document page-image budget; `None` allows every page on Metal.
+     * @minimum 0
+     * @nullable
+     */
+  pdfImagePageBudget?: number | null;
+  /** Additional per-root PDF page-image consent; defaults safely to off. */
+  pdfImagesEnabled?: boolean;
   /** Whether descendants inherit consent. */
   recursive: boolean;
   /** Active workspace. */

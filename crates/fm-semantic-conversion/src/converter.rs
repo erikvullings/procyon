@@ -22,7 +22,39 @@ use crate::text::decode;
 
 /// Version of the baseline converter. Bumping it invalidates every fingerprint
 /// derived from its output.
-pub const BASELINE_CONVERTER_VERSION: ComponentVersion = ComponentVersion::new("baseline", 2);
+pub const BASELINE_CONVERTER_VERSION: ComponentVersion = ComponentVersion::new("baseline", 3);
+
+/// One-based, inclusive page window for staged PDF conversion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PdfPageWindow {
+    start: u32,
+    end: u32,
+}
+
+impl PdfPageWindow {
+    /// Rejects zero-based or reversed page ranges before conversion.
+    pub fn new(start: u32, end: u32) -> Result<Self, InvalidPdfPageWindow> {
+        if start == 0 || end < start {
+            return Err(InvalidPdfPageWindow);
+        }
+        Ok(Self { start, end })
+    }
+
+    /// First one-based page.
+    pub const fn start(self) -> u32 {
+        self.start
+    }
+
+    /// Last one-based page.
+    pub const fn end(self) -> u32 {
+        self.end
+    }
+}
+
+/// A PDF page window must be one-based and ordered.
+#[derive(Debug, thiserror::Error)]
+#[error("PDF page window must be one-based and ordered")]
+pub struct InvalidPdfPageWindow;
 
 /// Magic bytes of an OLE compound file. Encrypted OOXML documents are stored
 /// this way, as are the legacy `.doc`/`.xls`/`.ppt` binary formats.
@@ -55,6 +87,7 @@ pub struct ConversionContext {
     cancellation: Cancellation,
     clock: Arc<dyn Clock>,
     visual_evidence: bool,
+    pdf_page_window: Option<PdfPageWindow>,
 }
 
 impl Default for ConversionContext {
@@ -64,6 +97,7 @@ impl Default for ConversionContext {
             cancellation: Cancellation::none(),
             clock: Arc::new(SystemClock::new()),
             visual_evidence: false,
+            pdf_page_window: None,
         }
     }
 }
@@ -112,6 +146,20 @@ impl ConversionContext {
     pub fn with_visual_evidence(mut self, enabled: bool) -> Self {
         self.visual_evidence = enabled;
         self
+    }
+
+    /// Restricts PDF extraction to a page window. Subset output is always
+    /// partial and must not be published as a complete document generation.
+    #[must_use]
+    pub fn with_pdf_page_window(mut self, window: PdfPageWindow) -> Self {
+        self.pdf_page_window = Some(window);
+        self
+    }
+
+    /// Requested PDF page window, when staging a subset.
+    #[must_use]
+    pub fn pdf_page_window(&self) -> Option<PdfPageWindow> {
+        self.pdf_page_window
     }
 
     /// The budgets in force.
@@ -294,6 +342,11 @@ impl DocumentConverter for BaselineConverter {
                 return Ok(ConversionOutcome::Malformed { detail });
             }
         };
+        if context.pdf_page_window().is_some() && format != FormatKind::Pdf {
+            return Ok(ConversionOutcome::Malformed {
+                detail: "PDF page windows cannot convert non-PDF content".to_owned(),
+            });
+        }
 
         let mut tracker = BudgetTracker::new(
             &context.budgets,
@@ -377,7 +430,7 @@ impl DocumentConverter for BaselineConverter {
             FormatKind::Pdf => {
                 let mut builder = DocumentBuilder::new(self.version(), format, &mut tracker);
                 builder.set_visuals_enabled(context.visual_evidence());
-                if let Err(error) = pdf::convert(&mut builder, bytes) {
+                if let Err(error) = pdf::convert(&mut builder, bytes, context.pdf_page_window()) {
                     return Ok(pdf_outcome(error));
                 }
                 builder.finish()

@@ -342,6 +342,9 @@ pub struct KnowledgeEvidence {
     pub indexed_content_hash: String,
     /// Published generation.
     pub generation: u64,
+    /// PDF pages omitted by the configured page-image budget.
+    #[serde(default)]
+    pub pdf_image_skipped_pages: Option<u32>,
     /// Document order.
     pub source_position: u32,
     /// Generated rather than extracted evidence.
@@ -583,8 +586,8 @@ impl KnowledgeRetrievalService {
         if cancellation.is_cancelled() {
             return Err(KnowledgeRetrievalError::Cancelled);
         }
-        let fused = fuse_ranked_candidates(&lists, request.policy.rank_constant);
-        let evidence = self.materialize(&reader, &fused, &lists, &request, cancellation)?;
+        let mut fused = fuse_ranked_candidates(&lists, request.policy.rank_constant);
+        let evidence = self.materialize(&reader, &mut fused, &lists, &request, cancellation)?;
         let token_count = evidence
             .iter()
             .map(|item| item.token_count)
@@ -760,12 +763,30 @@ impl KnowledgeRetrievalService {
     fn materialize(
         &self,
         reader: &CatalogReader,
-        fused: &[FusedCandidate],
+        fused: &mut [FusedCandidate],
         lists: &[RankedCandidateList],
         request: &KnowledgeRetrievalRequest,
         cancellation: &CancellationToken,
     ) -> Result<Vec<KnowledgeEvidence>, KnowledgeRetrievalError> {
         let authorized = self.authorize_candidates(reader, fused, lists, request, cancellation)?;
+        for candidate in fused.iter_mut() {
+            if let Some((_, item)) = authorized.get(&candidate.record_id)
+                && crate::ingestion::is_pdf_navigation(
+                    &item.media_type,
+                    &item.record_kind,
+                    &item.section_path,
+                    &item.content,
+                )
+            {
+                candidate.score *= 0.25;
+            }
+        }
+        fused.sort_by(|left, right| {
+            right
+                .score
+                .total_cmp(&left.score)
+                .then_with(|| left.record_id.cmp(&right.record_id))
+        });
         let mut primaries = Vec::<(usize, QueryEvidence)>::new();
         let mut duplicates = HashMap::<String, BTreeSet<String>>::new();
         let mut logical_chunks = HashMap::<ChunkIdentity, String>::new();
@@ -990,6 +1011,7 @@ struct ChunkIdentity {
     record_kind: String,
     generation: u64,
     source_position: u32,
+    image_provenance: Option<String>,
 }
 
 impl ChunkIdentity {
@@ -999,6 +1021,8 @@ impl ChunkIdentity {
             record_kind: evidence.record_kind.clone(),
             generation: evidence.generation,
             source_position: evidence.source_position,
+            image_provenance: (evidence.record_kind == "pdf_image")
+                .then(|| evidence.provenance.clone()),
         }
     }
 }
@@ -1174,6 +1198,20 @@ fn build_evidence(
 ) -> Result<KnowledgeEvidence, KnowledgeRetrievalError> {
     let provenance = serde_json::from_str(&evidence.provenance)
         .map_err(|_| KnowledgeRetrievalError::InvalidProvenance)?;
+    let navigation = crate::ingestion::is_pdf_navigation(
+        &evidence.media_type,
+        &evidence.record_kind,
+        &evidence.section_path,
+        &evidence.content,
+    );
+    let (excerpt, content) = if evidence.media_type == "application/pdf" {
+        (
+            fm_semantic_conversion::clean_pdf_toc_text(&evidence.excerpt).0,
+            fm_semantic_conversion::clean_pdf_toc_text(&evidence.content).0,
+        )
+    } else {
+        (evidence.excerpt.clone(), evidence.content.clone())
+    };
     let stale = request
         .current_hashes
         .get(&evidence.source_id)
@@ -1187,9 +1225,13 @@ fn build_evidence(
             .unwrap_or_default(),
         document_id: evidence.document_id,
         library_id: evidence.library_id,
-        chunk_kind: evidence.record_kind,
-        excerpt: evidence.excerpt,
-        content: evidence.content,
+        chunk_kind: if navigation {
+            "navigation".into()
+        } else {
+            evidence.record_kind
+        },
+        excerpt,
+        content,
         token_count: evidence.token_count,
         section_path: evidence.section_path,
         provenance,
@@ -1197,6 +1239,7 @@ fn build_evidence(
         modified_at_ms: (evidence.modified_at_ms != 0).then_some(evidence.modified_at_ms),
         indexed_content_hash: evidence.content_hash,
         generation: evidence.generation,
+        pdf_image_skipped_pages: evidence.pdf_image_skipped_pages,
         source_position: evidence.source_position,
         generated: evidence.generated,
         unavailable: !evidence.available,
@@ -1501,6 +1544,8 @@ mod tests {
                 library_id: "library-a".into(),
                 document_id: document_id.into(),
                 content_hash: format!("hash-{document_id}"),
+                source_complete: true,
+                pdf_image_skipped_pages: None,
                 generation: 1,
                 occurrences,
                 records,
@@ -1927,6 +1972,54 @@ mod tests {
         assert_eq!(record_ids(&retrieval), ["b-0", "a-0", "a-1"]);
         assert_eq!(retrieval.evidence[0].final_rank, 1);
         assert_eq!(retrieval.evidence[2].final_rank, 3);
+    }
+
+    #[test]
+    fn toc_candidates_keep_navigation_access_without_outranking_body_evidence() {
+        let path = catalog_path();
+        let catalog = SemanticCatalog::open(&path).expect("catalog");
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .expect("library");
+        let mut toc_occurrence = occurrence("toc-occ", "toc-source", "root-a", "workspace-a", true);
+        toc_occurrence.media_type = "application/pdf".into();
+        let mut body_occurrence =
+            occurrence("body-occ", "body-source", "root-a", "workspace-a", true);
+        body_occurrence.media_type = "application/pdf".into();
+        let mut toc = record("toc-0", "toc-occ", 0);
+        toc.record_kind = "navigation".into();
+        toc.excerpt = "........................ Aggression".into();
+        toc.content = toc.excerpt.clone();
+        publish(&catalog, "tenant-a", "toc", vec![toc_occurrence], vec![toc]);
+        publish(
+            &catalog,
+            "tenant-a",
+            "body",
+            vec![body_occurrence],
+            vec![record("body-0", "body-occ", 0)],
+        );
+        let service = KnowledgeRetrievalService::new(
+            catalog,
+            None,
+            None,
+            Some(FakeFullTextIndex::returning(vec![vec!["toc-0", "body-0"]])),
+        );
+        let mut request = request(KnowledgeRoute::FullText, policy());
+        request.policy.include_trace = true;
+        let result = service
+            .retrieve(request, &CancellationToken::new())
+            .expect("retrieve");
+        assert_eq!(
+            result
+                .evidence
+                .iter()
+                .map(|item| (item.record_id.as_str(), item.content.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("body-0", "complete text for body-0"),
+                ("toc-0", "Aggression")
+            ]
+        );
     }
 
     #[test]
@@ -2751,6 +2844,89 @@ mod tests {
     }
 
     #[test]
+    fn distinct_pdf_images_on_one_page_remain_visible_across_duplicate_occurrences() {
+        let path = catalog_path();
+        let catalog = fixture(&path);
+        let image_record = |id: &str, occurrence_id: &str, image_index: u32| {
+            let mut record = record(id, occurrence_id, 1);
+            record.record_kind = "pdf_image".into();
+            record.content.clear();
+            record.token_count = 0;
+            record.provenance = serde_json::to_string(&ChunkProvenance::Exact(
+                fm_semantic_conversion::Provenance::PdfImage {
+                    page_number: 1,
+                    image_index,
+                },
+            ))
+            .expect("PDF image provenance");
+            record
+        };
+        let pdf_occurrence = |id, source| Occurrence {
+            media_type: "application/pdf".into(),
+            ..occurrence(id, source, "root-a", "workspace-a", true)
+        };
+        publish(
+            &catalog,
+            "tenant-a",
+            "document-pdf",
+            vec![
+                pdf_occurrence("pdf-a", "source-pdf-a"),
+                pdf_occurrence("pdf-b", "source-pdf-b"),
+            ],
+            vec![
+                image_record("img-1", "pdf-a", 1),
+                image_record("img-2", "pdf-a", 2),
+                image_record("img-1-copy", "pdf-b", 1),
+                record("pdf-text", "pdf-a", 1),
+            ],
+        );
+        let service = KnowledgeRetrievalService::new(
+            catalog,
+            None,
+            None,
+            Some(FakeFullTextIndex::returning(vec![vec![
+                "img-1",
+                "img-2",
+                "img-1-copy",
+            ]])),
+        );
+        let retrieved = service
+            .retrieve(
+                request(
+                    KnowledgeRoute::FullText,
+                    KnowledgeRetrievalPolicy {
+                        result_limit: 3,
+                        adjacent_chunk_radius: 1,
+                        ..policy()
+                    },
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("page-image evidence");
+        assert_eq!(record_ids(&retrieved), ["img-1", "img-2"]);
+        assert_eq!(retrieved.evidence[0].duplicate_source_ids, ["source-pdf-b"]);
+        let text_service = KnowledgeRetrievalService::new(
+            SemanticCatalog::open(&path).expect("reopen catalog"),
+            None,
+            None,
+            Some(FakeFullTextIndex::returning(vec![vec!["pdf-text"]])),
+        );
+        let text = text_service
+            .retrieve(
+                request(
+                    KnowledgeRoute::FullText,
+                    KnowledgeRetrievalPolicy {
+                        adjacent_chunk_radius: 1,
+                        ..policy()
+                    },
+                ),
+                &CancellationToken::new(),
+            )
+            .expect("text evidence");
+        assert_eq!(record_ids(&text), ["pdf-text"]);
+    }
+
+    #[test]
     fn authorization_continues_in_batches_until_a_visible_result_is_found() {
         let path = catalog_path();
         let mut candidates = (0..AUTHORIZATION_BATCH_SIZE)
@@ -3034,10 +3210,11 @@ mod tests {
             route: KnowledgeRoute::FullText,
             record_ids: vec!["a-0".into()],
         }];
+        let mut fused = fuse_ranked_candidates(&lists, DEFAULT_RANK_CONSTANT);
         assert!(matches!(
             service.materialize(
                 &service.catalog.begin_read().expect("read lease"),
-                &fuse_ranked_candidates(&lists, DEFAULT_RANK_CONSTANT),
+                &mut fused,
                 &lists,
                 &request(
                     KnowledgeRoute::FullText,

@@ -47,7 +47,7 @@ function parentPath(entry: EntrySummary): string {
   try {
     const path = decodeURIComponent(new URL(entry.location.uri).pathname).replace(/\/+$/u, '');
     const separator = path.lastIndexOf('/');
-    return separator <= 0 ? '/' : path.slice(0, separator);
+    return `${entry.location.providerId}:${new URL(entry.location.uri).host}${separator <= 0 ? '/' : path.slice(0, separator)}`;
   } catch {
     return entry.location.uri;
   }
@@ -81,18 +81,20 @@ export function sortEntries(
   return entries
     .map((entry, index) => ({ entry, index }))
     .sort((left, right) => {
+      if (options.groupByParentPath === true) {
+        const pathComparison = compareNames(parentPath(left.entry), parentPath(right.entry));
+        if (pathComparison !== 0) {
+          return descriptor?.column === 'name' && descriptor.direction === 'descending'
+            ? -pathComparison
+            : pathComparison;
+        }
+      }
       if (foldersFirst && left.entry.kind !== right.entry.kind) {
         if (left.entry.kind === 'directory') return -1;
         if (right.entry.kind === 'directory') return 1;
       }
 
       if (descriptor !== undefined) {
-        if (descriptor.column === 'name' && options.groupByParentPath === true) {
-          const pathComparison = compareNames(parentPath(left.entry), parentPath(right.entry));
-          if (pathComparison !== 0) {
-            return descriptor.direction === 'ascending' ? pathComparison : -pathComparison;
-          }
-        }
         const comparison = compareByColumn(left.entry, right.entry, descriptor.column);
         if (comparison !== 0) {
           return descriptor.direction === 'ascending' ? comparison : -comparison;
@@ -110,17 +112,19 @@ function compareIndexed(
   foldersFirst: boolean,
   groupByParentPath: boolean,
 ): number {
+  if (groupByParentPath) {
+    const pathComparison = compareNames(parentPath(left.entry), parentPath(right.entry));
+    if (pathComparison !== 0) {
+      return descriptor?.column === 'name' && descriptor.direction === 'descending'
+        ? -pathComparison
+        : pathComparison;
+    }
+  }
   if (foldersFirst && left.entry.kind !== right.entry.kind) {
     if (left.entry.kind === 'directory') return -1;
     if (right.entry.kind === 'directory') return 1;
   }
   if (descriptor !== undefined) {
-    if (descriptor.column === 'name' && groupByParentPath) {
-      const pathComparison = compareNames(parentPath(left.entry), parentPath(right.entry));
-      if (pathComparison !== 0) {
-        return descriptor.direction === 'ascending' ? pathComparison : -pathComparison;
-      }
-    }
     const comparison = compareByColumn(left.entry, right.entry, descriptor.column);
     if (comparison !== 0) {
       return descriptor.direction === 'ascending' ? comparison : -comparison;

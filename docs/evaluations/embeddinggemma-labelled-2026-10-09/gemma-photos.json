@@ -1,0 +1,137 @@
+{
+  "model": "google/embeddinggemma-2",
+  "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "runtime": "native-rust-cpu-fp32",
+  "measurementWidth": 768,
+  "dimensionMethod": "truncate and L2 renormalize both sides",
+  "os": "macos",
+  "architecture": "aarch64",
+  "modelLoadSeconds": 0.659982666,
+  "result": {
+    "fixtureSha256": "460702f7fea6f3c081b2cec94cb02d89c20cafdf92056d51e42aaf333a3cb190",
+    "pairCount": 5,
+    "task": "real-photo image versus independently validated positive/hard-negative captions",
+    "dimensions": {
+      "128": {
+        "accuracy": 0.8,
+        "cases": [
+          {
+            "id": "579635",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.021142277783086305
+          },
+          {
+            "id": "232348",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.0171590741789156
+          },
+          {
+            "id": "355610",
+            "positiveBeatsHardNegative": false,
+            "cosineMargin": -0.0011697051914234535
+          },
+          {
+            "id": "179174",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.02966748274348252
+          },
+          {
+            "id": "7511",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.0046767247288880265
+          }
+        ]
+      },
+      "256": {
+        "accuracy": 0.8,
+        "cases": [
+          {
+            "id": "579635",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.03397060489223391
+          },
+          {
+            "id": "232348",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.02277531623658724
+          },
+          {
+            "id": "355610",
+            "positiveBeatsHardNegative": false,
+            "cosineMargin": -0.009968410481492884
+          },
+          {
+            "id": "179174",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.060380769567796366
+          },
+          {
+            "id": "7511",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.009630053521756166
+          }
+        ]
+      },
+      "512": {
+        "accuracy": 0.8,
+        "cases": [
+          {
+            "id": "579635",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.030211590279743183
+          },
+          {
+            "id": "232348",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.019988968916936023
+          },
+          {
+            "id": "355610",
+            "positiveBeatsHardNegative": false,
+            "cosineMargin": -0.005152957449703344
+          },
+          {
+            "id": "179174",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.06538275102524005
+          },
+          {
+            "id": "7511",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.011637427614254126
+          }
+        ]
+      },
+      "768": {
+        "accuracy": 0.8,
+        "cases": [
+          {
+            "id": "579635",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.03038915088059546
+          },
+          {
+            "id": "232348",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.022333635931401474
+          },
+          {
+            "id": "355610",
+            "positiveBeatsHardNegative": false,
+            "cosineMargin": -0.006190005747869987
+          },
+          {
+            "id": "179174",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.0592087921297334
+          },
+          {
+            "id": "7511",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.01087312841755217
+          }
+        ]
+      }
+    }
+  }
+}

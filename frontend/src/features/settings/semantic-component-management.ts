@@ -26,6 +26,11 @@ import type {
 export interface SemanticComponentManagementAttrs {
   readonly client: FileManagerClient;
   readonly onStatusChange?: (status: SemanticComponentStatus) => void;
+  readonly onInstallationChange?: (
+    state: 'installing' | 'succeeded' | 'failed',
+    message: string,
+  ) => void;
+  readonly installInProgress?: boolean;
 }
 
 type LoadState = 'loading' | 'loaded' | 'error';
@@ -678,6 +683,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
 }) => {
   const client = attrs.client;
   const onStatusChange = attrs.onStatusChange;
+  const onInstallationChange = attrs.onInstallationChange;
   const loadController = new AbortController();
   let loadState: LoadState = 'loading';
   let loaded: LoadedState | undefined;
@@ -795,8 +801,13 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
     actionError = undefined;
     actionErrorAction = undefined;
     actionMessage = undefined;
+    if (name === 'install') {
+      onInstallationChange?.('installing', t('semanticComponents', 'installing'));
+    }
+    let actionCompleted = false;
     try {
       await action();
+      actionCompleted = true;
       actionMessage = success?.();
     } catch (error: unknown) {
       actionError = errorMessage(error);
@@ -811,6 +822,18 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         }
       }
       busy = undefined;
+      if (name === 'install') {
+        onInstallationChange?.(
+          actionError === undefined ? 'succeeded' : 'failed',
+          actionError === undefined
+            ? t('semanticComponents', 'statusInstalledEnabled')
+            : t(
+                'semanticComponents',
+                actionCompleted ? 'installationUnconfirmed' : 'installationFailed',
+                { error: actionError },
+              ),
+        );
+      }
       m.redraw();
     }
   }
@@ -874,7 +897,10 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
           };
           await client.initializeGemmaLibrary(selected);
           if (loaded !== undefined) {
-            loaded = { ...loaded, gemmaSetup: selected };
+            loaded = {
+              ...loaded,
+              gemmaSetup: await client.getGemmaLibrarySetup(),
+            };
           }
         }
         await client.acceptSemanticComponentInstallationOffer({ offerId: acceptedOffer.offerId });
@@ -1137,6 +1163,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
     }
 
     const canOffer =
+      !attrs.installInProgress &&
       can('createInstallationOffer') &&
       (capabilities.runtimeExecutableDownload === 'directDistribution' ||
         capabilities.runtimeExecutableDownload === 'simulated');
@@ -1154,7 +1181,16 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         ? m('p.fm-semantic-authority-note', t('semanticComponents', 'developmentSimulation'))
         : undefined,
       developerBundle
-        ? m('p.fm-semantic-authority-note', t('semanticComponents', 'developmentBundle'))
+        ? m(
+            'p.fm-semantic-authority-note',
+            t(
+              'semanticComponents',
+              installProfile === 'embeddingGemma2' ||
+                status.activeModel?.profile === 'embeddingGemma2'
+                ? 'developmentGemmaBundle'
+                : 'developmentBundle',
+            ),
+          )
         : undefined,
       canOffer && (installableLifecycle || switchProfiles.length > 0)
         ? m(

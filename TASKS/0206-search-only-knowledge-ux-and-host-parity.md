@@ -15,8 +15,9 @@ exact sources. No LLM profile or answer panel may be required.
 
 - Add capability/root/parse/plan/execute APIs with equivalent HTTP, Tauri, mock, and
   `FileManagerClient` behavior.
-- Provide `Search Knowledge…` entry points that default scope from the current indexed folder or
-  semantic result set.
+- Provide `Search Knowledge…` entry points that default to all enrolled roots in the current
+  workspace, independent of navigation. Offer an unchecked, accessible current-folder-only
+  filter pinned to the folder when the search pane opens.
 - Build an accessible visual composer for subject, needs, related terms, scope, and
   hybrid/full-text/semantic mode with an editable DSL equivalent.
 - Show interpretation and advanced query preview, including fields explicitly not used for
@@ -79,8 +80,12 @@ exact sources. No LLM profile or answer panel may be required.
   warning-free Clippy, Biome (pre-existing specificity warnings only), and a final combined
   correctness review.
 - 2026-09-08 Copilot: Fixed a live desktop regression where an enrolled device library became
-  unsearchable after its originating workspace was replaced. Host-wide entire-library searches now
-  query every persisted workspace tenant through bounded worker partitions, while server searches
+  unsearchable after its originating workspace was replaced. Host-wide Ask entire-library searches
+  now query every persisted workspace tenant through bounded worker partitions, while server searches
   remain tenant-isolated. Added backend regressions for workspace replacement and deterministic
   multi-tenant partitioning, made transport-coded search failures actionable, and corrected the
   dark-theme alert to use the canonical error token and an error surface.
+- 2026-10-11 Copilot: Knowledge search now defaults to all enrolled roots of the current workspace,
+  even after navigating to another folder; both default and explicit whole-library Knowledge scopes
+  exclude other workspaces. An unchecked current-folder-only filter pins the folder present at
+  opening and never enrolls it implicitly. Ask's host-wide entire-library behavior is unchanged.

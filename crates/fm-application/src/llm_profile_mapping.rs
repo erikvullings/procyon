@@ -1,16 +1,26 @@
 //! Explicit mapping between generation-profile domain values and host DTOs.
 
 use crate::llm_profiles::{
-    EndpointLocality, LlmAdvancedSettings, LlmApiCapability, LlmPreset, LlmProfile,
+    EndpointLocality, LlmAdvancedSettings, LlmApiCapability, LlmModelLimits, LlmPreset, LlmProfile,
     LlmProfileDraft, LlmProfileError, LlmProfileTestResult, LlmTestErrorCategory, LlmTlsPolicy,
-    OrphanCredentialDisposition, normalize_endpoint_locality,
+    MAX_GENERATION_ANSWER_TOKENS, MAX_GENERATION_CONTEXT_WINDOW, OrphanCredentialDisposition,
+    normalize_endpoint_locality,
 };
 use fm_transport_dto::{
-    LlmAdvancedSettingsDto, LlmApiCapabilityDto, LlmEndpointLocalityDto, LlmPresetDto,
-    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
+    LlmAdvancedSettingsDto, LlmApiCapabilityDto, LlmEndpointLocalityDto, LlmModelLimitsDto,
+    LlmPresetDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
     LlmTestErrorCategoryDto, LlmTlsPolicyDto, OrphanLlmCredentialDispositionDto,
     SaveLlmProfileRequestDto,
 };
+
+pub(crate) fn model_limits_to_dto(limits: LlmModelLimits) -> LlmModelLimitsDto {
+    LlmModelLimitsDto {
+        context_window: limits.context_window,
+        maximum_answer_tokens: limits.maximum_answer_tokens,
+        context_window_cap: MAX_GENERATION_CONTEXT_WINDOW,
+        maximum_answer_tokens_cap: MAX_GENERATION_ANSWER_TOKENS,
+    }
+}
 
 pub(crate) fn draft_from_dto(request: SaveLlmProfileRequestDto) -> LlmProfileDraft {
     LlmProfileDraft {
@@ -124,6 +134,7 @@ fn preset_from_dto(value: LlmPresetDto) -> LlmPreset {
         LlmPresetDto::Vllm => LlmPreset::Vllm,
         LlmPresetDto::Sglang => LlmPreset::Sglang,
         LlmPresetDto::Omlx => LlmPreset::Omlx,
+        LlmPresetDto::MlxServe => LlmPreset::MlxServe,
         LlmPresetDto::OpenAiCompatible => LlmPreset::OpenAiCompatible,
         LlmPresetDto::AzureOpenAi => LlmPreset::AzureOpenAi,
     }
@@ -136,6 +147,7 @@ fn preset_to_dto(value: LlmPreset) -> LlmPresetDto {
         LlmPreset::Vllm => LlmPresetDto::Vllm,
         LlmPreset::Sglang => LlmPresetDto::Sglang,
         LlmPreset::Omlx => LlmPresetDto::Omlx,
+        LlmPreset::MlxServe => LlmPresetDto::MlxServe,
         LlmPreset::OpenAiCompatible => LlmPresetDto::OpenAiCompatible,
         LlmPreset::AzureOpenAi => LlmPresetDto::AzureOpenAi,
     }

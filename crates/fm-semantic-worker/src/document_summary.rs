@@ -1,5 +1,6 @@
 //! Worker-side representative preparation and generated-summary publication.
 
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -16,11 +17,12 @@ use crate::representative_selection::{
     SummarySourceChunk, representative_selection_fingerprint, select_representative_chunks,
 };
 use crate::semantic_storage::{
-    SemanticCatalog, StorageError, StoredDocumentSummary, SummaryPublication, SummarySourceSet,
+    SemanticCatalog, StorageError, StoredDocumentSummary, SummaryAttribution, SummaryPublication,
+    SummarySourceSet,
 };
 
 /// Versioned prompt contract persisted beside every generated summary.
-pub const SUMMARY_PROMPT_VERSION: &str = "document-summary/1";
+pub const SUMMARY_PROMPT_VERSION: &str = "document-summary/2";
 
 /// One document whose representative evidence should be prepared.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,6 +58,8 @@ pub struct PreparedDocumentSummary {
     pub modified_at_ms: i64,
     /// Deterministic source selection.
     pub selection: RepresentativeSelection,
+    /// Ordered, complete extracted non-generated source chunks.
+    pub source_chunks: Vec<SummarySourceChunk>,
     /// True when a matching prior selection was reused.
     pub reused_selection: bool,
 }
@@ -71,6 +75,12 @@ pub struct GeneratedSummary {
     pub brief_text: String,
     /// Full structured summary.
     pub full_text: String,
+    /// Exact source chunks consumed by the generator, in source order.
+    pub supporting_chunk_ids: Vec<String>,
+    /// Explicit or evidence-backed title, if established.
+    pub title: Option<SummaryAttribution>,
+    /// Explicit or evidence-backed author names, if established.
+    pub authors: Vec<SummaryAttribution>,
     /// Host creation timestamp in Unix milliseconds.
     pub created_at_ms: i64,
 }
@@ -108,6 +118,9 @@ impl DocumentSummaryService {
             &request.library_id,
             &request.document_id,
         )?;
+        if !source.source_complete {
+            return Err(DocumentSummaryError::IncompleteSource);
+        }
         let chunks = source_chunks(&source);
         let config = RepresentativeSelectionConfig::for_budget(request.input_token_budget);
         let fingerprint = representative_selection_fingerprint(
@@ -149,6 +162,7 @@ impl DocumentSummaryService {
             media_type: source.media_type,
             modified_at_ms: source.modified_at_ms,
             selection,
+            source_chunks: chunks,
             reused_selection,
         })
     }
@@ -163,6 +177,49 @@ impl DocumentSummaryService {
         if cancellation.is_cancelled() {
             return Err(DocumentSummaryError::Cancelled);
         }
+        let source_positions: HashMap<_, _> = prepared
+            .source_chunks
+            .iter()
+            .enumerate()
+            .map(|(position, chunk)| (chunk.chunk_id.as_str(), position))
+            .collect();
+        if generated.supporting_chunk_ids.is_empty()
+            || generated.supporting_chunk_ids.len() > 16_384
+            || generated
+                .supporting_chunk_ids
+                .iter()
+                .any(|id| !source_positions.contains_key(id.as_str()))
+            || generated
+                .supporting_chunk_ids
+                .windows(2)
+                .any(|ids| source_positions[ids[0].as_str()] >= source_positions[ids[1].as_str()])
+        {
+            return Err(DocumentSummaryError::Storage(StorageError::InvalidSummary));
+        }
+        let representative_ids: Vec<_> = prepared
+            .selection
+            .representatives
+            .iter()
+            .map(|item| item.source.chunk_id.as_str())
+            .collect();
+        let supporting_weights = if generated
+            .supporting_chunk_ids
+            .iter()
+            .map(String::as_str)
+            .eq(representative_ids)
+        {
+            prepared
+                .selection
+                .representatives
+                .iter()
+                .map(|item| item.cluster_weight)
+                .collect()
+        } else {
+            vec![
+                1.0 / generated.supporting_chunk_ids.len() as f32;
+                generated.supporting_chunk_ids.len()
+            ]
+        };
         let vectors = self
             .embedder
             .embed(std::slice::from_ref(&generated.full_text), cancellation)?;
@@ -193,21 +250,21 @@ impl DocumentSummaryService {
             algorithm_version: prepared.selection.algorithm_version.to_owned(),
             prompt_version: SUMMARY_PROMPT_VERSION.to_owned(),
             selection_fingerprint: prepared.selection.fingerprint.clone(),
-            supporting_chunk_ids: prepared
-                .selection
-                .representatives
-                .iter()
-                .map(|item| item.source.chunk_id.clone())
-                .collect(),
-            supporting_weights: prepared
-                .selection
-                .representatives
-                .iter()
-                .map(|item| item.cluster_weight)
-                .collect(),
+            supporting_chunk_ids: generated.supporting_chunk_ids,
+            selection_chunk_ids: Some(
+                prepared
+                    .selection
+                    .representatives
+                    .iter()
+                    .map(|item| item.source.chunk_id.clone())
+                    .collect(),
+            ),
+            supporting_weights,
             created_at_ms: generated.created_at_ms,
             brief_text: generated.brief_text,
             full_text: generated.full_text,
+            title: generated.title,
+            authors: generated.authors,
         };
         let provenance = prepared
             .selection
@@ -304,8 +361,17 @@ fn reuse_selection(
     fingerprint: String,
     summary: &StoredDocumentSummary,
 ) -> Option<RepresentativeSelection> {
+    if summary
+        .selection_chunk_ids
+        .as_ref()
+        .is_some_and(|ids| ids != &summary.supporting_chunk_ids)
+    {
+        return None;
+    }
     let mut representatives = summary
-        .supporting_chunk_ids
+        .selection_chunk_ids
+        .as_ref()
+        .unwrap_or(&summary.supporting_chunk_ids)
         .iter()
         .zip(&summary.supporting_weights)
         .map(|(record_id, weight)| {
@@ -382,6 +448,9 @@ pub enum DocumentSummaryError {
     /// Local embedding returned no vector.
     #[error("summary embedding output is missing")]
     MissingEmbedding,
+    /// Indexed records were created with omitted source text or before completeness was recorded.
+    #[error("indexed source text is incomplete or requires an authorized reindex")]
+    IncompleteSource,
     /// Selection unexpectedly contained no real source chunks.
     #[error("summary has no representative source chunks")]
     NoRepresentatives,
@@ -529,6 +598,8 @@ mod tests {
                 library_id: "library-a".into(),
                 document_id: "document-a".into(),
                 content_hash: "hash-a".into(),
+                source_complete: true,
+                pdf_image_skipped_pages: None,
                 generation: 1,
                 occurrences: vec![occurrence],
                 records,
@@ -563,6 +634,15 @@ mod tests {
             .prepare(request.clone(), &CancellationToken::new())
             .unwrap();
         assert_eq!(prepared.selection.representatives.len(), 3);
+        assert_eq!(
+            prepared
+                .source_chunks
+                .iter()
+                .map(|chunk| chunk.chunk_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["title", "body", "conclusion"]
+        );
+        assert!(prepared.source_chunks.iter().all(|chunk| !chunk.generated));
         assert!(embedder.inputs.lock().unwrap().is_empty());
 
         let summary = service
@@ -573,6 +653,13 @@ mod tests {
                     model_id: "generator-a".into(),
                     brief_text: "Brief overview.".into(),
                     full_text: "Full grounded summary.".into(),
+                    supporting_chunk_ids: prepared
+                        .source_chunks
+                        .iter()
+                        .map(|chunk| chunk.chunk_id.clone())
+                        .collect(),
+                    title: None,
+                    authors: vec![],
                     created_at_ms: 2_000,
                 },
                 &CancellationToken::new(),
@@ -613,5 +700,105 @@ mod tests {
             prepared.selection.fingerprint
         );
         assert!(!service.current(&regenerated.request).unwrap().unwrap().1);
+    }
+
+    #[test]
+    fn indexed_summary_rejects_partially_converted_generation() {
+        let (service, catalog, _, _) = summary_service();
+        catalog
+            .stage_generation(&StagedGeneration {
+                tenant_id: "tenant-a".into(),
+                library_id: "library-a".into(),
+                document_id: "document-a".into(),
+                content_hash: "partial-hash".into(),
+                source_complete: false,
+                pdf_image_skipped_pages: None,
+                generation: 2,
+                occurrences: vec![Occurrence {
+                    occurrence_id: "occurrence-a".into(),
+                    source_id: "source-a".into(),
+                    root_id: "root-a".into(),
+                    workspace_id: None,
+                    media_type: "application/pdf".into(),
+                    modified_at_ms: 2_000,
+                    available: true,
+                    provenance: "source".into(),
+                }],
+                records: Vec::new(),
+            })
+            .unwrap();
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-a", 2)
+            .unwrap();
+        let result = service.prepare(
+            PrepareDocumentSummary {
+                tenant_id: "tenant-a".into(),
+                library_id: "library-a".into(),
+                document_id: "document-a".into(),
+                input_token_budget: 1_000,
+            },
+            &CancellationToken::new(),
+        );
+        assert!(matches!(
+            result,
+            Err(DocumentSummaryError::IncompleteSource)
+        ));
+    }
+
+    #[test]
+    fn full_source_publication_tracks_all_consumed_chunks() {
+        let (service, _catalog, _embedder, _index) = summary_service();
+        let prepared = service
+            .prepare(
+                PrepareDocumentSummary {
+                    tenant_id: "tenant-a".into(),
+                    library_id: "library-a".into(),
+                    document_id: "document-a".into(),
+                    input_token_budget: 20,
+                },
+                &CancellationToken::new(),
+            )
+            .unwrap();
+        assert!(prepared.selection.representatives.len() < prepared.source_chunks.len());
+        let ids: Vec<_> = prepared
+            .source_chunks
+            .iter()
+            .map(|chunk| chunk.chunk_id.clone())
+            .collect();
+        let generated = GeneratedSummary {
+            profile_id: "profile-a".into(),
+            model_id: "generator-a".into(),
+            brief_text: "Brief overview.".into(),
+            full_text: "Full grounded summary.".into(),
+            supporting_chunk_ids: ids.clone(),
+            title: None,
+            authors: vec![],
+            created_at_ms: 2_000,
+        };
+        let summary = service
+            .publish(&prepared, generated.clone(), &CancellationToken::new())
+            .unwrap();
+        assert_eq!(summary.supporting_chunk_ids, ids);
+        assert_eq!(summary.supporting_weights.len(), 3);
+        assert!(
+            summary
+                .supporting_weights
+                .iter()
+                .all(|weight| (*weight - 1.0 / 3.0).abs() < 0.0001)
+        );
+        let reselected = service
+            .prepare(prepared.request.clone(), &CancellationToken::new())
+            .unwrap();
+        assert!(!reselected.reused_selection);
+        assert_eq!(
+            reselected.selection.representatives,
+            prepared.selection.representatives
+        );
+        let mut invalid = generated;
+        invalid.supporting_chunk_ids = vec!["missing".into()];
+        assert!(matches!(
+            service.publish(&prepared, invalid, &CancellationToken::new()),
+            Err(DocumentSummaryError::Storage(StorageError::InvalidSummary))
+        ));
     }
 }

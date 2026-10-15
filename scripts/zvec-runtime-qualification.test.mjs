@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -12,6 +13,7 @@ import {
 import {
   archivePathForTar,
   nativeLibraryNames,
+  notarizedArtifactEvidence,
   parseNativeDependencies,
   recordAcceptedMacNotarization,
   tarExtractionArgs,
@@ -205,6 +207,78 @@ test('Gemma qualification is explicit and uses verified originals on every targe
   const build = steps.find((step) => step.name === 'Build verified semantic release payloads');
   assert.match(build.run, /--gemma-original-files/u);
   assert.match(build.run, /GEMMA_ORIGINAL_FILES/u);
+  assert.equal(workflow.on.workflow_dispatch.inputs.approve_experimental_gemma.default, false);
+  const publish = workflow.jobs['semantic-publish'];
+  assert.match(publish.if, /SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED/u);
+  const experimental = publish.steps.find(
+    (step) => step.name === 'Check explicit experimental Gemma approval and exact signed candidate',
+  );
+  assert.match(experimental.if, /approve_experimental_gemma == true/u);
+  assert.match(experimental.run, /check-experimental-gemma-release\.mjs/u);
+  assert.match(experimental.run, /pdf-evidence/u);
+  assert.match(
+    JSON.stringify(publish.steps),
+    /Verify installed PDF vision run completed on candidate source/u,
+  );
+  assert.match(JSON.stringify(publish), /semantic_production_catalog/u);
+});
+
+test('sampled installed PDF vision qualification is opt-in and cannot publish', () => {
+  const workflow = loadYaml(
+    fs.readFileSync(path.resolve('.github/workflows/release-semantic-components.yml'), 'utf8'),
+  );
+  assert.equal(workflow.on.workflow_dispatch.inputs.qualify_pdf_vision.default, false);
+  assert.match(
+    workflow.jobs['validate-pdf-vision-request'].steps[0].run,
+    /INSTALLED_CANDIDATE_SOURCE_REVISION/u,
+  );
+  assert.equal(workflow.jobs['installed-gemma-qualification'].needs, 'validate-pdf-vision-request');
+  assert.match(
+    workflow.jobs['installed-gemma-qualification'].if,
+    /validate-pdf-vision-request'\]\.result == 'success'/u,
+  );
+  assert.match(workflow.jobs['installed-gemma-qualification'].if, /qualify_installed_gemma/u);
+  assert.match(
+    JSON.stringify(workflow.jobs['installed-gemma-qualification']),
+    /PROCYON_GEMMA_PDF_QUALIFICATION_REPORT/u,
+  );
+  assert.match(
+    JSON.stringify(workflow.jobs['installed-gemma-qualification']),
+    /record-pdf-vision-qualification\.mjs/u,
+  );
+  assert.match(
+    JSON.stringify(workflow.jobs['installed-gemma-qualification']),
+    /PROCYON_GEMMA_PDF_HOST_TEST/u,
+  );
+  assert.match(
+    JSON.stringify(workflow.jobs['installed-gemma-qualification']),
+    /--features gemma-native/u,
+  );
+  assert.match(
+    JSON.stringify(workflow.jobs['installed-gemma-qualification']),
+    /--test semantic_indexing/u,
+  );
+  assert.match(workflow.jobs['semantic-publish'].if, /qualify_pdf_vision != true/u);
+  assert.match(workflow.jobs['semantic-payloads'].if, /qualify_pdf_vision != true/u);
+});
+
+test('sampled enrolled-host PDF qualification is a separate read-only installed run', () => {
+  const workflow = loadYaml(
+    fs.readFileSync(path.resolve('.github/workflows/release-semantic-components.yml'), 'utf8'),
+  );
+  assert.equal(workflow.on.workflow_dispatch.inputs.qualify_pdf_host_sample.default, false);
+  assert.match(
+    workflow.jobs['validate-pdf-vision-request'].steps[0].run,
+    /QUALIFY_PDF_VISION" != "\$QUALIFY_PDF_HOST_SAMPLE/u,
+  );
+  const installed = JSON.stringify(workflow.jobs['installed-gemma-qualification']);
+  assert.match(installed, /PROCYON_GEMMA_PDF_HOST_SAMPLE_REPORT/u);
+  assert.match(installed, /gemma-pdf-host-sample\.json/u);
+  assert.match(installed, /gemma-pdf-host-bound-report\.json/u);
+  assert.match(installed, /record-pdf-vision-qualification\.mjs/u);
+  assert.match(installed, /manifest\.sourceRevision !== process\.env\.GITHUB_SHA/u);
+  assert.match(workflow.jobs['semantic-publish'].if, /qualify_pdf_host_sample != true/u);
+  assert.match(workflow.jobs['semantic-payloads'].if, /qualify_pdf_host_sample != true/u);
 });
 
 test('private qualification rejects release events and enabled release gates', () => {
@@ -285,6 +359,25 @@ test('release qualification proof rejects workflow inputs interpolated into shel
   fs.rmSync(directory, { recursive: true, force: true });
 });
 
+test('PDF vision qualification cannot become a default or skip Gemma originals', () => {
+  const directory = fs.mkdtempSync(path.join(tmpdir(), 'unsafe-pdf-render-'));
+  try {
+    const workflow = path.join(directory, 'release.yml');
+    const original = fs.readFileSync(
+      path.resolve('.github/workflows/release-semantic-components.yml'),
+      'utf8',
+    );
+    const enabled = original.replace(/(qualify_pdf_render:[\s\S]*?default: )false/u, '$1true');
+    assert.notEqual(enabled, original);
+    fs.writeFileSync(workflow, enabled);
+    assert.throws(() => checkSemanticQualificationWorkflow(workflow), /PDF rendering/u);
+    fs.writeFileSync(workflow, original.replace(/test -n "\$\{GEMMA_ORIGINAL_FILES:-\}"/u, 'true'));
+    assert.throws(() => checkSemanticQualificationWorkflow(workflow), /PDF rendering/u);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('a bare accepted status cannot fabricate Apple notarization evidence', () => {
   const directory = fs.mkdtempSync(path.join(tmpdir(), 'notary-result-'));
   const result = path.join(directory, 'result.json');
@@ -294,4 +387,31 @@ test('a bare accepted status cannot fabricate Apple notarization evidence', () =
     /accepted submission with an identifier/u,
   );
   fs.rmSync(directory, { recursive: true, force: true });
+});
+
+test('Apple notarization binds an optional PDFium dylib to the signed catalog inputs', () => {
+  const directory = fs.mkdtempSync(path.join(tmpdir(), 'pdfium-notary-'));
+  try {
+    fs.mkdirSync(path.join(directory, 'artifacts'));
+    const artifacts = [
+      'procyon.semantic.worker',
+      'procyon.semantic.zvec-runtime',
+      'procyon.semantic.pdfium-runtime',
+    ].map((componentId, index) => {
+      const bytes = Buffer.from(`fixture payload ${index}`);
+      const id = `artifact-${index}`;
+      fs.writeFileSync(path.join(directory, 'artifacts', id), bytes);
+      return {
+        id,
+        component_id: componentId,
+        resources: { download_bytes: bytes.length },
+        checksum: [...createHash('sha256').update(bytes).digest()],
+      };
+    });
+    assert.equal(notarizedArtifactEvidence(directory, { catalog: { artifacts } }).length, 3);
+    artifacts.pop();
+    assert.equal(notarizedArtifactEvidence(directory, { catalog: { artifacts } }).length, 2);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });

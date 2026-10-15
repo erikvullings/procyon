@@ -41,8 +41,8 @@ use fm_transport_dto::{
     GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, GetSemanticFolderStatusRequestDto,
     HostKeyProbeDto, ImportSemanticLocalModelRequestDto, ImportSemanticVocabularyRequestDto,
     InstallSemanticWorkerPatchRequestDto, InvokeActionRequestDto, LinkOptionsDto,
-    LinkOptionsRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest, LlmProfileDto,
-    LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LocationDto,
+    LinkOptionsRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest, LlmModelLimitsDto,
+    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LocationDto,
     MoveSemanticDataRequestDto, NavigateRequest, OneDriveAuthorizationAttemptDto,
     OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto,
     OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
@@ -735,6 +735,34 @@ pub(crate) struct GemmaLibrarySetup {
     images: bool,
     audio: bool,
     video: bool,
+    image_device: &'static str,
+    pdf_image_page_budget: Option<u32>,
+    last_worker_device: Option<&'static str>,
+}
+
+fn last_gemma_worker_device(marker: Option<&Path>) -> std::io::Result<Option<&'static str>> {
+    let Some(runtime) = marker
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .map(|root| root.join("worker-runtime/gemma-backend"))
+    else {
+        return Ok(None);
+    };
+    let backend = match std::fs::read_to_string(runtime) {
+        Ok(backend) => backend,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    if backend.starts_with("google/embeddinggemma-2 (FP32 Metal)") {
+        Ok(Some("metal"))
+    } else if backend.starts_with("google/embeddinggemma-2 (native CPU)") {
+        Ok(Some("cpu"))
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "unrecognized Gemma worker backend",
+        ))
+    }
 }
 
 /// Reads the choices of an existing library; the setup form must not alter them.
@@ -742,6 +770,15 @@ pub(crate) struct GemmaLibrarySetup {
 pub(crate) async fn get_semantic_gemma_library_setup(
     state: State<'_, AppState>,
 ) -> Result<Option<GemmaLibrarySetup>, SemanticLibraryErrorDto> {
+    let last_worker_device = last_gemma_worker_device(
+        state.semantic_reindex_pending_marker.as_deref(),
+    )
+    .map_err(|error| {
+        tracing::error!(%error, "Gemma worker backend status could not be read");
+        semantic_library_error(
+            fm_application::semantic_library::SemanticLibraryError::StateUnavailable,
+        )
+    })?;
     state
         .service
         .semantic_gemma_library_setup()
@@ -752,6 +789,9 @@ pub(crate) async fn get_semantic_gemma_library_setup(
                 images: setup.media.images,
                 audio: setup.media.audio,
                 video: setup.media.video,
+                image_device: setup.image_device,
+                pdf_image_page_budget: setup.pdf_image_page_budget,
+                last_worker_device,
             })
         })
         .map_err(semantic_library_error)
@@ -809,11 +849,45 @@ pub(crate) async fn accept_semantic_component_installation_offer(
     state: State<'_, AppState>,
     request: AcceptSemanticInstallationOfferRequestDto,
 ) -> Result<SemanticInstallReceiptDto, SemanticComponentErrorDto> {
-    state
+    let previous_model = state
+        .service
+        .semantic_component_status()
+        .await
+        .map_err(semantic_component_error)?
+        .active_model()
+        .cloned();
+    let receipt = state
         .service
         .accept_semantic_component_installation_offer(request)
         .await
-        .map_err(semantic_component_error)
+        .map_err(semantic_component_error)?;
+    let active_model = state
+        .service
+        .semantic_component_status()
+        .await
+        .map_err(semantic_component_error)?
+        .active_model()
+        .cloned();
+    if state.semantic_managed_components
+        && model_changed_after_install(&previous_model, &active_model)
+    {
+        if let Some(marker) = state.semantic_reindex_pending_marker.as_deref() {
+            persist_semantic_reindex_pending(marker)?;
+        }
+        reindex_enrolled_roots_for_the_new_model(
+            Arc::clone(&state.service),
+            state.semantic_reindex_pending_marker.as_deref(),
+        )
+        .await;
+    }
+    Ok(receipt)
+}
+
+fn model_changed_after_install(
+    previous: &Option<fm_application::semantic_components::SemanticModelSelection>,
+    active: &Option<fm_application::semantic_components::SemanticModelSelection>,
+) -> bool {
+    active.is_some() && previous != active
 }
 
 /// Pauses semantic indexing without uninstalling components.
@@ -1017,6 +1091,12 @@ async fn reindex_enrolled_roots_for_the_new_model(
             "semantic developer reindex failed after the model change"
         );
     }
+    if report.failed_occurrences > 0 {
+        tracing::error!(
+            failed_occurrences = report.failed_occurrences,
+            "semantic model reindex left documents unsearchable"
+        );
+    }
     if report.is_complete() {
         if let Some(marker) = pending_marker
             && let Err(error) = std::fs::remove_file(marker)
@@ -1064,6 +1144,12 @@ pub(crate) async fn reconcile_semantic_library_on_startup(
             root_id = %failure.root_id,
             error = %failure.reason,
             "semantic startup reconciliation failed"
+        );
+    }
+    if report.failed_occurrences > 0 {
+        tracing::error!(
+            failed_occurrences = report.failed_occurrences,
+            "semantic startup reconciliation left documents unsearchable"
         );
     }
     if report.is_complete() {
@@ -2705,6 +2791,19 @@ pub(crate) async fn discover_llm_profile_draft_models(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Discovers bounded advertised limits for the selected model in a draft.
+#[tauri::command]
+pub(crate) async fn discover_llm_profile_draft_model_limits(
+    state: State<'_, AppState>,
+    request: SaveLlmProfileRequestDto,
+) -> Result<LlmModelLimitsDto, ApplicationErrorDto> {
+    state
+        .service
+        .discover_llm_profile_draft_model_limits(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Prepares representative key passages without contacting a generation endpoint.
 #[tauri::command]
 pub(crate) async fn preview_document_summary(
@@ -3287,9 +3386,50 @@ fn reload_focused_webview<R: Runtime>(app: &AppHandle<R>) {
 mod tests {
     use std::sync::Mutex;
 
+    use fm_application::semantic_components::{
+        SemanticModelIdentity, SemanticModelSelection, SemanticProfile,
+    };
     use tauri::ipc::InvokeResponseBody;
 
     use super::*;
+
+    #[test]
+    fn installing_a_new_active_model_restarts_the_cached_worker() {
+        let gemma = Some(SemanticModelSelection::new(
+            SemanticProfile::EmbeddingGemma2,
+            SemanticModelIdentity::new("google-embeddinggemma-2", "pinned-revision"),
+        ));
+        assert!(model_changed_after_install(&None, &gemma));
+        assert!(!model_changed_after_install(&gemma, &gemma));
+        assert!(!model_changed_after_install(&gemma, &None));
+    }
+
+    #[test]
+    fn worker_device_comes_from_the_observed_backend_not_the_platform() {
+        let root = tempfile::tempdir().unwrap();
+        let runtime = root.path().join("worker-runtime");
+        std::fs::create_dir(&runtime).unwrap();
+        let marker = root.path().join("zvec/model-reindex-pending");
+        assert_eq!(last_gemma_worker_device(Some(&marker)).unwrap(), None);
+        std::fs::write(
+            runtime.join("gemma-backend"),
+            "google/embeddinggemma-2 (FP32 Metal)\n",
+        )
+        .unwrap();
+        assert_eq!(
+            last_gemma_worker_device(Some(&marker)).unwrap(),
+            Some("metal")
+        );
+        std::fs::write(
+            runtime.join("gemma-backend"),
+            "google/embeddinggemma-2 (native CPU) [Metal unavailable; CPU fallback]\n",
+        )
+        .unwrap();
+        assert_eq!(
+            last_gemma_worker_device(Some(&marker)).unwrap(),
+            Some("cpu")
+        );
+    }
 
     #[test]
     fn disk_usage_dispatch_does_not_require_an_entered_tokio_reactor() {

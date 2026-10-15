@@ -43,7 +43,17 @@ describe('LlmProfileManagement', () => {
     const client = new MockFileManagerClient();
     await mountLoaded(client);
 
-    expect(root.querySelector('[aria-label="Generation profiles"]')).not.toBeNull();
+    expect(await client.listLlmProfilePresets()).toContainEqual(
+      expect.objectContaining({
+        name: 'mlx-serve',
+        preset: 'mlxServe',
+        baseUrl: 'http://127.0.0.1:11234',
+        capabilities: ['chatCompletions', 'modelDiscovery'],
+      }),
+    );
+    expect(root.querySelector('[aria-label="AI summaries and answers"]')).not.toBeNull();
+    expect(root.textContent).toContain('No generation profiles configured.');
+    expect(await client.listLlmProfiles()).toEqual([]);
     expect(
       [...root.querySelectorAll<HTMLInputElement>('input')].some(
         (input) => input.value === 'Ollama',
@@ -52,6 +62,8 @@ describe('LlmProfileManagement', () => {
     expect(root.textContent).toContain('Provider preset');
     expect(root.textContent).toContain('Base URL');
     expect(root.textContent).toContain('API key or token');
+    expect(root.textContent).toContain('write document summaries and answer questions');
+    expect(root.textContent).toContain('Semantic search works without a profile');
   });
 
   it('does not repeat the advanced disclosure label inside a fieldset', async () => {
@@ -70,6 +82,181 @@ describe('LlmProfileManagement', () => {
         (legend) => legend.textContent?.trim() === 'Advanced settings',
       ),
     ).toBe(false);
+    await vi.waitFor(() => expect(fieldInput('Context window')?.value).toBe('128k'));
+    expect(fieldInput('Maximum answer tokens')?.value).toBe('8k');
+    expect(root.textContent).toContain('131,072 context tokens, 8,192 output tokens');
+    fieldInput('Context window')?.click();
+    m.redraw.sync();
+    expect(
+      [...root.querySelectorAll('li')].some((item) => item.textContent?.trim() === '128k'),
+    ).toBe(true);
+    expect(
+      [...root.querySelectorAll('li')].some((item) => item.textContent?.trim() === '256k'),
+    ).toBe(false);
+    expect(root.textContent).toContain('Maximum input and output combined');
+    expect(root.textContent).toContain('This also counts toward the context window');
+    expect(root.textContent).not.toContain('Unlimited');
+  });
+
+  it('keeps conservative starting caps when model limits are unavailable', async () => {
+    const client = new MockFileManagerClient();
+    const discover = vi.spyOn(client, 'discoverLlmProfileDraftModelLimits').mockResolvedValue({
+      contextWindow: null,
+      maximumAnswerTokens: null,
+      contextWindowCap: 1_048_576,
+      maximumAnswerTokensCap: 16_384,
+    });
+    await mountLoaded(client);
+    await vi.waitFor(() => expect(discover).toHaveBeenCalledOnce());
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Advanced settings')
+      ?.click();
+    m.redraw.sync();
+
+    expect(fieldInput('Context window')?.value).toBe('8k');
+    expect(fieldInput('Maximum answer tokens')?.value).toBe('1k');
+    expect(root.textContent).toContain('Model limits could not be determined');
+  });
+
+  it('offers the backend-capped 1M context and no output above 16k', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'discoverLlmProfileDraftModelLimits').mockResolvedValue({
+      contextWindow: 1_048_576,
+      maximumAnswerTokens: null,
+      contextWindowCap: 1_048_576,
+      maximumAnswerTokensCap: 16_384,
+    });
+    await mountLoaded(client);
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Advanced settings')
+      ?.click();
+    await vi.waitFor(() => expect(fieldInput('Context window')?.value).toBe('1M'));
+    fieldInput('Maximum answer tokens')?.click();
+    m.redraw.sync();
+    const options = [...root.querySelectorAll('li')].map((item) => item.textContent?.trim());
+    expect(options).toContain('16k');
+    expect(options).not.toContain('32k');
+    expect(options).not.toContain('Unlimited');
+  });
+
+  it('resets automatically suggested limits on model change without overriding edited caps', async () => {
+    const client = new MockFileManagerClient();
+    await mountLoaded(client);
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Advanced settings')
+      ?.click();
+    await vi.waitFor(() => expect(fieldInput('Context window')?.value).toBe('128k'));
+
+    fieldInput('Model')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll('li')]
+      .find((item) => item.textContent?.trim() === 'model-b')
+      ?.click();
+    await vi.waitFor(() => expect(fieldInput('Context window')?.value).toBe('8k'));
+    expect(fieldInput('Maximum answer tokens')?.value).toBe('1k');
+
+    fieldInput('Context window')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll('li')].find((item) => item.textContent?.trim() === '16k')?.click();
+    m.redraw.sync();
+    fieldInput('Model')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll('li')]
+      .find((item) => item.textContent?.trim() === 'model-a')
+      ?.click();
+    await vi.waitFor(() => expect(fieldInput('Maximum answer tokens')?.value).toBe('8k'));
+    expect(fieldInput('Context window')?.value).toBe('16k');
+  });
+
+  it('keeps existing non-preset token limits selectable without modifying a saved profile', async () => {
+    const client = new MockFileManagerClient();
+    const existing = await client.createLlmProfile({
+      name: 'Existing',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'model-a',
+      credential: null,
+      advanced: {
+        contextWindow: 12_000,
+        maximumAnswerTokens: 3_000,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions', 'modelDiscovery'],
+      redactFilenames: false,
+    });
+    await mountLoaded(client);
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Advanced settings')
+      ?.click();
+    m.redraw.sync();
+
+    expect(fieldInput('Context window')?.value).toBe('Current: 12,000 tokens');
+    expect(fieldInput('Maximum answer tokens')?.value).toBe('Current: 3,000 tokens');
+    expect((await client.listLlmProfiles())[0]?.advanced).toEqual(existing.advanced);
+  });
+
+  it('warns without rewriting a saved limit above the model report', async () => {
+    const client = new MockFileManagerClient();
+    const existing = await client.createLlmProfile({
+      name: 'Large existing',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'model-a',
+      credential: null,
+      advanced: {
+        contextWindow: 262_144,
+        maximumAnswerTokens: 12_288,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions', 'modelDiscovery'],
+      redactFilenames: false,
+    });
+    await mountLoaded(client);
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Advanced settings')
+      ?.click();
+    await vi.waitFor(() => expect(root.textContent).toContain('above a reported model limit'));
+    expect(fieldInput('Context window')?.value).toBe('Current: 262,144 tokens');
+    expect(fieldInput('Maximum answer tokens')?.value).toBe('Current: 12,288 tokens');
+    expect((await client.listLlmProfiles())[0]?.advanced).toEqual(existing.advanced);
+  });
+
+  it('saves independently selected context and answer caps', async () => {
+    const client = new MockFileManagerClient();
+    let save: (() => Promise<boolean>) | undefined;
+    await mountLoaded(client, (handler) => {
+      save = handler;
+    });
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Advanced settings')
+      ?.click();
+    m.redraw.sync();
+
+    fieldInput('Context window')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll('li')].find((item) => item.textContent?.trim() === '16k')?.click();
+    m.redraw.sync();
+    fieldInput('Maximum answer tokens')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll('li')].find((item) => item.textContent?.trim() === '4k')?.click();
+    m.redraw.sync();
+
+    expect(fieldInput('Context window')?.value).toBe('16k');
+    expect(fieldInput('Maximum answer tokens')?.value).toBe('4k');
+    if (save === undefined) throw new Error('Save handler was not registered');
+    expect(await save()).toBe(true);
+    expect((await client.listLlmProfiles())[0]?.advanced.contextWindow).toBe(16_384);
+    expect((await client.listLlmProfiles())[0]?.advanced.maximumAnswerTokens).toBe(4_096);
   });
 
   it('keeps local/cloud and informed-consent status visible for saved profiles', async () => {
@@ -104,9 +291,45 @@ describe('LlmProfileManagement', () => {
 
     expect(root.textContent).toContain('Cloud');
     expect(root.textContent).toContain('llm.example.test');
-    expect(root.textContent).toContain('questions, conversation history, and retrieved excerpts');
+    expect(root.textContent).toContain('https://llm.example.test');
+    expect(root.textContent).toContain('documents you choose to summarize');
     expect(root.textContent).not.toContain('never-render-this');
     expect(profile.hasCredential).toBe(true);
+  });
+
+  it('invalidates consent if a saved cloud endpoint path changes on the same host', async () => {
+    const client = new MockFileManagerClient();
+    const draft = {
+      name: 'Cloud profile',
+      preset: 'openAiCompatible' as const,
+      baseUrl: 'https://llm.example.test:8443/first',
+      deployment: null,
+      apiVersion: null,
+      model: 'model-a',
+      credential: null,
+      advanced: {
+        contextWindow: 8192,
+        maximumAnswerTokens: 1024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireHttps' as const,
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions' as const],
+      redactFilenames: true,
+    };
+    const profile = await client.createLlmProfile(draft);
+    expect((await client.activateLlmProfile(profile.id, true)).consentedHost).toBe(
+      'https://llm.example.test:8443/first',
+    );
+    const changed = await client.updateLlmProfile(profile.id, {
+      ...draft,
+      baseUrl: 'https://llm.example.test:8443/second',
+    });
+    expect(changed.consentedHost).toBeNull();
+    await expect(client.activateLlmProfile(profile.id, false)).rejects.toThrow(
+      'Cloud consent is required',
+    );
   });
 
   it('integrates models discovered by a saved provider into the model field', async () => {
@@ -240,6 +463,28 @@ describe('LlmProfileManagement', () => {
       expect(fieldInput('Model')?.classList.contains('select-dropdown')).toBe(true);
     });
     expect(root.textContent).not.toContain('Available provider models');
+  });
+
+  it('saves the visibly selected first discovered Ollama model without a change event', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'discoverLlmProfileDraftModels').mockResolvedValue([
+      'llama3.2:3b',
+      'qwen3:14b',
+    ]);
+    let save: (() => Promise<boolean>) | undefined;
+    await mountLoaded(client, (handler) => {
+      save = handler;
+    });
+    await vi.waitFor(() => {
+      expect(fieldInput('Model')?.value).toBe('llama3.2:3b');
+      expect(fieldInput('Model')?.classList.contains('select-dropdown')).toBe(true);
+    });
+    if (!save) throw new Error('Settings did not register profile save');
+    expect(await save()).toBe(true);
+    expect(await client.listLlmProfiles()).toEqual([
+      expect.objectContaining({ preset: 'ollama', model: 'llama3.2:3b' }),
+    ]);
+    expect((await client.getKnowledgeCapabilities()).answerGeneration).toBe(true);
   });
 
   it('selects and discovers the first saved local profile on load', async () => {

@@ -317,6 +317,10 @@ pub struct SemanticEnrolmentPreview {
     pub location: Location,
     /// Whether consent is recursive.
     pub recursive: bool,
+    /// Whether this root separately consents to PDF page-image embeddings.
+    pub pdf_images_enabled: bool,
+    /// Per-document page-image budget, or `None` for no cap.
+    pub pdf_image_page_budget: Option<u32>,
     /// Bounded estimate projection.
     pub estimate: SemanticEnrolmentEstimateStatus,
     /// Explicit retention disclosure.
@@ -420,6 +424,10 @@ pub struct SemanticRootStatus {
     pub location: Location,
     /// Whether descendants inherit consent.
     pub recursive: bool,
+    /// Whether this root separately consents to PDF page-image embeddings.
+    pub pdf_images_enabled: bool,
+    /// Per-document page-image budget, or `None` for no cap.
+    pub pdf_image_page_budget: Option<u32>,
     /// Whether the provider supplied stable filesystem identity.
     pub stable_identity_verified: bool,
     /// Workspaces referring to this global consent.
@@ -438,9 +446,12 @@ pub struct SemanticRootStatus {
     pub reconciliation_generation: u64,
     /// Last generation committed to runtime state.
     pub indexed_generation: u64,
-    /// Indexed occurrences already searchable through this root, including
-    /// those recorded by a still-incomplete enumeration.
+    /// Observed occurrences, which may not yet have completed worker ingestion.
     pub indexed_occurrences: u64,
+    /// Worker-completed occurrences per attached workspace, including incomplete passes.
+    pub completed_occurrences_by_workspace: BTreeMap<Uuid, u64>,
+    /// Older occurrences without worker-completion receipts per workspace.
+    pub unverified_legacy_occurrences_by_workspace: BTreeMap<Uuid, u64>,
     /// Explicit descendant/root exclusions.
     pub exclusions: Vec<SemanticExclusionStatus>,
 }
@@ -1244,6 +1255,24 @@ impl SemanticLibraryService {
         context: SemanticFolderContext,
         recursive: bool,
     ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
+        self.preview_enrolment_with_pdf_image_policy(access, context, recursive, false, None)
+    }
+
+    /// Creates a bounded enrolment disclosure with an additional, validated
+    /// per-root PDF page-image choice.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, request-validation, lock, or
+    /// persistence failure.
+    pub fn preview_enrolment_with_pdf_image_policy(
+        &self,
+        access: &SemanticAccessContext,
+        context: SemanticFolderContext,
+        recursive: bool,
+        pdf_images_enabled: bool,
+        pdf_image_page_budget: Option<u32>,
+    ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
         self.ensure_operation_allowed(access, SemanticLibraryOperation::PreviewEnrolment)?;
         let managed = self.managed_backend()?;
         managed.authorize(access)?;
@@ -1251,7 +1280,7 @@ impl SemanticLibraryService {
             return Err(SemanticLibraryError::InvalidRequest);
         }
         let mut locked = managed.lock()?;
-        let (existing_root, revision, budgets) = {
+        let (existing_root, revision, budgets, gemma_images_allowed) = {
             let data = locked.data()?;
             data.policy
                 .consent_state(&context.location)
@@ -1264,8 +1293,24 @@ impl SemanticLibraryService {
                     .cloned(),
                 data.policy.revision(),
                 data.policy.resource_profile().budgets,
+                data.policy
+                    .library()
+                    .model()
+                    .gemma_media()
+                    .is_some_and(|media| media.images),
             )
         };
+        let expected_budget = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            None
+        } else {
+            Some(core::CPU_PDF_IMAGE_PAGE_BUDGET)
+        };
+        if (pdf_images_enabled
+            && (!gemma_images_allowed || pdf_image_page_budget != expected_budget))
+            || (!pdf_images_enabled && pdf_image_page_budget.is_some())
+        {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
         let deterministic = managed.deterministic;
         let root_id = match existing_root.as_ref() {
             Some(root) => root.id(),
@@ -1288,6 +1333,8 @@ impl SemanticLibraryService {
                 recursive,
             )
         });
+        root.set_pdf_image_policy(pdf_images_enabled, pdf_image_page_budget)
+            .map_err(map_policy_error)?;
         root.attach_workspace(context.workspace_id);
         let confirmation_id = next_confirmation(&mut locked.cache, deterministic, "enrol");
         locked.cache.enrolment_confirmations.insert(
@@ -1304,6 +1351,8 @@ impl SemanticLibraryService {
             policy_revision: revision,
             location: context.location,
             recursive,
+            pdf_images_enabled,
+            pdf_image_page_budget,
             estimate: project_estimate(&estimate, budgets),
             normalized_excerpts_retained_locally: true,
         })
@@ -1343,10 +1392,16 @@ impl SemanticLibraryService {
             .find(|root| root.location() == &context.location)
             .map(core::EnrolledRoot::id)
         {
-            next.policy
+            let root = next
+                .policy
                 .root_mut(existing)
-                .ok_or(SemanticLibraryError::NotFound)?
-                .attach_workspace(context.workspace_id);
+                .ok_or(SemanticLibraryError::NotFound)?;
+            root.attach_workspace(context.workspace_id);
+            root.set_pdf_image_policy(
+                pending.root.pdf_images_enabled(),
+                pending.root.pdf_image_page_budget(),
+            )
+            .map_err(map_policy_error)?;
             existing
         } else {
             let root_id = pending.root.id();
@@ -1825,7 +1880,13 @@ impl SemanticLibraryService {
         root_id: core::RootId,
         observed_occurrences: &BTreeSet<core::OccurrenceId>,
     ) -> Result<u64, SemanticLibraryError> {
-        self.complete_reconciliation_preserving(access, root_id, observed_occurrences, &[])
+        self.complete_reconciliation_preserving(
+            access,
+            root_id,
+            observed_occurrences,
+            &[],
+            &BTreeMap::new(),
+        )
     }
 
     /// Commits an enumeration that could not read some entries, retaining
@@ -1840,6 +1901,7 @@ impl SemanticLibraryService {
         root_id: core::RootId,
         observed_occurrences: &BTreeSet<core::OccurrenceId>,
         preserved: &[Location],
+        skipped: &BTreeMap<core::EligibilityReason, u64>,
     ) -> Result<u64, SemanticLibraryError> {
         let managed = self.managed_backend()?;
         managed.authorize(access)?;
@@ -1858,6 +1920,12 @@ impl SemanticLibraryService {
         next.state
             .record_indexed_generation(root_id, generation)
             .map_err(|_| SemanticLibraryError::InvalidRequest)?;
+        next.state.set_eligibility_reason_counts(
+            root_id,
+            core::EligibilityReasonCounts::from_counts(
+                skipped.iter().map(|(reason, count)| (*reason, *count)),
+            ),
+        );
         locked.commit(next, core::LibraryOperation::Reconciliation)?;
         Ok(generation)
     }
@@ -1884,6 +1952,25 @@ impl SemanticLibraryService {
         access: &SemanticAccessContext,
         candidates: &[SemanticFeedCandidate],
     ) -> Result<SemanticWorkerFeedPlan, SemanticLibraryError> {
+        self.worker_feed_plan_with_pdf_limit(
+            access,
+            candidates,
+            crate::semantic_indexing::MAX_SOURCE_BYTES,
+        )
+    }
+
+    pub(crate) fn worker_feed_plan_with_pdf_limit(
+        &self,
+        access: &SemanticAccessContext,
+        candidates: &[SemanticFeedCandidate],
+        max_pdf_source_bytes: u64,
+    ) -> Result<SemanticWorkerFeedPlan, SemanticLibraryError> {
+        if !(crate::semantic_indexing::MAX_SOURCE_BYTES
+            ..=fm_semantic_protocol::MAX_PDF_INGESTION_BYTES)
+            .contains(&max_pdf_source_bytes)
+        {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
         let managed = self.managed_backend()?;
         managed.authorize(access)?;
         let tenant = managed.tenant_for(access)?;
@@ -1898,6 +1985,15 @@ impl SemanticLibraryService {
         let mut eligible = Vec::new();
         let mut decisions = Vec::new();
         for candidate in candidates {
+            let mut candidate_budgets = budgets;
+            candidate_budgets.max_source_bytes_per_document =
+                candidate_budgets.max_source_bytes_per_document.min(
+                    if candidate.candidate.mime_type.as_deref() == Some("application/pdf") {
+                        max_pdf_source_bytes
+                    } else {
+                        crate::semantic_indexing::MAX_SOURCE_BYTES
+                    },
+                );
             let root = data
                 .policy
                 .root(candidate.root_id)
@@ -1917,7 +2013,7 @@ impl SemanticLibraryService {
                 .evaluate(
                     root.location(),
                     &candidate.candidate,
-                    &budgets,
+                    &candidate_budgets,
                     usage,
                     root.eligibility_overrides(),
                 )
@@ -1937,6 +2033,12 @@ impl SemanticLibraryService {
         };
         Ok(SemanticWorkerFeedPlan {
             paused,
+            pdf_images_consented: data
+                .policy
+                .library()
+                .model()
+                .gemma_media()
+                .is_some_and(|media| media.images),
             decisions: worker_decisions,
             eligible_locations: eligible,
             skipped_reason_counts: reason_counts(&core::EligibilityReasonCounts::from_decisions(
@@ -2006,6 +2108,33 @@ impl SemanticLibraryService {
         Ok(occurrence_id)
     }
 
+    /// Persists a scope-bound receipt after the worker confirms ingestion.
+    pub(crate) fn confirm_indexed_observation(
+        &self,
+        access: &SemanticAccessContext,
+        occurrence_id: core::OccurrenceId,
+        fingerprint: &core::ContentFingerprint,
+        scope: core::OccurrenceScope,
+    ) -> Result<(), SemanticLibraryError> {
+        let managed = self.managed_backend()?;
+        managed.authorize(access)?;
+        let mut locked = managed.lock()?;
+        let mut next = locked.data()?.clone();
+        if next
+            .catalog
+            .authorized_occurrence(&next.policy, scope.workspace_id(), occurrence_id)
+            .map_err(|_| SemanticLibraryError::InvalidRequest)?
+            .is_none()
+            || !next
+                .catalog
+                .confirm_indexed(occurrence_id, fingerprint, scope)
+        {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
+        locked.commit(next, core::LibraryOperation::Reconciliation)?;
+        Ok(())
+    }
+
     /// Resolves one path-free worker source against the current host catalog.
     ///
     /// Authorization and consent are rechecked at activation time so a stale
@@ -2024,6 +2153,7 @@ impl SemanticLibraryService {
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let data = locked.data()?;
+        let mut authorized_root_id = None;
         let occurrence = if matches!(access, SemanticAccessContext::Host) {
             let candidate = data
                 .catalog
@@ -2037,6 +2167,7 @@ impl SemanticLibraryService {
                         .authorized_occurrence(&data.policy, scope.workspace_id(), occurrence_id)
                         .map_err(|_| SemanticLibraryError::InvalidRequest)?
                     {
+                        authorized_root_id = Some(scope.root_id());
                         authorized = Some(occurrence);
                         break;
                     }
@@ -2051,9 +2182,20 @@ impl SemanticLibraryService {
         let Some(occurrence) = occurrence else {
             return Ok(None);
         };
+        let root_id = if matches!(access, SemanticAccessContext::Host) {
+            authorized_root_id.ok_or(SemanticLibraryError::NotFound)?
+        } else {
+            occurrence
+                .scopes()
+                .iter()
+                .find(|scope| scope.workspace_id() == workspace_id)
+                .map(|scope| scope.root_id())
+                .ok_or(SemanticLibraryError::NotFound)?
+        };
         Ok(Some(ResolvedSemanticOccurrence {
             entry_id: occurrence.entry_id(),
             location: occurrence.location().clone(),
+            root_id,
             available: data.catalog.source_availability(occurrence_id)
                 == Some(core::SourceAvailability::Available),
         }))
@@ -2129,20 +2271,16 @@ impl SemanticLibraryService {
     /// Resolves a user-visible Structured Knowledge scope into current
     /// authorization.
     ///
-    /// A desktop whole-library search spans every workspace tenant that still
-    /// owns indexed occurrences. The device library outlives individual
-    /// workspaces, so replacing a workspace must not orphan its indexed roots.
-    /// Server callers remain confined to their authenticated tenant.
+    /// Knowledge search stays within the requested workspace, including an
+    /// explicit whole-library selection; roots in other workspaces remain
+    /// available to those workspaces without joining this search.
     pub(crate) fn resolve_knowledge_scope(
         &self,
         access: &SemanticAccessContext,
         workspace_id: WorkspaceId,
         selection: &RagScopeSelection,
     ) -> Result<ResolvedKnowledgeScope, SemanticLibraryError> {
-        let cross_workspace = matches!(access, SemanticAccessContext::Host)
-            && matches!(selection, RagScopeSelection::EntireLibrary);
-        let sources =
-            self.resolve_scope_sources(access, workspace_id, selection, cross_workspace)?;
+        let sources = self.resolve_scope_sources(access, workspace_id, selection, false)?;
         Ok(ResolvedKnowledgeScope {
             filters: QueryFilters {
                 tenant_id: sources.tenant_id,
@@ -2153,7 +2291,7 @@ impl SemanticLibraryService {
                 // are written per ingesting workspace, so a workspace filter
                 // there could hide evidence that is authorized through a later
                 // co-enrolment; the exact source restriction covers that case.
-                workspace_id: (matches!(access, SemanticAccessContext::Host) && !cross_workspace)
+                workspace_id: matches!(access, SemanticAccessContext::Host)
                     .then(|| workspace_id.to_string()),
                 include_unavailable: true,
                 ..QueryFilters::default()
@@ -2411,6 +2549,8 @@ pub(crate) struct SemanticIndexingObservation {
 pub struct SemanticWorkerFeedPlan {
     /// Whether ingestion is paused; queries still use existing generations.
     pub paused: bool,
+    /// Immutable library image consent for PDF visual ingestion; false for E5.
+    pub pdf_images_consented: bool,
     /// Path-free decisions the host may send to the isolated worker.
     pub decisions: Vec<core::WorkerFeedDecision>,
     /// Candidate locations the curated policy admitted, retained by the host.
@@ -2424,6 +2564,7 @@ pub struct SemanticWorkerFeedPlan {
 pub(crate) struct ResolvedSemanticOccurrence {
     pub(crate) entry_id: fm_domain::EntryId,
     pub(crate) location: Location,
+    pub(crate) root_id: core::RootId,
     pub(crate) available: bool,
 }
 
@@ -2581,7 +2722,7 @@ mod tenant_tests {
     }
 
     #[test]
-    fn desktop_entire_library_knowledge_scope_survives_workspace_replacement() {
+    fn desktop_knowledge_scopes_exclude_other_workspaces() {
         let service = SemanticLibraryService::deterministic_mock();
         let enrolled_workspace = WorkspaceId::new();
         let other_workspace = WorkspaceId::new();
@@ -2654,9 +2795,8 @@ mod tenant_tests {
         assert!(authorized.unavailable_source_ids.is_empty());
         assert_eq!(authorized.eligible, 1);
 
-        // The device library outlives individual workspaces. Replacing the
-        // workspace must not orphan already indexed roots from a host-wide
-        // "entire library" search.
+        // Even an explicit whole-library Knowledge scope cannot search a root
+        // that belongs only to another workspace.
         let foreign = service
             .resolve_knowledge_scope(
                 &SemanticAccessContext::Host,
@@ -2664,12 +2804,25 @@ mod tenant_tests {
                 &RagScopeSelection::EntireLibrary,
             )
             .unwrap();
-        assert_eq!(foreign.filters.tenant_id, enrolled_workspace.to_string());
-        assert_eq!(foreign.filters.workspace_id, None);
-        assert!(foreign.additional_tenant_ids.is_empty());
+        assert_eq!(foreign.filters.tenant_id, other_workspace.to_string());
         assert_eq!(
-            foreign.allowed_source_ids,
-            BTreeSet::from([occurrence_id.to_string()])
+            foreign.filters.workspace_id,
+            Some(other_workspace.to_string())
+        );
+        assert!(foreign.additional_tenant_ids.is_empty());
+        assert!(foreign.allowed_source_ids.is_empty());
+        assert_eq!(foreign.eligible, 0);
+        let own_library = service
+            .resolve_knowledge_scope(
+                &SemanticAccessContext::Host,
+                enrolled_workspace,
+                &RagScopeSelection::EntireLibrary,
+            )
+            .unwrap();
+        assert!(
+            own_library
+                .allowed_source_ids
+                .contains(&occurrence_id.to_string())
         );
         let opened = service
             .resolve_occurrence(
@@ -2679,6 +2832,7 @@ mod tenant_tests {
             )
             .unwrap()
             .expect("host-wide evidence remains openable after workspace replacement");
+        assert_eq!(opened.root_id, root_id);
         assert_eq!(opened.location.uri, "file:///semantic-library/turbines.md");
 
         // A root enrolled through another workspace cannot be named as a scope.
@@ -3382,6 +3536,8 @@ fn project_root(
         id: root.id().to_string(),
         location: root.location().clone(),
         recursive: root.recursive(),
+        pdf_images_enabled: root.pdf_images_enabled(),
+        pdf_image_page_budget: root.pdf_image_page_budget(),
         stable_identity_verified: root.filesystem_identity().is_some(),
         workspace_references: root
             .workspace_references()
@@ -3416,6 +3572,36 @@ fn project_root(
         indexed_generation: data.state.indexed_generation(root.id()),
         indexed_occurrences: u64::try_from(data.catalog.root_occurrence_count(root.id()))
             .unwrap_or(u64::MAX),
+        completed_occurrences_by_workspace: root
+            .workspace_references()
+            .iter()
+            .map(|workspace_id| {
+                (
+                    Uuid::from(*workspace_id),
+                    u64::try_from(
+                        data.catalog
+                            .root_completed_count(core::OccurrenceScope::new(
+                                *workspace_id,
+                                root.id(),
+                            )),
+                    )
+                    .unwrap_or(u64::MAX),
+                )
+            })
+            .collect(),
+        unverified_legacy_occurrences_by_workspace: root
+            .workspace_references()
+            .iter()
+            .map(|workspace_id| {
+                (
+                    Uuid::from(*workspace_id),
+                    u64::try_from(data.catalog.root_unverified_legacy_count(
+                        core::OccurrenceScope::new(*workspace_id, root.id()),
+                    ))
+                    .unwrap_or(u64::MAX),
+                )
+            })
+            .collect(),
         exclusions: root
             .exclusions()
             .iter()
@@ -3765,6 +3951,10 @@ pub struct GemmaLibrarySetup {
     pub dimensions: u32,
     /// Fixed media permissions.
     pub media: core::GemmaMediaSelection,
+    /// Default page-image device selected by the signed worker target.
+    pub image_device: &'static str,
+    /// Default CPU page-image budget; absent for the Metal target.
+    pub pdf_image_page_budget: Option<u32>,
 }
 
 impl SemanticLibraryComposition {
@@ -3806,6 +3996,19 @@ impl SemanticLibraryComposition {
                     media: model
                         .gemma_media()
                         .ok_or(SemanticLibraryError::IncompatibleLibraryIdentity)?,
+                    image_device: if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+                        "metal"
+                    } else {
+                        "cpu"
+                    },
+                    pdf_image_page_budget: if cfg!(all(
+                        target_os = "macos",
+                        target_arch = "aarch64"
+                    )) {
+                        None
+                    } else {
+                        Some(core::CPU_PDF_IMAGE_PAGE_BUDGET)
+                    },
                 })
             })
             .transpose()

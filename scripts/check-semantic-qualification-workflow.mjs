@@ -55,6 +55,14 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
       'qualification must build against the final tag and retain smoke/privacy evidence',
     );
   }
+  if (
+    workflow.on.workflow_dispatch.inputs.qualify_pdf_render?.default !== false ||
+    !payloadConfiguration.includes('inputs.qualify_pdf_render') ||
+    !/test -n "\$\{GEMMA_ORIGINAL_FILES:-\}"/u.test(payloadCommands) ||
+    !payloadCommands.includes('--experimental-pdf-render true')
+  ) {
+    failures.push('PDF rendering qualification must be opt-in and require Gemma originals');
+  }
 
   const collect = workflow.jobs?.['semantic-collect'];
   if (
@@ -82,6 +90,7 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
   if (
     !publishGate.includes("inputs.qualification_run_id != ''") ||
     !publishGate.includes("vars.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true'") ||
+    !publishGate.includes("vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED == 'true'") ||
     publish?.permissions?.contents !== 'write' ||
     publish?.permissions?.actions !== 'read'
   ) {
@@ -96,9 +105,33 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
     !publishCommands.includes('check-semantic-release-preconditions.mjs') ||
     !publishCommands.includes('--approved-report') ||
     !publishCommands.includes('verify-semantic-component-release.mjs') ||
+    !publishCommands.includes('check-experimental-gemma-release.mjs') ||
+    !publishCommands.includes('semantic_production_catalog') ||
     !publishCommands.includes('gh release create')
   ) {
     failures.push('publication must verify and publish exact retained qualification artifacts');
+  }
+  const experimentalCheck = publishSteps.findIndex((step) =>
+    String(step.run ?? '').includes('check-experimental-gemma-release.mjs'),
+  );
+  const signatureCheck = publishSteps.findIndex((step) =>
+    String(step.run ?? '').includes('semantic_production_catalog'),
+  );
+  const publishIndex = publishSteps.findIndex((step) => publishingStep(step));
+  if (
+    workflow.on.workflow_dispatch.inputs.approve_experimental_gemma?.default !== false ||
+    !publishGate.includes('inputs.approve_experimental_gemma != true') ||
+    experimentalCheck < 0 ||
+    signatureCheck <= experimentalCheck ||
+    publishIndex <= signatureCheck ||
+    !String(publishSteps[experimentalCheck].if ?? '').includes(
+      'approve_experimental_gemma == true',
+    ) ||
+    !String(publishSteps[signatureCheck].if ?? '').includes('approve_experimental_gemma == true')
+  ) {
+    failures.push(
+      'experimental Gemma publication must explicitly verify exact approved signed assets',
+    );
   }
   for (const [index, step] of publishSteps.entries()) {
     if (publishingStep(step) && !publishGate.includes("inputs.qualification_run_id != ''")) {

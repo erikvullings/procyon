@@ -135,28 +135,8 @@ export function breadcrumbSegments(path: string): readonly BreadcrumbSegment[] {
   return path.includes('\\') ? windowsSegments(path) : posixSegments(path);
 }
 
-/** Non-navigable breadcrumb for a search, including whether it matches filenames or content. */
-export function searchBreadcrumbSegments(
-  uri: string,
-  presentation: SearchPresentation | undefined,
-): readonly BreadcrumbSegment[] {
-  const withoutScheme = uri.slice('search://'.length);
-  const separatorIndex = withoutScheme.indexOf('/');
-  const providerId = separatorIndex === -1 ? withoutScheme : withoutScheme.slice(0, separatorIndex);
-  const searchId = separatorIndex === -1 ? '' : withoutScheme.slice(separatorIndex + 1);
-  const displayTerm = presentation?.label ?? presentation?.term;
-  return [
-    { label: '/', path: '/' },
-    { label: t('pane', 'searchBreadcrumb'), path: 'search' },
-    { label: providerId, path: providerId },
-    {
-      label:
-        presentation === undefined
-          ? searchId
-          : presentation.kind === 'filename'
-            ? t('pane', 'filenameSearchBreadcrumb', { term: displayTerm ?? '' })
-            : t('pane', 'contentSearchBreadcrumb', { term: displayTerm ?? '' }),
-      path: displayTerm ?? searchId,
-    },
-  ];
+/** A search is a virtual result set, not a navigable filesystem path. */
+export function searchResultTitle(presentation: SearchPresentation | undefined): string {
+  const term = presentation?.headerTerm ?? presentation?.label ?? presentation?.term;
+  return term ? `${t('search', 'resultsTitle')} · ${term}` : t('search', 'resultsTitle');
 }

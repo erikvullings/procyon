@@ -88,3 +88,14 @@ not replace the original chunks as the basis for grounded claims.
   VFS conversion and deterministic positional selection in memory, revalidates the selection
   fingerprint before generation, and returns the result only to the open dialog. The F3 action is
   hidden until managed semantic components and an LLM generation profile are ready.
+- 2026-10-11: A later user decision supersedes representative-only *generation*: all extracted
+  text must be read through bounded source passes, with a visible multi-pass warning, no silent
+  truncation, and explicit failure when the source or reduction cannot fit. Representatives remain
+  only a local Key passages preview. Generation uses the active saved profile, exact-endpoint
+  consent for cloud transfer, the validated requested Ollama context (`num_ctx`), or the saved
+  context with an unverified-limit warning for providers without a report. Nullable source-backed
+  title/author fields distinguish AI extraction from typed metadata; conversion currently has no
+  dependable bibliographic metadata or byline field to prefer. Old catalog generations are not
+  attested as complete until an authorized reindex, which must not be triggered automatically.
+  The approved production evaluation remains tied to its original pipeline identity and requires
+  a new exact-source assessment before any release.

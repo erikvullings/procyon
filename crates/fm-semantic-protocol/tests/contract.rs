@@ -63,6 +63,8 @@ fn ingestion_and_query_are_scoped_and_carry_no_path_authority() {
         }],
         media_type: "text/plain".to_owned(),
         expected_content_bytes: 12,
+        pdf_images_consented: false,
+        expected_sha256: Vec::new(),
     };
 
     // Exhaustive destructuring makes adding path, root, credential, action, or
@@ -72,11 +74,15 @@ fn ingestion_and_query_are_scoped_and_carry_no_path_authority() {
         metadata,
         media_type,
         expected_content_bytes,
+        pdf_images_consented,
+        expected_sha256,
     } = start.clone();
     assert_eq!(document_id, "document-1");
     assert_eq!(metadata.len(), 1);
     assert_eq!(media_type, "text/plain");
     assert_eq!(expected_content_bytes, 12);
+    assert!(!pdf_images_consented);
+    assert!(expected_sha256.is_empty());
 
     let ingestion = v1::IngestionRequest {
         session: Some(session()),

@@ -1,6 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { IconButton, ModalPanel } from 'mithril-materialized';
 
+import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { copyIcon, plusIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
@@ -457,6 +458,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
               ]),
             ]),
             m('textarea', {
+              ...technicalTextInputAttrs,
               id: 'fm-rag-question-input',
               rows: 5,
               value: question,

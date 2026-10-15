@@ -45,6 +45,16 @@ describe('copy selection actions', () => {
     expect(selectionClipboardText(actionId, selectedEntries, activeDirectory)).toBe(expected);
   });
 
+  it('copies a regular folder entry’s own full path', () => {
+    const folder = {
+      ...entry('docs', 'file:///workspace/project/docs'),
+      kind: 'directory' as const,
+    };
+    expect(selectionClipboardText('core.copyPath', [folder], activeDirectory)).toBe(
+      '/workspace/project/docs',
+    );
+  });
+
   it('formats the synthetic parent row against the active directory', () => {
     const parent: EntrySummary = {
       id: 'fm:parent:/workspace/project' as EntryId,
@@ -56,7 +66,9 @@ describe('copy selection actions', () => {
       metadataRevision: 0,
     };
 
-    expect(selectionClipboardText('core.copyPath', [parent], activeDirectory)).toBe('/workspace');
+    expect(selectionClipboardText('core.copyPath', [parent], activeDirectory)).toBe(
+      '/workspace/project',
+    );
     expect(selectionClipboardText('core.copyRelativePath', [parent], activeDirectory)).toBe('..');
   });
 

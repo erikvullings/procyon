@@ -1,0 +1,883 @@
+{
+  "format": "procyon-skos-1",
+  "id": "unesco-psychology",
+  "name": "Psychology (UNESCO Thesaurus 2026-08-31 snapshot excerpt)",
+  "concepts": [
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept1000",
+      "prefLabels": {
+        "en": "Talent"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept389"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept3086",
+        "http://vocabularies.unesco.org/thesaurus/concept993",
+        "http://vocabularies.unesco.org/thesaurus/concept996"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept10244",
+      "prefLabels": {
+        "en": "Mind"
+      },
+      "altLabels": {
+        "en": ["Mentality"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept391"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept392"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept10602",
+      "prefLabels": {
+        "en": "Experimental psychology"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept7833"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept6239",
+        "http://vocabularies.unesco.org/thesaurus/concept9430"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept1209",
+      "prefLabels": {
+        "en": "Achievement motivation"
+      },
+      "altLabels": {
+        "en": ["Performance motivation"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept390"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept1211",
+        "http://vocabularies.unesco.org/thesaurus/concept385"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept1211",
+      "prefLabels": {
+        "en": "Self discipline"
+      },
+      "altLabels": {
+        "en": ["Self control"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept390"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept1209"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept12147",
+      "prefLabels": {
+        "en": "Identity"
+      },
+      "altLabels": {
+        "en": ["Individuals", "Personal identity"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept391"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept392",
+        "http://vocabularies.unesco.org/thesaurus/concept8001"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept13013",
+      "prefLabels": {
+        "en": "Mental stress"
+      },
+      "altLabels": {
+        "en": ["Mental strain"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept3691"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept15060",
+      "prefLabels": {
+        "en": "Perception"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept998"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept6822"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept15081",
+      "prefLabels": {
+        "en": "Self esteem"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept391"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept15670",
+      "prefLabels": {
+        "en": "Psychometrics"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept6239"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept9430"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept1597",
+      "prefLabels": {
+        "en": "Emotions"
+      },
+      "altLabels": {
+        "en": ["Feelings", "Love"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept386"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17133"],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept5058"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept16462",
+      "prefLabels": {
+        "en": "Sleep"
+      },
+      "altLabels": {
+        "en": ["Dreams"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept3692"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept17110",
+      "prefLabels": {
+        "en": "Critical thinking"
+      },
+      "altLabels": {
+        "en": ["Critical mind"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept5557"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept7519"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept17133",
+      "prefLabels": {
+        "en": "Happiness"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept1597"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept17154",
+      "prefLabels": {
+        "en": "Social skills"
+      },
+      "altLabels": {
+        "en": ["Interpersonal skills", "Social abilities", "Social competence"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept999"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept1929",
+      "prefLabels": {
+        "en": "Sexual behaviour"
+      },
+      "altLabels": {
+        "en": ["Sex customs", "Sexuality"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept386"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3086",
+      "prefLabels": {
+        "en": "Creativity"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept5554"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept1000",
+        "http://vocabularies.unesco.org/thesaurus/concept6813",
+        "http://vocabularies.unesco.org/thesaurus/concept6822"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3299",
+      "prefLabels": {
+        "en": "Attitude change"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept385"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3306",
+      "prefLabels": {
+        "en": "Intolerance"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept385"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept3307",
+        "http://vocabularies.unesco.org/thesaurus/concept3308"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3307",
+      "prefLabels": {
+        "en": "Prejudice"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept385"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept3306"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3308",
+      "prefLabels": {
+        "en": "Tolerance"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept385"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept3306"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3690",
+      "prefLabels": {
+        "en": "Lateral dominance"
+      },
+      "altLabels": {
+        "en": ["Left handedness"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept386"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3691",
+      "prefLabels": {
+        "en": "Psychological effects"
+      },
+      "altLabels": {
+        "en": ["Psychological factors"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept386"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept13013"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept3692",
+      "prefLabels": {
+        "en": "Unconscious"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept386"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept16462"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept385",
+      "prefLabels": {
+        "en": "Attitudes"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept3299",
+        "http://vocabularies.unesco.org/thesaurus/concept3306",
+        "http://vocabularies.unesco.org/thesaurus/concept3307",
+        "http://vocabularies.unesco.org/thesaurus/concept3308"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept1209",
+        "http://vocabularies.unesco.org/thesaurus/concept390"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept386",
+      "prefLabels": {
+        "en": "Behaviour"
+      },
+      "altLabels": {
+        "en": ["Human behaviour"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept1597",
+        "http://vocabularies.unesco.org/thesaurus/concept1929",
+        "http://vocabularies.unesco.org/thesaurus/concept3690",
+        "http://vocabularies.unesco.org/thesaurus/concept3691",
+        "http://vocabularies.unesco.org/thesaurus/concept3692",
+        "http://vocabularies.unesco.org/thesaurus/concept998"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept390",
+        "http://vocabularies.unesco.org/thesaurus/concept392"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept387",
+      "prefLabels": {
+        "en": "Cognition"
+      },
+      "altLabels": {
+        "en": ["Cognitive processes"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "The mental action or process of acquiring knowledge through thought, experience and senses."
+      },
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept5553",
+        "http://vocabularies.unesco.org/thesaurus/concept5554",
+        "http://vocabularies.unesco.org/thesaurus/concept5555",
+        "http://vocabularies.unesco.org/thesaurus/concept5556",
+        "http://vocabularies.unesco.org/thesaurus/concept5557"
+      ],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept389"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept388",
+      "prefLabels": {
+        "en": "Developmental psychology"
+      },
+      "altLabels": {
+        "en": ["Genetic psychology", "Individual development"]
+      },
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Study of the changes in cognitive, motivational, psychophysiological, and social functioning that occur throughout the human life span."
+      },
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept5058",
+        "http://vocabularies.unesco.org/thesaurus/concept5059",
+        "http://vocabularies.unesco.org/thesaurus/concept5060",
+        "http://vocabularies.unesco.org/thesaurus/concept7752"
+      ],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept392"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept389",
+      "prefLabels": {
+        "en": "Intelligence"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept1000",
+        "http://vocabularies.unesco.org/thesaurus/concept993",
+        "http://vocabularies.unesco.org/thesaurus/concept996"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept387",
+        "http://vocabularies.unesco.org/thesaurus/concept998"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept390",
+      "prefLabels": {
+        "en": "Motivation"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept1209",
+        "http://vocabularies.unesco.org/thesaurus/concept1211"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept385",
+        "http://vocabularies.unesco.org/thesaurus/concept386"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept391",
+      "prefLabels": {
+        "en": "Personality"
+      },
+      "altLabels": {
+        "en": ["Character", "Temperament"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept10244",
+        "http://vocabularies.unesco.org/thesaurus/concept12147",
+        "http://vocabularies.unesco.org/thesaurus/concept15081",
+        "http://vocabularies.unesco.org/thesaurus/concept8001"
+      ],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept392",
+      "prefLabels": {
+        "en": "Psychology"
+      },
+      "altLabels": {
+        "en": ["Individual psychology"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept6239",
+        "http://vocabularies.unesco.org/thesaurus/concept7833"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept10244",
+        "http://vocabularies.unesco.org/thesaurus/concept12147",
+        "http://vocabularies.unesco.org/thesaurus/concept386",
+        "http://vocabularies.unesco.org/thesaurus/concept388",
+        "http://vocabularies.unesco.org/thesaurus/concept8001"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5055",
+      "prefLabels": {
+        "en": "Child development"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept7752"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept5058",
+        "http://vocabularies.unesco.org/thesaurus/concept5059",
+        "http://vocabularies.unesco.org/thesaurus/concept5060"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5058",
+      "prefLabels": {
+        "en": "Emotional development"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept388"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept1597",
+        "http://vocabularies.unesco.org/thesaurus/concept5055"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5059",
+      "prefLabels": {
+        "en": "Mental development"
+      },
+      "altLabels": {
+        "en": ["Intellectual development", "Thought process development"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept388"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept5055",
+        "http://vocabularies.unesco.org/thesaurus/concept5557"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5060",
+      "prefLabels": {
+        "en": "Moral development"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept388"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept5055"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5553",
+      "prefLabels": {
+        "en": "Conceptualization"
+      },
+      "altLabels": {
+        "en": ["Concept formation", "Concepts"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept387"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5554",
+      "prefLabels": {
+        "en": "Imagination"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept387"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept3086"],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept5555",
+        "http://vocabularies.unesco.org/thesaurus/concept6822"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5555",
+      "prefLabels": {
+        "en": "Intuition"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept387"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept5554"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5556",
+      "prefLabels": {
+        "en": "Memorization"
+      },
+      "altLabels": {
+        "en": ["Memory"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept387"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept5557",
+      "prefLabels": {
+        "en": "Thinking"
+      },
+      "altLabels": {
+        "en": ["Thought process"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept387"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept17110",
+        "http://vocabularies.unesco.org/thesaurus/concept6813",
+        "http://vocabularies.unesco.org/thesaurus/concept7519"
+      ],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept5059"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6239",
+      "prefLabels": {
+        "en": "Psychological research"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept392"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept15670",
+        "http://vocabularies.unesco.org/thesaurus/concept9430"
+      ],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept10602"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6813",
+      "prefLabels": {
+        "en": "Creative thinking"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept5557"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept3086"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept6822",
+      "prefLabels": {
+        "en": "Visualization"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept998"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept15060",
+        "http://vocabularies.unesco.org/thesaurus/concept3086",
+        "http://vocabularies.unesco.org/thesaurus/concept5554"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept7519",
+      "prefLabels": {
+        "en": "Reasoning"
+      },
+      "altLabels": {
+        "en": ["Abstract reasoning", "Deduction (reasoning)", "Induction (reasoning)"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept5557"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept17110"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept7752",
+      "prefLabels": {
+        "en": "Personality development"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept388"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept5055"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept7833",
+      "prefLabels": {
+        "en": "Psychological schools"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "Freudian, Jungian, Gestalt, dynamic, introspective, etc."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept392"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept10602"],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept8001",
+      "prefLabels": {
+        "en": "Individual differences"
+      },
+      "altLabels": {
+        "en": ["Individuality"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept391"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept12147",
+        "http://vocabularies.unesco.org/thesaurus/concept392"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept9430",
+      "prefLabels": {
+        "en": "Psychological tests"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept6239"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept10602",
+        "http://vocabularies.unesco.org/thesaurus/concept15670"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept993",
+      "prefLabels": {
+        "en": "Ability"
+      },
+      "altLabels": {
+        "en": ["Intellectual ability"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept389"],
+      "narrower": [],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept1000",
+        "http://vocabularies.unesco.org/thesaurus/concept996",
+        "http://vocabularies.unesco.org/thesaurus/concept998",
+        "http://vocabularies.unesco.org/thesaurus/concept999"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept996",
+      "prefLabels": {
+        "en": "Aptitude"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {
+        "en": "The potential ability of an individual to perform an as yet unlearned task or skill."
+      },
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept389"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept999"],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept1000",
+        "http://vocabularies.unesco.org/thesaurus/concept993",
+        "http://vocabularies.unesco.org/thesaurus/concept998"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept998",
+      "prefLabels": {
+        "en": "Sensorimotor activities"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept386"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept15060",
+        "http://vocabularies.unesco.org/thesaurus/concept6822"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept389",
+        "http://vocabularies.unesco.org/thesaurus/concept993",
+        "http://vocabularies.unesco.org/thesaurus/concept996",
+        "http://vocabularies.unesco.org/thesaurus/concept999"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept999",
+      "prefLabels": {
+        "en": "Skills"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept996"],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept17154"],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept993",
+        "http://vocabularies.unesco.org/thesaurus/concept998"
+      ],
+      "extensions": {}
+    }
+  ],
+  "extensions": {
+    "https://procyon.app/ns/skos-starter/source": "https://vocabularies.unesco.org/exports/thesaurus/latest/unesco-thesaurus.rdf",
+    "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by-sa/3.0/igo/",
+    "https://procyon.app/ns/skos-starter/selection": ["mt4.10"]
+  }
+}

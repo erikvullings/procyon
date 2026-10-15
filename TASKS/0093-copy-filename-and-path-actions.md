@@ -87,3 +87,6 @@ core actions, not the plugin.
   Full Path and Copy Relative Path. Formatting resolves the full parent path from the active
   directory and returns `..` for the relative path without enabling mutation actions on the
   presentation-only row.
+- 2026-10-11 Copilot: On the synthetic `..` row, Copy Full Path now copies the current
+  directory's path; Copy Relative Path continues to copy `..`. Activating the row still
+  navigates to the parent. Ordinary file and folder entries continue to copy their own paths.

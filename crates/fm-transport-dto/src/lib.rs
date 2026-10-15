@@ -131,8 +131,8 @@ pub use knowledge::{
 };
 pub use llm_profile::{
     ActivateLlmProfileRequestDto, DeleteLlmProfileRequestDto, LlmAdvancedSettingsDto,
-    LlmApiCapabilityDto, LlmCredentialInputDto, LlmEndpointLocalityDto, LlmPresetDto,
-    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
+    LlmApiCapabilityDto, LlmCredentialInputDto, LlmEndpointLocalityDto, LlmModelLimitsDto,
+    LlmPresetDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
     LlmTestErrorCategoryDto, LlmTlsPolicyDto, OrphanLlmCredentialDispositionDto,
     SaveLlmProfileRequestDto,
 };
@@ -167,9 +167,9 @@ pub use search::{
     ConceptHierarchyScopeDto, SearchConceptPredicateDto, SearchContentPredicateDto,
     SearchEntryKindDto, SearchExecutionModeDto, SearchGitStatusDto, SearchModeDto,
     SearchNameModeDto, SearchNamePredicateDto, SearchPredicateKindDto, SearchProviderLimitationDto,
-    SearchQueryDto, SearchScopeDto, SearchSemanticPredicateDto, SemanticEvidenceDto,
-    SemanticSearchCoverageDto, SemanticSearchResultDto, SemanticSearchScopeDto,
-    StartSearchRequestDto, StartSearchResponseDto,
+    SearchQueryDto, SearchScopeDto, SearchSemanticConceptSourceDto, SearchSemanticPredicateDto,
+    SemanticEvidenceDto, SemanticSearchCoverageDto, SemanticSearchResultDto,
+    SemanticSearchScopeDto, StartSearchRequestDto, StartSearchResponseDto,
 };
 pub use semantic_components::*;
 pub use semantic_library::*;

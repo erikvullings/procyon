@@ -1,9 +1,13 @@
 import m, { type FactoryComponent } from 'mithril';
-import { FlatButton, IconButton, ModalPanel } from 'mithril-materialized';
+import { FlatButton, IconButton, ModalPanel, Skeleton } from 'mithril-materialized';
 
+import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import {
   brainIcon,
+  checkIcon,
+  chevronDownIcon,
+  chevronUpIcon,
   closeIcon,
   cloudIcon,
   copyIcon,
@@ -11,6 +15,7 @@ import {
   dotsIcon,
   externalLinkIcon,
   filterIcon,
+  photoIcon,
   sparklesIcon,
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
@@ -41,9 +46,12 @@ import type {
 import { defaultKnowledgeSearchOptions } from '../../models';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { lastPathSegment } from '../navigation/navigation';
-import { copyText } from '../preview/clipboard';
+import { copyImageDataUri, copyText } from '../preview/clipboard';
 import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
+import { pathFromUri } from '../workspace/workspace-layout';
+import { pdfPageRenderProvenance } from './evidence-provenance';
 import { decodeEvidenceTitle } from './evidence-title';
+import { mediaDescription, mediaKind, mediaLabel, mediaModifiedLabel } from './media-evidence';
 
 /** Everything the shell knows about the default scope when the dialog opens. */
 export interface KnowledgeSearchDialogAttrs {
@@ -56,8 +64,12 @@ export interface KnowledgeSearchDialogAttrs {
   readonly semanticSourceIds: readonly string[];
   /** Initial subject text, e.g. the active quick filter or semantic query. */
   readonly initialSubject?: string | undefined;
+  /** Changes when Settings may have activated or removed a generation profile. */
+  readonly profileRevision?: number;
   readonly onClose: () => void;
   readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
+  readonly isSourceOpen?: (evidence: KnowledgeEvidence) => boolean;
+  readonly onConfigureAnswers?: () => void;
 }
 
 /** Canonical need order, matching the backend enum declaration order. */
@@ -79,11 +91,347 @@ const INTENTS: readonly KnowledgeQueryIntent[] = ['search', 'questionAnswering',
 const SCOPE_KINDS: readonly KnowledgeScopeKind[] = [
   'entireLibrary',
   'enrolledRoots',
-  'currentFolder',
   'semanticResults',
 ];
 
 const PREFERENCES_STORAGE_KEY = 'procyon.knowledgeSearch.preferences.v1';
+
+interface KnowledgeImagePreviewAttrs {
+  readonly client: FileManagerClient;
+  readonly workspaceId: string;
+  readonly evidence: KnowledgeEvidence;
+  readonly title: string;
+}
+
+const KnowledgeImagePreview: FactoryComponent<KnowledgeImagePreviewAttrs> = () => {
+  let observer: IntersectionObserver | undefined;
+  let controller: AbortController | undefined;
+  let started = false;
+  let dataUri: string | undefined;
+  let unavailable = false;
+  let removed = false;
+
+  async function load(attrs: KnowledgeImagePreviewAttrs): Promise<void> {
+    if (started || removed) return;
+    started = true;
+    controller = new AbortController();
+    const signal = controller.signal;
+    try {
+      const source = await attrs.client.resolveKnowledgeSource(
+        { workspaceId: attrs.workspaceId, sourceId: attrs.evidence.sourceId },
+        signal,
+      );
+      // PDF page thumbnails are not the indexed embedded image; never present
+      // one as a preview of that image.
+      if (!source.available || !/\.(?:jpe?g|png|gif|webp|ico)$/iu.test(source.location.uri)) {
+        unavailable = true;
+        return;
+      }
+      const bytes = await attrs.client.getThumbnail(source.location.uri, 'small', signal);
+      if (bytes === undefined || bytes.length === 0 || bytes.length > 128 * 1024) {
+        unavailable = true;
+        return;
+      }
+      let binary = '';
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      dataUri = `data:image/jpeg;base64,${btoa(binary)}`;
+    } catch {
+      if (!signal.aborted) unavailable = true;
+    } finally {
+      if (!signal.aborted) m.redraw();
+    }
+  }
+
+  return {
+    oncreate: ({ dom, attrs }) => {
+      if (typeof IntersectionObserver === 'undefined') {
+        void load(attrs);
+        return;
+      }
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (!entries.some((entry) => entry.isIntersecting)) return;
+          observer?.disconnect();
+          void load(attrs);
+        },
+        { rootMargin: '96px' },
+      );
+      observer.observe(dom);
+    },
+    onremove: () => {
+      removed = true;
+      observer?.disconnect();
+      controller?.abort();
+    },
+    view: ({ attrs }) =>
+      m(
+        'span.fm-knowledge-image-preview',
+        dataUri === undefined
+          ? m(
+              'span.fm-knowledge-image-placeholder',
+              {
+                role: 'img',
+                'aria-label': t(
+                  'knowledgeSearch',
+                  unavailable ? 'imagePreviewUnavailable' : 'imagePreviewLoading',
+                ),
+              },
+              photoIcon(),
+            )
+          : m('img', {
+              src: dataUri,
+              alt: t('knowledgeSearch', 'imagePreviewAlt', { title: attrs.title }),
+              loading: 'lazy',
+              decoding: 'async',
+              onerror: () => {
+                dataUri = undefined;
+                unavailable = true;
+                m.redraw();
+              },
+            }),
+      ),
+  };
+};
+
+const KnowledgeChunkCopy: FactoryComponent<{
+  readonly evidence: KnowledgeEvidence;
+  readonly title: string;
+}> = () => {
+  let copied = false;
+  let failed = false;
+  let resetTimer: number | undefined;
+
+  return {
+    onremove: () => {
+      if (resetTimer !== undefined) clearTimeout(resetTimer);
+    },
+    view: ({ attrs }) =>
+      m('span.fm-knowledge-chunk-copy', [
+        m(
+          'button.fm-knowledge-chunk-copy-button',
+          {
+            type: 'button',
+            'aria-label': t('knowledgeSearch', 'copyChunk'),
+            onclick: (event: MouseEvent) => {
+              const section = (event.currentTarget as Element).closest('.fm-knowledge-result');
+              const content = section
+                ?.querySelector('.fm-knowledge-chunk-content')
+                ?.textContent?.trim();
+              if (content === undefined || content === '') return;
+              const position = knowledgeProvenanceLabel(attrs.evidence.provenance);
+              const source = t('knowledgeSearch', 'chunkSource', {
+                title: `${attrs.title}${position === '' ? '' : `, ${position}`}`,
+              });
+              void (async () => {
+                try {
+                  await copyText(`${content}\n\n${source}`);
+                  copied = true;
+                  failed = false;
+                  if (resetTimer !== undefined) clearTimeout(resetTimer);
+                  resetTimer = window.setTimeout(() => {
+                    copied = false;
+                    m.redraw();
+                  }, 1500);
+                } catch {
+                  copied = false;
+                  failed = true;
+                }
+                m.redraw();
+              })();
+            },
+          },
+          copied ? checkIcon({ size: 14 }) : copyIcon({ size: 14 }),
+        ),
+        copied
+          ? m('span.fm-visually-hidden', { role: 'status' }, t('knowledgeSearch', 'chunkCopied'))
+          : undefined,
+        failed
+          ? m('span.fm-knowledge-error', { role: 'alert' }, t('knowledgeSearch', 'copyChunkFailed'))
+          : undefined,
+      ]),
+  };
+};
+
+const KNOWLEDGE_COPY_IMAGE_LIMIT = 8 * 1024 * 1024;
+const KNOWLEDGE_COPY_READ_LENGTH = 1024 * 1024;
+
+const KnowledgeMediaCopy: FactoryComponent<{
+  readonly client: FileManagerClient;
+  readonly workspaceId: string;
+  readonly evidence: KnowledgeEvidence;
+  readonly title: string;
+  readonly description: string;
+}> = () => {
+  let copied = false;
+  let error: string | undefined;
+  let resetTimer: number | undefined;
+  let controller: AbortController | undefined;
+  let busy = false;
+
+  async function copy(attrs: {
+    readonly client: FileManagerClient;
+    readonly workspaceId: string;
+    readonly evidence: KnowledgeEvidence;
+    readonly title: string;
+    readonly description: string;
+  }): Promise<void> {
+    if (busy) return;
+    busy = true;
+    controller = new AbortController();
+    const signal = controller.signal;
+    const kind = mediaKind(attrs.evidence.mediaType);
+    try {
+      const source = await attrs.client.resolveKnowledgeSource(
+        { workspaceId: attrs.workspaceId, sourceId: attrs.evidence.sourceId },
+        signal,
+      );
+      if (!source.available) throw new Error(t('knowledgeSearch', 'copySourceUnavailable'));
+      if (kind === 'image') {
+        if (!/\.(?:jpe?g|png|gif|webp|ico)$/iu.test(source.location.uri)) {
+          throw new Error(t('knowledgeSearch', 'copyEmbeddedImageUnavailable'));
+        }
+        const bytes = new Uint8Array(KNOWLEDGE_COPY_IMAGE_LIMIT);
+        let offset = 0;
+        let eof = false;
+        while (!eof && offset < KNOWLEDGE_COPY_IMAGE_LIMIT) {
+          const part = await attrs.client.readFileRange(
+            { location: source.location, offset, length: KNOWLEDGE_COPY_READ_LENGTH },
+            signal,
+          );
+          if (part.offset !== offset || part.length === 0 || part.length !== part.data.length) {
+            throw new Error(t('knowledgeSearch', 'copyMediaFailed'));
+          }
+          if (offset + part.length > KNOWLEDGE_COPY_IMAGE_LIMIT) {
+            throw new Error(t('knowledgeSearch', 'copyImageTooLarge'));
+          }
+          bytes.set(part.data, offset);
+          offset += part.length;
+          eof = part.eof;
+        }
+        if (!eof || offset === 0) {
+          throw new Error(t('knowledgeSearch', 'copyImageTooLarge'));
+        }
+        const png =
+          bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+        const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+        if (!png && !jpeg) throw new Error(t('knowledgeSearch', 'copyImageUnsupported'));
+        let binary = '';
+        for (const byte of bytes.subarray(0, offset)) binary += String.fromCharCode(byte);
+        if (signal.aborted) return;
+        await copyImageDataUri(`data:image/${png ? 'png' : 'jpeg'};base64,${btoa(binary)}`);
+      } else {
+        const uri = source.location.uri;
+        if (source.location.providerId !== 'local' || !uri.startsWith('file:///')) {
+          throw new Error(t('knowledgeSearch', 'copyLocalLinkUnavailable'));
+        }
+        if (signal.aborted) return;
+        await copyText(
+          `${decodeEvidenceText(attrs.description)}\n\n${t('knowledgeSearch', 'chunkSource', { title: attrs.title })}\n${uri}`,
+        );
+      }
+      if (signal.aborted) return;
+      error = undefined;
+      copied = true;
+      if (resetTimer !== undefined) clearTimeout(resetTimer);
+      resetTimer = window.setTimeout(() => {
+        copied = false;
+        m.redraw();
+      }, 1500);
+    } catch (cause) {
+      if (!signal.aborted) {
+        copied = false;
+        error = cause instanceof Error ? cause.message : t('knowledgeSearch', 'copyMediaFailed');
+      }
+    } finally {
+      busy = false;
+      if (!signal.aborted) m.redraw();
+    }
+  }
+
+  return {
+    onremove: () => {
+      controller?.abort();
+      if (resetTimer !== undefined) clearTimeout(resetTimer);
+    },
+    view: ({ attrs }) => {
+      const image = mediaKind(attrs.evidence.mediaType) === 'image';
+      return m('span.fm-knowledge-media-copy', [
+        m(
+          'button.fm-knowledge-media-copy-button',
+          {
+            type: 'button',
+            disabled: busy || attrs.evidence.unavailable || attrs.evidence.stale === true,
+            'aria-label': t('knowledgeSearch', image ? 'copyImage' : 'copyMediaDetails'),
+            onclick: () => void copy(attrs),
+          },
+          copied ? checkIcon({ size: 14 }) : copyIcon({ size: 14 }),
+        ),
+        copied
+          ? m(
+              'span.fm-visually-hidden',
+              { role: 'status' },
+              t('knowledgeSearch', image ? 'imageCopied' : 'mediaDetailsCopied'),
+            )
+          : undefined,
+        error === undefined ? undefined : m('span.fm-knowledge-error', { role: 'alert' }, error),
+      ]);
+    },
+  };
+};
+
+function decodeEvidenceText(text: string): string {
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = text.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  return textarea.value.replace(
+    /(https?:\/\/doi\.org\/10\.1016\/j\.)\s+([a-z]+\.\d{4}\.)/giu,
+    '$1$2',
+  );
+}
+
+function externalEvidenceUrl(value: string): string | undefined {
+  if (!/^https?:\/\//iu.test(value)) return undefined;
+  try {
+    const parsed = new URL(value);
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      parsed.hostname !== '' &&
+      parsed.username === '' &&
+      parsed.password === ''
+      ? parsed.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function evidenceTextWithLinks(text: string): m.Children {
+  const nodes: m.Children[] = [];
+  const urlPattern = /https?:\/\/[^\s<>"']+/giu;
+  let last = 0;
+  for (const match of text.matchAll(urlPattern)) {
+    const start = match.index;
+    const raw = match[0];
+    let end = raw.length;
+    while (
+      end > 0 &&
+      (/[.,;:!?]/u.test(raw[end - 1] ?? '') ||
+        (raw[end - 1] === ')' &&
+          (raw.slice(0, end).match(/\)/gu)?.length ?? 0) >
+            (raw.slice(0, end).match(/\(/gu)?.length ?? 0)))
+    ) {
+      end--;
+    }
+    const label = raw.slice(0, end);
+    const href = externalEvidenceUrl(label);
+    if (href === undefined) continue;
+    nodes.push(
+      text.slice(last, start),
+      m('a', { href, target: '_blank', rel: 'noopener noreferrer' }, label),
+    );
+    last = start + end;
+  }
+  nodes.push(text.slice(last));
+  return nodes;
+}
 
 function loadPreferredNeeds(): KnowledgeNeed[] {
   try {
@@ -251,6 +599,24 @@ export function knowledgeProvenanceLabel(provenance: string): string {
       case 'pdfBlock': {
         const page = number('page_number');
         return page === undefined ? undefined : t('ragAsk', 'citationPage', { page });
+      }
+      case 'pdfImage': {
+        const page = number('page_number');
+        const image = number('image_index');
+        return page === undefined ||
+          !Number.isInteger(page) ||
+          page <= 0 ||
+          image === undefined ||
+          !Number.isInteger(image) ||
+          image <= 0
+          ? undefined
+          : t('knowledgeSearch', 'pdfImageCitation', { page, image });
+      }
+      case 'pdfPageRender': {
+        const page = number('page_number');
+        return page === undefined || !Number.isInteger(page) || page <= 0
+          ? undefined
+          : t('ragAsk', 'citationPage', { page });
       }
       case 'textLines':
       case 'codeLines': {
@@ -701,8 +1067,14 @@ export function knowledgeSearchErrorMessage(error: unknown): string {
 
 export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> = () => {
   let wasOpen = false;
+  let currentAttrs: KnowledgeSearchDialogAttrs;
+  let rootRefreshTimer: ReturnType<typeof setInterval> | undefined;
+  let rootRefreshInFlight = false;
+  let rootRefreshUnsubscribe: (() => void) | undefined;
+  let removed = false;
   let busy: 'loading' | 'planning' | 'searching' | undefined;
   let error: string | undefined;
+  let rootRefreshError: string | undefined;
   let notice: string | undefined;
   let capabilities: KnowledgeCapabilities | undefined;
   let roots: readonly KnowledgeRoot[] = [];
@@ -716,11 +1088,14 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   let subjectsText = '';
   let mode: KnowledgeRetrievalMode = 'hybrid';
   let intent: KnowledgeQueryIntent = 'search';
-  let scopeKind: KnowledgeScopeKind = 'entireLibrary';
+  let scopeKind: KnowledgeScopeKind = 'enrolledRoots';
   let selectedRootIds = new Set<string>();
   let dslText = '';
   let includeTrace = false;
   let currentFolderIndexed = false;
+  let openingFolder: Location | undefined;
+  let pinnedFolder: Location | undefined;
+  let openedWorkspaceId: string | undefined;
   let interpretation: KnowledgeQueryInterpretation | undefined;
   /** DSL scopes that cannot be applied; search stays blocked while any exist. */
   let scopeIssues: readonly KnowledgeScopeIssue[] = [];
@@ -737,7 +1112,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    */
   let answerProfiles: readonly LlmProfile[] = [];
   let answerProfilesFailed = false;
+  let loadedProfileRevision = 0;
   let answerCopied = false;
+  let answerCopyError: string | undefined;
+  let answerCopyResetTimer: number | undefined;
   /** Grounded-only by default; the opt-in is explicit and labelled. */
   let allowModelKnowledge = false;
   let answer: KnowledgeAnswer | undefined;
@@ -747,8 +1125,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   let answerAbortController: AbortController | undefined;
   /** Bumped per generation, so only the newest response owns the state. */
   let answerSequence = 0;
-  /** Set when an answer arrived and its region should take focus once. */
-  let focusAnswerOnReady = false;
   /** Bumped on every open/close, so responses from a previous life are dropped. */
   let generation = 0;
   /** Bumped on every edit, so a response for an older draft is never applied. */
@@ -805,7 +1181,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     return {
       workspaceId: attrs.workspaceId,
       kind: scopeKind,
-      folder: scopeKind === 'currentFolder' ? (attrs.currentFolder ?? null) : null,
+      folder: scopeKind === 'currentFolder' ? (pinnedFolder ?? null) : null,
       enrolledRootIds: scopeKind === 'enrolledRoots' ? [...selectedRootIds] : [],
       semanticSourceIds: scopeKind === 'semanticResults' ? [...attrs.semanticSourceIds] : [],
     };
@@ -818,7 +1194,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       case 'enrolledRoots':
         return roots.length > 0;
       case 'currentFolder':
-        return attrs.currentFolder !== undefined && currentFolderIndexed;
+        return openingFolder !== undefined && currentFolderIndexed;
       case 'semanticResults':
         return attrs.semanticSourceIds.length > 0;
     }
@@ -850,6 +1226,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    * nothing of it behind - not even a response still on its way.
    */
   function resetAnswer(): void {
+    if (answerCopyResetTimer !== undefined) clearTimeout(answerCopyResetTimer);
+    answerCopyResetTimer = undefined;
+    answerCopied = false;
+    answerCopyError = undefined;
     answerAbortController?.abort();
     answerAbortController = undefined;
     answerSequence += 1;
@@ -857,7 +1237,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     answer = undefined;
     answerError = undefined;
     answerNotice = undefined;
-    focusAnswerOnReady = false;
   }
 
   /**
@@ -892,11 +1271,13 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     wholeLibraryDeclared = classified.wholeLibrary;
     if (classified.rootIds.length > 0) {
       scopeKind = 'enrolledRoots';
+      pinnedFolder = undefined;
       selectedRootIds = new Set(classified.rootIds);
       return;
     }
     if (classified.wholeLibrary) {
-      scopeKind = 'entireLibrary';
+      scopeKind = 'enrolledRoots';
+      pinnedFolder = undefined;
     }
   }
 
@@ -970,9 +1351,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     generation += 1;
     revision += 1;
     const loadGeneration = generation;
+    const profileRevision = attrs.profileRevision ?? 0;
     pendingParse = undefined;
     busy = 'loading';
     error = undefined;
+    rootRefreshError = undefined;
     notice = undefined;
     resetResults();
     interpretation = undefined;
@@ -987,17 +1370,21 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     subjectsText = attrs.initialSubject ?? '';
     dslText = '';
     currentFolderIndexed = false;
+    openingFolder = attrs.currentFolder;
+    pinnedFolder = undefined;
+    openedWorkspaceId = attrs.workspaceId;
     includeTrace = false;
     capabilities = undefined;
     roots = [];
     selectedRootIds = new Set();
     mode = 'hybrid';
     intent = 'search';
-    scopeKind = 'entireLibrary';
+    scopeKind = 'enrolledRoots';
     focusSubjectOnOpen = true;
     searchAfterLoad = false;
     answerProfiles = [];
     answerProfilesFailed = false;
+    loadedProfileRevision = profileRevision;
     allowModelKnowledge = false;
     settingsOpen = false;
     enrolmentOpen = false;
@@ -1017,7 +1404,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
             )
           : { profiles: [], failed: false },
       );
-      const currentFolder = attrs.currentFolder;
+      const currentFolder = openingFolder;
       const folderIndexedRequest =
         currentFolder === undefined
           ? Promise.resolve(false)
@@ -1037,24 +1424,20 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           folderIndexedRequest,
         ]);
       if (loadGeneration !== generation) return;
-      capabilities = reportedCapabilities;
+      if (loadedProfileRevision === profileRevision) {
+        capabilities = reportedCapabilities;
+        answerProfiles = profileResult.profiles;
+        answerProfilesFailed = profileResult.failed;
+      }
       roots = availableRoots;
-      selectedRootIds = new Set(
-        availableRoots.filter((root) => root.available).map((r) => r.rootId),
-      );
+      selectedRootIds = new Set(availableRoots.map((root) => root.rootId));
       mode = reportedCapabilities.semantic
         ? 'hybrid'
         : reportedCapabilities.fullText
           ? 'hybrid'
           : 'fullText';
-      answerProfiles = profileResult.profiles;
-      answerProfilesFailed = profileResult.failed;
       if (currentFolder !== undefined) currentFolderIndexed = folderIndexed;
-      scopeKind = scopeAvailable(attrs, 'currentFolder')
-        ? 'currentFolder'
-        : scopeAvailable(attrs, 'semanticResults')
-          ? 'semanticResults'
-          : 'entireLibrary';
+      scopeKind = 'enrolledRoots';
     } catch {
       if (loadGeneration !== generation) return;
       error = t('knowledgeSearch', 'loadFailed');
@@ -1070,6 +1453,28 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     if (loadGeneration === generation && searchAfterLoad) {
       searchAfterLoad = false;
       await search(attrs);
+    }
+  }
+
+  async function refreshRoots(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
+    if (removed || !attrs.open || rootRefreshInFlight || busy === 'loading') return;
+    rootRefreshInFlight = true;
+    const openGeneration = generation;
+    try {
+      const availableRoots = await attrs.client.listKnowledgeRoots({
+        workspaceId: attrs.workspaceId,
+      });
+      if (removed || openGeneration !== generation || !attrs.open) return;
+      roots = availableRoots;
+      rootRefreshError = undefined;
+      m.redraw();
+    } catch {
+      if (!removed && openGeneration === generation && attrs.open) {
+        rootRefreshError = t('knowledgeSearch', 'loadFailed');
+        m.redraw();
+      }
+    } finally {
+      rootRefreshInFlight = false;
     }
   }
 
@@ -1111,7 +1516,14 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
 
   /** Whether an authorized source can be queried while full reconciliation continues. */
   function hasSearchableSources(attrs: KnowledgeSearchDialogAttrs): boolean {
-    return attrs.semanticSourceIds.length > 0 || roots.some((root) => root.available);
+    const indexedRoots = roots.filter(
+      (root) =>
+        root.available && (root.confirmedCompletedSources > 0 || root.unverifiedLegacySources > 0),
+    );
+    if (scopeKind === 'enrolledRoots') {
+      return indexedRoots.some((root) => selectedRootIds.has(root.rootId));
+    }
+    return attrs.semanticSourceIds.length > 0 || indexedRoots.length > 0;
   }
 
   /** Whether a search can run: searchable sources, a subject, and no unusable scope selector. */
@@ -1206,10 +1618,26 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    */
   function answerAvailable(): boolean {
     return (
-      (result?.capabilities ?? capabilities)?.answerGeneration === true &&
-      !answerProfilesFailed &&
-      answerProfiles.length > 0
+      capabilities?.answerGeneration === true && !answerProfilesFailed && answerProfiles.length > 0
     );
+  }
+
+  async function refreshAnswerProfiles(attrs: KnowledgeSearchDialogAttrs): Promise<void> {
+    const requestedRevision = attrs.profileRevision ?? 0;
+    const requestedGeneration = generation;
+    try {
+      const reported = await attrs.client.getKnowledgeCapabilities();
+      const profiles = reported.answerGeneration ? await attrs.client.listLlmProfiles() : [];
+      if (generation !== requestedGeneration || loadedProfileRevision !== requestedRevision) return;
+      capabilities = reported;
+      answerProfiles = profiles;
+      answerProfilesFailed = false;
+    } catch {
+      if (generation !== requestedGeneration || loadedProfileRevision !== requestedRevision) return;
+      answerProfiles = [];
+      answerProfilesFailed = true;
+    }
+    m.redraw();
   }
 
   /** Whether the Generate control can run right now. */
@@ -1314,7 +1742,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       );
       if (superseded()) return;
       answer = generated;
-      focusAnswerOnReady = true;
     } catch (cause) {
       if (superseded()) return;
       if (cause instanceof DOMException && cause.name === 'AbortError') {
@@ -1347,8 +1774,22 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     error = undefined;
     try {
       await attrs.onOpenSource(evidence);
+      m.redraw();
     } catch {
       error = t('knowledgeSearch', 'openSourceFailed');
+      m.redraw();
+    }
+  }
+
+  async function openExternalEvidence(
+    attrs: KnowledgeSearchDialogAttrs,
+    url: string,
+  ): Promise<void> {
+    error = undefined;
+    try {
+      await attrs.client.openExternalUrl(url);
+    } catch {
+      error = t('knowledgeSearch', 'openExternalFailed');
       m.redraw();
     }
   }
@@ -1409,13 +1850,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
   }
 
-  function evidenceSection(
-    attrs: KnowledgeSearchDialogAttrs,
-    row: KnowledgeEvidence,
-    key: string,
-  ): m.Vnode {
-    const position = knowledgeProvenanceLabel(row.provenance);
-    const indexedTitle = row.sectionPath.join(' / ');
+  function relevanceIndicator(row: KnowledgeEvidence): m.Children {
     const relevanceStrength = row.finalRank <= 3 ? 'high' : row.finalRank <= 10 ? 'medium' : 'low';
     const relevanceKey =
       relevanceStrength === 'high'
@@ -1424,51 +1859,146 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           ? 'resultRelevanceMedium'
           : 'resultRelevanceLow';
     const relevance = t('knowledgeSearch', relevanceKey);
+    return tooltip(
+      relevance,
+      m('span.fm-knowledge-relevance-indicator', {
+        role: 'img',
+        tabindex: 0,
+        'aria-label': relevance,
+        'data-strength': relevanceStrength,
+      }),
+      { 'data-tooltip-placement': 'above' },
+    );
+  }
+
+  function evidenceSection(
+    attrs: KnowledgeSearchDialogAttrs,
+    row: KnowledgeEvidence,
+    key: string,
+    fileTitle?: string,
+    positionInHeader = false,
+  ): m.Vnode {
+    const position = knowledgeProvenanceLabel(row.provenance);
+    const pdfImage = row.mediaType === 'application/pdf' && row.chunkKind === 'pdf_image';
+    const renderedPage = pdfImage ? pdfPageRenderProvenance(row.provenance) : undefined;
+    const indexedTitle = row.sectionPath.join(' / ');
     const openable = !row.unavailable && attrs.onOpenSource !== undefined;
+    const kind = mediaKind(row.mediaType);
+    const sourceOpen = attrs.isSourceOpen?.(row) === true;
+    const modifiedLabel = mediaModifiedLabel(row.modifiedAtMs);
+    const description = kind === undefined ? undefined : mediaDescription(row.excerpt);
+    const redundantImageDescription =
+      kind === 'image' &&
+      fileTitle !== undefined &&
+      description === `image: ${fileTitle} (file-level evidence)`;
     const states = [
       row.adjacent ? t('knowledgeSearch', 'adjacentEvidence') : undefined,
       row.generated ? t('knowledgeSearch', 'generatedEvidence') : undefined,
       row.stale === true ? t('knowledgeSearch', 'staleEvidence') : undefined,
       row.stale == null ? t('knowledgeSearch', 'unknownFreshness') : undefined,
       row.unavailable ? t('knowledgeSearch', 'unavailableEvidence') : undefined,
+      (row.pdfImageSkippedPages ?? 0) > 0
+        ? t('semanticLibrary', 'pdfImagesSkippedPages', {
+            pages: row.pdfImageSkippedPages ?? 0,
+          })
+        : undefined,
       row.duplicateSourceIds.length === 0
         ? undefined
         : t('knowledgeSearch', 'duplicateSources', { count: row.duplicateSourceIds.length }),
     ].filter((value): value is string => value !== undefined);
     return m('section.fm-knowledge-result', { key }, [
-      m('.fm-knowledge-section-heading', [
-        indexedTitle === '' ? undefined : m('span.fm-knowledge-section-title', indexedTitle),
-        m('.fm-knowledge-section-metadata', [
-          position === ''
-            ? undefined
-            : m(
-                'button.fm-knowledge-page-link',
-                {
-                  type: 'button',
-                  disabled: !openable,
-                  'aria-label': t('knowledgeSearch', 'openSection', { section: position }),
-                  onclick: () => void openSource(attrs, row),
+      fileTitle !== undefined || positionInHeader
+        ? undefined
+        : m('.fm-knowledge-section-heading', [
+            indexedTitle === '' ? undefined : m('span.fm-knowledge-section-title', indexedTitle),
+            m('.fm-knowledge-section-metadata', [
+              position === ''
+                ? undefined
+                : m(
+                    'button.fm-knowledge-page-link',
+                    {
+                      type: 'button',
+                      disabled: !openable,
+                      'aria-label': t('knowledgeSearch', 'openSection', { section: position }),
+                      onclick: () => void openSource(attrs, row),
+                    },
+                    position,
+                  ),
+              relevanceIndicator(row),
+            ]),
+          ]),
+      pdfImage
+        ? m(
+            '.fm-knowledge-pdf-image-evidence',
+            t('knowledgeSearch', renderedPage ? 'pdfPageRenderEvidence' : 'pdfImageEvidence'),
+          )
+        : kind === undefined
+          ? m(
+              '.fm-knowledge-result-markdown',
+              {
+                onclick: (event: MouseEvent) => {
+                  if (!(event.target instanceof Element)) return;
+                  const anchor = event.target.closest<HTMLAnchorElement>('a[href]');
+                  if (anchor === null) return;
+                  event.preventDefault();
+                  const url = externalEvidenceUrl(anchor.getAttribute('href') ?? '');
+                  if (url === undefined || document.getSelection()?.toString()) return;
+                  void openExternalEvidence(attrs, url);
                 },
-                position,
-              ),
-          tooltip(
-            relevance,
-            m('span.fm-knowledge-relevance-indicator', {
-              role: 'img',
-              tabindex: 0,
-              'aria-label': relevance,
-              'data-strength': relevanceStrength,
-            }),
-            { 'data-tooltip-placement': 'above' },
-          ),
-        ]),
-      ]),
-      m(
-        '.fm-knowledge-result-markdown',
-        row.mediaType === 'application/pdf'
-          ? m('p', row.content)
-          : m.trust(safeMarkdownHtml(row.content)),
-      ),
+              },
+              [
+                m(KnowledgeChunkCopy, {
+                  evidence: row,
+                  title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
+                }),
+                m(
+                  '.fm-knowledge-chunk-content',
+                  row.mediaType === 'application/pdf'
+                    ? m('p', evidenceTextWithLinks(decodeEvidenceText(row.content)))
+                    : m.trust(safeMarkdownHtml(row.content)),
+                ),
+              ],
+            )
+          : m('.fm-knowledge-media-evidence', [
+              kind === 'image' &&
+              !row.unavailable &&
+              row.stale !== true &&
+              row.sectionPath.length === 0 &&
+              row.provenance === ''
+                ? m(KnowledgeImagePreview, {
+                    client: attrs.client,
+                    workspaceId: attrs.workspaceId,
+                    evidence: row,
+                    title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
+                  })
+                : undefined,
+              m('.fm-knowledge-media-summary', [
+                m('strong', mediaLabel(kind)),
+                modifiedLabel === undefined
+                  ? undefined
+                  : m('small.fm-knowledge-media-modified', modifiedLabel),
+                m(KnowledgeMediaCopy, {
+                  client: attrs.client,
+                  workspaceId: attrs.workspaceId,
+                  evidence: row,
+                  title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
+                  description: description ?? '',
+                }),
+                m(
+                  'button.fm-knowledge-media-open',
+                  {
+                    type: 'button',
+                    disabled: !openable,
+                    'aria-expanded': sourceOpen ? 'true' : 'false',
+                    onclick: () => void openSource(attrs, row),
+                  },
+                  t('search', sourceOpen ? 'closeMedia' : 'openMedia', {
+                    type: mediaLabel(kind).toLowerCase(),
+                  }),
+                ),
+              ]),
+              redundantImageDescription ? undefined : m('p', description),
+            ]),
       states.length === 0
         ? undefined
         : m(
@@ -1484,33 +2014,70 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     index: number,
   ): m.Vnode {
     const openable = !group.openEvidence.unavailable && attrs.onOpenSource !== undefined;
+    const firstRow = group.rows[0];
+    const firstPosition =
+      firstRow !== undefined && firstRow.sectionPath.length === 0
+        ? knowledgeProvenanceLabel(firstRow.provenance)
+        : '';
+    const compactFileMedia =
+      group.rows.length === 1 &&
+      firstRow !== undefined &&
+      mediaKind(firstRow.mediaType) !== undefined &&
+      firstRow.sectionPath.length === 0 &&
+      knowledgeProvenanceLabel(firstRow.provenance) === '';
     return m(
       'li.fm-knowledge-document-item',
       { key: `document-${group.documentId}`, value: index + 1 },
-      m('article.fm-knowledge-group', [
-        m('.fm-knowledge-document-heading', [
-          m('span.fm-knowledge-document-number', { 'aria-hidden': 'true' }, `${index + 1}.`),
-          m('h4.fm-knowledge-result-heading', [
-            m(
-              'button.fm-knowledge-source-link',
-              {
-                type: 'button',
-                disabled: !openable,
-                'aria-label': t('knowledgeSearch', 'openSource', { title: group.title }),
-                title: group.title,
-                onclick: () => void openSource(attrs, group.openEvidence),
-              },
-              [externalLinkIcon({ size: 14 }), m('span', group.title)],
-            ),
+      m(
+        'article.fm-knowledge-group',
+        { className: compactFileMedia ? 'fm-knowledge-group-compact-media' : '' },
+        [
+          m('.fm-knowledge-document-heading', [
+            m('span.fm-knowledge-document-number', { 'aria-hidden': 'true' }, `${index + 1}.`),
+            m('h4.fm-knowledge-result-heading', [
+              m(
+                'button.fm-knowledge-source-link',
+                {
+                  type: 'button',
+                  disabled: !openable,
+                  'aria-label': t('knowledgeSearch', 'openSource', { title: group.title }),
+                  title: group.title,
+                  onclick: () => void openSource(attrs, group.openEvidence),
+                },
+                [externalLinkIcon({ size: 14 }), m('span', group.title)],
+              ),
+              firstRow !== undefined && firstPosition !== ''
+                ? m(
+                    'button.fm-knowledge-page-link',
+                    {
+                      type: 'button',
+                      disabled: firstRow.unavailable || attrs.onOpenSource === undefined,
+                      'aria-label': t('knowledgeSearch', 'openSection', { section: firstPosition }),
+                      onclick: () => void openSource(attrs, firstRow),
+                    },
+                    firstPosition,
+                  )
+                : undefined,
+              firstRow !== undefined && firstPosition !== ''
+                ? relevanceIndicator(firstRow)
+                : undefined,
+              compactFileMedia && firstRow !== undefined ? relevanceIndicator(firstRow) : undefined,
+            ]),
           ]),
-        ]),
-        m(
-          '.fm-knowledge-sections',
-          group.rows.map((row) =>
-            evidenceSection(attrs, row, `${group.documentId}-${row.recordId}`),
+          m(
+            '.fm-knowledge-sections',
+            group.rows.map((row, rowIndex) =>
+              evidenceSection(
+                attrs,
+                row,
+                `${group.documentId}-${row.recordId}`,
+                compactFileMedia ? group.title : undefined,
+                rowIndex === 0 && firstPosition !== '',
+              ),
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 
@@ -1564,15 +2131,12 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       return m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'searching'));
     }
     if (result === undefined) {
-      if (capabilities !== undefined && !hasSearchableSources(attrs)) {
-        return m(
-          'p.fm-knowledge-warning',
-          { role: 'status' },
-          t('knowledgeSearch', 'searchNoSources'),
-        );
-      }
       const pendingRoots = roots.filter(
-        (root) => root.available && root.indexedGeneration === 0 && root.indexedSources === 0,
+        (root) =>
+          root.available &&
+          root.indexedGeneration === 0 &&
+          root.confirmedCompletedSources === 0 &&
+          root.unverifiedLegacySources === 0,
       );
       if (
         capabilities !== undefined &&
@@ -1586,8 +2150,23 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
           'p.fm-knowledge-warning',
           { role: 'status' },
           pendingRoots.length === 1
-            ? t('knowledgeSearch', 'searchIndexPending', { folder: folders })
-            : t('knowledgeSearch', 'searchIndexPendingMany', { folders }),
+            ? t(
+                'knowledgeSearch',
+                hasSearchableSources(attrs) ? 'searchIndexPending' : 'searchIndexStarting',
+                { folder: folders },
+              )
+            : t(
+                'knowledgeSearch',
+                hasSearchableSources(attrs) ? 'searchIndexPendingMany' : 'searchIndexStartingMany',
+                { folders },
+              ),
+        );
+      }
+      if (capabilities !== undefined && !hasSearchableSources(attrs)) {
+        return m(
+          'p.fm-knowledge-warning',
+          { role: 'status' },
+          t('knowledgeSearch', 'searchNoSources'),
         );
       }
       return m('p.fm-knowledge-status', { role: 'status' }, notice ?? t('knowledgeSearch', 'idle'));
@@ -1621,11 +2200,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     displayed: ReadonlyMap<string, KnowledgeEvidence>,
   ): m.Children {
     if (generatingAnswer) {
-      return m(
-        'p.fm-knowledge-status',
-        { role: 'status' },
-        t('knowledgeSearch', 'generatingAnswer'),
-      );
+      return m('.fm-knowledge-status.fm-knowledge-answer-progress', { role: 'status' }, [
+        m('span', t('knowledgeSearch', 'generatingAnswer')),
+        m(Skeleton, { count: 3, className: 'fm-knowledge-answer-skeleton' }),
+      ]);
     }
     const current = answer;
     if (current === undefined) {
@@ -1761,15 +2339,25 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       (reference) => `[${reference.number}] ${reference.title}`,
     );
     const heading = t('knowledgeSearch', 'answerCitations', { count: sources.length });
-    await copyText(
-      sources.length === 0
-        ? numbered.text
-        : `${numbered.text}\n\n${heading}\n${sources.join('\n')}`,
-    );
+    try {
+      await copyText(
+        sources.length === 0
+          ? numbered.text
+          : `${numbered.text}\n\n${heading}\n${sources.join('\n')}`,
+      );
+    } catch {
+      answerCopied = false;
+      answerCopyError = t('knowledgeSearch', 'copyFailed');
+      m.redraw();
+      return;
+    }
+    if (answerCopyResetTimer !== undefined) clearTimeout(answerCopyResetTimer);
+    answerCopyError = undefined;
     answerCopied = true;
     m.redraw();
-    window.setTimeout(() => {
+    answerCopyResetTimer = window.setTimeout(() => {
       answerCopied = false;
+      answerCopyResetTimer = undefined;
       m.redraw();
     }, 1500);
   }
@@ -1777,13 +2365,41 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   /**
    * The optional ask bar, docked below the results it is about.
    *
-   * It exists only while a successful result whose own capabilities report
-   * `answerGeneration` is on screen, so a search-only host renders nothing here
-   * and search stays complete without it. The answer opens in a collapsible
-   * panel directly above the bar.
+   * Search remains available independently of generation; a host with Settings
+   * exposes the reason Ask cannot run rather than silently removing its bar.
    */
   function answerView(attrs: KnowledgeSearchDialogAttrs): m.Children {
-    if (!answerAvailable()) return undefined;
+    if (!answerAvailable()) {
+      if (
+        attrs.onConfigureAnswers === undefined ||
+        capabilities === undefined ||
+        (!capabilities.fullText && !capabilities.semantic)
+      )
+        return undefined;
+      return m(
+        'section.fm-knowledge-answer',
+        { 'aria-label': t('knowledgeSearch', 'answerRegion') },
+        m('.fm-knowledge-ask-bar.fm-knowledge-ask-unavailable', [
+          sparklesIcon({ className: 'fm-knowledge-ask-icon', size: 15 }),
+          m(
+            'span',
+            { role: 'status' },
+            t(
+              'knowledgeSearch',
+              answerProfilesFailed ? 'answerProfilesFailed' : 'answerProfileNeeded',
+            ),
+          ),
+          m(
+            'button.fm-knowledge-configure-answers',
+            {
+              type: 'button',
+              onclick: attrs.onConfigureAnswers,
+            },
+            t('knowledgeSearch', 'configureAnswers'),
+          ),
+        ]),
+      );
+    }
     const displayed = displayedEvidence();
     const profile = answerProfile();
     const hasOutput =
@@ -1793,7 +2409,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       answerNotice !== undefined;
     return m(
       'section.fm-knowledge-answer',
-      { 'aria-label': t('knowledgeSearch', 'answerRegion'), 'aria-busy': generatingAnswer },
+      {
+        'aria-label': t('knowledgeSearch', 'answerRegion'),
+        'aria-busy': generatingAnswer ? 'true' : 'false',
+      },
       [
         m('.fm-knowledge-answer-output', { class: hasOutput ? undefined : 'is-empty' }, [
           m('.fm-knowledge-answer-output-heading', [
@@ -1814,39 +2433,39 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                         : t('knowledgeSearch', 'copyAnswer'),
                       onclick: () => void copyAnswer(),
                     },
-                    copyIcon({ size: 14 }),
+                    answerCopied ? checkIcon({ size: 14 }) : copyIcon({ size: 14 }),
                   ),
                 ),
             m(
               'button.fm-knowledge-answer-collapse',
               {
                 type: 'button',
+                'aria-label': answerCollapsed
+                  ? t('knowledgeSearch', 'showAnswer')
+                  : t('knowledgeSearch', 'hideAnswer'),
                 'aria-expanded': answerCollapsed ? 'false' : 'true',
                 'aria-controls': 'fm-knowledge-answer-body',
                 onclick: () => {
                   answerCollapsed = !answerCollapsed;
                 },
               },
-              answerCollapsed
-                ? t('knowledgeSearch', 'showAnswer')
-                : t('knowledgeSearch', 'hideAnswer'),
+              answerCollapsed ? chevronDownIcon({ size: 16 }) : chevronUpIcon({ size: 16 }),
             ),
           ]),
+          answerCopied
+            ? m('span.fm-visually-hidden', { role: 'status' }, t('knowledgeSearch', 'answerCopied'))
+            : undefined,
+          answerCopyError === undefined
+            ? undefined
+            : m('p.fm-knowledge-error', { role: 'alert' }, answerCopyError),
           answerError === undefined
             ? undefined
             : m('p.fm-knowledge-error', { role: 'alert' }, answerError),
           m(
             '.fm-knowledge-answer-body#fm-knowledge-answer-body',
             {
-              tabindex: '-1',
               'aria-live': 'polite',
               hidden: answerCollapsed,
-              onupdate: ({ dom }: m.VnodeDOM) => {
-                if (focusAnswerOnReady && answer !== undefined) {
-                  focusAnswerOnReady = false;
-                  (dom as HTMLElement).focus();
-                }
-              },
             },
             hasOutput ? answerBody(attrs, displayed) : undefined,
           ),
@@ -1859,6 +2478,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
             t('knowledgeSearch', 'question'),
           ),
           m('textarea#fm-knowledge-question', {
+            ...technicalTextInputAttrs,
             name: 'knowledge-answer-question',
             rows: 1,
             maxlength: 8192,
@@ -1947,12 +2567,37 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
 
   return {
     oninit: ({ attrs }) => {
+      currentAttrs = attrs;
       wasOpen = attrs.open;
       if (attrs.open) void load(attrs);
+      rootRefreshTimer = setInterval(() => void refreshRoots(currentAttrs), 3_000);
+      if (attrs.client.connection.get() !== 'closed') {
+        void attrs.client
+          .subscribe((event) => {
+            if (event.payload.type === 'semantic.ingestionProgress' && !removed) {
+              void refreshRoots(currentAttrs);
+            }
+          })
+          .then((unsubscribe) => {
+            if (removed) unsubscribe();
+            else rootRefreshUnsubscribe = unsubscribe;
+          })
+          .catch(() => {
+            if (!removed) {
+              rootRefreshError = t('knowledgeSearch', 'loadFailed');
+              m.redraw();
+            }
+          });
+      }
     },
     onupdate: ({ attrs }) => {
-      if (attrs.open && !wasOpen) void load(attrs);
+      currentAttrs = attrs;
+      if (attrs.open && (!wasOpen || openedWorkspaceId !== attrs.workspaceId)) void load(attrs);
       wasOpen = attrs.open;
+      if (attrs.open && loadedProfileRevision !== (attrs.profileRevision ?? 0)) {
+        loadedProfileRevision = attrs.profileRevision ?? 0;
+        void refreshAnswerProfiles(attrs);
+      }
       // The modal keeps its content mounted while closed, so the subject
       // field's own `oncreate` only ever runs once, long before the dialog is
       // opened. Focus is therefore taken on the closed -> open transition.
@@ -1965,7 +2610,13 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         }
       }
     },
-    onremove: () => abortController?.abort(),
+    onremove: () => {
+      removed = true;
+      if (rootRefreshTimer !== undefined) clearInterval(rootRefreshTimer);
+      if (answerCopyResetTimer !== undefined) clearTimeout(answerCopyResetTimer);
+      rootRefreshUnsubscribe?.();
+      abortController?.abort();
+    },
     view: ({ attrs }) => {
       const offline = attrs.client.connection.get() === 'closed';
       const searchable = canSearch(attrs);
@@ -1998,11 +2649,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 ),
               ),
               m('textarea#fm-knowledge-subjects', {
+                ...technicalTextInputAttrs,
                 name: 'knowledge-subjects',
                 rows: 1,
                 value: subjectsText,
                 disabled: busy === 'searching',
-                autocomplete: 'off',
                 'aria-label': t('knowledgeSearch', 'subjects'),
                 placeholder: t('knowledgeSearch', 'subjectsPlaceholder'),
                 onupdate: ({ dom }: m.VnodeDOM) => {
@@ -2084,7 +2735,41 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 ),
               ),
             ]),
-            attrs.currentFolder === undefined
+            openingFolder === undefined
+              ? undefined
+              : m('label.fm-knowledge-folder-filter', [
+                  m('input', {
+                    type: 'checkbox',
+                    checked: scopeKind === 'currentFolder',
+                    disabled: !currentFolderIndexed || busy === 'searching',
+                    onchange: (event: Event) => {
+                      const checked = (event.currentTarget as HTMLInputElement).checked;
+                      pinnedFolder = checked ? openingFolder : undefined;
+                      scopeKind = checked ? 'currentFolder' : 'enrolledRoots';
+                      edited();
+                      void reinterpret(attrs);
+                    },
+                  }),
+                  m(
+                    'span',
+                    t('knowledgeSearch', 'includeOnlyCurrentFolder', {
+                      folder: lastPathSegment(openingFolder) ?? pathFromUri(openingFolder.uri),
+                    }),
+                  ),
+                ]),
+            !currentFolderIndexed && openingFolder !== undefined && busy !== 'loading'
+              ? m(
+                  'button.fm-knowledge-include-folder-action',
+                  {
+                    type: 'button',
+                    onclick: () => {
+                      enrolmentOpen = true;
+                    },
+                  },
+                  t('knowledgeSearch', 'includeFolder'),
+                )
+              : undefined,
+            openingFolder === undefined
               ? undefined
               : m(ModalPanel, {
                   className: 'fm-dense-modal fm-semantic-enrolment-modal',
@@ -2098,11 +2783,19 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     ? m(SemanticFolderEnrolmentPrompt, {
                         client: attrs.client,
                         workspaceId: attrs.workspaceId,
-                        location: attrs.currentFolder,
+                        location: openingFolder,
                         onEnrolled: () => {
                           currentFolderIndexed = true;
-                          scopeKind = 'currentFolder';
+                          scopeKind = 'enrolledRoots';
                           enrolmentOpen = false;
+                          void refreshRoots(attrs).then(() => {
+                            const included = roots.find(
+                              (root) =>
+                                root.location.providerId === openingFolder?.providerId &&
+                                root.location.uri === openingFolder.uri,
+                            );
+                            if (included !== undefined) selectedRootIds.add(included.rootId);
+                          });
                           m.redraw();
                         },
                         onCancel: () => {
@@ -2120,21 +2813,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                 settingsOpen = open;
               },
               description: m('.fm-knowledge-settings', [
-                !currentFolderIndexed && attrs.currentFolder !== undefined
-                  ? m('label.fm-knowledge-include-folder', [
-                      m('input', {
-                        type: 'checkbox',
-                        checked: false,
-                        disabled: busy === 'loading',
-                        onchange: (event: Event) => {
-                          (event.currentTarget as HTMLInputElement).checked = false;
-                          settingsOpen = false;
-                          enrolmentOpen = true;
-                        },
-                      }),
-                      m('span', t('knowledgeSearch', 'includeFolder')),
-                    ])
-                  : undefined,
                 m('details.fm-knowledge-advanced', [
                   m('summary', t('knowledgeSearch', 'showAdvanced')),
                   m('.fm-knowledge-advanced-body', [
@@ -2158,30 +2836,36 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                       ),
                     ]),
                     m('.fm-knowledge-row', [
-                      m('label.fm-knowledge-field', [
-                        m('span', t('knowledgeSearch', 'scope')),
-                        m(
-                          'select#fm-knowledge-scope.browser-default',
-                          {
-                            name: 'knowledge-scope',
-                            value: scopeKind,
-                            disabled: busy === 'searching',
-                            onchange: (event: Event) => {
-                              scopeKind = (event.currentTarget as HTMLSelectElement)
-                                .value as KnowledgeScopeKind;
-                              edited();
-                              void reinterpret(attrs);
-                            },
-                          },
-                          SCOPE_KINDS.map((kind) =>
+                      scopeKind === 'currentFolder'
+                        ? undefined
+                        : m('label.fm-knowledge-field', [
+                            m('span', t('knowledgeSearch', 'scope')),
                             m(
-                              'option',
-                              { key: kind, value: kind, disabled: !scopeAvailable(attrs, kind) },
-                              scopeKindLabel(kind),
+                              'select#fm-knowledge-scope.browser-default',
+                              {
+                                name: 'knowledge-scope',
+                                value: scopeKind,
+                                disabled: busy === 'searching',
+                                onchange: (event: Event) => {
+                                  scopeKind = (event.currentTarget as HTMLSelectElement)
+                                    .value as KnowledgeScopeKind;
+                                  edited();
+                                  void reinterpret(attrs);
+                                },
+                              },
+                              SCOPE_KINDS.map((kind) =>
+                                m(
+                                  'option',
+                                  {
+                                    key: kind,
+                                    value: kind,
+                                    disabled: !scopeAvailable(attrs, kind),
+                                  },
+                                  scopeKindLabel(kind),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      ]),
+                          ]),
                       m('fieldset.fm-knowledge-modes', [
                         m('legend', t('knowledgeSearch', 'mode')),
                         MODES.map((candidate) =>
@@ -2224,6 +2908,25 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     scopeKind === 'enrolledRoots'
                       ? m('fieldset.fm-knowledge-roots', [
                           m('legend', t('knowledgeSearch', 'roots')),
+                          roots.some(
+                            (root) => root.pdfImagesEnabled && root.pdfImagePageBudget !== null,
+                          )
+                            ? m(
+                                'p.fm-knowledge-hint',
+                                { role: 'status' },
+                                t('knowledgeSearch', 'pdfImagesLimitedNotice', {
+                                  pages: Math.min(
+                                    ...roots
+                                      .filter(
+                                        (root) =>
+                                          root.pdfImagesEnabled && root.pdfImagePageBudget !== null,
+                                      )
+                                      .map((root) => root.pdfImagePageBudget)
+                                      .filter((budget): budget is number => budget !== null),
+                                  ),
+                                }),
+                              )
+                            : undefined,
                           roots.length === 0
                             ? m('p.fm-knowledge-hint', t('knowledgeSearch', 'rootsEmpty'))
                             : roots.map((root) =>
@@ -2253,11 +2956,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                     m('details.fm-knowledge-dsl', [
                       m('summary', t('knowledgeSearch', 'dsl')),
                       m('textarea#fm-knowledge-dsl-input', {
+                        ...technicalTextInputAttrs,
                         name: 'knowledge-dsl',
                         rows: 4,
                         value: dslText,
                         disabled: busy === 'searching',
-                        autocomplete: 'off',
                         'aria-describedby': 'fm-knowledge-dsl-hint',
                         oninput: (event: InputEvent) => {
                           dslText = (event.currentTarget as HTMLTextAreaElement).value;
@@ -2482,6 +3185,9 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
             }),
           ]),
           error === undefined ? undefined : m('p.fm-knowledge-error', { role: 'alert' }, error),
+          rootRefreshError === undefined
+            ? undefined
+            : m('p.fm-knowledge-error', { role: 'alert' }, rootRefreshError),
           offline
             ? m('p.fm-knowledge-warning', { role: 'status' }, t('knowledgeSearch', 'offline'))
             : undefined,

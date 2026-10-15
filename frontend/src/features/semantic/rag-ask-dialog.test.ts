@@ -121,7 +121,7 @@ describe('RagAskDialog', () => {
     expect(selects).toHaveLength(1);
     const scopeSelect = selects.item(0);
     expect([...scopeSelect.options].map((option) => option.text)).toEqual([
-      'Entire indexed library',
+      'All indexed folders in this workspace',
       'Selected files',
       'Current folder recursively',
       'Current semantic result set',
