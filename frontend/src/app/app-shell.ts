@@ -4733,7 +4733,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         (operation) =>
           operation?.kind === 'delete' && operation.state === 'waitingForConflictResolution',
       );
-      const activeOperationProgress = summariseActiveOperations(operations);
       const activeOperations = Object.values(operations.byId).filter(
         (operation): operation is Operation =>
           operation !== undefined && isActiveOperation(operation),
@@ -4744,10 +4743,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         activityCount === 1
           ? t('shell', 'activitySingle')
           : t('shell', 'activityCount', { count: activityCount });
+      const runningSemanticJobs = semanticJobs.size - failedSemanticJobs.length;
+      const activityBusy = activeOperations.length > 0 || runningSemanticJobs > 0;
+      const activityKinds = [
+        ...new Set([
+          ...activeOperations.map((operation) => operationKindLabel(operation.kind)),
+          ...(runningSemanticJobs > 0 ? [t('shell', 'indexingActivity')] : []),
+          ...(failedSemanticJobs.length > 0 ? [t('shell', 'indexingFailed')] : []),
+        ]),
+      ];
       const activityStatusLabel =
-        failedSemanticJobs.length > 0
-          ? `${activityLabel}: ${t('shell', 'indexingFailed')}`
-          : activityLabel;
+        activityKinds.length === 0
+          ? activityLabel
+          : `${activityLabel}: ${activityKinds.join(', ')}`;
       // The macOS overlay keeps native traffic lights while the toolbar draws the title.
       // The browser tab already provides a title; Windows has its own menu/title row.
       const isMacOverlay = runtimeKind === 'tauri' && platform === 'macos';
@@ -5148,27 +5156,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 m(
                   IconButton,
                   {
-                    className: [
-                      'fm-operation-centre-button',
-                      activeOperationProgress === undefined ? '' : 'fm-operations-busy',
-                    ]
-                      .filter(Boolean)
-                      .join(' '),
+                    className: 'fm-operation-centre-button',
                     disabled: workspace === undefined,
                     'aria-label': t('shell', 'operationCentre'),
                     title: t('shell', 'operationCentre'),
                     'aria-pressed': String(workspace?.operationCentre.visible === true),
-                    ...(activeOperationProgress === undefined
-                      ? {}
-                      : {
-                          ...(activeOperationProgress.percent === undefined
-                            ? {}
-                            : {
-                                style: {
-                                  '--fm-operation-progress': `${activeOperationProgress.percent}%`,
-                                },
-                              }),
-                        }),
                     onclick: () => {
                       activityOpen = false;
                       toggleOperationCentre();
@@ -5181,16 +5173,24 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       'button.fm-activity-count',
                       {
                         type: 'button',
-                        className: failedSemanticJobs.length > 0 ? 'fm-activity-failed' : '',
+                        className: [
+                          failedSemanticJobs.length > 0 ? 'fm-activity-failed' : '',
+                          activityBusy ? 'fm-activity-busy' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' '),
                         'aria-label': activityStatusLabel,
                         'aria-expanded': String(activityOpen),
                         'aria-controls': 'fm-activity-popover',
-                        title: `${t('shell', 'showActivity')}: ${activityStatusLabel}`,
+                        title: activityStatusLabel,
                         onclick: () => {
                           activityOpen = !activityOpen;
                         },
                       },
-                      [activityIcon({ size: 16 }), m('span', activityCount)],
+                      [
+                        m('span.fm-activity-icon', activityIcon({ size: 16 })),
+                        m('span.fm-activity-number', activityCount),
+                      ],
                     )
                   : undefined,
                 activityOpen && activityCount > 0

@@ -5265,22 +5265,56 @@ input[type="text"].fm-shortcuts-help-capture-input {
   align-items: center;
 }
 
-.fm-activity-count {
+button.fm-activity-count {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  box-sizing: border-box;
+  min-height: 24px;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-  padding: 1px 4px;
+  padding: 1px 6px;
   color: var(--fm-accent);
   background: transparent;
-  border: 1px solid var(--fm-border);
+  border: 0;
   border-radius: 2px;
   cursor: pointer;
 }
 
+.fm-activity-icon {
+  display: inline-flex;
+}
+
+/* Running work: the activity icon itself pulses in amber, distinct from the blue accent. */
+.fm-activity-count.fm-activity-busy {
+  color: var(--fm-warning);
+}
+
+.fm-activity-count.fm-activity-busy .fm-activity-icon {
+  animation: fm-activity-pulse 0.9s ease-in-out infinite alternate;
+}
+
 .fm-activity-count.fm-activity-failed {
   color: var(--fm-error);
+}
+
+.fm-activity-count.fm-activity-failed .fm-activity-icon {
+  animation: none;
+}
+
+@keyframes fm-activity-pulse {
+  from {
+    opacity: 0.3;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-activity-count.fm-activity-busy .fm-activity-icon {
+    animation: none;
+  }
 }
 
 .fm-activity-popover {
@@ -5327,47 +5361,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .fm-activity-target {
   color: var(--fm-accent);
   white-space: nowrap;
-}
-
-.fm-operation-centre-button.fm-operations-busy {
-  position: relative;
-  color: var(--fm-accent);
-}
-
-.fm-operation-centre-button.fm-operations-busy::after {
-  content: "";
-  position: absolute;
-  left: 15%;
-  bottom: 2px;
-  width: 70%;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--fm-accent);
-  animation: fm-operation-progress-pulse 1.2s ease-in-out infinite alternate;
-}
-
-.fm-operation-centre-button.fm-operations-busy[style*="--fm-operation-progress"]::after {
-  background: linear-gradient(
-    to right,
-    var(--fm-accent) var(--fm-operation-progress),
-    color-mix(in srgb, var(--fm-accent) 25%, transparent) var(--fm-operation-progress)
-  );
-  animation: none;
-}
-
-@keyframes fm-operation-progress-pulse {
-  from {
-    opacity: 0.35;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fm-operation-centre-button.fm-operations-busy::after {
-    animation: none;
-  }
 }
 
 .fm-app-shell[data-mac-titlebar-overlay="true"] .fm-navigation-controls,
