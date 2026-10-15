@@ -1,5 +1,10 @@
 # Experimental opt-in EmbeddingGemma 2 component: release decision
 
+> Historical qualification snapshot. The release-owner decision and current
+> user-facing limitations are recorded in
+> [the 2026-10-15 experimental release notes](embeddinggemma-experimental-release-2026-10-15.md).
+> This document describes the state before the final candidate was approved.
+
 **Decision: an explicitly opt-in EXPERIMENTAL package is desired, but no
 candidate is approved for publication yet.** E5 remains the default. The
 checked-in lock now identifies the signed mixed-media Metal candidate from

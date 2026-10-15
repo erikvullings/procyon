@@ -10,6 +10,15 @@ const preIntegrationSource = 'd3f921fe08e4994a905727a71af102979f4fbe23';
 const pdfVisionSamplePages = 8;
 const pdfVisionSampleBytes = 3_967_050;
 const pdfVisionSampleHash = '6fd090eee5fcdd7e547c8787f8ada4465e896fcff190b84e2b2f49e9c5b3d690';
+const releaseOwnerApprovedLimitations = [
+  'resource-ceilings-unqualified',
+  'anonymous-pdf-spool-peak-unqualified',
+  'cpu-fallback-unqualified',
+  'cross-host-navigation-unqualified',
+  'upgrade-rollback-unqualified',
+  'model-quality-unproven',
+  'cpu-pdf-image-indexing-about-106-seconds-per-page-four-page-budget-about-eight-minutes',
+];
 const gemmaFiles = [
   'embeddinggemma2-original',
   'embeddinggemma2-file-1',
@@ -36,7 +45,7 @@ function verifyPdfVisionQualification(consent, candidate, evidenceRoot) {
   }
   for (const target of targets) {
     const bytes = fs.readFileSync(
-      path.join(evidenceRoot, `installed-gemma-${target}`, 'gemma-pdf-bound-report.json'),
+      path.join(evidenceRoot, `installed-gemma-${target}`, 'gemma-pdf-host-bound-report.json'),
     );
     const report = JSON.parse(bytes);
     const isCpu = typeof report.backend === 'string' && report.backend.includes('CPU');
@@ -64,26 +73,19 @@ function verifyPdfVisionQualification(consent, candidate, evidenceRoot) {
       report.completeGenerationVerified !== true ||
       report.hostVfsVerified !== true ||
       report.replacementVerified !== true ||
-      report.fallbackVerified !== true ||
-      report.upgradeRollbackVerified !== true ||
+      report.fallbackVerified === true ||
+      report.upgradeRollbackVerified === true ||
       report.currentContentAndDeletionVerified !== true ||
-      report.crossHostNavigationVerified !== true ||
-      report.resourceCeilingQualified !== true ||
+      report.crossHostNavigationVerified === true ||
+      report.resourceCeilingQualified !== false ||
       !Number.isFinite(report.elapsedSeconds) ||
       report.elapsedSeconds <= 0 ||
-      report.secondsPerPage !== report.elapsedSeconds / pdfVisionSamplePages ||
-      report.pagesPerSecond !== pdfVisionSamplePages / report.elapsedSeconds ||
-      report.secondsPerImagePage !== report.elapsedSeconds / expectedImageCount ||
       report.imagePagesPerSecond !== expectedImageCount / report.elapsedSeconds ||
-      !Number.isFinite(report.releaseCeilingSeconds) ||
-      report.releaseCeilingSeconds < report.elapsedSeconds ||
       !Number.isFinite(report.hostPeakRssBytes) ||
       report.hostPeakRssBytes <= 0 ||
       !Number.isFinite(report.workerPeakRssBytes) ||
       report.workerPeakRssBytes <= 0 ||
-      !Number.isFinite(report.temporaryDiskPeakBytes) ||
-      report.temporaryDiskPeakBytes <= 0 ||
-      report.qualityDisclosure !== 'experimental-unproven'
+      report.temporaryDiskPeakBytes !== null
     ) {
       throw new Error(`experimental Gemma ${target} PDF vision qualification is incomplete`);
     }
@@ -98,6 +100,13 @@ export function checkExperimentalGemmaRelease(assetsRoot, candidateRoot, approva
   const reportBytes = fs.readFileSync(path.join(assetsRoot, 'semantic-production-evaluation.json'));
   const report = JSON.parse(reportBytes);
   const consent = approval.experimentalGemma;
+  if (
+    consent?.approvalBasis !== 'release-owner-approved-with-known-limitations' ||
+    consent.modelQualityDecision !== 'noGo' ||
+    JSON.stringify(consent.knownLimitations) !== JSON.stringify(releaseOwnerApprovedLimitations)
+  ) {
+    throw new Error('experimental Gemma release requires the exact approved limitations');
+  }
   if (candidate.sourceRevision === preIntegrationSource) {
     throw new Error('pre-integration Gemma worker cannot publish without a new signed candidate');
   }

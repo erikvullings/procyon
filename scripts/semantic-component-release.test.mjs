@@ -118,15 +118,20 @@ test('unapproved or incomplete component releases fail closed', () => {
   );
 });
 
-test('experimental desktop rejects missing consent, old candidates and mismatched model revisions', () => {
-  const historicalApproval = JSON.parse(
+test('experimental desktop requires opt-in and an approved architecture and model revision', () => {
+  const approval = JSON.parse(
     readFileSync(
       new URL('../docs/evaluations/semantic-gemma-experimental-v1.json', import.meta.url),
     ),
   );
   assert.throws(
-    () => checkDesktopGemmaRelease(historicalApproval, 'true', 'true'),
-    /approved semantic component release/u,
+    () => checkDesktopGemmaRelease(approval, 'false', 'true', 'arm64'),
+    /both independent release approvals/u,
+  );
+  assert.deepEqual(checkDesktopGemmaRelease(approval, 'true', 'true', 'arm64'), approval);
+  assert.throws(
+    () => checkDesktopGemmaRelease(approval, 'true', 'true'),
+    /universal macOS desktop/u,
   );
   const targets = Object.fromEntries(
     ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'].map((target) => [

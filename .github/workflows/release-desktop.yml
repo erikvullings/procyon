@@ -26,7 +26,7 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' || contains(github.ref_name, '-') }}
           name: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && format('Procyon {0} - Experimental Gemma', github.ref_name) || github.ref_name }}
-          body: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && 'Experimental Gemma is opt-in; multilingual E5 remains the default, and Gemma ranking quality is not established. The macOS Gemma download requires Apple Silicon (arm64) and does not run on Intel Macs. Intel users should use the separate universal non-Gemma release.' || '' }}
+          body: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && 'EXPERIMENTAL OPT-IN: multilingual E5 remains the default. No model-quality claim is made; the candidate and evaluation remain no-go for model quality, with E5 used only as a negative control. Resource ceilings and anonymous PDF spool peak are unqualified. CPU fallback, cross-host navigation, and upgrade/rollback are unqualified. CPU PDF page-image indexing is slow (up to about 106 seconds per indexed page); the four-page CPU budget takes about eight minutes. PDF text indexing is unaffected. The Gemma macOS package requires Apple Silicon (arm64) and does not run on Intel Macs.' || '' }}
 
   macos:
     name: Signed and notarized macOS bundles

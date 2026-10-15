@@ -17,6 +17,15 @@ const files = [
   ['embeddinggemma2-file-3', 'processor_config.json'],
   ['embeddinggemma2-file-4', 'preprocessor_config.json'],
 ];
+const knownLimitations = [
+  'resource-ceilings-unqualified',
+  'anonymous-pdf-spool-peak-unqualified',
+  'cpu-fallback-unqualified',
+  'cross-host-navigation-unqualified',
+  'upgrade-rollback-unqualified',
+  'model-quality-unproven',
+  'cpu-pdf-image-indexing-about-106-seconds-per-page-four-page-budget-about-eight-minutes',
+];
 
 function sha(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -163,24 +172,16 @@ function fixture(context, { pdfRenderer = true, pdfEvidence = true } = {}) {
         completeGenerationVerified: true,
         hostVfsVerified: true,
         replacementVerified: true,
-        fallbackVerified: true,
-        upgradeRollbackVerified: true,
         currentContentAndDeletionVerified: true,
-        crossHostNavigationVerified: true,
-        resourceCeilingQualified: true,
+        resourceCeilingQualified: false,
         elapsedSeconds: 10_000,
-        secondsPerPage: 1_250,
-        pagesPerSecond: 8 / 10_000,
-        secondsPerImagePage: 10_000 / imageEvidenceCount,
         imagePagesPerSecond: imageEvidenceCount / 10_000,
-        releaseCeilingSeconds: 12_000,
         hostPeakRssBytes: 200_000_000,
         workerPeakRssBytes: 800_000_000,
-        temporaryDiskPeakBytes: 300_000_000,
-        qualityDisclosure: 'experimental-unproven',
+        temporaryDiskPeakBytes: null,
       };
       const bytes = `${JSON.stringify(evidence)}\n`;
-      writeFileSync(join(directory, 'gemma-pdf-bound-report.json'), bytes);
+      writeFileSync(join(directory, 'gemma-pdf-host-bound-report.json'), bytes);
       pdfTargets[target] = sha(bytes);
     }
   }
@@ -189,7 +190,10 @@ function fixture(context, { pdfRenderer = true, pdfEvidence = true } = {}) {
     decision: 'go',
     experimentalGemma: {
       approval: 'explicit-opt-in-experimental',
+      approvalBasis: 'release-owner-approved-with-known-limitations',
       candidateDecision: 'noGo',
+      modelQualityDecision: 'noGo',
+      knownLimitations,
       candidateManifestSha256: sha(candidateBytes),
       evaluationSha256: sha(readFileSync(join(assets, 'semantic-production-evaluation.json'))),
       modelRevision: '914f7f89142e33e77833254d9c9b90c3cef7303b',
@@ -209,6 +213,17 @@ test('only the exact four-target signed candidate and E5 negative-control report
     releaseTag: 'semantic-v1',
     sourceRevision: 'a'.repeat(40),
   });
+  assert.throws(
+    () =>
+      check({
+        ...approval,
+        experimentalGemma: {
+          ...approval.experimentalGemma,
+          knownLimitations: knownLimitations.slice(1),
+        },
+      }),
+    /exact approved limitations/u,
+  );
   assert.throws(() => check({ ...approval, releaseTag: 'other' }), /releaseTag differs/u);
   assert.throws(() => check({ ...approval, qualificationRunId: 9 }), /qualificationRunId differs/u);
   const changed = {
@@ -288,7 +303,11 @@ test('signed PDFium alone cannot authorize a Gemma release without installed sam
 
 test('CPU release evidence must honor the four-page cap and report skipped pages', (context) => {
   const { assets, candidateRoot, evidenceRoot, approval } = fixture(context);
-  const file = join(evidenceRoot, 'installed-gemma-linux-aarch64', 'gemma-pdf-bound-report.json');
+  const file = join(
+    evidenceRoot,
+    'installed-gemma-linux-aarch64',
+    'gemma-pdf-host-bound-report.json',
+  );
   const report = JSON.parse(readFileSync(file));
   report.imageEvidenceCount = 8;
   report.pdfImageSkippedPages = 0;
@@ -313,12 +332,12 @@ test('CPU release evidence must honor the four-page cap and report skipped pages
   );
 });
 
-test('changed or incomplete PDF evidence cannot be promoted by updating only its digest', (context) => {
+test('unqualified PDF evidence cannot be represented as qualified by updating its digest', (context) => {
   const { assets, candidateRoot, evidenceRoot, approval } = fixture(context);
   const target = 'macos-aarch64';
-  const file = join(evidenceRoot, `installed-gemma-${target}`, 'gemma-pdf-bound-report.json');
+  const file = join(evidenceRoot, `installed-gemma-${target}`, 'gemma-pdf-host-bound-report.json');
   const report = JSON.parse(readFileSync(file));
-  report.resourceCeilingQualified = false;
+  report.resourceCeilingQualified = true;
   const bytes = `${JSON.stringify(report)}\n`;
   writeFileSync(file, bytes);
   assert.throws(
@@ -344,7 +363,7 @@ test('changed or incomplete PDF evidence cannot be promoted by updating only its
   );
 });
 
-test('the mixed-media Metal candidate lock remains blocked and the pre-integration source cannot publish', (context) => {
+test('the approved mixed-media Metal lock preserves no-go quality and rejects the pre-integration source', (context) => {
   const lock = JSON.parse(
     readFileSync(
       fileURLToPath(
@@ -353,14 +372,12 @@ test('the mixed-media Metal candidate lock remains blocked and the pre-integrati
       'utf8',
     ),
   );
-  assert.equal(lock.decision, 'noGo');
-  assert.equal(lock.sourceRevision, '021e8ab9a40fa98591ba997d700ad501693b8e2b');
-  assert.equal(lock.experimentalGemma.approval, 'blocked-pending-release-owner-review');
-  const { assets, candidateRoot, evidenceRoot } = fixture(context);
-  assert.throws(
-    () => checkExperimentalGemmaRelease(assets, candidateRoot, lock, evidenceRoot),
-    /no-go evidence/u,
-  );
+  assert.equal(lock.decision, 'go');
+  assert.equal(lock.sourceRevision, '4553da275e76638678c7fc0a6ddcea732a19165b');
+  assert.equal(lock.experimentalGemma.approval, 'explicit-opt-in-experimental');
+  assert.equal(lock.experimentalGemma.modelQualityDecision, 'noGo');
+  assert.deepEqual(lock.experimentalGemma.knownLimitations, knownLimitations);
+  const { assets, candidateRoot, evidenceRoot, approval } = fixture(context);
   const oldCandidate = JSON.parse(
     readFileSync(join(candidateRoot, 'semantic-component-release.json'), 'utf8'),
   );
@@ -373,11 +390,9 @@ test('the mixed-media Metal candidate lock remains blocked and the pre-integrati
         assets,
         candidateRoot,
         {
-          ...lock,
-          decision: 'go',
+          ...approval,
           experimentalGemma: {
-            ...lock.experimentalGemma,
-            approval: 'explicit-opt-in-experimental',
+            ...approval.experimentalGemma,
             candidateManifestSha256: sha(bytes),
           },
         },

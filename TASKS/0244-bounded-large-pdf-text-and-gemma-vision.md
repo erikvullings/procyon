@@ -1042,3 +1042,32 @@ optional Docling ML/PDFium pack is qualified on those targets.
   upgrade/rollback or model-quality claim is qualified; all reports remain no-go. Because this
   disclosure correction changes the final source SHA, the edited source still needs CI and a
   new exact-source candidate before it can be treated as final.
+- Release-owner decision: explicitly approved an **opt-in experimental package** with the
+  limitations below. This is a package/release decision only; it does not turn the candidate or
+  evaluation's `noGo` into model-quality evidence.
+  - Resource ceilings and the anonymous PDF spool peak are unqualified.
+  - CPU fallback, cross-host navigation, and upgrade/rollback are unqualified.
+  - No model-quality claim is made.
+  - CPU PDF page-image indexing is slow: the installed sample measured up to 106.23 seconds per
+    indexed image page. The four-page CPU budget is disclosed as about eight minutes; PDF text
+    indexing is unaffected.
+- Exact approved candidate: read-only signed four-target candidate run
+  [38623341847](https://github.com/erikvullings/procyon/actions/runs/38623341847), tag
+  `semantic-v0.5.0-gemma-experimental-r3`, source
+  `4553da275e76638678c7fc0a6ddcea732a19165b`, fingerprint
+  `sha256:bea8f430d4c151dee2397b52c278b97515de4b84d9a698a306e3e5dc65645200`.
+  Candidate decision remains `noGo`; publication was skipped during qualification.
+- Exact installed-host PDF sample
+  [38635009803](https://github.com/erikvullings/procyon/actions/runs/38635009803) passed on
+  all four targets against that candidate. Linux aarch64/x86-64 and Windows x86-64 used CPU,
+  indexed four of eight synthetic page images, and reported respectively 106.23, 89.99, and
+  93.24 seconds per indexed image page. macOS aarch64 used FP32 Metal, indexed all eight, and
+  reported 18.04 seconds per image page. Sampled worker RSS was 2.15-2.36 GB and sampled host
+  RSS 37.5-71.9 MB. The sample verified host VFS consent, complete generation, replacement,
+  current-content/deletion behavior, and workspace isolation. These are sampled peaks, not
+  qualified ceilings; anonymous spool peak was not measured. CPU fallback, cross-host
+  navigation, and upgrade/rollback remain unqualified.
+- The checked-in experimental approval lock binds the exact candidate, four catalogs/signatures,
+  model revision, E5-only negative-control evaluation, and all four installed report hashes. The
+  protected semantic and desktop release workflows still require their independent approval
+  gates. No semantic package, desktop release, or tag is published by this approval record alone.
