@@ -4733,7 +4733,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         (operation) =>
           operation?.kind === 'delete' && operation.state === 'waitingForConflictResolution',
       );
-      const activeOperationProgress = summariseActiveOperations(operations);
       const activeOperations = Object.values(operations.byId).filter(
         (operation): operation is Operation =>
           operation !== undefined && isActiveOperation(operation),
@@ -4746,10 +4745,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           : t('shell', 'activityCount', { count: activityCount });
       const runningSemanticJobs = semanticJobs.size - failedSemanticJobs.length;
       const activityBusy = activeOperations.length > 0 || runningSemanticJobs > 0;
-      // A known percentage only exists when every running task reports a measurable total;
-      // semantic indexing scans have no total, so they keep the indicator indeterminate.
-      const activityPercent =
-        runningSemanticJobs === 0 ? activeOperationProgress?.percent : undefined;
       const activityKinds = [
         ...new Set([
           ...activeOperations.map((operation) => operationKindLabel(operation.kind)),
@@ -4760,9 +4755,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       const activityStatusLabel =
         activityKinds.length === 0
           ? activityLabel
-          : `${activityLabel}: ${activityKinds.join(', ')}${
-              activityPercent === undefined ? '' : ` (${activityPercent}%)`
-            }`;
+          : `${activityLabel}: ${activityKinds.join(', ')}`;
       // The macOS overlay keeps native traffic lights while the toolbar draws the title.
       // The browser tab already provides a title; Windows has its own menu/title row.
       const isMacOverlay = runtimeKind === 'tauri' && platform === 'macos';
@@ -5190,9 +5183,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                         'aria-expanded': String(activityOpen),
                         'aria-controls': 'fm-activity-popover',
                         title: activityStatusLabel,
-                        ...(activityPercent === undefined
-                          ? {}
-                          : { style: { '--fm-activity-progress': `${activityPercent}%` } }),
                         onclick: () => {
                           activityOpen = !activityOpen;
                         },

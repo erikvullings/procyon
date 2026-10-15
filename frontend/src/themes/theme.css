@@ -5265,13 +5265,15 @@ input[type="text"].fm-shortcuts-help-capture-input {
   align-items: center;
 }
 
-.fm-activity-count {
+button.fm-activity-count {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  box-sizing: border-box;
+  min-height: 24px;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-  padding: 1px 4px;
+  padding: 1px 6px;
   color: var(--fm-accent);
   background: transparent;
   border: 1px solid var(--fm-border);
@@ -5280,7 +5282,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-activity-icon {
-  position: relative;
   display: inline-flex;
 }
 
@@ -5292,19 +5293,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .fm-activity-count.fm-activity-busy .fm-activity-icon {
   animation: fm-activity-pulse 0.9s ease-in-out infinite alternate;
-}
-
-/* Known overall percentage: a thin ring fills around the icon. */
-.fm-activity-count.fm-activity-busy[style*="--fm-activity-progress"] .fm-activity-icon::before {
-  content: "";
-  position: absolute;
-  inset: -3px;
-  border-radius: 50%;
-  background: conic-gradient(
-    currentColor var(--fm-activity-progress),
-    color-mix(in srgb, currentColor 22%, transparent) var(--fm-activity-progress)
-  );
-  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
 }
 
 .fm-activity-count.fm-activity-failed {

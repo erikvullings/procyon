@@ -1982,7 +1982,7 @@ describe('AppShell', () => {
     );
   });
 
-  it('keeps the operation centre closed for long-running jobs and shows progress on the activity icon', async () => {
+  it('keeps the operation centre closed for long-running jobs and pulses the activity icon', async () => {
     const client = new MockFileManagerClient();
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
@@ -2020,9 +2020,9 @@ describe('AppShell', () => {
       expect(centreButton?.getAttribute('style')).toBeNull();
       const activity = root.querySelector<HTMLButtonElement>('.fm-activity-count');
       expect(activity?.classList.contains('fm-activity-busy')).toBe(true);
-      expect(activity?.style.getPropertyValue('--fm-activity-progress')).toBe('25%');
-      expect(activity?.getAttribute('aria-label')).toBe('1 background activity: Copy (25%)');
-      expect(activity?.getAttribute('title')).toBe('1 background activity: Copy (25%)');
+      expect(activity?.getAttribute('style')).toBeNull();
+      expect(activity?.getAttribute('aria-label')).toBe('1 background activity: Copy');
+      expect(activity?.getAttribute('title')).toBe('1 background activity: Copy');
     } finally {
       vi.useRealTimers();
       raf.mockRestore();
@@ -2055,11 +2055,6 @@ describe('AppShell', () => {
     expect(root.querySelector('.fm-activity-count')?.classList.contains('fm-activity-busy')).toBe(
       true,
     );
-    expect(
-      root
-        .querySelector<HTMLButtonElement>('.fm-activity-count')
-        ?.style.getPropertyValue('--fm-activity-progress'),
-    ).toBe('');
     const lastSeparator = [...root.querySelectorAll('.fm-toolbar-separator')].at(-1);
     const settingsButton = root.querySelector('.fm-settings-button');
     if (lastSeparator === undefined || settingsButton === null) {
@@ -2133,11 +2128,6 @@ describe('AppShell', () => {
     await vi.waitFor(() =>
       expect(root.querySelector<HTMLButtonElement>('.fm-activity-count')?.textContent).toBe('1'),
     );
-    expect(
-      root
-        .querySelector<HTMLButtonElement>('.fm-activity-count')
-        ?.style.getPropertyValue('--fm-activity-progress'),
-    ).toBe('');
     expect(root.querySelector('.fm-activity-count')?.getAttribute('aria-label')).toBe(
       '1 background activity: Delete',
     );
