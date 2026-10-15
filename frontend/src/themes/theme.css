@@ -5279,8 +5279,56 @@ input[type="text"].fm-shortcuts-help-capture-input {
   cursor: pointer;
 }
 
+.fm-activity-icon {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Running work: the activity icon itself pulses in amber, distinct from the blue accent. */
+.fm-activity-count.fm-activity-busy {
+  color: var(--fm-warning);
+  border-color: color-mix(in srgb, var(--fm-warning) 55%, var(--fm-border));
+}
+
+.fm-activity-count.fm-activity-busy .fm-activity-icon {
+  animation: fm-activity-pulse 0.9s ease-in-out infinite alternate;
+}
+
+/* Known overall percentage: a thin ring fills around the icon. */
+.fm-activity-count.fm-activity-busy[style*="--fm-activity-progress"] .fm-activity-icon::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: conic-gradient(
+    currentColor var(--fm-activity-progress),
+    color-mix(in srgb, currentColor 22%, transparent) var(--fm-activity-progress)
+  );
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+}
+
 .fm-activity-count.fm-activity-failed {
   color: var(--fm-error);
+  border-color: color-mix(in srgb, var(--fm-error) 55%, var(--fm-border));
+}
+
+.fm-activity-count.fm-activity-failed .fm-activity-icon {
+  animation: none;
+}
+
+@keyframes fm-activity-pulse {
+  from {
+    opacity: 0.3;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-activity-count.fm-activity-busy .fm-activity-icon {
+    animation: none;
+  }
 }
 
 .fm-activity-popover {
@@ -5327,47 +5375,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .fm-activity-target {
   color: var(--fm-accent);
   white-space: nowrap;
-}
-
-.fm-operation-centre-button.fm-operations-busy {
-  position: relative;
-  color: var(--fm-accent);
-}
-
-.fm-operation-centre-button.fm-operations-busy::after {
-  content: "";
-  position: absolute;
-  left: 15%;
-  bottom: 2px;
-  width: 70%;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--fm-accent);
-  animation: fm-operation-progress-pulse 1.2s ease-in-out infinite alternate;
-}
-
-.fm-operation-centre-button.fm-operations-busy[style*="--fm-operation-progress"]::after {
-  background: linear-gradient(
-    to right,
-    var(--fm-accent) var(--fm-operation-progress),
-    color-mix(in srgb, var(--fm-accent) 25%, transparent) var(--fm-operation-progress)
-  );
-  animation: none;
-}
-
-@keyframes fm-operation-progress-pulse {
-  from {
-    opacity: 0.35;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fm-operation-centre-button.fm-operations-busy::after {
-    animation: none;
-  }
 }
 
 .fm-app-shell[data-mac-titlebar-overlay="true"] .fm-navigation-controls,
