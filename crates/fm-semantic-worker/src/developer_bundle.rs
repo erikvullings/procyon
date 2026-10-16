@@ -701,6 +701,73 @@ fn prepare_active_model_index(
     Ok(model_directory)
 }
 
+/// Manifest fields describing how source bytes become embedded records.
+///
+/// They change with the shipped worker, not with the user's model choice. A
+/// mismatch on these alone means the active model's derived records are stale
+/// but its embedding space is unchanged, so they can be rebuilt from sources.
+const REBUILDABLE_PIPELINE_FIELDS: [&str; 3] = [
+    "embedding_preprocessing",
+    "converter_version",
+    "chunker_version",
+];
+
+/// Discards the active model's index when only its source pipeline is stale.
+///
+/// A worker upgrade that changes conversion, chunking, or embedding
+/// preprocessing leaves records that no longer match what this worker would
+/// produce for the same bytes. Those records are derived from host-owned
+/// sources and must not be mixed with fresh ones, so the whole model-scoped
+/// directory is retired before anything opens it; the host's normal enrolled
+/// root reconciliation then repopulates it. Consent and enrolment state live
+/// in the host and are untouched.
+///
+/// Only this model's directory is considered, and a difference in any
+/// embedding-space field (model revision, tokenizer, dimensions, distance, or
+/// normalization) is never treated as rebuildable: that still fails closed
+/// later with a migration requirement. The retirement is a single rename
+/// followed by removal of the renamed directory, so an interruption at any
+/// point leaves either the untouched index or a leftover that the next launch
+/// finishes removing.
+fn discard_superseded_pipeline_index(
+    model_directory: &Path,
+    expected: &LibraryIndexManifest,
+) -> Result<bool, DeveloperBundleError> {
+    let mut retired_name = model_directory
+        .file_name()
+        .ok_or_else(|| DeveloperBundleError::InvalidDataDirectory(model_directory.to_owned()))?
+        .to_owned();
+    retired_name.push(".superseded-pipeline");
+    let retired = model_directory.with_file_name(retired_name);
+    if retired.exists() {
+        std::fs::remove_dir_all(&retired)?;
+    }
+    let catalog_path = model_directory.join("catalog.sqlite");
+    if !catalog_path.is_file() {
+        return Ok(false);
+    }
+    let differing = SemanticCatalog::open(&catalog_path)?
+        .registered_manifest_incompatibilities(expected)?
+        .into_iter()
+        .filter(|field| *field != "zvec_schema_version")
+        .collect::<Vec<_>>();
+    if differing.is_empty()
+        || differing
+            .iter()
+            .any(|field| !REBUILDABLE_PIPELINE_FIELDS.contains(field))
+    {
+        return Ok(false);
+    }
+    std::fs::rename(model_directory, &retired)?;
+    std::fs::remove_dir_all(&retired)?;
+    eprintln!(
+        "Procyon semantic worker: discarded the active model's index built by a superseded \
+pipeline ({}); enrolled folders will be reindexed",
+        differing.join(", ")
+    );
+    Ok(true)
+}
+
 struct OnnxPackLoader {
     pack: ModelPack,
 }
@@ -929,11 +996,6 @@ impl DeveloperWorker {
         // one embedding space is meaningless in another, so switching profiles
         // must start a new index rather than corrupt or reject the old one.
         let model_directory = prepare_active_model_index(data_directory, &model)?;
-        std::fs::create_dir_all(&model_directory)?;
-        #[cfg(feature = "gemma-native")]
-        if let Some((_, media)) = gemma {
-            prepare_gemma_index_marker(&model_directory, model.identity.dimensions, *media)?;
-        }
         let manifest = developer_manifest(&model.identity);
         #[cfg(feature = "gemma-native")]
         let manifest = if gemma.is_some() {
@@ -944,6 +1006,12 @@ impl DeveloperWorker {
         } else {
             manifest
         };
+        discard_superseded_pipeline_index(&model_directory, &manifest)?;
+        std::fs::create_dir_all(&model_directory)?;
+        #[cfg(feature = "gemma-native")]
+        if let Some((_, media)) = gemma {
+            prepare_gemma_index_marker(&model_directory, model.identity.dimensions, *media)?;
+        }
         let catalog = SemanticCatalog::open(model_directory.join("catalog.sqlite"))?;
         let index_directory = model_directory.join("zvec");
         let index = if ZvecStorage::migration_pending(&index_directory) {
@@ -2732,5 +2800,225 @@ mod tests {
                 crate::semantic_storage::StorageError::MigrationRequired { .. }
             ))
         ));
+    }
+
+    /// Rewrites every registered manifest exactly as an older worker left it.
+    fn rewrite_registered_manifests(
+        model_directory: &Path,
+        rewrite: impl Fn(&mut LibraryIndexManifest),
+    ) {
+        let connection =
+            rusqlite::Connection::open(model_directory.join("catalog.sqlite")).expect("catalog");
+        let rows = connection
+            .prepare("SELECT tenant_id, library_id, manifest_json FROM libraries")
+            .expect("libraries")
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .expect("library rows")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("library rows");
+        assert!(!rows.is_empty(), "fixture must register a library");
+        for (tenant_id, library_id, manifest_json) in rows {
+            let mut manifest: LibraryIndexManifest =
+                serde_json::from_str(&manifest_json).expect("manifest");
+            rewrite(&mut manifest);
+            connection
+                .execute(
+                    "UPDATE libraries SET manifest_json = ?3
+                     WHERE tenant_id = ?1 AND library_id = ?2",
+                    rusqlite::params![
+                        tenant_id,
+                        library_id,
+                        serde_json::to_string(&manifest).expect("manifest json")
+                    ],
+                )
+                .expect("rewrite manifest");
+        }
+    }
+
+    fn ingest_and_wait(
+        ingestion: &Arc<dyn WorkerIngestionBackend>,
+        document_id: &str,
+        content: &[u8],
+    ) {
+        let job_id = ingestion
+            .enqueue(
+                WorkerIngestionInput {
+                    job_id: format!("job-{document_id}"),
+                    tenant_id: "tenant-upgrade".into(),
+                    library_id: "library-upgrade".into(),
+                    document_id: document_id.into(),
+                    media_type: "text/plain".into(),
+                    pdf_images_consented: false,
+                    metadata: BTreeMap::from([
+                        ("occurrence_id".into(), format!("occurrence-{document_id}")),
+                        ("source_id".into(), format!("source-{document_id}")),
+                        ("root_id".into(), "root-upgrade".into()),
+                        ("modified_at_ms".into(), "1".into()),
+                    ]),
+                    content: content.to_vec(),
+                    #[cfg(feature = "experimental-large-pdf")]
+                    pdf_text: None,
+                },
+                CancellationToken::new(),
+            )
+            .expect("enqueue");
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let job = ingestion
+                .job("tenant-upgrade", "library-upgrade", &job_id)
+                .expect("job")
+                .expect("registered job");
+            if job.state == IngestionState::Completed {
+                return;
+            }
+            assert_ne!(job.state, IngestionState::Failed, "{:?}", job.error);
+            assert!(std::time::Instant::now() < deadline, "ingestion timed out");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn upgrade_query(query: &Arc<dyn WorkerQueryBackend>) -> Vec<String> {
+        query
+            .query(
+                WorkerQueryInput {
+                    tenant_id: "tenant-upgrade".into(),
+                    library_id: "library-upgrade".into(),
+                    query: "orchard harvest".into(),
+                    intent: fm_semantic_protocol::v1::QueryIntent::Search,
+                    concept_query: None,
+                    maximum_results: 10,
+                },
+                &CancellationToken::new(),
+            )
+            .expect("query")
+            .into_iter()
+            .map(|result| result.document_id)
+            .collect()
+    }
+
+    fn index_built_by_previous_pipeline(name: &str) -> (TestDirectory, PathBuf) {
+        let directory = TestDirectory::new(name);
+        let worker = DeveloperWorker::open(&directory.0, None).expect("developer worker");
+        let (ingestion, query) = worker.backends();
+        ingest_and_wait(&ingestion, "document-stale", b"Orchard harvest notes.");
+        assert_eq!(upgrade_query(&query), ["document-stale"]);
+        drop((ingestion, query, worker));
+        let model_directory = fixture_index_directory(&directory.0);
+        // The exact identities v0.5.0-2 recorded before the converter and
+        // chunker contracts advanced.
+        rewrite_registered_manifests(&model_directory, |manifest| {
+            manifest.converter_version = "docling-pdf/1036000+baseline/2".into();
+            manifest.chunker_version = "structural/3".into();
+        });
+        std::fs::write(
+            model_directory.join("stale-derived-content"),
+            b"old pipeline",
+        )
+        .expect("stale marker");
+        (directory, model_directory)
+    }
+
+    #[test]
+    fn worker_upgrade_discards_an_index_built_by_a_superseded_pipeline_and_reindexes() {
+        let (directory, model_directory) = index_built_by_previous_pipeline("superseded-pipeline");
+
+        let upgraded = DeveloperWorker::open(&directory.0, None)
+            .expect("an upgraded worker must start instead of failing on stale pipeline records");
+
+        assert!(!model_directory.join("stale-derived-content").exists());
+        let (ingestion, query) = upgraded.backends();
+        assert!(
+            upgrade_query(&query).is_empty(),
+            "records from the superseded pipeline must never answer queries"
+        );
+        ingest_and_wait(&ingestion, "document-fresh", b"Orchard harvest notes.");
+        assert_eq!(upgrade_query(&query), ["document-fresh"]);
+        drop((ingestion, query, upgraded));
+        let reopened = DeveloperWorker::open(&directory.0, None).expect("reopen after reindex");
+        let (_, query) = reopened.backends();
+        assert_eq!(
+            upgrade_query(&query),
+            ["document-fresh"],
+            "a compatible rebuilt index is preserved across restarts"
+        );
+    }
+
+    #[test]
+    fn pipeline_recovery_finishes_an_interrupted_discard_without_touching_the_active_index() {
+        let directory = TestDirectory::new("superseded-pipeline-resume");
+        drop(DeveloperWorker::open(&directory.0, None).expect("developer worker"));
+        let model_directory = fixture_index_directory(&directory.0);
+        std::fs::write(model_directory.join("keep-me"), b"current").expect("current marker");
+        let mut retired = model_directory.file_name().expect("name").to_owned();
+        retired.push(".superseded-pipeline");
+        let retired = model_directory.with_file_name(retired);
+        std::fs::create_dir_all(retired.join("zvec")).expect("interrupted discard");
+        std::fs::write(retired.join("catalog.sqlite"), b"partial").expect("leftover");
+
+        drop(DeveloperWorker::open(&directory.0, None).expect("resumed worker"));
+
+        assert!(!retired.exists(), "the interrupted discard is completed");
+        assert!(model_directory.join("keep-me").is_file());
+    }
+
+    #[test]
+    fn pipeline_recovery_never_discards_a_different_embedding_space() {
+        let (directory, model_directory) =
+            index_built_by_previous_pipeline("superseded-pipeline-model");
+        rewrite_registered_manifests(&model_directory, |manifest| {
+            manifest.tokenizer = "different-tokenizer".into();
+        });
+
+        assert!(matches!(
+            DeveloperWorker::open(&directory.0, None),
+            Err(DeveloperBundleError::Catalog(
+                crate::semantic_storage::StorageError::MigrationRequired { .. }
+            ))
+        ));
+        assert!(
+            model_directory.join("stale-derived-content").is_file(),
+            "an embedding-space mismatch fails closed and keeps the index for inspection"
+        );
+    }
+
+    #[test]
+    fn pipeline_recovery_reports_only_rebuildable_fields_as_discardable() {
+        let directory = TestDirectory::new("superseded-pipeline-unit");
+        let model_directory = directory.0.join("indexes").join("model");
+        std::fs::create_dir_all(&model_directory).expect("model directory");
+        let expected = developer_manifest(&development_embedding_identity());
+        assert!(
+            !discard_superseded_pipeline_index(&model_directory, &expected).expect("empty"),
+            "a missing catalog is a fresh index, not a recovery"
+        );
+        let catalog =
+            SemanticCatalog::open(model_directory.join("catalog.sqlite")).expect("catalog");
+        catalog
+            .register_library("tenant", "library", &expected)
+            .expect("compatible library");
+        drop(catalog);
+        assert!(!discard_superseded_pipeline_index(&model_directory, &expected).expect("same"));
+        assert!(model_directory.is_dir());
+
+        rewrite_registered_manifests(&model_directory, |manifest| {
+            manifest.zvec_schema_version += 1;
+        });
+        assert!(
+            !discard_superseded_pipeline_index(&model_directory, &expected).expect("zvec"),
+            "Zvec schema changes keep using the in-place derived-index rebuild"
+        );
+
+        rewrite_registered_manifests(&model_directory, |manifest| {
+            manifest.zvec_schema_version = expected.zvec_schema_version;
+            manifest.embedding_preprocessing = "preserve-case/1".into();
+        });
+        assert!(discard_superseded_pipeline_index(&model_directory, &expected).expect("stale"));
+        assert!(!model_directory.exists());
     }
 }
