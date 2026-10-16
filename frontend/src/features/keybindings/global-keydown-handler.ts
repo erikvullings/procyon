@@ -112,6 +112,9 @@ export interface GlobalKeydownContext {
   actionsWithFavourites(): readonly ActionDescriptor[];
   openFindFiles(): void;
   replaceClipboard(next?: ClipboardState): void;
+  /** The clipboard a paste uses: Procyon's own, or file references copied in the system file
+   * manager when those are newer (task 0247). */
+  resolvePasteClipboard(): Promise<ClipboardState>;
   selectedLocations(): readonly Location[];
   /** Consumes bare F5 when the collection basket is the visible destination. */
   collectIntoBasketIfVisible(): boolean;
@@ -836,47 +839,7 @@ const ACTION_KEYDOWN_ROUTES = [
         }
         if (key === 'v') {
           event.preventDefault();
-          const active = context.activeDirectory();
-          const directory =
-            active === undefined
-              ? undefined
-              : context.getDirectories().get(context.activeTabKey(active.paneId));
-          const currentClipboard = context.clipboard();
-          const target =
-            active === undefined || directory === undefined
-              ? undefined
-              : {
-                  location: active.location,
-                  writable: directory.writable === true,
-                  loaded: directory.state.type === 'loaded',
-                };
-          const validation = validatePasteTarget(currentClipboard, target);
-          if (!validation.ok) {
-            context.setClipboardMessage(validation.message);
-            context.redraw();
-            return;
-          }
-          const mode = currentClipboard.mode;
-          if (mode === undefined || active === undefined) return;
-          context.setClipboardMessage(undefined);
-          void (
-            mode === 'move'
-              ? context.getOpsController().move(currentClipboard.locations, active.location)
-              : isSameFolderPaste(currentClipboard, active.location)
-                ? context.getOpsController().duplicate(currentClipboard.locations)
-                : context.getOpsController().copy(currentClipboard.locations, active.location)
-          )
-            .then((operation) => {
-              if (operation === undefined) return;
-              if (mode === 'move') context.replaceClipboard(clearClipboard(currentClipboard));
-              context.redraw();
-            })
-            .catch((error: unknown) => {
-              context.setClipboardMessage(
-                error instanceof Error ? error.message : t('clipboard', 'pasteFailed'),
-              );
-              context.redraw();
-            });
+          void pasteIntoActiveDirectory(context);
           return;
         }
         if (key >= '1' && key <= '9') {
@@ -1934,4 +1897,46 @@ export function isTerminalToggleShortcut(
     ((bareModifiers && event.ctrlKey && backquoteKey) ||
       (bareModifiers && !event.ctrlKey && f12Key))
   );
+}
+
+/** Pastes the resolved clipboard into the active directory through the operation engine. */
+async function pasteIntoActiveDirectory(context: GlobalKeydownContext): Promise<void> {
+  const currentClipboard = await context.resolvePasteClipboard();
+  const active = context.activeDirectory();
+  const directory =
+    active === undefined
+      ? undefined
+      : context.getDirectories().get(context.activeTabKey(active.paneId));
+  const target =
+    active === undefined || directory === undefined
+      ? undefined
+      : {
+          location: active.location,
+          writable: directory.writable === true,
+          loaded: directory.state.type === 'loaded',
+        };
+  const validation = validatePasteTarget(currentClipboard, target);
+  if (!validation.ok) {
+    context.setClipboardMessage(validation.message);
+    context.redraw();
+    return;
+  }
+  const mode = currentClipboard.mode;
+  if (mode === undefined || active === undefined) return;
+  context.setClipboardMessage(undefined);
+  try {
+    const operation = await (mode === 'move'
+      ? context.getOpsController().move(currentClipboard.locations, active.location)
+      : isSameFolderPaste(currentClipboard, active.location)
+        ? context.getOpsController().duplicate(currentClipboard.locations)
+        : context.getOpsController().copy(currentClipboard.locations, active.location));
+    if (operation === undefined) return;
+    if (mode === 'move') context.replaceClipboard(clearClipboard(currentClipboard));
+    context.redraw();
+  } catch (error: unknown) {
+    context.setClipboardMessage(
+      error instanceof Error ? error.message : t('clipboard', 'pasteFailed'),
+    );
+    context.redraw();
+  }
 }

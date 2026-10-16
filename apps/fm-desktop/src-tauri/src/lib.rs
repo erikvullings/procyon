@@ -7,6 +7,8 @@
 mod commands;
 mod credentials;
 mod event_stream;
+#[cfg(any(target_os = "linux", all(test, unix)))]
+mod linux_clipboard;
 mod native_menu;
 mod platform;
 mod plugin_spa;
@@ -577,6 +579,8 @@ pub fn run() {
             commands::get_volumes,
             commands::get_home_directory,
             commands::start_native_drag,
+            commands::write_os_clipboard_files,
+            commands::read_os_clipboard_files,
             commands::show_platform_context_menu,
             commands::list_open_with_applications,
             commands::open_with_application,
@@ -951,6 +955,8 @@ mod tests {
                 commands::get_volumes,
                 commands::get_home_directory,
                 commands::start_native_drag,
+                commands::write_os_clipboard_files,
+                commands::read_os_clipboard_files,
                 commands::native_drag_locations,
                 commands::get_file_icon,
                 commands::get_thumbnail,

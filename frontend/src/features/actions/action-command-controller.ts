@@ -82,6 +82,9 @@ export interface ActionCommandControllerContext {
   ): Promise<readonly EntrySummary[] | undefined>;
   getClipboard(): ClipboardState;
   replaceClipboard(next?: ClipboardState): void;
+  /** The clipboard a paste uses, including newer file references from the system file manager
+   * (task 0247). Defaults to {@link getClipboard}. */
+  resolvePasteClipboard?(): Promise<ClipboardState>;
   toast(options: { html: string }): void;
   getOpenTerminalSupported(): boolean;
   openCreateDirectory(location?: import('../../models').Location): void;
@@ -582,18 +585,20 @@ export function createActionCommandController(
       return;
     }
     if (action.id === 'core.paste') {
-      const currentClipboard = context.getClipboard();
-      const mode = currentClipboard.mode;
-      if (mode === undefined || directory.location === undefined) return;
-      void (
-        mode === 'move'
-          ? context.getOpsController().move(currentClipboard.locations, directory.location)
-          : context.getOpsController().copy(currentClipboard.locations, directory.location)
-      ).then((operation) => {
-        if (operation === undefined) return;
-        if (mode === 'move') context.replaceClipboard(clearClipboard(currentClipboard));
-        context.redraw();
-      });
+      const destination = directory.location;
+      if (destination === undefined) return;
+      void (context.resolvePasteClipboard?.() ?? Promise.resolve(context.getClipboard()))
+        .then(async (currentClipboard) => {
+          const mode = currentClipboard.mode;
+          if (mode === undefined || currentClipboard.locations.length === 0) return;
+          const operation = await (mode === 'move'
+            ? context.getOpsController().move(currentClipboard.locations, destination)
+            : context.getOpsController().copy(currentClipboard.locations, destination));
+          if (operation === undefined) return;
+          if (mode === 'move') context.replaceClipboard(clearClipboard(currentClipboard));
+          context.redraw();
+        })
+        .catch(() => undefined);
       return;
     }
     if (action.id === 'core.pack' || action.id === 'core.moveToArchive') {

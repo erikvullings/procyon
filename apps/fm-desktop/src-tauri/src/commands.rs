@@ -566,6 +566,37 @@ fn colorref(css: &str) -> Option<u32> {
     Some((blue << 16) | (green << 8) | red)
 }
 
+/// Publishes local files on the system clipboard (task 0247). Returns
+/// `false` when the selection stays internal to Procyon.
+#[tauri::command]
+pub(crate) async fn write_os_clipboard_files(
+    state: State<'_, AppState>,
+    locations: Vec<LocationDto>,
+) -> Result<bool, ApplicationErrorDto> {
+    let locations = locations
+        .into_iter()
+        .map(fm_domain::Location::from)
+        .collect::<Vec<_>>();
+    state
+        .service
+        .write_os_clipboard_files(&locations)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Reads local files referenced on the system clipboard (task 0247).
+#[tauri::command]
+pub(crate) async fn read_os_clipboard_files(
+    state: State<'_, AppState>,
+) -> Result<Vec<LocationDto>, ApplicationErrorDto> {
+    state
+        .service
+        .read_os_clipboard_files()
+        .await
+        .map(|locations| locations.into_iter().map(LocationDto::from).collect())
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Caches an archive password for the lifetime of this desktop backend session.
 #[tauri::command]
 pub(crate) fn cache_archive_password(

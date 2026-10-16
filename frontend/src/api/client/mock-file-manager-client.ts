@@ -309,6 +309,8 @@ export type MockClientMethod =
   | 'getVolumes'
   | 'getHomeDirectory'
   | 'startNativeDrag'
+  | 'writeOsClipboardFiles'
+  | 'readOsClipboardFiles'
   | 'showPlatformContextMenu'
   | 'getSettings'
   | 'updateSettings'
@@ -1488,6 +1490,7 @@ export class MockFileManagerClient implements FileManagerClient {
       clipboard: false,
       extendedAttributes: true,
       finderAliases: false,
+      osFileClipboard: false,
       finderTags: true,
       nativeDragOut: false,
       nativeFileIcons: this.nativeIconExtensions.size > 0,
@@ -2410,6 +2413,7 @@ export class MockFileManagerClient implements FileManagerClient {
         clipboard: false,
         extendedAttributes: true,
         finderAliases: false,
+        osFileClipboard: false,
         finderTags: true,
         nativeDragOut: false,
         nativeFileIcons: this.nativeIconExtensions.size > 0,
@@ -2468,6 +2472,15 @@ export class MockFileManagerClient implements FileManagerClient {
 
   startNativeDrag(_locations: readonly Location[], signal?: AbortSignal): Promise<void> {
     return this.perform('startNativeDrag', signal, () => undefined);
+  }
+
+  /** The mock host has no OS file clipboard (`osFileClipboard: false`). */
+  writeOsClipboardFiles(_locations: readonly Location[], signal?: AbortSignal): Promise<boolean> {
+    return this.perform('writeOsClipboardFiles', signal, () => false);
+  }
+
+  readOsClipboardFiles(signal?: AbortSignal): Promise<Location[]> {
+    return this.perform('readOsClipboardFiles', signal, () => []);
   }
 
   showPlatformContextMenu(_locations: readonly Location[], signal?: AbortSignal): Promise<void> {

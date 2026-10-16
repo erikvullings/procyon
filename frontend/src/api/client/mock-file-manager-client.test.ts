@@ -1325,3 +1325,15 @@ describe('MockFileManagerClient file range and content search methods', () => {
     expect(result).toEqual({ removed: false });
   });
 });
+
+describe('MockFileManagerClient OS file clipboard', () => {
+  it('reports the capability as unsupported and leaves copies internal', async () => {
+    const client = new MockFileManagerClient();
+
+    expect((await client.getRuntimeCapabilities()).osFileClipboard).toBe(false);
+    await expect(
+      client.writeOsClipboardFiles([{ providerId: 'local', uri: 'file:///home/report.pdf' }]),
+    ).resolves.toBe(false);
+    await expect(client.readOsClipboardFiles()).resolves.toEqual([]);
+  });
+});

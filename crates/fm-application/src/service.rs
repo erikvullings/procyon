@@ -3597,6 +3597,24 @@ impl FileManagerService {
         platform_mapping::read_file_icon(&self.platform, uri)
     }
 
+    /// Publishes local `locations` on the operating system's clipboard as
+    /// file references (task 0247). Returns `false`, leaving the system
+    /// clipboard untouched, when this host has no OS file clipboard or any
+    /// entry is not a local file.
+    pub async fn write_os_clipboard_files(
+        &self,
+        locations: &[Location],
+    ) -> Result<bool, ApplicationError> {
+        crate::os_file_clipboard::write(self.runtime, &self.platform, locations).await
+    }
+
+    /// Reads the local files referenced on the operating system's clipboard,
+    /// e.g. copied in Finder or Explorer (task 0247). Empty when the host has
+    /// no OS file clipboard or the clipboard holds no files.
+    pub async fn read_os_clipboard_files(&self) -> Result<Vec<Location>, ApplicationError> {
+        crate::os_file_clipboard::read(self.runtime, &self.platform).await
+    }
+
     /// Lists the link kinds that can be created for `target` inside the
     /// `destination` directory (task 0168). An empty list means the pair has no
     /// link semantics, e.g. a remote provider or targets on different providers.

@@ -34,6 +34,12 @@ export interface RuntimeCapabilitiesDto {
   nativeThumbnails: boolean;
   /** Whether opening a terminal at a location is supported. */
   openTerminal: boolean;
+  /**
+     * Whether copied local files are shared with the operating system's
+     * clipboard as file references, and file references copied in the system
+     * file manager can be pasted (task 0247). Desktop host only.
+     */
+  osFileClipboard: boolean;
   /** The host operating system, when known. */
   platform: PlatformKindDto;
   /** Whether the desktop host can expose the OS Services/Send To submenu. */

@@ -53,6 +53,7 @@ pub enum PlatformKindDto {
     "extendedAttributes": false,
     "finderTags": false,
     "finderAliases": false,
+    "osFileClipboard": false,
     "semanticComponentAuthority": "administratorProvisioned",
     "semanticRuntimeExecutableDownload": "administratorProvisioned"
 }))]
@@ -90,6 +91,10 @@ pub struct RuntimeCapabilitiesDto {
     pub finder_tags: bool,
     /// Whether macOS Finder alias files can be resolved to their targets.
     pub finder_aliases: bool,
+    /// Whether copied local files are shared with the operating system's
+    /// clipboard as file references, and file references copied in the system
+    /// file manager can be pasted (task 0247). Desktop host only.
+    pub os_file_clipboard: bool,
     /// Principal that owns semantic component lifecycle changes.
     pub semantic_component_authority: SemanticComponentAuthorityDto,
     /// Executable semantic component download policy for this distribution.
@@ -118,6 +123,7 @@ mod tests {
             extended_attributes: false,
             finder_tags: false,
             finder_aliases: false,
+            os_file_clipboard: false,
             semantic_component_authority: SemanticComponentAuthorityDto::AdministratorProvisioned,
             semantic_runtime_executable_download:
                 SemanticRuntimeExecutableDownloadDto::AdministratorProvisioned,

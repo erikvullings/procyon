@@ -92,6 +92,7 @@ export function diagnosticsFromDto(input: unknown): DiagnosticsView {
       serverAdministration: false,
       extendedAttributes: false,
       finderAliases: false,
+      osFileClipboard: false,
       finderTags: false,
     },
     connectionState: {

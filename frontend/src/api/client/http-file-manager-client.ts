@@ -389,6 +389,19 @@ export class HttpFileManagerClient implements FileManagerClient {
     return Promise.reject(new Error('Native drag is available only in the desktop application'));
   }
 
+  /** A browser page cannot place file references on the OS clipboard (the server's files are
+   * not the browser machine's files), so copies stay inside Procyon. */
+  writeOsClipboardFiles(
+    _locations: readonly FileLocation[],
+    _signal?: AbortSignal,
+  ): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  readOsClipboardFiles(_signal?: AbortSignal): Promise<FileLocation[]> {
+    return Promise.resolve([]);
+  }
+
   showPlatformContextMenu(
     _locations: readonly FileLocation[],
     _signal?: AbortSignal,

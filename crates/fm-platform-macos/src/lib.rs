@@ -10,8 +10,9 @@
 //! resolved). Finder tags and the Spotlight
 //! "Finder comment" extended attribute are implemented (task 0136), via the
 //! `xattr`/`plist` crates rather than AppKit - see [`read_finder_tags`] and
-//! [`read_spotlight_comment`]. Native drag-to-Finder is provided by the Tauri window host (task 0062),
-//! while clipboard file references stay delegated to the fallback adapter.
+//! [`read_spotlight_comment`]. Native drag-to-Finder is provided by the Tauri window host (task 0062).
+//! Clipboard file references use the general pasteboard's file URLs (see
+//! `clipboard`), so Finder and Procyon can copy and paste files to each other.
 //! `open_with_default_application` (task
 //! 0061) shells out to `open <path>`. `open_with_chooser` (task 0061
 //! follow-up) queries Launch Services (`NSWorkspace
@@ -36,6 +37,7 @@
 // (see docs/decisions/0010-native-platform-adapters.md).
 #![allow(unsafe_code)]
 
+pub(crate) mod clipboard;
 pub(crate) mod dock;
 pub mod search;
 pub(crate) mod uninstall;
@@ -632,6 +634,7 @@ impl PlatformAdapter for MacosPlatformAdapter {
             | PlatformCapabilities::APPLICATION_UNINSTALL
             | PlatformCapabilities::PLATFORM_CONTEXT_MENU
             | PlatformCapabilities::QUICK_LOOK
+            | PlatformCapabilities::CLIPBOARD_FILE_REFERENCES
     }
 
     fn file_icon(&self, path: &Path) -> Result<Vec<u8>, PlatformError> {
@@ -810,11 +813,13 @@ impl PlatformAdapter for MacosPlatformAdapter {
     }
 
     fn read_clipboard_file_references(&self) -> Result<Vec<PathBuf>, PlatformError> {
-        self.fallback.read_clipboard_file_references()
+        Ok(clipboard::read_file_references(
+            &clipboard::general_pasteboard(),
+        ))
     }
 
     fn write_clipboard_file_references(&self, paths: &[PathBuf]) -> Result<(), PlatformError> {
-        self.fallback.write_clipboard_file_references(paths)
+        clipboard::write_file_references(&clipboard::general_pasteboard(), paths)
     }
 
     fn mounted_volumes(&self) -> Result<Vec<MountedVolume>, PlatformError> {
@@ -1805,16 +1810,12 @@ mod tests {
             PlatformCapabilities::APPLICATION_UNINSTALL,
             PlatformCapabilities::PLATFORM_CONTEXT_MENU,
             PlatformCapabilities::QUICK_LOOK,
+            PlatformCapabilities::CLIPBOARD_FILE_REFERENCES,
         ] {
             assert!(capabilities.contains(expected), "{expected:?}");
         }
 
-        for unimplemented in [
-            PlatformCapabilities::THUMBNAILS,
-            PlatformCapabilities::CLIPBOARD_FILE_REFERENCES,
-        ] {
-            assert!(!capabilities.contains(unimplemented), "{unimplemented:?}");
-        }
+        assert!(!capabilities.contains(PlatformCapabilities::THUMBNAILS));
     }
 
     #[test]
@@ -1825,7 +1826,7 @@ mod tests {
     }
 
     #[test]
-    fn thumbnail_and_clipboard_still_delegate_to_fallback() {
+    fn thumbnail_still_delegates_to_fallback() {
         let adapter = MacosPlatformAdapter::new();
         let fallback = FallbackPlatformAdapter;
         let path = Path::new("/tmp/fm-platform-macos-test.txt");
@@ -1833,26 +1834,6 @@ mod tests {
         assert_eq!(
             adapter.thumbnail(path, 64).unwrap_err().to_string(),
             fallback.thumbnail(path, 64).unwrap_err().to_string()
-        );
-        assert_eq!(
-            adapter
-                .read_clipboard_file_references()
-                .unwrap_err()
-                .to_string(),
-            fallback
-                .read_clipboard_file_references()
-                .unwrap_err()
-                .to_string()
-        );
-        assert_eq!(
-            adapter
-                .write_clipboard_file_references(&[path.to_path_buf()])
-                .unwrap_err()
-                .to_string(),
-            fallback
-                .write_clipboard_file_references(&[path.to_path_buf()])
-                .unwrap_err()
-                .to_string()
         );
     }
 

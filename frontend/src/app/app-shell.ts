@@ -56,7 +56,8 @@ import {
   wouldDeleteEveryCopy,
 } from '../features/checksums/checksum-state';
 import { DuplicateReviewView } from '../features/checksums/duplicate-review-view';
-import { emptyClipboard } from '../features/clipboard/clipboard';
+import { type ClipboardState, emptyClipboard } from '../features/clipboard/clipboard';
+import { createOsFileClipboard } from '../features/clipboard/os-file-clipboard';
 import { CommandPalette } from '../features/command-palette/command-palette';
 import {
   evaluateActionAvailability,
@@ -2580,6 +2581,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }
   }
 
+  const osFileClipboard = createOsFileClipboard(() => attrsClient);
+
   function clipboard() {
     return appState?.clipboard ?? emptyClipboard;
   }
@@ -2588,6 +2591,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (appState !== undefined) {
       appState = applyAppPatches(appState, clipboardPatch(next));
     }
+    osFileClipboard.mirror(next);
+  }
+
+  function resolvePasteClipboard(): Promise<ClipboardState> {
+    return osFileClipboard.resolvePasteClipboard(clipboard());
   }
 
   function selectedLocations(): readonly Location[] {
@@ -3672,6 +3680,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     actionsWithFavourites,
     openFindFiles: () => findFilesController.openFindFiles(),
     replaceClipboard,
+    resolvePasteClipboard,
     selectedLocations,
     invokeActionById: (actionId, parameters, context) =>
       actionCommandController.invokeActionById(actionId, parameters, context),
@@ -4006,6 +4015,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     prepareFileOperationEntries,
     getClipboard: () => clipboard(),
     replaceClipboard: (next) => replaceClipboard(next),
+    resolvePasteClipboard,
     toast: (options) => toast(options),
     getOpenTerminalSupported: () => openTerminalSupported,
     openCreateDirectory: (location) => dialogs.openCreateDirectory(location),

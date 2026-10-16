@@ -51,6 +51,7 @@ function fixtureCapabilities() {
     clipboard: true,
     extendedAttributes: false,
     finderAliases: false,
+    osFileClipboard: false,
     finderTags: false,
     nativeDragOut: false,
     nativeFileIcons: false,
@@ -523,6 +524,20 @@ describe('TauriFileManagerClient', () => {
         new TauriFileManagerClient().beginOneDriveAuthorization('connection-1'),
       ).rejects.toThrow('Microsoft authorization URL');
       expect(openUrl).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('OS file clipboard', () => {
+    it('publishes and reads file references through the desktop commands', async () => {
+      const client = new TauriFileManagerClient();
+      const locations = [{ providerId: 'local', uri: 'file:///Users/example/report.pdf' }];
+      invoke.mockResolvedValueOnce(true).mockResolvedValueOnce(locations);
+
+      await expect(client.writeOsClipboardFiles(locations)).resolves.toBe(true);
+      await expect(client.readOsClipboardFiles()).resolves.toEqual(locations);
+
+      expect(invoke).toHaveBeenNthCalledWith(1, 'write_os_clipboard_files', { locations });
+      expect(invoke).toHaveBeenNthCalledWith(2, 'read_os_clipboard_files');
     });
   });
 
