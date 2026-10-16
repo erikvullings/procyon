@@ -282,9 +282,9 @@ Pass criteria (all required):
 
 | # | Item | Platform / build | Measured values | Result (Pass / Fail / Blocked) | Date | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1a | Resource ceilings, Metal | | Peak tree RSS:  · Peak single RSS:  · Peak temp:  · Free-disk drop: | | | |
+| 1a | Resource ceilings, Metal | v0.5.0-2 · macOS ARM64 · Gemma FP32 Metal | First 20 min: peak tree RSS 6,434,422,784 B (5.99 GiB; 12 processes at peak, 13 max) · peak single RSS 2,760,671,232 B (2.57 GiB) · peak temp 79,048,531 B (75.4 MiB) · free-disk drop 26,345,328,640 B (inconclusive). Continuation 20 min: peak RSS 2,995,748,864 B (1 process) · peak temp 0 B. | Fail | 2026-10-16 | Provisional installed run while reindexing roots, including a 166 MiB / 354-page scanned PDF. Indexing was still active at 40 min. Concurrent local builds confound the free-disk drop; do not attribute it to worker/index. CPU not measured. |
 | 1b | Resource ceilings, CPU forced | | Peak tree RSS:  · Peak single RSS:  · Peak temp:  · Free-disk drop: | | | |
-| 1c | Proposed memory ceiling | | | | | |
+| 1c | Proposed memory ceiling | macOS ARM64 · Gemma FP32 Metal | 7.5 GiB (peak tree RSS × 1.25, rounded up to next 0.5 GiB; observed peak: 6,434,422,784 B / 5.99 GiB) | Fail | 2026-10-16 | Exceeds the 4 GiB pass ceiling; helper RSS investigation issue filed. This blocks promotion. |
 | 2 | CPU fallback | | Backend file: · Queries in top 5: /5 · Page-image budget shown: | | | |
 | 3 | Cross-host navigation | | Capabilities: · Citations matched: /4 | | | |
 | 4 | Upgrade and rollback | v0.5.0-2 → | Steps 3–6: · Rollback state: | | | |
