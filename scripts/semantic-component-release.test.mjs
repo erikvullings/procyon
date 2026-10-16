@@ -133,6 +133,13 @@ test('experimental desktop requires opt-in and an approved architecture and mode
     () => checkDesktopGemmaRelease(approval, 'true', 'true'),
     /universal macOS desktop/u,
   );
+  assert.throws(
+    () => checkDesktopGemmaRelease(approval, 'true', 'true', 'arm64', 'a'.repeat(40)),
+    /worker source revision does not match desktop release/u,
+  );
+  assert.doesNotThrow(() =>
+    checkDesktopGemmaRelease(approval, 'true', 'true', 'arm64', approval.sourceRevision),
+  );
   const targets = Object.fromEntries(
     ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'].map((target) => [
       target,

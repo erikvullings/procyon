@@ -50,7 +50,8 @@ jobs:
         env:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
-        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only
+          RELEASE_SOURCE_REVISION: ${{ steps.validate-release-tag.outputs.commit }}
+        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only --source-revision "$RELEASE_SOURCE_REVISION"
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
@@ -70,6 +71,7 @@ jobs:
     env:
       MACOS_TARGET: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && 'aarch64-apple-darwin' || 'universal-apple-darwin' }}
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -87,7 +89,7 @@ jobs:
         env:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
-        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only
+        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only --source-revision "$RELEASE_SOURCE_REVISION"
       - name: Compile the production semantic catalog trust key
         if: vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
@@ -275,6 +277,7 @@ jobs:
     environment: desktop-release
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -300,7 +303,7 @@ jobs:
         env:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
-        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only
+        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only --source-revision "$RELEASE_SOURCE_REVISION"
       - name: Compile the production semantic catalog trust key
         if: vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
@@ -366,6 +369,7 @@ jobs:
     environment: desktop-release
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -380,10 +384,11 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Require exact experimental Gemma desktop approval
         if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        shell: bash
         env:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
-        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only
+        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only --source-revision "$RELEASE_SOURCE_REVISION"
       - name: Compile the production semantic catalog trust key
         if: vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
