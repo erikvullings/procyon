@@ -3828,6 +3828,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       void navigation.load(paneAId);
       void navigation.load(paneBId);
     },
+    requestLocationEdit: (paneId) => requestLocationEdit(paneId),
     openMultiRenameForActivePane: () => {
       const active = activeDirectory();
       if (active === undefined) return;
@@ -3995,6 +3996,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   };
 
   const renameRequests = new Map<PaneId, PaneRenameRequest>();
+  const locationEditRequests = new Map<PaneId, number>();
+  const requestLocationEdit = (paneId: PaneId): void => {
+    locationEditRequests.set(paneId, (locationEditRequests.get(paneId) ?? 0) + 1);
+    m.redraw();
+  };
   const actionCommandControllerContext: ActionCommandControllerContext = {
     getCommandPaletteOpen: () => commandPaletteOpen,
     setCommandPaletteOpen: (open) => {
@@ -4048,6 +4054,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       renameRequests.set(paneId, { revision, entryIds });
       m.redraw();
     },
+    requestLocationEdit,
     openCreateLink: (target, destination) => dialogs.openCreateLink({ target, destination }),
     toggleDirectoryTree,
     toggleOperationCentre,
@@ -4080,6 +4087,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getNativeDragOutSupported: () => nativeDragOutSupported,
     getNativeDropInProgress: () => nativeDropInProgress,
     getRenameRequest: (paneId) => renameRequests.get(paneId),
+    getLocationEditRequest: (paneId) => locationEditRequests.get(paneId),
     getAppState: () => appState,
     getOperations: () =>
       Object.values(operations.byId).filter(

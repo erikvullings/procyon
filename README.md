@@ -231,7 +231,7 @@ Procyon uses **Cmd** as the primary modifier on macOS and **Ctrl** on Windows an
 | Trash | `F8` or `Delete` |
 | Rename | `F2` |
 | Command palette | `Cmd/Ctrl+P` |
-| Focus location | `Cmd/Ctrl+L` |
+| Edit location path | `Cmd/Ctrl+L` or double-click the breadcrumb |
 | Quick filter | `Cmd/Ctrl+F` |
 | Find files | `Option/Alt+F7` |
 | Toggle directory tree | `Option/Alt+F10` |
@@ -243,6 +243,10 @@ The quick filter matches plain text anywhere in a name. Use `*` and `?` for a gl
 the whole name, and `;` to combine masks, such as `*.jpg;*.png`. Press `Esc` or the clear button to
 remove the filter. While the filter box has focus, `Cmd/Ctrl+C` and `Cmd/Ctrl+X` copy or cut the
 selected files when no filter text is selected.
+
+The location editor accepts absolute paths, `~` or `~/...` for your home folder, and a file path
+(which opens its folder). Pasted paths are cleaned up: surrounding whitespace, backticks or code
+fences, and single or double quotes are removed, and a Markdown-escaped `\~` is read as `~`.
 
 Disk usage scans the active directory in a transient tab in the other pane. Selecting a
 treemap folder opens it in the original pane while zooming the treemap; selecting a file

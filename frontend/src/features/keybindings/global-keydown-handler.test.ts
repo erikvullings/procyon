@@ -53,6 +53,11 @@ const ACTIONS: readonly ActionDescriptor[] = [
     defaultShortcuts: [{ key: 'F9', ctrl: true }],
   },
   {
+    id: 'core.focusLocation',
+    title: 'Focus location',
+    defaultShortcuts: [{ key: 'l', ctrl: true }],
+  },
+  {
     id: 'client.diskUsage',
     title: 'Disk usage',
     defaultShortcuts: [{ key: 'l', ctrl: true, shift: true }],
@@ -248,6 +253,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     setSort: vi.fn(),
     swapPaneTabSets: vi.fn(),
     openMultiRenameForActivePane: vi.fn(),
+    requestLocationEdit: vi.fn(),
     openPropertiesForActivePane: vi.fn(),
     quitApplication: vi.fn(),
     startComparison: vi.fn(),
@@ -660,6 +666,30 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     });
     createGlobalKeydownHandler(context)(keydown('F5', { ctrlKey: true, shiftKey: true }));
     expect(openCreateLink).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+L opens the active pane path editor when focus is outside the pane', () => {
+    const requestLocationEdit = vi.fn();
+    const context = makeContext({
+      requestLocationEdit,
+    });
+    const event = keydown('l', { ctrlKey: true });
+
+    expect(dispatchGlobalKeydown(context, event)).toBe('core.focusLocation');
+    expect(event.defaultPrevented).toBe(true);
+    expect(requestLocationEdit).toHaveBeenCalledExactlyOnceWith(PANE_A);
+  });
+
+  it('Ctrl+L leaves an event the focused pane already handled alone', () => {
+    const requestLocationEdit = vi.fn();
+    const context = makeContext({
+      requestLocationEdit,
+    });
+    const event = keydown('l', { ctrlKey: true });
+    event.preventDefault();
+
+    createGlobalKeydownHandler(context)(event);
+    expect(requestLocationEdit).not.toHaveBeenCalled();
   });
 
   it('Ctrl+M opens the Multi-Rename Tool directly', () => {

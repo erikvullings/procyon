@@ -116,6 +116,8 @@ export interface ActionCommandControllerContext {
   uninstallApplication(paneId: PaneId, entry: EntrySummary): void;
   /** Starts the pane's F2 rename flow (inline, or multi-rename for several entries). */
   requestRename?(paneId: PaneId, entryIds: readonly EntryId[]): void;
+  /** Opens the pane's breadcrumb path editor. */
+  requestLocationEdit?(paneId: PaneId): void;
   /** Opens the Create link dialog for `target`, creating the link in `destination` (task 0168). */
   openCreateLink?(target: Location, destination: Location): void;
   /** Toggles the directory-tree sidebar (task 0139). */
@@ -426,6 +428,10 @@ export function createActionCommandController(
     }
     if (action.id === 'core.createDirectory') {
       context.openCreateDirectory(undefined);
+      return;
+    }
+    if (action.id === 'core.focusLocation') {
+      if (contextParam.paneId !== undefined) context.requestLocationEdit?.(contextParam.paneId);
       return;
     }
     // These three actions carry no default keybinding by design (spec §18/§35, tasks 0077/0140)

@@ -176,6 +176,8 @@ export interface GlobalKeydownContext {
   setSort(paneId: PaneId, sort: readonly SortDescriptor[]): void;
   /** Swaps `paneAId` and `paneBId`'s entire tab sets (Ctrl+Shift+U), not just their active locations. */
   swapPaneTabSets(paneAId: PaneId, paneBId: PaneId): void;
+  /** Opens the breadcrumb path editor of `paneId` (Cmd/Ctrl+L), like a browser's address bar. */
+  requestLocationEdit(paneId: PaneId): void;
   /** Opens the Multi-Rename Tool directly (Ctrl+M), defaulting to every entry when none is selected. */
   openMultiRenameForActivePane(): void;
   /** Opens the Properties dialog for the active pane's selection (Alt+Enter), falling back to the
@@ -1131,6 +1133,24 @@ const ACTION_KEYDOWN_ROUTES = [
         return;
       }
       return false;
+    },
+  },
+  {
+    // The focused pane handles Cmd/Ctrl+L itself; this covers focus elsewhere (tree, toolbar,
+    // document body) so the shortcut always reaches the active pane's breadcrumb.
+    id: 'core.focusLocation',
+    tryHandle: (context, event, state) => {
+      if (
+        state.dispatchedAction !== 'core.focusLocation' ||
+        event.defaultPrevented ||
+        isEditableEvent(event)
+      )
+        return false;
+      const active = context.activeDirectory();
+      if (active === undefined) return false;
+      event.preventDefault();
+      context.requestLocationEdit(active.paneId);
+      return;
     },
   },
   {

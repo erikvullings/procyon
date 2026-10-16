@@ -1893,6 +1893,38 @@ describe('Pane breadcrumb editing', () => {
     await vi.waitFor(() => expect(root.querySelector('.fm-path-input')).toBeNull());
   });
 
+  it('opens the path editor when the location-edit request changes, not on first render', () => {
+    const base = attrs();
+    const rerender = mountUpdating({ ...base, locationEditRequest: 2 });
+    m.redraw.sync();
+    expect(root.querySelector('.fm-path-input')).toBeNull();
+
+    rerender({ ...base, locationEditRequest: 3 });
+    expect(root.querySelector<HTMLInputElement>('.fm-path-input')?.value).toBe('/home/erik');
+  });
+
+  it.each([
+    ['`~/.copilot/session-state/files/plan.json`', '~/.copilot/session-state/files/plan.json'],
+    ['"/Users/erik/My Files"', '/Users/erik/My Files'],
+    ["  '/tmp/report.md'  ", '/tmp/report.md'],
+    ['\\~/Documents', '~/Documents'],
+  ])('strips quoting from pasted path %j before navigating', async (typed, expected) => {
+    const onNavigate = vi.fn();
+    mount(attrs({ onNavigate }));
+
+    root
+      .querySelector<HTMLElement>('.fm-breadcrumb')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    m.redraw.sync();
+    const input = root.querySelector<HTMLInputElement>('.fm-path-input');
+    if (input === null) throw new Error('path input missing');
+    input.value = typed;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    await vi.waitFor(() => expect(onNavigate).toHaveBeenCalledWith(expected));
+  });
+
   it('cancels an edited path when focus leaves the input without navigating', () => {
     const onNavigate = vi.fn();
     mount(attrs({ onNavigate }));
