@@ -1,4 +1,4 @@
-# 0247 OS file clipboard in the desktop app
+# 0249 OS file clipboard in the desktop app
 
 Status: in_progress
 Priority: medium
@@ -64,5 +64,13 @@ separate PR: Cmd+C puts the files on the system clipboard in the desktop app".
 - [x] Cmd/Ctrl+V pastes newer Finder/Explorer file references through a copy job.
 - [x] Browser and mock adapters report the capability unsupported and degrade gracefully.
 - [x] macOS Cmd+C in a pane writes the file URL to the pasteboard (real `pnpm dev:tauri` build).
-- [ ] Manual macOS round-trip: Procyon → Finder and Finder → Procyon.
+- [x] Manual macOS round-trip: Procyon → Finder and Finder → Procyon.
 - [ ] Manual Windows (Explorer) and Linux (Nautilus/Dolphin, X11) round-trips.
+
+## Agent Notes
+
+- 2026-10-16 Copilot: Renumbered from 0247 to 0249 after merge; #125 had already taken 0247
+  (media consent) and #128 took 0248. The user manually verified the macOS round trip in a
+  `pnpm dev:tauri` build (Procyon → Finder, Finder → Procyon, Procyon pane → pane, and Cmd+C
+  text copy in inputs) after the native Edit-menu fix. Windows and Linux manual round trips
+  remain open.
