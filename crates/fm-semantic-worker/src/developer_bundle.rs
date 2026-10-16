@@ -24,6 +24,21 @@ use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
 use crate::developer_onnx::OnnxEmbeddingBackend;
+
+/// How a managed Gemma worker selects its compute backend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GemmaBackendSelection {
+    /// Use Metal when compiled in and available, otherwise native CPU.
+    #[default]
+    Automatic,
+    /// Development-only CPU baseline used to compare against Metal.
+    DevelopmentCpuBaseline,
+    /// Operator-requested CPU-only inference (`PROCYON_GEMMA_FORCE_CPU`).
+    ForcedCpu,
+}
+
+/// Status suffix written to `gemma-backend` when CPU was forced by the operator.
+pub const GEMMA_FORCED_CPU_STATUS: &str = "[CPU forced by PROCYON_GEMMA_FORCE_CPU]";
 use crate::embedding::{
     CpuEmbeddingBackend, CpuEmbeddingLoader, CuratedModelPackage, EMBEDDING_PREPROCESSING_VERSION,
     EmbeddingError, EmbeddingModelIdentity, EmbeddingResourceProfile, LocalEmbeddingRuntime,
@@ -383,13 +398,14 @@ impl DeveloperModel {
         files: &GemmaNativeFiles,
         dimensions: usize,
         media: GemmaMedia,
-        force_cpu_images: bool,
+        selection: GemmaBackendSelection,
     ) -> Result<Self, DeveloperBundleError> {
         #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
-        let metal_available = lattice_inference::forward::metal_gemm::is_available();
+        let metal_available = selection == GemmaBackendSelection::Automatic
+            && lattice_inference::forward::metal_gemm::is_available();
         #[cfg(not(all(target_os = "macos", feature = "gemma-metal")))]
         let metal_available = false;
-        Self::resolve_gemma_with_device(files, dimensions, media, force_cpu_images, metal_available)
+        Self::resolve_gemma_with_device(files, dimensions, media, selection, metal_available)
     }
 
     #[cfg(feature = "gemma-native")]
@@ -397,7 +413,7 @@ impl DeveloperModel {
         files: &GemmaNativeFiles,
         dimensions: usize,
         media: GemmaMedia,
-        force_cpu_images: bool,
+        selection: GemmaBackendSelection,
         metal_available: bool,
     ) -> Result<Self, DeveloperBundleError> {
         for path in [
@@ -414,12 +430,13 @@ impl DeveloperModel {
                 return Err(DeveloperBundleError::InvalidGemmaFile(path.clone()));
             }
         }
-        #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
         let mut description = "google/embeddinggemma-2 (native CPU)".to_owned();
-        #[cfg(not(all(target_os = "macos", feature = "gemma-metal")))]
-        let description = "google/embeddinggemma-2 (native CPU)".to_owned();
         #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
-        let encoder = if force_cpu_images {
+        let encoder = if selection == GemmaBackendSelection::ForcedCpu {
+            description.push(' ');
+            description.push_str(GEMMA_FORCED_CPU_STATUS);
+            GemmaNativeEncoder::open_files(files, dimensions, media)
+        } else if selection == GemmaBackendSelection::DevelopmentCpuBaseline {
             description.push_str(" [development CPU baseline]");
             GemmaNativeEncoder::open_files(files, dimensions, media)
         } else if !metal_available {
@@ -440,10 +457,14 @@ impl DeveloperModel {
         };
         #[cfg(not(all(target_os = "macos", feature = "gemma-metal")))]
         let encoder = {
+            if selection == GemmaBackendSelection::ForcedCpu {
+                description.push(' ');
+                description.push_str(GEMMA_FORCED_CPU_STATUS);
+            }
             eprintln!(
                 "Procyon Gemma backend: Metal is not compiled for this worker/target; using CPU"
             );
-            let _ = (force_cpu_images, metal_available);
+            let _ = metal_available;
             GemmaNativeEncoder::open_files(files, dimensions, media)
         };
         let encoder =
@@ -976,7 +997,7 @@ impl DeveloperWorker {
         data_directory: &Path,
         model: &ManagedModel,
         ocrmypdf_executable: Option<&Path>,
-        force_cpu_images: bool,
+        selection: GemmaBackendSelection,
     ) -> Result<Self, DeveloperBundleError> {
         if !data_directory.is_absolute() {
             return Err(DeveloperBundleError::RelativeDataDirectory);
@@ -989,7 +1010,7 @@ impl DeveloperWorker {
         }
         let model = match model {
             ManagedModel::Pack(path) => {
-                if force_cpu_images {
+                if selection != GemmaBackendSelection::Automatic {
                     return Err(DeveloperBundleError::CpuSelection(
                         "CPU image override requires a Gemma model".to_owned(),
                     ));
@@ -1001,7 +1022,7 @@ impl DeveloperWorker {
                 files,
                 dimensions,
                 media,
-            } => DeveloperModel::resolve_gemma(files, *dimensions, *media, force_cpu_images)?,
+            } => DeveloperModel::resolve_gemma(files, *dimensions, *media, selection)?,
             #[cfg(all(feature = "gemma-launch", not(feature = "gemma-native")))]
             ManagedModel::Gemma { .. } => {
                 return Err(DeveloperBundleError::Gemma(
@@ -1187,7 +1208,7 @@ pub async fn run_managed_worker(
     model: &ManagedModel,
     ocrmypdf_executable: Option<&Path>,
     idle_timeout: Duration,
-    force_cpu_images: bool,
+    gemma_backend: GemmaBackendSelection,
 ) -> Result<(), ServerError> {
     run_desktop_worker_with_factory(runtime_directory, idle_timeout, |config| {
         #[cfg(feature = "experimental-large-pdf")]
@@ -1208,7 +1229,7 @@ pub async fn run_managed_worker(
             data_directory,
             model,
             ocrmypdf_executable,
-            force_cpu_images,
+            gemma_backend,
         )
         .map_err(|error| ServerError::Io(io::Error::other(error)))?;
         #[cfg(feature = "gemma-native")]
@@ -1383,7 +1404,7 @@ mod tests {
             video: false,
         };
         assert!(matches!(
-            DeveloperModel::resolve_gemma(&files, 128, media, false),
+            DeveloperModel::resolve_gemma(&files, 128, media, GemmaBackendSelection::Automatic),
             Err(DeveloperBundleError::InvalidGemmaFile(_))
         ));
         for path in [
@@ -1396,7 +1417,7 @@ mod tests {
             std::fs::write(path, b"original").unwrap();
         }
         assert!(matches!(
-            DeveloperModel::resolve_gemma(&files, 123, media, false),
+            DeveloperModel::resolve_gemma(&files, 123, media, GemmaBackendSelection::Automatic),
             Err(DeveloperBundleError::Gemma(_))
         ));
     }
@@ -1414,17 +1435,34 @@ mod tests {
             audio: false,
             video: false,
         };
-        let cpu = DeveloperModel::resolve_gemma(&files, 128, images, true).unwrap();
+        let cpu = DeveloperModel::resolve_gemma(
+            &files,
+            128,
+            images,
+            GemmaBackendSelection::DevelopmentCpuBaseline,
+        )
+        .unwrap();
         assert!(cpu.description.contains("native CPU"));
         drop(cpu);
         #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
         {
-            let metal = DeveloperModel::resolve_gemma(&files, 128, images, false).unwrap();
+            let metal = DeveloperModel::resolve_gemma(
+                &files,
+                128,
+                images,
+                GemmaBackendSelection::Automatic,
+            )
+            .unwrap();
             assert!(metal.description.contains("FP32 Metal"));
             drop(metal);
-            let unavailable =
-                DeveloperModel::resolve_gemma_with_device(&files, 128, images, false, false)
-                    .unwrap();
+            let unavailable = DeveloperModel::resolve_gemma_with_device(
+                &files,
+                128,
+                images,
+                GemmaBackendSelection::Automatic,
+                false,
+            )
+            .unwrap();
             assert!(
                 unavailable
                     .description
@@ -1438,7 +1476,7 @@ mod tests {
                     video: true,
                     ..images
                 },
-                false,
+                GemmaBackendSelection::Automatic,
             )
             .unwrap();
             assert!(mixed.description.contains("FP32 Metal"));
@@ -1451,7 +1489,7 @@ mod tests {
                     video: true,
                     ..images
                 },
-                false,
+                GemmaBackendSelection::Automatic,
                 false,
             )
             .unwrap();
@@ -1461,6 +1499,19 @@ mod tests {
                     .contains("Metal unavailable; CPU fallback")
             );
             assert_eq!(unavailable_mixed.gemma.unwrap().0.metal_dispatches(), 0);
+            let forced = DeveloperModel::resolve_gemma(
+                &files,
+                128,
+                images,
+                GemmaBackendSelection::ForcedCpu,
+            )
+            .unwrap();
+            assert!(forced.description.contains(GEMMA_FORCED_CPU_STATUS));
+            let forced_encoder = &forced.gemma.as_ref().unwrap().0;
+            forced_encoder
+                .encode_text(crate::gemma_probe::GemmaTextTask::Search, "test", None)
+                .unwrap();
+            assert_eq!(forced_encoder.metal_dispatches(), 0);
             for media in [
                 GemmaMedia {
                     images: false,
@@ -1473,7 +1524,13 @@ mod tests {
                     video: false,
                 },
             ] {
-                let selected = DeveloperModel::resolve_gemma(&files, 128, media, false).unwrap();
+                let selected = DeveloperModel::resolve_gemma(
+                    &files,
+                    128,
+                    media,
+                    GemmaBackendSelection::Automatic,
+                )
+                .unwrap();
                 assert!(selected.description.contains("FP32 Metal"));
                 let encoder = &selected.gemma.as_ref().unwrap().0;
                 let before = encoder.metal_dispatches();
@@ -1504,7 +1561,13 @@ mod tests {
                 video: true,
             },
         };
-        let worker = DeveloperWorker::open_managed(&directory.0, &model, None, false).unwrap();
+        let worker = DeveloperWorker::open_managed(
+            &directory.0,
+            &model,
+            None,
+            GemmaBackendSelection::Automatic,
+        )
+        .unwrap();
         let (ingestion, query) = worker.backends();
         let image = ImageBuffer::from_fn(128, 96, |x, y| {
             Rgb([
@@ -1672,7 +1735,13 @@ mod tests {
                 video: false,
             },
         };
-        let worker = DeveloperWorker::open_managed(&directory.0, &model, None, false).unwrap();
+        let worker = DeveloperWorker::open_managed(
+            &directory.0,
+            &model,
+            None,
+            GemmaBackendSelection::Automatic,
+        )
+        .unwrap();
         assert_eq!(
             worker.passages.identity().model_id,
             "google-embeddinggemma-2"
@@ -1808,7 +1877,13 @@ mod tests {
         drop(query);
         drop(ingestion);
         drop(worker);
-        let reopened = DeveloperWorker::open_managed(&directory.0, &model, None, false).unwrap();
+        let reopened = DeveloperWorker::open_managed(
+            &directory.0,
+            &model,
+            None,
+            GemmaBackendSelection::Automatic,
+        )
+        .unwrap();
         let (_, query) = reopened.backends();
         let after = query.query(query_input, &CancellationToken::new()).unwrap();
         assert_eq!(after[0].document_id, "document-gemma");

@@ -5,7 +5,33 @@
 //! or ONNX Runtime into its own binary.
 
 use std::collections::BTreeMap;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+
+/// Host environment variable that forces the Gemma worker onto CPU even when
+/// a GPU backend such as Metal is available. Off by default; used for CPU
+/// fallback qualification. The host turns it into the explicit
+/// [`GEMMA_FORCE_CPU_FLAG`] worker argument.
+pub const GEMMA_FORCE_CPU_ENV: &str = "PROCYON_GEMMA_FORCE_CPU";
+
+/// Worker argument that selects the native CPU backend unconditionally.
+pub const GEMMA_FORCE_CPU_FLAG: &str = "--gemma-force-cpu";
+
+/// Whether a [`GEMMA_FORCE_CPU_ENV`] value requests CPU-only Gemma inference.
+///
+/// Only explicit affirmative values (`1`, `true`, `yes`, `on`, case-insensitive)
+/// enable it; absent, empty, or any other value keeps automatic selection.
+#[must_use]
+pub fn gemma_cpu_forced(value: Option<&OsStr>) -> bool {
+    value
+        .and_then(OsStr::to_str)
+        .map(str::trim)
+        .is_some_and(|value| {
+            ["1", "true", "yes", "on"]
+                .iter()
+                .any(|accepted| value.eq_ignore_ascii_case(accepted))
+        })
+}
 
 /// Which media a caller has explicitly enabled for this encoder.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,5 +117,16 @@ mod tests {
             GemmaNativeFiles::from_original_files(&incomplete),
             Err(IncompleteGemmaFiles)
         );
+    }
+
+    #[test]
+    fn only_explicit_affirmative_values_force_cpu() {
+        for enabled in ["1", "true", "TRUE", " yes ", "On"] {
+            assert!(gemma_cpu_forced(Some(OsStr::new(enabled))), "{enabled}");
+        }
+        assert!(!gemma_cpu_forced(None));
+        for disabled in ["", "0", "false", "off", "no", "metal", "2"] {
+            assert!(!gemma_cpu_forced(Some(OsStr::new(disabled))), "{disabled}");
+        }
     }
 }

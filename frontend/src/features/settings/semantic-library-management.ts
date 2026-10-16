@@ -448,7 +448,7 @@ function rootStatusView(
   root: SemanticRootStatus,
   confirmedCompletedSources: number | undefined,
   unverifiedLegacySources: number | undefined,
-  lastWorkerDevice: 'metal' | 'cpu' | null | undefined,
+  lastWorkerDevice: 'metal' | 'cpu' | 'cpuForced' | null | undefined,
   scannedEntries: number | undefined,
   workspaceId: WorkspaceId | undefined,
   busy: BusyAction | undefined,
@@ -672,7 +672,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
   let showPdfImageOption = false;
   let pdfImageEnabled = false;
   let pdfImagePageBudget: number | null = null;
-  let lastWorkerDevice: 'metal' | 'cpu' | null | undefined;
+  let lastWorkerDevice: 'metal' | 'cpu' | 'cpuForced' | null | undefined;
   const scannedRoots = new Map<string, number>();
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
   let refreshInFlight = false;

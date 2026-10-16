@@ -505,6 +505,8 @@ pub struct ManagedWorkerLaunch {
     ocrmypdf_executable: Option<PathBuf>,
     #[cfg(feature = "gemma-launch")]
     development_cpu_images: bool,
+    #[cfg(feature = "gemma-launch")]
+    forced_cpu: bool,
 }
 
 impl ManagedWorkerLaunch {
@@ -530,6 +532,8 @@ impl ManagedWorkerLaunch {
             ocrmypdf_executable: None,
             #[cfg(feature = "gemma-launch")]
             development_cpu_images: false,
+            #[cfg(feature = "gemma-launch")]
+            forced_cpu: false,
         }
     }
 
@@ -555,6 +559,7 @@ impl ManagedWorkerLaunch {
             },
             ocrmypdf_executable: None,
             development_cpu_images: false,
+            forced_cpu: false,
         }
     }
 
@@ -578,6 +583,28 @@ impl ManagedWorkerLaunch {
     pub fn with_development_cpu_images(mut self) -> Self {
         self.development_cpu_images = true;
         self
+    }
+
+    /// Force a Gemma worker onto its native CPU backend even when a GPU is available.
+    ///
+    /// Supported in production workers for CPU-fallback qualification; it has no
+    /// effect on E5 model-pack launches.
+    #[cfg(feature = "gemma-launch")]
+    #[must_use]
+    pub fn with_forced_cpu(mut self) -> Self {
+        self.forced_cpu = true;
+        self
+    }
+
+    /// Applies [`gemma_launch::GEMMA_FORCE_CPU_ENV`] from the host process environment.
+    #[cfg(feature = "gemma-launch")]
+    #[must_use]
+    fn with_host_cpu_override(self, value: Option<&std::ffi::OsStr>) -> Self {
+        if gemma_launch::gemma_cpu_forced(value) {
+            self.with_forced_cpu()
+        } else {
+            self
+        }
     }
 }
 
@@ -945,6 +972,12 @@ impl WorkerConnector {
                 } else {
                     None
                 };
+                #[cfg(feature = "gemma-launch")]
+                let managed_launch = managed_launch.map(|launch| {
+                    launch.with_host_cpu_override(
+                        std::env::var_os(gemma_launch::GEMMA_FORCE_CPU_ENV).as_deref(),
+                    )
+                });
                 let launch_executable = managed_launch
                     .as_ref()
                     .map_or(executable.as_path(), |launch| launch.executable.as_path());
@@ -1221,6 +1254,8 @@ fn managed_launch_arguments(launch: &ManagedWorkerLaunch) -> Vec<std::ffi::OsStr
             }
             if launch.development_cpu_images {
                 arguments.push("--gemma-cpu-images".into());
+            } else if launch.forced_cpu {
+                arguments.push(crate::gemma_launch::GEMMA_FORCE_CPU_FLAG.into());
             }
         }
     }
@@ -1355,7 +1390,7 @@ mod developer_connector_tests {
     #[cfg(feature = "gemma-launch")]
     #[test]
     fn managed_gemma_launch_passes_five_original_files_and_refuses_missing_files() {
-        use crate::gemma_launch::{GemmaMedia, GemmaNativeFiles};
+        use crate::gemma_launch::{GEMMA_FORCE_CPU_FLAG, GemmaMedia, GemmaNativeFiles};
         let directory = tempfile::tempdir().unwrap();
         let files = GemmaNativeFiles::from_directory(directory.path());
         for path in [
@@ -1389,6 +1424,21 @@ mod developer_connector_tests {
         assert!(arguments.iter().any(|arg| arg == "--gemma-video"));
         assert!(!arguments.iter().any(|arg| arg == "--semantic-model-pack"));
         assert!(!arguments.iter().any(|arg| arg == "--gemma-cpu-images"));
+        assert!(!arguments.iter().any(|arg| arg == GEMMA_FORCE_CPU_FLAG));
+        let unset = resolved.clone().with_host_cpu_override(None);
+        assert!(
+            !managed_launch_arguments(&unset)
+                .iter()
+                .any(|arg| arg == GEMMA_FORCE_CPU_FLAG)
+        );
+        let forced = resolved
+            .clone()
+            .with_host_cpu_override(Some(std::ffi::OsStr::new("1")));
+        assert!(
+            managed_launch_arguments(&forced)
+                .iter()
+                .any(|arg| arg == GEMMA_FORCE_CPU_FLAG)
+        );
         #[cfg(feature = "developer-bundle")]
         {
             let cpu_arguments =
@@ -1471,6 +1521,8 @@ mod developer_connector_tests {
             ocrmypdf_executable: Some(stale),
             #[cfg(feature = "gemma-launch")]
             development_cpu_images: false,
+            #[cfg(feature = "gemma-launch")]
+            forced_cpu: false,
         };
         let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
         let resolved = resolve_managed_worker(&resolver).expect("launch");

@@ -85,7 +85,7 @@ async fn main() -> Result<(), fm_semantic_worker::ServerError> {
             &model,
             arguments.ocrmypdf_executable.as_deref(),
             arguments.idle_timeout,
-            arguments.force_cpu_images,
+            arguments.gemma_backend,
         )
         .await;
     }
@@ -107,7 +107,7 @@ struct Arguments {
     #[cfg(feature = "semantic-runtime")]
     development_mode: bool,
     #[cfg(feature = "semantic-runtime")]
-    force_cpu_images: bool,
+    gemma_backend: fm_semantic_worker::developer_bundle::GemmaBackendSelection,
 }
 
 fn arguments_from(
@@ -132,10 +132,12 @@ fn arguments_from(
     };
     #[cfg(feature = "gemma-native")]
     let mut gemma_selected = false;
+    #[cfg(feature = "semantic-runtime")]
+    use fm_semantic_worker::developer_bundle::GemmaBackendSelection;
     #[cfg(feature = "gemma-native")]
-    let mut force_cpu_images = false;
+    let mut gemma_backend = GemmaBackendSelection::Automatic;
     #[cfg(all(feature = "semantic-runtime", not(feature = "gemma-native")))]
-    let force_cpu_images = false;
+    let gemma_backend = GemmaBackendSelection::Automatic;
     #[cfg(feature = "semantic-runtime")]
     let mut ocrmypdf_executable = None;
     #[cfg(all(feature = "semantic-runtime", feature = "developer-bundle"))]
@@ -261,13 +263,23 @@ fn arguments_from(
                             })?,
                     );
                 } else if flag == "--gemma-cpu-images" {
-                    if !cfg!(feature = "developer-bundle") || force_cpu_images {
+                    if !cfg!(feature = "developer-bundle")
+                        || gemma_backend != GemmaBackendSelection::Automatic
+                    {
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidInput,
                             "CPU image override requires a development worker and one flag",
                         ));
                     }
-                    force_cpu_images = true;
+                    gemma_backend = GemmaBackendSelection::DevelopmentCpuBaseline;
+                } else if flag == fm_semantic_worker::gemma_launch::GEMMA_FORCE_CPU_FLAG {
+                    if gemma_backend != GemmaBackendSelection::Automatic {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "at most one Gemma CPU selection flag is allowed",
+                        ));
+                    }
+                    gemma_backend = GemmaBackendSelection::ForcedCpu;
                 } else {
                     let enabled = match flag.as_ref() {
                         "--gemma-images" => &mut gemma_media.images,
@@ -343,7 +355,7 @@ fn arguments_from(
     #[cfg(feature = "semantic-runtime")]
     let managed_model = {
         #[cfg(feature = "gemma-native")]
-        if force_cpu_images && !gemma_selected {
+        if gemma_backend != GemmaBackendSelection::Automatic && !gemma_selected {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "CPU image override requires a Gemma managed model",
@@ -416,7 +428,7 @@ fn arguments_from(
         #[cfg(feature = "semantic-runtime")]
         managed_model,
         #[cfg(feature = "semantic-runtime")]
-        force_cpu_images,
+        gemma_backend,
         #[cfg(feature = "semantic-runtime")]
         ocrmypdf_executable,
         #[cfg(feature = "semantic-runtime")]
@@ -541,6 +553,7 @@ mod tests {
     #[cfg(feature = "gemma-native")]
     #[test]
     fn gemma_cli_requires_complete_original_files_and_excludes_pack() {
+        use fm_semantic_worker::developer_bundle::GemmaBackendSelection;
         let base = ["--runtime-dir", "runtime", "--semantic-data-dir", "data"];
         let files = [
             "--gemma-weights",
@@ -559,7 +572,7 @@ mod tests {
             "--gemma-video",
         ];
         let complete = arguments_from(base.into_iter().chain(files).map(Into::into)).unwrap();
-        assert!(!complete.force_cpu_images);
+        assert_eq!(complete.gemma_backend, GemmaBackendSelection::Automatic);
         assert!(matches!(
             complete.managed_model,
             Some(fm_semantic_worker::ManagedModel::Gemma {
@@ -583,7 +596,10 @@ mod tests {
                 .map(Into::into),
         );
         if cfg!(feature = "developer-bundle") {
-            assert!(selected.unwrap().force_cpu_images);
+            assert_eq!(
+                selected.unwrap().gemma_backend,
+                GemmaBackendSelection::DevelopmentCpuBaseline
+            );
         } else {
             assert!(selected.is_err());
         }
@@ -592,6 +608,31 @@ mod tests {
                 base.into_iter()
                     .chain(files)
                     .chain(["--gemma-cpu-images", "--gemma-cpu-images"])
+                    .map(Into::into)
+            )
+            .is_err()
+        );
+        let forced = arguments_from(
+            base.into_iter()
+                .chain(files)
+                .chain(["--gemma-force-cpu"])
+                .map(Into::into),
+        )
+        .expect("production workers accept the CPU-only switch");
+        assert_eq!(forced.gemma_backend, GemmaBackendSelection::ForcedCpu);
+        assert!(
+            arguments_from(
+                base.into_iter()
+                    .chain(files)
+                    .chain(["--gemma-force-cpu", "--gemma-force-cpu"])
+                    .map(Into::into)
+            )
+            .is_err()
+        );
+        assert!(
+            arguments_from(
+                base.into_iter()
+                    .chain(["--gemma-force-cpu"])
                     .map(Into::into)
             )
             .is_err()
