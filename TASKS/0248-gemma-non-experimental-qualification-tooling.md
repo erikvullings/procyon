@@ -15,7 +15,7 @@ are unqualified:
 2. CPU fallback on a GPU-capable machine;
 3. cross-host citation navigation (fm-server and browser against the desktop library);
 4. upgrade and rollback from v0.5.0-2, including switching to E5;
-5. Gemma vs E5 quality on user-written queries.
+5. on-device Gemma image/audio/video search, source attribution, and consent isolation.
 
 These need manual runs on the release owner's own data. This task provides the tooling and the
 procedure. Promotion itself stays open until the
@@ -41,6 +41,8 @@ approved.
   tested.
 - [x] The checklist documents the procedures, pass criteria, the spool location, the privacy rules,
   and a fill-in results table.
+- [x] Item 5 qualifies locally consented image/audio/video retrieval and truthful file-level
+  provenance; published text benchmarks remain context, not an on-device E5 comparison gate.
 - [ ] Release owner records results for items 1–5 and decides on promotion.
 
 ## Implementation Notes
@@ -53,7 +55,8 @@ approved.
   `MAX_PDF_INGESTION_BYTES`) and the staged visual pages (256 MiB `MAX_STAGED_VISUAL_BYTES`). They
   are unlinked on Unix, so the sampler reads open descriptors through `lsof` or `/proc`.
 - The existing `semantic_production_evaluation` example scores a fixed embedded corpus. It is not
-  suited to user-written queries, hence the separate comparison script.
+  suited to user-written queries. The comparison script remains available for optional text
+  evaluation, but it is not an item-5 gate.
 
 ## Agent Notes
 
@@ -64,3 +67,9 @@ approved.
 - The real worker has not yet been run with the sampler on a large scanned PDF in this change.
   A 155 MiB scanned PDF is available locally for the item-1 run. The sampler was verified against a
   process holding an unlinked 5 MiB temp file.
+- 2026-10-16: Replaced the item-5 text comparison gate in
+  `docs/qualification/gemma-non-experimental-checklist.md` with nine local media-search probes,
+  source/coverage checks, and an unenrolled/excluded-source check. Existing Gemma libraries can
+  enable audio/video in Settings (0247) without resetting the dimension. Search presents file-level
+  media evidence; video sampled-frame coverage is not timestamp navigation. No installed-app
+  result or promotion decision is asserted here.
