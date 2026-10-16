@@ -3121,3 +3121,209 @@ fn the_worker_feed_stamps_the_tenant_of_the_authorized_caller() {
         service.status(&administrator).unwrap().roots[0].id
     );
 }
+
+/// An operator-attached host (task 0250) reads the desktop's exact library
+/// through the device principal but can never change it or its shared stores.
+#[tokio::test]
+async fn attached_desktop_host_reads_the_exact_desktop_library_and_never_changes_it() {
+    let directory = project_temp_dir("attached-desktop-");
+    let profile = directory.path().join("procyon");
+    std::fs::create_dir_all(&profile).unwrap();
+    let profile = profile.canonicalize().unwrap();
+    let service = FileManagerService::new(
+        RuntimeKindDto::BrowserServer,
+        directory.path().join("workspaces"),
+        &profile,
+    )
+    .with_attached_desktop_semantic_library(&profile, Vec::new());
+
+    // Nothing is attached until the desktop has an active model and consent,
+    // and attaching creates nothing in the desktop profile.
+    assert_eq!(
+        service
+            .semantic_library_capabilities(&HOST)
+            .await
+            .authority(),
+        SemanticLibraryAuthority::Unavailable
+    );
+    assert!(!profile.join("semantic-components").exists());
+    assert!(!profile.join("semantic").exists());
+
+    let components =
+        fm_semantic_components::SemanticStateStore::new(profile.join("semantic-components"));
+    let mut state = components.load_or_default(&profile).unwrap();
+    state
+        .activate_initial_model(
+            fm_semantic_components::SemanticProfile::CompactMultilingual,
+            fm_semantic_components::ModelIdentity::new(
+                fm_semantic_components::ModelId::new("fixture-model").unwrap(),
+                fm_semantic_components::ModelRevision::new("revision-1").unwrap(),
+            ),
+            7,
+        )
+        .unwrap();
+    components.save(&state).unwrap();
+    assert_eq!(
+        service
+            .semantic_library_capabilities(&HOST)
+            .await
+            .authority(),
+        SemanticLibraryAuthority::Unavailable,
+        "an active model without a consented library attaches nothing"
+    );
+    assert!(!profile.join("semantic/library").exists());
+
+    let desktop = SemanticLibraryService::desktop_managed(
+        SemanticLibraryConfiguration::new(
+            profile.clone(),
+            profile.join("semantic/library"),
+            library_identity(),
+            ResourceProfile {
+                kind: ResourceProfileKind::Balanced,
+                budgets: ResourceBudgets::default(),
+            },
+        ),
+        Arc::new(FixedSemanticEnrolmentEstimator::new(estimate())),
+    )
+    .unwrap();
+    let context = SemanticFolderContext::new(workspace(10), location("file:///desktop-docs"));
+    let revision = enrol(&desktop, &context);
+    let policy_path = profile.join("semantic-library-policy.json");
+    let policy_before = std::fs::read(&policy_path).unwrap();
+
+    let capabilities = service.semantic_library_capabilities(&HOST).await;
+    assert_eq!(
+        capabilities.authority(),
+        SemanticLibraryAuthority::DesktopManaged
+    );
+    assert_eq!(
+        capabilities.operations(),
+        [
+            SemanticLibraryOperation::ViewStatus,
+            SemanticLibraryOperation::ViewFolderStatus,
+        ]
+    );
+    let status = service.semantic_library_status(&HOST).await.unwrap();
+    assert_eq!(status.revision, revision);
+    assert_eq!(status.roots.len(), 1);
+
+    // A server principal cannot borrow the device library's authority.
+    let server = SemanticAccessContext::server("private", "administrator").unwrap();
+    assert!(
+        service
+            .semantic_library_capabilities(&server)
+            .await
+            .operations()
+            .is_empty()
+    );
+    assert!(service.semantic_library_status(&server).await.is_err());
+
+    // Every user mutation and shared-store write is refused.
+    assert!(
+        service
+            .import_semantic_vocabulary(
+                &HOST,
+                fm_transport_dto::ImportSemanticVocabularyRequestDto {
+                    skos_json: "{}".to_owned(),
+                },
+            )
+            .await
+            .is_err_and(|error| matches!(
+                error,
+                fm_application::ApplicationError::PermissionDenied
+            ))
+    );
+    assert!(!profile.join("semantic-vocabularies.json").exists());
+    assert_eq!(std::fs::read(&policy_path).unwrap(), policy_before);
+
+    // A host restricted to roots that do not contain every enrolled root
+    // exposes none of the library; one whose roots do sees all of it.
+    let restricted = FileManagerService::new(
+        RuntimeKindDto::BrowserServer,
+        directory.path().join("workspaces"),
+        &profile,
+    )
+    .with_attached_desktop_semantic_library(&profile, vec![profile.clone()]);
+    assert_eq!(
+        restricted
+            .semantic_library_capabilities(&HOST)
+            .await
+            .authority(),
+        SemanticLibraryAuthority::Unavailable
+    );
+    if cfg!(unix) {
+        let covering = FileManagerService::new(
+            RuntimeKindDto::BrowserServer,
+            directory.path().join("workspaces"),
+            &profile,
+        )
+        .with_attached_desktop_semantic_library(&profile, vec![std::path::PathBuf::from("/")]);
+        assert_eq!(
+            covering
+                .semantic_library_status(&HOST)
+                .await
+                .unwrap()
+                .roots
+                .len(),
+            1
+        );
+    }
+
+    // The desktop's later commits become visible without restarting.
+    let second = SemanticFolderContext::new(workspace(10), location("file:///desktop-more"));
+    let next_revision = enrol(&desktop, &second);
+    let status = service.semantic_library_status(&HOST).await.unwrap();
+    assert_eq!(status.revision, next_revision);
+    assert_eq!(status.roots.len(), 2);
+}
+
+#[test]
+fn attached_read_only_library_refuses_internal_reconciliation_commits() {
+    let directory = project_temp_dir("attached-internal-");
+    let desktop = desktop(&directory);
+    let context = SemanticFolderContext::new(workspace(10), location("file:///desktop-docs"));
+    enrol(&desktop, &context);
+    let root_id: RootId = desktop.status(&HOST).unwrap().roots[0].id.parse().unwrap();
+    let attached = SemanticLibraryService::desktop_attached_read_only(
+        configuration(&directory),
+        Arc::new(UnavailableSemanticEnrolmentEstimator),
+    )
+    .unwrap();
+
+    assert_eq!(attached.status(&HOST).unwrap().roots.len(), 1);
+    assert_eq!(
+        attached
+            .mark_root_unavailable(&HOST, root_id, RootUnavailabilityReason::Missing)
+            .unwrap_err(),
+        SemanticLibraryError::AccessDenied
+    );
+    assert_eq!(
+        attached
+            .observe_root_identity(&HOST, root_id, &[])
+            .unwrap_err(),
+        SemanticLibraryError::AccessDenied
+    );
+    assert_eq!(
+        attached
+            .complete_reconciliation_preserving(
+                &HOST,
+                root_id,
+                &BTreeSet::new(),
+                &[],
+                &BTreeMap::new()
+            )
+            .unwrap_err(),
+        SemanticLibraryError::AccessDenied
+    );
+    assert_eq!(
+        attached.worker_feed_plan(&HOST, &[]).unwrap_err(),
+        SemanticLibraryError::AccessDenied
+    );
+    assert!(
+        desktop
+            .folder_status(&HOST, &context)
+            .unwrap()
+            .source_available,
+        "the desktop's durable library is unchanged"
+    );
+}

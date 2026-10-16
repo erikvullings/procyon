@@ -755,6 +755,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: fm_transport_dto::ImportSemanticVocabularyRequestDto,
     ) -> Result<fm_transport_dto::SemanticVocabularyDto, ApplicationError> {
+        self.ensure_semantic_shared_store_writable()?;
         self.semantic_library()
             .await
             .status(access)
@@ -793,6 +794,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: fm_transport_dto::AttachSemanticVocabularyRequestDto,
     ) -> Result<fm_transport_dto::SemanticVocabularyDto, ApplicationError> {
+        self.ensure_semantic_shared_store_writable()?;
         let status = self
             .semantic_library()
             .await
@@ -827,6 +829,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: fm_transport_dto::ReviewConceptCandidateRequestDto,
     ) -> Result<fm_transport_dto::SemanticVocabularyDto, ApplicationError> {
+        self.ensure_semantic_shared_store_writable()?;
         self.semantic_library()
             .await
             .status(access)
@@ -865,6 +868,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: fm_transport_dto::DeleteSemanticVocabularyRequestDto,
     ) -> Result<fm_transport_dto::DeleteSemanticVocabularyImpactDto, ApplicationError> {
+        self.ensure_semantic_shared_store_writable()?;
         self.semantic_library()
             .await
             .status(access)
@@ -890,6 +894,16 @@ impl FileManagerService {
                 .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
         }
         Ok(impact)
+    }
+
+    /// Vocabulary and saved-conversation stores live in this host's settings
+    /// directory, which an attached host shares with the desktop app that owns
+    /// them. An attached host may read them but never change them.
+    fn ensure_semantic_shared_store_writable(&self) -> Result<(), ApplicationError> {
+        if self.semantic_library.is_attached_desktop() {
+            return Err(ApplicationError::PermissionDenied);
+        }
+        Ok(())
     }
 
     pub(crate) async fn ensure_semantic_library_operation(
@@ -1452,6 +1466,37 @@ impl FileManagerService {
         &self,
     ) -> Result<SemanticComponentStatus, SemanticComponentError> {
         self.semantic_components.status().await
+    }
+
+    /// Attaches this host read-only to the desktop app's device-local
+    /// semantic library and its already-running worker.
+    ///
+    /// `profile_directory` is the desktop's Procyon configuration directory.
+    /// It is an explicit operator choice; nothing is attached by default. The
+    /// library resolves lazily from the desktop's durable component state, so
+    /// it reports itself unavailable until the desktop has an active model and
+    /// a consented library. The attached host never launches, replaces, or
+    /// stops the desktop's worker, never runs reconciliation or indexing
+    /// commits, and gains no semantic component authority. Callers must serve
+    /// requests as [`SemanticAccessContext::Host`], the desktop's principal.
+    ///
+    /// `accessible_roots` are the host's canonical root restrictions. When
+    /// non-empty, the library is reported unavailable while any enrolled root
+    /// lies outside them, so retrieval never reveals content the host's file
+    /// routes would refuse.
+    #[must_use]
+    pub fn with_attached_desktop_semantic_library(
+        mut self,
+        profile_directory: &std::path::Path,
+        accessible_roots: Vec<std::path::PathBuf>,
+    ) -> Self {
+        let runtime_directory =
+            crate::semantic_library::attached_desktop_runtime_directory(profile_directory);
+        self.semantic_library =
+            SemanticLibraryComposition::attached_desktop(profile_directory, accessible_roots);
+        self.with_semantic_capability(Arc::new(
+            crate::semantic::IpcSemanticCapability::desktop_attached(&runtime_directory),
+        ))
     }
 
     /// Replaces the inert default with a host-provided component capability.
@@ -2413,6 +2458,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: SaveRagConversationRequestDto,
     ) -> Result<SavedRagConversationDto, ApplicationError> {
+        self.ensure_semantic_shared_store_writable()?;
         let tenant_id = access
             .tenant_id()
             .map_err(|_| ApplicationError::PermissionDenied)?;
@@ -2459,6 +2505,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: DeleteRagConversationRequestDto,
     ) -> Result<(), ApplicationError> {
+        self.ensure_semantic_shared_store_writable()?;
         let tenant_id = access
             .tenant_id()
             .map_err(|_| ApplicationError::PermissionDenied)?;

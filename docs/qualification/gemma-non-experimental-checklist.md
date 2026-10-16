@@ -165,20 +165,37 @@ Pass criteria:
 Goal: Search and Ask citations opened from the browser host (fm-server) navigate to the same file
 and location as in the desktop app, against the same library.
 
-Precondition: the browser host must be able to reach the desktop's semantic library. At the time of
-writing, `fm-server` starts with an unavailable semantic capability and an administrator-provisioned
-library that has no roots. Check before investing time:
+Precondition: the browser host reaches the desktop's library through the explicit, read-only
+desktop attachment (task 0250). By default `fm-server` attaches nothing. The attachment joins the
+desktop's already-running worker as the same OS user; it never launches, stops, or changes that
+worker or library, and it requires a loopback bind and token authentication.
 
-1. Quit the desktop app. Run `pnpm dev:server` in one terminal and `pnpm dev:http` in another, then
-   open the printed URL.
-2. Run `curl -s http://127.0.0.1:8787/api/v1/semantic/knowledge/capabilities` and
-   `curl -s http://127.0.0.1:8787/api/v1/semantic/library/capabilities`.
-3. If they report the capability as unavailable or administrator-provisioned without roots, record
-   item 3 as **Blocked: fm-server has no semantic worker attachment** and stop. Promoting Gemma then
-   requires either attaching the server to a provisioned worker and library, or an explicit
-   release-owner decision that browser hosts are out of scope for Gemma.
+1. Start the desktop app with Gemma active and the qualification corpus enrolled, and leave it
+   running. Its profile directory is `~/Library/Application Support/procyon` on macOS,
+   `%APPDATA%\procyon` on Windows, and `~/.config/procyon` on Linux.
+2. In one terminal, start the server **without** `--dev-mode-auth-disabled` (do not use
+   `pnpm dev:server`), passing every enrolled folder, or a parent of all of them, as a root:
 
-If the precondition holds:
+   ```bash
+   cargo run -p fm-server -- \
+     --semantic-desktop-profile "$HOME/Library/Application Support/procyon" \
+     --root "$HOME/qualification-corpus"
+   ```
+
+   Note the printed access token. In another terminal run `pnpm dev:http`, open the printed URL,
+   and sign in with the token.
+3. Run, with `TOKEN` set to that token:
+
+   ```bash
+   curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8787/api/v1/semantic/library/capabilities
+   curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8787/api/v1/semantic/knowledge/capabilities
+   ```
+
+   The library must report `desktopManaged` with only `viewStatus` and `viewFolderStatus`. If it
+   reports `unavailable`, check that the desktop app is running with an active model and consented
+   library, and that every enrolled folder lies inside a `--root`; the attachment fails closed
+   otherwise. A release build reports knowledge search as available only when it was compiled with
+   the knowledge-search release qualification flag.
 
 4. In the desktop app, run three Search queries and one Ask question whose citations point to
    (a) a text file line, (b) a PDF page, and (c) a PDF page image. Note the target file and location

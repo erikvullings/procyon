@@ -88,6 +88,102 @@ pub struct ServerConfig {
     /// provisioned with to serve the private library; leave it as any other
     /// value and every semantic-library call is denied.
     pub semantic_library_user_id: String,
+    /// The desktop app's Procyon profile directory to attach read-only
+    /// (task 0250). `None`, the default, attaches nothing.
+    ///
+    /// An explicit operator opt-in: the server then serves the desktop's
+    /// device-local semantic library through the desktop's already-running
+    /// worker, as the device principal, instead of
+    /// [`Self::semantic_library_user_id`]. Only valid with a loopback bind and
+    /// authentication enabled; see [`Self::semantic_desktop_attachment`].
+    pub semantic_desktop_profile: Option<PathBuf>,
+}
+
+/// Why an operator-requested attachment to the desktop's semantic library
+/// is refused (task 0250).
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum SemanticDesktopAttachmentError {
+    /// The server could be reached from another device.
+    #[error("semantic desktop attachment requires a loopback bind address")]
+    NonLoopbackBind,
+    /// Requests would not be authenticated.
+    #[error(
+        "semantic desktop attachment requires authentication and cannot be combined with \
+         dev-mode auth disable"
+    )]
+    AuthenticationDisabled,
+    /// The profile is not an existing absolute directory.
+    #[error("semantic desktop profile must be an existing absolute directory: {0}")]
+    InvalidProfile(String),
+    /// An accessible root cannot be resolved, so containment cannot be proven.
+    #[error("accessible root cannot be resolved: {0}")]
+    InvalidRoot(String),
+}
+
+/// A validated, canonical desktop-library attachment.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemanticDesktopAttachment {
+    /// Canonical desktop profile directory.
+    pub profile_directory: PathBuf,
+    /// Canonical accessible roots the attached library must stay inside.
+    pub accessible_roots: Vec<PathBuf>,
+}
+
+impl ServerConfig {
+    /// Whether the server binds only to a loopback address.
+    #[must_use]
+    pub fn is_loopback(&self) -> bool {
+        match self.bind_address {
+            IpAddr::V4(address) => address.octets()[0] == 127,
+            IpAddr::V6(address) => address.is_loopback(),
+        }
+    }
+
+    /// Validates the opt-in desktop semantic-library attachment.
+    ///
+    /// Returns `Ok(None)` when no attachment was requested. An attachment is
+    /// only ever granted to an authenticated, loopback-only server: the
+    /// desktop library is device-local data of this OS user and must never
+    /// become reachable from the network or without the session token.
+    ///
+    /// # Errors
+    ///
+    /// Returns why a requested attachment is refused.
+    pub fn semantic_desktop_attachment(
+        &self,
+    ) -> Result<Option<SemanticDesktopAttachment>, SemanticDesktopAttachmentError> {
+        let Some(profile) = &self.semantic_desktop_profile else {
+            return Ok(None);
+        };
+        if !self.is_loopback() {
+            return Err(SemanticDesktopAttachmentError::NonLoopbackBind);
+        }
+        if self.dev_mode_auth_disabled {
+            return Err(SemanticDesktopAttachmentError::AuthenticationDisabled);
+        }
+        let invalid_profile =
+            || SemanticDesktopAttachmentError::InvalidProfile(profile.display().to_string());
+        if !profile.is_absolute() {
+            return Err(invalid_profile());
+        }
+        let profile_directory = profile.canonicalize().map_err(|_| invalid_profile())?;
+        if !profile_directory.is_dir() {
+            return Err(invalid_profile());
+        }
+        let accessible_roots = self
+            .roots
+            .iter()
+            .map(|root| {
+                root.canonicalize().map_err(|_| {
+                    SemanticDesktopAttachmentError::InvalidRoot(root.display().to_string())
+                })
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Some(SemanticDesktopAttachment {
+            profile_directory,
+            accessible_roots,
+        }))
+    }
 }
 
 impl Default for ServerConfig {
@@ -108,6 +204,7 @@ impl Default for ServerConfig {
             dev_mode_auth_disabled: false,
             semantic_library_tenant_id: "private".to_owned(),
             semantic_library_user_id: "administrator".to_owned(),
+            semantic_desktop_profile: None,
         }
     }
 }
@@ -128,6 +225,7 @@ impl Default for ServerConfig {
 /// devModeAuthDisabled = false
 /// semanticLibraryTenantId = "private"
 /// semanticLibraryUserId = "administrator"
+/// semanticDesktopProfile = "/Users/me/Library/Application Support/procyon"
 /// tlsCert = "/etc/fm-server/cert.pem"
 /// tlsKey = "/etc/fm-server/key.pem"
 /// ```
@@ -154,6 +252,8 @@ pub struct ServerFileConfig {
     pub semantic_library_tenant_id: Option<String>,
     /// See [`ServerConfig::semantic_library_user_id`].
     pub semantic_library_user_id: Option<String>,
+    /// See [`ServerConfig::semantic_desktop_profile`].
+    pub semantic_desktop_profile: Option<PathBuf>,
     /// PEM certificate chain path for direct TLS termination (task 0064).
     /// Requires `tls_key` to also be set.
     pub tls_cert: Option<PathBuf>,
@@ -279,6 +379,104 @@ mod tests {
             config.tls_key,
             Some(PathBuf::from("/etc/fm-server/key.pem"))
         );
+    }
+
+    #[test]
+    fn server_file_config_parses_the_semantic_desktop_profile() {
+        let config: ServerFileConfig =
+            toml::from_str(r#"semanticDesktopProfile = "/profiles/procyon""#)
+                .expect("valid TOML must parse");
+        assert_eq!(
+            config.semantic_desktop_profile,
+            Some(PathBuf::from("/profiles/procyon"))
+        );
+    }
+
+    #[test]
+    fn no_semantic_desktop_attachment_is_made_by_default() {
+        assert_eq!(
+            ServerConfig::default().semantic_desktop_attachment(),
+            Ok(None)
+        );
+    }
+
+    #[test]
+    fn semantic_desktop_attachment_requires_loopback_and_authentication() {
+        let profile = tempfile::tempdir().expect("tempdir");
+        let attached = ServerConfig {
+            semantic_desktop_profile: Some(profile.path().to_path_buf()),
+            ..ServerConfig::default()
+        };
+
+        let remote = ServerConfig {
+            bind_address: IpAddr::from([0, 0, 0, 0]),
+            ..attached.clone()
+        };
+        assert_eq!(
+            remote.semantic_desktop_attachment(),
+            Err(SemanticDesktopAttachmentError::NonLoopbackBind)
+        );
+        let lan = ServerConfig {
+            bind_address: IpAddr::from([192, 168, 1, 2]),
+            ..attached.clone()
+        };
+        assert_eq!(
+            lan.semantic_desktop_attachment(),
+            Err(SemanticDesktopAttachmentError::NonLoopbackBind)
+        );
+        let unauthenticated = ServerConfig {
+            dev_mode_auth_disabled: true,
+            ..attached.clone()
+        };
+        assert_eq!(
+            unauthenticated.semantic_desktop_attachment(),
+            Err(SemanticDesktopAttachmentError::AuthenticationDisabled)
+        );
+
+        let granted = attached
+            .semantic_desktop_attachment()
+            .expect("valid attachment")
+            .expect("attachment requested");
+        assert_eq!(
+            granted.profile_directory,
+            profile.path().canonicalize().unwrap()
+        );
+        assert!(granted.accessible_roots.is_empty());
+        let ipv6 = ServerConfig {
+            bind_address: IpAddr::from(std::net::Ipv6Addr::LOCALHOST),
+            ..attached
+        };
+        assert!(ipv6.semantic_desktop_attachment().is_ok());
+    }
+
+    #[test]
+    fn semantic_desktop_attachment_rejects_unresolvable_profiles_and_roots() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let file = directory.path().join("not-a-directory");
+        std::fs::write(&file, b"x").expect("write fixture");
+        for profile in [
+            PathBuf::from("relative/procyon"),
+            directory.path().join("missing"),
+            file,
+        ] {
+            let config = ServerConfig {
+                semantic_desktop_profile: Some(profile),
+                ..ServerConfig::default()
+            };
+            assert!(matches!(
+                config.semantic_desktop_attachment(),
+                Err(SemanticDesktopAttachmentError::InvalidProfile(_))
+            ));
+        }
+        let config = ServerConfig {
+            semantic_desktop_profile: Some(directory.path().to_path_buf()),
+            roots: vec![directory.path().join("missing-root")],
+            ..ServerConfig::default()
+        };
+        assert!(matches!(
+            config.semantic_desktop_attachment(),
+            Err(SemanticDesktopAttachmentError::InvalidRoot(_))
+        ));
     }
 
     #[test]

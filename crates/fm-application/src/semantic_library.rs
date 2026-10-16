@@ -936,6 +936,9 @@ struct ServerAccess {
 struct ManagedSemanticLibrary {
     authority: SemanticLibraryAuthority,
     read_only: bool,
+    /// Joined from another host process that owns and maintains the library,
+    /// so this process must not run even internal reconciliation commits.
+    attached: bool,
     deterministic: bool,
     coordinator: Option<core::SemanticLibraryCoordinator>,
     initial_policy: core::SemanticLibraryPolicy,
@@ -998,6 +1001,38 @@ impl SemanticLibraryService {
                 estimator,
                 None,
             )?)),
+        })
+    }
+
+    /// Opens the desktop host's device-local library read-only from another
+    /// process on the same device, such as an operator-attached `fm-server`.
+    ///
+    /// The desktop host keeps sole ownership: callers may only read status
+    /// and query through the device principal
+    /// ([`SemanticAccessContext::Host`]). Every user mutation is denied by the
+    /// read-only capability set, and internal reconciliation commits — root
+    /// availability, identity observation, reconciliation, and worker feed
+    /// planning — are refused so the attached process never maintains the
+    /// library behind the desktop host's back.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an invalid model identity or resource profile.
+    pub fn desktop_attached_read_only(
+        configuration: SemanticLibraryConfiguration,
+        estimator: Arc<dyn SemanticEnrolmentEstimator>,
+    ) -> Result<Self, SemanticLibraryError> {
+        let mut managed = build_managed(
+            configuration,
+            SemanticLibraryAuthority::DesktopManaged,
+            true,
+            false,
+            estimator,
+            None,
+        )?;
+        managed.attached = true;
+        Ok(Self {
+            backend: SemanticLibraryBackend::Managed(Arc::new(managed)),
         })
     }
 
@@ -1799,7 +1834,7 @@ impl SemanticLibraryService {
         root_id: core::RootId,
         reason: core::RootUnavailabilityReason,
     ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
-        let managed = self.managed_backend()?;
+        let managed = self.maintainable_backend()?;
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let mut next = locked.data()?.clone();
@@ -1903,7 +1938,7 @@ impl SemanticLibraryService {
         root_id: core::RootId,
         observations: &[core::ObservedRootIdentity],
     ) -> Result<core::RootMoveResolution, SemanticLibraryError> {
-        let managed = self.managed_backend()?;
+        let managed = self.maintainable_backend()?;
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let mut next = locked.data()?.clone();
@@ -1953,7 +1988,7 @@ impl SemanticLibraryService {
         preserved: &[Location],
         skipped: &BTreeMap<core::EligibilityReason, u64>,
     ) -> Result<u64, SemanticLibraryError> {
-        let managed = self.managed_backend()?;
+        let managed = self.maintainable_backend()?;
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let mut next = locked.data()?.clone();
@@ -2021,7 +2056,7 @@ impl SemanticLibraryService {
         {
             return Err(SemanticLibraryError::InvalidRequest);
         }
-        let managed = self.managed_backend()?;
+        let managed = self.maintainable_backend()?;
         managed.authorize(access)?;
         let tenant = managed.tenant_for(access)?;
         let mut locked = managed.lock()?;
@@ -2570,6 +2605,17 @@ impl SemanticLibraryService {
         self.resolved_backend()
             .ok_or(SemanticLibraryError::Unavailable)
     }
+
+    /// Resolves a backend this process may maintain with internal
+    /// reconciliation commits; an attached library is maintained only by the
+    /// host process that owns it.
+    fn maintainable_backend(&self) -> Result<Arc<ManagedSemanticLibrary>, SemanticLibraryError> {
+        let managed = self.managed_backend()?;
+        if managed.attached {
+            return Err(SemanticLibraryError::AccessDenied);
+        }
+        Ok(managed)
+    }
 }
 
 /// One host-enumerated entry offered to the semantic feed.
@@ -3020,6 +3066,7 @@ fn build_managed(
     Ok(ManagedSemanticLibrary {
         authority,
         read_only,
+        attached: false,
         deterministic,
         coordinator: (!deterministic).then(|| {
             core::SemanticLibraryCoordinator::new(
@@ -3995,6 +4042,14 @@ pub(crate) enum SemanticLibraryComposition {
         configuration_directory: PathBuf,
         resolved: tokio::sync::Mutex<Option<(DesktopCompositionKey, Arc<SemanticLibraryService>)>>,
     },
+    /// The desktop host's library, opened read-only by another process from
+    /// the desktop profile's durable component state (no catalog, worker
+    /// launch, or component authority is needed or granted).
+    AttachedDesktop {
+        profile_directory: PathBuf,
+        accessible_roots: Vec<PathBuf>,
+        resolved: tokio::sync::Mutex<Option<(DesktopCompositionKey, Arc<SemanticLibraryService>)>>,
+    },
 }
 
 /// Choices permanently bound to a separately initialized Gemma library.
@@ -4171,6 +4226,22 @@ impl SemanticLibraryComposition {
         Self::Fixed(Arc::new(service))
     }
 
+    /// Whether this host is read-only attached to a desktop app's library.
+    pub(crate) const fn is_attached_desktop(&self) -> bool {
+        matches!(self, Self::AttachedDesktop { .. })
+    }
+
+    pub(crate) fn attached_desktop(
+        profile_directory: impl Into<PathBuf>,
+        accessible_roots: Vec<PathBuf>,
+    ) -> Self {
+        Self::AttachedDesktop {
+            profile_directory: profile_directory.into(),
+            accessible_roots,
+            resolved: tokio::sync::Mutex::new(None),
+        }
+    }
+
     pub(crate) async fn resolve(
         &self,
         components: &crate::semantic_components::SemanticComponentService,
@@ -4214,8 +4285,155 @@ impl SemanticLibraryComposition {
                 }
                 service
             }
+            Self::AttachedDesktop {
+                profile_directory,
+                accessible_roots,
+                resolved,
+            } => {
+                let mut resolved = resolved.lock().await;
+                let Some(key) = attached_desktop_composition_key(profile_directory) else {
+                    *resolved = None;
+                    return Arc::new(SemanticLibraryService::unavailable());
+                };
+                let service = match resolved.as_ref() {
+                    Some((cached_key, service)) if *cached_key == key => Arc::clone(service),
+                    _ => match attached_desktop_library(&key, profile_directory) {
+                        Some(service) => {
+                            let service = Arc::new(service);
+                            *resolved = Some((key, Arc::clone(&service)));
+                            service
+                        }
+                        None => {
+                            *resolved = None;
+                            return Arc::new(SemanticLibraryService::unavailable());
+                        }
+                    },
+                };
+                // Re-checked on every use because the desktop may enrol more
+                // roots at any time: the library is exposed only while all of
+                // it lies inside this host's accessible roots.
+                if attached_roots_are_accessible(&service, accessible_roots) {
+                    service
+                } else {
+                    tracing::warn!(
+                        "attached desktop semantic library has roots outside the accessible roots; \
+                         reporting it unavailable"
+                    );
+                    Arc::new(SemanticLibraryService::unavailable())
+                }
+            }
         }
     }
+}
+
+/// Reads the desktop profile's durable component state without recovering,
+/// installing, or activating anything.
+///
+/// The desktop host shares one directory for configuration and app data, so
+/// the profile directory is both the component-state parent and the default
+/// semantic-data root parent.
+fn attached_desktop_composition_key(
+    profile_directory: &std::path::Path,
+) -> Option<DesktopCompositionKey> {
+    let state = fm_semantic_components::SemanticStateStore::new(
+        profile_directory.join("semantic-components"),
+    )
+    .read_without_recovery(profile_directory)
+    .map_err(|error| {
+        tracing::debug!(%error, "attached desktop semantic component state is unavailable");
+    })
+    .ok()??;
+    let active = state.active_model()?;
+    Some(DesktopCompositionKey {
+        data_root: state.data_root().path().to_path_buf(),
+        model_id: active.identity().model_id().as_str().to_owned(),
+        model_revision: active.identity().revision().as_str().to_owned(),
+    })
+}
+
+/// Returns the desktop worker runtime directory below the profile's configured
+/// semantic-data root, defaulting like the desktop host when no component
+/// state has been persisted yet.
+pub(crate) fn attached_desktop_runtime_directory(profile_directory: &std::path::Path) -> PathBuf {
+    attached_desktop_composition_key(profile_directory).map_or_else(
+        || {
+            fm_semantic_components::SemanticDataRoot::from_app_data(profile_directory)
+                .path()
+                .join("worker-runtime")
+        },
+        |key| key.data_root.join("worker-runtime"),
+    )
+}
+
+/// Whether every enrolled root of an attached library is a local folder inside
+/// one of the host's canonical accessible roots. An empty allowlist means the
+/// host is unrestricted, exactly as for its file routes.
+fn attached_roots_are_accessible(
+    service: &SemanticLibraryService,
+    accessible_roots: &[PathBuf],
+) -> bool {
+    if accessible_roots.is_empty() {
+        return true;
+    }
+    let Ok(status) = service.status(&SemanticAccessContext::Host) else {
+        return false;
+    };
+    status.roots.iter().all(|root| {
+        root.location.to_native_path().is_ok_and(|path| {
+            let path = path.canonicalize().unwrap_or(path);
+            accessible_roots
+                .iter()
+                .any(|allowed| path.starts_with(allowed))
+        })
+    })
+}
+
+/// Opens the desktop's persisted library for the active model read-only.
+///
+/// Only an existing, consented policy whose embedding identity matches the
+/// desktop's active model is opened; nothing is created or migrated.
+fn attached_desktop_library(
+    key: &DesktopCompositionKey,
+    profile_directory: &std::path::Path,
+) -> Option<SemanticLibraryService> {
+    let (configuration_directory, semantic_data_root) = if key.model_id == "google-embeddinggemma-2"
+    {
+        (
+            profile_directory.join("semantic-library-gemma"),
+            key.data_root.join("library-gemma"),
+        )
+    } else {
+        (
+            profile_directory.to_path_buf(),
+            key.data_root.join("library"),
+        )
+    };
+    // Loading an absent library creates its directories; an attached host
+    // must not create anything before the desktop has persisted consent.
+    if !std::fs::symlink_metadata(configuration_directory.join(core::POLICY_FILE_NAME))
+        .is_ok_and(|metadata| metadata.is_file())
+    {
+        return None;
+    }
+    let policy =
+        core::SemanticLibraryCoordinator::new(&configuration_directory, &semantic_data_root)
+            .load()
+            .ok()?
+            .policy;
+    let model = policy.library().model();
+    if model.model_id() != key.model_id || model.revision() != key.model_revision {
+        return None;
+    }
+    SemanticLibraryService::desktop_attached_read_only(
+        SemanticLibraryConfiguration::new(
+            configuration_directory,
+            semantic_data_root,
+            policy.library().clone(),
+            policy.resource_profile().clone(),
+        ),
+        Arc::new(LocalSemanticEnrolmentEstimator),
+    )
+    .ok()
 }
 
 /// Returns the authoritative composition inputs, or `None` when no desktop
