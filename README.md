@@ -23,6 +23,7 @@ collection basket gathers files across folders and providers.
 | **Move data safely** | Cancellable and resumable copy, move, rename, duplicate, trash, archive, and synchronization jobs with explicit conflict handling |
 | **Work across providers** | Local files, SFTP, FTP/FTPS, WebDAV, S3-compatible storage, OneDrive, archives, and mounted network volumes |
 | **Inspect files in place** | Fast text, image, video, PDF, archive, CSV, JSON, Excel, DOCX, and PPTX previews plus an integrated text editor |
+| **Search by meaning and ask** | Optional local-only semantic search, enabled with consent per folder and powered by multilingual E5 by default. Knowledge search finds relevant passages; Ask produces retrieval-augmented answers with page-level citations. EmbeddingGemma 2 is an experimental, opt-in alternative for image, audio, and video indexing; CPU-only PDF page-image indexing is capped and slow. |
 | **Adapt the workflow** | Configurable shortcuts, light and dark themes, native platform actions, and resource-limited Lua and JavaScript plugins |
 
 Procyon never implements file mutations in the frontend. Every operation goes through the same
@@ -160,6 +161,8 @@ On macOS arm64, `pnpm dev:tauri:semantic:gemma:metal` instead compiles the
 experimental image-only Metal path; the worker selects Metal automatically
 when a device is available and falls back to CPU for unavailable devices or
 mixed image/audio/video libraries. Audio and video are CPU-only.
+EmbeddingGemma 2 ships in v0.5.0-2 as an experimental, opt-in macOS arm64 package.
+On CPU-only machines, PDF page-image indexing is capped and slow; PDF text remains indexed.
 
 In the desktop, open **Settings → Semantic components**, choose **EmbeddingGemma
 2 (optional)**, select 128/256/512/768 dimensions and the desired image, audio,
@@ -172,16 +175,18 @@ inclusion and choose **Include and index folder**. Once indexing progresses,
 search or Ask within the indexed folder. The selected dimensions and media
 permissions cannot be changed for that Gemma library. Existing E5 data is not
 deleted; no migration or representative quality result is implied by this
-development bundle. Standard release builds remain Gemma-disabled unless the
-release owner explicitly approves a **new**, four-target signed Gemma candidate
-and sets both independent semantic approval gates plus
+development bundle. The v0.5.0-2 experimental Gemma package is opt-in and
+Apple Silicon (arm64) only; it uses a separate signed updater channel and does
+not replace the regular E5 build. Standard release builds remain Gemma-disabled
+unless the release owner explicitly approves a **new**, four-target signed
+Gemma candidate and sets both independent semantic approval gates plus
 `SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL=true`. The desktop release then compiles
 `semantic-gemma` and fetches that candidate's reviewed, signed target catalog;
-the historical CPU-only candidate is blocked. Version 0.5.0 source alone is
-**not** a published Gemma package. E5 stays the default, and Gemma's measured
-quality does not establish an improvement over E5. Before a new release is
-approved, verify image acceleration and CPU fallback on supported hardware
-and rerun the integrated mixed-media ingestion/search checks. Included
+the historical CPU-only candidate is blocked. E5 stays the default, and
+Gemma's measured quality does not establish an improvement over E5. Before a
+new release is approved, verify image acceleration and CPU fallback on
+supported hardware and rerun the integrated mixed-media ingestion/search
+checks. Included
 folders can be removed directly from **Settings → Semantic library**, even when
 their sources are unavailable; confirm the displayed cleanup inventory to
 remove their local index data without deleting original files. Moving, deleting,
@@ -332,11 +337,11 @@ macOS releases are signed and notarized. Windows releases are currently unsigned
 Microsoft Defender SmartScreen warning. Desktop builds verify signed update artifacts before
 installation. Automatic checks can be disabled in Settings; checks never download, install, or
 restart without user confirmation, and a manual **Check now** action remains available.
-If approved for release, the opt-in experimental Gemma macOS build will be **Apple Silicon
-(arm64) only**; it cannot run on Intel Macs. Its signed updater uses a separate experimental
+The v0.5.0-2 opt-in experimental Gemma macOS package is **Apple Silicon (arm64)
+only**; it cannot run on Intel Macs. Its signed updater uses a separate experimental
 channel. The regular non-Gemma universal macOS build and Homebrew cask remain available to
-Intel users; experimental packages would be downloaded directly from their GitHub Release and
-would not replace the stable cask or Chocolatey package. E5 remains the default, and Gemma
+Intel users; the experimental package is downloaded directly from its GitHub Release and
+does not replace the stable cask or Chocolatey package. E5 remains the default, and Gemma
 search quality is not established.
 
 ## Desktop releases

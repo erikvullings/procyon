@@ -94,7 +94,7 @@ function generateChocolatey() {
 
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
 
-    <projectUrl>https://github.com/${options.repository}</projectUrl>
+    <projectUrl>https://erikvullings.github.io/procyon/</projectUrl>
     <packageSourceUrl>https://github.com/${options.repository}</packageSourceUrl>
     <projectSourceUrl>https://github.com/${options.repository}</projectSourceUrl>
     <docsUrl>https://github.com/${options.repository}#readme</docsUrl>
