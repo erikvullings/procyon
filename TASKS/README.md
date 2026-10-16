@@ -363,8 +363,8 @@ behavior.
   and automated coverage complete; manual macOS and Windows invocation checks remain)*
 - [x] 0148 Application deleter (macOS) *(needs 0059, 0061; macOS-only — Windows/Linux already have
   their own uninstall conventions)*
-- [ ] 0247 OS file clipboard in the desktop app *(needs 0048, 0058; in_progress — macOS automated
-  coverage complete; Windows and Linux compile-checked only, manual round-trips remain)*
+- [ ] 0249 OS file clipboard in the desktop app *(needs 0048, 0058; in_progress — macOS manual
+  round-trip verified; Windows and Linux compile-checked only, manual round-trips remain)*
 
 ## Settings & workspace management
 
