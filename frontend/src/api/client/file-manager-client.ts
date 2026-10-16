@@ -176,6 +176,7 @@ import type {
   UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
+  UpdateGemmaMediaRequest,
   UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
@@ -296,6 +297,10 @@ export interface FileManagerClient {
   cancelSemanticOcrRemediation(jobId: string, signal?: AbortSignal): Promise<SemanticOcrJob>;
   getSemanticLibraryCapabilities(signal?: AbortSignal): Promise<SemanticLibraryCapabilities>;
   getSemanticLibraryStatus(signal?: AbortSignal): Promise<SemanticLibraryStatus>;
+  updateGemmaMedia(
+    request: UpdateGemmaMediaRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
   listSemanticVocabularies(signal?: AbortSignal): Promise<readonly SemanticVocabulary[]>;
   importSemanticVocabulary(skosJson: string, signal?: AbortSignal): Promise<SemanticVocabulary>;
   exportSemanticVocabulary(vocabularyId: string, signal?: AbortSignal): Promise<string>;

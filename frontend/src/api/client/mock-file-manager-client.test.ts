@@ -701,6 +701,15 @@ describe('MockFileManagerClient semantic library lifecycle', () => {
     expect(paused.paused).toBe(true);
     const resumed = await client.resumeSemanticLibrary({ policyRevision: paused.revision });
     expect(resumed.paused).toBe(false);
+    await expect(
+      client.updateGemmaMedia({
+        policyRevision: resumed.revision,
+        images: true,
+        audio: false,
+        video: false,
+        confirmRemoval: false,
+      }),
+    ).rejects.toMatchObject({ code: 'invalidRequest' });
 
     const plan = await client.planSemanticExclusion({
       policyRevision: resumed.revision,

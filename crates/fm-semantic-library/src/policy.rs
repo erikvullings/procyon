@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Current durable semantic-library policy schema.
-pub const CURRENT_POLICY_SCHEMA_VERSION: u32 = 4;
+pub const CURRENT_POLICY_SCHEMA_VERSION: u32 = 5;
 
 /// CPU page-image budget used when opting in on a host without Metal.
 pub const CPU_PDF_IMAGE_PAGE_BUDGET: u32 = 4;
@@ -19,7 +19,7 @@ pub const CPU_PDF_IMAGE_PAGE_BUDGET: u32 = 4;
 const GEMMA_MODEL_ID: &str = "google-embeddinggemma-2";
 const GEMMA_REVISION: &str = "914f7f89142e33e77833254d9c9b90c3cef7303b";
 
-/// Creation-time media permissions for an EmbeddingGemma 2 library.
+/// Optional media permissions for an EmbeddingGemma 2 library. Text is always enabled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GemmaMediaSelection {
@@ -80,7 +80,7 @@ impl ModelIdentity {
             model_id: GEMMA_MODEL_ID.to_owned(),
             revision: GEMMA_REVISION.to_owned(),
             dimensions,
-            embedding_space: gemma_embedding_space(dimensions, media),
+            embedding_space: gemma_embedding_space(dimensions),
             gemma_media: Some(media),
         };
         identity.validate()?;
@@ -93,9 +93,9 @@ impl ModelIdentity {
             || self.embedding_space.trim().is_empty()
             || self.dimensions == 0
             || (self.model_id == GEMMA_MODEL_ID
-                && (self.gemma_media.is_none_or(|media| {
-                    self.embedding_space != gemma_embedding_space(self.dimensions, media)
-                }) || self.revision != GEMMA_REVISION
+                && (self.gemma_media.is_none()
+                    || self.embedding_space != gemma_embedding_space(self.dimensions)
+                    || self.revision != GEMMA_REVISION
                     || !matches!(self.dimensions, 128 | 256 | 512 | 768)))
             || (self.model_id != GEMMA_MODEL_ID && self.gemma_media.is_some())
         {
@@ -128,20 +128,15 @@ impl ModelIdentity {
         &self.embedding_space
     }
 
-    /// Returns the immutable media choices, if this is a Gemma library.
+    /// Returns the original media choices of a Gemma model identity.
     #[must_use]
     pub const fn gemma_media(&self) -> Option<GemmaMediaSelection> {
         self.gemma_media
     }
 }
 
-fn gemma_embedding_space(dimensions: u32, media: GemmaMediaSelection) -> String {
-    format!(
-        "embeddinggemma-2/{dimensions}/images-{}/audio-{}/video-{}/v1",
-        u8::from(media.images),
-        u8::from(media.audio),
-        u8::from(media.video)
-    )
+fn gemma_embedding_space(dimensions: u32) -> String {
+    format!("embeddinggemma-2/{dimensions}/v1")
 }
 
 /// Stable device-local library and its current exact embedding identity.
@@ -554,6 +549,8 @@ pub struct SemanticLibraryPolicy {
     revision: u64,
     resource_profile: ResourceProfile,
     reconciliation_interval_seconds: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    gemma_media: Option<GemmaMediaSelection>,
     #[serde(default)]
     roots: BTreeMap<RootId, EnrolledRoot>,
 }
@@ -570,6 +567,7 @@ impl SemanticLibraryPolicy {
     ) -> Result<Self, PolicyError> {
         let policy = Self {
             schema_version: CURRENT_POLICY_SCHEMA_VERSION,
+            gemma_media: library.model().gemma_media(),
             library,
             revision: 1,
             resource_profile,
@@ -609,6 +607,39 @@ impl SemanticLibraryPolicy {
     #[must_use]
     pub const fn library(&self) -> &DeviceLibraryIdentity {
         &self.library
+    }
+
+    /// Current optional media consent, independent of the immutable vector space.
+    #[must_use]
+    pub const fn gemma_media(&self) -> Option<GemmaMediaSelection> {
+        self.gemma_media
+    }
+
+    /// Updates Gemma media consent without changing the model, dimensions, or index.
+    ///
+    /// The caller must confirm removals and advance the policy revision in its
+    /// transaction. A false return means no policy change was necessary.
+    pub fn set_gemma_media(
+        &mut self,
+        media: GemmaMediaSelection,
+        confirm_removal: bool,
+    ) -> Result<bool, PolicyError> {
+        if self.library.model().model_id() != GEMMA_MODEL_ID {
+            return Err(PolicyError::ImmutableGemmaLibrary);
+        }
+        let previous = self.gemma_media.ok_or(PolicyError::InvalidModelIdentity)?;
+        if previous == media {
+            return Ok(false);
+        }
+        if !confirm_removal
+            && ((previous.images && !media.images)
+                || (previous.audio && !media.audio)
+                || (previous.video && !media.video))
+        {
+            return Err(PolicyError::MediaRemovalRequiresConfirmation);
+        }
+        self.gemma_media = Some(media);
+        Ok(true)
     }
 
     /// Replaces only the embedding model while preserving device-local consent.
@@ -881,6 +912,9 @@ impl SemanticLibraryPolicy {
             return Err(PolicyError::InvalidRevision);
         }
         self.library.model.validate()?;
+        if self.library.model().gemma_media().is_some() != self.gemma_media.is_some() {
+            return Err(PolicyError::InvalidModelIdentity);
+        }
         self.resource_profile.budgets.validate()?;
         if !(60..=24 * 60 * 60).contains(&self.reconciliation_interval_seconds) {
             return Err(PolicyError::InvalidReconciliationInterval);
@@ -937,9 +971,12 @@ pub enum PolicyError {
     /// Model identity is incomplete.
     #[error("semantic model identity is invalid")]
     InvalidModelIdentity,
-    /// Gemma selection is fixed when the library is created.
-    #[error("EmbeddingGemma 2 dimensions and media require a new library")]
+    /// Gemma model and dimensions are fixed when the library is created.
+    #[error("EmbeddingGemma 2 dimensions require a new library")]
     ImmutableGemmaLibrary,
+    /// Turning off media consent must be explicitly confirmed.
+    #[error("removing Gemma media consent requires confirmation")]
+    MediaRemovalRequiresConfirmation,
     /// One or more hard resource budgets are zero or inconsistent.
     #[error("semantic resource budgets are invalid")]
     InvalidResourceBudgets,

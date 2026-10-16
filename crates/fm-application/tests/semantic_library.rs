@@ -1198,6 +1198,54 @@ fn a_gemma_library_feeds_only_media_selected_at_creation() {
 }
 
 #[test]
+fn gemma_media_change_preserves_identity_across_restart_and_gates_pdf_images() {
+    let directory = project_temp_dir("gemma-media-restart-");
+    let config = SemanticLibraryConfiguration::embeddinggemma_2(
+        directory.path().join("config"),
+        directory.path().join("semantic-data"),
+        Uuid::new_v4(),
+        256,
+        GemmaMediaSelection {
+            images: true,
+            audio: false,
+            video: false,
+        },
+    )
+    .unwrap();
+    let estimator = || Arc::new(FixedSemanticEnrolmentEstimator::new(estimate()));
+    let service = SemanticLibraryService::desktop_managed(config.clone(), estimator()).unwrap();
+    let context = SemanticFolderContext::new(workspace(10), location("file:///docs"));
+    enrol(&service, &context);
+    let before = service.status(&HOST).unwrap();
+    let disabled = GemmaMediaSelection {
+        images: false,
+        audio: true,
+        video: false,
+    };
+    assert_eq!(
+        service.update_gemma_media(&HOST, disabled, before.revision, false),
+        Err(SemanticLibraryError::RemovalRequiresConfirmation)
+    );
+    let after = service
+        .update_gemma_media(&HOST, disabled, before.revision, true)
+        .unwrap();
+    assert_eq!(after.library, before.library);
+    assert_eq!(after.roots.len(), before.roots.len());
+    assert_eq!(after.gemma_media, Some(disabled));
+    assert!(
+        !service
+            .worker_feed_plan(&HOST, &[])
+            .unwrap()
+            .pdf_images_consented
+    );
+    let restarted = SemanticLibraryService::desktop_managed(config, estimator()).unwrap();
+    let reloaded = restarted.status(&HOST).unwrap();
+    assert_eq!(reloaded.gemma_media, Some(disabled));
+    assert_eq!(reloaded.library, before.library);
+    assert_eq!(reloaded.revision, after.revision);
+}
+
+#[test]
 fn per_root_pdf_image_policy_is_validated_and_persisted_with_enrolment() {
     let directory = project_temp_dir("gemma-pdf-page-policy-");
     let config = SemanticLibraryConfiguration::embeddinggemma_2(

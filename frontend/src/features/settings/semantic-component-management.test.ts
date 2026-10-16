@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MockClientError, MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import { setLocale } from '../../i18n';
-import type { SemanticModelProfile } from '../../models';
+import type { EntrySummary, SemanticModelProfile } from '../../models';
 import { SemanticComponentManagement } from './semantic-component-management';
 
 let root: HTMLElement;
@@ -64,6 +64,46 @@ async function withGemmaProfile(client: MockFileManagerClient): Promise<void> {
 }
 
 describe('SemanticComponentManagement', () => {
+  it('browses local folders while keeping the semantic data destination editable', async () => {
+    const client = new MockFileManagerClient();
+    const documents: EntrySummary = {
+      id: 'documents',
+      location: { providerId: 'file', uri: 'file:///Documents' },
+      name: 'Documents',
+      kind: 'directory',
+      hidden: false,
+      readOnly: false,
+      metadataRevision: 1,
+    };
+    vi.spyOn(client, 'getVolumes').mockResolvedValue([
+      { name: 'Macintosh HD', location: { providerId: 'file', uri: 'file:///' } },
+    ]);
+    vi.spyOn(client, 'listDirectoryChildren').mockImplementation(async (location) =>
+      location.uri === 'file:///' ? [documents] : [],
+    );
+    mountComponent(client);
+    await waitForLoaded();
+    root.querySelector<HTMLDetailsElement>('.fm-semantic-move-details')?.setAttribute('open', '');
+
+    const destination = root.querySelector<HTMLInputElement>('#fm-semantic-move-destination');
+    expect(destination).not.toBeNull();
+    expect(destination?.type).toBe('text');
+    button('Browse…').click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-tree-row')).not.toBeNull());
+    const documentsRow = [...root.querySelectorAll<HTMLElement>('.fm-tree-row')].find((row) =>
+      row.textContent?.includes('Documents'),
+    );
+    documentsRow?.click();
+    m.redraw.sync();
+
+    expect(destination?.value).toBe('/Documents');
+    expect(root.querySelector('.fm-semantic-move-picker')).toBeNull();
+    expect(client.listDirectoryChildren).toHaveBeenCalledWith(
+      { providerId: 'file', uri: 'file:///' },
+      false,
+    );
+  });
+
   it('offers Gemma choices directly and hides artifact files behind optional details', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     await withGemmaProfile(client);
@@ -197,10 +237,14 @@ describe('SemanticComponentManagement', () => {
     expect(root.querySelector('.fm-semantic-offer [role="status"]')?.textContent).toContain(
       'Starting the signed model download',
     );
-    expect(button('Installing…').disabled).toBe(true);
+    const installing = button('Installing…');
+    expect(installing.disabled).toBe(true);
+    expect(installing.getAttribute('aria-busy')).toBe('true');
+    expect(installing.classList.contains('fm-busy-button')).toBe(true);
     await vi.waitFor(() => expect(finishInstall).toBeTypeOf('function'));
     finishInstall?.();
     await vi.waitFor(() => expect(root.textContent).toContain('Installed and enabled'));
+    expect(root.querySelector('[aria-busy="true"].fm-busy-button')).toBeNull();
     expect(root.querySelector('.fm-semantic-offer [role="status"]')).toBeNull();
   });
 
@@ -706,11 +750,9 @@ describe('SemanticComponentManagement', () => {
     root
       .querySelector<HTMLDetailsElement>('.fm-semantic-migration-details')
       ?.setAttribute('open', '');
-    expect(
-      root.querySelector<HTMLInputElement>(
-        'input[name="fm-semantic-migration-profile"][value="multilingualQuality"]',
-      )?.checked,
-    ).toBe(true);
+    expect(root.querySelector<HTMLSelectElement>('#fm-semantic-migration-profile')?.value).toBe(
+      'multilingualQuality',
+    );
     expect(button('Review model change').disabled).toBe(false);
     button('Review model change').click();
 
@@ -769,10 +811,12 @@ describe('SemanticComponentManagement', () => {
       ?.setAttribute('open', '');
     expect(root.querySelector('#fm-semantic-migration-documents')).toBeNull();
     expect(root.querySelector('#fm-semantic-migration-source-bytes')).toBeNull();
-    const quality = root.querySelector<HTMLInputElement>(
-      'input[name="fm-semantic-migration-profile"][value="multilingualQuality"]',
-    );
-    quality?.click();
+    const targetProfile = root.querySelector<HTMLSelectElement>('#fm-semantic-migration-profile');
+    expect(targetProfile?.classList).toContain('browser-default');
+    expect(root.querySelector('.fm-semantic-migration-details input[type="radio"]')).toBeNull();
+    if (targetProfile === null) throw new Error('Migration target profile select is missing');
+    targetProfile.value = 'multilingualQuality';
+    targetProfile.dispatchEvent(new Event('change', { bubbles: true }));
     m.redraw.sync();
     expect(button('Review model change').disabled).toBe(false);
     button('Review model change').click();
@@ -810,11 +854,10 @@ describe('SemanticComponentManagement', () => {
     root
       .querySelector<HTMLDetailsElement>('.fm-semantic-migration-details')
       ?.setAttribute('open', '');
-    root
-      .querySelector<HTMLInputElement>(
-        'input[name="fm-semantic-migration-profile"][value="multilingualQuality"]',
-      )
-      ?.click();
+    const targetProfile = root.querySelector<HTMLSelectElement>('#fm-semantic-migration-profile');
+    if (targetProfile === null) throw new Error('Migration target profile select is missing');
+    targetProfile.value = 'multilingualQuality';
+    targetProfile.dispatchEvent(new Event('change', { bubbles: true }));
     m.redraw.sync();
     button('Review model change').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Full reindex required'));
@@ -837,6 +880,13 @@ describe('SemanticComponentManagement', () => {
     mountComponent(client);
     await waitForLoaded();
 
+    expect(root.querySelector('.fm-semantic-local-model-details')).toBeNull();
+    const developerTools = root.querySelector<HTMLInputElement>(
+      '.fm-semantic-developer-tools-toggle input[type="checkbox"]',
+    );
+    expect(developerTools?.checked).toBe(false);
+    developerTools?.click();
+    m.redraw.sync();
     root
       .querySelector<HTMLDetailsElement>('.fm-semantic-local-model-details')
       ?.setAttribute('open', '');
@@ -877,11 +927,13 @@ describe('SemanticComponentManagement', () => {
     expect(root.querySelector('input[type="url"]')).toBeNull();
     expect(button('Review local model migration').disabled).toBe(true);
     setInput('#fm-semantic-local-source-path', '/models/local');
-    root
-      .querySelector<HTMLInputElement>(
-        'input[name="fm-semantic-local-profile"][value="compactEnglish"]',
-      )
-      ?.click();
+    const profile = root.querySelector<HTMLSelectElement>('#fm-semantic-local-profile');
+    expect(profile).not.toBeNull();
+    expect(localModelDetails?.querySelector('input[type="radio"]')).toBeNull();
+    if (profile === null) throw new Error('Developer target profile select is missing');
+    profile.value = 'compactEnglish';
+    profile.dispatchEvent(new Event('change', { bubbles: true }));
+    m.redraw.sync();
     button('Review local model migration').click();
 
     await vi.waitFor(() => expect(importModel).toHaveBeenCalledOnce());
@@ -910,6 +962,8 @@ describe('SemanticComponentManagement', () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     mountComponent(client);
     await waitForLoaded();
+    root.querySelector<HTMLInputElement>('.fm-semantic-developer-tools-toggle input')?.click();
+    m.redraw.sync();
 
     for (const selector of [
       '.fm-semantic-remove-details',

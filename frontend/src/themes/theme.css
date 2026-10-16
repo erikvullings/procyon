@@ -742,6 +742,27 @@ main.fm-workspace {
   font-weight: 600;
 }
 
+.fm-semantic-library-media {
+  display: grid;
+  gap: 0.5rem;
+  margin-block: 1rem;
+}
+
+.fm-semantic-library-media h6,
+.fm-semantic-library-media p {
+  margin: 0;
+}
+
+.fm-semantic-library-media label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fm-semantic-library-media button {
+  justify-self: start;
+}
+
 .fm-semantic-library-values,
 .fm-semantic-library-cleanup {
   display: grid;
@@ -1731,6 +1752,40 @@ main.fm-workspace {
   gap: 0.55rem;
 }
 
+.fm-semantic-move-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 0.55rem;
+  width: 100%;
+  margin-top: 0.65rem;
+}
+
+.fm-semantic-move-row > label {
+  min-width: 0;
+}
+
+.fm-semantic-move-picker {
+  display: grid;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.55rem;
+}
+
+.fm-semantic-move-picker .fm-directory-tree {
+  height: 12.5rem;
+  overflow-y: auto;
+  border: 1px solid var(--fm-border);
+}
+
+.fm-semantic-developer-tools-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.65rem 0;
+  color: var(--fm-text-muted);
+}
+
 .fm-semantic-field {
   display: grid;
   min-width: 0;
@@ -1810,6 +1865,14 @@ main.fm-workspace {
   .fm-semantic-installed-components,
   .fm-semantic-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .fm-semantic-move-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .fm-semantic-move-row > label {
+    grid-column: 1 / -1;
   }
 
   .fm-semantic-installed-component {

@@ -17,6 +17,7 @@ import type {
   SemanticRootStatus,
   WorkspaceId,
 } from '../../models';
+import { busyButtonAttrs } from './busy-button';
 
 export interface SemanticLibraryManagementAttrs {
   readonly client: FileManagerClient;
@@ -41,7 +42,8 @@ type BusyAction =
   | 'pause'
   | 'resume'
   | 'cleanup'
-  | 'override';
+  | 'override'
+  | 'media';
 
 interface PdfImageConsentOption {
   readonly enabled: boolean;
@@ -58,6 +60,12 @@ const SAFE_OVERRIDE_REASONS = [
   'cacheDirectory',
   'gitIgnored',
 ] as const satisfies readonly SemanticEligibilityReason[];
+
+const GEMMA_MEDIA_LABELS = {
+  images: 'gemmaImages',
+  audio: 'gemmaAudio',
+  video: 'gemmaVideo',
+} as const;
 
 const CPU_PDF_IMAGE_SECONDS_PER_PAGE = 107;
 
@@ -278,7 +286,12 @@ function estimateView(
         ),
         m(
           'button.fm-semantic-library-action',
-          { type: 'button', disabled: busy !== undefined, onclick: onEnrol },
+          {
+            type: 'button',
+            ...busyButtonAttrs(busy === 'enrol'),
+            disabled: busy !== undefined,
+            onclick: onEnrol,
+          },
           busy === 'enrol' ? t('semanticLibrary', 'working') : actionLabel,
         ),
       ]),
@@ -420,6 +433,7 @@ function exclusionPlanView(
       'button.fm-semantic-library-action.fm-semantic-library-destructive',
       {
         type: 'button',
+        ...busyButtonAttrs(busy === 'confirmExclusion'),
         disabled: busy !== undefined,
         onclick: onExclude,
       },
@@ -613,6 +627,7 @@ function rootStatusView(
                     'button.fm-semantic-library-action',
                     {
                       type: 'button',
+                      ...busyButtonAttrs(busy === 'cleanup'),
                       disabled: busy !== undefined,
                       onclick: () => onResumeCleanup(exclusion.cleanup.planId as string),
                     },
@@ -670,6 +685,8 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
   let exclusionPlan: SemanticExclusionPlan | undefined;
   let busy: BusyAction | undefined;
   let error: string | undefined;
+  let selectedMedia: { images: boolean; audio: boolean; video: boolean } | undefined;
+  let confirmMediaRemoval = false;
   let contextKey = '';
 
   function key(attrs: SemanticLibraryManagementAttrs): string {
@@ -694,6 +711,8 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
       }
       const nextStatus = await attrs.client.getSemanticLibraryStatus();
       status = nextStatus;
+      selectedMedia = nextStatus.gemmaMedia ? { ...nextStatus.gemmaMedia } : undefined;
+      confirmMediaRemoval = false;
       indexedRoots =
         attrs.workspaceId === undefined || !nextStatus.available
           ? []
@@ -702,7 +721,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
       gemmaActive = component.activeModel?.profile === 'embeddingGemma2';
       const gemmaSetup = gemmaActive ? await attrs.client.getGemmaLibrarySetup() : null;
       lastWorkerDevice = gemmaSetup?.lastWorkerDevice;
-      showPdfImageOption = gemmaSetup?.images === true;
+      showPdfImageOption = nextStatus.gemmaMedia?.images ?? gemmaSetup?.images === true;
       pdfImagePageBudget = gemmaSetup?.pdfImagePageBudget ?? null;
       pdfImageEnabled = showPdfImageOption && gemmaSetup?.imageDevice === 'metal';
       folder =
@@ -739,7 +758,10 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
       if (removed || busy !== undefined || refreshKey !== contextKey) return;
       status = nextStatus;
       indexedRoots = nextRoots;
-      if (gemmaActive) lastWorkerDevice = nextSetup?.lastWorkerDevice;
+      if (gemmaActive) {
+        lastWorkerDevice = nextSetup?.lastWorkerDevice;
+        showPdfImageOption = nextStatus.gemmaMedia?.images ?? nextSetup?.images === true;
+      }
       refreshError = undefined;
       m.redraw();
     } catch (cause) {
@@ -785,6 +807,31 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
 
   function has(operation: SemanticLibraryCapabilities['operations'][number]): boolean {
     return capabilities?.operations.includes(operation) ?? false;
+  }
+
+  function saveMedia(attrs: SemanticLibraryManagementAttrs): void {
+    if (!status?.gemmaMedia || !selectedMedia) return;
+    const media = selectedMedia;
+    const revision = status.revision;
+    const removing =
+      (status.gemmaMedia.images && !media.images) ||
+      (status.gemmaMedia.audio && !media.audio) ||
+      (status.gemmaMedia.video && !media.video);
+    if (removing && !confirmMediaRemoval) {
+      confirmMediaRemoval = true;
+      return;
+    }
+    void action(attrs, 'media', async () => {
+      status = await attrs.client.updateGemmaMedia({
+        policyRevision: revision,
+        ...media,
+        confirmRemoval: removing,
+      });
+      selectedMedia = status.gemmaMedia ? { ...status.gemmaMedia } : undefined;
+      showPdfImageOption = status.gemmaMedia?.images === true;
+      if (!showPdfImageOption) pdfImageEnabled = false;
+      confirmMediaRemoval = false;
+    });
   }
 
   function previewInclusion(
@@ -988,12 +1035,56 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
               ? t('semanticLibrary', 'ingestionPaused')
               : t('semanticLibrary', 'ingestionActive'),
           ),
+          gemmaActive && status.gemmaMedia && selectedMedia && has('updateGemmaMedia')
+            ? m('section.fm-semantic-library-media', [
+                m('h6', t('semanticLibrary', 'gemmaMediaTitle')),
+                m('p', t('semanticLibrary', 'gemmaMediaAddingHelp')),
+                (['images', 'audio', 'video'] as const).map((medium) =>
+                  m('label.fm-semantic-library-pdf-images', { key: medium }, [
+                    m('input', {
+                      type: 'checkbox',
+                      checked: selectedMedia?.[medium] ?? false,
+                      disabled: busy !== undefined,
+                      onchange: (event: Event) => {
+                        if (!selectedMedia) return;
+                        selectedMedia = {
+                          ...selectedMedia,
+                          [medium]: (event.currentTarget as HTMLInputElement).checked,
+                        };
+                        confirmMediaRemoval = false;
+                      },
+                    }),
+                    t('semanticComponents', GEMMA_MEDIA_LABELS[medium]),
+                  ]),
+                ),
+                confirmMediaRemoval
+                  ? m('p', { role: 'alert' }, t('semanticLibrary', 'gemmaMediaRemovingWarning'))
+                  : undefined,
+                m(
+                  'button.fm-semantic-library-action',
+                  {
+                    type: 'button',
+                    ...busyButtonAttrs(busy === 'media'),
+                    disabled:
+                      busy !== undefined ||
+                      (selectedMedia.images === status.gemmaMedia.images &&
+                        selectedMedia.audio === status.gemmaMedia.audio &&
+                        selectedMedia.video === status.gemmaMedia.video),
+                    onclick: () => saveMedia(attrs),
+                  },
+                  confirmMediaRemoval
+                    ? t('semanticLibrary', 'gemmaMediaConfirmRemoval')
+                    : t('semanticLibrary', 'gemmaMediaSave'),
+                ),
+              ])
+            : undefined,
           status.paused ? m('p', t('semanticLibrary', 'pauseExplanation')) : undefined,
           has(status.paused ? 'resume' : 'pause')
             ? m(
                 'button.fm-semantic-library-action',
                 {
                   type: 'button',
+                  ...busyButtonAttrs(busy === 'pause' || busy === 'resume'),
                   disabled: busy !== undefined,
                   onclick: () =>
                     void action(attrs, status?.paused ? 'resume' : 'pause', async () => {
@@ -1083,6 +1174,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
                           'button.fm-semantic-library-action',
                           {
                             type: 'button',
+                            ...busyButtonAttrs(busy === 'preview'),
                             disabled: busy !== undefined,
                             onclick: () => previewInclusion(attrs),
                           },
@@ -1101,6 +1193,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
                           'button.fm-semantic-library-action',
                           {
                             type: 'button',
+                            ...busyButtonAttrs(busy === 'planExclusion'),
                             disabled: busy !== undefined,
                             onclick: () => planExclusion(attrs, attrs.location as Location),
                           },

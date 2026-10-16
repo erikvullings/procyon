@@ -3,6 +3,7 @@ import { Switch } from 'mithril-materialized';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type { AppUpdateInfo, AppUpdateProgress } from '../../models';
+import { busyButtonAttrs } from './busy-button';
 
 export interface AppUpdateSettingsAttrs {
   readonly client: FileManagerClient;
@@ -75,6 +76,7 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
                 'button.fm-update-check',
                 {
                   type: 'button',
+                  ...busyButtonAttrs(phase === 'checking'),
                   disabled: phase === 'checking' || phase === 'installing',
                   onclick: () => void check(attrs.client),
                 },
@@ -99,6 +101,7 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
                       'button.fm-update-install',
                       {
                         type: 'button',
+                        ...busyButtonAttrs(phase === 'installing'),
                         disabled: phase === 'installing',
                         onclick: () => void install(attrs.client),
                       },

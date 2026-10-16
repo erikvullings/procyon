@@ -1431,12 +1431,12 @@ export const nl = {
     multilingualQualityName: 'Meertalige kwaliteit',
     multilingualQualityDescription:
       'Meertalig zoeken van hogere kwaliteit met meer schijf-, geheugen- en indexeerkosten.',
-    gemmaName: 'EmbeddingGemma 2 (optioneel)',
+    gemmaName: 'EmbeddingGemma 2 (experimenteel)',
     gemmaDescription:
       'Tekst en code op de CPU, met optionele indexering van afbeeldingen, audio en video. Vereist een afzonderlijke, nieuwe index.',
     gemmaSetupTitle: 'Nieuwe EmbeddingGemma 2-bibliotheek',
     gemmaFreshLibraryExplanation:
-      'Dit begint met een lege bibliotheek. Uw E5-bibliotheek en index blijven intact. De gekozen dimensie en mediatoestemmingen kunnen alleen met een nieuwe index worden gewijzigd. Instellingen opslaan installeert Gemma niet. Met Accepteren en installeren wordt de nieuwe bibliotheek gemaakt en begint het downloaden van het model.',
+      'Dit begint met een lege bibliotheek. Uw E5-bibliotheek en index blijven intact. De gekozen embeddingdimensie staat vast voor deze bibliotheek; keuzes voor media-indexering kunnen later worden gewijzigd. Instellingen opslaan installeert Gemma niet. Met Accepteren en installeren wordt de nieuwe bibliotheek gemaakt en begint het downloaden van het model.',
     gemmaDimensions: 'Dimensies van de embeddings',
     gemmaSelectDimension: 'Kies een dimensie',
     gemmaDimensionTradeoff:
@@ -1448,7 +1448,15 @@ export const nl = {
       'Ik begrijp dat Gemma met een lege index begint en mijn E5-gegevens niet migreert.',
     gemmaConsentRequired: 'Kies een dimensie en bevestig de informatie over de nieuwe bibliotheek.',
     gemmaExistingSetup:
-      'Bestaande bibliotheek: {dimensions} dimensies · afbeeldingen: {images} · audio: {audio} · video: {video}. Deze keuzes staan vast.',
+      'Bestaande bibliotheek: {dimensions} dimensies · afbeeldingen: {images} · audio: {audio} · video: {video}. De embeddingdimensie staat vast; media-keuzes kunnen later worden gewijzigd.',
+    showDeveloperTools: 'Ontwikkelaarstools tonen',
+    browseDestination: 'Bladeren…',
+    closeMovePicker: 'Mapkiezer sluiten',
+    movePickerVolume: 'Volume',
+    movePickerLabel: 'Kies een lokale doelmap',
+    loadingMovePicker: 'Mappen laden…',
+    movePickerNoVolumes: 'Er zijn geen lokale mappen beschikbaar om te kiezen.',
+    movePickerUnsupportedLocation: 'U kunt hier alleen lokale mappen kiezen.',
     recommended: 'Aanbevolen',
     noProfiles: 'Deze host biedt geen modelprofielen aan.',
     reviewInstallation:
@@ -1690,6 +1698,15 @@ export const nl = {
     reasonExplicitlyExcluded: 'Expliciete uitsluiting',
     ocrRequiredFiles: 'Gescande PDF’s zonder doorzoekbare tekst',
     ocrRequiredGuidance: 'Kies hieronder welke gescande PDF’s u doorzoekbaar wilt maken.',
+    pdfToolsEnabled: "Gescande pdf's doorzoekbaar maken (ingeschakeld)",
+    pdfToolsDisabled: "Gescande pdf's doorzoekbaar maken (uitgeschakeld)",
+    gemmaMediaTitle: 'Gemma-media-indexering',
+    gemmaMediaSave: 'Mediakeuzes opslaan',
+    gemmaMediaConfirmRemoval: 'Verwijdering bevestigen en opslaan',
+    gemmaMediaRemovingWarning:
+      'Als u geïndexeerde media verwijdert, worden de vectoren voor dat mediatype permanent uit deze bibliotheek verwijderd.',
+    gemmaMediaAddingHelp:
+      'Nieuw ingeschakelde media worden tijdens de volgende bibliotheekscan geïndexeerd.',
     cleanupRunning: 'Opschoning actief',
     cleanupPending: 'Opschonen in wachtrij',
     cleanupFailed: 'Opschoning mislukt',

@@ -989,8 +989,34 @@ export const fr = {
     message: "Ce panneau n'a pas d'autres onglets. Le fermer laissera le panneau vide.",
     closeTab: "Fermer l'onglet",
   },
-  semanticComponents: en.semanticComponents,
-  semanticLibrary: en.semanticLibrary,
+  semanticComponents: {
+    ...en.semanticComponents,
+    gemmaName: 'EmbeddingGemma 2 (expérimental)',
+    gemmaFreshLibraryExplanation:
+      'Cela crée une bibliothèque vide. Votre bibliothèque E5 et son index sont conservés. La dimension d’embedding choisie est verrouillée pour cette bibliothèque ; les options d’indexation des médias pourront être modifiées ultérieurement. Enregistrer les paramètres n’installe pas Gemma. Accepter et installer crée la nouvelle bibliothèque et lance le téléchargement du modèle.',
+    gemmaExistingSetup:
+      'Bibliothèque existante : {dimensions} dimensions · images : {images} · audio : {audio} · vidéo : {video}. La dimension d’embedding est verrouillée ; les options des médias pourront changer ultérieurement.',
+    showDeveloperTools: 'Afficher les outils de développement',
+    browseDestination: 'Parcourir…',
+    closeMovePicker: 'Fermer le navigateur de dossiers',
+    movePickerVolume: 'Volume',
+    movePickerLabel: 'Choisir un dossier de destination local',
+    loadingMovePicker: 'Chargement des dossiers…',
+    movePickerNoVolumes: 'Aucun dossier local disponible.',
+    movePickerUnsupportedLocation: 'Seuls les dossiers locaux peuvent être choisis ici.',
+  },
+  semanticLibrary: {
+    ...en.semanticLibrary,
+    pdfToolsEnabled: 'Rendre les PDF numérisés consultables (activé)',
+    pdfToolsDisabled: 'Rendre les PDF numérisés consultables (désactivé)',
+    gemmaMediaTitle: 'Indexation des médias Gemma',
+    gemmaMediaSave: 'Enregistrer les choix des médias',
+    gemmaMediaConfirmRemoval: 'Confirmer la suppression et enregistrer',
+    gemmaMediaRemovingWarning:
+      'La suppression des médias indexés efface définitivement de cette bibliothèque les vecteurs de ce type de média.',
+    gemmaMediaAddingHelp:
+      'Les nouveaux médias activés seront indexés lors de la prochaine analyse de la bibliothèque.',
+  },
   semanticOcr: en.semanticOcr,
   semanticVocabulary: en.semanticVocabulary,
   llmProfiles: en.llmProfiles,

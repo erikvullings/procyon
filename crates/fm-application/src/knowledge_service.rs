@@ -143,6 +143,7 @@ fn snapshot_of(resolved: &ResolvedKnowledgeScope) -> KnowledgeAuthorizationSnaps
         allowed_source_ids: resolved.allowed_source_ids.clone(),
         unavailable_source_ids: resolved.unavailable_source_ids.clone(),
         fingerprints: resolved.fingerprints.clone(),
+        media: resolved.media,
     }
 }
 
@@ -2309,6 +2310,7 @@ mod partition_tests {
             fingerprints: HashMap::new(),
             titles: HashMap::new(),
             eligible: 0,
+            media: None,
         }
     }
 

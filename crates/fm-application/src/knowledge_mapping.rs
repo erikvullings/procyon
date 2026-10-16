@@ -620,6 +620,8 @@ pub(crate) fn answer_evidence_from_dto(
         label: citation_label(index),
         record_id: evidence.record_id.clone(),
         source_id: evidence.source_id.clone(),
+        media_type: evidence.media_type.clone(),
+        chunk_kind: evidence.chunk_kind.clone(),
         title: evidence.title.clone(),
         content: evidence.content.clone(),
         section_path: evidence.section_path.clone(),

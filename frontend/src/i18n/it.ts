@@ -983,8 +983,34 @@ export const it = {
     message: 'Questo riquadro non ha altre schede. Chiuderla lascerà il riquadro vuoto.',
     closeTab: 'Chiudi scheda',
   },
-  semanticComponents: en.semanticComponents,
-  semanticLibrary: en.semanticLibrary,
+  semanticComponents: {
+    ...en.semanticComponents,
+    gemmaName: 'EmbeddingGemma 2 (sperimentale)',
+    gemmaFreshLibraryExplanation:
+      'Questo avvia una libreria vuota. La libreria E5 e il relativo indice restano intatti. La dimensione di embedding scelta è bloccata per questa libreria; le opzioni di indicizzazione dei contenuti multimediali potranno essere modificate in seguito. Salvare le impostazioni non installa Gemma. Accetta e installa crea la nuova libreria e avvia il download del modello.',
+    gemmaExistingSetup:
+      'Libreria esistente: {dimensions} dimensioni · immagini: {images} · audio: {audio} · video: {video}. La dimensione di embedding è bloccata; le opzioni multimediali potranno cambiare in seguito.',
+    showDeveloperTools: 'Mostra strumenti per sviluppatori',
+    browseDestination: 'Sfoglia…',
+    closeMovePicker: 'Chiudi il selettore di cartelle',
+    movePickerVolume: 'Volume',
+    movePickerLabel: 'Scegli una cartella di destinazione locale',
+    loadingMovePicker: 'Caricamento cartelle…',
+    movePickerNoVolumes: 'Nessuna cartella locale disponibile.',
+    movePickerUnsupportedLocation: 'Qui è possibile scegliere solo cartelle locali.',
+  },
+  semanticLibrary: {
+    ...en.semanticLibrary,
+    pdfToolsEnabled: 'Rendere ricercabili i PDF scansionati (attivato)',
+    pdfToolsDisabled: 'Rendere ricercabili i PDF scansionati (disattivato)',
+    gemmaMediaTitle: 'Indicizzazione dei contenuti multimediali Gemma',
+    gemmaMediaSave: 'Salva le scelte multimediali',
+    gemmaMediaConfirmRemoval: 'Conferma la rimozione e salva',
+    gemmaMediaRemovingWarning:
+      'La rimozione dei contenuti multimediali indicizzati elimina definitivamente dalla libreria i vettori di quel tipo di media.',
+    gemmaMediaAddingHelp:
+      'I nuovi contenuti multimediali abilitati verranno indicizzati durante la prossima scansione della libreria.',
+  },
   semanticOcr: en.semanticOcr,
   semanticVocabulary: en.semanticVocabulary,
   llmProfiles: en.llmProfiles,

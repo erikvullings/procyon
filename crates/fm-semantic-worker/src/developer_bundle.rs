@@ -54,7 +54,7 @@ use crate::{
 const INDEX_REBUILD_BATCH_SIZE: usize = 256;
 
 #[cfg(feature = "gemma-native")]
-fn gemma_embedding_space(dimensions: usize, media: GemmaMedia) -> String {
+fn legacy_gemma_embedding_space(dimensions: usize, media: GemmaMedia) -> String {
     format!(
         "embeddinggemma-2/{dimensions}/images-{}/audio-{}/video-{}/v1",
         u8::from(media.images),
@@ -64,16 +64,25 @@ fn gemma_embedding_space(dimensions: usize, media: GemmaMedia) -> String {
 }
 
 #[cfg(feature = "gemma-native")]
+fn gemma_embedding_space(dimensions: usize) -> String {
+    format!("embeddinggemma-2/{dimensions}/v1")
+}
+
+#[cfg(feature = "gemma-native")]
 fn prepare_gemma_index_marker(
     model_directory: &Path,
     dimensions: usize,
     media: GemmaMedia,
 ) -> Result<(), DeveloperBundleError> {
     let marker = model_directory.join("embedding-space");
-    let space = gemma_embedding_space(dimensions, media);
+    let space = gemma_embedding_space(dimensions);
     if marker.exists() {
-        if std::fs::read_to_string(&marker)? != space {
+        let existing = std::fs::read_to_string(&marker)?;
+        if existing != space && existing != legacy_gemma_embedding_space(dimensions, media) {
             return Err(DeveloperBundleError::GemmaIndexIdentityMismatch);
+        }
+        if existing != space {
+            std::fs::write(&marker, &space)?;
         }
     } else {
         if model_directory.join("catalog.sqlite").exists() || model_directory.join("zvec").exists()
@@ -465,9 +474,9 @@ impl DeveloperModel {
         hasher.update(b"\0");
         hasher.update(self.identity.model_revision.as_bytes());
         #[cfg(feature = "gemma-native")]
-        if let Some((_, media)) = &self.gemma {
+        if self.gemma.is_some() {
             hasher.update(b"\0");
-            hasher.update(gemma_embedding_space(self.identity.dimensions, *media).as_bytes());
+            hasher.update(gemma_embedding_space(self.identity.dimensions).as_bytes());
         }
         let digest = hasher.finalize();
         let slug = self
@@ -484,14 +493,8 @@ impl DeveloperModel {
             .take(48)
             .collect::<String>();
         #[cfg(feature = "gemma-native")]
-        let slug = if let Some((_, media)) = &self.gemma {
-            format!(
-                "{slug}-d{}-i{}-a{}-v{}",
-                self.identity.dimensions,
-                u8::from(media.images),
-                u8::from(media.audio),
-                u8::from(media.video)
-            )
+        let slug = if self.gemma.is_some() {
+            format!("{slug}-d{}", self.identity.dimensions)
         } else {
             slug
         };
@@ -499,6 +502,82 @@ impl DeveloperModel {
             "{slug}-{:016x}",
             u64::from_be_bytes(digest[..8].try_into().unwrap_or([0; 8]))
         ))
+    }
+
+    #[cfg(feature = "gemma-native")]
+    fn migrate_gemma_index(
+        data_directory: &Path,
+        model: &DeveloperModel,
+        destination: &Path,
+    ) -> Result<(), DeveloperBundleError> {
+        if destination.exists() {
+            return Ok(());
+        }
+        if model.gemma.is_none() {
+            return Ok(());
+        }
+        // Only a directory carrying its own exact legacy marker is eligible.
+        // Never silently select one among several previously initialized indexes.
+        let mut source = None;
+        for flags in 0..8 {
+            let media = GemmaMedia {
+                images: flags & 1 != 0,
+                audio: flags & 2 != 0,
+                video: flags & 4 != 0,
+            };
+            let space = legacy_gemma_embedding_space(model.identity.dimensions, media);
+            let mut hasher = Sha256::new();
+            hasher.update(model.identity.model_id.as_bytes());
+            hasher.update(b"\0");
+            hasher.update(model.identity.model_revision.as_bytes());
+            hasher.update(b"\0");
+            hasher.update(space.as_bytes());
+            let digest = hasher.finalize();
+            let slug = model
+                .identity
+                .model_id
+                .chars()
+                .map(|character| {
+                    if character.is_ascii_alphanumeric() || character == '.' || character == '-' {
+                        character.to_ascii_lowercase()
+                    } else {
+                        '-'
+                    }
+                })
+                .take(48)
+                .collect::<String>();
+            let legacy = data_directory.join("indexes").join(format!(
+                "{slug}-d{}-i{}-a{}-v{}-{:016x}",
+                model.identity.dimensions,
+                u8::from(media.images),
+                u8::from(media.audio),
+                u8::from(media.video),
+                u64::from_be_bytes(digest[..8].try_into().unwrap_or([0; 8])),
+            ));
+            if !legacy.exists() {
+                continue;
+            }
+            if std::fs::read_to_string(legacy.join("embedding-space"))
+                .ok()
+                .as_deref()
+                != Some(space.as_str())
+            {
+                return Err(DeveloperBundleError::GemmaIndexIdentityMismatch);
+            }
+            if source.replace((legacy, media)).is_some() {
+                return Err(DeveloperBundleError::GemmaIndexIdentityMismatch);
+            }
+        }
+        if let Some((legacy, _)) = source {
+            std::fs::rename(legacy, destination)?;
+            // The vector space is independent of current permissions; a removed
+            // permission must not force an index reset.
+            std::fs::write(
+                destination.join("embedding-space"),
+                gemma_embedding_space(model.identity.dimensions),
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -555,8 +634,9 @@ fn prepare_active_model_index(
     let model_directory = model.index_directory(data_directory);
     #[cfg(feature = "gemma-native")]
     if model.gemma.is_some() {
-        // Gemma has a separate dimension/media-specific space. Do not touch
+        // Gemma has a separate dimension-specific space. Do not touch
         // E5's activation marker or clear E5's existing index on a switch.
+        DeveloperModel::migrate_gemma_index(data_directory, model, &model_directory)?;
         return Ok(model_directory);
     }
     let identity = format!(
@@ -868,6 +948,14 @@ impl DeveloperWorker {
             ZvecStorage::open(&index_directory, model.identity.dimensions, false)?
         };
         catalog.validate_registered_library_manifests(&manifest)?;
+        #[cfg(feature = "gemma-native")]
+        if let Some((_, media)) = gemma {
+            let pending = catalog.revoke_gemma_media(media.images, media.audio, media.video)?;
+            if !pending.is_empty() {
+                index.delete(&pending.iter().map(String::as_str).collect::<Vec<_>>())?;
+                catalog.finish_gemma_media_cleanup(&pending)?;
+            }
+        }
         Ok(Self {
             catalog,
             passages,
@@ -1225,7 +1313,7 @@ mod tests {
 
     #[cfg(feature = "gemma-native")]
     #[test]
-    fn gemma_space_marks_dimensions_and_each_media_without_touching_e5_activation() {
+    fn gemma_space_marks_dimensions_but_not_media_without_touching_e5_activation() {
         let directory = TestDirectory::new("gemma-index-identity");
         drop(DeveloperWorker::open(&directory.0, None).unwrap());
         let e5_directory = fixture_index_directory(&directory.0);
@@ -1241,11 +1329,10 @@ mod tests {
         prepare_gemma_index_marker(&gemma_index, 512, media).unwrap();
         assert_eq!(
             std::fs::read_to_string(gemma_index.join("embedding-space")).unwrap(),
-            "embeddinggemma-2/512/images-0/audio-0/video-1/v1"
+            "embeddinggemma-2/512/v1"
         );
         prepare_gemma_index_marker(&gemma_index, 512, media).unwrap();
         for other in [
-            (256, media),
             (
                 512,
                 GemmaMedia {
@@ -1268,11 +1355,12 @@ mod tests {
                 },
             ),
         ] {
-            assert!(matches!(
-                prepare_gemma_index_marker(&gemma_index, other.0, other.1),
-                Err(DeveloperBundleError::GemmaIndexIdentityMismatch)
-            ));
+            prepare_gemma_index_marker(&gemma_index, other.0, other.1).unwrap();
         }
+        assert!(matches!(
+            prepare_gemma_index_marker(&gemma_index, 256, media),
+            Err(DeveloperBundleError::GemmaIndexIdentityMismatch)
+        ));
         drop(DeveloperWorker::open(&directory.0, None).unwrap());
         assert_eq!(
             std::fs::read(directory.0.join("active-model-index")).unwrap(),

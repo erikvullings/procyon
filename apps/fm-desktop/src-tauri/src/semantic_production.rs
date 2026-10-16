@@ -380,9 +380,9 @@ pub(crate) fn gemma_library_settings(
     {
         return Err("Gemma library identity does not match the signed active model".to_owned());
     }
-    let media = model
+    let media = policy
         .gemma_media()
-        .ok_or_else(|| "Gemma library is missing immutable media choices".to_owned())?;
+        .ok_or_else(|| "Gemma library is missing media consent".to_owned())?;
     let dimensions = usize::try_from(model.dimensions())
         .map_err(|_| "Gemma dimensions exceed the worker's address space".to_owned())?;
     Ok((

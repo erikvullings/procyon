@@ -118,6 +118,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   let activeSection: SettingsSection = 'appearance';
   let lastInitialSection: SettingsSection | undefined;
   let semanticStatus: SemanticComponentStatus | undefined;
+  let semanticOcrEnabled: boolean | undefined;
   let saveLlmProfile: (() => Promise<boolean>) | undefined;
 
   function resetDraft(current: SettingsEditorAttrs): void {
@@ -631,10 +632,23 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         }),
                       ),
                       m('details.fm-settings-semantic-tools', [
-                        m('summary', t('semanticLibrary', 'pdfTools')),
+                        m(
+                          'summary',
+                          t(
+                            'semanticLibrary',
+                            semanticOcrEnabled === undefined
+                              ? 'pdfTools'
+                              : semanticOcrEnabled
+                                ? 'pdfToolsEnabled'
+                                : 'pdfToolsDisabled',
+                          ),
+                        ),
                         m(SemanticOcrManagement, {
                           client: current.client,
                           hideHeading: true,
+                          onStatusChange: (status) => {
+                            semanticOcrEnabled = status.enabled;
+                          },
                         }),
                       ]),
                       m('details.fm-settings-semantic-tools', [

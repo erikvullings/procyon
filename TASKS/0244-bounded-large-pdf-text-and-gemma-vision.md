@@ -42,7 +42,7 @@ standalone page PNG may therefore be indexed while its source PDF is absent from
   reason, preserves the previous complete generation, and never reports an unembedded page as
   searchable. Keep baseline text-layer extraction for E5 and Gemma; OCR remains an explicitly
   installed/consented option and must never run silently.
-- A Gemma library with its existing immutable **images** choice off indexes no PDF image vectors.
+- A Gemma library with **images** consent off indexes no PDF image vectors.
   With images on, embed eligible PDF XObjects with page/image provenance and render scanned or
   image-only pages lacking useful extracted text when an approved renderer is installed. Bound
   each rendered image by pixel/encoded-byte limits and use one-page windows; never silently

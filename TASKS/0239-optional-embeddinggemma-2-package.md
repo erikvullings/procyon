@@ -42,9 +42,9 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   warns can yield invalid or degraded embeddings.
 - At library initialization, select one supported output dimension
   (128/256/512/768) and separate opt-in checkboxes for images, audio, and
-  video. These choices are immutable for that library; do not expose controls
-  that change them after initialization. Any future change path must explicitly
-  confirm and rebuild affected vectors and indexes.
+  video. The dimension is immutable. Media consent changes in an existing
+  library follow task 0247: incrementally index newly allowed media and
+  explicitly confirm resumable removal when revoking media.
   Video requires the vision encoder even if standalone image indexing is off.
   Explain the quality/storage trade-off, especially for 128-dimensional media
   search. Truncate and L2-normalize query and corpus vectors identically.

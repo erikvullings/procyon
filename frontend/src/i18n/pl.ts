@@ -984,8 +984,34 @@ export const pl = {
     message: 'Ten panel nie ma innych kart. Jego zamknięcie spowoduje opróżnienie panelu.',
     closeTab: 'Zamknij kartę',
   },
-  semanticComponents: en.semanticComponents,
-  semanticLibrary: en.semanticLibrary,
+  semanticComponents: {
+    ...en.semanticComponents,
+    gemmaName: 'EmbeddingGemma 2 (eksperymentalny)',
+    gemmaFreshLibraryExplanation:
+      'Tworzy to pustą bibliotekę. Biblioteka E5 i jej indeks pozostają nienaruszone. Wybrany wymiar embeddingu jest zablokowany dla tej biblioteki; opcje indeksowania multimediów można zmienić później. Zapisanie ustawień nie instaluje Gemmy. Wybór „Akceptuj i zainstaluj” utworzy nową bibliotekę i rozpocznie pobieranie modelu.',
+    gemmaExistingSetup:
+      'Istniejąca biblioteka: {dimensions} wymiary · obrazy: {images} · audio: {audio} · wideo: {video}. Wymiar embeddingu jest zablokowany; opcje multimediów można zmienić później.',
+    showDeveloperTools: 'Pokaż narzędzia programistyczne',
+    browseDestination: 'Przeglądaj…',
+    closeMovePicker: 'Zamknij przeglądarkę folderów',
+    movePickerVolume: 'Wolumin',
+    movePickerLabel: 'Wybierz lokalny folder docelowy',
+    loadingMovePicker: 'Wczytywanie folderów…',
+    movePickerNoVolumes: 'Brak lokalnych folderów do przeglądania.',
+    movePickerUnsupportedLocation: 'Można tu wybierać tylko foldery lokalne.',
+  },
+  semanticLibrary: {
+    ...en.semanticLibrary,
+    pdfToolsEnabled: 'Umożliw wyszukiwanie w zeskanowanych plikach PDF (włączone)',
+    pdfToolsDisabled: 'Umożliw wyszukiwanie w zeskanowanych plikach PDF (wyłączone)',
+    gemmaMediaTitle: 'Indeksowanie multimediów Gemma',
+    gemmaMediaSave: 'Zapisz wybór multimediów',
+    gemmaMediaConfirmRemoval: 'Potwierdź usunięcie i zapisz',
+    gemmaMediaRemovingWarning:
+      'Usunięcie zindeksowanych multimediów trwale kasuje z tej biblioteki wektory danego typu.',
+    gemmaMediaAddingHelp:
+      'Nowo włączone multimedia zostaną zindeksowane podczas następnego skanowania biblioteki.',
+  },
   semanticOcr: en.semanticOcr,
   semanticVocabulary: en.semanticVocabulary,
   llmProfiles: en.llmProfiles,

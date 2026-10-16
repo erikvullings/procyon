@@ -156,6 +156,7 @@ semantic components are not installed.
 - [ ] 0245 PDF footnote reading order and separation *(needs 0180, 0192; tracked follow-up,
   not an experimental release gate)*
 - [ ] 0246 Shift Gemma qualification failures left *(needs 0244; before another candidate round)*
+- [ ] 0247 Change Gemma library media consent *(needs 0239)*
 
 ## Structured knowledge search
 

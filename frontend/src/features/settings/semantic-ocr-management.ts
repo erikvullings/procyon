@@ -10,10 +10,12 @@ import type {
   SemanticOcrUnavailableReason,
   StartSemanticOcrRemediationRequest,
 } from '../../models';
+import { busyButtonAttrs } from './busy-button';
 
 export interface SemanticOcrManagementAttrs {
   readonly client: FileManagerClient;
   readonly hideHeading?: boolean;
+  readonly onStatusChange?: (status: SemanticOcrStatus) => void;
 }
 
 type BusyAction = 'consent' | 'start' | 'cancel';
@@ -111,13 +113,15 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
   let status: SemanticOcrStatus | undefined;
   let loading = true;
   let busy: BusyAction | undefined;
+  let busyTarget: string | undefined;
   let error: string | undefined;
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
   const selected = new Set<string>();
 
-  function applyStatus(next: SemanticOcrStatus): void {
+  function applyStatus(next: SemanticOcrStatus, attrs: SemanticOcrManagementAttrs): void {
     status = next;
+    attrs.onStatusChange?.(next);
     const reported = new Set(next.reportedFiles.map(targetKey));
     for (const key of selected) {
       if (!reported.has(key)) selected.delete(key);
@@ -139,7 +143,7 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
   async function load(attrs: SemanticOcrManagementAttrs, initial = true): Promise<void> {
     if (initial) loading = true;
     try {
-      applyStatus(await attrs.client.getSemanticOcrStatus());
+      applyStatus(await attrs.client.getSemanticOcrStatus(), attrs);
       error = undefined;
     } catch (cause) {
       error = errorMessage(cause);
@@ -156,12 +160,13 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
     busy = 'consent';
     error = undefined;
     try {
-      applyStatus(await attrs.client.setSemanticOcrConsent(enabled));
+      applyStatus(await attrs.client.setSemanticOcrConsent(enabled), attrs);
     } catch (cause) {
       error = errorMessage(cause);
       await load(attrs, false);
     } finally {
       busy = undefined;
+      busyTarget = undefined;
       schedulePoll(attrs);
       m.redraw();
     }
@@ -170,8 +175,10 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
   async function start(
     attrs: SemanticOcrManagementAttrs,
     request: StartSemanticOcrRemediationRequest,
+    target: string,
   ): Promise<void> {
     busy = 'start';
+    busyTarget = target;
     error = undefined;
     try {
       await attrs.client.startSemanticOcrRemediation(request);
@@ -181,6 +188,7 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
       error = errorMessage(cause);
     } finally {
       busy = undefined;
+      busyTarget = undefined;
       schedulePoll(attrs);
       m.redraw();
     }
@@ -188,6 +196,7 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
 
   async function cancel(attrs: SemanticOcrManagementAttrs, jobId: string): Promise<void> {
     busy = 'cancel';
+    busyTarget = `cancel:${jobId}`;
     error = undefined;
     try {
       await attrs.client.cancelSemanticOcrRemediation(jobId);
@@ -196,6 +205,7 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
       error = errorMessage(cause);
     } finally {
       busy = undefined;
+      busyTarget = undefined;
       schedulePoll(attrs);
       m.redraw();
     }
@@ -247,8 +257,9 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
                     'aria-label': t('semanticOcr', 'runFileFor', {
                       file: decodedLocation(file.location.uri),
                     }),
+                    ...busyButtonAttrs(busyTarget === `file:${key}`),
                     disabled: controlsDisabled,
-                    onclick: () => void start(attrs, { scope: 'oneFile', file }),
+                    onclick: () => void start(attrs, { scope: 'oneFile', file }, `file:${key}`),
                   },
                   t('semanticOcr', 'runFile'),
                 ),
@@ -261,8 +272,9 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
               type: 'button',
               'data-ocr-root': rootId,
               'aria-label': t('semanticOcr', 'runRootFor', { root: rootId }),
+              ...busyButtonAttrs(busyTarget === `root:${rootId}`),
               disabled: controlsDisabled,
-              onclick: () => void start(attrs, { scope: 'enrolledRoot', rootId }),
+              onclick: () => void start(attrs, { scope: 'enrolledRoot', rootId }, `root:${rootId}`),
             },
             t('semanticOcr', 'runRoot'),
           ),
@@ -281,8 +293,10 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
           'button.fm-semantic-ocr-action',
           {
             type: 'button',
+            ...busyButtonAttrs(busyTarget === 'selected'),
             disabled: controlsDisabled || selectedFiles.length === 0,
-            onclick: () => void start(attrs, { scope: 'selectedFiles', files: selectedFiles }),
+            onclick: () =>
+              void start(attrs, { scope: 'selectedFiles', files: selectedFiles }, 'selected'),
           },
           t('semanticOcr', 'runSelected'),
         ),
@@ -290,8 +304,9 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
           'button.fm-semantic-ocr-action',
           {
             type: 'button',
+            ...busyButtonAttrs(busyTarget === 'all'),
             disabled: controlsDisabled,
-            onclick: () => void start(attrs, { scope: 'allReported' }),
+            onclick: () => void start(attrs, { scope: 'allReported' }, 'all'),
           },
           t('semanticOcr', 'runAll'),
         ),
@@ -349,6 +364,7 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
                         {
                           type: 'button',
                           'aria-label': t('semanticOcr', 'cancelJobNamed', { job: job.id }),
+                          ...busyButtonAttrs(busyTarget === `cancel:${job.id}`),
                           disabled: busy !== undefined,
                           onclick: () => void cancel(attrs, job.id),
                         },

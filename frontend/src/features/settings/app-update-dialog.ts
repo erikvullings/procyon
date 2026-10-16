@@ -1,8 +1,9 @@
-import m, { type FactoryComponent } from 'mithril';
+import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type { AppUpdateInfo, AppUpdateProgress } from '../../models';
+import { busyButtonAttrs } from './busy-button';
 
 export interface AppUpdateDialogAttrs {
   readonly client: FileManagerClient;
@@ -40,6 +41,14 @@ export const AppUpdateDialog: FactoryComponent<AppUpdateDialogAttrs> = () => {
     }
   }
 
+  // ModalPanel footer buttons accept no ARIA attributes, so mirror busy state onto the DOM.
+  function syncInstallBusy(vnode: VnodeDOM): void {
+    const button = vnode.dom.closest('.modal')?.querySelector('.fm-update-install');
+    const busy = busyButtonAttrs(installing)['aria-busy'];
+    if (busy === undefined) button?.removeAttribute('aria-busy');
+    else button?.setAttribute('aria-busy', busy);
+  }
+
   return {
     view: ({ attrs }) =>
       m(ModalPanel, {
@@ -48,31 +57,35 @@ export const AppUpdateDialog: FactoryComponent<AppUpdateDialogAttrs> = () => {
         description:
           attrs.update === undefined
             ? undefined
-            : m('.fm-app-update-dialog-content', [
-                m(
-                  'p',
-                  t('settings', 'updateAvailableDescription', {
-                    current: attrs.update.currentVersion,
-                    version: attrs.update.version,
-                  }),
-                ),
-                attrs.update.body === undefined
-                  ? undefined
-                  : m('p.fm-update-notes', attrs.update.body),
-                installing
-                  ? m(
-                      'p.fm-update-status',
-                      { role: 'status' },
-                      totalBytes === undefined
-                        ? t('settings', 'downloadingUpdate')
-                        : t('settings', 'updateDownloadProgress', {
-                            downloaded: downloadedBytes,
-                            total: totalBytes,
-                          }),
-                    )
-                  : undefined,
-                error === undefined ? undefined : m('.fm-update-error', { role: 'alert' }, error),
-              ]),
+            : m(
+                '.fm-app-update-dialog-content',
+                { oncreate: syncInstallBusy, onupdate: syncInstallBusy },
+                [
+                  m(
+                    'p',
+                    t('settings', 'updateAvailableDescription', {
+                      current: attrs.update.currentVersion,
+                      version: attrs.update.version,
+                    }),
+                  ),
+                  attrs.update.body === undefined
+                    ? undefined
+                    : m('p.fm-update-notes', attrs.update.body),
+                  installing
+                    ? m(
+                        'p.fm-update-status',
+                        { role: 'status' },
+                        totalBytes === undefined
+                          ? t('settings', 'downloadingUpdate')
+                          : t('settings', 'updateDownloadProgress', {
+                              downloaded: downloadedBytes,
+                              total: totalBytes,
+                            }),
+                      )
+                    : undefined,
+                  error === undefined ? undefined : m('.fm-update-error', { role: 'alert' }, error),
+                ],
+              ),
         isOpen: attrs.update !== undefined,
         closeOnEsc: !installing,
         onToggle: (open: boolean) => {
@@ -90,7 +103,9 @@ export const AppUpdateDialog: FactoryComponent<AppUpdateDialogAttrs> = () => {
               : t('settings', 'installAndRestart'),
             onclick: () => void install(attrs),
             disabled: installing,
-            className: 'fm-update-install',
+            className: ['fm-update-install', busyButtonAttrs(installing).class]
+              .filter(Boolean)
+              .join(' '),
           },
         ],
       }),

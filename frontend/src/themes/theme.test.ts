@@ -311,6 +311,30 @@ describe('theme stylesheet', () => {
     expect(themeCss).not.toMatch(/\.fm-basket-actions button\.btn-flat\s*\{[^}]*transition:/);
   });
 
+  it('keeps busy action labels at normal text contrast instead of disabled grey', () => {
+    const busyRule = materializedCss.match(
+      /button\.fm-busy-button\[aria-busy="true"\]:is\(:disabled, :not\(:disabled\)\)\s*\{([^}]*)\}/,
+    )?.[1];
+    expect(busyRule).toMatch(/color:\s*var\(--fm-text\)\s*!important/);
+    expect(busyRule).toMatch(/background-color:\s*var\(--fm-hover\)\s*!important/);
+    expect(busyRule).toMatch(/opacity:\s*1\s*!important/);
+    expect(busyRule).toMatch(/pointer-events:\s*none/);
+    expect(materializedCss).toMatch(
+      /@media \(prefers-reduced-motion: no-preference\)\s*\{\s*button\.fm-busy-button\[aria-busy="true"\]::before\s*\{\s*animation:/,
+    );
+
+    const themes = [
+      themeBlock(/:root,\s*\[data-theme=["']light["']\]\s*\{([^}]*)\}/),
+      themeBlock(/\[data-theme=["']dark["']\]\s*\{([^}]*)\}/),
+      themeBlock(/:root:not\(\[data-theme\]\)\s*\{([^}]*)\}/),
+    ];
+    for (const theme of themes) {
+      expect(
+        contrastRatio(tokenValue(theme, '--fm-text'), tokenValue(theme, '--fm-hover')),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('meets WCAG AA for text on surfaces and both selection states', () => {
     const themes = [
       themeBlock(/:root,\s*\[data-theme=["']light["']\]\s*\{([^}]*)\}/),

@@ -55,6 +55,8 @@ pub enum SemanticLibraryOperation {
     Resume,
     /// Replace safe per-root eligibility overrides.
     UpdateEligibilityOverrides,
+    /// Change optional Gemma media permissions without changing vector dimensions.
+    UpdateGemmaMedia,
 }
 
 /// Authority and operations exposed by the active semantic-library service.
@@ -498,6 +500,8 @@ pub struct SemanticLibraryStatus {
     pub paused: bool,
     /// Stable library/model identity, when configured.
     pub library: Option<SemanticLibraryIdentity>,
+    /// Current optional Gemma media consent; text is always permitted.
+    pub gemma_media: Option<core::GemmaMediaSelection>,
     /// Resource policy, when configured.
     pub resource_profile: Option<SemanticResourceProfile>,
     /// Reconciliation cadence.
@@ -515,6 +519,7 @@ impl SemanticLibraryStatus {
             revision: 0,
             paused: false,
             library: None,
+            gemma_media: None,
             resource_profile: None,
             reconciliation_interval_seconds: None,
             roots: Vec::new(),
@@ -1158,7 +1163,7 @@ impl SemanticLibraryService {
                         SemanticLibraryOperation::ViewFolderStatus,
                     ]
                 } else {
-                    vec![
+                    let mut operations = vec![
                         SemanticLibraryOperation::ViewStatus,
                         SemanticLibraryOperation::ViewFolderStatus,
                         SemanticLibraryOperation::PreviewEnrolment,
@@ -1169,7 +1174,17 @@ impl SemanticLibraryService {
                         SemanticLibraryOperation::Pause,
                         SemanticLibraryOperation::Resume,
                         SemanticLibraryOperation::UpdateEligibilityOverrides,
-                    ]
+                    ];
+                    if managed
+                        .initial_policy
+                        .library()
+                        .model()
+                        .gemma_media()
+                        .is_some()
+                    {
+                        operations.push(SemanticLibraryOperation::UpdateGemmaMedia);
+                    }
+                    operations
                 },
             },
         }
@@ -1668,6 +1683,41 @@ impl SemanticLibraryService {
         locked.status()
     }
 
+    /// Updates optional Gemma media consent at an optimistic policy revision.
+    ///
+    /// Removals require explicit confirmation. The durable policy is committed
+    /// before returning, so every subsequent feed uses the new permissions.
+    pub fn update_gemma_media(
+        &self,
+        access: &SemanticAccessContext,
+        media: core::GemmaMediaSelection,
+        expected_revision: u64,
+        confirm_removal: bool,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        self.ensure_operation_allowed(access, SemanticLibraryOperation::UpdateGemmaMedia)?;
+        let managed = self.managed_backend()?;
+        managed.authorize(access)?;
+        let mut locked = managed.lock()?;
+        let mut next = locked.checked_data(expected_revision)?.clone();
+        if next.policy.library().model().gemma_media().is_none() {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
+        if !next
+            .policy
+            .set_gemma_media(media, confirm_removal)
+            .map_err(|error| match error {
+                core::PolicyError::MediaRemovalRequiresConfirmation => {
+                    SemanticLibraryError::RemovalRequiresConfirmation
+                }
+                _ => SemanticLibraryError::InvalidRequest,
+            })?
+        {
+            return locked.status();
+        }
+        locked.commit(next, core::LibraryOperation::Enrolment)?;
+        locked.status()
+    }
+
     /// Detaches an *already deleted* workspace while retaining global root
     /// consent and deduplicated content.
     ///
@@ -1977,7 +2027,7 @@ impl SemanticLibraryService {
         let mut locked = managed.lock()?;
         let data = locked.data()?;
         let mut policy = core::EligibilityPolicy::curated_defaults();
-        if let Some(media) = data.policy.library().model().gemma_media() {
+        if let Some(media) = data.policy.gemma_media() {
             policy = policy.with_gemma_media(media);
         }
         let budgets = data.policy.resource_profile().budgets;
@@ -2033,12 +2083,7 @@ impl SemanticLibraryService {
         };
         Ok(SemanticWorkerFeedPlan {
             paused,
-            pdf_images_consented: data
-                .policy
-                .library()
-                .model()
-                .gemma_media()
-                .is_some_and(|media| media.images),
+            pdf_images_consented: data.policy.gemma_media().is_some_and(|media| media.images),
             decisions: worker_decisions,
             eligible_locations: eligible,
             skipped_reason_counts: reason_counts(&core::EligibilityReasonCounts::from_decisions(
@@ -2281,6 +2326,7 @@ impl SemanticLibraryService {
         selection: &RagScopeSelection,
     ) -> Result<ResolvedKnowledgeScope, SemanticLibraryError> {
         let sources = self.resolve_scope_sources(access, workspace_id, selection, false)?;
+        let media = self.status(access)?.gemma_media;
         Ok(ResolvedKnowledgeScope {
             filters: QueryFilters {
                 tenant_id: sources.tenant_id,
@@ -2311,6 +2357,7 @@ impl SemanticLibraryService {
             fingerprints: sources.fingerprints,
             titles: sources.titles,
             eligible: sources.eligible,
+            media,
         })
     }
 
@@ -2634,6 +2681,8 @@ pub(crate) struct ResolvedKnowledgeScope {
     pub(crate) fingerprints: HashMap<String, String>,
     pub(crate) titles: HashMap<String, String>,
     pub(crate) eligible: u64,
+    /// Current optional media permissions for evidence projection.
+    pub(crate) media: Option<core::GemmaMediaSelection>,
 }
 
 fn semantic_worker_tenant(
@@ -3512,6 +3561,7 @@ fn project_status(data: &LibraryData) -> SemanticLibraryStatus {
                 embedding_space: model.embedding_space().to_owned(),
             },
         }),
+        gemma_media: data.policy.gemma_media(),
         resource_profile: Some(SemanticResourceProfile {
             kind: data.policy.resource_profile().kind,
             budgets: data.policy.resource_profile().budgets,
@@ -3859,6 +3909,9 @@ pub enum SemanticLibraryError {
     /// Request data is malformed or violates policy.
     #[error("semantic library request is invalid")]
     InvalidRequest,
+    /// The caller did not explicitly confirm removing a currently enabled modality.
+    #[error("removing Gemma media consent requires confirmation")]
+    RemovalRequiresConfirmation,
     /// The supplied workspace is not attached to the active root.
     #[error("an active workspace/root is required")]
     WorkspaceRequired,
@@ -3993,7 +4046,7 @@ impl SemanticLibraryComposition {
                 let model = policy.library().model();
                 Ok(GemmaLibrarySetup {
                     dimensions: model.dimensions(),
-                    media: model
+                    media: policy
                         .gemma_media()
                         .ok_or(SemanticLibraryError::IncompatibleLibraryIdentity)?,
                     image_device: if cfg!(all(target_os = "macos", target_arch = "aarch64")) {

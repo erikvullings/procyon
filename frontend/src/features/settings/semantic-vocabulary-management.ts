@@ -3,6 +3,7 @@ import m, { type FactoryComponent } from 'mithril';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type { SemanticVocabulary, WorkspaceId } from '../../models';
+import { busyButtonAttrs } from './busy-button';
 
 export interface SemanticVocabularyManagementAttrs {
   readonly client: FileManagerClient;
@@ -20,6 +21,7 @@ export const SemanticVocabularyManagement: FactoryComponent<
   let source = '';
   let loading = true;
   let busy = false;
+  let importing = false;
   let error: string | undefined;
   let pendingDelete: string | undefined;
 
@@ -41,6 +43,7 @@ export const SemanticVocabularyManagement: FactoryComponent<
     skosJson: string,
   ): Promise<boolean> => {
     busy = true;
+    importing = true;
     error = undefined;
     try {
       const imported = await client.importSemanticVocabulary(skosJson);
@@ -51,6 +54,7 @@ export const SemanticVocabularyManagement: FactoryComponent<
       return false;
     } finally {
       busy = false;
+      importing = false;
       m.redraw();
     }
   };
@@ -73,6 +77,7 @@ export const SemanticVocabularyManagement: FactoryComponent<
           'button.btn',
           {
             type: 'button',
+            ...busyButtonAttrs(importing),
             disabled: busy || loading || source.trim().length === 0,
             onclick: async () => {
               if (await importVocabulary(attrs.client, source)) {
