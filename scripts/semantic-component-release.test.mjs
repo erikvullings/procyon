@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { checkDesktopGemmaRelease } from './check-desktop-gemma-release.mjs';
+import {
+  checkDesktopGemmaRelease,
+  verifySemanticWorkerSource,
+} from './check-desktop-gemma-release.mjs';
 import {
   createSemanticComponentReleaseManifest,
   semanticCatalogSourceRevision,
@@ -133,13 +137,6 @@ test('experimental desktop requires opt-in and an approved architecture and mode
     () => checkDesktopGemmaRelease(approval, 'true', 'true'),
     /universal macOS desktop/u,
   );
-  assert.throws(
-    () => checkDesktopGemmaRelease(approval, 'true', 'true', 'arm64', 'a'.repeat(40)),
-    /worker source revision does not match desktop release/u,
-  );
-  assert.doesNotThrow(() =>
-    checkDesktopGemmaRelease(approval, 'true', 'true', 'arm64', approval.sourceRevision),
-  );
   const targets = Object.fromEntries(
     ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'].map((target) => [
       target,
@@ -224,6 +221,52 @@ test('experimental desktop requires opt-in and an approved architecture and mode
         signature,
       ),
     /model identity differs/u,
+  );
+});
+
+test('desktop release allows reviewed manifest commits but rejects worker source changes', (context) => {
+  const root = mkdtempSync(join(tmpdir(), 'semantic-worker-source-'));
+  context.after(() => rmSync(root, { force: true, recursive: true }));
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  execFileSync('git', ['config', 'user.email', 'test@example.invalid'], { cwd: root });
+  execFileSync('git', ['config', 'user.name', 'Test'], { cwd: root });
+  mkdirSync(join(root, 'crates/fm-semantic-worker/src'), { recursive: true });
+  mkdirSync(join(root, 'docs/evaluations'), { recursive: true });
+  writeFileSync(join(root, 'Cargo.toml'), '[workspace]\n');
+  writeFileSync(join(root, 'crates/fm-semantic-worker/src/lib.rs'), 'pub fn worker() {}\n');
+  writeFileSync(join(root, 'docs/evaluations/semantic-gemma-experimental-v1.json'), '{}\n');
+  execFileSync('git', ['add', '.'], { cwd: root });
+  execFileSync('git', ['commit', '-qm', 'Build signed candidate'], { cwd: root });
+  const candidateRevision = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: root,
+    encoding: 'utf8',
+  }).trim();
+
+  writeFileSync(
+    join(root, 'docs/evaluations/semantic-gemma-experimental-v1.json'),
+    '{"qualificationRunId":123}\n',
+  );
+  execFileSync('git', ['add', '.'], { cwd: root });
+  execFileSync('git', ['commit', '-qm', 'Record signed candidate approval'], { cwd: root });
+  const releaseRevision = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: root,
+    encoding: 'utf8',
+  }).trim();
+  assert.doesNotThrow(() => verifySemanticWorkerSource(candidateRevision, releaseRevision, root));
+
+  writeFileSync(
+    join(root, 'crates/fm-semantic-worker/src/lib.rs'),
+    'pub fn worker() { todo!() }\n',
+  );
+  execFileSync('git', ['add', '.'], { cwd: root });
+  execFileSync('git', ['commit', '-qm', 'Change worker after candidate'], { cwd: root });
+  const changedWorkerRevision = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: root,
+    encoding: 'utf8',
+  }).trim();
+  assert.throws(
+    () => verifySemanticWorkerSource(candidateRevision, changedWorkerRevision, root),
+    /build inputs changed after signed candidate/u,
   );
 });
 
