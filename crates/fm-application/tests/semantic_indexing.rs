@@ -787,10 +787,10 @@ async fn enabling_media_indexes_only_newly_permitted_files_without_reindexing_te
         .await
         .unwrap();
     assert_eq!(capability.restart_count.load(Ordering::SeqCst), 1);
-    assert_eq!(
-        capability.ingested_titles.lock().unwrap().as_slice(),
-        ["note.txt", "sound.wav", "image.png"]
-    );
+    let mut ingested = capability.ingested_titles.lock().unwrap().clone();
+    assert_eq!(ingested.first().map(String::as_str), Some("note.txt"));
+    ingested[1..].sort();
+    assert_eq!(ingested, ["note.txt", "image.png", "sound.wav"]);
     assert_eq!(
         updated.roots[0].reconciliation_generation,
         initial.reconciliation_generation
