@@ -50,11 +50,20 @@ pub const OCRMYPDF_ENABLED_ENV: &str = "PROCYON_SEMANTIC_OCRMYPDF";
 /// Optional trusted executable override for non-standard installations.
 pub const OCRMYPDF_EXECUTABLE_ENV: &str = "PROCYON_OCRMYPDF_EXECUTABLE";
 const DEFAULT_OCR_TIMEOUT: Duration = Duration::from_secs(4 * 60);
+/// OCRmyPDF page-worker processes per conversion (`--jobs`).
+///
+/// OCRmyPDF otherwise starts one worker per CPU, each rasterizing a page and
+/// running Tesseract concurrently. That pool, not the semantic worker, dominated
+/// the scanned-PDF worker-tree memory peak (issue #134); a single job keeps the
+/// OCR helpers to roughly one rasterized page at a time. Recognized text is
+/// unchanged: only page scheduling differs, so throughput is traded for the
+/// tree-memory ceiling and slow documents end in the explicit OCR deadline.
+pub const OCRMYPDF_JOBS: u32 = 1;
 const OCR_POLL_INTERVAL: Duration = Duration::from_millis(25);
 const OCRMYPDF_VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 const OCRMYPDF_VERSION_OUTPUT_LIMIT: usize = 16 * 1024;
 /// Oldest stable OCRmyPDF release audited for the converter's
-/// `--output-type pdf --redo-ocr --optimize 0 --quiet` invocation.
+/// `--output-type pdf --redo-ocr --optimize 0 --jobs 1 --quiet` invocation.
 pub const OCRMYPDF_MINIMUM_SUPPORTED_VERSION: &str = "16.0.0";
 /// Exclusive upper bound for audited OCRmyPDF releases.
 ///
@@ -642,6 +651,8 @@ impl OcrMyPdfConverter {
             .arg("--redo-ocr")
             .arg("--optimize")
             .arg("0")
+            .arg("--jobs")
+            .arg(OCRMYPDF_JOBS.to_string())
             .arg("--quiet")
             .arg(&input_path)
             .arg(&output_path);
