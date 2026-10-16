@@ -33,6 +33,7 @@ import {
   withExpanded,
   withLoading,
 } from '../directory-tree/directory-tree-state';
+import { busyButtonAttrs } from './busy-button';
 
 export interface SemanticComponentManagementAttrs {
   readonly client: FileManagerClient;
@@ -526,6 +527,7 @@ function offerView(
       'button.btn.fm-semantic-action.fm-semantic-accept',
       {
         type: 'button',
+        ...busyButtonAttrs(busy === 'install'),
         disabled: busy !== undefined || !canAccept,
         onclick: onAccept,
       },
@@ -578,6 +580,7 @@ function indexRemovalPlanView(
         'button.fm-semantic-action',
         {
           type: 'button',
+          ...busyButtonAttrs(busy === 'confirmRemoval'),
           disabled: busy !== undefined || !confirmed,
           onclick: onConfirm,
         },
@@ -654,6 +657,7 @@ function migrationProgressView(
             'button.fm-semantic-action',
             {
               type: 'button',
+              ...busyButtonAttrs(busy === 'checkpointMigration'),
               disabled:
                 busy !== undefined ||
                 completedDocuments.trim().length === 0 ||
@@ -672,6 +676,7 @@ function migrationProgressView(
           'button.fm-semantic-action',
           {
             type: 'button',
+            ...busyButtonAttrs(busy === 'completeMigration'),
             disabled:
               busy !== undefined || progress.completedDocuments < progress.estimate.documents,
             onclick: onComplete,
@@ -1202,6 +1207,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
             'button.fm-semantic-action',
             {
               type: 'button',
+              ...busyButtonAttrs(busy === 'confirmMigration'),
               disabled: busy !== undefined,
               onclick: confirmMigration,
             },
@@ -1363,6 +1369,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                       'button.btn.fm-semantic-action',
                       {
                         type: 'button',
+                        ...busyButtonAttrs(busy === 'offer'),
                         disabled: busy !== undefined || switchProfiles.length === 0,
                         onclick: createOffer,
                       },
@@ -1503,6 +1510,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                 'button.fm-semantic-action',
                 {
                   type: 'button',
+                  ...busyButtonAttrs(busy === 'pause'),
                   disabled: busy !== undefined,
                   onclick: () =>
                     void runAction('pause', () => client.pauseSemanticComponentIndexing()),
@@ -1517,6 +1525,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                 'button.fm-semantic-action',
                 {
                   type: 'button',
+                  ...busyButtonAttrs(busy === 'resume'),
                   disabled: busy !== undefined,
                   onclick: () =>
                     void runAction('resume', () => client.resumeSemanticComponentIndexing()),
@@ -1547,6 +1556,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                   'button.fm-semantic-action',
                   {
                     type: 'button',
+                    ...busyButtonAttrs(busy === 'planRemoval'),
                     disabled: busy !== undefined || enrolmentId.trim().length === 0,
                     onclick: planIndexRemoval,
                   },
@@ -1594,6 +1604,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                   'button.fm-semantic-action',
                   {
                     type: 'button',
+                    ...busyButtonAttrs(busy === 'move'),
                     disabled: busy !== undefined || moveDestination.trim().length === 0,
                     onclick: moveData,
                   },
@@ -1644,6 +1655,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                   'button.fm-semantic-action.fm-semantic-uninstall-confirm',
                   {
                     type: 'button',
+                    ...busyButtonAttrs(busy === 'uninstall'),
                     disabled: busy !== undefined || uninstallDecision === undefined,
                     onclick: uninstall,
                   },
@@ -1714,6 +1726,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                 'button.fm-semantic-action',
                 {
                   type: 'button',
+                  ...busyButtonAttrs(busy === 'planMigration'),
                   disabled:
                     busy !== undefined ||
                     migrationTarget === undefined ||
@@ -1916,6 +1929,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                 'button.fm-semantic-action',
                 {
                   type: 'button',
+                  ...busyButtonAttrs(busy === 'importModel'),
                   disabled: busy !== undefined || !validLocalModel(),
                   onclick: importLocalModel,
                 },

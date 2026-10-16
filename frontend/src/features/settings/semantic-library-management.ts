@@ -17,6 +17,7 @@ import type {
   SemanticRootStatus,
   WorkspaceId,
 } from '../../models';
+import { busyButtonAttrs } from './busy-button';
 
 export interface SemanticLibraryManagementAttrs {
   readonly client: FileManagerClient;
@@ -285,7 +286,12 @@ function estimateView(
         ),
         m(
           'button.fm-semantic-library-action',
-          { type: 'button', disabled: busy !== undefined, onclick: onEnrol },
+          {
+            type: 'button',
+            ...busyButtonAttrs(busy === 'enrol'),
+            disabled: busy !== undefined,
+            onclick: onEnrol,
+          },
           busy === 'enrol' ? t('semanticLibrary', 'working') : actionLabel,
         ),
       ]),
@@ -427,6 +433,7 @@ function exclusionPlanView(
       'button.fm-semantic-library-action.fm-semantic-library-destructive',
       {
         type: 'button',
+        ...busyButtonAttrs(busy === 'confirmExclusion'),
         disabled: busy !== undefined,
         onclick: onExclude,
       },
@@ -620,6 +627,7 @@ function rootStatusView(
                     'button.fm-semantic-library-action',
                     {
                       type: 'button',
+                      ...busyButtonAttrs(busy === 'cleanup'),
                       disabled: busy !== undefined,
                       onclick: () => onResumeCleanup(exclusion.cleanup.planId as string),
                     },
@@ -1056,6 +1064,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
                   'button.fm-semantic-library-action',
                   {
                     type: 'button',
+                    ...busyButtonAttrs(busy === 'media'),
                     disabled:
                       busy !== undefined ||
                       (selectedMedia.images === status.gemmaMedia.images &&
@@ -1075,6 +1084,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
                 'button.fm-semantic-library-action',
                 {
                   type: 'button',
+                  ...busyButtonAttrs(busy === 'pause' || busy === 'resume'),
                   disabled: busy !== undefined,
                   onclick: () =>
                     void action(attrs, status?.paused ? 'resume' : 'pause', async () => {
@@ -1164,6 +1174,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
                           'button.fm-semantic-library-action',
                           {
                             type: 'button',
+                            ...busyButtonAttrs(busy === 'preview'),
                             disabled: busy !== undefined,
                             onclick: () => previewInclusion(attrs),
                           },
@@ -1182,6 +1193,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
                           'button.fm-semantic-library-action',
                           {
                             type: 'button',
+                            ...busyButtonAttrs(busy === 'planExclusion'),
                             disabled: busy !== undefined,
                             onclick: () => planExclusion(attrs, attrs.location as Location),
                           },

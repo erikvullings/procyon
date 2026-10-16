@@ -237,10 +237,14 @@ describe('SemanticComponentManagement', () => {
     expect(root.querySelector('.fm-semantic-offer [role="status"]')?.textContent).toContain(
       'Starting the signed model download',
     );
-    expect(button('Installing…').disabled).toBe(true);
+    const installing = button('Installing…');
+    expect(installing.disabled).toBe(true);
+    expect(installing.getAttribute('aria-busy')).toBe('true');
+    expect(installing.classList.contains('fm-busy-button')).toBe(true);
     await vi.waitFor(() => expect(finishInstall).toBeTypeOf('function'));
     finishInstall?.();
     await vi.waitFor(() => expect(root.textContent).toContain('Installed and enabled'));
+    expect(root.querySelector('[aria-busy="true"].fm-busy-button')).toBeNull();
     expect(root.querySelector('.fm-semantic-offer [role="status"]')).toBeNull();
   });
 
