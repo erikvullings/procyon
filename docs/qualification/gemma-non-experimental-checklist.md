@@ -247,10 +247,12 @@ script or require an E5 library for this item.
 3. Prepare **three independent text queries per modality** (nine total), each describing one
    known target without naming its file: visible subject/composition for images, audible content
    for audio, and a scene/action sampled in a video. Avoid exact title matches and reuse neither
-   the query text nor a path in the shared table. In the app's **Semantic search & Ask > Search**,
-   search the included folder with Gemma active. For each query, record locally whether the
-   expected file appears among the **first five distinct files** in the result list, its rank,
-   and whether **Open image/audio/video** opens that same source. Do not treat a filename or
+   the query text nor a path in the shared table. With Gemma active, open the **Semantic Search**
+   dialog from the toolbar button (tooltip **Semantic search & Ask** or **Semantic Search…**),
+   enter the query under **What are you looking for?**, scope it to the included folder, and press
+   **Search**. For each query, record locally whether the expected file appears among the **first
+   five distinct files** in the result list, its rank, and whether the result's **Open image**,
+   **Open audio**, or **Open video** button opens that same source. Do not treat a filename or
    excerpt-only lexical hit as proof of media retrieval; check the result's media label.
 4. Inspect one successful result of each modality: **Image**, **Audio**, **Video** labels must
    match the source type and open the correct file. File-level image and audio evidence need
