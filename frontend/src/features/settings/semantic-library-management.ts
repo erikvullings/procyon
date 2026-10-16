@@ -1141,68 +1141,60 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
             ? m('p', t('semanticLibrary', 'openFolder'))
             : folder === undefined
               ? m('p', t('semanticLibrary', 'folderStatusUnavailable'))
-              : folder.consent === 'includedHere' &&
-                  includedRoots.some(
-                    (root) =>
-                      root.location.providerId === attrs.location?.providerId &&
-                      root.location.uri === attrs.location?.uri,
-                  )
-                ? undefined
-                : m('section.fm-semantic-library-folder', [
-                    m('h6', t('semanticLibrary', 'currentFolder')),
-                    m('p.fm-semantic-library-location', attrs.location.uri),
-                    folder.consent === 'notIncluded'
-                      ? m('p.fm-semantic-library-folder-help', t('semanticLibrary', 'changeFolder'))
-                      : undefined,
-                    m(
-                      '.fm-semantic-library-consent-state',
-                      { 'data-consent': folder.consent, 'aria-live': 'polite' },
-                      consentLabel(folder.consent),
-                    ),
-                    folder.sourceAvailable
-                      ? undefined
-                      : m('.fm-semantic-library-source-unavailable', { role: 'status' }, [
-                          m('strong', t('semanticLibrary', 'sourceUnavailable')),
-                          folder.unavailableReason == null
-                            ? undefined
-                            : ` — ${folder.unavailableReason}`,
-                        ]),
-                    (folder.consent === 'notIncluded' || !folder.workspaceReferenced) &&
-                    folder.consent !== 'excluded' &&
-                    has('previewEnrolment')
-                      ? m(
-                          'button.fm-semantic-library-action',
-                          {
-                            type: 'button',
-                            ...busyButtonAttrs(busy === 'preview'),
-                            disabled: busy !== undefined,
-                            onclick: () => previewInclusion(attrs),
-                          },
-                          busy === 'preview'
-                            ? t('semanticLibrary', 'working')
-                            : folder.consent === 'notIncluded'
-                              ? t('semanticLibrary', 'previewInclusion')
-                              : t('semanticLibrary', 'attachToWorkspace'),
-                        )
-                      : undefined,
-                    (folder.consent === 'includedHere' ||
-                      folder.consent === 'inheritedFromParent') &&
-                    folder.workspaceReferenced &&
-                    has('planExclusion')
-                      ? m(
-                          'button.fm-semantic-library-action',
-                          {
-                            type: 'button',
-                            ...busyButtonAttrs(busy === 'planExclusion'),
-                            disabled: busy !== undefined,
-                            onclick: () => planExclusion(attrs, attrs.location as Location),
-                          },
-                          busy === 'planExclusion'
-                            ? t('semanticLibrary', 'working')
-                            : t('semanticLibrary', 'reviewExclusion'),
-                        )
-                      : undefined,
-                  ]),
+              : m('section.fm-semantic-library-folder', [
+                  m('h6', t('semanticLibrary', 'currentFolder')),
+                  m('p.fm-semantic-library-location', attrs.location.uri),
+                  folder.consent === 'notIncluded'
+                    ? m('p.fm-semantic-library-folder-help', t('semanticLibrary', 'changeFolder'))
+                    : undefined,
+                  m(
+                    '.fm-semantic-library-consent-state',
+                    { 'data-consent': folder.consent, 'aria-live': 'polite' },
+                    consentLabel(folder.consent),
+                  ),
+                  folder.sourceAvailable
+                    ? undefined
+                    : m('.fm-semantic-library-source-unavailable', { role: 'status' }, [
+                        m('strong', t('semanticLibrary', 'sourceUnavailable')),
+                        folder.unavailableReason == null
+                          ? undefined
+                          : ` — ${folder.unavailableReason}`,
+                      ]),
+                  (folder.consent === 'notIncluded' || !folder.workspaceReferenced) &&
+                  folder.consent !== 'excluded' &&
+                  has('previewEnrolment')
+                    ? m(
+                        'button.fm-semantic-library-action',
+                        {
+                          type: 'button',
+                          ...busyButtonAttrs(busy === 'preview'),
+                          disabled: busy !== undefined,
+                          onclick: () => previewInclusion(attrs),
+                        },
+                        busy === 'preview'
+                          ? t('semanticLibrary', 'working')
+                          : folder.consent === 'notIncluded'
+                            ? t('semanticLibrary', 'previewInclusion')
+                            : t('semanticLibrary', 'attachToWorkspace'),
+                      )
+                    : undefined,
+                  (folder.consent === 'includedHere' || folder.consent === 'inheritedFromParent') &&
+                  folder.workspaceReferenced &&
+                  has('planExclusion')
+                    ? m(
+                        'button.fm-semantic-library-action',
+                        {
+                          type: 'button',
+                          ...busyButtonAttrs(busy === 'planExclusion'),
+                          disabled: busy !== undefined,
+                          onclick: () => planExclusion(attrs, attrs.location as Location),
+                        },
+                        busy === 'planExclusion'
+                          ? t('semanticLibrary', 'working')
+                          : t('semanticLibrary', 'removeFolder'),
+                      )
+                    : undefined,
+                ]),
           preview === undefined
             ? undefined
             : estimateView(
@@ -1236,6 +1228,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
             : m('p.fm-semantic-library-error', { role: 'alert' }, error),
           m('section.fm-semantic-library-roots', [
             m('h6', t('semanticLibrary', 'enrolledRoots')),
+            m('p.fm-semantic-library-guidance', t('semanticLibrary', 'includedFoldersHelp')),
             includedRoots.length === 0
               ? m('p', t('semanticLibrary', 'noEnrolledRoots'))
               : m('ul', includedRoots.map(rootView)),
