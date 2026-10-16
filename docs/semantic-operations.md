@@ -165,6 +165,19 @@ installed and activated rather than a fixed one.
   `StorageAdmission` rejects the operation unless the configured free-space reserve remains.
 - Server deployments use administrator-provisioned components, local-only enrolment policy by
   default, and hard tenant quotas. A tenant quota failure does not alter another tenant's catalog.
+- An operator can instead attach `fm-server` read-only to the desktop app's library on the same
+  machine with `--semantic-desktop-profile <profile>` (`FM_SERVER_SEMANTIC_DESKTOP_PROFILE`, or
+  `semanticDesktopProfile` in the config file). The server must bind to loopback and keep
+  authentication enabled, or it refuses to start. It runs as the same OS user, joins the desktop's
+  already-running worker with the owner-only launch secret, and serves the device library as the
+  device principal. It never launches, restarts, or stops that worker. It never enrols, excludes,
+  reconciles, or migrates, and it never writes shared vocabularies or saved conversations. Loading
+  the library may complete a pending journal record under the cross-process lock, exactly as the
+  desktop would. The library reports `unavailable` while the desktop has no active model or
+  consented library, and while any enrolled folder lies outside the server's `--root` set or cannot be
+  resolved (missing, unreadable, or replaced by a symlink that escapes the roots). Citation and
+  source resolution additionally check the resolved file against the current `--root` set and
+  return 403 outside it.
 - Enrolment never occurs from a search. Roots require explicit recursive consent and remain
   independently excludable.
 

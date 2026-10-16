@@ -679,6 +679,20 @@ impl IpcSemanticCapability {
         }
     }
 
+    /// Joins the desktop host's already-running worker without ever
+    /// launching, replacing, or stopping it.
+    ///
+    /// Used by a separate process, such as an operator-attached `fm-server`,
+    /// that reads the desktop's library on the same device. Shutdown and
+    /// restart only drop this process's connection.
+    #[must_use]
+    pub fn desktop_attached(runtime_directory: &Path) -> Self {
+        Self {
+            connector: WorkerConnector::attached(runtime_directory),
+            client: AsyncMutex::new(None),
+        }
+    }
+
     /// Configures a desktop worker that is discovered or launched on demand.
     #[must_use]
     pub fn desktop_on_demand(runtime_directory: &Path, executable: &Path) -> Self {
@@ -968,6 +982,10 @@ impl SemanticCapability for IpcSemanticCapability {
     }
 
     async fn shutdown(&self, grace: Duration) -> Result<(), SemanticError> {
+        if self.connector.is_attached() {
+            self.client.lock().await.take();
+            return Ok(());
+        }
         let Some(client) = self.client.lock().await.as_ref().cloned() else {
             return Ok(());
         };
@@ -977,6 +995,10 @@ impl SemanticCapability for IpcSemanticCapability {
 
     async fn restart(&self, grace: Duration) -> Result<(), SemanticError> {
         let mut cached = self.client.lock().await;
+        if self.connector.is_attached() {
+            cached.take();
+            return Ok(());
+        }
         // Taken before the shutdown round trip so the connection is dropped
         // even if the worker refuses or the transport fails: a stale client
         // pointing at the previous model must never be reused.

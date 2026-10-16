@@ -448,6 +448,11 @@ pub enum ClientError {
 
 enum ConnectorSource {
     Provisioned(LaunchSecret),
+    /// Joins a worker that another host process launched and owns, without
+    /// ever starting, replacing, or stopping it.
+    Attached {
+        runtime_directory: PathBuf,
+    },
     Desktop {
         runtime_directory: PathBuf,
         executable: PathBuf,
@@ -635,6 +640,30 @@ impl WorkerConnector {
             endpoint,
             source: ConnectorSource::Provisioned(secret),
         }
+    }
+
+    /// Joins the desktop host's already-running worker through its owner-only
+    /// runtime directory.
+    ///
+    /// The connector never launches, replaces, or shuts down that worker: when
+    /// the desktop host is not serving one, [`Self::connect`] reports the
+    /// endpoint as absent. It authenticates with the same per-launch secret
+    /// file the desktop host writes, so only the same OS user can attach.
+    #[must_use]
+    pub fn attached(runtime_directory: &Path) -> Self {
+        Self {
+            endpoint: Endpoint::for_runtime_directory(runtime_directory),
+            source: ConnectorSource::Attached {
+                runtime_directory: runtime_directory.to_owned(),
+            },
+        }
+    }
+
+    /// Reports whether this connector joins a worker owned by another host
+    /// process, which callers must then never stop or restart.
+    #[must_use]
+    pub const fn is_attached(&self) -> bool {
+        matches!(self.source, ConnectorSource::Attached { .. })
     }
 
     /// Creates an on-demand desktop launcher.
@@ -836,7 +865,8 @@ impl WorkerConnector {
             }
             ConnectorSource::Desktop {
                 runtime_directory, ..
-            } => {
+            }
+            | ConnectorSource::Attached { runtime_directory } => {
                 if !runtime_directory.is_dir() {
                     return Ok(None);
                 }
@@ -873,7 +903,10 @@ impl WorkerConnector {
             ConnectorSource::Provisioned(_) => true,
             ConnectorSource::Desktop {
                 runtime_directory, ..
-            } => !runtime_directory.join("worker.pid").exists(),
+            }
+            | ConnectorSource::Attached { runtime_directory } => {
+                !runtime_directory.join("worker.pid").exists()
+            }
         }
     }
 
@@ -916,6 +949,12 @@ impl WorkerConnector {
             ConnectorSource::Provisioned(secret) => {
                 WorkerClient::connect(&self.endpoint, secret.clone()).await
             }
+            ConnectorSource::Attached { .. } => self.connect_existing().await?.ok_or_else(|| {
+                ClientError::Io(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "the desktop host is not running a semantic worker",
+                ))
+            }),
             ConnectorSource::Desktop {
                 runtime_directory,
                 executable,
@@ -6066,6 +6105,47 @@ mod tests {
     use super::{Endpoint, LaunchSecret, WorkerConfig};
     use std::path::Path;
     use std::time::Duration;
+
+    #[tokio::test]
+    async fn attached_connector_joins_a_running_worker_and_never_launches_one() {
+        let root = tempfile::tempdir().expect("temporary runtime root");
+        let runtime = root.path().join("worker-runtime");
+        let connector = super::WorkerConnector::attached(&runtime);
+        assert!(connector.is_attached());
+
+        let absent = connector.connect().await.expect_err("no worker is running");
+        assert!(matches!(
+            absent,
+            super::ClientError::Io(ref error) if error.kind() == std::io::ErrorKind::NotFound
+        ));
+        assert!(
+            !runtime.exists(),
+            "attaching must not create the desktop runtime directory"
+        );
+
+        super::ensure_runtime_directory(&runtime).expect("owner-only runtime directory");
+        let secret = LaunchSecret::generate();
+        super::write_secret_file(&runtime.join("launch.secret"), &secret).expect("secret file");
+        let endpoint = Endpoint::for_runtime_directory(&runtime);
+        let server = tokio::spawn(
+            super::WorkerServer::new(WorkerConfig::new(endpoint.clone(), secret)).run(),
+        );
+        for _ in 0..200 {
+            if endpoint.exists() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        let client = connector.connect().await.expect("join the running worker");
+        assert_eq!(client.protocol_version(), 1);
+        assert!(
+            !runtime.join("launch.lock").exists(),
+            "attaching must not take the desktop launch lock"
+        );
+        client.shutdown(Duration::from_millis(100)).await.unwrap();
+        server.await.unwrap().unwrap();
+    }
 
     #[test]
     fn authenticated_sessions_default_to_the_ipc_connection_lifetime() {

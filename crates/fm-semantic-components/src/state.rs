@@ -1005,6 +1005,30 @@ impl SemanticStateStore {
         self.with_exclusive_lock(|| self.load_or_default_unlocked(app_data))
     }
 
+    /// Reads persisted state under the cross-process lock without recovering
+    /// an interrupted uninstall or defaulting absent state.
+    ///
+    /// This is for a process that only observes another host's components,
+    /// such as an operator-attached `fm-server`: it never writes, and absent
+    /// state is reported as `None` rather than synthesized.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed filesystem, serialization, or validation failure.
+    pub fn read_without_recovery(
+        &self,
+        app_data: &Path,
+    ) -> Result<Option<SemanticState>, SemanticStateError> {
+        if !self.path().is_file() {
+            return Ok(None);
+        }
+        self.with_exclusive_lock(|| {
+            let state = self.read_state_unlocked(app_data)?;
+            state.validate_referenced_payloads()?;
+            Ok(Some(state))
+        })
+    }
+
     pub(crate) fn load_or_default_unlocked(
         &self,
         app_data: &Path,

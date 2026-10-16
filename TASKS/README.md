@@ -159,6 +159,8 @@ semantic components are not installed.
 - [ ] 0247 Change Gemma library media consent *(needs 0239)*
 - [ ] 0248 Gemma non-experimental qualification tooling *(needs 0244; tooling done, manual
   results and promotion decision open)*
+- [ ] 0250 Read-only fm-server attachment to the desktop semantic library *(needs 0248; automated
+  coverage done, manual cross-host citation qualification open)*
 
 ## Structured knowledge search
 
