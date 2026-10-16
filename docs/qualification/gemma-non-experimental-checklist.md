@@ -15,10 +15,10 @@ the [results table](#results) before anyone may remove the experimental label. A
 - `scripts/measure-semantic-worker-resources.mjs` records only process memory, the byte size of
   temporary files the worker holds open, and free disk space. It does not record file names or
   temporary paths.
-- `scripts/semantic-quality-compare.mjs` compares the file paths you type into a local JSON file.
-  It never opens those files and makes no network requests.
-- Keep the generated `samples.csv`, `summary.json`, and quality JSON files local. Before you share
-  results, copy only the numbers into the results table. Query wording and file paths can be
+- Item 5 uses only the installed app and a deliberately chosen local test folder; do not use
+  private files you do not want to index. Keep query wording, result lists, and file paths local.
+- Keep the generated `samples.csv` and `summary.json` local. Before you share results, copy only
+  aggregate counts and observations into the results table. Query wording and file paths can be
   sensitive, so summarize them instead of pasting them.
 
 ## Preparation
@@ -222,47 +222,72 @@ Pass criteria:
 - Restoring a snapshot always recovers.
 - No step modifies the E5 index.
 
-## 5. Model quality (Gemma vs E5)
+## 5. On-device Gemma media search
 
-Goal: on your own documents, Gemma's top-k results are at least as good as E5's.
+Goal: qualify image, audio, and video retrieval against a small, **locally chosen** test set on
+the installed candidate, including source attribution and honest coverage. Published text
+benchmarks (see the [model card](https://huggingface.co/google/embeddinggemma-2) and
+[existing labelled evaluation](../evaluations/embeddinggemma-judged-2026-10-10.md)) provide
+context, not a local Gemma-vs-E5 promotion threshold. Do not run the `semantic:quality:compare`
+script or require an E5 library for this item.
 
-The existing `semantic_production_evaluation` example
-(`crates/fm-application/examples/evaluate_semantic_production.rs`) runs a fixed, embedded corpus,
-so it cannot score your own files and queries. Use it as a reproducible baseline, and use
-`semantic-quality-compare` for this item.
+1. Make a separate, backed-up test folder with **at least three supported files per modality**:
+   JPEG/PNG/WebP images, WAV/MP3/FLAC/AAC/M4A audio, and MP4/MOV video. Use files you own and
+   are willing to index, with recognizable, different subjects, sounds, and scenes. Add at least
+   two same-modality distractors for each target (the other two targets suffice). Avoid filenames
+   that contain the query words. Keep an excluded or unenrolled folder with one distinctive
+   media file for the privacy check. Do not record paths or queries in the shared results table.
+2. In **Settings > Semantic**, keep the existing Gemma library and dimension. Under **Gemma media
+   indexing**, enable **Include images**, **Include audio**, and **Include video (uses the vision
+   encoder)**, then **Save media choices**. An existing library that started with images enabled
+   and audio/video disabled does **not** need to be recreated. Include the test folder for
+   semantic search; leave the privacy-check folder unenrolled or explicitly excluded. Wait for
+   the next library scan and for the included folder to finish indexing. If a medium is skipped,
+   fails, or the worker is unavailable, record the reason instead of counting it as a search miss.
+3. Prepare **three independent text queries per modality** (nine total), each describing one
+   known target without naming its file: visible subject/composition for images, audible content
+   for audio, and a scene/action sampled in a video. Avoid exact title matches and reuse neither
+   the query text nor a path in the shared table. With Gemma active, open the **Semantic Search**
+   dialog from the toolbar button (tooltip **Semantic search & Ask** or **Semantic Search…**),
+   enter the query under **What are you looking for?**, scope it to the included folder, and press
+   **Search**. For each query, record locally whether the expected file appears among the **first
+   five distinct files** in the result list, its rank, and whether the result's **Open image**,
+   **Open audio**, or **Open video** button opens that same source. Do not treat a filename or
+   excerpt-only lexical hit as proof of media retrieval; check the result's media label.
+4. Inspect one successful result of each modality: **Image**, **Audio**, **Video** labels must
+   match the source type and open the correct file. File-level image and audio evidence need
+   not claim a particular region or second. Video evidence may describe a number of sampled
+   frames and **partial temporal coverage**; it must not claim an exact matching time or frame.
+   Current Search UI opens the source file, not a timestamped video segment. If a preview cannot
+   be shown, the source must still open and the UI must not present an invented preview.
+5. Search for the distinctive content of the unenrolled/excluded file in the same scope. Inspect
+   the first five results and confirm that neither this source nor a path or preview from it is
+   shown. If it appears, mark **Fail** regardless of retrieval counts. Do not disable an existing
+   medium solely for this check: removing consent deletes its indexed vectors.
 
-1. Enrol the **same** folder in both the E5 and the Gemma libraries, and wait until both are fully
-   indexed.
-2. Run `pnpm --silent semantic:quality:compare --template > ~/procyon-quality.json`. Write about 20
-   queries in your own words, without copying sentences from the documents. For each query, list
-   the files that correctly answer it, as paths relative to the enrolled root.
-3. With Gemma active, run each query in Search and record the ranked file paths of the first 10
-   results under `results.gemma`. Switch to E5 and record the same under `results.e5`. Repeated
-   excerpts from the same file are collapsed automatically.
-4. Run `pnpm --silent semantic:quality:compare ~/procyon-quality.json` (add `--json` for
-   machine-readable output) and copy the table into the results section.
+Pass criteria (all required):
 
-Pass criteria, all of:
-
-- Gemma MRR ≥ E5 MRR − 0.05.
-- Gemma hit@5 ≥ E5 hit@5.
-- Gemma misses (no correct file in the top 10) ≤ E5 misses.
-- Any query that Gemma loses badly (E5 rank 1–3, Gemma missing) is reviewed and explained in the
-  notes.
-
-With about 20 queries, one query changes hit@k by 0.05, so treat small differences as ties. This
-is a sanity check on real use, not a statistically significant benchmark.
+- Image **3/3**, audio **3/3**, and video **3/3** expected targets in the top five distinct files,
+  with the matching media label and the correct file opened for every hit. Record counts by
+  modality, plus any failures or skips, not source names.
+- The sampled evidence observations in step 4 are accurate: video coverage is explicitly partial
+  when reported, and no result implies an exact timestamp/region that the app cannot resolve.
+- The unenrolled/excluded source is absent; no content, path, or preview escapes its scope.
+- Any failed indexing, crash, unusable source link, mislabeled evidence, or unauthorized result is
+  **Fail**. Mark **Blocked** only when the installed candidate cannot perform the run (for
+  example, the Gemma worker is unavailable); record the reason. Do not silently omit a modality
+  or count an unindexed file as a pass.
 
 ## Results
 
 | # | Item | Platform / build | Measured values | Result (Pass / Fail / Blocked) | Date | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1a | Resource ceilings, Metal | | Peak tree RSS:  · Peak single RSS:  · Peak temp:  · Free-disk drop: | | | |
+| 1a | Resource ceilings, Metal | v0.5.0-2 · macOS ARM64 · Gemma FP32 Metal | First 20 min: peak tree RSS 6,434,422,784 B (5.99 GiB; 12 processes at peak, 13 max) · peak single RSS 2,760,671,232 B (2.57 GiB) · peak temp 79,048,531 B (75.4 MiB) · free-disk drop 26,345,328,640 B (inconclusive). Continuation 20 min: peak RSS 2,995,748,864 B (1 process) · peak temp 0 B. | Fail | 2026-10-16 | Provisional installed run while reindexing roots, including a 166 MiB / 354-page scanned PDF. Indexing was still active at 40 min. Concurrent local builds confound the free-disk drop; do not attribute it to worker/index. CPU not measured. |
 | 1b | Resource ceilings, CPU forced | | Peak tree RSS:  · Peak single RSS:  · Peak temp:  · Free-disk drop: | | | |
-| 1c | Proposed memory ceiling | | | | | |
+| 1c | Proposed memory ceiling | macOS ARM64 · Gemma FP32 Metal | 7.5 GiB (peak tree RSS × 1.25, rounded up to next 0.5 GiB; observed peak: 6,434,422,784 B / 5.99 GiB) | Fail | 2026-10-16 | Exceeds the 4 GiB pass ceiling; helper RSS investigation issue filed. This blocks promotion. |
 | 2 | CPU fallback | | Backend file: · Queries in top 5: /5 · Page-image budget shown: | | | |
 | 3 | Cross-host navigation | | Capabilities: · Citations matched: /4 | | | |
 | 4 | Upgrade and rollback | v0.5.0-2 → | Steps 3–6: · Rollback state: | | | |
-| 5 | Model quality | | Gemma MRR / hit@5 / misses: · E5 MRR / hit@5 / misses: | | | |
+| 5 | On-device Gemma media search | | Image top-5 /3: · Audio top-5 /3: · Video top-5 /3: · Correct media/source: /9 · Excluded source absent: · Coverage/provenance accurate: | | | |
 
 Promotion decision (release owner): ______________________  Date: __________
