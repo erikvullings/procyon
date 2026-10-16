@@ -1592,8 +1592,9 @@ export const en = {
       'Semantic indexing retains normalized excerpts locally until their source scope is explicitly excluded.',
     openFolder: 'Open a folder in a pane to include it in search.',
     folderStatusUnavailable: 'Folder consent status is unavailable.',
-    currentFolder: 'Folder selected for indexing',
-    changeFolder: 'To choose another folder, open it in a pane.',
+    currentFolder: 'Folder open in a pane',
+    changeFolder:
+      'This folder is not indexed. Opening it does not start indexing. To index just a subfolder, open that subfolder in a pane and select Review indexing.',
     includedHere: 'Included here',
     inheritedFromParent: 'Inherited from parent',
     excluded: 'Excluded',
@@ -1614,7 +1615,6 @@ export const en = {
       'Indexing stores extracted text and embeddings locally until you remove the folder.',
     confirmInclusion: 'OK, index folder',
     includeFolder: 'Include and index folder',
-    reviewExclusion: 'Remove from search…',
     exclusionPlan: 'Remove folder from search?',
     exclusionWarning:
       'This removes the folder from search and deletes its local index data where no other included folder needs it. Your original files are not deleted.',
@@ -1628,10 +1628,12 @@ export const en = {
     categoryVectors: 'Unreferenced vectors',
     categoryConversationPins: 'Saved conversation evidence pins',
     enrolledRoots: 'Included folders',
+    includedFoldersHelp:
+      'Only these folders and eligible subfolders are indexed. Opening a folder in a pane does not include it.',
     noEnrolledRoots: 'No folders are included yet.',
     cleanupInProgress: 'Removal and cleanup',
     removedFolders: 'Removed folders',
-    removeFolder: 'Remove',
+    removeFolder: 'Remove from indexing…',
     folderDetails: 'Indexing details',
     indexedSources: {
       1: '1 confirmed indexed document',
@@ -1665,7 +1667,7 @@ export const en = {
     pdfToolsDisabled: 'Make scanned PDFs searchable (disabled)',
     ocrNeededCount: '{count} scanned PDF(s) need text recognition; see indexing details.',
     missingRootGuidance:
-      'Moving or deleting an included folder does not remove its index automatically. Offline folders keep their search data; use Remove to delete it.',
+      'Moving or deleting an included folder does not remove its index automatically. Offline folders keep their search data; use Remove from indexing to delete it.',
     stableIdentity: 'Stable identity',
     verified: 'Verified',
     unverified: 'Unavailable; moves require new confirmation',
