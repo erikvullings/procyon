@@ -582,6 +582,7 @@ pub fn run() {
             commands::write_os_clipboard_files,
             commands::read_os_clipboard_files,
             commands::show_platform_context_menu,
+            commands::perform_native_edit_command,
             commands::list_open_with_applications,
             commands::open_with_application,
             commands::open_with_any_application,

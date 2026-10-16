@@ -116,6 +116,7 @@ import {
   type GlobalKeydownContext,
 } from '../features/keybindings/global-keydown-handler';
 import { ShortcutsHelpDialog } from '../features/keybindings/shortcuts-help-dialog';
+import { replayEditCommand } from '../features/native-menu/edit-command';
 import {
   dispatchNativeMenuAction,
   type NativeMenuDispatchContext,
@@ -642,7 +643,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       favouriteActions: favouriteActions(),
       tabs: nativeMenuWindowTabs(),
       canOpenNewWindow: attrsClient.openWorkspaceWindow !== undefined,
-      useNativeEditRoles: platform === 'macos',
+      macEditCommands: platform === 'macos',
       workspaces: sortWorkspaceSummaries(workspaceSummaries),
       currentWorkspaceId: workspace?.id,
       volumes,
@@ -751,6 +752,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       const paneId = activeDirectory()?.paneId;
       if (paneId === undefined) return;
       void navigation.navigate(paneId, location);
+    },
+    performEditCommand: (command) => {
+      replayEditCommand(command, document.activeElement, (unhandled) => {
+        void invoke('perform_native_edit_command', { command: unhandled }).catch(() => undefined);
+      });
     },
   };
   let installedIconThemeId: string | undefined;

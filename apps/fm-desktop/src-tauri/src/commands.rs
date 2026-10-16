@@ -380,6 +380,70 @@ pub(crate) async fn show_platform_context_menu<R: Runtime>(
     }
 }
 
+/// Standard Edit-menu command the frontend could not handle as a page keydown.
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum NativeEditCommand {
+    Cut,
+    Copy,
+    Paste,
+    SelectAll,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum NativeEditCommandError {
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[error("native edit commands are unavailable on this platform")]
+    Unsupported,
+    #[cfg(target_os = "macos")]
+    #[error("failed to perform the native edit command: {0}")]
+    Perform(String),
+}
+
+impl serde::Serialize for NativeEditCommandError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+/// Forwards an Edit-menu command to the macOS responder chain (text fields, editors) after the
+/// frontend's replayed keydown left it unhandled; see `fm_platform_macos::perform_standard_edit_command`.
+#[tauri::command]
+pub(crate) async fn perform_native_edit_command<R: Runtime>(
+    app: AppHandle<R>,
+    command: NativeEditCommand,
+) -> Result<(), NativeEditCommandError> {
+    #[cfg(target_os = "macos")]
+    {
+        use fm_platform_macos::StandardEditCommand;
+        let command = match command {
+            NativeEditCommand::Cut => StandardEditCommand::Cut,
+            NativeEditCommand::Copy => StandardEditCommand::Copy,
+            NativeEditCommand::Paste => StandardEditCommand::Paste,
+            NativeEditCommand::SelectAll => StandardEditCommand::SelectAll,
+        };
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        app.run_on_main_thread(move || {
+            let result = fm_platform_macos::perform_standard_edit_command(command)
+                .map(|_| ())
+                .map_err(|error| NativeEditCommandError::Perform(error.to_string()));
+            let _ = sender.send(result);
+        })
+        .map_err(|error| NativeEditCommandError::Perform(error.to_string()))?;
+        receiver
+            .await
+            .map_err(|error| NativeEditCommandError::Perform(error.to_string()))?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, command);
+        Err(NativeEditCommandError::Unsupported)
+    }
+}
+
 /// Starts a Finder/Explorer file-reference drag from the current desktop window.
 #[tauri::command]
 pub(crate) async fn start_native_drag<R: Runtime>(

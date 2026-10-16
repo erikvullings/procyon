@@ -1229,6 +1229,44 @@ impl ServicesRequestor {
     }
 }
 
+/// A standard text-editing command the Edit menu forwards to the responder chain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StandardEditCommand {
+    /// `cut:`
+    Cut,
+    /// `copy:`
+    Copy,
+    /// `paste:`
+    Paste,
+    /// `selectAll:`
+    SelectAll,
+}
+
+impl StandardEditCommand {
+    fn selector(self) -> Sel {
+        match self {
+            Self::Cut => sel!(cut:),
+            Self::Copy => sel!(copy:),
+            Self::Paste => sel!(paste:),
+            Self::SelectAll => sel!(selectAll:),
+        }
+    }
+}
+
+/// Sends `command` down the key window's responder chain, exactly as a role-based Edit menu item
+/// would. The Edit menu uses app-dispatched items so Cmd+C reaches the webview as a keydown first
+/// (file clipboard); this is the fallback when the page leaves the command to native text editing.
+/// Returns whether a responder handled it. Must run on the main thread.
+pub fn perform_standard_edit_command(command: StandardEditCommand) -> Result<bool, PlatformError> {
+    let mtm = MainThreadMarker::new().ok_or_else(|| PlatformError::Io {
+        message: "edit commands must be performed on the main thread".to_owned(),
+    })?;
+    let app = NSApplication::sharedApplication(mtm);
+    // SAFETY: a nil target makes AppKit walk the responder chain, and every selector here takes
+    // a single sender argument, matching the standard `cut:`/`copy:`/`paste:`/`selectAll:`.
+    Ok(unsafe { app.sendAction_to_from(command.selector(), None, None) })
+}
+
 /// Opens AppKit's OS-populated Services menu for `paths` at the current pointer position.
 ///
 /// The caller must schedule this on the process main thread. While the menu is open, a temporary

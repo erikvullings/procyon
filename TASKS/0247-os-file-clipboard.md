@@ -46,6 +46,15 @@ separate PR: Cmd+C puts the files on the system clipboard in the desktop app".
   browser host reports `osFileClipboard: false` and keeps the internal clipboard behaviour.
 - The context-menu **Paste** item's enabled state still reflects the internal clipboard only;
   Cmd/Ctrl+V (and the menu item when enabled) consult the OS clipboard at paste time.
+- **The macOS Edit menu is app-dispatched, not responder-chain roles.** A menu item's key
+  equivalent consumes Cmd+X/C/V/A before WKWebView delivers the keydown (verified with an
+  instrumented `pnpm dev:tauri` build: Cmd+C never reached JS, even in the capture phase), so the
+  role-based Copy item beeped with no text selection and the file clipboard never ran. The Edit
+  items (`ui.edit.*`) now replay their chord as a keydown on the focused element
+  (`replayEditCommand`), so pane, quick-filter and editor handlers see it exactly as in the
+  browser. Only when no page handler claims it (text fields, plain text selections) does the
+  thin `perform_native_edit_command` command send `cut:`/`copy:`/`paste:`/`selectAll:` down the
+  responder chain, keeping native text editing. Windows (HTML menu) and Linux menus are unchanged.
 
 ## Acceptance Criteria
 
@@ -54,5 +63,6 @@ separate PR: Cmd+C puts the files on the system clipboard in the desktop app".
 - [x] Non-local selections and unsupported hosts leave the OS clipboard untouched.
 - [x] Cmd/Ctrl+V pastes newer Finder/Explorer file references through a copy job.
 - [x] Browser and mock adapters report the capability unsupported and degrade gracefully.
+- [x] macOS Cmd+C in a pane writes the file URL to the pasteboard (real `pnpm dev:tauri` build).
 - [ ] Manual macOS round-trip: Procyon → Finder and Finder → Procyon.
 - [ ] Manual Windows (Explorer) and Linux (Nautilus/Dolphin, X11) round-trips.
