@@ -15,6 +15,7 @@ import type {
 } from '../../models';
 import { connectionStatusLabel, isBrowsable } from '../connections/connections-model';
 import {
+  EDIT_MENU_IDS,
   NEW_WORKSPACE_WINDOW_MENU_ID,
   SYNC_WORKSPACE_MENU_ID,
   WINDOW_OPEN_WORKSPACE_MENU_ID_PREFIX,
@@ -49,8 +50,11 @@ export interface NativeMenuInputs {
    * with no window concept (browser/HTTP), in which case the File menu's "New Window" item and
    * the Window menu's "Open Workspace" submenu are omitted entirely rather than added disabled. */
   readonly canOpenNewWindow: boolean;
-  /** Whether Edit-menu text commands should use the OS responder chain (required by WKWebView). */
-  readonly useNativeEditRoles: boolean;
+  /** Whether the Edit menu carries the standard Cut/Copy/Paste/Select All items (macOS). They are
+   * app-dispatched items, not responder-chain roles: a role's key equivalent consumes Cmd+C
+   * before WKWebView delivers the keydown, which made file copy beep (see
+   * `dispatchNativeMenuAction`). */
+  readonly macEditCommands: boolean;
   /** Every stored workspace, in display order - backs the Window menu's "Open Workspace"
    * submenu (task 0143 follow-up), the native-menu equivalent of the workspace switcher's list. */
   readonly workspaces: readonly WorkspaceSummary[];
@@ -161,16 +165,25 @@ function fileMenu(actions: readonly ActionDescriptor[], canOpenNewWindow: boolea
   };
 }
 
-/** Native Edit roles act on focused text fields, not on selected files. */
-function editMenu(actions: readonly ActionDescriptor[], useNativeEditRoles: boolean): NativeMenu {
+/** macOS Edit items replay their keystroke into the page (file clipboard, text fields, editors)
+ * and fall back to the responder chain only when the page leaves it unhandled. */
+function editMenu(actions: readonly ActionDescriptor[], macEditCommands: boolean): NativeMenu {
+  const editItem = (id: string, title: string, key: string): NativeMenuItem => ({
+    kind: 'action',
+    id,
+    title,
+    shortcut: { key, meta: true },
+    enabled: true,
+    checked: false,
+  });
   return {
     title: t('menu', 'edit'),
-    items: useNativeEditRoles
+    items: macEditCommands
       ? [
-          { kind: 'role', role: 'cut' },
-          { kind: 'role', role: 'copy' },
-          { kind: 'role', role: 'paste' },
-          { kind: 'role', role: 'selectAll' },
+          editItem(EDIT_MENU_IDS.cut, t('menu', 'cutText'), 'x'),
+          editItem(EDIT_MENU_IDS.copy, t('action', 'copy'), 'c'),
+          editItem(EDIT_MENU_IDS.paste, t('action', 'paste'), 'v'),
+          editItem(EDIT_MENU_IDS.selectAll, t('action', 'selectAll'), 'a'),
         ]
       : actionItems(actions, ['core.copy', 'core.paste', 'core.selectAll']),
   };
@@ -411,7 +424,7 @@ export function buildNativeMenuSpec(inputs: NativeMenuInputs): NativeMenuSpec {
     menus: [
       appMenu(),
       fileMenu(inputs.actions, inputs.canOpenNewWindow),
-      editMenu(inputs.actions, inputs.useNativeEditRoles),
+      editMenu(inputs.actions, inputs.macEditCommands),
       viewMenu(inputs.actions),
       toolsMenu(inputs.actions),
       goMenu(

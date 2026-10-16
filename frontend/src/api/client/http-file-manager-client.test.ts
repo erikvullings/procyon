@@ -202,6 +202,7 @@ function fixtureCapabilities() {
     clipboard: true,
     extendedAttributes: false,
     finderAliases: false,
+    osFileClipboard: false,
     finderTags: false,
     nativeDragOut: false,
     nativeFileIcons: false,
@@ -329,6 +330,19 @@ describe('HttpFileManagerClient', () => {
       new HttpFileManagerClient().discoverLlmProfileDraftModelLimits(request),
     ).resolves.toEqual(limits);
     expect(discoverLlmProfileDraftModelLimits).toHaveBeenCalledWith(request, undefined);
+  });
+
+  it('keeps copies inside Procyon because a browser has no OS file clipboard', async () => {
+    const client = new HttpFileManagerClient();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    await expect(
+      client.writeOsClipboardFiles([{ providerId: 'local', uri: 'file:///srv/report.pdf' }]),
+    ).resolves.toBe(false);
+    await expect(client.readOsClipboardFiles()).resolves.toEqual([]);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 
   it('reports OCR remediation unavailable without adding server endpoints', async () => {

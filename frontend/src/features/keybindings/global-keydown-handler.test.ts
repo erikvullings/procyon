@@ -221,6 +221,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     actionsWithFavourites: () => ACTIONS,
     openFindFiles: vi.fn(),
     replaceClipboard: vi.fn(),
+    resolvePasteClipboard: () => Promise.resolve({ locations: [] }),
     selectedLocations: () => [],
     collectIntoBasketIfVisible: () => false,
     removeFromBasketIfActive: () => false,
@@ -256,7 +257,11 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     openSemanticAssistant: vi.fn(),
     openKnowledgeSearch: vi.fn(),
   };
-  return { ...base, ...overrides };
+  const context = { ...base, ...overrides };
+  if (overrides.resolvePasteClipboard === undefined) {
+    context.resolvePasteClipboard = () => Promise.resolve(context.clipboard());
+  }
+  return context;
 }
 
 function defaultCode(key: string): string {
@@ -1482,6 +1487,7 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
 describe('createGlobalKeydownHandler clipboard paste', () => {
   const source: Location = { providerId: 'local', uri: 'file:///a/report.txt' };
   const destination: Location = { providerId: 'local', uri: 'file:///a' };
+  const flushPaste = () => new Promise((resolve) => setTimeout(resolve, 0));
 
   function pasteContext(activeLocation: Location) {
     const copy = vi.fn().mockResolvedValue({});
@@ -1514,10 +1520,27 @@ describe('createGlobalKeydownHandler clipboard paste', () => {
     const macContext = { ...context, getPlatform: () => 'macos' as const };
 
     createGlobalKeydownHandler(macContext)(keydown('v', { metaKey: true }));
-    await Promise.resolve();
+    await flushPaste();
 
     expect(duplicate).toHaveBeenCalledWith([source]);
     expect(copy).not.toHaveBeenCalled();
+  });
+
+  it('pastes files copied in the system file manager through a copy job', async () => {
+    const external: Location = { providerId: 'local', uri: 'file:///finder/photo.jpg' };
+    const otherFolder: Location = { providerId: 'local', uri: 'file:///b' };
+    const { context, copy, duplicate } = pasteContext(otherFolder);
+    const event = keydown('v', { ctrlKey: true });
+
+    createGlobalKeydownHandler({
+      ...context,
+      resolvePasteClipboard: () => Promise.resolve({ mode: 'copy', locations: [external] }),
+    })(event);
+    await flushPaste();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(copy).toHaveBeenCalledWith([external], otherFolder);
+    expect(duplicate).not.toHaveBeenCalled();
   });
 
   it('keeps original names by using copy when pasted into another folder', async () => {
@@ -1525,7 +1548,7 @@ describe('createGlobalKeydownHandler clipboard paste', () => {
     const { context, copy, duplicate } = pasteContext(otherFolder);
 
     createGlobalKeydownHandler(context)(keydown('v', { ctrlKey: true }));
-    await Promise.resolve();
+    await flushPaste();
 
     expect(copy).toHaveBeenCalledWith([source], otherFolder);
     expect(duplicate).not.toHaveBeenCalled();

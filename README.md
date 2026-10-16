@@ -255,6 +255,14 @@ default; hold Command or Option on macOS, or Control on Windows/Linux, to copy i
 ordinary operation confirmation and conflict handling still apply. Use Cut/Copy and Paste for
 the keyboard equivalent.
 
+In the desktop app, `Cmd/Ctrl+C` and `Cmd/Ctrl+X` on local files also put them on the system
+clipboard, so they can be pasted in Finder, Explorer or a Linux file manager (best effort, X11).
+A cut is offered to other applications as a copy; only Procyon's own paste moves the files.
+Remote or archive entries stay on Procyon's internal clipboard and are never downloaded. Files
+copied in the system file manager can be pasted into a pane with `Cmd/Ctrl+V`, which runs a
+normal copy job with the usual conflict handling. The browser host cannot access file references
+on the system clipboard, so there copy and paste work within Procyon only.
+
 The in-app `F1` reference is the authoritative list. Browser-reserved shortcuts may only be
 available in the desktop app. The
 [Total Commander parity audit](TASKS/0128-total-commander-shortcuts-quick-wins.md) records design

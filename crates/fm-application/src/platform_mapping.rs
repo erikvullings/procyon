@@ -296,16 +296,16 @@ pub(crate) fn runtime_capabilities_dto_with_semantic(
         // Clipboard API without any native bridge, on every host. This is
         // deliberately not derived from `PlatformCapabilities::
         // CLIPBOARD_FILE_REFERENCES`, which instead gates pasting actual
-        // file path lists (e.g. from Finder/Explorer) - a capability
-        // `RuntimeCapabilitiesDto` has no field for yet. A future task
-        // adding file-reference paste support should add one rather than
-        // overload this flag.
+        // file path lists (e.g. from Finder/Explorer) and is reported as
+        // `os_file_clipboard` (task 0247).
         clipboard: true,
         plugins: true,
         server_administration: false,
         extended_attributes: capabilities.contains(PlatformCapabilities::EXTENDED_ATTRIBUTES),
         finder_tags: capabilities.contains(PlatformCapabilities::FINDER_TAGS),
         finder_aliases: capabilities.contains(PlatformCapabilities::FINDER_ALIASES),
+        os_file_clipboard: runtime == RuntimeKindDto::Tauri
+            && capabilities.contains(PlatformCapabilities::CLIPBOARD_FILE_REFERENCES),
         semantic_component_authority,
         semantic_runtime_executable_download,
     }

@@ -1877,6 +1877,9 @@ Implement:
 - completed and failed operation states;
 - refresh affected directories;
 - clipboard-based copy/cut/paste within the application.
+  The desktop host additionally exchanges local file references with the OS clipboard (task
+  0247; cut is exposed to other applications as copy). The browser host cannot, and reports
+  this through the `osFileClipboard` runtime capability.
 
 Do not implement file operations directly in UI code.
 

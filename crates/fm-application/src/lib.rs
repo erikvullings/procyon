@@ -44,6 +44,7 @@ mod operation_history;
 mod operation_planner;
 mod operation_requests;
 mod operations_coordinator;
+mod os_file_clipboard;
 mod platform_mapping;
 mod plugin_manager;
 mod pptx_preview;

@@ -381,6 +381,70 @@ pub(crate) async fn show_platform_context_menu<R: Runtime>(
     }
 }
 
+/// Standard Edit-menu command the frontend could not handle as a page keydown.
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum NativeEditCommand {
+    Cut,
+    Copy,
+    Paste,
+    SelectAll,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum NativeEditCommandError {
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[error("native edit commands are unavailable on this platform")]
+    Unsupported,
+    #[cfg(target_os = "macos")]
+    #[error("failed to perform the native edit command: {0}")]
+    Perform(String),
+}
+
+impl serde::Serialize for NativeEditCommandError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+/// Forwards an Edit-menu command to the macOS responder chain (text fields, editors) after the
+/// frontend's replayed keydown left it unhandled; see `fm_platform_macos::perform_standard_edit_command`.
+#[tauri::command]
+pub(crate) async fn perform_native_edit_command<R: Runtime>(
+    app: AppHandle<R>,
+    command: NativeEditCommand,
+) -> Result<(), NativeEditCommandError> {
+    #[cfg(target_os = "macos")]
+    {
+        use fm_platform_macos::StandardEditCommand;
+        let command = match command {
+            NativeEditCommand::Cut => StandardEditCommand::Cut,
+            NativeEditCommand::Copy => StandardEditCommand::Copy,
+            NativeEditCommand::Paste => StandardEditCommand::Paste,
+            NativeEditCommand::SelectAll => StandardEditCommand::SelectAll,
+        };
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        app.run_on_main_thread(move || {
+            let result = fm_platform_macos::perform_standard_edit_command(command)
+                .map(|_| ())
+                .map_err(|error| NativeEditCommandError::Perform(error.to_string()));
+            let _ = sender.send(result);
+        })
+        .map_err(|error| NativeEditCommandError::Perform(error.to_string()))?;
+        receiver
+            .await
+            .map_err(|error| NativeEditCommandError::Perform(error.to_string()))?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, command);
+        Err(NativeEditCommandError::Unsupported)
+    }
+}
+
 /// Starts a Finder/Explorer file-reference drag from the current desktop window.
 #[tauri::command]
 pub(crate) async fn start_native_drag<R: Runtime>(
@@ -565,6 +629,37 @@ fn colorref(css: &str) -> Option<u32> {
     let green = u32::from_str_radix(&expanded[2..4], 16).ok()?;
     let blue = u32::from_str_radix(&expanded[4..6], 16).ok()?;
     Some((blue << 16) | (green << 8) | red)
+}
+
+/// Publishes local files on the system clipboard (task 0247). Returns
+/// `false` when the selection stays internal to Procyon.
+#[tauri::command]
+pub(crate) async fn write_os_clipboard_files(
+    state: State<'_, AppState>,
+    locations: Vec<LocationDto>,
+) -> Result<bool, ApplicationErrorDto> {
+    let locations = locations
+        .into_iter()
+        .map(fm_domain::Location::from)
+        .collect::<Vec<_>>();
+    state
+        .service
+        .write_os_clipboard_files(&locations)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Reads local files referenced on the system clipboard (task 0247).
+#[tauri::command]
+pub(crate) async fn read_os_clipboard_files(
+    state: State<'_, AppState>,
+) -> Result<Vec<LocationDto>, ApplicationErrorDto> {
+    state
+        .service
+        .read_os_clipboard_files()
+        .await
+        .map(|locations| locations.into_iter().map(LocationDto::from).collect())
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
 /// Caches an archive password for the lifetime of this desktop backend session.

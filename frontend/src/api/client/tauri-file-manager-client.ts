@@ -568,6 +568,14 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<void>('start_native_drag', { locations });
   }
 
+  writeOsClipboardFiles(locations: readonly Location[], _signal?: AbortSignal): Promise<boolean> {
+    return invoke<boolean>('write_os_clipboard_files', { locations });
+  }
+
+  readOsClipboardFiles(_signal?: AbortSignal): Promise<Location[]> {
+    return invoke<Location[]>('read_os_clipboard_files');
+  }
+
   showPlatformContextMenu(locations: readonly Location[], _signal?: AbortSignal): Promise<void> {
     return invoke<void>('show_platform_context_menu', { locations });
   }

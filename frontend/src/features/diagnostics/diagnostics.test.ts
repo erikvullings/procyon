@@ -30,6 +30,7 @@ describe('Diagnostics', () => {
           serverAdministration: false,
           extendedAttributes: true,
           finderAliases: false,
+          osFileClipboard: false,
           finderTags: true,
         },
         connectionState: {
@@ -139,6 +140,7 @@ describe('Diagnostics', () => {
           serverAdministration: false,
           extendedAttributes: false,
           finderAliases: false,
+          osFileClipboard: false,
           finderTags: false,
         },
         connectionState: {

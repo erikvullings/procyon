@@ -16201,6 +16201,7 @@
           "extendedAttributes",
           "finderTags",
           "finderAliases",
+          "osFileClipboard",
           "semanticComponentAuthority",
           "semanticRuntimeExecutableDownload"
         ],
@@ -16240,6 +16241,10 @@
           "openTerminal": {
             "type": "boolean",
             "description": "Whether opening a terminal at a location is supported."
+          },
+          "osFileClipboard": {
+            "type": "boolean",
+            "description": "Whether copied local files are shared with the operating system's\nclipboard as file references, and file references copied in the system\nfile manager can be pasted (task 0247). Desktop host only."
           },
           "platform": {
             "$ref": "#/components/schemas/PlatformKindDto",
@@ -16295,6 +16300,7 @@
           "extendedAttributes": false,
           "finderTags": false,
           "finderAliases": false,
+          "osFileClipboard": false,
           "semanticComponentAuthority": "administratorProvisioned",
           "semanticRuntimeExecutableDownload": "administratorProvisioned"
         }

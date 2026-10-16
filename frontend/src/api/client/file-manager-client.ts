@@ -363,6 +363,16 @@ export interface FileManagerClient {
   /** Starts an OS file-reference drag from the desktop host. */
   startNativeDrag(locations: readonly Location[], signal?: AbortSignal): Promise<void>;
 
+  /** Publishes local files on the operating system clipboard as file references, so they paste
+   * in Finder or Explorer. Resolves `false`, leaving the OS clipboard untouched, when the host
+   * has no OS file clipboard (`RuntimeCapabilities.osFileClipboard`) or any entry is not a local
+   * file. Always a copy on the OS side: cut/move semantics stay inside Procyon. */
+  writeOsClipboardFiles(locations: readonly Location[], signal?: AbortSignal): Promise<boolean>;
+
+  /** Local files referenced on the operating system clipboard (e.g. copied in Finder or
+   * Explorer); empty when there are none or the host has no OS file clipboard. */
+  readOsClipboardFiles(signal?: AbortSignal): Promise<Location[]>;
+
   /** Opens the native Services (macOS) or Send To (Windows) submenu for a local selection. */
   showPlatformContextMenu(locations: readonly Location[], signal?: AbortSignal): Promise<void>;
 
