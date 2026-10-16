@@ -1063,6 +1063,10 @@ test('package-manager generator creates a Homebrew cask and Chocolatey installer
   const install = readFileSync(join(chocolateyDir, 'tools', 'chocolateyinstall.ps1'), 'utf8');
   assert.match(nuspec, /<id>procyon<\/id>/);
   assert.match(nuspec, /<version>1\.2\.3<\/version>/);
+  assert.match(nuspec, /<authors>Erik Vullings<\/authors>/);
+  assert.match(nuspec, /<owners>Erik Vullings<\/owners>/);
+  assert.match(nuspec, /<projectUrl>https:\/\/erikvullings\.github\.io\/procyon\/<\/projectUrl>/);
+  assert.match(nuspec, /<projectSourceUrl>https:\/\/github\.com\/example\/fm<\/projectSourceUrl>/);
   assert.match(
     nuspec,
     /<licenseUrl>https:\/\/github\.com\/example\/fm\/blob\/main\/LICENSE<\/licenseUrl>/,
