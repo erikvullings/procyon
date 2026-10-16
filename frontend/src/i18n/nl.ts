@@ -1663,6 +1663,7 @@ export const nl = {
     lastWorkerDevice: 'Laatste workerstart: {device}',
     metal: 'Metal',
     cpu: 'CPU',
+    cpuForced: 'CPU (afgedwongen via PROCYON_GEMMA_FORCE_CPU)',
     computeMode: 'Rekenbeleid voor indexeren',
     computeAutomatic:
       'Metal op ondersteunde macOS-workers indien beschikbaar; anders CPU (actief apparaat wordt hier niet gemeld)',

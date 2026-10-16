@@ -2182,7 +2182,10 @@ async fn repeated_last_client_disconnects_cannot_lose_idle_shutdown() {
         let task = tokio::spawn(
             WorkerServer::new(
                 WorkerConfig::new(endpoint.clone(), secret.clone())
-                    .with_idle_timeout(Duration::from_millis(20))
+                    // Long enough that a loaded runner still connects before the
+                    // initial idle shutdown; the race under test is the disconnect
+                    // landing inside the idle-wait delay, which this does not affect.
+                    .with_idle_timeout(Duration::from_secs(1))
                     .with_test_idle_wait_delay(Duration::from_millis(100)),
             )
             .run(),
@@ -2192,7 +2195,8 @@ async fn repeated_last_client_disconnects_cannot_lose_idle_shutdown() {
         assert_eq!(client.health().await.unwrap(), WorkerHealth::Serving);
         drop(client);
 
-        tokio::time::timeout(Duration::from_millis(250), task)
+        // A lost notification never shuts down, so a generous deadline still detects it.
+        tokio::time::timeout(Duration::from_secs(10), task)
             .await
             .unwrap_or_else(|_| {
                 panic!("idle shutdown notification was lost on iteration {iteration}")
@@ -2925,18 +2929,26 @@ async fn desktop_connector_reaps_the_worker_process_after_it_exits() {
     let pid = rustix::process::Pid::from_raw(raw_pid).unwrap();
 
     client.shutdown(Duration::from_millis(100)).await.unwrap();
-    for _ in 0..100 {
-        if !directory.join("worker.pid").exists() {
+
+    // The connector reaps asynchronously. Probe with WNOWAIT so this test never
+    // reaps the child itself; ECHILD means the connector already collected it.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        let probe = rustix::process::waitid(
+            rustix::process::WaitId::Pid(pid),
+            rustix::process::WaitIdOptions::EXITED
+                | rustix::process::WaitIdOptions::NOHANG
+                | rustix::process::WaitIdOptions::NOWAIT,
+        );
+        if probe.is_err() {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(5)).await;
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "worker child remained waitable after exit"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    tokio::time::sleep(Duration::from_millis(50)).await;
-
-    assert!(
-        rustix::process::waitpid(Some(pid), rustix::process::WaitOptions::NOHANG).is_err(),
-        "worker child remained waitable after exit"
-    );
 }
 
 #[tokio::test]
@@ -3865,7 +3877,8 @@ async fn client_rejects_a_peer_that_exceeds_the_negotiated_stream_budget() {
 }
 
 async fn wait_for_endpoint(endpoint: &Endpoint) {
-    for _ in 0..100 {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while tokio::time::Instant::now() < deadline {
         if endpoint.exists() {
             return;
         }

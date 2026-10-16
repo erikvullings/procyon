@@ -157,6 +157,8 @@ semantic components are not installed.
   not an experimental release gate)*
 - [ ] 0246 Shift Gemma qualification failures left *(needs 0244; before another candidate round)*
 - [ ] 0247 Change Gemma library media consent *(needs 0239)*
+- [ ] 0248 Gemma non-experimental qualification tooling *(needs 0244; tooling done, manual
+  results and promotion decision open)*
 
 ## Structured knowledge search
 

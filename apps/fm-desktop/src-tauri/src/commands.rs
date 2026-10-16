@@ -852,7 +852,15 @@ fn last_gemma_worker_device(marker: Option<&Path>) -> std::io::Result<Option<&'s
     if backend.starts_with("google/embeddinggemma-2 (FP32 Metal)") {
         Ok(Some("metal"))
     } else if backend.starts_with("google/embeddinggemma-2 (native CPU)") {
-        Ok(Some("cpu"))
+        // Must match the worker's `GEMMA_FORCED_CPU_STATUS`, which the desktop
+        // host cannot link without the native inference stack.
+        Ok(Some(
+            if backend.contains("[CPU forced by PROCYON_GEMMA_FORCE_CPU]") {
+                "cpuForced"
+            } else {
+                "cpu"
+            },
+        ))
     } else {
         Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -3536,6 +3544,15 @@ mod tests {
         assert_eq!(
             last_gemma_worker_device(Some(&marker)).unwrap(),
             Some("cpu")
+        );
+        std::fs::write(
+            runtime.join("gemma-backend"),
+            "google/embeddinggemma-2 (native CPU) [CPU forced by PROCYON_GEMMA_FORCE_CPU]\n",
+        )
+        .unwrap();
+        assert_eq!(
+            last_gemma_worker_device(Some(&marker)).unwrap(),
+            Some("cpuForced")
         );
     }
 

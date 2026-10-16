@@ -1654,6 +1654,7 @@ export const en = {
     lastWorkerDevice: 'Last worker launch: {device}',
     metal: 'Metal',
     cpu: 'CPU',
+    cpuForced: 'CPU (forced by PROCYON_GEMMA_FORCE_CPU)',
     computeMode: 'Indexing compute policy',
     computeAutomatic:
       'Metal on supported macOS workers when available; CPU fallback (current worker device not reported here)',

@@ -619,6 +619,14 @@ targets; platform hardware smoke tests remain mandatory before publishing an acc
 
 ## Troubleshooting and deletion
 
+To rule out the GPU path, set `PROCYON_GEMMA_FORCE_CPU=1` in the environment of the desktop app (or
+`pnpm dev:tauri*`) before a Gemma worker starts. Procyon then launches the worker with
+`--gemma-force-cpu`, and Settings reports "Last worker launch: CPU (forced by
+PROCYON_GEMMA_FORCE_CPU)". A worker that is already running keeps its backend until it exits. For
+promotion checks, use the
+[Gemma qualification checklist](qualification/gemma-non-experimental-checklist.md) and its
+measurement scripts.
+
 1. Check component/model compatibility and available disk reserve.
 2. Inspect root coverage for pending, stale, excluded, skipped, failed, and unavailable counts.
 3. Restart the worker; authenticated clients reconnect and incomplete staging generations remain
