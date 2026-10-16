@@ -68,6 +68,20 @@ impl LibraryIndexManifest {
         Ok(())
     }
 
+    fn incompatible_fields_order() -> [&'static str; 9] {
+        [
+            "zvec_schema_version",
+            "dimensions",
+            "distance_metric",
+            "model_revision",
+            "tokenizer",
+            "embedding_preprocessing",
+            "converter_version",
+            "chunker_version",
+            "normalization",
+        ]
+    }
+
     fn incompatible_fields(&self, requested: &Self) -> Vec<&'static str> {
         let mut fields = Vec::new();
         if self.zvec_schema_version != requested.zvec_schema_version {
@@ -583,6 +597,37 @@ impl SemanticCatalog {
             }
         }
         Ok(())
+    }
+
+    /// Returns every manifest field on which any registered library differs
+    /// from `expected`, without changing the catalog.
+    ///
+    /// Fields are reported once each, in manifest declaration order.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed database, serialization, or manifest error.
+    pub fn registered_manifest_incompatibilities(
+        &self,
+        expected: &LibraryIndexManifest,
+    ) -> Result<Vec<&'static str>, StorageError> {
+        expected.validate()?;
+        let connection = self.connection()?;
+        let mut statement = connection.prepare("SELECT manifest_json FROM libraries")?;
+        let manifests = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut differing = std::collections::BTreeSet::new();
+        for manifest in manifests {
+            let manifest: LibraryIndexManifest = serde_json::from_str(&manifest)?;
+            manifest.validate()?;
+            differing.extend(manifest.incompatible_fields(expected));
+        }
+        let all = LibraryIndexManifest::incompatible_fields_order();
+        Ok(all
+            .into_iter()
+            .filter(|field| differing.contains(field))
+            .collect())
     }
 
     /// Loads one stable keyset page used to reconstruct the derived Zvec collection.

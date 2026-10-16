@@ -415,6 +415,17 @@ transactions, then resume deletion and ingestion jobs. A damaged or incompatible
 quarantined and rebuilt from authoritative state; never reinterpret vectors under a different
 model-space fingerprint.
 
+When an upgraded worker opens the active model's index and finds that its records were produced by
+a superseded source pipeline — only the converter, chunker, or embedding-preprocessing version
+differs — the worker discards that model's index directory before serving anything, logs the
+differing fields, and starts empty. The desktop's startup reconciliation re-feeds every enrolled
+root, so search becomes available immediately and fills in as reindexing progresses. The discard is
+a rename to `<index>.superseded-pipeline` followed by removal, and the next launch finishes an
+interrupted removal. Other models' indexes, enrolment, consent, and settings are untouched. Any
+difference in model revision, tokenizer, dimensions, distance, or normalization is never discarded
+automatically: the worker still refuses to start with a migration requirement so a wrong embedding
+space cannot be reused or silently destroyed.
+
 ## Evaluation and change control
 
 The local evaluation suite stores query/relevance judgments on device and computes file recall@k,
