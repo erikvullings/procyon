@@ -2,6 +2,7 @@ import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MockFileManagerClient } from '../api/client/mock-file-manager-client';
 import { EDIT_MENU_IDS } from '../features/native-menu/native-menu-dispatch';
+import { FILE_CLIPBOARD_PASSTHROUGH_ATTRIBUTE } from '../features/quick-filter/quick-filter';
 
 // The macOS menu bar owns Cmd+X/C/V/A as key equivalents, so in the desktop app those chords
 // arrive through the native-menu channel rather than as keydowns. These tests drive the whole
@@ -127,6 +128,25 @@ describe('macOS Edit menu', () => {
     ]);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(startOperation).not.toHaveBeenCalled();
+  });
+
+  it('copies files from the quick filter when it has no text selection', async () => {
+    const { startOperation, menu } = await mountMacDesktop();
+    const filter = document.createElement('input');
+    filter.setAttribute(FILE_CLIPBOARD_PASSTHROUGH_ATTRIBUTE, '');
+    root.appendChild(filter);
+    filter.focus();
+
+    menu(EDIT_MENU_IDS.copy);
+    activePane()?.focus();
+    menu(EDIT_MENU_IDS.paste);
+
+    await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());
+    expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
+      type: 'duplicate',
+      sources: [{ uri: 'mock:///Applications' }],
+    });
+    expect(nativeEditCommands()).toEqual([]);
   });
 
   it('selects every entry from the native Select All item while a pane has focus', async () => {
