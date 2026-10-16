@@ -103,6 +103,7 @@ struct RemediatingDocumentCapability {
     ocr_enabled: AtomicBool,
     complete_after_restart: bool,
     restart_count: AtomicUsize,
+    health_count: AtomicUsize,
     cancel_count: AtomicUsize,
     remediated_contents: Mutex<Vec<Vec<u8>>>,
     ingested_titles: Mutex<Vec<String>>,
@@ -116,6 +117,7 @@ impl RemediatingDocumentCapability {
             ocr_enabled: AtomicBool::new(false),
             complete_after_restart: true,
             restart_count: AtomicUsize::new(0),
+            health_count: AtomicUsize::new(0),
             cancel_count: AtomicUsize::new(0),
             remediated_contents: Mutex::new(Vec::new()),
             ingested_titles: Mutex::new(Vec::new()),
@@ -134,6 +136,7 @@ impl RemediatingDocumentCapability {
 #[async_trait]
 impl SemanticCapability for RemediatingDocumentCapability {
     async fn health(&self) -> Result<SemanticHealth, SemanticError> {
+        self.health_count.fetch_add(1, Ordering::AcqRel);
         self.inner.health().await
     }
 
@@ -688,6 +691,7 @@ async fn reconciliation_feeds_only_media_enabled_for_the_gemma_library() {
     for name in ["image.png", "sound.wav", "clip.mp4"] {
         std::fs::write(root.path().join(name), b"fixture-bytes").unwrap();
     }
+
     let state = project_temp_dir("media-state-");
     let library = library_with_model(
         &state,
@@ -720,6 +724,97 @@ async fn reconciliation_feeds_only_media_enabled_for_the_gemma_library() {
         .unwrap();
     assert_eq!(report.observed_files, 2);
     assert_eq!(report.ingested_occurrences, 2);
+}
+
+#[tokio::test]
+async fn enabling_media_indexes_only_newly_permitted_files_without_reindexing_text() {
+    let root = project_temp_dir("incremental-media-root-");
+    for (name, contents) in [
+        ("note.txt", b"original text".as_slice()),
+        ("image.png", b"image payload"),
+        ("sound.wav", b"audio payload"),
+        ("clip.mp4", b"video payload"),
+    ] {
+        std::fs::write(root.path().join(name), contents).unwrap();
+    }
+    let state = project_temp_dir("incremental-media-state-");
+    let library = library_with_model(
+        &state,
+        ModelIdentity::embeddinggemma_2(
+            256,
+            GemmaMediaSelection {
+                images: false,
+                audio: false,
+                video: false,
+            },
+        )
+        .unwrap(),
+    );
+    let root_id = enrol(
+        &library,
+        WorkspaceId::from(Uuid::from_u128(0x1911)),
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let capability = Arc::new(RemediatingDocumentCapability::new());
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(capability.clone());
+    let initial = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(initial.observed_files, 1);
+    let revision = service
+        .semantic_library_status(&HOST)
+        .await
+        .unwrap()
+        .revision;
+    let updated = service
+        .update_semantic_gemma_media(
+            &HOST,
+            GemmaMediaSelection {
+                images: true,
+                audio: true,
+                video: false,
+            },
+            revision,
+            false,
+        )
+        .await
+        .unwrap();
+    assert_eq!(capability.restart_count.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        capability.ingested_titles.lock().unwrap().as_slice(),
+        ["note.txt", "sound.wav", "image.png"]
+    );
+    assert_eq!(
+        updated.roots[0].reconciliation_generation,
+        initial.reconciliation_generation
+    );
+    let health_before = capability.health_count.load(Ordering::SeqCst);
+    let disabled = service
+        .update_semantic_gemma_media(
+            &HOST,
+            GemmaMediaSelection {
+                images: false,
+                audio: true,
+                video: false,
+            },
+            updated.revision,
+            true,
+        )
+        .await
+        .unwrap();
+    assert!(!disabled.gemma_media.unwrap().images);
+    assert_eq!(capability.restart_count.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        capability.health_count.load(Ordering::SeqCst),
+        health_before + 1
+    );
 }
 
 #[tokio::test]

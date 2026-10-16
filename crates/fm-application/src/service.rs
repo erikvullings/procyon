@@ -920,6 +920,82 @@ impl FileManagerService {
         Ok(status)
     }
 
+    /// Changes Gemma's optional media consent without replacing its text index.
+    ///
+    /// A running worker has its media encoders fixed at launch. Retire it after
+    /// the durable change so the next request launches with current consent.
+    pub async fn update_semantic_gemma_media(
+        &self,
+        access: &SemanticAccessContext,
+        media: fm_semantic_library::GemmaMediaSelection,
+        expected_revision: u64,
+        confirm_removal: bool,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        let library = self.semantic_library().await;
+        let previous = library
+            .status(access)?
+            .gemma_media
+            .ok_or(SemanticLibraryError::InvalidRequest)?;
+        let status =
+            library.update_gemma_media(access, media, expected_revision, confirm_removal)?;
+        if status.revision != expected_revision {
+            self.semantic
+                .restart(Duration::from_secs(5))
+                .await
+                .map_err(|_| SemanticLibraryError::StateUnavailable)?;
+            if previous.images && !media.images
+                || previous.audio && !media.audio
+                || previous.video && !media.video
+            {
+                // Health opens the replacement worker. Its startup transaction
+                // removes revoked catalog records and drains the durable Zvec
+                // deletion ledger before it accepts queries. A failure must
+                // never return a success status while cleanup is still owed.
+                self.semantic
+                    .health()
+                    .await
+                    .map_err(|_| SemanticLibraryError::Cleanup)?;
+            }
+        }
+        let added = fm_semantic_library::GemmaMediaSelection {
+            images: media.images && !previous.images,
+            audio: media.audio && !previous.audio,
+            video: media.video && !previous.video,
+        };
+        if added.images || added.audio || added.video {
+            for root in &status.roots {
+                if !matches!(
+                    root.availability,
+                    crate::semantic_library::SemanticRootAvailability::Available
+                ) {
+                    continue;
+                }
+                let root_id = root
+                    .id
+                    .parse()
+                    .map_err(|_| SemanticLibraryError::InvalidRequest)?;
+                let report = self
+                    .semantic_indexing
+                    .index_added_media(
+                        Arc::clone(&library),
+                        access,
+                        root_id,
+                        added,
+                        tokio_util::sync::CancellationToken::new(),
+                    )
+                    .await
+                    .map_err(|error| {
+                        tracing::warn!(%error, "newly permitted Gemma media indexing could not complete");
+                        SemanticLibraryError::StateUnavailable
+                    })?;
+                if report.failed_occurrences != 0 || report.unreadable_files != 0 {
+                    return Err(SemanticLibraryError::StateUnavailable);
+                }
+            }
+        }
+        self.semantic_library_status(access).await
+    }
+
     /// Starts a separate, empty Gemma library after explicit fresh-index consent.
     pub async fn initialize_semantic_gemma_library(
         &self,
@@ -2509,6 +2585,12 @@ impl FileManagerService {
             return Err(ApplicationError::NotFound);
         }
         let indexed = resolved.eligible.saturating_sub(resolved.unavailable);
+        let media = self
+            .semantic_library()
+            .await
+            .status(access)
+            .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?
+            .gemma_media;
         Ok(AuthorizedRagRequest {
             question,
             scope: scope_from_dto(scope),
@@ -2523,6 +2605,7 @@ impl FileManagerService {
                 titles: resolved.titles,
             },
             retrieval_strategy,
+            media,
         })
     }
 

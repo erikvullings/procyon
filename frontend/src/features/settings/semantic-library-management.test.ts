@@ -54,6 +54,61 @@ function button(label: string): HTMLButtonElement {
 }
 
 describe('SemanticLibraryManagement', () => {
+  it('changes existing Gemma media only after confirming removal', async () => {
+    const component = await client.getSemanticComponentStatus();
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...component,
+      activeModel: {
+        profile: 'embeddingGemma2',
+        identity: { modelId: 'gemma', revision: 'test' },
+      },
+    });
+    vi.spyOn(client, 'getGemmaLibrarySetup').mockResolvedValue({
+      dimensions: 512,
+      images: true,
+      audio: false,
+      video: false,
+      imageDevice: 'metal',
+      pdfImagePageBudget: null,
+    });
+    const original = await client.getSemanticLibraryStatus();
+    const media = { images: true, audio: false, video: false };
+    vi.spyOn(client, 'getSemanticLibraryStatus').mockResolvedValue({
+      ...original,
+      gemmaMedia: media,
+    });
+    vi.spyOn(client, 'getSemanticLibraryCapabilities').mockResolvedValue({
+      authority: 'desktopManaged',
+      operations: ['viewStatus', 'updateGemmaMedia'],
+    });
+    const update = vi.spyOn(client, 'updateGemmaMedia').mockResolvedValue({
+      ...original,
+      revision: original.revision + 1,
+      gemmaMedia: { images: false, audio: true, video: false },
+    });
+    mountComponent(client);
+    await waitForLoaded();
+    const controls = root.querySelectorAll<HTMLInputElement>('.fm-semantic-library-media input');
+    expect(controls).toHaveLength(3);
+    controls[0]?.click();
+    controls[1]?.click();
+    m.redraw.sync();
+    button('Save media choices').click();
+    m.redraw.sync();
+    expect(update).not.toHaveBeenCalled();
+    expect(root.textContent).toContain('Removing indexed media');
+    button('Confirm removal and save').click();
+    await vi.waitFor(() =>
+      expect(update).toHaveBeenCalledWith({
+        policyRevision: original.revision,
+        images: false,
+        audio: true,
+        video: false,
+        confirmRemoval: true,
+      }),
+    );
+  });
+
   it('distinguishes observed sources from searchable documents while indexing', async () => {
     const preview = await client.previewSemanticEnrolment({
       workspaceId: workspace.id,

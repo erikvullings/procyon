@@ -14,6 +14,7 @@ import type {
 export interface SemanticOcrManagementAttrs {
   readonly client: FileManagerClient;
   readonly hideHeading?: boolean;
+  readonly onStatusChange?: (status: SemanticOcrStatus) => void;
 }
 
 type BusyAction = 'consent' | 'start' | 'cancel';
@@ -116,8 +117,9 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
   let disposed = false;
   const selected = new Set<string>();
 
-  function applyStatus(next: SemanticOcrStatus): void {
+  function applyStatus(next: SemanticOcrStatus, attrs: SemanticOcrManagementAttrs): void {
     status = next;
+    attrs.onStatusChange?.(next);
     const reported = new Set(next.reportedFiles.map(targetKey));
     for (const key of selected) {
       if (!reported.has(key)) selected.delete(key);
@@ -139,7 +141,7 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
   async function load(attrs: SemanticOcrManagementAttrs, initial = true): Promise<void> {
     if (initial) loading = true;
     try {
-      applyStatus(await attrs.client.getSemanticOcrStatus());
+      applyStatus(await attrs.client.getSemanticOcrStatus(), attrs);
       error = undefined;
     } catch (cause) {
       error = errorMessage(cause);
@@ -156,7 +158,7 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
     busy = 'consent';
     error = undefined;
     try {
-      applyStatus(await attrs.client.setSemanticOcrConsent(enabled));
+      applyStatus(await attrs.client.setSemanticOcrConsent(enabled), attrs);
     } catch (cause) {
       error = errorMessage(cause);
       await load(attrs, false);

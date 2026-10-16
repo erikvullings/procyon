@@ -161,6 +161,30 @@ async fn mock_http_enrolment_round_trip_has_folder_status_and_stale_revision_pro
 }
 
 #[tokio::test]
+async fn gemma_media_endpoint_rejects_a_non_gemma_library() {
+    let (server, _) = spawn_mock_server().await;
+    let response = reqwest::Client::new()
+        .post(format!(
+            "{}/api/v1/semantic/library/gemma-media",
+            server.base_url
+        ))
+        .json(&serde_json::json!({
+            "policyRevision": 1,
+            "images": true,
+            "audio": false,
+            "video": false,
+            "confirmRemoval": false
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response.status().is_client_error(),
+        "non-Gemma libraries must not accept media consent"
+    );
+}
+
+#[tokio::test]
 async fn browser_server_denies_mutation_before_using_untrusted_location() {
     let directory = project_temp_dir("browser-deny-");
     let untrusted_path = directory.path().join("never-read");

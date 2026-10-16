@@ -6364,6 +6364,63 @@
         }
       }
     },
+    "/api/v1/semantic/library/gemma-media": {
+      "post": {
+        "operationId": "updateGemmaMedia",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGemmaMediaRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryStatusDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/semantic/library/pause": {
       "post": {
         "operationId": "pauseSemanticLibrary",
@@ -10572,6 +10629,29 @@
           "username": {
             "type": "string",
             "description": "Remote username."
+          }
+        }
+      },
+      "GemmaMediaSelectionDto": {
+        "type": "object",
+        "description": "Mutable media indexing consent for a Gemma library; text is always indexed.",
+        "required": [
+          "images",
+          "audio",
+          "video"
+        ],
+        "properties": {
+          "audio": {
+            "type": "boolean",
+            "description": "Audio indexing."
+          },
+          "images": {
+            "type": "boolean",
+            "description": "Image and consented PDF-page visual indexing."
+          },
+          "video": {
+            "type": "boolean",
+            "description": "Video indexing."
           }
         }
       },
@@ -18743,7 +18823,8 @@
           "resumeCleanup",
           "pause",
           "resume",
-          "updateEligibilityOverrides"
+          "updateEligibilityOverrides",
+          "updateGemmaMedia"
         ]
       },
       "SemanticLibraryResourceBudgetsDto": {
@@ -18846,6 +18927,17 @@
           "available": {
             "type": "boolean",
             "description": "Whether a library is configured."
+          },
+          "gemmaMedia": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GemmaMediaSelectionDto",
+                "description": "Current media consent, present only for a Gemma library."
+              }
+            ]
           },
           "library": {
             "oneOf": [
@@ -21031,6 +21123,42 @@
             ]
           }
         }
+      },
+      "UpdateGemmaMediaRequestDto": {
+        "type": "object",
+        "description": "Replaces the Gemma library's media consent at an expected policy revision.",
+        "required": [
+          "policyRevision",
+          "images",
+          "audio",
+          "video",
+          "confirmRemoval"
+        ],
+        "properties": {
+          "audio": {
+            "type": "boolean",
+            "description": "Audio consent."
+          },
+          "confirmRemoval": {
+            "type": "boolean",
+            "description": "Explicit acknowledgement when any currently indexed medium is disabled."
+          },
+          "images": {
+            "type": "boolean",
+            "description": "Image consent."
+          },
+          "policyRevision": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Expected durable policy revision.",
+            "minimum": 0
+          },
+          "video": {
+            "type": "boolean",
+            "description": "Video consent."
+          }
+        },
+        "additionalProperties": false
       },
       "UpdateSemanticEligibilityOverridesRequestDto": {
         "type": "object",

@@ -278,16 +278,20 @@ impl SearchComparisonCoordinator {
         let mut entries = Vec::new();
         let mut semantic_results = Vec::new();
         let mut coverage = None;
-        let root_pdf_image_policies = if let Some(library) = semantic_library {
-            library
+        let (root_pdf_image_policies, gemma_media) = if let Some(library) = semantic_library {
+            let status = library
                 .status(&crate::semantic_library::SemanticAccessContext::Host)
-                .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?
-                .roots
-                .into_iter()
-                .map(|root| (root.id, root.pdf_images_enabled, root.pdf_image_page_budget))
-                .collect::<Vec<_>>()
+                .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
+            (
+                status
+                    .roots
+                    .into_iter()
+                    .map(|root| (root.id, root.pdf_images_enabled, root.pdf_image_page_budget))
+                    .collect::<Vec<_>>(),
+                status.gemma_media,
+            )
         } else {
-            Vec::new()
+            (Vec::new(), None)
         };
         fn semantic_source_ids(result: &crate::semantic::SemanticSearchResult) -> Vec<String> {
             serde_json::from_str::<Vec<fm_semantic_worker::semantic_search::SemanticEvidence>>(
@@ -310,6 +314,32 @@ impl SearchComparisonCoordinator {
             .collect()
         }
         for mut result in results {
+            if let Some(media) = gemma_media {
+                let mut evidence: Vec<fm_semantic_worker::semantic_search::SemanticEvidence> =
+                    serde_json::from_str(
+                        result
+                            .metadata
+                            .get("semantic.evidence")
+                            .map(String::as_str)
+                            .unwrap_or("[]"),
+                    )
+                    .unwrap_or_default();
+                evidence.retain(|item| {
+                    item.media_type.as_deref().is_none_or(|mime| {
+                        !(mime.starts_with("image/") && !media.images
+                            || mime.starts_with("audio/") && !media.audio
+                            || mime.starts_with("video/") && !media.video)
+                    }) && (item.chunk_kind != "pdf_image" || media.images)
+                });
+                if evidence.is_empty() {
+                    continue;
+                }
+                result.metadata.insert(
+                    "semantic.evidence".to_owned(),
+                    serde_json::to_string(&evidence)
+                        .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?,
+                );
+            }
             if let Some(library) = semantic_library
                 && let Some(source_id) = semantic_source_ids(&result).into_iter().next()
                 && let Some(occurrence) = library

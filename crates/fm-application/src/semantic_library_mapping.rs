@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use fm_domain::{Location, ProviderId, WorkspaceId};
 use fm_semantic_library as core;
 use fm_transport_dto::{
-    ConfirmSemanticEnrolmentRequestDto, ConfirmSemanticExclusionRequestDto,
+    ConfirmSemanticEnrolmentRequestDto, ConfirmSemanticExclusionRequestDto, GemmaMediaSelectionDto,
     GetSemanticFolderStatusRequestDto, PlanSemanticExclusionRequestDto,
     PreviewSemanticEnrolmentRequestDto, ResumeSemanticCleanupRequestDto, SemanticBudgetKindDto,
     SemanticCleanupStateDto, SemanticCleanupStatusDto, SemanticDeletionCategoryDto,
@@ -19,7 +19,8 @@ use fm_transport_dto::{
     SemanticLibraryOperationDto, SemanticLibraryResourceBudgetsDto,
     SemanticLibraryResourceProfileDto, SemanticLibraryResourceProfileKindDto,
     SemanticLibraryRevisionRequestDto, SemanticLibraryStatusDto, SemanticRootAvailabilityDto,
-    SemanticRootStatusDto, UpdateSemanticEligibilityOverridesRequestDto,
+    SemanticRootStatusDto, UpdateGemmaMediaRequestDto,
+    UpdateSemanticEligibilityOverridesRequestDto,
 };
 use uuid::Uuid;
 
@@ -77,6 +78,11 @@ pub fn semantic_library_status_to_dto(status: SemanticLibraryStatus) -> Semantic
         revision: status.revision,
         paused: status.paused,
         library: status.library.map(semantic_library_identity_to_dto),
+        gemma_media: status.gemma_media.map(|media| GemmaMediaSelectionDto {
+            images: media.images,
+            audio: media.audio,
+            video: media.video,
+        }),
         resource_profile: status
             .resource_profile
             .map(semantic_resource_profile_to_dto),
@@ -115,6 +121,9 @@ pub fn semantic_library_error_to_dto(
             None,
         ),
         SemanticLibraryError::InvalidRequest => (SemanticLibraryErrorCodeDto::InvalidRequest, None),
+        SemanticLibraryError::RemovalRequiresConfirmation => {
+            (SemanticLibraryErrorCodeDto::InvalidRequest, None)
+        }
         SemanticLibraryError::WorkspaceRequired => {
             (SemanticLibraryErrorCodeDto::WorkspaceRequired, None)
         }
@@ -151,6 +160,26 @@ pub fn semantic_library_error_to_dto(
 }
 
 impl FileManagerService {
+    /// Changes the current Gemma media consent after checking the revision.
+    pub async fn update_gemma_media_dto(
+        &self,
+        access: &SemanticAccessContext,
+        request: UpdateGemmaMediaRequestDto,
+    ) -> Result<SemanticLibraryStatusDto, SemanticLibraryError> {
+        self.update_semantic_gemma_media(
+            access,
+            core::GemmaMediaSelection {
+                images: request.images,
+                audio: request.audio,
+                video: request.video,
+            },
+            request.policy_revision,
+            request.confirm_removal,
+        )
+        .await
+        .map(semantic_library_status_to_dto)
+    }
+
     /// Returns semantic-library capabilities as a wire DTO.
     pub async fn semantic_library_capabilities_dto(
         &self,
@@ -621,6 +650,7 @@ const fn semantic_library_operation_to_dto(
         SemanticLibraryOperation::UpdateEligibilityOverrides => {
             SemanticLibraryOperationDto::UpdateEligibilityOverrides
         }
+        SemanticLibraryOperation::UpdateGemmaMedia => SemanticLibraryOperationDto::UpdateGemmaMedia,
     }
 }
 

@@ -987,8 +987,34 @@ export const es = {
     message: 'Este panel no tiene otras pestañas. Al cerrarla, el panel quedará vacío.',
     closeTab: 'Cerrar pestaña',
   },
-  semanticComponents: en.semanticComponents,
-  semanticLibrary: en.semanticLibrary,
+  semanticComponents: {
+    ...en.semanticComponents,
+    gemmaName: 'EmbeddingGemma 2 (experimental)',
+    gemmaFreshLibraryExplanation:
+      'Esto inicia una biblioteca vacía. Tu biblioteca E5 y su índice se conservan. La dimensión de embedding elegida queda bloqueada para esta biblioteca; las opciones de indexación de medios se podrán cambiar más adelante. Guardar los ajustes no instala Gemma. Al aceptar e instalar se crea la biblioteca nueva y comienza la descarga del modelo.',
+    gemmaExistingSetup:
+      'Biblioteca existente: {dimensions} dimensiones · imágenes: {images} · audio: {audio} · vídeo: {video}. La dimensión de embedding está bloqueada; las opciones de medios podrán cambiarse más adelante.',
+    showDeveloperTools: 'Mostrar herramientas de desarrollo',
+    browseDestination: 'Examinar…',
+    closeMovePicker: 'Cerrar explorador de carpetas',
+    movePickerVolume: 'Volumen',
+    movePickerLabel: 'Elige una carpeta de destino local',
+    loadingMovePicker: 'Cargando carpetas…',
+    movePickerNoVolumes: 'No hay carpetas locales disponibles para explorar.',
+    movePickerUnsupportedLocation: 'Aquí solo se pueden elegir carpetas locales.',
+  },
+  semanticLibrary: {
+    ...en.semanticLibrary,
+    pdfToolsEnabled: 'Hacer que los PDF escaneados sean buscables (activado)',
+    pdfToolsDisabled: 'Hacer que los PDF escaneados sean buscables (desactivado)',
+    gemmaMediaTitle: 'Indexación de medios de Gemma',
+    gemmaMediaSave: 'Guardar opciones de medios',
+    gemmaMediaConfirmRemoval: 'Confirmar eliminación y guardar',
+    gemmaMediaRemovingWarning:
+      'Al eliminar medios indexados se borran permanentemente de esta biblioteca los vectores de ese tipo de medio.',
+    gemmaMediaAddingHelp:
+      'Los medios habilitados recientemente se indexarán durante el siguiente análisis de la biblioteca.',
+  },
   semanticOcr: en.semanticOcr,
   semanticVocabulary: en.semanticVocabulary,
   llmProfiles: en.llmProfiles,

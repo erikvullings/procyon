@@ -15,7 +15,7 @@ use fm_domain::{EntryKind, EntrySummary, GitFileStatus, Location, LocationError,
 use fm_events::{BackendEventPayload, EventAudience, EventBus};
 use fm_semantic_library::{
     ContentFingerprint, EligibilityCandidate, EligibilityEntryKind, EligibilityReason,
-    OccurrenceId, OccurrenceScope, RootId,
+    GemmaMediaSelection, OccurrenceId, OccurrenceScope, RootId,
 };
 use fm_vcs_status::{GitIgnoreError, ignored_entries};
 use fm_vfs::{
@@ -197,7 +197,7 @@ impl SemanticIndexingService {
         self.scanned_entries.store(0, Ordering::Relaxed);
         let job_id = format!("root:{root_id}");
         self.publish_progress(&job_id, "reconciling", 0, 0);
-        let work = self.reconcile_root(library, access, root_id, cancellation);
+        let work = self.reconcile_root(library, access, root_id, cancellation, None);
         tokio::pin!(work);
         let mut heartbeat = interval_at(
             Instant::now() + Duration::from_secs(1),
@@ -245,12 +245,29 @@ impl SemanticIndexingService {
         );
     }
 
+    /// Scans only newly permitted modalities; existing text and media files
+    /// never need their vectors regenerated. PDF is revisited only for roots
+    /// that separately opted in to page images.
+    pub(crate) async fn index_added_media(
+        &self,
+        library: Arc<SemanticLibraryService>,
+        access: &SemanticAccessContext,
+        root_id: RootId,
+        media: GemmaMediaSelection,
+        cancellation: CancellationToken,
+    ) -> Result<SemanticIndexingReport, SemanticIndexingError> {
+        let _run = self.run_lock.lock().await;
+        self.reconcile_root(library, access, root_id, cancellation, Some(media))
+            .await
+    }
+
     async fn reconcile_root(
         &self,
         library: Arc<SemanticLibraryService>,
         access: &SemanticAccessContext,
         root_id: RootId,
         cancellation: CancellationToken,
+        added_media: Option<GemmaMediaSelection>,
     ) -> Result<SemanticIndexingReport, SemanticIndexingError> {
         check_cancelled(&cancellation)?;
 
@@ -341,6 +358,20 @@ impl SemanticIndexingService {
                         }
                         EntryKind::Directory | EntryKind::Symlink => {}
                         EntryKind::File => {
+                            if let Some(media) = added_media {
+                                let mime = media_type(&entry);
+                                let selected = (media.images
+                                    && (mime.is_some_and(|mime| mime.starts_with("image/"))
+                                        || (context.pdf_images_enabled
+                                            && mime == Some("application/pdf"))))
+                                    || (media.audio
+                                        && mime.is_some_and(|mime| mime.starts_with("audio/")))
+                                    || (media.video
+                                        && mime.is_some_and(|mime| mime.starts_with("video/")));
+                                if !selected {
+                                    continue;
+                                }
+                            }
                             match self
                                 .ingest_entry(EntryIngestRequest {
                                     library: &library,
@@ -356,6 +387,7 @@ impl SemanticIndexingService {
                                 EntryIngestOutcome::Oversized => {
                                     *skipped.entry(EligibilityReason::Oversized).or_insert(0) += 1;
                                 }
+                                EntryIngestOutcome::Ineligible => {}
                                 EntryIngestOutcome::Unreadable(error) => {
                                     tracing::debug!(%error, "semantic reconciliation skipped an unreadable file");
                                     unreadable_files = unreadable_files.saturating_add(1);
@@ -409,12 +441,23 @@ impl SemanticIndexingService {
         }
 
         check_cancelled(&cancellation)?;
-        let reconciliation_generation = library
-            .complete_reconciliation_preserving(access, root_id, &observed, &preserved, &skipped)?;
-        self.ocr_required_files
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(root_id, ocr_required_files.clone());
+        let reconciliation_generation = if added_media.is_some() {
+            library
+                .status(access)?
+                .roots
+                .iter()
+                .find(|root| root.id == root_id.to_string())
+                .map_or(0, |root| root.reconciliation_generation)
+        } else {
+            let generation = library.complete_reconciliation_preserving(
+                access, root_id, &observed, &preserved, &skipped,
+            )?;
+            self.ocr_required_files
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(root_id, ocr_required_files.clone());
+            generation
+        };
         let tenant_ids = match access {
             SemanticAccessContext::Host => context
                 .workspace_ids
@@ -604,6 +647,9 @@ impl SemanticIndexingService {
             }],
             context.max_pdf_source_bytes,
         )?;
+        if feed.eligible_locations.first() != Some(&entry.location) {
+            return Ok(EntryIngestOutcome::Ineligible);
+        }
         let pdf_images_consented = feed.pdf_images_consented
             && context.pdf_images_enabled
             && media_type == "application/pdf";
@@ -801,6 +847,7 @@ impl SemanticIndexingService {
             .await?
         {
             EntryIngestOutcome::Oversized => Ok(SingleFileIngestOutcome::Oversized),
+            EntryIngestOutcome::Ineligible => Ok(SingleFileIngestOutcome::Ineligible),
             EntryIngestOutcome::Unreadable(error) => Err(error.into()),
             EntryIngestOutcome::Ingested(report) => Ok(SingleFileIngestOutcome::Ingested(report)),
         }
@@ -861,6 +908,7 @@ pub(crate) struct EntryIngestReport {
 
 enum EntryIngestOutcome {
     Oversized,
+    Ineligible,
     Unreadable(VfsError),
     Ingested(EntryIngestReport),
 }

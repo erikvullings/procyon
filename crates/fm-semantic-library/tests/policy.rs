@@ -118,7 +118,7 @@ fn new_gemma_library_persists_immutable_dimensions_and_independent_media_consent
     let reloaded = store.load().unwrap();
     assert_eq!(reloaded.library().model(), &model);
     assert_eq!(reloaded.library().model().gemma_media(), Some(media));
-    assert_ne!(
+    assert_eq!(
         model.embedding_space(),
         ModelIdentity::embeddinggemma_2(
             256,
@@ -172,6 +172,68 @@ fn changing_gemma_media_or_dimensions_requires_a_new_library() {
     );
     assert_eq!(policy.library().model(), &original);
     assert_eq!(policy.revision(), original_revision);
+    assert!(!policy.set_gemma_media(media, false).unwrap());
+    let updated = GemmaMediaSelection {
+        images: false,
+        audio: true,
+        video: true,
+    };
+    assert!(policy.set_gemma_media(updated, false).is_err());
+    assert_eq!(policy.gemma_media(), Some(media));
+    assert!(policy.set_gemma_media(updated, true).unwrap());
+    assert_eq!(policy.gemma_media(), Some(updated));
+    assert_eq!(policy.library().model(), &original);
+}
+
+#[test]
+fn legacy_gemma_media_migrates_to_independent_consent_without_losing_index_identity() {
+    let initial = GemmaMediaSelection {
+        images: true,
+        audio: false,
+        video: true,
+    };
+    let directory = project_temp_dir("legacy-gemma-consent-");
+    let store = SemanticLibraryPolicyStore::new(directory.path());
+    let policy = SemanticLibraryPolicy::new(
+        DeviceLibraryIdentity::new(
+            LibraryId::new(),
+            ModelIdentity::embeddinggemma_2(256, initial).unwrap(),
+        ),
+        ResourceProfile {
+            kind: ResourceProfileKind::Balanced,
+            budgets: ResourceBudgets::default(),
+        },
+    )
+    .unwrap();
+    let mut legacy = serde_json::to_value(&policy).unwrap();
+    legacy["schemaVersion"] = serde_json::json!(4);
+    legacy.as_object_mut().unwrap().remove("gemmaMedia");
+    legacy["library"]["model"]["embeddingSpace"] =
+        serde_json::json!("embeddinggemma-2/256/images-1/audio-0/video-1/v1");
+    std::fs::create_dir_all(directory.path()).unwrap();
+    std::fs::write(store.path(), serde_json::to_vec(&legacy).unwrap()).unwrap();
+
+    let mut migrated = store.load().unwrap();
+    assert_eq!(migrated.gemma_media(), Some(initial));
+    assert_eq!(
+        migrated.library().model().embedding_space(),
+        "embeddinggemma-2/256/v1"
+    );
+    let identity = migrated.library().clone();
+    migrated
+        .set_gemma_media(
+            GemmaMediaSelection {
+                images: false,
+                ..initial
+            },
+            true,
+        )
+        .unwrap();
+    migrated.advance_revision().unwrap();
+    store.save(&migrated).unwrap();
+    let reloaded = store.load().unwrap();
+    assert_eq!(reloaded.library(), &identity);
+    assert!(!reloaded.gemma_media().unwrap().images);
 }
 
 #[test]

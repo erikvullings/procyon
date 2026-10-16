@@ -1690,6 +1690,7 @@ impl CorpusHarness {
                 .iter()
                 .map(|source_id| (source_id.clone(), content_hash(source_id)))
                 .collect(),
+            media: None,
         }
     }
 

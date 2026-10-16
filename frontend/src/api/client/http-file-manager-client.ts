@@ -175,6 +175,7 @@ import type {
   UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
+  UpdateGemmaMediaRequest,
   UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
@@ -240,6 +241,7 @@ import {
   setFinderTags as requestFinderTagsUpdate,
   calculateFolderSize as requestFolderSizeCalculation,
   recordFrontendDiagnostic as requestFrontendDiagnostic,
+  updateGemmaMedia as requestGemmaMediaUpdate,
   getFileGitHistory as requestGitFileHistory,
   cancelKnowledgeAnswer as requestKnowledgeAnswerCancellation,
   generateKnowledgeAnswer as requestKnowledgeAnswerGeneration,
@@ -738,6 +740,20 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200) {
       throw new Error(`Unexpected getSemanticLibraryStatus response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async updateGemmaMedia(
+    request: UpdateGemmaMediaRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    const response = await requestGemmaMediaUpdate(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected updateGemmaMedia response status: ${response.status}`);
     }
     return response.data;
   }

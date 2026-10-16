@@ -988,8 +988,34 @@ export const pt = {
     message: 'Este painel não tem outros separadores. Ao fechá-lo, o painel ficará vazio.',
     closeTab: 'Fechar separador',
   },
-  semanticComponents: en.semanticComponents,
-  semanticLibrary: en.semanticLibrary,
+  semanticComponents: {
+    ...en.semanticComponents,
+    gemmaName: 'EmbeddingGemma 2 (experimental)',
+    gemmaFreshLibraryExplanation:
+      'Isto inicia uma biblioteca vazia. A sua biblioteca E5 e o respetivo índice permanecem intactos. A dimensão de embedding selecionada fica bloqueada para esta biblioteca; as opções de indexação de multimédia podem ser alteradas mais tarde. Guardar as Definições não instala o Gemma. Aceitar e instalar cria a nova biblioteca e inicia a transferência do modelo.',
+    gemmaExistingSetup:
+      'Biblioteca existente: {dimensions} dimensões · imagens: {images} · áudio: {audio} · vídeo: {video}. A dimensão de embedding está bloqueada; as opções de multimédia podem ser alteradas mais tarde.',
+    showDeveloperTools: 'Mostrar ferramentas de desenvolvimento',
+    browseDestination: 'Procurar…',
+    closeMovePicker: 'Fechar o seletor de pastas',
+    movePickerVolume: 'Volume',
+    movePickerLabel: 'Escolha uma pasta de destino local',
+    loadingMovePicker: 'A carregar pastas…',
+    movePickerNoVolumes: 'Não existem pastas locais disponíveis.',
+    movePickerUnsupportedLocation: 'Só é possível escolher pastas locais aqui.',
+  },
+  semanticLibrary: {
+    ...en.semanticLibrary,
+    pdfToolsEnabled: 'Tornar pesquisáveis os PDFs digitalizados (ativado)',
+    pdfToolsDisabled: 'Tornar pesquisáveis os PDFs digitalizados (desativado)',
+    gemmaMediaTitle: 'Indexação de multimédia do Gemma',
+    gemmaMediaSave: 'Guardar escolhas de multimédia',
+    gemmaMediaConfirmRemoval: 'Confirmar remoção e guardar',
+    gemmaMediaRemovingWarning:
+      'A remoção de multimédia indexada elimina permanentemente desta biblioteca os vetores desse tipo de multimédia.',
+    gemmaMediaAddingHelp:
+      'A multimédia ativada recentemente será indexada durante a próxima análise da biblioteca.',
+  },
   semanticOcr: en.semanticOcr,
   semanticVocabulary: en.semanticVocabulary,
   llmProfiles: en.llmProfiles,

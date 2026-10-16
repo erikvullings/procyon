@@ -195,6 +195,7 @@ import type {
   SystemLocationDto,
   UninstallSemanticComponentsRequestDto,
   UpdateConnectionRequestDto,
+  UpdateGemmaMediaRequestDto,
   UpdateSemanticEligibilityOverridesRequestDto,
   UpdateStructuredViewRequestDto,
   VerificationReportDto,
@@ -7921,6 +7922,70 @@ return fetchMutator<getSemanticFolderStatusResponse>(getGetSemanticFolderStatusU
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(getSemanticFolderStatusRequestDto)
+  }
+);}
+
+
+
+export type updateGemmaMediaResponse200 = {
+  data: SemanticLibraryStatusDto
+  status: 200
+}
+
+export type updateGemmaMediaResponse400 = {
+  data: SemanticLibraryErrorDto
+  status: 400
+}
+
+export type updateGemmaMediaResponse403 = {
+  data: SemanticLibraryErrorDto
+  status: 403
+}
+
+export type updateGemmaMediaResponse409 = {
+  data: SemanticLibraryErrorDto
+  status: 409
+}
+
+export type updateGemmaMediaResponseSuccess = (updateGemmaMediaResponse200) & {
+  headers: Headers;
+};
+export type updateGemmaMediaResponseError = (updateGemmaMediaResponse400 | updateGemmaMediaResponse403 | updateGemmaMediaResponse409) & {
+  headers: Headers;
+};
+
+export type updateGemmaMediaResponse = (updateGemmaMediaResponseSuccess | updateGemmaMediaResponseError)
+
+export const getUpdateGemmaMediaUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/library/gemma-media`
+}
+
+export const updateGemmaMedia = async (updateGemmaMediaRequestDto: UpdateGemmaMediaRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<updateGemmaMediaResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<updateGemmaMediaResponse>(getUpdateGemmaMediaUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateGemmaMediaRequestDto)
   }
 );}
 

@@ -36,4 +36,5 @@ export type { SemanticLibraryRevisionRequestDto as SemanticLibraryRevisionReques
 export type { SemanticLibraryStatusDto as SemanticLibraryStatus } from '../api/generated/models/semanticLibraryStatusDto';
 export type { SemanticRootAvailabilityDto as SemanticRootAvailability } from '../api/generated/models/semanticRootAvailabilityDto';
 export type { SemanticRootStatusDto as SemanticRootStatus } from '../api/generated/models/semanticRootStatusDto';
+export type { UpdateGemmaMediaRequestDto as UpdateGemmaMediaRequest } from '../api/generated/models/updateGemmaMediaRequestDto';
 export type { UpdateSemanticEligibilityOverridesRequestDto as UpdateSemanticEligibilityOverridesRequest } from '../api/generated/models/updateSemanticEligibilityOverridesRequestDto';

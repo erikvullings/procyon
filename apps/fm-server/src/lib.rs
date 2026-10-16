@@ -108,6 +108,9 @@ fn api_router() -> OpenApiRouter<AppState> {
             routes::semantic_library::get_semantic_library_status
         ))
         .routes(utoipa_axum::routes!(
+            routes::semantic_library::update_gemma_media
+        ))
+        .routes(utoipa_axum::routes!(
             routes::semantic_library::get_semantic_folder_status
         ))
         .routes(utoipa_axum::routes!(

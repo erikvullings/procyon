@@ -79,6 +79,40 @@ describe('i18n', () => {
       }
     });
 
+    it.each(LOCALES)('localises experimental Gemma wording and media labels in %s', (locale) => {
+      setLocale(locale);
+      expect(t('semanticComponents', 'gemmaName')).toMatch(/\(.*\)/u);
+      expect(t('semanticComponents', 'gemmaFreshLibraryExplanation')).toMatch(
+        /dimension|dimension|dimensi|dimens|dimensió|wymiar/iu,
+      );
+      expect(t('semanticComponents', 'gemmaExistingSetup')).toBeTruthy();
+      for (const key of [
+        'gemmaMediaTitle',
+        'gemmaMediaSave',
+        'gemmaMediaConfirmRemoval',
+        'gemmaMediaRemovingWarning',
+        'gemmaMediaAddingHelp',
+      ] as const) {
+        expect(t('semanticLibrary', key).trim().length).toBeGreaterThan(0);
+      }
+      expect(t('semanticLibrary', 'pdfToolsEnabled').trim().length).toBeGreaterThan(0);
+      expect(t('semanticLibrary', 'pdfToolsDisabled').trim().length).toBeGreaterThan(0);
+      if (locale !== 'en') {
+        expect(t('semanticLibrary', 'gemmaMediaSave')).not.toBe(
+          catalogues.en.semanticLibrary.gemmaMediaSave,
+        );
+      }
+    });
+
+    it('uses the requested scanned-PDF enabled and disabled labels in English', () => {
+      expect(catalogues.en.semanticLibrary.pdfToolsEnabled).toBe(
+        'Make scanned PDFs searchable (enabled)',
+      );
+      expect(catalogues.en.semanticLibrary.pdfToolsDisabled).toBe(
+        'Make scanned PDFs searchable (disabled)',
+      );
+    });
+
     it('switches to Dutch without a page reload', () => {
       setLocale('nl');
       expect(getLocale()).toBe('nl');

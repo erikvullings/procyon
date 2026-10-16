@@ -608,6 +608,8 @@ pub struct AuthorizedRagRequest {
     pub display: RagSourceDisplay,
     /// Explicit retrieval strategy requested for this turn.
     pub retrieval_strategy: RagRetrievalStrategy,
+    /// Current Gemma media consent used to withhold stale worker evidence.
+    pub media: Option<fm_semantic_library::GemmaMediaSelection>,
 }
 
 /// One evidence item shown before generation and mapped locally after it.
@@ -1118,9 +1120,24 @@ fn preview_from_context(
     request: AuthorizedRagRequest,
     profile_id: Uuid,
     profile: &crate::llm_profiles::LlmProfile,
-    context: RagContext,
+    mut context: RagContext,
     plan: RagQueryPlan,
 ) -> Result<RagPreview, RagError> {
+    if let Some(media) = request.media {
+        context.chunks.retain(|chunk| {
+            let mime = chunk.evidence.media_type.as_str();
+            !(mime.starts_with("image/") && !media.images
+                || mime.starts_with("audio/") && !media.audio
+                || mime.starts_with("video/") && !media.video)
+                && (chunk.evidence.record_kind != "pdf_image" || media.images)
+        });
+        context.token_count = context
+            .chunks
+            .iter()
+            .map(|chunk| chunk.evidence.token_count)
+            .sum();
+        context.insufficient = context.chunks.is_empty();
+    }
     let evidence = context
         .chunks
         .iter()
@@ -1652,6 +1669,7 @@ mod tests {
                 )]),
             },
             retrieval_strategy: RagRetrievalStrategy::SingleQuery,
+            media: None,
         };
         let preview = coordinator
             .preview(
@@ -1757,6 +1775,7 @@ mod tests {
                     coverage: RagCoverage::default(),
                     display: RagSourceDisplay::default(),
                     retrieval_strategy: RagRetrievalStrategy::MultiQuery,
+                    media: None,
                 },
                 profile.id,
                 &profiles,

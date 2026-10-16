@@ -1477,6 +1477,78 @@ impl SemanticCatalog {
         })
     }
 
+    /// Removes evidence from disabled Gemma modalities and journals derived
+    /// Zvec deletions. Repeating this after interruption is safe: rows already
+    /// removed from the catalog cannot be queried, and pending Zvec IDs remain
+    /// until their deletion succeeds.
+    pub fn revoke_gemma_media(
+        &self,
+        images: bool,
+        audio: bool,
+        video: bool,
+    ) -> Result<Vec<String>, StorageError> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        transaction.execute_batch(
+            "CREATE TABLE IF NOT EXISTS media_cleanup_pending (record_id TEXT PRIMARY KEY)",
+        )?;
+        let ids = {
+            let mut statement = transaction.prepare(
+                "SELECT r.record_id, r.cache_key FROM records r
+                 JOIN occurrences o ON o.occurrence_id = r.occurrence_id
+                   AND o.generation = r.generation
+                 WHERE ((?1 = 0 AND o.media_type IN ('image/jpeg','image/png','image/webp'))
+                    OR (?2 = 0 AND o.media_type IN
+                        ('audio/wav','audio/x-wav','audio/mpeg','audio/flac',
+                         'audio/aac','audio/mp4'))
+                    OR (?3 = 0 AND o.media_type IN ('video/mp4','video/quicktime'))
+                    OR (?1 = 0 AND o.media_type = 'application/pdf'
+                        AND r.record_kind = 'pdf_image'))",
+            )?;
+            statement
+                .query_map(
+                    (i64::from(images), i64::from(audio), i64::from(video)),
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?)),
+                )?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        for (record_id, cache_key) in &ids {
+            transaction.execute(
+                "INSERT OR IGNORE INTO media_cleanup_pending (record_id) VALUES (?1)",
+                [record_id],
+            )?;
+            transaction.execute("DELETE FROM records WHERE record_id = ?1", [record_id])?;
+            transaction.execute(
+                "UPDATE vectors SET reference_count = reference_count - 1 WHERE cache_key = ?1",
+                [cache_key],
+            )?;
+            transaction.execute(
+                "DELETE FROM vectors WHERE cache_key = ?1 AND reference_count <= 0",
+                [cache_key],
+            )?;
+        }
+        transaction.commit()?;
+        let mut statement = connection.prepare("SELECT record_id FROM media_cleanup_pending")?;
+        let pending = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(pending)
+    }
+
+    /// Clears successfully reclaimed derived record IDs after Zvec deletion.
+    pub fn finish_gemma_media_cleanup(&self, ids: &[String]) -> Result<(), StorageError> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        for id in ids {
+            transaction.execute(
+                "DELETE FROM media_cleanup_pending WHERE record_id = ?1",
+                [id],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
     /// Persists one ingestion/reconciliation job state.
     ///
     /// # Errors
@@ -2984,6 +3056,69 @@ mod tests {
         let catalog =
             SemanticCatalog::open(directory.path().join("catalog.sqlite")).expect("catalog");
         (directory, catalog)
+    }
+
+    #[test]
+    fn media_revocation_preserves_pdf_text_and_retries_derived_cleanup_after_restart() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("semantic-media-revocation-tests")
+            .join(format!(
+                "{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("catalog.sqlite");
+        let catalog = SemanticCatalog::open(&path).unwrap();
+        catalog
+            .register_library("tenant-a", "library-a", &manifest())
+            .unwrap();
+        let mut image = occurrence("photo", "root-a");
+        image.media_type = "image/png".into();
+        let mut pdf = occurrence("pdf", "root-a");
+        pdf.media_type = "application/pdf".into();
+        let mut document = generation(
+            "tenant-a",
+            "library-a",
+            "document-a",
+            1,
+            vec![image, pdf],
+            "body",
+        );
+        let image_id = document.records[0].record_id.clone();
+        let pdf_text_id = document.records[1].record_id.clone();
+        let mut page = document.records[1].clone();
+        page.record_id = "pdf-page-image".into();
+        page.record_kind = "pdf_image".into();
+        document.records.push(page.clone());
+        catalog.stage_generation(&document).unwrap();
+        catalog
+            .publish_generation("tenant-a", "library-a", "document-a", 1)
+            .unwrap();
+        let pending = catalog.revoke_gemma_media(false, true, true).unwrap();
+        assert_eq!(pending.len(), 2);
+        assert!(pending.contains(&image_id));
+        assert!(pending.contains(&page.record_id));
+        assert!(!pending.contains(&pdf_text_id));
+        drop(catalog);
+
+        let restarted = SemanticCatalog::open(&path).unwrap();
+        assert_eq!(
+            restarted.revoke_gemma_media(false, true, true).unwrap(),
+            pending
+        );
+        restarted.finish_gemma_media_cleanup(&pending).unwrap();
+        assert!(
+            restarted
+                .revoke_gemma_media(false, true, true)
+                .unwrap()
+                .is_empty()
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

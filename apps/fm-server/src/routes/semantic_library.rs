@@ -8,7 +8,8 @@ use fm_transport_dto::{
     PreviewSemanticEnrolmentRequestDto, ResumeSemanticCleanupRequestDto,
     SemanticEnrolmentPreviewDto, SemanticExclusionPlanDto, SemanticFolderStatusDto,
     SemanticLibraryCapabilitiesDto, SemanticLibraryErrorDto, SemanticLibraryRevisionRequestDto,
-    SemanticLibraryStatusDto, UpdateSemanticEligibilityOverridesRequestDto,
+    SemanticLibraryStatusDto, UpdateGemmaMediaRequestDto,
+    UpdateSemanticEligibilityOverridesRequestDto,
 };
 use tower_http::request_id::RequestId;
 
@@ -52,6 +53,31 @@ pub(crate) async fn get_semantic_library_status(
     state
         .service
         .semantic_library_status_dto(state.semantic_access())
+        .await
+        .map(Json)
+        .map_err(|error| SemanticLibraryApiError::new(error, extract_request_id(&request_id)))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/semantic/library/gemma-media",
+    operation_id = "updateGemmaMedia",
+    request_body = UpdateGemmaMediaRequestDto,
+    responses(
+        (status = 200, body = SemanticLibraryStatusDto),
+        (status = 400, body = SemanticLibraryErrorDto),
+        (status = 403, body = SemanticLibraryErrorDto),
+        (status = 409, body = SemanticLibraryErrorDto)
+    )
+)]
+pub(crate) async fn update_gemma_media(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<UpdateGemmaMediaRequestDto>,
+) -> Result<Json<SemanticLibraryStatusDto>, SemanticLibraryApiError> {
+    state
+        .service
+        .update_gemma_media_dto(state.semantic_access(), request)
         .await
         .map(Json)
         .map_err(|error| SemanticLibraryApiError::new(error, extract_request_id(&request_id)))

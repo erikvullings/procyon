@@ -733,6 +733,13 @@ describe('TauriFileManagerClient', () => {
       const planRequest = { policyRevision: 1, ...context };
       const cleanupRequest = { planId: 'plan-1', policyRevision: 1 };
       const revisionRequest = { policyRevision: 1 };
+      const mediaRequest = {
+        policyRevision: 1,
+        images: true,
+        audio: true,
+        video: false,
+        confirmRemoval: false,
+      };
       const overridesRequest = {
         rootId: 'root-1',
         workspaceId: context.workspaceId,
@@ -742,6 +749,7 @@ describe('TauriFileManagerClient', () => {
 
       await client.getSemanticLibraryCapabilities();
       await client.getSemanticLibraryStatus();
+      await client.updateGemmaMedia(mediaRequest);
       await client.getSemanticFolderStatus(context);
       await client.previewSemanticEnrolment(previewRequest);
       await client.confirmSemanticEnrolment(confirmation);
@@ -755,6 +763,7 @@ describe('TauriFileManagerClient', () => {
       expect(invoke.mock.calls).toEqual([
         ['get_semantic_library_capabilities'],
         ['get_semantic_library_status'],
+        ['update_gemma_media', { request: mediaRequest }],
         ['get_semantic_folder_status', { request: context }],
         ['preview_semantic_enrolment', { request: previewRequest }],
         ['confirm_semantic_enrolment', { request: confirmation }],

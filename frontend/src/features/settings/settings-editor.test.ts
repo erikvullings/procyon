@@ -249,9 +249,15 @@ describe('SettingsEditor', () => {
     expect(root.textContent).toContain('Concept vocabularies');
     expect(root.textContent).toContain('AI summaries and answers');
     const ocr = [...root.querySelectorAll<HTMLDetailsElement>('.fm-settings-semantic-tools')].find(
-      (section) => section.querySelector('summary')?.textContent === 'Make scanned PDFs searchable',
+      (section) =>
+        section.querySelector('summary')?.textContent?.startsWith('Make scanned PDFs searchable'),
     );
     if (ocr === undefined) throw new Error('OCR section missing');
+    await vi.waitFor(() =>
+      expect(ocr.querySelector('summary')?.textContent).toBe(
+        'Make scanned PDFs searchable (disabled)',
+      ),
+    );
     ocr.open = true;
     await vi.waitFor(() =>
       expect(ocr?.querySelector('.fm-semantic-ocr-management')).not.toBeNull(),
@@ -263,6 +269,12 @@ describe('SettingsEditor', () => {
     expect(
       ocr?.querySelector('label.fm-semantic-ocr-consent input[type="checkbox"]'),
     ).not.toBeNull();
+    ocr.querySelector<HTMLInputElement>('label.fm-semantic-ocr-consent input')?.click();
+    await vi.waitFor(() =>
+      expect(ocr.querySelector('summary')?.textContent).toBe(
+        'Make scanned PDFs searchable (enabled)',
+      ),
+    );
   });
 
   it('saves a changed generation profile through the main settings action', async () => {

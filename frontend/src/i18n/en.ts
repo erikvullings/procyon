@@ -1423,12 +1423,12 @@ export const en = {
     multilingualQualityName: 'Multilingual quality',
     multilingualQualityDescription:
       'Higher-quality multilingual retrieval with greater disk, memory, and indexing cost.',
-    gemmaName: 'EmbeddingGemma 2 (optional)',
+    gemmaName: 'EmbeddingGemma 2 (experimental)',
     gemmaDescription:
       'Native CPU text and code search with optional image, audio, and video indexing. Requires a separate, freshly indexed library.',
     gemmaSetupTitle: 'New EmbeddingGemma 2 library',
     gemmaFreshLibraryExplanation:
-      'This starts an empty library. Your E5 library and its index stay intact. The selected dimension and media permissions cannot change without creating a new index. Saving Settings does not install Gemma. Accept and install creates the new library and starts the model download.',
+      'This starts an empty library. Your E5 library and its index stay intact. The selected embedding dimension is locked for this library; media indexing choices can be changed later. Saving Settings does not install Gemma. Accept and install creates the new library and starts the model download.',
     gemmaDimensions: 'Embedding dimensions',
     gemmaSelectDimension: 'Select a dimension',
     gemmaDimensionTradeoff:
@@ -1440,7 +1440,15 @@ export const en = {
       'I understand that Gemma starts with an empty index and does not migrate my E5 data.',
     gemmaConsentRequired: 'Select a dimension and confirm the new-library disclosure.',
     gemmaExistingSetup:
-      'Existing library: {dimensions} dimensions · images: {images} · audio: {audio} · video: {video}. These choices are locked.',
+      'Existing library: {dimensions} dimensions · images: {images} · audio: {audio} · video: {video}. The embedding dimension is locked; media choices can change later.',
+    showDeveloperTools: 'Show developer tools',
+    browseDestination: 'Browse…',
+    closeMovePicker: 'Close folder browser',
+    movePickerVolume: 'Volume',
+    movePickerLabel: 'Choose a local destination folder',
+    loadingMovePicker: 'Loading folders…',
+    movePickerNoVolumes: 'No local folders are available to browse.',
+    movePickerUnsupportedLocation: 'Only local folders can be chosen here.',
     recommended: 'Recommended',
     noProfiles: 'No model profiles are available from this host.',
     reviewInstallation: 'Review the complete signed offer before anything is downloaded.',
@@ -1652,6 +1660,8 @@ export const en = {
     computeUnknown: 'Device not reported by the worker',
     libraryDetails: 'Library details',
     pdfTools: 'Make scanned PDFs searchable',
+    pdfToolsEnabled: 'Make scanned PDFs searchable (enabled)',
+    pdfToolsDisabled: 'Make scanned PDFs searchable (disabled)',
     ocrNeededCount: '{count} scanned PDF(s) need text recognition; see indexing details.',
     missingRootGuidance:
       'Moving or deleting an included folder does not remove its index automatically. Offline folders keep their search data; use Remove to delete it.',
@@ -1681,6 +1691,12 @@ export const en = {
     reasonExplicitlyExcluded: 'Explicit exclusion',
     ocrRequiredFiles: 'Scanned PDFs without searchable text',
     ocrRequiredGuidance: 'Use the options below to choose which scanned PDFs to make searchable.',
+    gemmaMediaTitle: 'Gemma media indexing',
+    gemmaMediaSave: 'Save media choices',
+    gemmaMediaConfirmRemoval: 'Confirm removal and save',
+    gemmaMediaRemovingWarning:
+      'Removing indexed media permanently deletes vectors for that media type from this library.',
+    gemmaMediaAddingHelp: 'Newly enabled media is indexed during the next library scan.',
     cleanupRunning: 'Cleanup running',
     cleanupPending: 'Cleanup pending',
     cleanupFailed: 'Cleanup failed',

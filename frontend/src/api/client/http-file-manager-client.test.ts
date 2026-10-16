@@ -24,6 +24,7 @@ const discoverLlmProfileDraftModels = vi.fn();
 const discoverLlmProfileDraftModelLimits = vi.fn();
 const getSemanticLibraryCapabilities = vi.fn();
 const getSemanticLibraryStatus = vi.fn();
+const updateGemmaMedia = vi.fn();
 const getSemanticFolderStatus = vi.fn();
 const previewSemanticEnrolment = vi.fn();
 const confirmSemanticEnrolment = vi.fn();
@@ -120,6 +121,7 @@ vi.mock('../generated/file-manager-api', () => ({
     discoverLlmProfileDraftModelLimits(...args),
   getSemanticLibraryCapabilities: (...args: unknown[]) => getSemanticLibraryCapabilities(...args),
   getSemanticLibraryStatus: (...args: unknown[]) => getSemanticLibraryStatus(...args),
+  updateGemmaMedia: (...args: unknown[]) => updateGemmaMedia(...args),
   getSemanticFolderStatus: (...args: unknown[]) => getSemanticFolderStatus(...args),
   previewSemanticEnrolment: (...args: unknown[]) => previewSemanticEnrolment(...args),
   confirmSemanticEnrolment: (...args: unknown[]) => confirmSemanticEnrolment(...args),
@@ -241,6 +243,7 @@ afterEach(() => {
   completeSemanticComponentModelMigration.mockReset();
   getSemanticLibraryCapabilities.mockReset();
   getSemanticLibraryStatus.mockReset();
+  updateGemmaMedia.mockReset();
   getSemanticFolderStatus.mockReset();
   previewSemanticEnrolment.mockReset();
   confirmSemanticEnrolment.mockReset();
@@ -797,6 +800,7 @@ describe('HttpFileManagerClient', () => {
         response({ authority: 'deterministicMock', operations: ['viewStatus'] }),
       );
       getSemanticLibraryStatus.mockResolvedValue(response(status));
+      updateGemmaMedia.mockResolvedValue(response(status));
       getSemanticFolderStatus.mockResolvedValue(response(folder));
       previewSemanticEnrolment.mockResolvedValue(response(preview));
       confirmSemanticEnrolment.mockResolvedValue(response(status));
@@ -810,6 +814,14 @@ describe('HttpFileManagerClient', () => {
 
       await client.getSemanticLibraryCapabilities(controller.signal);
       await client.getSemanticLibraryStatus(controller.signal);
+      const mediaRequest = {
+        policyRevision: 1,
+        images: true,
+        audio: false,
+        video: true,
+        confirmRemoval: false,
+      };
+      await client.updateGemmaMedia(mediaRequest, controller.signal);
       await client.getSemanticFolderStatus(context, controller.signal);
       await client.previewSemanticEnrolment({ ...context, recursive: true }, controller.signal);
       await client.confirmSemanticEnrolment(enrolRequest, controller.signal);
@@ -822,6 +834,7 @@ describe('HttpFileManagerClient', () => {
 
       expect(getSemanticLibraryCapabilities).toHaveBeenCalledWith(options);
       expect(getSemanticLibraryStatus).toHaveBeenCalledWith(options);
+      expect(updateGemmaMedia).toHaveBeenCalledWith(mediaRequest, options);
       expect(getSemanticFolderStatus).toHaveBeenCalledWith(context, options);
       expect(previewSemanticEnrolment).toHaveBeenCalledWith(
         { ...context, recursive: true },

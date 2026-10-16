@@ -73,9 +73,10 @@ use fm_transport_dto::{
     StartDuplicateScanResponseDto, StartOperationRequestDto, StartSearchRequestDto,
     StartSearchResponseDto, StartSemanticOcrRemediationRequestDto, StructuredViewSessionRequestDto,
     StructuredViewStatusDto, SyncPlanDto, UninstallSemanticComponentsRequestDto,
-    UpdateConnectionRequestDto, UpdateSemanticEligibilityOverridesRequestDto,
-    UpdateStructuredViewRequestDto, VerificationReportDto, VerifyChecksumFileRequestDto,
-    VocabularyIdRequestDto, WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
+    UpdateConnectionRequestDto, UpdateGemmaMediaRequestDto,
+    UpdateSemanticEligibilityOverridesRequestDto, UpdateStructuredViewRequestDto,
+    VerificationReportDto, VerifyChecksumFileRequestDto, VocabularyIdRequestDto,
+    WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
 };
 
 #[cfg(target_os = "windows")]
@@ -1218,6 +1219,18 @@ pub(crate) async fn get_semantic_library_status(
     state
         .service
         .semantic_library_status_dto(&desktop_semantic_access())
+        .await
+        .map_err(semantic_library_error)
+}
+
+#[tauri::command]
+pub(crate) async fn update_gemma_media(
+    state: State<'_, AppState>,
+    request: UpdateGemmaMediaRequestDto,
+) -> Result<SemanticLibraryStatusDto, SemanticLibraryErrorDto> {
+    state
+        .service
+        .update_gemma_media_dto(&desktop_semantic_access(), request)
         .await
         .map_err(semantic_library_error)
 }

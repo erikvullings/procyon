@@ -197,6 +197,7 @@ import type {
   UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
+  UpdateGemmaMediaRequest,
   UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
@@ -288,6 +289,7 @@ export type MockClientMethod =
   | 'cancelSemanticOcrRemediation'
   | 'getSemanticLibraryCapabilities'
   | 'getSemanticLibraryStatus'
+  | 'updateGemmaMedia'
   | 'listSemanticVocabularies'
   | 'importSemanticVocabulary'
   | 'exportSemanticVocabulary'
@@ -1975,6 +1977,7 @@ export class MockFileManagerClient implements FileManagerClient {
         'pause',
         'resume',
         'updateEligibilityOverrides',
+        ...(this.semanticLibrary.gemmaMedia ? (['updateGemmaMedia'] as const) : []),
       ],
     }));
   }
@@ -1983,6 +1986,32 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('getSemanticLibraryStatus', signal, () =>
       structuredClone(this.semanticLibrary),
     );
+  }
+
+  updateGemmaMedia(
+    request: UpdateGemmaMediaRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('updateGemmaMedia', signal, () => {
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      const previous = this.semanticLibrary.gemmaMedia;
+      if (!previous) throw new MockClientError('invalidRequest', 'A Gemma library is required');
+      if (
+        !request.confirmRemoval &&
+        ((previous.images && !request.images) ||
+          (previous.audio && !request.audio) ||
+          (previous.video && !request.video))
+      ) {
+        throw new MockClientError('invalidRequest', 'Removing media requires confirmation');
+      }
+      this.semanticLibrary.gemmaMedia = {
+        images: request.images,
+        audio: request.audio,
+        video: request.video,
+      };
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
   }
 
   listSemanticVocabularies(signal?: AbortSignal): Promise<readonly SemanticVocabulary[]> {
