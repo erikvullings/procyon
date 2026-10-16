@@ -103,6 +103,7 @@ import {
 import { BreadcrumbTrail, breadcrumbSegments, searchResultTitle } from './breadcrumb-view';
 import { formatListingSummary, sizeLabel } from './pane-status-summary';
 import { isParentEntry } from './parent-entry';
+import { normalizeTypedPath } from './path-input';
 import { createRenameEditingController, findRenameCollision } from './rename-edit-controller';
 import type { PaneTab } from './tab-strip';
 import { TabStrip } from './tab-strip';
@@ -267,6 +268,8 @@ export interface PaneAttrs {
   readonly onMultiRename?: (entries: readonly EntrySummary[]) => void;
   /** A new revision starts the F2 rename flow from outside the pane (context menu, palette). */
   readonly renameRequest?: PaneRenameRequest;
+  /** A new revision opens the breadcrumb path editor from outside the pane (Cmd/Ctrl+L, palette). */
+  readonly locationEditRequest?: number;
   readonly onContextMenu: (entries: readonly EntrySummary[], x: number, y: number) => void;
   // Drag/drop into the directory table (3)
   readonly onDragStart?: (entries: readonly EntrySummary[], event: DragEvent) => void;
@@ -854,8 +857,9 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
     m.redraw();
   }
 
-  async function navigate(path: string, attrs: PaneAttrs, fromEditor: boolean): Promise<void> {
+  async function navigate(rawPath: string, attrs: PaneAttrs, fromEditor: boolean): Promise<void> {
     if (renameCtrl.entry !== undefined) return;
+    const path = fromEditor ? normalizeTypedPath(rawPath) : rawPath;
     if (!isAcceptedPath(path)) {
       if (fromEditor) editing = false;
       toast({ html: t('pane', 'unableToOpenPath') });
@@ -874,6 +878,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
 
   let renameRequestSeen = false;
   let handledRenameRevision: number | undefined;
+  let handledLocationEditRevision: number | undefined;
 
   return {
     onremove: () => {
@@ -883,12 +888,19 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
       if (!renameRequestSeen) {
         renameRequestSeen = true;
         handledRenameRevision = attrs.renameRequest?.revision;
+        handledLocationEditRevision = attrs.locationEditRequest;
       } else if (
         attrs.renameRequest !== undefined &&
         attrs.renameRequest.revision !== handledRenameRevision
       ) {
         handledRenameRevision = attrs.renameRequest.revision;
         beginRename(attrs, attrs.renameRequest.entryIds);
+      }
+      if (attrs.locationEditRequest !== handledLocationEditRevision) {
+        handledLocationEditRevision = attrs.locationEditRequest;
+        if (attrs.locationEditRequest !== undefined && attrs.viewerContent === undefined) {
+          beginEditing(attrs.path);
+        }
       }
       if (
         renameCtrl.entry !== undefined &&

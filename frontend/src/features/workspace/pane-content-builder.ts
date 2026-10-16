@@ -122,6 +122,8 @@ export interface PaneContentContext {
     | undefined;
   /** Revision bumped when the context menu or palette asks this pane to start renaming. */
   getRenameRequest?(paneId: PaneId): PaneRenameRequest | undefined;
+  /** Revision bumped when Cmd/Ctrl+L or the palette asks this pane to edit its path. */
+  getLocationEditRequest?(paneId: PaneId): number | undefined;
   clipboard(): ClipboardState;
 
   // Map state (mutable reference — callers may .get()/.set()/.delete() directly)
@@ -340,6 +342,7 @@ export function createPaneContentBuilder(
         : withParentEntry(pathFromUri(tab.location.uri), filteredFresh);
     }
     const renameRequest = context.getRenameRequest?.(paneId);
+    const locationEditRequest = context.getLocationEditRequest?.(paneId);
     const cursorIndex =
       selection.cursorEntryId === undefined ? undefined : entryIds.indexOf(selection.cursorEntryId);
     const selectedEntryIds = new Set<EntryId>(selection.selectedEntryIds);
@@ -504,6 +507,7 @@ export function createPaneContentBuilder(
       ...(cursorIndex === undefined || cursorIndex < 0 ? {} : { cursorIndex }),
       ...(contextTargetEntryId === undefined ? {} : { contextTargetEntryId }),
       ...(renameRequest === undefined ? {} : { renameRequest }),
+      ...(locationEditRequest === undefined ? {} : { locationEditRequest }),
       onNavigate: async (path) => {
         if (tab !== undefined) {
           await context

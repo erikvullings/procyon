@@ -484,6 +484,21 @@ describe('action-command-controller file operations from the context menu and pa
     expect(requestRename).toHaveBeenCalledWith(paneId, [entry.id]);
     expect(getClient).not.toHaveBeenCalled();
   });
+
+  it('opens the pane path editor for Focus location from the palette', () => {
+    const requestLocationEdit = vi.fn();
+    const getClient = vi.fn();
+    const controller = createActionCommandController(
+      fakeContext({ requestLocationEdit, getClient }),
+    );
+
+    controller.invokePaletteAction(fileOperationAction('core.focusLocation'), undefined, {
+      paneId,
+    });
+
+    expect(requestLocationEdit).toHaveBeenCalledExactlyOnceWith(paneId);
+    expect(getClient).not.toHaveBeenCalled();
+  });
 });
 
 describe('action-command-controller context-menu copy actions', () => {

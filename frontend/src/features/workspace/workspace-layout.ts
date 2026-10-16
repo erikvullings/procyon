@@ -142,6 +142,7 @@ export interface WorkspacePaneContent {
    * the single-entry inline rename input. */
   readonly onMultiRename?: (entries: readonly EntrySummary[]) => void;
   readonly renameRequest?: PaneRenameRequest;
+  readonly locationEditRequest?: number;
   readonly onContextMenu?: (entries: readonly EntrySummary[], x: number, y: number) => void;
   readonly onDragStart?: (entries: readonly EntrySummary[], event: DragEvent) => void;
   readonly onDragOver?: (entry: EntrySummary | undefined, event: DropEventState) => boolean;
@@ -720,6 +721,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           onRename: content.onRename,
           ...(content.onMultiRename === undefined ? {} : { onMultiRename: content.onMultiRename }),
           ...(content.renameRequest === undefined ? {} : { renameRequest: content.renameRequest }),
+          ...(content.locationEditRequest === undefined
+            ? {}
+            : { locationEditRequest: content.locationEditRequest }),
           onContextMenu: content.onContextMenu ?? (() => undefined),
           ...(content.onDragStart === undefined ? {} : { onDragStart: content.onDragStart }),
           ...(content.onPointerDragStart === undefined
