@@ -57,6 +57,11 @@ on:
         required: false
         default: false
         type: boolean
+      approve_non_experimental_gemma:
+        description: Publish a new signed Gemma candidate only with the independent five-gate release-owner approval
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -338,7 +343,7 @@ jobs:
 
   semantic-publish:
     name: Publish approved semantic component release
-    if: ${{ inputs.qualification_run_id != '' && inputs.qualify_installed_gemma != true && inputs.measure_installed_gemma != true && inputs.qualify_pdf_vision != true && inputs.qualify_pdf_host_sample != true && vars.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true' && (inputs.approve_experimental_gemma != true || vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED == 'true') }}
+    if: ${{ inputs.qualification_run_id != '' && inputs.qualify_installed_gemma != true && inputs.measure_installed_gemma != true && inputs.qualify_pdf_vision != true && inputs.qualify_pdf_host_sample != true && vars.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED == 'true' && (inputs.approve_experimental_gemma != true || vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED == 'true') && (inputs.approve_non_experimental_gemma != true || vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true') && (inputs.approve_non_experimental_gemma != true || github.ref == 'refs/heads/main') && !(inputs.approve_experimental_gemma == true && inputs.approve_non_experimental_gemma == true) }}
     runs-on: ubuntu-latest
     environment: desktop-release
     permissions:
@@ -387,6 +392,56 @@ jobs:
           path: candidate-lock
           github-token: ${{ github.token }}
           run-id: ${{ inputs.qualification_run_id }}
+      - name: Select exact five-gate-approved Gemma candidate
+        id: qualified_gemma_candidate
+        if: inputs.approve_non_experimental_gemma == true
+        shell: bash
+        env:
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const approval = require("./docs/evaluations/semantic-gemma-qualified-v1.json");
+            const manifest = approval;
+            if (manifest.decision !== "go" ||
+                manifest.nonExperimentalGemma?.approval !== "release-owner-approved-five-gate-qualification" ||
+                manifest.qualificationRunId !== Number(process.env.QUALIFICATION_RUN_ID) ||
+                manifest.releaseTag !== process.env.RELEASE_TAG ||
+                !/^[0-9a-f]{40}$/.test(manifest.sourceRevision) ||
+                manifest.sourceRevision === "4553da275e76638678c7fc0a6ddcea732a19165b") {
+              throw new Error("a new exact-source, five-gate-approved Gemma candidate is required");
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `source_revision=${manifest.sourceRevision}\n`);
+          '
+      - name: Download exact five-gate-approved candidate fingerprint lock
+        if: inputs.approve_non_experimental_gemma == true
+        uses: actions/download-artifact@v8
+        with:
+          name: semantic-component-candidate-${{ steps.qualified_gemma_candidate.outputs.source_revision }}
+          path: qualified-candidate-lock
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.qualification_run_id }}
+      - name: Verify candidate run completed on the exact approved source
+        if: inputs.approve_non_experimental_gemma == true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID" \
+            > "$RUNNER_TEMP/gemma-candidate-run.json"
+          node -e '
+            const fs = require("node:fs");
+            const run = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const candidate = require("./qualified-candidate-lock/semantic-component-release.json");
+            if (run.conclusion !== "success" ||
+                run.event !== "workflow_dispatch" ||
+                run.head_sha !== candidate.sourceRevision ||
+                run.path !== ".github/workflows/release-semantic-components.yml") {
+              throw new Error("qualified Gemma run is not successful on the exact candidate source");
+            }
+          ' "$RUNNER_TEMP/gemma-candidate-run.json"
       - name: Select exact reviewed PDF vision qualification run
         if: inputs.approve_experimental_gemma == true
         id: pdf_vision_run
@@ -440,14 +495,14 @@ jobs:
           semantic-release-assets/semantic-production-evaluation.json
           docs/evaluations/semantic-production-v1.json
       - name: Match exact evaluated payloads to reviewed evidence
-        if: inputs.approve_experimental_gemma != true
+        if: inputs.approve_experimental_gemma != true && inputs.approve_non_experimental_gemma != true
         run: >
           node scripts/check-semantic-release-preconditions.mjs
           --policy experimental-alpha
           --report semantic-release-assets/semantic-production-evaluation.json
           --approved-report docs/evaluations/semantic-production-v1.json
       - name: Match exact assets to the approved component lock
-        if: inputs.approve_experimental_gemma != true
+        if: inputs.approve_experimental_gemma != true && inputs.approve_non_experimental_gemma != true
         env:
           QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
           RELEASE_TAG: ${{ inputs.release_tag }}
@@ -474,8 +529,17 @@ jobs:
               throw new Error("experimental Gemma dispatch run/tag differs from reviewed approval");
             }
           '
+      - name: Check five-gate Gemma approval and exact signed candidate
+        if: inputs.approve_non_experimental_gemma == true
+        env:
+          QUALIFICATION_RUN_ID: ${{ inputs.qualification_run_id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: >
+          node scripts/check-qualified-gemma-release.mjs
+          semantic-release-assets qualified-candidate-lock
+          "$QUALIFICATION_RUN_ID" "$RELEASE_TAG"
       - name: Verify four signed Gemma catalogs with the release public key
-        if: inputs.approve_experimental_gemma == true
+        if: inputs.approve_experimental_gemma == true || inputs.approve_non_experimental_gemma == true
         env:
           VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
         run: |
@@ -505,10 +569,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           APPROVE_EXPERIMENTAL_GEMMA: ${{ inputs.approve_experimental_gemma }}
+          APPROVE_NON_EXPERIMENTAL_GEMMA: ${{ inputs.approve_non_experimental_gemma }}
         run: |
           if [[ "$APPROVE_EXPERIMENTAL_GEMMA" == "true" ]]; then
             SOURCE_REVISION="$(jq -r '.sourceRevision' docs/evaluations/semantic-gemma-experimental-v1.json)"
             RELEASE_NOTES="$(cat docs/evaluations/embeddinggemma-experimental-release-2026-10-15.md)"
+          elif [[ "$APPROVE_NON_EXPERIMENTAL_GEMMA" == "true" ]]; then
+            SOURCE_REVISION="$(jq -r '.sourceRevision' docs/evaluations/semantic-gemma-qualified-v1.json)"
+            RELEASE_NOTES="Release-owner five-gate qualification passed for the exact signed EmbeddingGemma 2 candidate. Gemma remains opt-in; existing E5 libraries are unchanged."
           else
             SOURCE_REVISION="$(jq -r '.sourceRevision' docs/evaluations/semantic-component-release-v1.json)"
             RELEASE_NOTES="Qualified optional semantic components for Procyon."

@@ -990,6 +990,7 @@ export const es = {
   semanticComponents: {
     ...en.semanticComponents,
     gemmaName: 'EmbeddingGemma 2 (experimental)',
+    gemmaQualifiedName: 'EmbeddingGemma 2',
     gemmaFreshLibraryExplanation:
       'Esto inicia una biblioteca vacía. Tu biblioteca E5 y su índice se conservan. La dimensión de embedding elegida queda bloqueada para esta biblioteca; las opciones de indexación de medios se podrán cambiar más adelante. Guardar los ajustes no instala Gemma. Al aceptar e instalar se crea la biblioteca nueva y comienza la descarga del modelo.',
     gemmaExistingSetup:

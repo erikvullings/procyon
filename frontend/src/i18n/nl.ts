@@ -1432,6 +1432,7 @@ export const nl = {
     multilingualQualityDescription:
       'Meertalig zoeken van hogere kwaliteit met meer schijf-, geheugen- en indexeerkosten.',
     gemmaName: 'EmbeddingGemma 2 (experimenteel)',
+    gemmaQualifiedName: 'EmbeddingGemma 2',
     gemmaDescription:
       'Tekst en code op de CPU, met optionele indexering van afbeeldingen, audio en video. Vereist een afzonderlijke, nieuwe index.',
     gemmaSetupTitle: 'Nieuwe EmbeddingGemma 2-bibliotheek',
