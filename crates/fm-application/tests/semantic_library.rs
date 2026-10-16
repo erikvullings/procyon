@@ -3186,7 +3186,13 @@ async fn attached_desktop_host_reads_the_exact_desktop_library_and_never_changes
         Arc::new(FixedSemanticEnrolmentEstimator::new(estimate())),
     )
     .unwrap();
-    let context = SemanticFolderContext::new(workspace(10), location("file:///desktop-docs"));
+    let documents = directory.path().join("documents");
+    std::fs::create_dir_all(&documents).unwrap();
+    let documents = documents.canonicalize().unwrap();
+    let context = SemanticFolderContext::new(
+        workspace(10),
+        Location::from_native_path(&documents).unwrap(),
+    );
     let revision = enrol(&desktop, &context);
     let policy_path = profile.join("semantic-library-policy.json");
     let policy_before = std::fs::read(&policy_path).unwrap();
@@ -3251,23 +3257,64 @@ async fn attached_desktop_host_reads_the_exact_desktop_library_and_never_changes
             .authority(),
         SemanticLibraryAuthority::Unavailable
     );
-    if cfg!(unix) {
-        let covering = FileManagerService::new(
-            RuntimeKindDto::BrowserServer,
-            directory.path().join("workspaces"),
-            &profile,
-        )
-        .with_attached_desktop_semantic_library(&profile, vec![std::path::PathBuf::from("/")]);
+    let allowed = directory.path().canonicalize().unwrap();
+    let covering = FileManagerService::new(
+        RuntimeKindDto::BrowserServer,
+        directory.path().join("workspaces"),
+        &profile,
+    )
+    .with_attached_desktop_semantic_library(&profile, vec![allowed.clone()]);
+    assert_eq!(
+        covering
+            .semantic_library_status(&HOST)
+            .await
+            .unwrap()
+            .roots
+            .len(),
+        1
+    );
+
+    // A root that can no longer be resolved cannot be proven inside the
+    // allowlist, even when its lexical path still is, so it fails closed.
+    std::fs::rename(&documents, directory.path().join("moved")).unwrap();
+    assert_eq!(
+        covering
+            .semantic_library_capabilities(&HOST)
+            .await
+            .authority(),
+        SemanticLibraryAuthority::Unavailable
+    );
+    assert!(
+        covering
+            .semantic_library_status(&HOST)
+            .await
+            .is_ok_and(|status| status.roots.is_empty())
+    );
+
+    // A root replaced by a symlink that escapes the allowlist is refused.
+    #[cfg(unix)]
+    {
+        let outside = project_temp_dir("attached-outside-");
+        std::os::unix::fs::symlink(outside.path(), &documents).unwrap();
         assert_eq!(
             covering
-                .semantic_library_status(&HOST)
+                .semantic_library_capabilities(&HOST)
                 .await
-                .unwrap()
-                .roots
-                .len(),
-            1
+                .authority(),
+            SemanticLibraryAuthority::Unavailable
         );
+        std::fs::remove_file(&documents).unwrap();
     }
+
+    // Restoring the root inside the allowlist restores access.
+    std::fs::rename(directory.path().join("moved"), &documents).unwrap();
+    assert_eq!(
+        covering
+            .semantic_library_capabilities(&HOST)
+            .await
+            .authority(),
+        SemanticLibraryAuthority::DesktopManaged
+    );
 
     // The desktop's later commits become visible without restarting.
     let second = SemanticFolderContext::new(workspace(10), location("file:///desktop-more"));

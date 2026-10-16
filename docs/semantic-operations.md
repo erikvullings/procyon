@@ -174,7 +174,10 @@ installed and activated rather than a fixed one.
   reconciles, or migrates, and it never writes shared vocabularies or saved conversations. Loading
   the library may complete a pending journal record under the cross-process lock, exactly as the
   desktop would. The library reports `unavailable` while the desktop has no active model or
-  consented library, and while any enrolled folder lies outside the server's `--root` set.
+  consented library, and while any enrolled folder lies outside the server's `--root` set or cannot be
+  resolved (missing, unreadable, or replaced by a symlink that escapes the roots). Citation and
+  source resolution additionally check the resolved file against the current `--root` set and
+  return 403 outside it.
 - Enrolment never occurs from a search. Roots require explicit recursive consent and remain
   independently excludable.
 

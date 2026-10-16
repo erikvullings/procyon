@@ -4379,12 +4379,17 @@ fn attached_roots_are_accessible(
         return false;
     };
     status.roots.iter().all(|root| {
-        root.location.to_native_path().is_ok_and(|path| {
-            let path = path.canonicalize().unwrap_or(path);
-            accessible_roots
-                .iter()
-                .any(|allowed| path.starts_with(allowed))
-        })
+        // A root that cannot be resolved (missing, renamed, or unreadable)
+        // cannot be proven inside the allowlist, so it fails closed.
+        root.location
+            .to_native_path()
+            .ok()
+            .and_then(|path| path.canonicalize().ok())
+            .is_some_and(|path| {
+                accessible_roots
+                    .iter()
+                    .any(|allowed| path.starts_with(allowed))
+            })
     })
 }
 

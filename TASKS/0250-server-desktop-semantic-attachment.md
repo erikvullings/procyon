@@ -28,7 +28,10 @@ on loopback. Implement as proposed, with normal authentication/root restrictions
     recovery and loads the exact desktop library (default or Gemma) only when its policy file
     exists. `SemanticLibraryService::desktop_attached_read_only` allows only status operations and
     refuses internal reconciliation commits. It reports `Unavailable` while any enrolled root lies
-    outside the server's accessible roots.
+    outside the server's accessible roots or cannot be canonicalized (fail closed).
+- `fm-server` Ask citation and knowledge-source resolve routes check the
+  resolved location against the current accessible roots (403), so symlink or root changes after
+  indexing cannot open files outside `--root`.
 - Shared vocabulary and saved-conversation writes return `PermissionDenied` while attached.
 
 ## Acceptance

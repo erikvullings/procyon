@@ -148,10 +148,15 @@ pub(crate) async fn resolve_rag_citation(
     Extension(request_id): Extension<RequestId>,
     Json(request): Json<ResolveRagCitationRequestDto>,
 ) -> Result<Json<ResolvedRagCitationDto>, ApiError> {
-    state
+    let request_id = extract_request_id(&request_id);
+    let resolved = state
         .service
         .resolve_rag_citation(state.semantic_access(), request)
         .await
-        .map(Json)
-        .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))
+        .map_err(|error| ApiError::new(error, request_id))?;
+    // The library may outlive a root change or contain a path that now
+    // resolves elsewhere; a citation never reveals a target outside the
+    // server's current accessible roots.
+    crate::error::require_within_roots(&resolved.location, &state.accessible_roots, request_id)?;
+    Ok(Json(resolved))
 }
