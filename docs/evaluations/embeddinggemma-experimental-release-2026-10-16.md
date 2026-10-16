@@ -25,3 +25,44 @@ qualified.
 
 This package is experimental and opt-in. Keep important work backed up and
 continue to use E5 if the experimental model does not meet your needs.
+
+## Automated candidate evidence
+
+These CI runs use source revision
+`60c91ce615b7e4cce19079ebadbf4c4b56a29d78`. They exercise signed candidate
+artifacts on ephemeral runners; they do not complete the local qualification
+gates or change the `noGo` decisions. No component release or desktop tag was
+published, and task 0248 remains open.
+
+- [PR #137 CI](https://github.com/erikvullings/procyon/actions/runs/38958177323):
+  all 15 Actions jobs passed; the PR remains open and unmerged.
+- [Signed component candidate](https://github.com/erikvullings/procyon/actions/runs/38958774038):
+  four target payloads, signed catalogs, and the fingerprint lock were
+  generated with Gemma originals and the experimental PDF renderer enabled.
+  The build and publication are separate; this run did not publish a release.
+- [Installed lifecycle and synthetic PDF vision](https://github.com/erikvullings/procyon/actions/runs/38967273437)
+  and [host-bound PDF sample](https://github.com/erikvullings/procyon/actions/runs/38971737158):
+  all four target jobs passed against the exact signed candidate. Each
+  lifecycle report has 13/16 checks passing, one blocked because no preceding
+  signed production candidate was supplied, and two manual-required UX checks.
+  Lifecycle checks reported zero network artifact reads and successful
+  synthetic image/audio/video indexing with worker restart. The eight-page
+  synthetic host-VFS PDF reports are `noGo`: replacement and deletion passed,
+  CPU produced image evidence for 4/8 pages and Metal for 8/8, while resource
+  ceilings remain unqualified and temporary-disk peaks are unavailable.
+- [Four-target synthetic runner measurements](https://github.com/erikvullings/procyon/actions/runs/38971992914)
+  used one small synthetic image, audio, video, and text file per dimension,
+  not the local scanned-PDF workload:
+
+  | Target | Backend | Maximum worker RSS across 128/256/512/768d |
+  | --- | --- | --- |
+  | Linux x86-64 | CPU | 3.729 GB (3.473 GiB) |
+  | Linux ARM64 | CPU | 3.718 GB (3.463 GiB) |
+  | Windows x86-64 | CPU | 3.674 GB (3.421 GiB) |
+  | macOS ARM64 virtual runner | FP32 Metal | 3.248 GB (3.025 GiB) |
+
+  Applying the checklist's 25% headroom rule to these synthetic peaks would
+  imply 4.5 GiB on the CPU runners and 4.0 GiB on the virtual Metal runner.
+  This is preliminary runner evidence, not Gate 1: the required local
+  large-scanned-PDF measurement and anonymous temporary-disk peak are still
+  outstanding.
