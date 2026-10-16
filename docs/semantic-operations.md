@@ -501,8 +501,8 @@ semantic indexing with actionable OCRmyPDF guidance; they are not
 counted as retryable ingestion failures. When local OCR is explicitly enabled, only that
 `NoTextLayer` outcome invokes OCRmyPDF. Procyon copies the bounded bytes into a private temporary
 directory, passes neither the provider path nor credentials, gives the child only an allow-listed
-environment, runs it with `--jobs 1` so OCRmyPDF does not start one page worker per CPU (that
-pool dominated the scanned-PDF worker-tree memory peak), enforces the remaining conversion
+environment, runs it with `--jobs 1` so OCRmyPDF does not start one memory-heavy page worker per CPU,
+enforces the remaining conversion
 deadline, terminates the complete OCR process group
 on cancellation, and removes input, output, and OCR scratch files on every exit path. Successful
 output is converted again by deterministic Docling (with baseline extraction retained for OCR

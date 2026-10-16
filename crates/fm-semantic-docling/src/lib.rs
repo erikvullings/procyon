@@ -53,9 +53,9 @@ const DEFAULT_OCR_TIMEOUT: Duration = Duration::from_secs(4 * 60);
 /// OCRmyPDF page-worker processes per conversion (`--jobs`).
 ///
 /// OCRmyPDF otherwise starts one worker per CPU, each rasterizing a page and
-/// running Tesseract concurrently. That pool, not the semantic worker, dominated
-/// the scanned-PDF worker-tree memory peak (issue #134); a single job keeps the
-/// OCR helpers to roughly one rasterized page at a time. Recognized text is
+/// running Tesseract concurrently, which multiplies the semantic worker tree's
+/// resident memory by the CPU count (issue #134). A single job keeps the OCR
+/// helpers to roughly one rasterized page at a time. Recognized text is
 /// unchanged: only page scheduling differs, so throughput is traded for the
 /// tree-memory ceiling and slow documents end in the explicit OCR deadline.
 pub const OCRMYPDF_JOBS: u32 = 1;
