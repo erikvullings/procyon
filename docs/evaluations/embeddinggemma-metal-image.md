@@ -22,6 +22,56 @@ qualification have now passed (see
 [`embeddinggemma-experimental-release-2026-10-10.md`](embeddinggemma-experimental-release-2026-10-10.md));
 this is not approval to publish.
 
+## Independent Lattice image check (2026-10-16)
+
+Lattice `main` at `e3596cc6c22905d71408a1251de6a190619d9553` was
+checked against Procyon's pinned synthetic 128 x 96 RGB image and Python
+vector, **without replacing Procyon's worker or changing its dependency**.
+The raw RGB SHA-256 is
+`147cf1b45fb8604d2eed0aea139789cee5522747ef28cf911a1650c666f308ce`.
+The original BF16 checkpoint is model revision
+`914f7f89142e33e77833254d9c9b90c3cef7303b`, model safetensors SHA-256
+`197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79`
+(verified by `scripts/fetch-embeddinggemma-probe.mjs`). Both Lattice CPU and
+Metal produced exactly the pinned reference's 270 input IDs, 2,394 valid
+patches, and 266 soft tokens. They met the proposed cosine >= 0.99999 and
+maximum coordinate error <= 5e-5 at every width:
+
+| Width | CPU/reference cosine | Metal/reference cosine | CPU/reference max abs | Metal/reference max abs |
+| --- | ---: | ---: | ---: | ---: |
+| 128 | > 0.999999999 | > 0.999999999 | 4.813e-7 | 2.071e-7 |
+| 256 | > 0.999999999 | > 0.999999999 | 4.183e-7 | 1.799e-7 |
+| 512 | > 0.999999999 | > 0.999999999 | 3.493e-7 | 1.505e-7 |
+| 768 | > 0.999999999 | > 0.999999999 | 3.084e-7 | 1.329e-7 |
+
+CPU/Metal cosine was also > 0.999999999 at each width. On an Apple M4 Max
+(macOS 27.0.1, 128 GiB RAM), a release build with `f16,metal-gpu` took
+3.789 seconds CPU versus 1.391 seconds Metal for one process invocation;
+this includes checkpoint load, inference, stage dumping, and process
+startup. `/usr/bin/time -l` reported 2,419,261,440 versus 3,516,022,784
+bytes maximum process RSS. Lattice's Metal stage record reported 203.503 ms
+for the vision tower (95.023 ms attention GPU and 77.610 ms MLP GPU);
+the CPU example does not report a comparable stage breakdown. These
+single-invocation wall times are **not directly comparable** to Procyon's
+decode-through-vector timings, which exclude checkpoint loading. Procyon's
+existing pinned `metal_image_matches_cpu_and_upstream_at_every_dimension`
+test separately passed all four widths on the same host: CPU
+28.18/28.38/28.33/28.34 seconds, Metal 5.58/5.52/5.57/5.54 seconds.
+No worker integration, device-unavailable, dispatch-failure, cancellation,
+other image shape, or other machine was tested for Lattice.
+
+Reproduce from the repository root on a Metal-capable Mac:
+
+```sh
+git clone https://github.com/ohdearquant/lattice.git target/lattice-1889
+git -C target/lattice-1889 checkout e3596cc6c22905d71408a1251de6a190619d9553
+node scripts/fetch-embeddinggemma-probe.mjs
+cargo build --manifest-path target/lattice-1889/Cargo.toml -p lattice-inference \
+  --release --features f16,metal-gpu --example dump_embeddinggemma2_vision
+node scripts/verify-lattice-embeddinggemma-vision.mjs target/lattice-1889 \
+  target/semantic-model-cache/google--embeddinggemma-2/914f7f89142e33e77833254d9c9b90c3cef7303b
+```
+
 ## Mixed-media CPU/Metal qualification (2026-10-11)
 
 The pinned local checkpoint was loaded with **images, audio, and video all
