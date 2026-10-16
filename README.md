@@ -234,6 +234,11 @@ Procyon uses **Cmd** as the primary modifier on macOS and **Ctrl** on Windows an
 | Embedded terminal | `Ctrl+Backtick` or `F12` |
 | Shortcut reference | `F1` |
 
+The quick filter matches plain text anywhere in a name. Use `*` and `?` for a glob that must match
+the whole name, and `;` to combine masks, such as `*.jpg;*.png`. Press `Esc` or the clear button to
+remove the filter. While the filter box has focus, `Cmd/Ctrl+C` and `Cmd/Ctrl+X` copy or cut the
+selected files when no filter text is selected.
+
 Disk usage scans the active directory in a transient tab in the other pane. Selecting a
 treemap folder opens it in the original pane while zooming the treemap; selecting a file
 reveals it in its parent directory there. Closing the treemap tab restores the other pane's

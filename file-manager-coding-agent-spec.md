@@ -2388,8 +2388,10 @@ Distinguish:
    - filters the current directory;
    - entirely responsive;
    - may run in the frontend for the loaded snapshot;
-   - supports plain text initially;
-   - supports glob or regex later.
+   - plain text (no `*` or `?`) is a case-insensitive substring match;
+   - a mask containing `*` or `?` is a case-insensitive glob anchored to the whole name;
+   - `;` separates multiple masks (OR), e.g. `*.jpg;*.png`; masks are trimmed and blanks ignored;
+   - regex matching is not supported.
 
 2. Filesystem search:
    - runs in Rust;

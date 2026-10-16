@@ -33,6 +33,7 @@ import { canUseSystemTrash } from '../operations/system-trash';
 import { isParentEntry } from '../panes/parent-entry';
 import type { TabController } from '../panes/tab-controller';
 import type { FileViewerController, FileViewerState } from '../preview/file-viewer-controller';
+import { FILE_CLIPBOARD_PASSTHROUGH_ATTRIBUTE } from '../quick-filter/quick-filter';
 import type { SelectionPlatform } from '../selection/keybindings';
 import { getSelectedEntriesOrCursor, type SelectionState } from '../selection/selection';
 
@@ -209,6 +210,21 @@ function isEditableEvent(event: KeyboardEvent): boolean {
   return (
     isEditableTarget(event.target) ||
     event.composedPath().some((target) => isEditableTarget(target))
+  );
+}
+
+/**
+ * Cmd/Ctrl+C or Cmd/Ctrl+X in a text input that opts into file-clipboard pass-through (the quick
+ * filter) with no text selected: there is no text to copy, so the shortcut targets the files.
+ */
+function isFileClipboardPassthrough(event: KeyboardEvent): boolean {
+  const key = event.key.toLowerCase();
+  const target = event.target;
+  return (
+    (key === 'c' || key === 'x') &&
+    target instanceof HTMLInputElement &&
+    target.hasAttribute(FILE_CLIPBOARD_PASSTHROUGH_ATTRIBUTE) &&
+    target.selectionStart === target.selectionEnd
   );
 }
 
@@ -783,6 +799,23 @@ const ACTION_KEYDOWN_ROUTES = [
   {
     id: 'primary-modifier',
     tryHandle: (context, event) => {
+      if (isFileClipboardPassthrough(event)) {
+        if (!hasPrimaryModifier(event, context.getPlatform()) || event.altKey) return false;
+        const key = event.key.toLowerCase();
+        const sources = context.selectedLocations();
+        // Nothing selected in the input and no files to copy: swallow the chord rather than
+        // letting the host beep for an empty text copy.
+        event.preventDefault();
+        if (sources.length === 0) return;
+        context.replaceClipboard(
+          key === 'c'
+            ? copyToClipboard(context.clipboard(), sources)
+            : cutToClipboard(context.clipboard(), sources),
+        );
+        context.setClipboardMessage(undefined);
+        context.redraw();
+        return;
+      }
       if (
         !isEditableEvent(event) &&
         hasPrimaryModifier(event, context.getPlatform()) &&

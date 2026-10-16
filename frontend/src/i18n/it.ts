@@ -1196,6 +1196,7 @@ export const it = {
   },
   quickFilter: {
     placeholder: 'Filtro…',
+    clear: 'Cancella filtro',
   },
   commandCategory: {
     recent: 'Usati di recente',

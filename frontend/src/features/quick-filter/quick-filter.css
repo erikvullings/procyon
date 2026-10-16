@@ -38,3 +38,29 @@
   border-bottom: 0;
   box-shadow: none;
 }
+
+.fm-quick-filter-clear {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fm-text-muted);
+  cursor: pointer;
+}
+
+.fm-quick-filter-clear:hover {
+  color: inherit;
+  background: var(--fm-hover);
+}
+
+.fm-quick-filter-clear:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 1px;
+  color: inherit;
+}

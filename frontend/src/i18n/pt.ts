@@ -1203,6 +1203,7 @@ export const pt = {
   },
   quickFilter: {
     placeholder: 'Filtro…',
+    clear: 'Limpar filtro',
   },
   commandCategory: {
     recent: 'Usados recentemente',

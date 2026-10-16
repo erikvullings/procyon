@@ -1199,6 +1199,7 @@ export const pl = {
   },
   quickFilter: {
     placeholder: 'Filtr…',
+    clear: 'Wyczyść filtr',
   },
   commandCategory: {
     recent: 'Ostatnio używane',

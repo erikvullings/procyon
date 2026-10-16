@@ -1212,6 +1212,7 @@ export const de = {
   },
   quickFilter: {
     placeholder: 'Filter…',
+    clear: 'Filter löschen',
   },
   commandCategory: {
     recent: 'Zuletzt verwendet',

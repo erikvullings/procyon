@@ -1578,3 +1578,83 @@ describe('createGlobalKeydownHandler clipboard paste', () => {
     }
   });
 });
+
+describe('file clipboard shortcuts from the quick-filter input', () => {
+  const selected: Location = { providerId: 'local', uri: 'file:///a/photo.jpg' };
+
+  async function mountFilter(query: string) {
+    const { default: m } = await import('mithril');
+    const { QuickFilterInput } = await import('../quick-filter/quick-filter-input');
+    const replaceClipboard = vi.fn();
+    const handler = createGlobalKeydownHandler(
+      makeContext({
+        getPlatform: () => 'macos',
+        selectedLocations: () => [selected],
+        replaceClipboard,
+      }),
+    );
+    const root = document.createElement('div');
+    document.body.append(root);
+    document.addEventListener('keydown', handler);
+    m.mount(root, {
+      view: () =>
+        m(QuickFilterInput, {
+          query,
+          onQueryChange: () => undefined,
+          onCommit: () => undefined,
+          onClose: () => undefined,
+        }),
+    });
+    const input = root.querySelector('input') as HTMLInputElement;
+    return {
+      input,
+      replaceClipboard,
+      cleanup: () => {
+        document.removeEventListener('keydown', handler);
+        m.mount(root, null);
+        root.remove();
+      },
+    };
+  }
+
+  it.each([
+    ['c', 'copy'],
+    ['x', 'move'],
+  ])('Cmd+%s with no text selected puts the selected files on the clipboard', async (key, mode) => {
+    const { input, replaceClipboard, cleanup } = await mountFilter('*.jpg');
+    try {
+      input.setSelectionRange(input.value.length, input.value.length);
+      const event = keydown(key, { metaKey: true });
+      input.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      expect(replaceClipboard).toHaveBeenCalledWith({ mode, locations: [selected] });
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('keeps native text copy when the filter text is selected', async () => {
+    const { input, replaceClipboard, cleanup } = await mountFilter('*.jpg');
+    try {
+      input.setSelectionRange(0, input.value.length);
+      const event = keydown('c', { metaKey: true });
+      input.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(replaceClipboard).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('keeps Cmd+V as native text paste into the filter', async () => {
+    const { input, replaceClipboard, cleanup } = await mountFilter('');
+    try {
+      const event = keydown('v', { metaKey: true });
+      input.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(replaceClipboard).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+    }
+  });
+});
