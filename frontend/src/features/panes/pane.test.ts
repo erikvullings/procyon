@@ -2523,11 +2523,39 @@ describe('Pane quick filter', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(onFilterCommit).toHaveBeenCalledOnce();
 
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    expect(onFilterClose).toHaveBeenCalledOnce();
-
     input.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
     expect(onFilterCommit).toHaveBeenCalledTimes(2);
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(onFilterClose).toHaveBeenCalledOnce();
+    expect(onFilterCommit).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears the filter from the labelled clear button and returns focus to the file list', () => {
+    const onFilterCommit = vi.fn();
+    const onFilterClose = vi.fn();
+    mount(attrs({ filterOpen: true, filterQuery: '*.txt', onFilterCommit, onFilterClose }));
+    const clear = root.querySelector<HTMLButtonElement>('button[aria-label="Clear filter"]');
+    if (clear === null) throw new Error('clear button missing');
+    expect(clear.type).toBe('button');
+
+    clear.focus();
+    clear.click();
+
+    expect(onFilterClose).toHaveBeenCalledOnce();
+    expect(onFilterCommit).not.toHaveBeenCalled();
+    expect(document.activeElement?.closest('.fm-pane')).not.toBeNull();
+    expect(document.activeElement?.closest('.fm-quick-filter')).toBeNull();
+  });
+
+  it('returns focus to the file list when Escape closes the filter', () => {
+    const onFilterClose = vi.fn();
+    mount(attrs({ filterOpen: true, filterQuery: 'one', onFilterClose }));
+    const input = root.querySelector<HTMLInputElement>('.fm-quick-filter-input');
+    input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(onFilterClose).toHaveBeenCalledOnce();
+    expect(document.activeElement?.closest('.fm-pane')).not.toBeNull();
+    expect(document.activeElement?.closest('.fm-quick-filter')).toBeNull();
   });
 
   it('shows "N of M shown", the paging note, and reverts to the plain count when cleared', () => {

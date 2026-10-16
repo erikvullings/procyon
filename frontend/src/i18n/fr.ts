@@ -1204,6 +1204,7 @@ export const fr = {
   },
   quickFilter: {
     placeholder: 'Filtre…',
+    clear: 'Effacer le filtre',
   },
   commandCategory: {
     recent: 'Utilisés récemment',

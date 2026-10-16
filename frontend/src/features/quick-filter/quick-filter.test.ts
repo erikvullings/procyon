@@ -29,6 +29,40 @@ describe('matchesQuickFilter', () => {
   });
 });
 
+describe('quick-filter glob masks', () => {
+  const names = ['photo.JPG', 'scan.png', 'notes.txt', 'jpg-guide.md', 'a.jpg.bak'];
+  const visible = (query: string) =>
+    filterEntries(
+      names.map((name) => entry(name)),
+      query,
+    ).map((e) => e.name);
+
+  it('keeps substring matching for queries without wildcards', () => {
+    expect(visible('jpg')).toEqual(['photo.JPG', 'jpg-guide.md', 'a.jpg.bak']);
+  });
+
+  it('anchors a wildcard query to the whole name, case-insensitively', () => {
+    expect(visible('*.jpg')).toEqual(['photo.JPG']);
+    expect(visible('n?tes.*')).toEqual(['notes.txt']);
+    expect(visible('*.jp')).toEqual([]);
+  });
+
+  it('shows entries matching any ;-separated mask, ignoring blanks and padding', () => {
+    expect(visible(' *.jpg ; ;*.PNG; ')).toEqual(['photo.JPG', 'scan.png']);
+    expect(visible('*.png;guide')).toEqual(['scan.png', 'jpg-guide.md']);
+  });
+
+  it('treats a query of only separators as no filter', () => {
+    const entries = names.map((name) => entry(name));
+    expect(filterEntries(entries, ' ; ;')).toBe(entries);
+  });
+
+  it('matches regex metacharacters literally', () => {
+    expect(visible('a.jpg.*')).toEqual(['a.jpg.bak']);
+    expect(visible('(*')).toEqual([]);
+  });
+});
+
 describe('matchesGlobMask', () => {
   it('matches star and question-mark wildcards case-insensitively', () => {
     expect(matchesGlobMask('Report.PDF', '*.pdf')).toBe(true);

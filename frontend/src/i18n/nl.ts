@@ -2020,6 +2020,7 @@ export const nl = {
   },
   quickFilter: {
     placeholder: 'Filter…',
+    clear: 'Filter wissen',
   },
   commandCategory: {
     recent: 'Recent gebruikt',

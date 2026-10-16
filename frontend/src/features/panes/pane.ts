@@ -1640,7 +1640,10 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                   query: attrs.filter.filterQuery,
                   onQueryChange: attrs.filter.onFilterQueryChange,
                   onCommit: attrs.filter.onFilterCommit,
-                  onClose: attrs.filter.onFilterClose,
+                  onClose: () => {
+                    attrs.filter.onFilterClose();
+                    sectionElement?.focus();
+                  },
                 })
               : attrs.breadcrumbLabel !== undefined
                 ? m(

@@ -2006,6 +2006,7 @@ export const en = {
   },
   quickFilter: {
     placeholder: 'Filter…',
+    clear: 'Clear filter',
   },
   commandCategory: {
     recent: 'Recently used',
