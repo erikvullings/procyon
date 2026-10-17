@@ -117,6 +117,9 @@ PDF spools during large, scanned-PDF indexing, on both Metal and CPU.
 4. Wait about 30 seconds, then press `Ctrl+C`. The script writes `samples.csv` and
    `summary.json`. If the sampler exits with a process-list or `lsof` error, discard that
    incomplete run and repeat it; a missing tool is not a zero-memory or zero-temp result.
+   If `summary.json` reports `skippedSamples` greater than zero, one or more process trees
+   exited during descriptor inspection. Those intervals were discarded, not measured as zero;
+   repeat the run if any occurred during indexing, since a peak may have been missed.
 5. Repeat steps 2–4 with CPU forced (see above) into `~/procyon-measure/cpu`. First remove the
    folder from the library and recreate it, or use a second copy of the folder, so the PDF is
    indexed again.

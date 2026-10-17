@@ -307,9 +307,11 @@ export function run(command, args) {
   if (result.error)
     throw new Error(`${command} could not run: ${result.error.code ?? result.error}`);
   if (result.status !== 0) {
-    throw new Error(
+    const error = new Error(
       `${command} exited with ${result.signal ? `signal ${result.signal}` : `status ${result.status}`}`,
     );
+    error.exitStatus = result.status;
+    throw error;
   }
   return result.stdout;
 }
@@ -340,6 +342,27 @@ function readRootPids(options, rows) {
   } catch {
     return [];
   }
+}
+
+export class SampleProcessesExitedError extends Error {}
+
+export function lsofTempUsage(
+  pids,
+  tempDirs,
+  platform,
+  runCommand = run,
+  listProcessRows = listProcesses,
+) {
+  let output;
+  try {
+    output = runCommand('lsof', ['-n', '-P', '-F', 'ftsin', '-p', pids.join(',')]);
+  } catch (error) {
+    if (error.exitStatus === 1 && !listProcessRows().some((row) => pids.includes(row.pid))) {
+      throw new SampleProcessesExitedError('all sampled processes exited before lsof completed');
+    }
+    throw error;
+  }
+  return openTempBytesFromLsof(output, tempDirs, platform);
 }
 
 function openTempUsage(pids, tempDirs) {
@@ -386,11 +409,7 @@ function openTempUsage(pids, tempDirs) {
     }
     return { bytes, count };
   }
-  return openTempBytesFromLsof(
-    run('lsof', ['-n', '-P', '-F', 'ftsin', '-p', pids.join(',')]),
-    tempDirs,
-    process.platform,
-  );
+  return lsofTempUsage(pids, tempDirs, process.platform);
 }
 
 function freeDiskBytes(directory) {
@@ -458,6 +477,7 @@ async function main() {
     );
   fs.mkdirSync(out, { recursive: true });
   const samples = [];
+  let skippedSamples = 0;
   const started = Date.now();
   let stopping = false;
   process.on('SIGINT', () => {
@@ -467,16 +487,27 @@ async function main() {
     `Sampling every ${options.interval} ms (runtime ${options.runtimeDir}, temp ${tempDirs.join(', ')}). Press Ctrl+C to stop.`,
   );
   while (!stopping) {
-    const sample = takeSample(options, realTempDirs);
-    samples.push(sample);
-    console.log(
-      `${sample.timestamp} processes=${sample.processCount} rss=${formatBytes(sample.treeRssBytes)} temp=${formatBytes(sample.openTempBytes)} free=${formatBytes(sample.freeDiskBytes)}`,
-    );
+    let sample;
+    try {
+      sample = takeSample(options, realTempDirs);
+    } catch (error) {
+      if (!(error instanceof SampleProcessesExitedError)) throw error;
+      skippedSamples += 1;
+      console.warn(`Discarding incomplete sample: ${error.message}`);
+    }
+    if (sample) {
+      samples.push(sample);
+      console.log(
+        `${sample.timestamp} processes=${sample.processCount} rss=${formatBytes(sample.treeRssBytes)} temp=${formatBytes(sample.openTempBytes)} free=${formatBytes(sample.freeDiskBytes)}`,
+      );
+    }
     if (options.duration !== undefined && Date.now() - started >= options.duration * 1000) break;
     await new Promise((resolve) => setTimeout(resolve, options.interval));
   }
+  if (samples.length === 0) throw new Error('no complete resource samples were captured');
   const summary = {
     ...summarizeSamples(samples),
+    skippedSamples,
     platform: `${process.platform}-${process.arch}`,
     intervalMs: options.interval,
     runtimeDirectory: options.runtimeDir,
