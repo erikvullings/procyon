@@ -120,7 +120,11 @@ PDF spools during large, scanned-PDF indexing, on both Metal and CPU.
    folder from the library and recreate it, or use a second copy of the folder, so the PDF is
    indexed again.
 6. Copy `peakTreeRssBytes`, `peakSingleProcessRssBytes`, `peakOpenTempBytes`, and
-   `maximumFreeDiskDropBytes` from each `summary.json` into the results table.
+   `maximumFreeDiskDropBytes` from each `summary.json` into the results table. Inspect
+   `peakTreeProcessRss` at the tree-RSS peak: it separates the main worker, PDF worker children,
+   and other descendant helpers (including OCR processes) by count and RSS without recording
+   process commands or paths. Record those aggregate counts and bytes if memory exceeds the
+   ceiling; this breakdown is sampled, not a per-process high-water mark.
 
 Pass criteria:
 

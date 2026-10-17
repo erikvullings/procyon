@@ -8,6 +8,7 @@ import {
   parseArguments,
   parsePsTable,
   parseWindowsProcessCsv,
+  processRssBreakdown,
   processTree,
   samplesToCsv,
   summarizeSamples,
@@ -73,6 +74,30 @@ test('Windows process CSV uses working-set bytes', () => {
       { pid: 11, ppid: 10, rssBytes: 4096 },
     ],
   );
+});
+
+test('peak process attribution groups worker, PDF children, and external helpers without commands', () => {
+  const tree = parsePsTable(
+    [
+      '600 500 1024 /opt/procyon/payload --ocrmypdf-executable /opt/ocrmypdf',
+      '601 600 2048 /opt/procyon/payload --pdf-text-with-visuals-child',
+      '602 601 4096 /opt/homebrew/bin/python3 -m ocrmypdf private.pdf',
+      '603 602 512 /opt/homebrew/bin/tesseract private.pdf',
+    ].join('\n'),
+  );
+  const breakdown = processRssBreakdown(tree, [600]);
+  assert.deepEqual(breakdown, {
+    worker: { count: 1, rssBytes: 1024 * 1024 },
+    pdfChild: { count: 1, rssBytes: 2048 * 1024 },
+    otherHelper: { count: 2, rssBytes: 4608 * 1024 },
+  });
+  const summary = summarizeSamples([
+    { ...sample('t1', 4, 7_000_000, 0, 1000), processRssBreakdown: breakdown },
+    sample('t2', 1, 100, 0, 900),
+  ]);
+  assert.deepEqual(summary.peakTreeProcessRss, breakdown);
+  assert.doesNotMatch(JSON.stringify(summary), /private\.pdf|ocrmypdf|tesseract/);
+  assert.equal(summarizeSamples([]).peakTreeProcessRss, null);
 });
 
 test('temp-directory containment is prefix-safe and platform-aware', () => {

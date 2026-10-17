@@ -131,6 +131,26 @@ export function processTree(rows, rootPids) {
   return [...selected.values()];
 }
 
+/** Groups memory by the worker, its PDF children, and other descendant helpers. */
+export function processRssBreakdown(tree, rootPids) {
+  const roots = new Set(rootPids);
+  const breakdown = {
+    worker: { count: 0, rssBytes: 0 },
+    pdfChild: { count: 0, rssBytes: 0 },
+    otherHelper: { count: 0, rssBytes: 0 },
+  };
+  for (const row of tree) {
+    const role = roots.has(row.pid)
+      ? 'worker'
+      : /--pdf-(?:text|text-with-visuals|visual|visual-pages)-child(?:\s|$)/.test(row.command)
+        ? 'pdfChild'
+        : 'otherHelper';
+    breakdown[role].count += 1;
+    breakdown[role].rssBytes += row.rssBytes;
+  }
+  return breakdown;
+}
+
 export function normalizeForComparison(filePath, platform) {
   if (platform === 'win32') {
     return path.win32
@@ -206,6 +226,7 @@ export function summarizeSamples(samples) {
     endedAt: samples.at(-1)?.timestamp ?? null,
     peakTreeRssBytes: 0,
     peakTreeRssAt: null,
+    peakTreeProcessRss: null,
     peakSingleProcessRssBytes: 0,
     peakProcessCount: 0,
     peakOpenTempBytes: 0,
@@ -220,6 +241,7 @@ export function summarizeSamples(samples) {
     if (sample.treeRssBytes > summary.peakTreeRssBytes) {
       summary.peakTreeRssBytes = sample.treeRssBytes;
       summary.peakTreeRssAt = sample.timestamp;
+      summary.peakTreeProcessRss = sample.processRssBreakdown ?? null;
     }
     summary.peakSingleProcessRssBytes = Math.max(
       summary.peakSingleProcessRssBytes,
@@ -373,7 +395,8 @@ function freeDiskBytes(directory) {
 
 function takeSample(options, tempDirs) {
   const rows = listProcesses();
-  const tree = processTree(rows, readRootPids(options, rows));
+  const rootPids = readRootPids(options, rows);
+  const tree = processTree(rows, rootPids);
   const temp = openTempUsage(
     tree.map((row) => row.pid),
     tempDirs,
@@ -382,6 +405,7 @@ function takeSample(options, tempDirs) {
     timestamp: new Date().toISOString(),
     processCount: tree.length,
     treeRssBytes: tree.reduce((sum, row) => sum + row.rssBytes, 0),
+    processRssBreakdown: processRssBreakdown(tree, rootPids),
     largestProcessRssBytes: tree.reduce((max, row) => Math.max(max, row.rssBytes), 0),
     openTempBytes: temp.bytes,
     openTempFiles: temp.count,
