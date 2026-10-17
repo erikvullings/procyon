@@ -91,6 +91,7 @@ test('peak process attribution groups worker, PDF children, and external helpers
     pdfChild: { count: 1, rssBytes: 2048 * 1024 },
     otherHelper: { count: 2, rssBytes: 4608 * 1024 },
   });
+  assert.deepEqual(processRssBreakdown(tree, [600, 601]), breakdown);
   const summary = summarizeSamples([
     { ...sample('t1', 4, 7_000_000, 0, 1000), processRssBreakdown: breakdown },
     sample('t2', 1, 100, 0, 900),
