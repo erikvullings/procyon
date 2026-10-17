@@ -15,6 +15,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   setLocale('en');
   m.mount(root, null);
   root.remove();
@@ -126,6 +127,21 @@ describe('SemanticComponentManagement', () => {
     expect(details?.open).toBe(false);
     expect(details?.querySelectorAll('.fm-semantic-offer-component')).toHaveLength(3);
     expect(root.querySelector('.fm-semantic-offer')?.textContent).toContain('Total download');
+  });
+
+  it('shows the non-experimental Gemma label only in an approved release build', async () => {
+    vi.stubEnv('VITE_GEMMA_QUALIFIED', 'true');
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await withGemmaProfile(client);
+    mountComponent(client);
+    await waitForLoaded();
+
+    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
+      'EmbeddingGemma 2',
+    );
+    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).not.toContain(
+      'experimental',
+    );
   });
 
   it('gives the Gemma setup and consent focusable, labelled controls', async () => {

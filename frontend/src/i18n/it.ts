@@ -986,6 +986,7 @@ export const it = {
   semanticComponents: {
     ...en.semanticComponents,
     gemmaName: 'EmbeddingGemma 2 (sperimentale)',
+    gemmaQualifiedName: 'EmbeddingGemma 2',
     gemmaFreshLibraryExplanation:
       'Questo avvia una libreria vuota. La libreria E5 e il relativo indice restano intatti. La dimensione di embedding scelta è bloccata per questa libreria; le opzioni di indicizzazione dei contenuti multimediali potranno essere modificate in seguito. Salvare le impostazioni non installa Gemma. Accetta e installa crea la nuova libreria e avvia il download del modello.',
     gemmaExistingSetup:

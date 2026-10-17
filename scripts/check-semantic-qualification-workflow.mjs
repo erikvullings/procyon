@@ -133,6 +133,43 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
       'experimental Gemma publication must explicitly verify exact approved signed assets',
     );
   }
+  const qualifiedCheck = publishSteps.findIndex((step) =>
+    String(step.run ?? '').includes('check-qualified-gemma-release.mjs'),
+  );
+  const qualifiedSignatureCheck = publishSteps.findIndex(
+    (step) =>
+      String(step.run ?? '').includes('semantic_production_catalog') &&
+      String(step.if ?? '').includes('approve_non_experimental_gemma == true'),
+  );
+  if (
+    workflow.on.workflow_dispatch.inputs.approve_non_experimental_gemma?.default !== false ||
+    !publishGate.includes("vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'") ||
+    !publishGate.includes('inputs.approve_non_experimental_gemma != true') ||
+    !publishGate.includes("github.ref == 'refs/heads/main'") ||
+    qualifiedCheck < 0 ||
+    qualifiedSignatureCheck <= qualifiedCheck ||
+    publishIndex <= qualifiedSignatureCheck ||
+    !String(publishSteps[qualifiedCheck].if ?? '').includes(
+      'approve_non_experimental_gemma == true',
+    )
+  ) {
+    failures.push(
+      'non-experimental Gemma publication must require independent five-gate approval and verify exact signed assets',
+    );
+  }
+  if (
+    !publishSteps.some(
+      (step) =>
+        step.name === 'Verify candidate run completed on the exact approved source' &&
+        String(step.if ?? '').includes('approve_non_experimental_gemma == true'),
+    ) ||
+    !publishCommands.includes('run.head_sha !== candidate.sourceRevision') ||
+    !publishCommands.includes('run.conclusion !== "success"') ||
+    !publishCommands.includes('run.event !== "workflow_dispatch"') ||
+    !publishCommands.includes('run.path !== ".github/workflows/release-semantic-components.yml"')
+  ) {
+    failures.push('qualified Gemma publication must verify the exact successful source run');
+  }
   for (const [index, step] of publishSteps.entries()) {
     if (publishingStep(step) && !publishGate.includes("inputs.qualification_run_id != ''")) {
       failures.push(`semantic-publish step ${index + 1} can publish without an exact run`);

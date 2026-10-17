@@ -1432,6 +1432,7 @@ export const nl = {
     multilingualQualityDescription:
       'Meertalig zoeken van hogere kwaliteit met meer schijf-, geheugen- en indexeerkosten.',
     gemmaName: 'EmbeddingGemma 2 (experimenteel)',
+    gemmaQualifiedName: 'EmbeddingGemma 2',
     gemmaDescription:
       'Tekst en code op de CPU, met optionele indexering van afbeeldingen, audio en video. Vereist een afzonderlijke, nieuwe index.',
     gemmaSetupTitle: 'Nieuwe EmbeddingGemma 2-bibliotheek',
@@ -1601,8 +1602,9 @@ export const nl = {
       'Semantische indexering bewaart genormaliseerde fragmenten lokaal totdat hun bronbereik expliciet wordt uitgesloten.',
     openFolder: 'Open een map in een paneel om deze aan zoeken toe te voegen.',
     folderStatusUnavailable: 'Toestemmingsstatus van de map is niet beschikbaar.',
-    currentFolder: 'Map geselecteerd voor indexering',
-    changeFolder: 'Open een andere map in een paneel om die te kiezen.',
+    currentFolder: 'Map geopend in een paneel',
+    changeFolder:
+      'Deze map wordt niet geïndexeerd. Openen start geen indexering. Open alleen de gewenste submap in een paneel en kies Indexering controleren.',
     includedHere: 'Hier opgenomen',
     inheritedFromParent: 'Geërfd van bovenliggende map',
     excluded: 'Uitgesloten',
@@ -1623,7 +1625,6 @@ export const nl = {
       'Indexering bewaart tekstfragmenten en embeddings lokaal totdat u de map verwijdert.',
     confirmInclusion: 'OK, map indexeren',
     includeFolder: 'Map opnemen en indexeren',
-    reviewExclusion: 'Uit zoekresultaten verwijderen…',
     exclusionPlan: 'Map uit zoekresultaten verwijderen?',
     exclusionWarning:
       'Dit verwijdert de map uit zoekresultaten en wist de lokale indexgegevens die geen andere opgenomen map nodig heeft. Uw oorspronkelijke bestanden blijven behouden.',
@@ -1637,10 +1638,12 @@ export const nl = {
     categoryVectors: 'Niet-gerefereerde vectoren',
     categoryConversationPins: 'Opgeslagen gespreksbewijspinnen',
     enrolledRoots: 'Opgenomen mappen',
+    includedFoldersHelp:
+      'Alleen deze mappen en geschikte submappen worden geïndexeerd. Een map openen in een paneel neemt deze niet op.',
     noEnrolledRoots: 'Er zijn nog geen mappen opgenomen.',
     cleanupInProgress: 'Verwijderen en opschonen',
     removedFolders: 'Verwijderde mappen',
-    removeFolder: 'Verwijderen',
+    removeFolder: 'Uit indexering verwijderen…',
     folderDetails: 'Indexeringsdetails',
     indexedSources: {
       1: '1 bevestigd geïndexeerd document',
@@ -1672,7 +1675,7 @@ export const nl = {
     pdfTools: "Gescande pdf's doorzoekbaar maken",
     ocrNeededCount: '{count} gescande pdf(s) hebben tekstherkenning nodig; zie indexeringsdetails.',
     missingRootGuidance:
-      'Een verplaatste of verwijderde map verdwijnt niet automatisch uit de index. Offline mappen behouden hun zoekgegevens; gebruik Verwijderen om deze te wissen.',
+      'Een verplaatste of verwijderde map verdwijnt niet automatisch uit de index. Offline mappen behouden hun zoekgegevens; gebruik Uit indexering verwijderen om deze te wissen.',
     stableIdentity: 'Stabiele identiteit',
     verified: 'Geverifieerd',
     unverified: 'Niet beschikbaar; verplaatsen vereist nieuwe bevestiging',

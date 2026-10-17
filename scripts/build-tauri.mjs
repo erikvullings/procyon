@@ -39,6 +39,11 @@ function desktopConfig() {
 
   const windowsThumbprint = process.env.FM_WINDOWS_CERTIFICATE_THUMBPRINT?.trim();
   const createUpdaterArtifacts = Boolean(process.env.TAURI_SIGNING_PRIVATE_KEY?.trim());
+  const experimentalGemma = process.env.GEMMA_DESKTOP_EXPERIMENTAL === 'true';
+  const qualifiedGemma = process.env.GEMMA_DESKTOP_NON_EXPERIMENTAL === 'true';
+  if (experimentalGemma && qualifiedGemma) {
+    fail('experimental and non-experimental Gemma release modes cannot both be enabled');
+  }
   return {
     productName: metadata['product-name'],
     version: desktopPackage.version,
@@ -56,12 +61,14 @@ function desktopConfig() {
           }
         : {}),
     },
-    ...(process.env.GEMMA_DESKTOP_EXPERIMENTAL === 'true'
+    ...(experimentalGemma || qualifiedGemma
       ? {
           plugins: {
             updater: {
               endpoints: [
-                'https://github.com/erikvullings/procyon/releases/download/updater-gemma-experimental/latest.json',
+                `https://github.com/erikvullings/procyon/releases/download/${
+                  experimentalGemma ? 'updater-gemma-experimental' : 'updater-gemma'
+                }/latest.json`,
               ],
             },
           },

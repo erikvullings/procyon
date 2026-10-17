@@ -1001,6 +1001,7 @@ export const de = {
   semanticComponents: {
     ...en.semanticComponents,
     gemmaName: 'EmbeddingGemma 2 (experimentell)',
+    gemmaQualifiedName: 'EmbeddingGemma 2',
     gemmaFreshLibraryExplanation:
       'Dies startet eine leere Bibliothek. Ihre E5-Bibliothek und ihr Index bleiben erhalten. Die gewählte Einbettungsdimension ist für diese Bibliothek festgelegt; Medienindexierungsoptionen können später geändert werden. Das Speichern der Einstellungen installiert Gemma nicht. Mit „Annehmen und installieren“ wird die neue Bibliothek erstellt und der Modelldownload gestartet.',
     gemmaExistingSetup:
