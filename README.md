@@ -161,7 +161,7 @@ On macOS arm64, `pnpm dev:tauri:semantic:gemma:metal` instead compiles the
 experimental image-only Metal path; the worker selects Metal automatically
 when a device is available and falls back to CPU for unavailable devices or
 mixed image/audio/video libraries. Audio and video are CPU-only.
-EmbeddingGemma 2 ships in v0.5.0-2 as an experimental, opt-in macOS arm64 package.
+EmbeddingGemma 2 ships in v0.5.0-3 as an experimental, opt-in macOS arm64 package.
 On CPU-only machines, PDF page-image indexing is capped and slow; PDF text remains indexed.
 
 In the desktop, open **Settings → Semantic components**, choose **EmbeddingGemma
@@ -175,7 +175,7 @@ inclusion and choose **Include and index folder**. Once indexing progresses,
 search or Ask within the indexed folder. The selected dimensions and media
 permissions cannot be changed for that Gemma library. Existing E5 data is not
 deleted; no migration or representative quality result is implied by this
-development bundle. The v0.5.0-2 experimental Gemma package is opt-in and
+development bundle. The v0.5.0-3 experimental Gemma package is opt-in and
 Apple Silicon (arm64) only; it uses a separate signed updater channel and does
 not replace the regular E5 build. Standard release builds remain Gemma-disabled
 unless the release owner explicitly approves a **new**, four-target signed
@@ -354,7 +354,7 @@ macOS releases are signed and notarized. Windows releases are currently unsigned
 Microsoft Defender SmartScreen warning. Desktop builds verify signed update artifacts before
 installation. Automatic checks can be disabled in Settings; checks never download, install, or
 restart without user confirmation, and a manual **Check now** action remains available.
-The v0.5.0-2 opt-in experimental Gemma macOS package is **Apple Silicon (arm64)
+The v0.5.0-3 opt-in experimental Gemma macOS package is **Apple Silicon (arm64)
 only**; it cannot run on Intel Macs. Its signed updater uses a separate experimental
 channel. The regular non-Gemma universal macOS build and Homebrew cask remain available to
 Intel users; the experimental package is downloaded directly from its GitHub Release and

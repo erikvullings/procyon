@@ -252,6 +252,7 @@ test('protected release workflow signs updater artifacts and notarizes macOS pac
     `\${{ steps.validate-release-tag.outputs.commit }}`,
   );
   assert.equal(release.jobs.release.steps[2].with.path, 'release-source');
+  assert.equal(release.jobs.release.steps[2].with['fetch-depth'], 0);
   assert.equal(release.jobs.release.steps[3]['working-directory'], 'release-source');
   assert.match(release.jobs.release.steps[3].run, /check-desktop-release\.mjs/u);
 
@@ -821,6 +822,14 @@ test('Gemma desktop packaging requires a separately approved signed four-target 
     releaseSteps[releaseApproval].if,
     "vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'",
   );
+  assert.match(
+    releaseSteps[releaseApproval].run,
+    /--release-source-revision "\$RELEASE_SOURCE_REVISION"/u,
+  );
+  assert.equal(
+    releaseSteps[releaseApproval].env.RELEASE_SOURCE_REVISION,
+    `\${{ steps.validate-release-tag.outputs.commit }}`,
+  );
   const qualifiedReleaseApproval = releaseSteps.findIndex((step) =>
     /check-qualified-gemma-release\.mjs --desktop/u.test(step.run ?? ''),
   );
@@ -833,8 +842,18 @@ test('Gemma desktop packaging requires a separately approved signed four-target 
     releaseSteps[qualifiedReleaseApproval].if,
     "vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'",
   );
+  assert.match(
+    releaseSteps[qualifiedReleaseApproval].run,
+    /--release-source-revision "\$RELEASE_SOURCE_REVISION"/u,
+  );
+  assert.equal(
+    releaseSteps[qualifiedReleaseApproval].env.RELEASE_SOURCE_REVISION,
+    `\${{ steps.validate-release-tag.outputs.commit }}`,
+  );
   for (const jobName of ['macos', 'linux', 'windows']) {
     const steps = release.jobs[jobName].steps;
+    const checkout = steps.find((step) => step.uses?.startsWith('actions/checkout@'));
+    assert.equal(checkout.with['fetch-depth'], 0);
     const approval = steps.findIndex((step) =>
       /check-desktop-gemma-release\.mjs/u.test(step.run ?? ''),
     );
@@ -851,6 +870,11 @@ test('Gemma desktop packaging requires a separately approved signed four-target 
       approval >= 0 && approval < experimental && experimental < signature && signature < build,
     );
     assert.equal(steps[approval].if, "vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'");
+    assert.match(steps[approval].run, /--release-source-revision "\$RELEASE_SOURCE_REVISION"/u);
+    assert.equal(
+      steps[approval].env.RELEASE_SOURCE_REVISION,
+      `\${{ needs.release.outputs.release_commit }}`,
+    );
     assert.match(steps[build].run, /--features semantic-gemma/u);
     assert.match(steps[build].run, /GEMMA_DESKTOP_EXPERIMENTAL.*true/u);
     assert.match(steps[experimental].if, /SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL/u);
@@ -866,6 +890,15 @@ test('Gemma desktop packaging requires a separately approved signed four-target 
     assert.equal(
       steps[qualifiedApproval].if,
       "vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'",
+    );
+    assert.equal(steps[qualifiedApproval].shell, 'bash');
+    assert.match(
+      steps[qualifiedApproval].run,
+      /--release-source-revision "\$RELEASE_SOURCE_REVISION"/u,
+    );
+    assert.equal(
+      steps[qualifiedApproval].env.RELEASE_SOURCE_REVISION,
+      `\${{ needs.release.outputs.release_commit }}`,
     );
     assert.match(steps[build].run, /GEMMA_DESKTOP_NON_EXPERIMENTAL.*true/u);
     assert.match(JSON.stringify(steps[build].env), /VITE_GEMMA_QUALIFIED/u);

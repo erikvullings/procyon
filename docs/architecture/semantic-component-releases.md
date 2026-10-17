@@ -42,7 +42,9 @@ EmbeddingGemma promotion has separate experimental and non-experimental paths. T
 reviewed `docs/evaluations/semantic-gemma-qualified-v1.json` record bound to a new exact-source
 candidate, all five passing results in the Gemma qualification checklist, and a candidate lock
 whose bytes and signed catalog/payload hashes match that record. The release workflow also requires
-the independent `SEMANTIC_RELEASE_QUALIFIED` approval. Until the release owner records all five
+the independent `SEMANTIC_RELEASE_QUALIFIED` approval. Desktop releases must descend from the
+candidate source without changing any semantic-worker build inputs; both desktop paths check this
+against the signed candidate source before packaging. Until the release owner records all five
 passes and explicitly enables the new variable, the non-experimental path cannot publish or embed
 Gemma.
 

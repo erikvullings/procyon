@@ -54,6 +54,19 @@ function button(label: string): HTMLButtonElement {
 }
 
 describe('SemanticLibraryManagement', () => {
+  it('makes clear that the open folder is not automatically indexed', async () => {
+    mountComponent(client);
+    await waitForLoaded();
+
+    expect(root.textContent).toContain('Folder open in a pane');
+    expect(root.textContent).toContain('This folder is not indexed');
+    expect(root.textContent).toContain('Opening it does not start indexing');
+    expect(root.textContent).toContain('Only these folders and eligible subfolders are indexed');
+    expect(root.querySelector('.fm-semantic-library-folder button')?.textContent).toBe(
+      'Review indexing',
+    );
+  });
+
   it('changes existing Gemma media only after confirming removal', async () => {
     const component = await client.getSemanticComponentStatus();
     vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
@@ -209,7 +222,7 @@ describe('SemanticLibraryManagement', () => {
     expect(root.textContent).toContain('Every 30 minutes');
     expect(root.textContent).toContain('normalized excerpts');
     expect(root.textContent).toContain(location.uri);
-    expect(root.textContent).toContain('open it in a pane');
+    expect(root.textContent).toContain('open that subfolder in a pane');
     expect(
       root.querySelector<HTMLDetailsElement>('details.fm-semantic-library-details')?.open,
     ).toBe(false);
@@ -360,7 +373,7 @@ describe('SemanticLibraryManagement', () => {
     mountComponent(client);
     await waitForLoaded();
 
-    button('Remove').click();
+    button('Remove from indexing…').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Saved conversation evidence pins'));
     for (const label of [
       'Occurrences',
@@ -376,12 +389,40 @@ describe('SemanticLibraryManagement', () => {
     expect(button('Exclude and delete data').disabled).toBe(false);
     button('Cancel').click();
     expect(confirm).not.toHaveBeenCalled();
-    button('Remove').click();
+    button('Remove from indexing…').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Saved conversation evidence pins'));
     button('Exclude and delete data').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Excluded'));
     expect(root.textContent).toContain('Cleanup complete');
     expect(confirm.mock.calls[0]?.[0]).not.toHaveProperty('categories');
+  });
+
+  it('offers removal on the open included folder without searching the included list', async () => {
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    await client.confirmSemanticEnrolment({
+      confirmationId: preview.confirmationId,
+      policyRevision: preview.policyRevision,
+      workspaceId: workspace.id,
+      location,
+    });
+    const plan = vi.spyOn(client, 'planSemanticExclusion');
+    mountComponent(client);
+    await waitForLoaded();
+
+    const selectedFolder = root.querySelector('.fm-semantic-library-folder');
+    expect(selectedFolder?.textContent).toContain('Included here');
+    const remove = selectedFolder?.querySelector<HTMLButtonElement>('button');
+    expect(remove?.textContent).toBe('Remove from indexing…');
+    remove?.click();
+    await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
+    expect(plan.mock.calls[0]?.[0]).toMatchObject({ workspaceId: workspace.id, location });
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain('Your original files are not deleted'),
+    );
   });
 
   it('hides PDF-image consent and skips Gemma setup for an E5 library', async () => {
@@ -423,7 +464,7 @@ describe('SemanticLibraryManagement', () => {
     m.redraw.sync();
     await waitForLoaded();
 
-    button('Remove').click();
+    button('Remove from indexing…').click();
     await vi.waitFor(() => expect(plan).toHaveBeenCalled());
     expect(plan.mock.calls[0]?.[0]).toMatchObject({ workspaceId: workspace.id, location });
     await vi.waitFor(() =>

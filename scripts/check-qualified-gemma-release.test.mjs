@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -36,9 +37,24 @@ function fixture(context) {
   context.after(() => rmSync(root, { recursive: true, force: true }));
   const assets = join(root, 'assets');
   const candidateRoot = join(root, 'candidate');
+  const repositoryRoot = join(root, 'repository');
   mkdirSync(assets);
   mkdirSync(candidateRoot);
-  const sourceRevision = 'a'.repeat(40);
+  mkdirSync(join(repositoryRoot, 'crates/fm-semantic-worker/src'), { recursive: true });
+  execFileSync('git', ['init', '-q'], { cwd: repositoryRoot });
+  execFileSync('git', ['config', 'user.email', 'test@example.invalid'], { cwd: repositoryRoot });
+  execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repositoryRoot });
+  writeFileSync(join(repositoryRoot, 'Cargo.toml'), '[workspace]\n');
+  writeFileSync(
+    join(repositoryRoot, 'crates/fm-semantic-worker/src/lib.rs'),
+    'pub fn worker() {}\n',
+  );
+  execFileSync('git', ['add', '.'], { cwd: repositoryRoot });
+  execFileSync('git', ['commit', '-qm', 'Build signed candidate'], { cwd: repositoryRoot });
+  const sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+  }).trim();
   const artifacts = [
     ...gemmaFiles.map(([component, name]) => ({ component, id: `${component}.bin`, name })),
     { component: 'procyon.semantic.worker', id: 'worker.bin', name: 'worker' },
@@ -102,7 +118,15 @@ function fixture(context) {
       gates: Object.fromEntries(gateNames.map((gate) => [gate, { result: 'Pass' }])),
     },
   };
-  return { assets, candidateRoot, candidate, candidateBytes, approval, sourceRevision };
+  return {
+    assets,
+    candidateRoot,
+    candidate,
+    candidateBytes,
+    approval,
+    sourceRevision,
+    repositoryRoot,
+  };
 }
 
 test('five passing gates approve only the exact new signed candidate', (context) => {
@@ -175,18 +199,56 @@ test('approval is bound to candidate bytes, source, run, tag, and signed catalog
 });
 
 test('desktop promotion requires the independent approval gates and arm64-only macOS', (context) => {
-  const { approval } = fixture(context);
+  const { approval, sourceRevision, repositoryRoot } = fixture(context);
   assert.throws(
-    () => checkQualifiedGemmaDesktopRelease(approval, 'false', 'true', 'arm64'),
+    () =>
+      checkQualifiedGemmaDesktopRelease(
+        approval,
+        'false',
+        'true',
+        'arm64',
+        sourceRevision,
+        repositoryRoot,
+      ),
     /both independent release approvals/u,
   );
   assert.throws(
-    () => checkQualifiedGemmaDesktopRelease(approval, 'true', 'false', 'arm64'),
+    () =>
+      checkQualifiedGemmaDesktopRelease(
+        approval,
+        'true',
+        'false',
+        'arm64',
+        sourceRevision,
+        repositoryRoot,
+      ),
     /both independent release approvals/u,
   );
-  assert.deepEqual(checkQualifiedGemmaDesktopRelease(approval, 'true', 'true', 'arm64'), approval);
   assert.throws(
-    () => checkQualifiedGemmaDesktopRelease(approval, 'true', 'true', 'universal'),
+    () => checkQualifiedGemmaDesktopRelease(approval, 'true', 'true', 'arm64'),
+    /desktop release source/u,
+  );
+  assert.deepEqual(
+    checkQualifiedGemmaDesktopRelease(
+      approval,
+      'true',
+      'true',
+      'arm64',
+      sourceRevision,
+      repositoryRoot,
+    ),
+    approval,
+  );
+  assert.throws(
+    () =>
+      checkQualifiedGemmaDesktopRelease(
+        approval,
+        'true',
+        'true',
+        'universal',
+        sourceRevision,
+        repositoryRoot,
+      ),
     /arm64-only/u,
   );
   const blocked = {
@@ -200,7 +262,62 @@ test('desktop promotion requires the independent approval gates and arm64-only m
     },
   };
   assert.throws(
-    () => checkQualifiedGemmaDesktopRelease(blocked, 'true', 'true', 'arm64'),
+    () =>
+      checkQualifiedGemmaDesktopRelease(
+        blocked,
+        'true',
+        'true',
+        'arm64',
+        sourceRevision,
+        repositoryRoot,
+      ),
     /five-gate approval/u,
+  );
+});
+
+test('qualified desktop source must descend from the signed candidate without worker-input changes', (context) => {
+  const { approval, sourceRevision: candidateRevision, repositoryRoot } = fixture(context);
+
+  mkdirSync(join(repositoryRoot, 'docs'));
+  writeFileSync(join(repositoryRoot, 'docs/release.md'), 'release notes\n');
+  execFileSync('git', ['add', '.'], { cwd: repositoryRoot });
+  execFileSync('git', ['commit', '-qm', 'Record release notes'], { cwd: repositoryRoot });
+  const releaseRevision = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+  }).trim();
+  const exactCandidateApproval = { ...approval, sourceRevision: candidateRevision };
+  assert.doesNotThrow(() =>
+    checkQualifiedGemmaDesktopRelease(
+      exactCandidateApproval,
+      'true',
+      'true',
+      'arm64',
+      releaseRevision,
+      repositoryRoot,
+    ),
+  );
+
+  writeFileSync(
+    join(repositoryRoot, 'crates/fm-semantic-worker/src/lib.rs'),
+    'pub fn worker() { todo!() }\n',
+  );
+  execFileSync('git', ['add', '.'], { cwd: repositoryRoot });
+  execFileSync('git', ['commit', '-qm', 'Change worker after candidate'], { cwd: repositoryRoot });
+  const changedWorkerRevision = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+  }).trim();
+  assert.throws(
+    () =>
+      checkQualifiedGemmaDesktopRelease(
+        exactCandidateApproval,
+        'true',
+        'true',
+        'arm64',
+        changedWorkerRevision,
+        repositoryRoot,
+      ),
+    /build inputs changed after signed candidate/u,
   );
 });

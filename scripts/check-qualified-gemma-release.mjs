@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { verifySemanticWorkerSource } from './check-desktop-gemma-release.mjs';
 import { verifySemanticComponentRelease } from './verify-semantic-component-release.mjs';
 
 export const qualifiedGemmaManifestPath = fileURLToPath(
@@ -99,6 +100,8 @@ export function checkQualifiedGemmaDesktopRelease(
   semanticEnabled,
   qualifiedEnabled,
   macosArchitecture = 'universal',
+  releaseSourceRevision,
+  repositoryRoot = process.cwd(),
 ) {
   if (semanticEnabled !== 'true' || qualifiedEnabled !== 'true') {
     throw new Error('non-experimental Gemma desktop requires both independent release approvals');
@@ -110,6 +113,10 @@ export function checkQualifiedGemmaDesktopRelease(
   if (macosArchitecture !== 'arm64') {
     throw new Error('qualified Gemma desktop requires an arm64-only macOS build');
   }
+  if (!/^[0-9a-f]{40}$/u.test(releaseSourceRevision ?? '')) {
+    throw new Error('desktop release source must be a 40-character commit');
+  }
+  verifySemanticWorkerSource(manifest.sourceRevision, releaseSourceRevision, repositoryRoot);
   return manifest;
 }
 
@@ -202,11 +209,22 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   const manifest = JSON.parse(fs.readFileSync(qualifiedGemmaManifestPath, 'utf8'));
   if (process.argv.includes('--desktop')) {
+    const releaseSourceRevisionIndex = process.argv.indexOf('--release-source-revision');
+    const releaseSourceRevision =
+      releaseSourceRevisionIndex === -1 ? undefined : process.argv[releaseSourceRevisionIndex + 1];
+    if (
+      releaseSourceRevisionIndex === -1 ||
+      !releaseSourceRevision ||
+      !/^[0-9a-f]{40}$/u.test(releaseSourceRevision)
+    ) {
+      throw new Error('desktop release source must be a 40-character commit');
+    }
     checkQualifiedGemmaDesktopRelease(
       manifest,
       process.env.SEMANTIC_RELEASE_QUALIFIED,
       process.env.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED,
       process.argv.includes('--macos-arm64-only') ? 'arm64' : 'universal',
+      releaseSourceRevision,
     );
     console.log(
       `Qualified Gemma desktop uses reviewed signed candidate ${manifest.qualificationRunId}`,
