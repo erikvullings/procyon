@@ -42,14 +42,28 @@ published, and task 0248 remains open.
   The build and publication are separate; this run did not publish a release.
 - [Installed lifecycle and synthetic PDF vision](https://github.com/erikvullings/procyon/actions/runs/38967273437)
   and [host-bound PDF sample](https://github.com/erikvullings/procyon/actions/runs/38971737158):
-  all four target jobs passed against the exact signed candidate. Each
+  all four target jobs passed against signed candidate run
+  `38958774038` at the source revision above. Each
   lifecycle report has 13/16 checks passing, one blocked because no preceding
   signed production candidate was supplied, and two manual-required UX checks.
   Lifecycle checks reported zero network artifact reads and successful
-  synthetic image/audio/video indexing with worker restart. The eight-page
-  synthetic host-VFS PDF reports are `noGo`: replacement and deletion passed,
-  CPU produced image evidence for 4/8 pages and Metal for 8/8, while resource
-  ceilings remain unqualified and temporary-disk peaks are unavailable.
+  synthetic image/audio/video indexing with worker restart. All four host-bound
+  reports have decision `noGo` and scope
+  `installed-host-vfs-8-page-synthetic-pdf-sample`; replacement and deletion
+  passed. Their sampled worker peaks and PDF image-evidence counts were:
+
+  | Target | Backend | Sampled worker peak RSS | Image pages |
+  | --- | --- | ---: | ---: |
+  | macOS ARM64 | Metal | 2,334,687,232 B | 8/8 |
+  | Linux x86-64 | CPU | 2,160,611,328 B | 4/8 |
+  | Linux ARM64 | CPU | 2,139,082,752 B | 4/8 |
+  | Windows x86-64 | CPU | 2,048,323,584 B | 4/8 |
+
+  These eight-page synthetic CI samples can miss transient RSS peaks;
+  `temporaryDiskPeakBytes` is null and `resourceCeilingQualified` is false on
+  every target. Full scanned-PDF runs, cross-host navigation, upgrade/rollback,
+  and CPU fallback remain unqualified. None of this is an installed local
+  Gate 1 result or a release-owner decision.
 - [Four-target synthetic runner measurements](https://github.com/erikvullings/procyon/actions/runs/38971992914)
   used one small synthetic image, audio, video, and text file per dimension,
   not the local scanned-PDF workload:
