@@ -140,10 +140,12 @@ export function processRssBreakdown(tree, rootPids) {
     otherHelper: { count: 0, rssBytes: 0 },
   };
   for (const row of tree) {
-    const role = roots.has(row.pid)
-      ? 'worker'
-      : /--pdf-(?:text|text-with-visuals|visual|visual-pages)-child(?:\s|$)/.test(row.command)
-        ? 'pdfChild'
+    const role = /--pdf-(?:text|text-with-visuals|visual|visual-pages)-child(?:\s|$)/.test(
+      row.command,
+    )
+      ? 'pdfChild'
+      : roots.has(row.pid)
+        ? 'worker'
         : 'otherHelper';
     breakdown[role].count += 1;
     breakdown[role].rssBytes += row.rssBytes;
