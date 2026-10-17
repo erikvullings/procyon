@@ -302,9 +302,16 @@ export function formatBytes(bytes) {
   return `${bytes < 0 ? '-' : ''}${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
-function run(command, args) {
+export function run(command, args) {
   const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  return result.error ? '' : result.stdout;
+  if (result.error)
+    throw new Error(`${command} could not run: ${result.error.code ?? result.error}`);
+  if (result.status !== 0) {
+    throw new Error(
+      `${command} exited with ${result.signal ? `signal ${result.signal}` : `status ${result.status}`}`,
+    );
+  }
+  return result.stdout;
 }
 
 function listProcesses() {

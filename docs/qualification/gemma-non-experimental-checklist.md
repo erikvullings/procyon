@@ -115,7 +115,8 @@ PDF spools during large, scanned-PDF indexing, on both Metal and CPU.
    Wait until **Settings > Semantic** reports the folder as indexed (or failed or skipped with a
    recorded reason).
 4. Wait about 30 seconds, then press `Ctrl+C`. The script writes `samples.csv` and
-   `summary.json`.
+   `summary.json`. If the sampler exits with a process-list or `lsof` error, discard that
+   incomplete run and repeat it; a missing tool is not a zero-memory or zero-temp result.
 5. Repeat steps 2–4 with CPU forced (see above) into `~/procyon-measure/cpu`. First remove the
    folder from the library and recreate it, or use a second copy of the folder, so the PDF is
    indexed again.
