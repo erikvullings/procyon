@@ -10,9 +10,16 @@ import {
   parseWindowsProcessCsv,
   processRssBreakdown,
   processTree,
+  run,
   samplesToCsv,
   summarizeSamples,
 } from './measure-semantic-worker-resources.mjs';
+
+test('sampling command failure does not become an empty process list', () => {
+  assert.equal(run(process.execPath, ['-p', '"ready"']).trim(), 'ready');
+  assert.throws(() => run(process.execPath, ['-e', 'process.exit(7)']), /exited with status 7/);
+  assert.throws(() => run('procyon-nonexistent-process-list-tool', []), /could not run: ENOENT/);
+});
 
 test('default runtime directory follows each platform config root', () => {
   assert.match(
