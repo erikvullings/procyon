@@ -264,6 +264,14 @@ test('protected release workflow signs updater artifacts and notarizes macOS pac
   }
   const createRelease = release.jobs.release.steps.at(-1);
   assert.equal(createRelease.with.tag_name, `\${{ env.RELEASE_TAG }}`);
+  assert.equal(
+    createRelease.with.prerelease,
+    `\${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && (vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' || contains(env.RELEASE_TAG, '-')) }}`,
+  );
+  assert.equal(
+    createRelease.with.make_latest,
+    `\${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' && 'false' || '' }}`,
+  );
   assert.match(createRelease.with.body, /EXPERIMENTAL OPT-IN:/u);
 
   for (const jobName of ['macos', 'windows', 'linux']) {

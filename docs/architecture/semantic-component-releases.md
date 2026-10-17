@@ -49,9 +49,10 @@ passes and explicitly enables the new variable, the non-experimental path cannot
 Gemma.
 
 Both Gemma desktop modes produce an arm64-only macOS app because no Intel worker/catalog is
-approved. The qualified build uses a separate `updater-gemma` endpoint, omits the Intel updater
-entry, and does not publish cross-platform package-manager metadata. Only that build uses the
-non-experimental Gemma label in Settings; the default and experimental builds retain the
+approved. The qualified GitHub release is not marked as a prerelease, but is explicitly excluded
+from GitHub's default latest release; it uses a separate `updater-gemma` endpoint, omits the Intel
+updater entry, and does not publish cross-platform package-manager metadata. Only that build uses
+the non-experimental Gemma label in Settings; the default and experimental builds retain the
 experimental label.
 
 ## Consequences
