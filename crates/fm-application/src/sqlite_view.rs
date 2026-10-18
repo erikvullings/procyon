@@ -1242,7 +1242,11 @@ mod tests {
     #[test]
     fn opens_paths_with_reserved_characters() {
         let directory = tempfile::tempdir().expect("temp dir");
-        let nested = directory.path().join("we ird#dir?");
+        let nested = directory.path().join(if cfg!(windows) {
+            "we ird#dir%"
+        } else {
+            "we ird#dir?"
+        });
         std::fs::create_dir(&nested).expect("nested dir");
         let (connection, objects) = open(&fixture(&nested));
         assert!(!objects.is_empty());

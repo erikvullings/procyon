@@ -1755,10 +1755,8 @@ mod tests {
     /// just once at the top), so a scan over a large fixture stops promptly rather than running
     /// to completion once cancelled mid-traversal. A background thread watches
     /// `scanned_entries` and cancels once a small threshold is crossed, well before the fixture's
-    /// 20,000 entries could all be visited; the sequential traversal itself has no artificial
-    /// delay, but its own bookkeeping (one `symlink_metadata`/`read_dir` syscall per entry) is
-    /// slow enough relative to the watcher's tight spin loop that cancellation reliably lands
-    /// mid-scan.
+    /// 20,000 entries could all be visited. Synchronize the watcher before starting the scan:
+    /// on fast filesystems, the scan can otherwise finish before the watcher is scheduled.
     #[test]
     fn build_tree_parallel_cancellation_interrupts_a_large_deterministic_fixture() {
         let root = tempfile::tempdir().expect("create fixture root");
@@ -1774,12 +1772,16 @@ mod tests {
         let result = std::thread::scope(|scope| {
             let watcher_cancellation = cancellation.clone();
             let watcher_scanned_entries = &scanned_entries;
+            let watcher_ready = std::sync::Arc::new(std::sync::Barrier::new(2));
+            let watcher_start = std::sync::Arc::clone(&watcher_ready);
             scope.spawn(move || {
+                watcher_start.wait();
                 while watcher_scanned_entries.load(Ordering::Relaxed) < 50 {
                     std::hint::spin_loop();
                 }
                 watcher_cancellation.cancel();
             });
+            watcher_ready.wait();
 
             disk_usage_thread_pool()
                 .expect("create disk usage pool")
