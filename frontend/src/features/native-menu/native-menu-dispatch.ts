@@ -17,6 +17,7 @@ import type { EditCommand } from './edit-command';
 export const OPEN_SETTINGS_MENU_ID = 'ui.openSettings';
 export const OPEN_DIAGNOSTICS_MENU_ID = 'ui.openDiagnostics';
 export const OPEN_SHORTCUTS_MENU_ID = 'core.showShortcutsHelp';
+export const OPEN_WALKTHROUGHS_MENU_ID = 'ui.openWalkthroughs';
 
 /** Prefix for a Window-menu tab item's id, followed by the tab's `${paneId}:${tabId}` key. */
 export const WINDOW_TAB_MENU_ID_PREFIX = 'ui.window.tab.';
@@ -74,6 +75,7 @@ export interface NativeMenuDispatchContext {
   readonly openSettingsDialog: () => void;
   readonly openDiagnostics: () => void;
   readonly openShortcutsHelp: () => void;
+  readonly openWalkthroughs?: () => void;
   /** Activates the tab encoded in a `ui.window.tab.<tabKey>` id (the `${paneId}:${tabId}` key
    * app-shell.ts's tab caches are keyed by). */
   readonly activateTabByKey: (tabKey: string) => void;
@@ -143,6 +145,10 @@ export function dispatchNativeMenuAction(context: NativeMenuDispatchContext, id:
   }
   if (id === OPEN_SHORTCUTS_MENU_ID) {
     context.openShortcutsHelp();
+    return;
+  }
+  if (id === OPEN_WALKTHROUGHS_MENU_ID) {
+    context.openWalkthroughs?.();
     return;
   }
   if (id.startsWith(WINDOW_TAB_MENU_ID_PREFIX)) {

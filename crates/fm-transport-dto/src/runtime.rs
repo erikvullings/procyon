@@ -39,6 +39,7 @@ pub enum PlatformKindDto {
 #[schema(example = json!({
     "runtime": "browserServer",
     "platform": "macos",
+    "freshInstall": false,
     "nativeMenus": false,
     "platformContextMenu": false,
     "nativeFileIcons": false,
@@ -62,6 +63,8 @@ pub struct RuntimeCapabilitiesDto {
     pub runtime: RuntimeKindDto,
     /// The host operating system, when known.
     pub platform: PlatformKindDto,
+    /// Whether the service started without any previously persisted installation data.
+    pub fresh_install: bool,
     /// Whether native OS menus are available.
     pub native_menus: bool,
     /// Whether the desktop host can expose the OS Services/Send To submenu.
@@ -109,6 +112,7 @@ mod tests {
         RuntimeCapabilitiesDto {
             runtime: RuntimeKindDto::BrowserServer,
             platform: PlatformKindDto::Macos,
+            fresh_install: false,
             native_menus: false,
             platform_context_menu: false,
             native_file_icons: false,

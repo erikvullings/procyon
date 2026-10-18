@@ -1514,6 +1514,7 @@ export class MockFileManagerClient implements FileManagerClient {
       plugins: true,
       revealInSystemFileManager: false,
       runtime: 'mock',
+      freshInstall: false,
       semanticComponentAuthority:
         this.semanticStatus.lifecycle.state === 'unavailable' ? 'unavailable' : 'deterministicMock',
       semanticRuntimeExecutableDownload:
@@ -2450,6 +2451,7 @@ export class MockFileManagerClient implements FileManagerClient {
       platform: 'Mock',
       runtimeCapabilities: {
         clipboard: false,
+        freshInstall: false,
         extendedAttributes: true,
         finderAliases: false,
         osFileClipboard: false,

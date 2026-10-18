@@ -83,6 +83,7 @@ The dual-pane shell: layout, panes, tabs, sorting, selection, and finding things
 - [x] 0156 Slow directory navigation (several seconds per folder change) in alpha 5 *(three bugs:
   O(n^2) directory-listing round trips, per-entry async overhead, and the dominant one — watch
   registration blocking the response — see task notes)*
+- [x] 0253 Guided walkthroughs and in-app help
 
 ## Semantic search, RAG & knowledge
 

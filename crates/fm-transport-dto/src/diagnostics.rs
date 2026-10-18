@@ -110,6 +110,7 @@ mod tests {
             runtime_capabilities: crate::runtime::RuntimeCapabilitiesDto {
                 runtime: crate::runtime::RuntimeKindDto::Tauri,
                 platform: crate::runtime::PlatformKindDto::Macos,
+                fresh_install: false,
                 native_menus: true,
                 platform_context_menu: true,
                 native_file_icons: true,

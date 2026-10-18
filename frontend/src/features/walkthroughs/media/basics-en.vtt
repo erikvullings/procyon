@@ -1,0 +1,19 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:03.000
+F3 views the public Procyon README in the other pane.
+
+00:00:03.000 --> 00:00:06.000
+F4 opens the README for editing. We close it without saving.
+
+00:00:06.000 --> 00:00:09.000
+Pack the README into a ZIP archive.
+
+00:00:09.000 --> 00:00:12.000
+The new README.zip stays beside the source file.
+
+00:00:12.000 --> 00:00:14.500
+F5 copies that ZIP to the empty ~/Downloads/test folder.
+
+00:00:14.500 --> 00:00:17.500
+The ZIP is now in both panes; the original remains untouched.

@@ -124,6 +124,7 @@ describe('Diagnostics', () => {
         platform: 'macOS',
         runtimeCapabilities: {
           runtime: 'browserServer',
+          freshInstall: false,
           platform: 'macos',
           nativeMenus: false,
           platformContextMenu: false,

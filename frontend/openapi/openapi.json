@@ -16589,6 +16589,7 @@
         "required": [
           "runtime",
           "platform",
+          "freshInstall",
           "nativeMenus",
           "platformContextMenu",
           "nativeFileIcons",
@@ -16623,6 +16624,10 @@
           "finderTags": {
             "type": "boolean",
             "description": "Whether Finder tags can be read/written (task 0136)."
+          },
+          "freshInstall": {
+            "type": "boolean",
+            "description": "Whether the service started without any previously persisted installation data."
           },
           "nativeDragOut": {
             "type": "boolean",
@@ -16688,6 +16693,7 @@
         "example": {
           "runtime": "browserServer",
           "platform": "macos",
+          "freshInstall": false,
           "nativeMenus": false,
           "platformContextMenu": false,
           "nativeFileIcons": false,

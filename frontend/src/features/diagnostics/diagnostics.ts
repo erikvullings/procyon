@@ -76,6 +76,7 @@ export function diagnosticsFromDto(input: unknown): DiagnosticsView {
     platform: dto.platform ?? 'Unknown',
     runtimeCapabilities: dto.runtimeCapabilities ?? {
       runtime: 'browserServer',
+      freshInstall: false,
       platform: 'unknown',
       nativeMenus: false,
       platformContextMenu: false,
