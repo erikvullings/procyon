@@ -80,7 +80,18 @@ export interface NavigationController {
    * still in flight for the same tab, so it can never silently discard that navigation's own
    * snapshot fetch (see fm-search results not appearing after navigating to `search://`).
    */
-  load(paneId: PaneId, options?: { readonly background?: boolean }): Promise<void>;
+  load(
+    paneId: PaneId,
+    options?: {
+      readonly background?: boolean;
+      /**
+       * An authoritative first page already delivered by the backend (a `reset` delta). Skips the
+       * initial list call - which would make the backend re-list and re-sort the whole directory -
+       * and only re-hydrates the later pages from the backend's cached listing.
+       */
+      readonly firstSnapshot?: DirectorySnapshot;
+    },
+  ): Promise<void>;
   navigate(
     paneId: PaneId,
     location: Location,
@@ -448,7 +459,7 @@ export function createNavigationController(
     firstSnapshot: DirectorySnapshot,
     minEntries: number,
   ): Promise<DirectorySnapshot> {
-    let mergedEntries = [...firstSnapshot.entries];
+    const mergedEntries = [...firstSnapshot.entries];
     let hydratedSnapshot = firstSnapshot;
     let continuationToken = firstSnapshot.continuationToken;
     while (
@@ -468,7 +479,7 @@ export function createNavigationController(
         ),
         request.controller.signal,
       );
-      mergedEntries = [...mergedEntries, ...nextSnapshot.entries];
+      for (const entry of nextSnapshot.entries) mergedEntries.push(entry);
       hydratedSnapshot = nextSnapshot;
       continuationToken = nextSnapshot.continuationToken;
     }
@@ -480,7 +491,7 @@ export function createNavigationController(
 
   async function load(
     paneId: PaneId,
-    loadOptions?: { readonly background?: boolean },
+    loadOptions?: { readonly background?: boolean; readonly firstSnapshot?: DirectorySnapshot },
   ): Promise<void> {
     const workspace = options.getWorkspace();
     const tab = workspace === undefined ? undefined : activeTab(workspace, paneId);
@@ -507,12 +518,15 @@ export function createNavigationController(
       publish(paneId, tab.id, loadingView(paneId, tab.id, request, tab.location));
     }
     try {
-      let snapshot = await withArchiveCredential(tab.location, () =>
-        listDirectory(
-          requestFor(workspace, paneId, request.id, tab.location, tab),
-          request.controller.signal,
-        ),
-      );
+      let snapshot =
+        loadOptions?.firstSnapshot !== undefined
+          ? { ...loadOptions.firstSnapshot, requestId: request.id }
+          : await withArchiveCredential(tab.location, () =>
+              listDirectory(
+                requestFor(workspace, paneId, request.id, tab.location, tab),
+                request.controller.signal,
+              ),
+            );
       // Re-fetch every page that was already loaded, so a refresh of a large paged directory
       // doesn't drop later entries - which would prune the cursor/selection onto page one.
       if (

@@ -136,7 +136,7 @@ impl DirectoryService {
         let location: fm_domain::Location = request.location.clone().into();
         let first_page = request.continuation_token.is_none();
         let cancellation = CancellationToken::new();
-        let cached_full_entries = {
+        let (cached_full_entries, cached_summary) = {
             let mut panes = self.panes.lock().await;
             let revision = panes.get(&pane_id).map_or(0, |state| state.revision);
             let previous = panes.remove(&pane_id);
@@ -183,9 +183,26 @@ impl DirectoryService {
                     previous.watch_cancellation.cancel();
                 }
             }
-            panes
-                .get(&pane_id)
-                .and_then(|state| state.full_entries.clone())
+            let cached_summary = continuing_same_listing
+                .then(|| {
+                    panes
+                        .get(&pane_id)
+                        .and_then(|state| state.snapshot.as_ref())
+                        .and_then(|snapshot| {
+                            Some((
+                                snapshot.writable,
+                                snapshot.total_known_size?,
+                                snapshot.total_known_file_count?,
+                            ))
+                        })
+                })
+                .flatten();
+            (
+                panes
+                    .get(&pane_id)
+                    .and_then(|state| state.full_entries.clone()),
+                cached_summary,
+            )
         };
 
         let provider = self.providers.resolve(&location)?;
@@ -226,19 +243,27 @@ impl DirectoryService {
         state.revision += 1;
         state.full_entries = Some(Arc::clone(&full_entries));
 
-        let writable = provider
-            .inspect(
-                &EntryRef {
-                    id: EntryId::new(),
-                    location: location.clone(),
-                },
-                cancellation.clone(),
-            )
-            .await
-            .map(|entry| !entry.read_only)
-            .unwrap_or(false);
-
-        let (total_known_size, total_known_file_count) = aggregate_totals(&full_entries);
+        // Continuation pages of an unchanged listing reuse the first page's writability and
+        // totals: re-statting the directory and re-summing every entry per page made paging a
+        // large folder O(n^2 / page size).
+        let (writable, total_known_size, total_known_file_count) = match cached_summary {
+            Some(summary) => summary,
+            None => {
+                let writable = provider
+                    .inspect(
+                        &EntryRef {
+                            id: EntryId::new(),
+                            location: location.clone(),
+                        },
+                        cancellation.clone(),
+                    )
+                    .await
+                    .map(|entry| !entry.read_only)
+                    .unwrap_or(false);
+                let (size, file_count) = aggregate_totals(&full_entries);
+                (writable, size, file_count)
+            }
+        };
         let snapshot = DirectorySnapshot {
             pane_id,
             request_id: request.request_id,

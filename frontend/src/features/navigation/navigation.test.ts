@@ -1023,6 +1023,39 @@ describe('navigation controller', () => {
     expect(context.views.at(-1)?.entries.map((entry) => entry.name)).toEqual(['one', 'two']);
   });
 
+  it('a reset-delta reload reuses the delivered first page and only fetches later pages', async () => {
+    const context = setup();
+    const pages = (request: { requestId: string; continuationToken?: string | null }) =>
+      request.continuationToken === 'page-2'
+        ? snapshot(request.requestId, 'file:///home/erik', ['two'])
+        : snapshot(request.requestId, 'file:///home/erik', ['one'], {
+            hasMore: true,
+            continuationToken: 'page-2',
+          });
+    vi.mocked(context.client.listDirectory).mockImplementation(async (request) => pages(request));
+    const controller = createNavigationController({
+      client: context.client,
+      getWorkspace: context.getWorkspace,
+      replaceWorkspace: context.replaceWorkspace,
+      updatePane: (_paneId, _tabId, view) => context.views.push(view),
+    });
+    await controller.load('left');
+    await controller.loadAllPages('left');
+    vi.mocked(context.client.listDirectory).mockClear();
+
+    await controller.load('left', {
+      background: true,
+      firstSnapshot: snapshot('backend-request', 'file:///home/erik', ['uno'], {
+        hasMore: true,
+        continuationToken: 'page-2',
+      }),
+    });
+
+    const calls = vi.mocked(context.client.listDirectory).mock.calls;
+    expect(calls.map(([request]) => request.continuationToken)).toEqual(['page-2']);
+    expect(context.views.at(-1)?.entries.map((entry) => entry.name)).toEqual(['uno', 'two']);
+  });
+
   it('loadAllPages stops instead of retrying forever when a page fails', async () => {
     const context = setup();
     vi.mocked(context.client.listDirectory)

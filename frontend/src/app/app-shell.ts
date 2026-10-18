@@ -2110,7 +2110,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       // drop every later page the user already loaded and prune the cursor onto page one, so
       // re-fetch instead: background reloads re-hydrate all previously loaded pages.
       if (delta.snapshot.hasMore && delta.snapshot.entries.length < current.entries.length) {
-        refetchAffectedPanes(paneId);
+        // The backend already holds the fresh sorted listing, so only the later pages are
+        // re-fetched from its cache - a plain reload would make it re-list and re-sort the folder.
+        void navigation.load(paneId, { background: true, firstSnapshot: delta.snapshot });
         return;
       }
       navigation.applySnapshot(paneId, delta.snapshot);
