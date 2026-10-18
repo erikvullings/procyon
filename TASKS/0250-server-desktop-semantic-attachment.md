@@ -1,6 +1,6 @@
 # 0250 Read-only fm-server attachment to the desktop semantic library
 
-Status: in_progress
+Status: done
 Priority: medium
 Subsystem: semantic, server
 Depends on: 0248
@@ -42,4 +42,12 @@ on loopback. Implement as proposed, with normal authentication/root restrictions
   desktop commits, and is hidden while roots are outside the server's restrictions.
 - [x] Shared-store writes and reconciliation commits are refused.
 - [x] Docs and checklist item 3 procedure updated.
-- [ ] Manual cross-host citation qualification (checklist item 3) recorded by the release owner.
+- [x] For the v0.6.0 risk-accepted route, the release owner explicitly recorded the manual
+  cross-host citation check as waived, not performed; the checklist remains unqualified and no
+  pass is claimed.
+
+## Agent Notes
+
+- 2026-10-18 Copilot: The implementation and automated acceptance criteria were already complete.
+  The release owner explicitly accepted the remaining manual citation-navigation risk for v0.6.0.
+  This does not assert manual parity testing or change the qualification checklist result.

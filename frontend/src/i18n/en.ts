@@ -1425,8 +1425,11 @@ export const en = {
       'Higher-quality multilingual retrieval with greater disk, memory, and indexing cost.',
     gemmaName: 'EmbeddingGemma 2 (experimental)',
     gemmaQualifiedName: 'EmbeddingGemma 2',
+    gemmaRiskAcceptedName: 'EmbeddingGemma 2 (risk accepted; not five-gate qualified)',
     gemmaDescription:
       'Native CPU text and code search with optional image, audio, and video indexing. Requires a separate, freshly indexed library.',
+    gemmaRiskAcceptedDescription:
+      'Opt-in, owner-risk-accepted package; it has not passed the five-gate qualification. Resource gates 1a and 1c failed; CPU performance, other resource gates, cross-host navigation, upgrade/rollback, private-media qualification, and Windows GPU are unqualified. Use E5 if needed and file an issue for CPU or Windows GPU problems. Gemma on macOS requires Apple Silicon.',
     gemmaSetupTitle: 'New EmbeddingGemma 2 library',
     gemmaFreshLibraryExplanation:
       'This starts an empty library. Your E5 library and its index stay intact. The selected embedding dimension is locked for this library; media indexing choices can be changed later. Saving Settings does not install Gemma. Accept and install creates the new library and starts the model download.',

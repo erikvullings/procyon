@@ -144,6 +144,24 @@ describe('SemanticComponentManagement', () => {
     );
   });
 
+  it('labels risk-accepted Gemma as unqualified in Settings', async () => {
+    vi.stubEnv('VITE_GEMMA_RISK_ACCEPTED', 'true');
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await withGemmaProfile(client);
+    mountComponent(client);
+    await waitForLoaded();
+
+    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
+      'risk accepted; not five-gate qualified',
+    );
+    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
+      'has not passed the five-gate qualification',
+    );
+    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
+      'file an issue for CPU or Windows GPU problems',
+    );
+  });
+
   it('gives the Gemma setup and consent focusable, labelled controls', async () => {
     const client = new MockFileManagerClient();
     await withGemmaProfile(client);

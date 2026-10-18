@@ -1,6 +1,6 @@
 # 0248 Gemma non-experimental qualification tooling
 
-Status: open
+Status: in_progress
 Priority: high
 Subsystem: semantic
 Depends on: 0244
@@ -17,10 +17,11 @@ are unqualified:
 4. upgrade and rollback from v0.5.0-2, including switching to E5;
 5. on-device Gemma image/audio/video search, source attribution, and consent isolation.
 
-These need manual runs on the release owner's own data. This task provides the tooling and the
-procedure. Promotion itself stays open until the
-[checklist](../docs/qualification/gemma-non-experimental-checklist.md) results are recorded and
-approved.
+These qualification runs remain manual and were not completed. On 2026-10-18
+the release owner explicitly chose to ship v0.6.0 through the separate
+risk-accepted path rather than wait for five-gate qualification. This task
+records the tooling and release decision; risk acceptance does not change the
+checklist results or imply qualification.
 
 ## Acceptance Criteria
 
@@ -43,7 +44,10 @@ approved.
   and a fill-in results table.
 - [x] Item 5 qualifies locally consented image/audio/video retrieval and truthful file-level
   provenance; published text benchmarks remain context, not an on-device E5 comparison gate.
-- [ ] Release owner records results for items 1–5 and decides on promotion.
+- [x] The release owner either records all five qualification results and
+  approves the qualified path, or records a separate explicit risk acceptance
+  for an unqualified release. Risk acceptance preserves actual failed/missing
+  results and must never label them `Pass`.
 
 ## Implementation Notes
 
@@ -73,3 +77,17 @@ approved.
   enable audio/video in Settings (0247) without resetting the dimension. Search presents file-level
   media evidence; video sampled-frame coverage is not timestamp navigation. No installed-app
   result or promotion decision is asserted here.
+- 2026-10-18 Copilot: Updated the release decision per the user's explicit
+  direction for v0.6.0. Manual gates remain unqualified (Metal resource gate
+  failed; CPU resource and gates 2–5 remain unfilled). The separate
+  risk-accepted path is distinct from the five-gate qualified path, requires
+  owner acceptance of the listed limitations, and does not synthesize
+  qualification evidence. See
+  `docs/evaluations/embeddinggemma-risk-accepted-release-2026-10-18.md`.
+- 2026-10-18 Copilot: Implemented the separate candidate-bound risk-acceptance
+  contract, signed four-target catalog/artifact checks, source-lineage checks,
+  release-workflow gates, and explicit Settings disclosure. The existing
+  five-gate checker remains strict. Focused release tests (48), Settings tests
+  (42), frontend typecheck, and repository lint passed. The task stays
+  in-progress until a new post-merge signed candidate is bound to the actual
+  release-owner approval manifest; no existing candidate is reused.

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { semanticCatalogSourceRevision } from './create-semantic-component-release-manifest.mjs';
+import { validateRiskAcceptedGemmaApproval } from './gemma-risk-acceptance-contract.mjs';
 
 const defaultManifestPath = fileURLToPath(
   new URL('../docs/evaluations/semantic-component-release-v1.json', import.meta.url),
@@ -34,8 +35,18 @@ export function semanticComponentReleasePlan(manifest, target) {
   if (manifest?.schemaVersion !== 1 || manifest?.decision !== 'go') {
     throw new Error('an approved semantic component release is required');
   }
-  if (manifest.experimentalGemma && manifest.nonExperimentalGemma) {
-    throw new Error('experimental and non-experimental Gemma approval modes cannot be combined');
+  const gemmaModes = [
+    manifest.experimentalGemma,
+    manifest.nonExperimentalGemma,
+    manifest.riskAcceptedGemma,
+  ].filter(Boolean);
+  if (gemmaModes.length > 1) {
+    throw new Error(
+      'experimental, qualified, and risk-accepted Gemma approval modes cannot be combined',
+    );
+  }
+  if (manifest.riskAcceptedGemma) {
+    validateRiskAcceptedGemmaApproval(manifest);
   }
   if (manifest.experimentalGemma) {
     if (
@@ -96,14 +107,17 @@ export function semanticComponentReleasePlan(manifest, target) {
     catalogRevision: requireString(targetEvidence.catalogRevision, 'catalogRevision'),
     catalogSha256: requireString(targetEvidence.catalogSha256, 'catalogSha256'),
     signatureSha256: requireString(targetEvidence.signatureSha256, 'signatureSha256'),
-    ...(manifest.experimentalGemma || manifest.nonExperimentalGemma
+    ...(manifest.experimentalGemma || manifest.nonExperimentalGemma || manifest.riskAcceptedGemma
       ? {
           gemmaModelRevision: requireString(
             manifest.experimentalGemma?.modelRevision ??
-              manifest.nonExperimentalGemma?.modelRevision,
+              manifest.nonExperimentalGemma?.modelRevision ??
+              manifest.riskAcceptedGemma?.modelRevision,
             manifest.experimentalGemma
               ? 'experimental Gemma model revision'
-              : 'qualified Gemma model revision',
+              : manifest.nonExperimentalGemma
+                ? 'qualified Gemma model revision'
+                : 'risk-accepted Gemma model revision',
           ),
         }
       : {}),

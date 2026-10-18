@@ -266,13 +266,14 @@ test('protected release workflow signs updater artifacts and notarizes macOS pac
   assert.equal(createRelease.with.tag_name, `\${{ env.RELEASE_TAG }}`);
   assert.equal(
     createRelease.with.prerelease,
-    `\${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && (vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' || contains(env.RELEASE_TAG, '-')) }}`,
+    `\${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' && (vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' || contains(env.RELEASE_TAG, '-')) }}`,
   );
   assert.equal(
     createRelease.with.make_latest,
-    `\${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' && 'false' || '' }}`,
+    `\${{ (vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' || vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true') && 'false' || '' }}`,
   );
   assert.match(createRelease.with.body, /EXPERIMENTAL OPT-IN:/u);
+  assert.match(createRelease.with.body, /RISK-ACCEPTED, NOT FIVE-GATE QUALIFIED:/u);
 
   for (const jobName of ['macos', 'windows', 'linux']) {
     assert.equal(release.jobs[jobName].environment, 'desktop-release');
@@ -337,13 +338,13 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   assert.deepEqual(release.jobs.homebrew.needs, ['macos', 'linux']);
   assert.equal(
     release.jobs.homebrew.if,
-    `\${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.macos.result == 'success' && needs.linux.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' }}`,
+    `\${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.macos.result == 'success' && needs.linux.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}`,
   );
   assert.equal(release.jobs.homebrew.environment, 'desktop-release');
   assert.equal(release.jobs.chocolatey.needs, 'windows');
   assert.equal(
     release.jobs.chocolatey.if,
-    `\${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.windows.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' }}`,
+    `\${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.windows.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}`,
   );
   assert.equal(release.jobs.chocolatey.uses, './.github/workflows/publish-chocolatey.yml');
   assert.equal(
@@ -536,6 +537,16 @@ test('experimental updater and package managers never replace stable Intel chann
   assert.deepEqual(qualified.plugins.updater.endpoints, [
     'https://github.com/erikvullings/procyon/releases/download/updater-gemma/latest.json',
   ]);
+  const riskAccepted = JSON.parse(
+    execFileSync('node', ['scripts/build-tauri.mjs', '--print-config'], {
+      cwd: repoRoot,
+      env: { ...process.env, GEMMA_DESKTOP_RISK_ACCEPTED: 'true' },
+      encoding: 'utf8',
+    }),
+  );
+  assert.deepEqual(riskAccepted.plugins.updater.endpoints, [
+    'https://github.com/erikvullings/procyon/releases/download/updater-gemma-risk-accepted/latest.json',
+  ]);
   assert.throws(
     () =>
       execFileSync('node', ['scripts/build-tauri.mjs', '--print-config'], {
@@ -548,7 +559,7 @@ test('experimental updater and package managers never replace stable Intel chann
         encoding: 'utf8',
         stdio: 'pipe',
       }),
-    /both be enabled/u,
+    /cannot be combined/u,
   );
 });
 
@@ -842,7 +853,7 @@ test('Gemma desktop packaging requires a separately approved signed four-target 
     /check-qualified-gemma-release\.mjs --desktop/u.test(step.run ?? ''),
   );
   const rejectAmbiguousModes = releaseSteps.findIndex((step) =>
-    /Reject simultaneous experimental and qualified Gemma modes/u.test(step.name ?? ''),
+    /Reject simultaneous Gemma release modes/u.test(step.name ?? ''),
   );
   assert.ok(rejectAmbiguousModes >= 0 && rejectAmbiguousModes < publish);
   assert.ok(qualifiedReleaseApproval >= 0 && qualifiedReleaseApproval < publish);
@@ -857,6 +868,18 @@ test('Gemma desktop packaging requires a separately approved signed four-target 
   assert.equal(
     releaseSteps[qualifiedReleaseApproval].env.RELEASE_SOURCE_REVISION,
     `\${{ steps.validate-release-tag.outputs.commit }}`,
+  );
+  const riskAcceptedReleaseApproval = releaseSteps.findIndex((step) =>
+    /gemma-risk-acceptance\.mjs --desktop/u.test(step.run ?? ''),
+  );
+  assert.ok(riskAcceptedReleaseApproval >= 0 && riskAcceptedReleaseApproval < publish);
+  assert.equal(
+    releaseSteps[riskAcceptedReleaseApproval].if,
+    "vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'",
+  );
+  assert.match(
+    releaseSteps[riskAcceptedReleaseApproval].run,
+    /--target macos-aarch64 --release-source-revision "\$RELEASE_SOURCE_REVISION"/u,
   );
   for (const jobName of ['macos', 'linux', 'windows']) {
     const steps = release.jobs[jobName].steps;
@@ -910,6 +933,30 @@ test('Gemma desktop packaging requires a separately approved signed four-target 
     );
     assert.match(steps[build].run, /GEMMA_DESKTOP_NON_EXPERIMENTAL.*true/u);
     assert.match(JSON.stringify(steps[build].env), /VITE_GEMMA_QUALIFIED/u);
+    const riskAccepted = steps.findIndex((step) =>
+      /fetch-approved-semantic-catalog\.mjs[\s\S]*semantic-gemma-risk-accepted-v1\.json/u.test(
+        step.run ?? '',
+      ),
+    );
+    const riskAcceptedApproval = steps.findIndex((step) =>
+      /gemma-risk-acceptance\.mjs --desktop/u.test(step.run ?? ''),
+    );
+    assert.ok(
+      riskAcceptedApproval >= 0 &&
+        riskAcceptedApproval < riskAccepted &&
+        riskAccepted < signature &&
+        signature < build,
+      `${jobName}: risk-accepted approval, catalog, signature, and build steps are out of order`,
+    );
+    assert.match(
+      steps[riskAcceptedApproval].run,
+      new RegExp(
+        `--target ${jobName === 'macos' ? 'macos-aarch64' : `${jobName}-x86_64`} --release-source-revision`,
+        'u',
+      ),
+    );
+    assert.equal(steps[riskAccepted].if, "vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'");
+    assert.match(JSON.stringify(steps[build].env), /VITE_GEMMA_RISK_ACCEPTED/u);
   }
 });
 
