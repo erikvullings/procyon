@@ -301,6 +301,7 @@ mod tests {
                 source_id: format!("source-{document_id}"),
                 provenance: "{}".into(),
                 generation: 1,
+                pdf_image_skipped_pages: None,
                 record_kind: "chunk".into(),
                 excerpt: record_id.into(),
                 content: record_id.into(),

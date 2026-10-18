@@ -110,6 +110,44 @@
   opacity: 0.7;
 }
 
+/*
+ * A busy action is in progress, not unavailable. Override Materialize's forced disabled grey so
+ * the label keeps normal text contrast; the button stays non-clickable via `disabled`.
+ */
+button.fm-busy-button[aria-busy="true"]:is(:disabled, :not(:disabled)) {
+  border-color: var(--fm-border) !important;
+  background-color: var(--fm-hover) !important;
+  color: var(--fm-text) !important;
+  opacity: 1 !important;
+  cursor: progress;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+button.fm-busy-button[aria-busy="true"]::before {
+  content: "";
+  flex: none;
+  width: 0.75em;
+  height: 0.75em;
+  border: 2px solid currentcolor;
+  border-right-color: transparent;
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  button.fm-busy-button[aria-busy="true"]::before {
+    animation: fm-busy-spin 0.9s linear infinite;
+  }
+}
+
+@keyframes fm-busy-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .fm-app-shell .fm-settings-editor-actions button.fm-settings-save:focus-visible {
   border-color: var(--fm-accent);
   outline: none;
@@ -237,6 +275,7 @@
 .fm-app-shell .input-field input[type="number"] {
   appearance: textfield;
   -moz-appearance: textfield;
+  width: 100%;
   padding-right: 1.75rem;
 }
 
@@ -525,12 +564,16 @@
 
 .fm-app-shell .input-field .number-input-controls {
   top: calc(0.82rem * 1.15 + 0.2rem);
-  right: 0.25rem;
+  right: 0.35rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
   height: calc(var(--fm-row-height) - 2px);
   pointer-events: none;
+}
+
+.fm-app-shell .input-field.col .number-input-controls {
+  right: 1.1rem;
 }
 
 .fm-app-shell .input-field .number-input-control {

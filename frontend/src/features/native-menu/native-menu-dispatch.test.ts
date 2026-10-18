@@ -10,9 +10,11 @@ import type {
   Volume,
   WorkspaceId,
 } from '../../models';
+import type { EditCommand } from './edit-command';
 import {
   CLOSE_TAB_MENU_ID,
   dispatchNativeMenuAction,
+  EDIT_MENU_IDS,
   GO_MENU_CONNECTION_ID_PREFIX,
   GO_MENU_SYSTEM_LOCATION_ID_PREFIX,
   GO_MENU_VOLUME_ID_PREFIX,
@@ -59,6 +61,7 @@ interface ContextMocks {
   readonly getConnections: ReturnType<typeof vi.fn<() => readonly Connection[]>>;
   readonly getSystemLocations: ReturnType<typeof vi.fn<() => readonly SystemLocation[]>>;
   readonly navigateToLocation: ReturnType<typeof vi.fn<(location: Location) => void>>;
+  readonly performEditCommand: ReturnType<typeof vi.fn<(command: EditCommand) => void>>;
 }
 
 function contextMocks(
@@ -89,6 +92,7 @@ function contextMocks(
     () => overrides.systemLocations ?? [],
   );
   const navigateToLocation = vi.fn<(location: Location) => void>();
+  const performEditCommand = vi.fn<(command: EditCommand) => void>();
   return {
     findAction,
     openSettingsDialog,
@@ -108,6 +112,7 @@ function contextMocks(
     getConnections,
     getSystemLocations,
     navigateToLocation,
+    performEditCommand,
     context: {
       findAction,
       openSettingsDialog,
@@ -127,6 +132,7 @@ function contextMocks(
       openNewWorkspaceWindow,
       openWorkspaceWindowById,
       resyncWorkspace,
+      performEditCommand,
     },
   };
 }
@@ -231,6 +237,20 @@ describe('dispatchNativeMenuAction', () => {
     const mocks = contextMocks('pane-1' as PaneId);
     dispatchNativeMenuAction(mocks.context, 'core.sortUnsorted');
     expect(mocks.setSort).toHaveBeenCalledExactlyOnceWith('pane-1', []);
+  });
+
+  it('hands each macOS Edit item to the edit command runner, never the action registry', () => {
+    const mocks = contextMocks('left' as PaneId);
+    for (const command of ['cut', 'copy', 'paste', 'selectAll'] as const)
+      dispatchNativeMenuAction(mocks.context, EDIT_MENU_IDS[command]);
+    expect(mocks.performEditCommand.mock.calls).toEqual([
+      ['cut'],
+      ['copy'],
+      ['paste'],
+      ['selectAll'],
+    ]);
+    expect(mocks.findAction).not.toHaveBeenCalled();
+    expect(mocks.invokeAction).not.toHaveBeenCalled();
   });
 
   it('no-ops a sort-menu click when there is no active pane', () => {

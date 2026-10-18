@@ -8,6 +8,7 @@ import type {
   Volume,
   WorkspaceSummary,
 } from '../../models';
+import { EDIT_MENU_IDS } from './native-menu-dispatch';
 import { buildNativeMenuSpec, type NativeMenuInputs, type NativeMenuTab } from './native-menu-spec';
 
 function action(
@@ -54,7 +55,7 @@ function inputs(overrides: Partial<NativeMenuInputs> = {}): NativeMenuInputs {
     favouriteActions: [],
     tabs: [],
     canOpenNewWindow: false,
-    useNativeEditRoles: false,
+    macEditCommands: false,
     workspaces: [],
     currentWorkspaceId: undefined,
     volumes: [],
@@ -226,18 +227,29 @@ describe('buildNativeMenuSpec', () => {
     });
   });
 
-  it('uses native responder-chain Copy and Paste roles on macOS', () => {
+  it('uses app-dispatched Cmd+X/C/V/A items on macOS so file copy is not preempted', () => {
     const editMenu = buildNativeMenuSpec(
       inputs({
         actions: [action('core.copy', 'Copy'), action('core.paste', 'Paste')],
-        useNativeEditRoles: true,
+        macEditCommands: true,
       }),
     ).menus.find((menu) => menu.title === 'Edit');
 
-    expect(editMenu?.items).toEqual([
-      { kind: 'role', role: 'copy' },
-      { kind: 'role', role: 'paste' },
-      { kind: 'role', role: 'selectAll' },
+    expect(editMenu?.items.map((item) => item.kind)).toEqual([
+      'action',
+      'action',
+      'action',
+      'action',
+    ]);
+    expect(
+      editMenu?.items.map((item) =>
+        item.kind === 'action' ? [item.id, item.shortcut, item.enabled] : undefined,
+      ),
+    ).toEqual([
+      [EDIT_MENU_IDS.cut, { key: 'x', meta: true }, true],
+      [EDIT_MENU_IDS.copy, { key: 'c', meta: true }, true],
+      [EDIT_MENU_IDS.paste, { key: 'v', meta: true }, true],
+      [EDIT_MENU_IDS.selectAll, { key: 'a', meta: true }, true],
     ]);
   });
 

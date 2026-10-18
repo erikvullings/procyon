@@ -53,6 +53,11 @@ const ACTIONS: readonly ActionDescriptor[] = [
     defaultShortcuts: [{ key: 'F9', ctrl: true }],
   },
   {
+    id: 'core.focusLocation',
+    title: 'Focus location',
+    defaultShortcuts: [{ key: 'l', ctrl: true }],
+  },
+  {
     id: 'client.diskUsage',
     title: 'Disk usage',
     defaultShortcuts: [{ key: 'l', ctrl: true, shift: true }],
@@ -221,6 +226,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     actionsWithFavourites: () => ACTIONS,
     openFindFiles: vi.fn(),
     replaceClipboard: vi.fn(),
+    resolvePasteClipboard: () => Promise.resolve({ locations: [] }),
     selectedLocations: () => [],
     collectIntoBasketIfVisible: () => false,
     removeFromBasketIfActive: () => false,
@@ -247,6 +253,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     setSort: vi.fn(),
     swapPaneTabSets: vi.fn(),
     openMultiRenameForActivePane: vi.fn(),
+    requestLocationEdit: vi.fn(),
     openPropertiesForActivePane: vi.fn(),
     quitApplication: vi.fn(),
     startComparison: vi.fn(),
@@ -256,7 +263,11 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     openSemanticAssistant: vi.fn(),
     openKnowledgeSearch: vi.fn(),
   };
-  return { ...base, ...overrides };
+  const context = { ...base, ...overrides };
+  if (overrides.resolvePasteClipboard === undefined) {
+    context.resolvePasteClipboard = () => Promise.resolve(context.clipboard());
+  }
+  return context;
 }
 
 function defaultCode(key: string): string {
@@ -655,6 +666,30 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     });
     createGlobalKeydownHandler(context)(keydown('F5', { ctrlKey: true, shiftKey: true }));
     expect(openCreateLink).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+L opens the active pane path editor when focus is outside the pane', () => {
+    const requestLocationEdit = vi.fn();
+    const context = makeContext({
+      requestLocationEdit,
+    });
+    const event = keydown('l', { ctrlKey: true });
+
+    expect(dispatchGlobalKeydown(context, event)).toBe('core.focusLocation');
+    expect(event.defaultPrevented).toBe(true);
+    expect(requestLocationEdit).toHaveBeenCalledExactlyOnceWith(PANE_A);
+  });
+
+  it('Ctrl+L leaves an event the focused pane already handled alone', () => {
+    const requestLocationEdit = vi.fn();
+    const context = makeContext({
+      requestLocationEdit,
+    });
+    const event = keydown('l', { ctrlKey: true });
+    event.preventDefault();
+
+    createGlobalKeydownHandler(context)(event);
+    expect(requestLocationEdit).not.toHaveBeenCalled();
   });
 
   it('Ctrl+M opens the Multi-Rename Tool directly', () => {
@@ -1438,14 +1473,51 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
       getDirectories: () =>
         new Map([['pane-a:tab', { entries: [cursorLink] } as unknown as PaneDirectoryView]]),
     });
+
     createGlobalKeydownHandler(context)(keydown('F3'));
     expect(openViewer).toHaveBeenCalledWith(PANE_B, cursorLink, undefined);
+  });
+
+  it('F3 opens a selected PDF image result on its exact indexed page', () => {
+    const openViewer = vi.fn();
+    const pdf: EntrySummary = {
+      id: 'pdf-image-result' as never,
+      location: { providerId: 'local', uri: 'file:///a/b/scanned.pdf' },
+      name: 'scanned.pdf',
+      kind: 'file',
+      mimeType: 'application/pdf',
+      hidden: false,
+      readOnly: false,
+      metadataRevision: 0,
+    };
+    const coreViewAction: ActionDescriptor = {
+      id: 'core.view',
+      title: 'View',
+      defaultShortcuts: [{ key: 'F3' }],
+      category: 'test',
+      contextRequirements: {},
+      source: { kind: 'core' },
+    };
+    const context = makeContext({
+      getRegisteredActions: () => [...ACTIONS, coreViewAction],
+      actionsWithFavourites: () => [...ACTIONS, coreViewAction],
+      getViewer: () => undefined,
+      openViewer,
+      pdfImagePageForEntry: () => 3,
+      getSelections: () =>
+        new Map([['pane-a:tab', { selectedEntryIds: [], cursorEntryId: pdf.id }]]),
+      getDirectories: () =>
+        new Map([['pane-a:tab', { entries: [pdf] } as unknown as PaneDirectoryView]]),
+    });
+    createGlobalKeydownHandler(context)(keydown('F3'));
+    expect(openViewer).toHaveBeenCalledWith(PANE_B, pdf, undefined, undefined, 3);
   });
 });
 
 describe('createGlobalKeydownHandler clipboard paste', () => {
   const source: Location = { providerId: 'local', uri: 'file:///a/report.txt' };
   const destination: Location = { providerId: 'local', uri: 'file:///a' };
+  const flushPaste = () => new Promise((resolve) => setTimeout(resolve, 0));
 
   function pasteContext(activeLocation: Location) {
     const copy = vi.fn().mockResolvedValue({});
@@ -1478,10 +1550,27 @@ describe('createGlobalKeydownHandler clipboard paste', () => {
     const macContext = { ...context, getPlatform: () => 'macos' as const };
 
     createGlobalKeydownHandler(macContext)(keydown('v', { metaKey: true }));
-    await Promise.resolve();
+    await flushPaste();
 
     expect(duplicate).toHaveBeenCalledWith([source]);
     expect(copy).not.toHaveBeenCalled();
+  });
+
+  it('pastes files copied in the system file manager through a copy job', async () => {
+    const external: Location = { providerId: 'local', uri: 'file:///finder/photo.jpg' };
+    const otherFolder: Location = { providerId: 'local', uri: 'file:///b' };
+    const { context, copy, duplicate } = pasteContext(otherFolder);
+    const event = keydown('v', { ctrlKey: true });
+
+    createGlobalKeydownHandler({
+      ...context,
+      resolvePasteClipboard: () => Promise.resolve({ mode: 'copy', locations: [external] }),
+    })(event);
+    await flushPaste();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(copy).toHaveBeenCalledWith([external], otherFolder);
+    expect(duplicate).not.toHaveBeenCalled();
   });
 
   it('keeps original names by using copy when pasted into another folder', async () => {
@@ -1489,9 +1578,136 @@ describe('createGlobalKeydownHandler clipboard paste', () => {
     const { context, copy, duplicate } = pasteContext(otherFolder);
 
     createGlobalKeydownHandler(context)(keydown('v', { ctrlKey: true }));
-    await Promise.resolve();
+    await flushPaste();
 
     expect(copy).toHaveBeenCalledWith([source], otherFolder);
     expect(duplicate).not.toHaveBeenCalled();
+  });
+
+  it.each(['fm-knowledge-subjects', 'fm-knowledge-question', 'find-files-query'])(
+    'leaves native clipboard editing untouched in %s',
+    (id) => {
+      const { context, duplicate } = pasteContext(destination);
+      const macContext = { ...context, getPlatform: () => 'macos' as const };
+      const input = document.createElement(id === 'find-files-query' ? 'input' : 'textarea');
+      input.id = id;
+      document.body.append(input);
+      const handler = createGlobalKeydownHandler(macContext);
+      document.addEventListener('keydown', handler);
+      try {
+        for (const key of ['c', 'x', 'v']) {
+          const event = keydown(key, { metaKey: true });
+          input.dispatchEvent(event);
+          expect(event.defaultPrevented, `${id}: Cmd+${key}`).toBe(false);
+        }
+        expect(duplicate).not.toHaveBeenCalled();
+      } finally {
+        document.removeEventListener('keydown', handler);
+        input.remove();
+      }
+    },
+  );
+
+  it('preserves editing inside a shadow-root text field without routing paste to files', () => {
+    const { context, duplicate } = pasteContext(destination);
+    const host = document.createElement('div');
+    const shadow = host.attachShadow({ mode: 'open' });
+    const input = document.createElement('textarea');
+    shadow.append(input);
+    document.body.append(host);
+    const handler = createGlobalKeydownHandler({
+      ...context,
+      getPlatform: () => 'macos' as const,
+    });
+    document.addEventListener('keydown', handler);
+    try {
+      const event = keydown('v', { metaKey: true, composed: true });
+      input.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(duplicate).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener('keydown', handler);
+      host.remove();
+    }
+  });
+});
+
+describe('file clipboard shortcuts from the quick-filter input', () => {
+  const selected: Location = { providerId: 'local', uri: 'file:///a/photo.jpg' };
+
+  async function mountFilter(query: string) {
+    const { default: m } = await import('mithril');
+    const { QuickFilterInput } = await import('../quick-filter/quick-filter-input');
+    const replaceClipboard = vi.fn();
+    const handler = createGlobalKeydownHandler(
+      makeContext({
+        getPlatform: () => 'macos',
+        selectedLocations: () => [selected],
+        replaceClipboard,
+      }),
+    );
+    const root = document.createElement('div');
+    document.body.append(root);
+    document.addEventListener('keydown', handler);
+    m.mount(root, {
+      view: () =>
+        m(QuickFilterInput, {
+          query,
+          onQueryChange: () => undefined,
+          onCommit: () => undefined,
+          onClose: () => undefined,
+        }),
+    });
+    const input = root.querySelector('input') as HTMLInputElement;
+    return {
+      input,
+      replaceClipboard,
+      cleanup: () => {
+        document.removeEventListener('keydown', handler);
+        m.mount(root, null);
+        root.remove();
+      },
+    };
+  }
+
+  it.each([
+    ['c', 'copy'],
+    ['x', 'move'],
+  ])('Cmd+%s with no text selected puts the selected files on the clipboard', async (key, mode) => {
+    const { input, replaceClipboard, cleanup } = await mountFilter('*.jpg');
+    try {
+      input.setSelectionRange(input.value.length, input.value.length);
+      const event = keydown(key, { metaKey: true });
+      input.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      expect(replaceClipboard).toHaveBeenCalledWith({ mode, locations: [selected] });
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('keeps native text copy when the filter text is selected', async () => {
+    const { input, replaceClipboard, cleanup } = await mountFilter('*.jpg');
+    try {
+      input.setSelectionRange(0, input.value.length);
+      const event = keydown('c', { metaKey: true });
+      input.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(replaceClipboard).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('keeps Cmd+V as native text paste into the filter', async () => {
+    const { input, replaceClipboard, cleanup } = await mountFilter('');
+    try {
+      const event = keydown('v', { metaKey: true });
+      input.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(replaceClipboard).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+    }
   });
 });

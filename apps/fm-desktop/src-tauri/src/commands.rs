@@ -41,8 +41,8 @@ use fm_transport_dto::{
     GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, GetSemanticFolderStatusRequestDto,
     HostKeyProbeDto, ImportSemanticLocalModelRequestDto, ImportSemanticVocabularyRequestDto,
     InstallSemanticWorkerPatchRequestDto, InvokeActionRequestDto, LinkOptionsDto,
-    LinkOptionsRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest, LlmProfileDto,
-    LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LocationDto,
+    LinkOptionsRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest, LlmModelLimitsDto,
+    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LocationDto,
     MoveSemanticDataRequestDto, NavigateRequest, OneDriveAuthorizationAttemptDto,
     OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto,
     OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
@@ -73,9 +73,10 @@ use fm_transport_dto::{
     StartDuplicateScanResponseDto, StartOperationRequestDto, StartSearchRequestDto,
     StartSearchResponseDto, StartSemanticOcrRemediationRequestDto, StructuredViewSessionRequestDto,
     StructuredViewStatusDto, SyncPlanDto, UninstallSemanticComponentsRequestDto,
-    UpdateConnectionRequestDto, UpdateSemanticEligibilityOverridesRequestDto,
-    UpdateStructuredViewRequestDto, VerificationReportDto, VerifyChecksumFileRequestDto,
-    VocabularyIdRequestDto, WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
+    UpdateConnectionRequestDto, UpdateGemmaMediaRequestDto,
+    UpdateSemanticEligibilityOverridesRequestDto, UpdateStructuredViewRequestDto,
+    VerificationReportDto, VerifyChecksumFileRequestDto, VocabularyIdRequestDto,
+    WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
 };
 
 #[cfg(target_os = "windows")]
@@ -380,6 +381,70 @@ pub(crate) async fn show_platform_context_menu<R: Runtime>(
     }
 }
 
+/// Standard Edit-menu command the frontend could not handle as a page keydown.
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum NativeEditCommand {
+    Cut,
+    Copy,
+    Paste,
+    SelectAll,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum NativeEditCommandError {
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[error("native edit commands are unavailable on this platform")]
+    Unsupported,
+    #[cfg(target_os = "macos")]
+    #[error("failed to perform the native edit command: {0}")]
+    Perform(String),
+}
+
+impl serde::Serialize for NativeEditCommandError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+/// Forwards an Edit-menu command to the macOS responder chain (text fields, editors) after the
+/// frontend's replayed keydown left it unhandled; see `fm_platform_macos::perform_standard_edit_command`.
+#[tauri::command]
+pub(crate) async fn perform_native_edit_command<R: Runtime>(
+    app: AppHandle<R>,
+    command: NativeEditCommand,
+) -> Result<(), NativeEditCommandError> {
+    #[cfg(target_os = "macos")]
+    {
+        use fm_platform_macos::StandardEditCommand;
+        let command = match command {
+            NativeEditCommand::Cut => StandardEditCommand::Cut,
+            NativeEditCommand::Copy => StandardEditCommand::Copy,
+            NativeEditCommand::Paste => StandardEditCommand::Paste,
+            NativeEditCommand::SelectAll => StandardEditCommand::SelectAll,
+        };
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        app.run_on_main_thread(move || {
+            let result = fm_platform_macos::perform_standard_edit_command(command)
+                .map(|_| ())
+                .map_err(|error| NativeEditCommandError::Perform(error.to_string()));
+            let _ = sender.send(result);
+        })
+        .map_err(|error| NativeEditCommandError::Perform(error.to_string()))?;
+        receiver
+            .await
+            .map_err(|error| NativeEditCommandError::Perform(error.to_string()))?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, command);
+        Err(NativeEditCommandError::Unsupported)
+    }
+}
+
 /// Starts a Finder/Explorer file-reference drag from the current desktop window.
 #[tauri::command]
 pub(crate) async fn start_native_drag<R: Runtime>(
@@ -566,6 +631,37 @@ fn colorref(css: &str) -> Option<u32> {
     Some((blue << 16) | (green << 8) | red)
 }
 
+/// Publishes local files on the system clipboard (task 0247). Returns
+/// `false` when the selection stays internal to Procyon.
+#[tauri::command]
+pub(crate) async fn write_os_clipboard_files(
+    state: State<'_, AppState>,
+    locations: Vec<LocationDto>,
+) -> Result<bool, ApplicationErrorDto> {
+    let locations = locations
+        .into_iter()
+        .map(fm_domain::Location::from)
+        .collect::<Vec<_>>();
+    state
+        .service
+        .write_os_clipboard_files(&locations)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Reads local files referenced on the system clipboard (task 0247).
+#[tauri::command]
+pub(crate) async fn read_os_clipboard_files(
+    state: State<'_, AppState>,
+) -> Result<Vec<LocationDto>, ApplicationErrorDto> {
+    state
+        .service
+        .read_os_clipboard_files()
+        .await
+        .map(|locations| locations.into_iter().map(LocationDto::from).collect())
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Caches an archive password for the lifetime of this desktop backend session.
 #[tauri::command]
 pub(crate) fn cache_archive_password(
@@ -735,6 +831,42 @@ pub(crate) struct GemmaLibrarySetup {
     images: bool,
     audio: bool,
     video: bool,
+    image_device: &'static str,
+    pdf_image_page_budget: Option<u32>,
+    last_worker_device: Option<&'static str>,
+}
+
+fn last_gemma_worker_device(marker: Option<&Path>) -> std::io::Result<Option<&'static str>> {
+    let Some(runtime) = marker
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .map(|root| root.join("worker-runtime/gemma-backend"))
+    else {
+        return Ok(None);
+    };
+    let backend = match std::fs::read_to_string(runtime) {
+        Ok(backend) => backend,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    if backend.starts_with("google/embeddinggemma-2 (FP32 Metal)") {
+        Ok(Some("metal"))
+    } else if backend.starts_with("google/embeddinggemma-2 (native CPU)") {
+        // Must match the worker's `GEMMA_FORCED_CPU_STATUS`, which the desktop
+        // host cannot link without the native inference stack.
+        Ok(Some(
+            if backend.contains("[CPU forced by PROCYON_GEMMA_FORCE_CPU]") {
+                "cpuForced"
+            } else {
+                "cpu"
+            },
+        ))
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "unrecognized Gemma worker backend",
+        ))
+    }
 }
 
 /// Reads the choices of an existing library; the setup form must not alter them.
@@ -742,6 +874,15 @@ pub(crate) struct GemmaLibrarySetup {
 pub(crate) async fn get_semantic_gemma_library_setup(
     state: State<'_, AppState>,
 ) -> Result<Option<GemmaLibrarySetup>, SemanticLibraryErrorDto> {
+    let last_worker_device = last_gemma_worker_device(
+        state.semantic_reindex_pending_marker.as_deref(),
+    )
+    .map_err(|error| {
+        tracing::error!(%error, "Gemma worker backend status could not be read");
+        semantic_library_error(
+            fm_application::semantic_library::SemanticLibraryError::StateUnavailable,
+        )
+    })?;
     state
         .service
         .semantic_gemma_library_setup()
@@ -752,6 +893,9 @@ pub(crate) async fn get_semantic_gemma_library_setup(
                 images: setup.media.images,
                 audio: setup.media.audio,
                 video: setup.media.video,
+                image_device: setup.image_device,
+                pdf_image_page_budget: setup.pdf_image_page_budget,
+                last_worker_device,
             })
         })
         .map_err(semantic_library_error)
@@ -809,11 +953,45 @@ pub(crate) async fn accept_semantic_component_installation_offer(
     state: State<'_, AppState>,
     request: AcceptSemanticInstallationOfferRequestDto,
 ) -> Result<SemanticInstallReceiptDto, SemanticComponentErrorDto> {
-    state
+    let previous_model = state
+        .service
+        .semantic_component_status()
+        .await
+        .map_err(semantic_component_error)?
+        .active_model()
+        .cloned();
+    let receipt = state
         .service
         .accept_semantic_component_installation_offer(request)
         .await
-        .map_err(semantic_component_error)
+        .map_err(semantic_component_error)?;
+    let active_model = state
+        .service
+        .semantic_component_status()
+        .await
+        .map_err(semantic_component_error)?
+        .active_model()
+        .cloned();
+    if state.semantic_managed_components
+        && model_changed_after_install(&previous_model, &active_model)
+    {
+        if let Some(marker) = state.semantic_reindex_pending_marker.as_deref() {
+            persist_semantic_reindex_pending(marker)?;
+        }
+        reindex_enrolled_roots_for_the_new_model(
+            Arc::clone(&state.service),
+            state.semantic_reindex_pending_marker.as_deref(),
+        )
+        .await;
+    }
+    Ok(receipt)
+}
+
+fn model_changed_after_install(
+    previous: &Option<fm_application::semantic_components::SemanticModelSelection>,
+    active: &Option<fm_application::semantic_components::SemanticModelSelection>,
+) -> bool {
+    active.is_some() && previous != active
 }
 
 /// Pauses semantic indexing without uninstalling components.
@@ -1017,6 +1195,12 @@ async fn reindex_enrolled_roots_for_the_new_model(
             "semantic developer reindex failed after the model change"
         );
     }
+    if report.failed_occurrences > 0 {
+        tracing::error!(
+            failed_occurrences = report.failed_occurrences,
+            "semantic model reindex left documents unsearchable"
+        );
+    }
     if report.is_complete() {
         if let Some(marker) = pending_marker
             && let Err(error) = std::fs::remove_file(marker)
@@ -1064,6 +1248,12 @@ pub(crate) async fn reconcile_semantic_library_on_startup(
             root_id = %failure.root_id,
             error = %failure.reason,
             "semantic startup reconciliation failed"
+        );
+    }
+    if report.failed_occurrences > 0 {
+        tracing::error!(
+            failed_occurrences = report.failed_occurrences,
+            "semantic startup reconciliation left documents unsearchable"
         );
     }
     if report.is_complete() {
@@ -1132,6 +1322,18 @@ pub(crate) async fn get_semantic_library_status(
     state
         .service
         .semantic_library_status_dto(&desktop_semantic_access())
+        .await
+        .map_err(semantic_library_error)
+}
+
+#[tauri::command]
+pub(crate) async fn update_gemma_media(
+    state: State<'_, AppState>,
+    request: UpdateGemmaMediaRequestDto,
+) -> Result<SemanticLibraryStatusDto, SemanticLibraryErrorDto> {
+    state
+        .service
+        .update_gemma_media_dto(&desktop_semantic_access(), request)
         .await
         .map_err(semantic_library_error)
 }
@@ -1737,6 +1939,42 @@ pub(crate) async fn close_structured_view(
 }
 
 #[tauri::command]
+pub(crate) async fn open_sqlite_view(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::OpenSqliteViewRequestDto,
+) -> Result<fm_transport_dto::OpenSqliteViewResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .open_sqlite_view(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn query_sqlite_view(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::QuerySqliteViewRequestDto,
+) -> Result<fm_transport_dto::QuerySqliteViewResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .query_sqlite_view(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn close_sqlite_view(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::SqliteViewSessionRequestDto,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .close_sqlite_view(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
 pub(crate) async fn load_editable_file(
     state: State<'_, AppState>,
     request: fm_transport_dto::LoadEditableFileRequestDto,
@@ -2015,6 +2253,54 @@ pub(crate) async fn open_workspace_window(
         .await
         .map_err(|error| error.to_string())?;
     build_workspace_window(&app, forked.id).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+/// Label prefix of F3 viewer windows (`viewer-<uuid>`).
+pub(crate) const VIEWER_WINDOW_PREFIX: &str = "viewer-";
+/// Largest accepted viewer request payload, far above any real entry summary.
+const VIEWER_PAYLOAD_MAX_BYTES: usize = 8 * 1024;
+const VIEWER_TITLE_MAX_CHARS: usize = 200;
+
+/// A viewer request is a base64url-encoded entry description built by the frontend. Only that
+/// alphabet is allowed so the payload can be placed in the app URL's query without any escaping
+/// or URL-injection concerns.
+fn validate_viewer_payload(payload: &str) -> Result<(), String> {
+    if payload.is_empty() || payload.len() > VIEWER_PAYLOAD_MAX_BYTES {
+        return Err("invalid viewer request size".to_owned());
+    }
+    if !payload
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return Err("invalid viewer request encoding".to_owned());
+    }
+    Ok(())
+}
+
+/// Opens the Lister-style viewer for one file in its own OS window (the "open viewer in a
+/// separate window" setting). The window loads the same frontend bundle with a `?viewer=` query,
+/// which makes it mount only the viewer instead of the full app shell, and shares the host's
+/// single `FileManagerService` like every other window.
+#[tauri::command]
+pub(crate) async fn open_viewer_window(
+    app: AppHandle,
+    payload: String,
+    title: String,
+) -> Result<(), String> {
+    validate_viewer_payload(&payload)?;
+    let title: String = title.chars().take(VIEWER_TITLE_MAX_CHARS).collect();
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        format!("{VIEWER_WINDOW_PREFIX}{}", Uuid::new_v4()),
+        tauri::WebviewUrl::App(format!("index.html?viewer={payload}").into()),
+    )
+    .title(title)
+    .inner_size(1000.0, 720.0)
+    .min_inner_size(480.0, 320.0)
+    .zoom_hotkeys_enabled(true)
+    .build()
+    .map_err(|error| error.to_string())?;
     Ok(())
 }
 
@@ -2314,6 +2600,21 @@ pub(crate) fn get_plugin_logs(
     state
         .service
         .plugin_logs(&plugin_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Renders one file with an enabled plugin's sandboxed preview contribution (task 0142),
+/// mirroring the HTTP `POST /api/v1/plugins/{pluginId}/preview` route.
+#[tauri::command]
+pub(crate) async fn render_plugin_preview(
+    state: State<'_, AppState>,
+    plugin_id: String,
+    request: fm_transport_dto::RenderPluginPreviewRequestDto,
+) -> Result<fm_transport_dto::PluginPreviewResultDto, ApplicationErrorDto> {
+    state
+        .service
+        .render_plugin_preview(&plugin_id, request)
+        .await
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
@@ -2701,6 +3002,19 @@ pub(crate) async fn discover_llm_profile_draft_models(
     state
         .service
         .discover_llm_profile_draft_models(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Discovers bounded advertised limits for the selected model in a draft.
+#[tauri::command]
+pub(crate) async fn discover_llm_profile_draft_model_limits(
+    state: State<'_, AppState>,
+    request: SaveLlmProfileRequestDto,
+) -> Result<LlmModelLimitsDto, ApplicationErrorDto> {
+    state
+        .service
+        .discover_llm_profile_draft_model_limits(request)
         .await
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
@@ -3287,9 +3601,59 @@ fn reload_focused_webview<R: Runtime>(app: &AppHandle<R>) {
 mod tests {
     use std::sync::Mutex;
 
+    use fm_application::semantic_components::{
+        SemanticModelIdentity, SemanticModelSelection, SemanticProfile,
+    };
     use tauri::ipc::InvokeResponseBody;
 
     use super::*;
+
+    #[test]
+    fn installing_a_new_active_model_restarts_the_cached_worker() {
+        let gemma = Some(SemanticModelSelection::new(
+            SemanticProfile::EmbeddingGemma2,
+            SemanticModelIdentity::new("google-embeddinggemma-2", "pinned-revision"),
+        ));
+        assert!(model_changed_after_install(&None, &gemma));
+        assert!(!model_changed_after_install(&gemma, &gemma));
+        assert!(!model_changed_after_install(&gemma, &None));
+    }
+
+    #[test]
+    fn worker_device_comes_from_the_observed_backend_not_the_platform() {
+        let root = tempfile::tempdir().unwrap();
+        let runtime = root.path().join("worker-runtime");
+        std::fs::create_dir(&runtime).unwrap();
+        let marker = root.path().join("zvec/model-reindex-pending");
+        assert_eq!(last_gemma_worker_device(Some(&marker)).unwrap(), None);
+        std::fs::write(
+            runtime.join("gemma-backend"),
+            "google/embeddinggemma-2 (FP32 Metal)\n",
+        )
+        .unwrap();
+        assert_eq!(
+            last_gemma_worker_device(Some(&marker)).unwrap(),
+            Some("metal")
+        );
+        std::fs::write(
+            runtime.join("gemma-backend"),
+            "google/embeddinggemma-2 (native CPU) [Metal unavailable; CPU fallback]\n",
+        )
+        .unwrap();
+        assert_eq!(
+            last_gemma_worker_device(Some(&marker)).unwrap(),
+            Some("cpu")
+        );
+        std::fs::write(
+            runtime.join("gemma-backend"),
+            "google/embeddinggemma-2 (native CPU) [CPU forced by PROCYON_GEMMA_FORCE_CPU]\n",
+        )
+        .unwrap();
+        assert_eq!(
+            last_gemma_worker_device(Some(&marker)).unwrap(),
+            Some("cpuForced")
+        );
+    }
 
     #[test]
     fn disk_usage_dispatch_does_not_require_an_entered_tokio_reactor() {
@@ -3331,6 +3695,18 @@ mod tests {
             canonical_workspace_window_label(&first),
             format!("workspace-{id}"),
         );
+    }
+
+    #[test]
+    fn viewer_payload_accepts_only_bounded_base64url() {
+        assert!(validate_viewer_payload("eyJhIjoxfQ").is_ok());
+        assert!(validate_viewer_payload("a-b_c").is_ok());
+        assert!(validate_viewer_payload("").is_err());
+        assert!(validate_viewer_payload("a b").is_err());
+        assert!(validate_viewer_payload("a&b=c").is_err());
+        assert!(validate_viewer_payload("a/../b").is_err());
+        assert!(validate_viewer_payload("%2e").is_err());
+        assert!(validate_viewer_payload(&"a".repeat(VIEWER_PAYLOAD_MAX_BYTES + 1)).is_err());
     }
 
     #[test]

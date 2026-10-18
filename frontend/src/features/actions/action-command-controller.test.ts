@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createFileManagerClient } from '../../api/client/create-client';
 import type { ActionDescriptor, EntryId, EntrySummary, PaneId } from '../../models';
 import type { PaneDirectoryView } from '../navigation/navigation';
 import { withParentEntry } from '../panes/parent-entry';
@@ -483,26 +484,94 @@ describe('action-command-controller file operations from the context menu and pa
     expect(requestRename).toHaveBeenCalledWith(paneId, [entry.id]);
     expect(getClient).not.toHaveBeenCalled();
   });
+
+  it('opens the pane path editor for Focus location from the palette', () => {
+    const requestLocationEdit = vi.fn();
+    const getClient = vi.fn();
+    const controller = createActionCommandController(
+      fakeContext({ requestLocationEdit, getClient }),
+    );
+
+    controller.invokePaletteAction(fileOperationAction('core.focusLocation'), undefined, {
+      paneId,
+    });
+
+    expect(requestLocationEdit).toHaveBeenCalledExactlyOnceWith(paneId);
+    expect(getClient).not.toHaveBeenCalled();
+  });
 });
 
 describe('action-command-controller context-menu copy actions', () => {
-  it('copies the parent folder path for the synthetic ".." entry', async () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each(['http', 'tauri', 'mock'] as const)(
+    'copies the current folder path for the synthetic ".." entry with the %s client',
+    async (runtime) => {
+      const paneId = 'pane-1' as PaneId;
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal('navigator', { clipboard: { writeText } });
+      const parent = withParentEntry('/Users/me/Downloads', [bundleEntry()])[0];
+      if (parent === undefined) throw new Error('expected a parent entry');
+      const copyPath = {
+        id: 'core.copyPath',
+        title: 'Copy Full Path',
+        category: 'edit',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' as const },
+      };
+      const context = fakeContext({
+        getClient: () => createFileManagerClient(runtime),
+        getRegisteredActions: () => [copyPath],
+        getContextMenu: () => ({ paneId, entries: [parent], x: 0, y: 0 }),
+        getDirectories: () =>
+          new Map([
+            [
+              paneId,
+              {
+                state: { type: 'loaded' },
+                location: { providerId: 'local', uri: 'file:///Users/me/Downloads' },
+                entries: [bundleEntry()],
+                hasMore: false,
+              } as PaneDirectoryView,
+            ],
+          ]),
+      });
+
+      createActionCommandController(context).invokeContextMenuAction('core.copyPath');
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('/Users/me/Downloads'));
+    },
+  );
+
+  it.each([
+    ['file', bundleEntry(), '/Applications/Widget.app'],
+    [
+      'folder',
+      {
+        ...bundleEntry(),
+        id: 'manuals' as EntryId,
+        name: 'Manuals',
+        kind: 'directory' as const,
+        location: { providerId: 'local', uri: 'file:///Users/me/Downloads/Manuals' },
+      },
+      '/Users/me/Downloads/Manuals',
+    ],
+  ] as const)('copies a normal %s entry’s own path', async (_kind, entry, expected) => {
     const paneId = 'pane-1' as PaneId;
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
-    const parent = withParentEntry('/Users/me/Downloads', [bundleEntry()])[0];
-    if (parent === undefined) throw new Error('expected a parent entry');
-    const copyPath = {
-      id: 'core.copyPath',
-      title: 'Copy Full Path',
-      category: 'edit',
-      defaultShortcuts: [],
-      contextRequirements: {},
-      source: { kind: 'core' as const },
-    };
     const context = fakeContext({
-      getRegisteredActions: () => [copyPath],
-      getContextMenu: () => ({ paneId, entries: [parent], x: 0, y: 0 }),
+      getRegisteredActions: () => [
+        {
+          id: 'core.copyPath',
+          title: 'Copy Full Path',
+          category: 'edit',
+          defaultShortcuts: [],
+          contextRequirements: {},
+          source: { kind: 'core' },
+        },
+      ],
+      getContextMenu: () => ({ paneId, entries: [entry], x: 0, y: 0 }),
       getDirectories: () =>
         new Map([
           [
@@ -510,7 +579,7 @@ describe('action-command-controller context-menu copy actions', () => {
             {
               state: { type: 'loaded' },
               location: { providerId: 'local', uri: 'file:///Users/me/Downloads' },
-              entries: [bundleEntry()],
+              entries: [entry],
               hasMore: false,
             } as PaneDirectoryView,
           ],
@@ -518,7 +587,6 @@ describe('action-command-controller context-menu copy actions', () => {
     });
 
     createActionCommandController(context).invokeContextMenuAction('core.copyPath');
-    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('/Users/me'));
-    vi.unstubAllGlobals();
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(expected));
   });
 });

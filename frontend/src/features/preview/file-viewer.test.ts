@@ -43,6 +43,14 @@ function baseAttrs(
     onLoadJsonWindow: vi.fn(),
     onSearchStructuredRows: vi.fn(),
     onSortStructuredRows: vi.fn(),
+    sqlite: {
+      onTab: vi.fn(),
+      onSelectObject: vi.fn(),
+      onBrowse: vi.fn(),
+      onPage: vi.fn(),
+      onSql: vi.fn(),
+      onRunSql: vi.fn(),
+    },
     onSearchQueryChange: vi.fn(),
     onSearchOptionChange: vi.fn(),
     onRunSearch: vi.fn(),
@@ -492,6 +500,73 @@ describe('FileViewer', () => {
     expect(pagination?.textContent).not.toContain('bytes');
     pagination?.querySelectorAll<HTMLButtonElement>('.pagination-controls button')[2]?.click();
     expect(onLoadTextPage).toHaveBeenCalledWith(2);
+  });
+
+  it('renders a binary window as a hex dump with absolute offsets and pagination', () => {
+    const onLoadTextPage = vi.fn();
+    mount(
+      baseAttrs(
+        {
+          status: 'ready',
+          entry: entry({ size: 3 * 64 * 1024 }),
+          content: {
+            kind: 'hex',
+            windowOffset: 64 * 1024,
+            windowEnd: 64 * 1024 + 3,
+            bytes: new Uint8Array([0x48, 0x69, 0x00]),
+            atStart: false,
+            atEnd: false,
+            loadingMore: false,
+          },
+        },
+        { onLoadTextPage },
+      ),
+    );
+    expect(root.querySelector('.fm-file-viewer-hex')?.textContent).toMatch(
+      /^00010000 {2}48 69 00 .*\|Hi\.\|$/,
+    );
+    root
+      .querySelectorAll<HTMLButtonElement>(
+        '.fm-file-viewer-text-pagination .pagination-controls button',
+      )[2]
+      ?.click();
+    expect(onLoadTextPage).toHaveBeenCalledWith(2);
+  });
+
+  it('renders plugin preview html as markup and text as preformatted text', () => {
+    mount(
+      baseAttrs({
+        status: 'ready',
+        entry: entry(),
+        content: {
+          kind: 'pluginPreview',
+          pluginId: 'example.preview',
+          format: 'html',
+          body: '<h2>Title</h2>',
+          truncated: true,
+        },
+      }),
+    );
+    expect(root.querySelector('.fm-file-viewer-plugin-preview-html h2')?.textContent).toBe('Title');
+    expect(root.querySelector('.fm-file-viewer-plugin-preview-note')).not.toBeNull();
+
+    mount(
+      baseAttrs({
+        status: 'ready',
+        entry: entry(),
+        content: {
+          kind: 'pluginPreview',
+          pluginId: 'example.preview',
+          format: 'text',
+          body: '<b>not markup</b>',
+          truncated: false,
+        },
+      }),
+    );
+    expect(root.querySelector('pre.fm-file-viewer-plugin-preview-text')?.textContent).toBe(
+      '<b>not markup</b>',
+    );
+    expect(root.querySelector('.fm-file-viewer-plugin-preview-note')).toBeNull();
   });
 
   it('forwards search input, option toggles, and match navigation', () => {

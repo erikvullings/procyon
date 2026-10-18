@@ -785,6 +785,11 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
           <p>Deep filesystem search plus literal content search across files, served by a dedicated Rust search engine.</p>
           <div class="keys"><span class="kbd">⌘F</span></div>
         </article>
+        <article class="feat" data-od-id="feature-card-semantic-search">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-search"/></svg></div>
+          <h3>Semantic search &amp; Ask</h3>
+          <p>Optional local-only search, enabled with consent per folder and powered by multilingual E5 by default. Knowledge search finds relevant passages; Ask gives retrieval-augmented answers with page-level citations. EmbeddingGemma 2 is an experimental, opt-in alternative that can also index images, audio, and video; CPU-only PDF page-image indexing is capped and slow.</p>
+        </article>
         <article class="feat" data-od-id="feature-card-palette">
           <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-palette"/></svg></div>
           <h3>Command palette</h3>
@@ -794,7 +799,7 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
         <article class="feat" data-od-id="feature-card-viewer">
           <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-eye"/></svg></div>
           <h3>Office &amp; large-file viewer</h3>
-          <p>Open huge text files with lazy search, preview DOCX and PPTX documents, or explore bounded spreadsheet sheets with filtering, formulas and three-state sorting.</p>
+          <p>Open huge text files with lazy search and syntax highlighting, inspect binaries as a hex dump, preview DOCX and PPTX documents, or explore bounded spreadsheet sheets with filtering, formulas and three-state sorting.</p>
           <div class="keys"><span class="kbd">F3 view</span><span class="kbd">F4 edit</span></div>
         </article>
         <article class="feat" data-od-id="feature-card-archive">
@@ -846,13 +851,15 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
           <h2>Read it, edit it, preview it — in place.</h2>
         </div>
         <div class="view-body">
-          <p>The <b style="color:var(--fg)">F3 viewer</b> opens huge files instantly with lazy search. It also renders bounded <b style="color:var(--fg)">DOCX, PPTX and spreadsheet previews</b> without loading an entire document into memory.</p>
+          <p>The <b style="color:var(--fg)">F3 viewer</b> opens huge files instantly with lazy search, highlights source code in 40+ languages and shows binary files as a paged <b style="color:var(--fg)">hex dump</b>. It also renders bounded <b style="color:var(--fg)">DOCX, PPTX and spreadsheet previews</b> without loading an entire document into memory, browses <b style="color:var(--fg)">SQLite databases</b> read-only with search, filters and a SQL console, and can open in its own window like a classic Lister.</p>
           <p>Spreadsheet sheets open as compact tables with worksheet tabs, filtering, formulas, optional row numbers and sortable columns. The <b style="color:var(--fg)">F4 editor</b> edits text in-app with a <b style="color:var(--fg)">Markdown preview</b> pane.</p>
           <p>Grid/icon view adds three icon sizes, photo-day grouping and type filtering, with <span class="strong">image, video, PDF and CBZ/CBR thumbnails</span> served by the backend.</p>
           <p>The <b style="color:var(--fg)">Properties dialog</b> shows byte-precise sizes, timestamps and permissions — and aggregates totals across a multi-selection. On macOS, Finder tags and Spotlight comments round-trip with Finder itself.</p>
         </div>
         <div class="list-hints">
           <div class="hint"><span class="k"><kbd>F3</kbd></span><span class="d">Instant large-file viewer with lazy search</span></div>
+          <div class="hint"><span class="k"><kbd>binary</kbd></span><span class="d">Paged hex dump with absolute offsets</span></div>
+          <div class="hint"><span class="k"><kbd>.sqlite</kbd></span><span class="d">Read-only table browser with search, filters and SQL</span></div>
           <div class="hint"><span class="k"><kbd>.xlsx</kbd></span><span class="d">Bounded worksheet preview with filtering and reversible sorting</span></div>
           <div class="hint"><span class="k"><kbd>F4</kbd></span><span class="d">In-app editor with live Markdown preview</span></div>
           <div class="hint"><span class="k"><kbd>⌘I</kbd></span><span class="d">Properties dialog with multi-selection totals</span></div>

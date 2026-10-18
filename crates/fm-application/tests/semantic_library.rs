@@ -26,13 +26,13 @@ use fm_application::semantic_library::{
 };
 use fm_domain::{EntryId, Location, WorkspaceId};
 use fm_semantic_library::{
-    CatalogObservation, CommitStep, ContentFingerprint, ConversationEvidencePin, ConversationPinId,
-    DeletionPlanId, DerivedArtifactId, DeviceLibraryIdentity, DocumentArtifacts,
-    DocumentMeasurement, EligibilityCandidate, EligibilityDecision, EligibilityEntryKind,
-    EligibilityReason, EligibilityReasonCounts, EnrolledRoot, FilesystemIdentity,
-    GemmaMediaSelection, HardQuotas, LibraryId, LibraryOperation, ModelIdentity,
-    ObservedRootIdentity, OccurrenceScope, ResourceBudgets, ResourceProfile, ResourceProfileKind,
-    RootId, RootMoveResolution, RootUnavailabilityReason, SemanticCatalog,
+    CPU_PDF_IMAGE_PAGE_BUDGET, CatalogObservation, CommitStep, ContentFingerprint,
+    ConversationEvidencePin, ConversationPinId, DeletionPlanId, DerivedArtifactId,
+    DeviceLibraryIdentity, DocumentArtifacts, DocumentMeasurement, EligibilityCandidate,
+    EligibilityDecision, EligibilityEntryKind, EligibilityReason, EligibilityReasonCounts,
+    EnrolledRoot, FilesystemIdentity, GemmaMediaSelection, HardQuotas, LibraryId, LibraryOperation,
+    ModelIdentity, ObservedRootIdentity, OccurrenceScope, ResourceBudgets, ResourceProfile,
+    ResourceProfileKind, RootId, RootMoveResolution, RootUnavailabilityReason, SemanticCatalog,
     SemanticLibraryCoordinator, SemanticLibraryPolicy, SemanticLibraryState, ServerEnrolmentPolicy,
 };
 use fm_transport_dto::RuntimeKindDto;
@@ -1075,6 +1075,28 @@ fn the_worker_feed_applies_the_curated_eligibility_policy_and_stops_while_paused
                         false,
                     ),
                 },
+                SemanticFeedCandidate {
+                    root_id,
+                    candidate: EligibilityCandidate {
+                        source_bytes: 64 * 1024 * 1024,
+                        ..candidate(
+                            "file:///docs/within-limit.pdf",
+                            Some("application/pdf"),
+                            false,
+                        )
+                    },
+                },
+                SemanticFeedCandidate {
+                    root_id,
+                    candidate: EligibilityCandidate {
+                        source_bytes: 64 * 1024 * 1024 + 1,
+                        ..candidate(
+                            "file:///docs/over-limit.pdf",
+                            Some("application/pdf"),
+                            false,
+                        )
+                    },
+                },
             ],
         )
         .unwrap();
@@ -1082,7 +1104,10 @@ fn the_worker_feed_applies_the_curated_eligibility_policy_and_stops_while_paused
     assert!(!plan.paused);
     assert_eq!(
         plan.eligible_locations,
-        [location("file:///docs/report.md")]
+        [
+            location("file:///docs/report.md"),
+            location("file:///docs/within-limit.pdf")
+        ]
     );
     assert_eq!(
         plan.skipped_reason_counts
@@ -1098,7 +1123,16 @@ fn the_worker_feed_applies_the_curated_eligibility_policy_and_stops_while_paused
             .map(|count| count.count),
         Some(1)
     );
+    assert_eq!(
+        plan.skipped_reason_counts
+            .iter()
+            .find(|count| count.reason == EligibilityReason::Oversized)
+            .map(|count| count.count),
+        Some(1),
+        "the host's 64 MiB read limit must apply before the broader library quota"
+    );
     assert_eq!(plan.decisions.len(), 1, "one consented occurrence is fed");
+    assert!(!plan.pdf_images_consented, "E5 has no PDF image consent");
 
     let revision = service.status(&HOST).unwrap().revision;
     service.pause(&HOST, revision).unwrap();
@@ -1153,12 +1187,158 @@ fn a_gemma_library_feeds_only_media_selected_at_creation() {
             ],
         )
         .unwrap();
+    assert!(plan.pdf_images_consented);
     assert_eq!(
         plan.eligible_locations,
         [
             location("file:///docs/photo.png"),
             location("file:///docs/clip.mp4")
         ]
+    );
+}
+
+#[test]
+fn gemma_media_change_preserves_identity_across_restart_and_gates_pdf_images() {
+    let directory = project_temp_dir("gemma-media-restart-");
+    let config = SemanticLibraryConfiguration::embeddinggemma_2(
+        directory.path().join("config"),
+        directory.path().join("semantic-data"),
+        Uuid::new_v4(),
+        256,
+        GemmaMediaSelection {
+            images: true,
+            audio: false,
+            video: false,
+        },
+    )
+    .unwrap();
+    let estimator = || Arc::new(FixedSemanticEnrolmentEstimator::new(estimate()));
+    let service = SemanticLibraryService::desktop_managed(config.clone(), estimator()).unwrap();
+    let context = SemanticFolderContext::new(workspace(10), location("file:///docs"));
+    enrol(&service, &context);
+    let before = service.status(&HOST).unwrap();
+    let disabled = GemmaMediaSelection {
+        images: false,
+        audio: true,
+        video: false,
+    };
+    assert_eq!(
+        service.update_gemma_media(&HOST, disabled, before.revision, false),
+        Err(SemanticLibraryError::RemovalRequiresConfirmation)
+    );
+    let after = service
+        .update_gemma_media(&HOST, disabled, before.revision, true)
+        .unwrap();
+    assert_eq!(after.library, before.library);
+    assert_eq!(after.roots.len(), before.roots.len());
+    assert_eq!(after.gemma_media, Some(disabled));
+    assert!(
+        !service
+            .worker_feed_plan(&HOST, &[])
+            .unwrap()
+            .pdf_images_consented
+    );
+    let restarted = SemanticLibraryService::desktop_managed(config, estimator()).unwrap();
+    let reloaded = restarted.status(&HOST).unwrap();
+    assert_eq!(reloaded.gemma_media, Some(disabled));
+    assert_eq!(reloaded.library, before.library);
+    assert_eq!(reloaded.revision, after.revision);
+}
+
+#[test]
+fn per_root_pdf_image_policy_is_validated_and_persisted_with_enrolment() {
+    let directory = project_temp_dir("gemma-pdf-page-policy-");
+    let config = SemanticLibraryConfiguration::embeddinggemma_2(
+        directory.path().join("config"),
+        directory.path().join("semantic-data"),
+        Uuid::new_v4(),
+        256,
+        GemmaMediaSelection {
+            images: true,
+            audio: false,
+            video: false,
+        },
+    )
+    .unwrap();
+    let service = SemanticLibraryService::desktop_managed(
+        config,
+        Arc::new(FixedSemanticEnrolmentEstimator::new(estimate())),
+    )
+    .unwrap();
+    let context = SemanticFolderContext::new(workspace(10), location("file:///docs"));
+    let page_budget = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        None
+    } else {
+        Some(CPU_PDF_IMAGE_PAGE_BUDGET)
+    };
+    let preview = service
+        .preview_enrolment_with_pdf_image_policy(&HOST, context.clone(), true, true, page_budget)
+        .unwrap();
+    assert!(preview.pdf_images_enabled);
+    assert_eq!(preview.pdf_image_page_budget, page_budget);
+    service
+        .confirm_enrolment(
+            &HOST,
+            &preview.confirmation_id,
+            preview.policy_revision,
+            &context,
+        )
+        .unwrap();
+    let root = service.status(&HOST).unwrap().roots.remove(0);
+    assert!(root.pdf_images_enabled);
+    assert_eq!(root.pdf_image_page_budget, page_budget);
+
+    let invalid_budget = if page_budget.is_some() { None } else { Some(4) };
+    assert!(matches!(
+        service.preview_enrolment_with_pdf_image_policy(
+            &HOST,
+            context.clone(),
+            true,
+            true,
+            invalid_budget,
+        ),
+        Err(SemanticLibraryError::InvalidRequest)
+    ));
+    assert!(matches!(
+        service.preview_enrolment_with_pdf_image_policy(
+            &HOST,
+            context,
+            true,
+            false,
+            Some(CPU_PDF_IMAGE_PAGE_BUDGET),
+        ),
+        Err(SemanticLibraryError::InvalidRequest)
+    ));
+}
+
+#[test]
+fn pdf_image_consent_stays_off_for_a_text_only_gemma_library() {
+    let directory = project_temp_dir("gemma-text-only-pdf-feed-");
+    let config = SemanticLibraryConfiguration::embeddinggemma_2(
+        directory.path().join("config"),
+        directory.path().join("semantic-data"),
+        Uuid::new_v4(),
+        256,
+        GemmaMediaSelection {
+            images: false,
+            audio: false,
+            video: false,
+        },
+    )
+    .unwrap();
+    let service = SemanticLibraryService::desktop_managed(
+        config,
+        Arc::new(FixedSemanticEnrolmentEstimator::new(estimate())),
+    )
+    .unwrap();
+    let context = SemanticFolderContext::new(workspace(10), location("file:///docs"));
+    enrol(&service, &context);
+
+    assert!(
+        !service
+            .worker_feed_plan(&HOST, &[])
+            .unwrap()
+            .pdf_images_consented
     );
 }
 
@@ -1255,6 +1435,8 @@ async fn quarantined_roots_are_only_restored_by_a_proven_identity_observation() 
                 workspace_id: workspace_dto.id,
                 location: tab.location.clone(),
                 recursive: true,
+                pdf_images_enabled: false,
+                pdf_image_page_budget: None,
             },
         )
         .await
@@ -1457,6 +1639,8 @@ async fn facade_requires_the_active_folder_and_workspace_deletion_only_detaches_
                 workspace_id: workspace_dto.id,
                 location: tab.location.clone(),
                 recursive: true,
+                pdf_images_enabled: false,
+                pdf_image_page_budget: None,
             },
         )
         .await
@@ -1485,6 +1669,8 @@ async fn facade_requires_the_active_folder_and_workspace_deletion_only_detaches_
                     uri: "file:///not-active".to_owned(),
                 },
                 recursive: true,
+                pdf_images_enabled: false,
+                pdf_image_page_budget: None,
             },
         )
         .await;
@@ -1558,6 +1744,8 @@ async fn facade_removes_an_enrolled_root_even_when_another_folder_is_active() {
                 workspace_id: workspace.id,
                 location: root.clone(),
                 recursive: true,
+                pdf_images_enabled: false,
+                pdf_image_page_budget: None,
             },
         )
         .await
@@ -2259,6 +2447,8 @@ async fn the_reconciliation_facade_is_reachable_through_the_file_manager_service
                 workspace_id: workspace_dto.id,
                 location: tab.location.clone(),
                 recursive: true,
+                pdf_images_enabled: false,
+                pdf_image_page_budget: None,
             },
         )
         .await
@@ -2929,5 +3119,258 @@ fn the_worker_feed_stamps_the_tenant_of_the_authorized_caller() {
     assert_eq!(
         root_id.to_string(),
         service.status(&administrator).unwrap().roots[0].id
+    );
+}
+
+/// An operator-attached host (task 0250) reads the desktop's exact library
+/// through the device principal but can never change it or its shared stores.
+#[tokio::test]
+async fn attached_desktop_host_reads_the_exact_desktop_library_and_never_changes_it() {
+    let directory = project_temp_dir("attached-desktop-");
+    let profile = directory.path().join("procyon");
+    std::fs::create_dir_all(&profile).unwrap();
+    let profile = profile.canonicalize().unwrap();
+    let service = FileManagerService::new(
+        RuntimeKindDto::BrowserServer,
+        directory.path().join("workspaces"),
+        &profile,
+    )
+    .with_attached_desktop_semantic_library(&profile, Vec::new());
+
+    // Nothing is attached until the desktop has an active model and consent,
+    // and attaching creates nothing in the desktop profile.
+    assert_eq!(
+        service
+            .semantic_library_capabilities(&HOST)
+            .await
+            .authority(),
+        SemanticLibraryAuthority::Unavailable
+    );
+    assert!(!profile.join("semantic-components").exists());
+    assert!(!profile.join("semantic").exists());
+
+    let components =
+        fm_semantic_components::SemanticStateStore::new(profile.join("semantic-components"));
+    let mut state = components.load_or_default(&profile).unwrap();
+    state
+        .activate_initial_model(
+            fm_semantic_components::SemanticProfile::CompactMultilingual,
+            fm_semantic_components::ModelIdentity::new(
+                fm_semantic_components::ModelId::new("fixture-model").unwrap(),
+                fm_semantic_components::ModelRevision::new("revision-1").unwrap(),
+            ),
+            7,
+        )
+        .unwrap();
+    components.save(&state).unwrap();
+    assert_eq!(
+        service
+            .semantic_library_capabilities(&HOST)
+            .await
+            .authority(),
+        SemanticLibraryAuthority::Unavailable,
+        "an active model without a consented library attaches nothing"
+    );
+    assert!(!profile.join("semantic/library").exists());
+
+    let desktop = SemanticLibraryService::desktop_managed(
+        SemanticLibraryConfiguration::new(
+            profile.clone(),
+            profile.join("semantic/library"),
+            library_identity(),
+            ResourceProfile {
+                kind: ResourceProfileKind::Balanced,
+                budgets: ResourceBudgets::default(),
+            },
+        ),
+        Arc::new(FixedSemanticEnrolmentEstimator::new(estimate())),
+    )
+    .unwrap();
+    let documents = directory.path().join("documents");
+    std::fs::create_dir_all(&documents).unwrap();
+    let documents = documents.canonicalize().unwrap();
+    let context = SemanticFolderContext::new(
+        workspace(10),
+        Location::from_native_path(&documents).unwrap(),
+    );
+    let revision = enrol(&desktop, &context);
+    let policy_path = profile.join("semantic-library-policy.json");
+    let policy_before = std::fs::read(&policy_path).unwrap();
+
+    let capabilities = service.semantic_library_capabilities(&HOST).await;
+    assert_eq!(
+        capabilities.authority(),
+        SemanticLibraryAuthority::DesktopManaged
+    );
+    assert_eq!(
+        capabilities.operations(),
+        [
+            SemanticLibraryOperation::ViewStatus,
+            SemanticLibraryOperation::ViewFolderStatus,
+        ]
+    );
+    let status = service.semantic_library_status(&HOST).await.unwrap();
+    assert_eq!(status.revision, revision);
+    assert_eq!(status.roots.len(), 1);
+
+    // A server principal cannot borrow the device library's authority.
+    let server = SemanticAccessContext::server("private", "administrator").unwrap();
+    assert!(
+        service
+            .semantic_library_capabilities(&server)
+            .await
+            .operations()
+            .is_empty()
+    );
+    assert!(service.semantic_library_status(&server).await.is_err());
+
+    // Every user mutation and shared-store write is refused.
+    assert!(
+        service
+            .import_semantic_vocabulary(
+                &HOST,
+                fm_transport_dto::ImportSemanticVocabularyRequestDto {
+                    skos_json: "{}".to_owned(),
+                },
+            )
+            .await
+            .is_err_and(|error| matches!(
+                error,
+                fm_application::ApplicationError::PermissionDenied
+            ))
+    );
+    assert!(!profile.join("semantic-vocabularies.json").exists());
+    assert_eq!(std::fs::read(&policy_path).unwrap(), policy_before);
+
+    // A host restricted to roots that do not contain every enrolled root
+    // exposes none of the library; one whose roots do sees all of it.
+    let restricted = FileManagerService::new(
+        RuntimeKindDto::BrowserServer,
+        directory.path().join("workspaces"),
+        &profile,
+    )
+    .with_attached_desktop_semantic_library(&profile, vec![profile.clone()]);
+    assert_eq!(
+        restricted
+            .semantic_library_capabilities(&HOST)
+            .await
+            .authority(),
+        SemanticLibraryAuthority::Unavailable
+    );
+    let allowed = directory.path().canonicalize().unwrap();
+    let covering = FileManagerService::new(
+        RuntimeKindDto::BrowserServer,
+        directory.path().join("workspaces"),
+        &profile,
+    )
+    .with_attached_desktop_semantic_library(&profile, vec![allowed.clone()]);
+    assert_eq!(
+        covering
+            .semantic_library_status(&HOST)
+            .await
+            .unwrap()
+            .roots
+            .len(),
+        1
+    );
+
+    // A root that can no longer be resolved cannot be proven inside the
+    // allowlist, even when its lexical path still is, so it fails closed.
+    std::fs::rename(&documents, directory.path().join("moved")).unwrap();
+    assert_eq!(
+        covering
+            .semantic_library_capabilities(&HOST)
+            .await
+            .authority(),
+        SemanticLibraryAuthority::Unavailable
+    );
+    assert!(
+        covering
+            .semantic_library_status(&HOST)
+            .await
+            .is_ok_and(|status| status.roots.is_empty())
+    );
+
+    // A root replaced by a symlink that escapes the allowlist is refused.
+    #[cfg(unix)]
+    {
+        let outside = project_temp_dir("attached-outside-");
+        std::os::unix::fs::symlink(outside.path(), &documents).unwrap();
+        assert_eq!(
+            covering
+                .semantic_library_capabilities(&HOST)
+                .await
+                .authority(),
+            SemanticLibraryAuthority::Unavailable
+        );
+        std::fs::remove_file(&documents).unwrap();
+    }
+
+    // Restoring the root inside the allowlist restores access.
+    std::fs::rename(directory.path().join("moved"), &documents).unwrap();
+    assert_eq!(
+        covering
+            .semantic_library_capabilities(&HOST)
+            .await
+            .authority(),
+        SemanticLibraryAuthority::DesktopManaged
+    );
+
+    // The desktop's later commits become visible without restarting.
+    let second = SemanticFolderContext::new(workspace(10), location("file:///desktop-more"));
+    let next_revision = enrol(&desktop, &second);
+    let status = service.semantic_library_status(&HOST).await.unwrap();
+    assert_eq!(status.revision, next_revision);
+    assert_eq!(status.roots.len(), 2);
+}
+
+#[test]
+fn attached_read_only_library_refuses_internal_reconciliation_commits() {
+    let directory = project_temp_dir("attached-internal-");
+    let desktop = desktop(&directory);
+    let context = SemanticFolderContext::new(workspace(10), location("file:///desktop-docs"));
+    enrol(&desktop, &context);
+    let root_id: RootId = desktop.status(&HOST).unwrap().roots[0].id.parse().unwrap();
+    let attached = SemanticLibraryService::desktop_attached_read_only(
+        configuration(&directory),
+        Arc::new(UnavailableSemanticEnrolmentEstimator),
+    )
+    .unwrap();
+
+    assert_eq!(attached.status(&HOST).unwrap().roots.len(), 1);
+    assert_eq!(
+        attached
+            .mark_root_unavailable(&HOST, root_id, RootUnavailabilityReason::Missing)
+            .unwrap_err(),
+        SemanticLibraryError::AccessDenied
+    );
+    assert_eq!(
+        attached
+            .observe_root_identity(&HOST, root_id, &[])
+            .unwrap_err(),
+        SemanticLibraryError::AccessDenied
+    );
+    assert_eq!(
+        attached
+            .complete_reconciliation_preserving(
+                &HOST,
+                root_id,
+                &BTreeSet::new(),
+                &[],
+                &BTreeMap::new()
+            )
+            .unwrap_err(),
+        SemanticLibraryError::AccessDenied
+    );
+    assert_eq!(
+        attached.worker_feed_plan(&HOST, &[]).unwrap_err(),
+        SemanticLibraryError::AccessDenied
+    );
+    assert!(
+        desktop
+            .folder_status(&HOST, &context)
+            .unwrap()
+            .source_available,
+        "the desktop's durable library is unchanged"
     );
 }

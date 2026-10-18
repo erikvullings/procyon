@@ -36,4 +36,34 @@ describe('AppUpdateDialog', () => {
     root.querySelector<HTMLButtonElement>('.fm-update-install')?.click();
     await vi.waitFor(() => expect(install).toHaveBeenCalledOnce());
   });
+
+  it('marks the installing action busy without greying it out as unavailable', async () => {
+    const client = new MockFileManagerClient();
+    let finish: (() => void) | undefined;
+    vi.spyOn(client, 'installAppUpdate').mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    m.mount(root, {
+      view: () =>
+        m(AppUpdateDialog, {
+          client,
+          update: { currentVersion: '0.1.5', version: '0.1.6' },
+          onLater: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+
+    document.querySelector<HTMLButtonElement>('.fm-update-install')?.click();
+    await vi.waitFor(() => {
+      const installing = document.querySelector<HTMLButtonElement>('.fm-update-install');
+      expect(installing?.textContent).toContain('Installing…');
+      expect(installing?.disabled).toBe(true);
+      expect(installing?.getAttribute('aria-busy')).toBe('true');
+      expect(installing?.classList.contains('fm-busy-button')).toBe(true);
+    });
+    finish?.();
+  });
 });

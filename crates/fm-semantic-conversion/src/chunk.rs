@@ -30,7 +30,7 @@ use crate::tokens::{TOKEN_ESTIMATOR_VERSION, estimate_tokens};
 use serde::{Deserialize, Serialize};
 
 /// Version of the packing rules implemented here.
-pub const STRUCTURAL_CHUNKER_VERSION: ComponentVersion = ComponentVersion::new("structural", 3);
+pub const STRUCTURAL_CHUNKER_VERSION: ComponentVersion = ComponentVersion::new("structural", 4);
 
 /// Domain separator, so a fingerprint cannot collide with any other BLAKE3 use
 /// in the workspace.
@@ -119,6 +119,8 @@ pub struct Chunk {
     pub unit_orders: Vec<u32>,
     /// Format the chunk came from.
     pub format: FormatKind,
+    /// A PDF navigation entry, kept searchable but ranked behind substantive text.
+    pub is_navigation: bool,
     /// Section hierarchy of the chunk's first unit.
     pub section_path: Vec<String>,
     /// Whether the section hierarchy had to be shortened to leave room for
@@ -186,12 +188,20 @@ impl Chunker {
             let unit_content = chunk_content(&[unit]);
             let unit_tokens = estimate_tokens(&embedding_input(&section_path, &unit_content));
             if unit_tokens > self.options.max_tokens {
+                let preceding_heading = (pending.len() == 1
+                    && pending[0].kind == UnitKind::Heading
+                    && unit.kind != UnitKind::Navigation
+                    && pending[0].boundary == unit.boundary
+                    && chunk_section_path(pending[0]) == chunk_section_path(unit))
+                .then(|| pending.pop().expect("one pending heading"));
                 self.flush(document, &mut pending, &mut chunks);
-                self.split_unit(document, unit, &mut chunks);
+                self.split_unit(document, unit, preceding_heading, &mut chunks);
                 continue;
             }
             let compatible = pending.last().is_none_or(|previous| {
                 unit.kind != UnitKind::Heading
+                    && (previous.kind == UnitKind::Navigation)
+                        == (unit.kind == UnitKind::Navigation)
                     && previous.boundary == unit.boundary
                     && chunk_section_path(previous) == chunk_section_path(unit)
             });
@@ -201,7 +211,11 @@ impl Chunker {
                 let mut candidate = pending.clone();
                 candidate.push(unit);
                 let content = chunk_content(&candidate);
-                estimate_tokens(&embedding_input(&path, &content)) > self.options.target_tokens
+                let tokens = estimate_tokens(&embedding_input(&path, &content));
+                tokens > self.options.target_tokens
+                    && !(pending.len() == 1
+                        && pending[0].kind == UnitKind::Heading
+                        && tokens <= self.options.max_tokens)
             };
             if !compatible || exceeds_target {
                 self.flush(document, &mut pending, &mut chunks);
@@ -245,6 +259,11 @@ impl Chunker {
             &content,
             provenance,
             None,
+            document.format() == FormatKind::Pdf
+                && units.iter().all(|unit| {
+                    unit.kind == UnitKind::Navigation
+                        || crate::is_pdf_toc_section(&chunk_section_path(unit))
+                }),
         );
         chunks.push(chunk);
     }
@@ -253,6 +272,7 @@ impl Chunker {
         &self,
         document: &ConvertedDocument,
         unit: &StructuralUnit,
+        preceding_heading: Option<&StructuralUnit>,
         chunks: &mut Vec<Chunk>,
     ) {
         let (section_path, section_path_truncated) =
@@ -273,20 +293,33 @@ impl Chunker {
         let windows = self.split_text(&content, content_budget);
         let total = windows.len() as u32;
         for (index, (text, overlap_tokens)) in windows.into_iter().enumerate() {
+            let first_heading = if index == 0 { preceding_heading } else { None };
             let chunk = self.build(
                 document,
                 chunks.len() as u32,
-                unit.order,
-                vec![unit.order],
+                first_heading.map_or(unit.order, |heading| heading.order),
+                first_heading.map_or_else(
+                    || vec![unit.order],
+                    |heading| vec![heading.order, unit.order],
+                ),
                 section_path.clone(),
                 section_path_truncated,
                 &text,
-                ChunkProvenance::Exact(unit.provenance.clone()),
+                first_heading.map_or_else(
+                    || ChunkProvenance::Exact(unit.provenance.clone()),
+                    |heading| ChunkProvenance::Span {
+                        first: heading.provenance.clone(),
+                        last: unit.provenance.clone(),
+                    },
+                ),
                 Some(ChunkPart {
                     index: index as u32,
                     total,
                     overlap_tokens,
                 }),
+                document.format() == FormatKind::Pdf
+                    && (unit.kind == UnitKind::Navigation
+                        || crate::is_pdf_toc_section(&chunk_section_path(unit))),
             );
             chunks.push(chunk);
         }
@@ -379,6 +412,7 @@ impl Chunker {
         content: &str,
         provenance: ChunkProvenance,
         part: Option<ChunkPart>,
+        is_navigation: bool,
     ) -> Chunk {
         let embedding_input = embedding_input(&section_path, content);
         debug_assert!(estimate_tokens(&embedding_input) <= self.options.max_tokens);
@@ -389,6 +423,7 @@ impl Chunker {
             source_order,
             unit_orders,
             format: document.format(),
+            is_navigation,
             section_path,
             section_path_truncated,
             estimated_tokens: estimate_tokens(&embedding_input),
@@ -683,6 +718,44 @@ mod tests {
         assert_eq!(chunks.len(), 2);
         assert_eq!(chunks[0].unit_orders, [0, 1]);
         assert_eq!(chunks[1].unit_orders, [2, 3]);
+    }
+
+    #[test]
+    fn pdf_abstract_heading_stays_with_a_long_first_paragraph() {
+        let boundary = TopLevelBoundary::Page(1);
+        let document = document(vec![
+            heading(0, "Abstract", boundary.clone(), &[]),
+            unit(1, &"finding ".repeat(140), boundary, &["Abstract"]),
+            heading(2, "Methods", TopLevelBoundary::Page(2), &[]),
+            unit(
+                3,
+                "The methods are described here.",
+                TopLevelBoundary::Page(2),
+                &["Methods"],
+            ),
+        ]);
+        let chunks = Chunker::default().chunk(&document);
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].unit_orders, [0, 1]);
+        assert_eq!(chunks[0].section_path, ["Abstract"]);
+        assert!(chunks[0].embedding_input.contains("finding"));
+        assert_eq!(chunks[1].unit_orders, [2, 3]);
+    }
+
+    #[test]
+    fn pdf_abstract_heading_stays_with_first_part_of_an_oversized_paragraph() {
+        let boundary = TopLevelBoundary::Page(1);
+        let document = document(vec![
+            heading(0, "Abstract", boundary.clone(), &[]),
+            unit(1, &"finding ".repeat(200), boundary, &["Abstract"]),
+        ]);
+        let chunks = Chunker::default().chunk(&document);
+        assert!(chunks.len() > 1);
+        assert_eq!(chunks[0].unit_orders, [0, 1]);
+        assert_eq!(chunks[0].section_path, ["Abstract"]);
+        assert!(matches!(chunks[0].provenance, ChunkProvenance::Span { .. }));
+        assert!(chunks[1..].iter().all(|chunk| chunk.unit_orders == [1]));
+        assert!(chunks.iter().all(|chunk| chunk.estimated_tokens <= 512));
     }
 
     #[test]

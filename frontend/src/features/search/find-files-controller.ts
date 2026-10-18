@@ -102,6 +102,11 @@ export function searchQueryFromParams(
           caseSensitive: params.contentCaseSensitive,
           wholeWord: params.contentWholeWord,
         };
+  const selectedConcept =
+    params.selectedConcept ??
+    (params.semanticQuery === existing?.semantic?.query
+      ? existing?.semantic?.selectedConcept
+      : undefined);
 
   return {
     schemaVersion: 2,
@@ -123,9 +128,10 @@ export function searchQueryFromParams(
       : {
           semantic: {
             query: params.semanticQuery,
-            libraryId: existing?.semantic?.libraryId ?? 'active',
+            libraryId: params.semanticLibraryId ?? existing?.semantic?.libraryId ?? 'active',
             scope: params.semanticScope ?? 'currentFolder',
             enrolledRootIds: existing?.semantic?.enrolledRootIds ?? [],
+            ...(selectedConcept === undefined ? {} : { selectedConcept }),
           },
         }),
     gitStatuses: params.gitStatuses ?? existing?.gitStatuses ?? [],
@@ -208,9 +214,6 @@ export function createFindFilesController(
             .catch(() => undefined);
           return;
         }
-        if (target !== 'newTab') context.setFindFilesTargetPane(result.searchId, paneId);
-        if (refresh === undefined) context.setFindFilesSearchId(result.searchId);
-        context.setFindFilesSearchStartPending(false);
         context.getFindFilesRootsByLocationUri().set(result.location.uri, root);
         const executionMode =
           context.getSearchExecutionMode?.(result.searchId) ?? result.executionMode;
@@ -224,6 +227,7 @@ export function createFindFilesController(
               presentationLabel,
               result.semanticResults,
               result.semanticCoverage,
+              query,
             ),
           );
         context.getFindFilesParamsByLocationUri().set(result.location.uri, params);
@@ -239,6 +243,9 @@ export function createFindFilesController(
           );
         }
         if (target === 'newTab') context.openTabAt(paneId, result.location, root);
+        if (target !== 'newTab') context.setFindFilesTargetPane(result.searchId, paneId);
+        if (refresh === undefined) context.setFindFilesSearchId(result.searchId);
+        context.setFindFilesSearchStartPending(false);
         if (refresh === undefined) {
           context.setFindFilesOpen(false);
           context.setFindFilesRoot(undefined);
@@ -296,7 +303,11 @@ export function createFindFilesController(
     startFindFilesSearch(params: FindFilesSearchParams): void {
       const root = context.getFindFilesRoot();
       const workspace = context.getWorkspace();
-      if (root === undefined || workspace === undefined) return;
+      if (root === undefined || workspace === undefined) {
+        context.setFindFilesError(t('search', 'unableToStart'));
+        context.redraw();
+        return;
+      }
       const searchPaneId = context.getActiveDirectory()?.paneId ?? workspace.activePaneId;
       runSearch(
         searchQueryFromParams(
@@ -305,7 +316,13 @@ export function createFindFilesController(
           searchPaneId === undefined ? false : this.activeShowHidden(searchPaneId),
         ),
         params,
-        'currentPane',
+        params.selectedConcept === undefined ? 'currentPane' : 'newTab',
+        undefined,
+        params.conceptLabel === undefined
+          ? undefined
+          : t('search', 'relatedConcept', {
+              concept: params.conceptLabel,
+            }),
       );
     },
 
@@ -330,7 +347,11 @@ export function createFindFilesController(
             ? {}
             : {
                 semanticQuery: saved.query.semantic.query,
+                semanticLibraryId: saved.query.semantic.libraryId,
                 semanticScope: saved.query.semantic.scope,
+                ...(saved.query.semantic.selectedConcept === undefined
+                  ? {}
+                  : { selectedConcept: saved.query.semantic.selectedConcept }),
               }),
           ...(saved.query.minSizeBytes === undefined
             ? {}

@@ -34,12 +34,13 @@ use fm_transport_dto::{
     FinderTagsDto, GenerateRagAnswerRequestDto, GenerateRagAnswerResponseDto,
     GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
     InvokeActionRequestDto, LinkOptionsDto, LinkOptionsRequestDto, ListDirectoryRequest,
-    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
-    NavigateRequest, OperationDto, PluginDescriptorDto, PluginLogEntryDto, PreviewRagRequestDto,
-    RagPreviewDto, RagScopeDto, RagScopeKindDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    RemoveApplicationDockIconRequestDto, RemoveApplicationDockIconResponseDto,
-    RenderChecksumFileRequestDto, ResolveOperationConflictRequestDto, ResolveRagCitationRequestDto,
-    ResolvedRagCitationDto, RuntimeCapabilitiesDto, RuntimeKindDto, SaveLlmProfileRequestDto,
+    LlmModelLimitsDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
+    LlmProfileTestResultDto, NavigateRequest, OperationDto, PluginDescriptorDto, PluginLogEntryDto,
+    PreviewRagRequestDto, RagPreviewDto, RagScopeDto, RagScopeKindDto, ReadFileRangeRequestDto,
+    ReadFileRangeResponseDto, RemoveApplicationDockIconRequestDto,
+    RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
+    ResolveOperationConflictRequestDto, ResolveRagCitationRequestDto, ResolvedRagCitationDto,
+    RuntimeCapabilitiesDto, RuntimeKindDto, SaveLlmProfileRequestDto,
     SaveRagConversationRequestDto, SavedRagConversationDto, SearchInFileRequestDto,
     SearchInFileResponseDto, SetPaneActivityRequest, SettingsDto, SpotlightCommentDto,
     StartChecksumRequestDto, StartChecksumResponseDto, StartComparisonRequestDto,
@@ -76,8 +77,8 @@ use crate::knowledge_search::{
 };
 use crate::knowledge_service::KnowledgeService;
 use crate::llm_profile_mapping::{
-    disposition_from_dto, draft_from_dto, preset_to_profile_dto, profile_to_dto,
-    profile_to_export_dto, test_result_to_dto,
+    disposition_from_dto, draft_from_dto, model_limits_to_dto, preset_to_profile_dto,
+    profile_to_dto, profile_to_export_dto, test_result_to_dto,
 };
 use crate::llm_profiles::{
     LlmHostPolicy, LlmImageAttachment, LlmProfileService, ReqwestLlmProbeTransport,
@@ -137,6 +138,7 @@ use crate::semantic_ocr::{
     UnavailableOcrExecutableProbe,
 };
 use crate::settings_mapping::{settings_from_dto, settings_to_dto};
+use crate::sqlite_view::SqliteViewService;
 use crate::structured_view::StructuredViewService;
 use crate::thumbnails::ThumbnailService;
 use crate::workspace::{JsonFileWorkspaceRepository, WorkspaceService, WorkspaceSummary};
@@ -146,6 +148,24 @@ const MAX_SUMMARY_SOURCE_IMAGE_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_SUMMARY_TOTAL_IMAGE_BYTES: usize = 12 * 1024 * 1024;
 const MAX_SUMMARY_DECODED_PIXELS: u64 = 40_000_000;
 const MAX_SUMMARY_IMAGE_DIMENSION: u32 = 1_024;
+
+/// The percent-decoded last path segment of a location URI, without query or fragment.
+fn file_name_from_uri(uri: &str) -> String {
+    let path = uri.split(['?', '#']).next().unwrap_or(uri);
+    let segment = path.rsplit('/').next().unwrap_or_default();
+    percent_encoding::percent_decode_str(segment)
+        .decode_utf8_lossy()
+        .into_owned()
+}
+
+/// Lowercase extension of `name`; a leading-dot name such as `.torrent` has none (matching the
+/// frontend's routing).
+fn file_extension(name: &str) -> String {
+    match name.rfind('.') {
+        Some(index) if index > 0 => name[index + 1..].to_ascii_lowercase(),
+        _ => String::new(),
+    }
+}
 
 fn prepare_summary_image(data: &[u8], media_type: &str) -> Option<Vec<u8>> {
     if data.len() > MAX_SUMMARY_SOURCE_IMAGE_BYTES as usize {
@@ -221,6 +241,7 @@ pub struct FileManagerService {
     rag_ephemeral: Mutex<HashMap<Uuid, SavedRagConversation>>,
     pptx_preview: PptxPreviewService,
     structured_view: StructuredViewService,
+    sqlite_view: SqliteViewService,
     providers: ProviderRegistry,
     archive_provider: Arc<ArchiveFileSystemProvider>,
     events: EventBus,
@@ -562,6 +583,7 @@ impl FileManagerService {
             comparison_store,
             events.clone(),
             semantic.clone(),
+            providers.clone(),
         );
         let checksum_store = Arc::new(ChecksumResultsStore::new());
         let duplicate_store = Arc::new(DuplicateResultsStore::new());
@@ -663,6 +685,7 @@ impl FileManagerService {
             rag_ephemeral: Mutex::new(HashMap::new()),
             pptx_preview: PptxPreviewService::new(providers.clone()),
             structured_view: StructuredViewService::new(providers.clone()),
+            sqlite_view: SqliteViewService::new(providers.clone()),
             providers,
             archive_provider,
             events: events.clone(),
@@ -753,6 +776,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: fm_transport_dto::ImportSemanticVocabularyRequestDto,
     ) -> Result<fm_transport_dto::SemanticVocabularyDto, ApplicationError> {
+        self.ensure_semantic_shared_store_writable()?;
         self.semantic_library()
             .await
             .status(access)
@@ -791,6 +815,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: fm_transport_dto::AttachSemanticVocabularyRequestDto,
     ) -> Result<fm_transport_dto::SemanticVocabularyDto, ApplicationError> {
+        self.ensure_semantic_shared_store_writable()?;
         let status = self
             .semantic_library()
             .await
@@ -825,6 +850,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: fm_transport_dto::ReviewConceptCandidateRequestDto,
     ) -> Result<fm_transport_dto::SemanticVocabularyDto, ApplicationError> {
+        self.ensure_semantic_shared_store_writable()?;
         self.semantic_library()
             .await
             .status(access)
@@ -863,6 +889,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: fm_transport_dto::DeleteSemanticVocabularyRequestDto,
     ) -> Result<fm_transport_dto::DeleteSemanticVocabularyImpactDto, ApplicationError> {
+        self.ensure_semantic_shared_store_writable()?;
         self.semantic_library()
             .await
             .status(access)
@@ -888,6 +915,16 @@ impl FileManagerService {
                 .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
         }
         Ok(impact)
+    }
+
+    /// Vocabulary and saved-conversation stores live in this host's settings
+    /// directory, which an attached host shares with the desktop app that owns
+    /// them. An attached host may read them but never change them.
+    fn ensure_semantic_shared_store_writable(&self) -> Result<(), ApplicationError> {
+        if self.semantic_library.is_attached_desktop() {
+            return Err(ApplicationError::PermissionDenied);
+        }
+        Ok(())
     }
 
     pub(crate) async fn ensure_semantic_library_operation(
@@ -916,6 +953,82 @@ impl FileManagerService {
             }
         }
         Ok(status)
+    }
+
+    /// Changes Gemma's optional media consent without replacing its text index.
+    ///
+    /// A running worker has its media encoders fixed at launch. Retire it after
+    /// the durable change so the next request launches with current consent.
+    pub async fn update_semantic_gemma_media(
+        &self,
+        access: &SemanticAccessContext,
+        media: fm_semantic_library::GemmaMediaSelection,
+        expected_revision: u64,
+        confirm_removal: bool,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        let library = self.semantic_library().await;
+        let previous = library
+            .status(access)?
+            .gemma_media
+            .ok_or(SemanticLibraryError::InvalidRequest)?;
+        let status =
+            library.update_gemma_media(access, media, expected_revision, confirm_removal)?;
+        if status.revision != expected_revision {
+            self.semantic
+                .restart(Duration::from_secs(5))
+                .await
+                .map_err(|_| SemanticLibraryError::StateUnavailable)?;
+            if previous.images && !media.images
+                || previous.audio && !media.audio
+                || previous.video && !media.video
+            {
+                // Health opens the replacement worker. Its startup transaction
+                // removes revoked catalog records and drains the durable Zvec
+                // deletion ledger before it accepts queries. A failure must
+                // never return a success status while cleanup is still owed.
+                self.semantic
+                    .health()
+                    .await
+                    .map_err(|_| SemanticLibraryError::Cleanup)?;
+            }
+        }
+        let added = fm_semantic_library::GemmaMediaSelection {
+            images: media.images && !previous.images,
+            audio: media.audio && !previous.audio,
+            video: media.video && !previous.video,
+        };
+        if added.images || added.audio || added.video {
+            for root in &status.roots {
+                if !matches!(
+                    root.availability,
+                    crate::semantic_library::SemanticRootAvailability::Available
+                ) {
+                    continue;
+                }
+                let root_id = root
+                    .id
+                    .parse()
+                    .map_err(|_| SemanticLibraryError::InvalidRequest)?;
+                let report = self
+                    .semantic_indexing
+                    .index_added_media(
+                        Arc::clone(&library),
+                        access,
+                        root_id,
+                        added,
+                        tokio_util::sync::CancellationToken::new(),
+                    )
+                    .await
+                    .map_err(|error| {
+                        tracing::warn!(%error, "newly permitted Gemma media indexing could not complete");
+                        SemanticLibraryError::StateUnavailable
+                    })?;
+                if report.failed_occurrences != 0 || report.unreadable_files != 0 {
+                    return Err(SemanticLibraryError::StateUnavailable);
+                }
+            }
+        }
+        self.semantic_library_status(access).await
     }
 
     /// Starts a separate, empty Gemma library after explicit fresh-index consent.
@@ -998,11 +1111,37 @@ impl FileManagerService {
         context: SemanticFolderContext,
         recursive: bool,
     ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
+        self.semantic_library_preview_enrolment_with_pdf_image_policy(
+            access, context, recursive, false, None,
+        )
+        .await
+    }
+
+    /// Creates an enrolment disclosure with additional per-root PDF image consent.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, workspace, lock, or persistence
+    /// failure.
+    pub async fn semantic_library_preview_enrolment_with_pdf_image_policy(
+        &self,
+        access: &SemanticAccessContext,
+        context: SemanticFolderContext,
+        recursive: bool,
+        pdf_images_enabled: bool,
+        pdf_image_page_budget: Option<u32>,
+    ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
         let library = self.semantic_library().await;
         library.ensure_operation_allowed(access, SemanticLibraryOperation::PreviewEnrolment)?;
         self.ensure_active_semantic_folder(&context).await?;
         let context = self.semantic_consent_context(context).await;
-        library.preview_enrolment(access, context, recursive)
+        library.preview_enrolment_with_pdf_image_policy(
+            access,
+            context,
+            recursive,
+            pdf_images_enabled,
+            pdf_image_page_budget,
+        )
     }
 
     /// Confirms one live enrolment disclosure for the still-active folder.
@@ -1348,6 +1487,37 @@ impl FileManagerService {
         &self,
     ) -> Result<SemanticComponentStatus, SemanticComponentError> {
         self.semantic_components.status().await
+    }
+
+    /// Attaches this host read-only to the desktop app's device-local
+    /// semantic library and its already-running worker.
+    ///
+    /// `profile_directory` is the desktop's Procyon configuration directory.
+    /// It is an explicit operator choice; nothing is attached by default. The
+    /// library resolves lazily from the desktop's durable component state, so
+    /// it reports itself unavailable until the desktop has an active model and
+    /// a consented library. The attached host never launches, replaces, or
+    /// stops the desktop's worker, never runs reconciliation or indexing
+    /// commits, and gains no semantic component authority. Callers must serve
+    /// requests as [`SemanticAccessContext::Host`], the desktop's principal.
+    ///
+    /// `accessible_roots` are the host's canonical root restrictions. When
+    /// non-empty, the library is reported unavailable while any enrolled root
+    /// lies outside them, so retrieval never reveals content the host's file
+    /// routes would refuse.
+    #[must_use]
+    pub fn with_attached_desktop_semantic_library(
+        mut self,
+        profile_directory: &std::path::Path,
+        accessible_roots: Vec<std::path::PathBuf>,
+    ) -> Self {
+        let runtime_directory =
+            crate::semantic_library::attached_desktop_runtime_directory(profile_directory);
+        self.semantic_library =
+            SemanticLibraryComposition::attached_desktop(profile_directory, accessible_roots);
+        self.with_semantic_capability(Arc::new(
+            crate::semantic::IpcSemanticCapability::desktop_attached(&runtime_directory),
+        ))
     }
 
     /// Replaces the inert default with a host-provided component capability.
@@ -1815,7 +1985,10 @@ impl FileManagerService {
                 .await
             {
                 Ok(preview) => Ok(preview_to_dto(preview)),
-                Err(crate::document_summary::DocumentSummaryError::Unavailable) => {
+                Err(
+                    crate::document_summary::DocumentSummaryError::Unavailable
+                    | crate::document_summary::DocumentSummaryError::NotFound,
+                ) => {
                     self.preview_ephemeral_document_summary(
                         target,
                         request.input_token_budget,
@@ -1879,7 +2052,10 @@ impl FileManagerService {
                     .await
                 {
                     Ok(summary) => return Ok(summary_to_dto(summary, false)),
-                    Err(crate::document_summary::DocumentSummaryError::Unavailable) => {}
+                    Err(
+                        crate::document_summary::DocumentSummaryError::Unavailable
+                        | crate::document_summary::DocumentSummaryError::NotFound,
+                    ) => {}
                     Err(error) => return Err(summary_error_to_application(error)),
                 }
             }
@@ -1914,7 +2090,10 @@ impl FileManagerService {
         };
         match self.document_summaries.current(&worker_request).await {
             Ok(summary) => Ok(summary.map(|(stored, stale)| summary_to_dto(stored, stale))),
-            Err(crate::document_summary::DocumentSummaryError::Unavailable) => Ok(None),
+            Err(
+                crate::document_summary::DocumentSummaryError::Unavailable
+                | crate::document_summary::DocumentSummaryError::NotFound,
+            ) => Ok(None),
             Err(error) => Err(summary_error_to_application(error)),
         }
     }
@@ -1931,7 +2110,14 @@ impl FileManagerService {
             .prepare_ephemeral_document_summary(target, input_token_budget, cancellation)
             .await?;
         self.document_summaries
-            .preview_ephemeral(&prepared, profile_id, &self.llm_profiles, image_evidence)
+            .preview_ephemeral(
+                &prepared,
+                profile_id,
+                &self.llm_profiles,
+                image_evidence,
+                cancellation,
+            )
+            .await
             .map(preview_to_dto)
             .map_err(summary_error_to_application)
     }
@@ -1966,20 +2152,25 @@ impl FileManagerService {
             profile_id: generated.profile_id,
             model_id: generated.model_id,
             supporting_chunk_ids: prepared
-                .selection
-                .representatives
+                .source_chunks
                 .iter()
-                .map(|representative| representative.source.chunk_id.clone())
+                .map(|source| source.chunk_id.clone())
                 .collect(),
-            supporting_weights: prepared
-                .selection
-                .representatives
-                .iter()
-                .map(|representative| representative.cluster_weight)
-                .collect(),
+            supporting_weights: vec![
+                1.0 / prepared.source_chunks.len() as f32;
+                prepared.source_chunks.len()
+            ],
             created_at_ms: generated.created_at_ms,
             brief: generated.brief_text,
             full: generated.full_text,
+            title: generated
+                .title
+                .map(crate::document_summary_mapping::attribution_to_dto),
+            authors: generated
+                .authors
+                .into_iter()
+                .map(crate::document_summary_mapping::attribution_to_dto)
+                .collect(),
             stale: false,
         })
     }
@@ -2060,14 +2251,6 @@ impl FileManagerService {
             return Err(ApplicationError::InvalidRequest(
                 "summary input token budget is outside the supported range".into(),
             ));
-        }
-        let health = self
-            .semantic
-            .health()
-            .await
-            .map_err(|_| ApplicationError::ProviderUnavailable)?;
-        if health != SemanticHealth::Serving {
-            return Err(ApplicationError::ProviderUnavailable);
         }
         let outcome = self
             .document_conversion
@@ -2296,6 +2479,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: SaveRagConversationRequestDto,
     ) -> Result<SavedRagConversationDto, ApplicationError> {
+        self.ensure_semantic_shared_store_writable()?;
         let tenant_id = access
             .tenant_id()
             .map_err(|_| ApplicationError::PermissionDenied)?;
@@ -2342,6 +2526,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         request: DeleteRagConversationRequestDto,
     ) -> Result<(), ApplicationError> {
+        self.ensure_semantic_shared_store_writable()?;
         let tenant_id = access
             .tenant_id()
             .map_err(|_| ApplicationError::PermissionDenied)?;
@@ -2468,6 +2653,12 @@ impl FileManagerService {
             return Err(ApplicationError::NotFound);
         }
         let indexed = resolved.eligible.saturating_sub(resolved.unavailable);
+        let media = self
+            .semantic_library()
+            .await
+            .status(access)
+            .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?
+            .gemma_media;
         Ok(AuthorizedRagRequest {
             question,
             scope: scope_from_dto(scope),
@@ -2482,6 +2673,7 @@ impl FileManagerService {
                 titles: resolved.titles,
             },
             retrieval_strategy,
+            media,
         })
     }
 
@@ -2885,6 +3077,36 @@ impl FileManagerService {
         self.plugin_manager.plugin_logs(plugin_id)
     }
 
+    /// Renders one file with an enabled plugin's preview contribution (task 0142). Reads at most
+    /// [`fm_plugin_runtime::PREVIEW_MAX_INPUT_BYTES`] from the start of the file; the plugin
+    /// itself gets no filesystem authority.
+    pub async fn render_plugin_preview(
+        &self,
+        plugin_id: &str,
+        request: fm_transport_dto::RenderPluginPreviewRequestDto,
+    ) -> Result<fm_transport_dto::PluginPreviewResultDto, ApplicationError> {
+        let name = file_name_from_uri(&request.location.uri);
+        let extension = file_extension(&name);
+        self.plugin_manager
+            .check_preview_claim(plugin_id, &extension)?;
+        let chunk = content_streaming::read_file_range(
+            &self.providers,
+            ReadFileRangeRequestDto {
+                location: request.location,
+                offset: 0,
+                length: fm_plugin_runtime::PREVIEW_MAX_INPUT_BYTES as u64,
+            },
+        )
+        .await?;
+        self.plugin_manager.render_plugin_preview(
+            plugin_id,
+            &name,
+            &extension,
+            &chunk.data,
+            !chunk.eof,
+        )
+    }
+
     /// Persists a plugin enablement decision after confirming its manifest is valid.
     pub fn set_plugin_enabled(
         &self,
@@ -3176,6 +3398,30 @@ impl FileManagerService {
         request: fm_transport_dto::StructuredViewSessionRequestDto,
     ) -> Result<(), ApplicationError> {
         self.structured_view.close(request).await
+    }
+
+    /// Opens a read-only SQLite database viewer session (task 0251).
+    pub async fn open_sqlite_view(
+        &self,
+        request: fm_transport_dto::OpenSqliteViewRequestDto,
+    ) -> Result<fm_transport_dto::OpenSqliteViewResponseDto, ApplicationError> {
+        self.sqlite_view.open(request).await
+    }
+
+    /// Reads one bounded page of a table, view or read-only SQL result.
+    pub async fn query_sqlite_view(
+        &self,
+        request: fm_transport_dto::QuerySqliteViewRequestDto,
+    ) -> Result<fm_transport_dto::QuerySqliteViewResponseDto, ApplicationError> {
+        self.sqlite_view.query(request).await
+    }
+
+    /// Closes a SQLite viewer session and deletes any temporary copy.
+    pub async fn close_sqlite_view(
+        &self,
+        request: fm_transport_dto::SqliteViewSessionRequestDto,
+    ) -> Result<(), ApplicationError> {
+        self.sqlite_view.close(request).await
     }
 
     /// Loads a complete text file only when it fits the bounded editor budget.
@@ -3556,6 +3802,24 @@ impl FileManagerService {
         platform_mapping::read_file_icon(&self.platform, uri)
     }
 
+    /// Publishes local `locations` on the operating system's clipboard as
+    /// file references (task 0247). Returns `false`, leaving the system
+    /// clipboard untouched, when this host has no OS file clipboard or any
+    /// entry is not a local file.
+    pub async fn write_os_clipboard_files(
+        &self,
+        locations: &[Location],
+    ) -> Result<bool, ApplicationError> {
+        crate::os_file_clipboard::write(self.runtime, &self.platform, locations).await
+    }
+
+    /// Reads the local files referenced on the operating system's clipboard,
+    /// e.g. copied in Finder or Explorer (task 0247). Empty when the host has
+    /// no OS file clipboard or the clipboard holds no files.
+    pub async fn read_os_clipboard_files(&self) -> Result<Vec<Location>, ApplicationError> {
+        crate::os_file_clipboard::read(self.runtime, &self.platform).await
+    }
+
     /// Lists the link kinds that can be created for `target` inside the
     /// `destination` directory (task 0168). An empty list means the pair has no
     /// link semantics, e.g. a remote provider or targets on different providers.
@@ -3854,6 +4118,19 @@ impl FileManagerService {
             .await?)
     }
 
+    /// Discovers bounded advertised limits for an unsaved draft's selected model.
+    pub async fn discover_llm_profile_draft_model_limits(
+        &self,
+        request: SaveLlmProfileRequestDto,
+    ) -> Result<LlmModelLimitsDto, ApplicationError> {
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        Ok(model_limits_to_dto(
+            self.llm_profiles
+                .discover_draft_model_limits(draft_from_dto(request), &cancellation)
+                .await?,
+        ))
+    }
+
     /// Lists every stored connection profile with its current runtime status
     /// (spec §16 `GET /api/v1/connections`, task 0103).
     pub async fn list_connections(&self) -> Result<Vec<ConnectionDto>, ApplicationError> {
@@ -4009,6 +4286,18 @@ impl From<WorkspaceSummary> for WorkspaceSummaryDto {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    #[test]
+    fn preview_file_names_are_percent_decoded_and_dotfiles_have_no_extension() {
+        assert_eq!(
+            file_name_from_uri("file:///a/My%20Movie.TORRENT?x=1#y"),
+            "My Movie.TORRENT"
+        );
+        assert_eq!(file_extension("My Movie.TORRENT"), "torrent");
+        assert_eq!(file_extension(".torrent"), "");
+        assert_eq!(file_extension("README"), "");
+    }
+
     use std::io::Write;
     use std::path::Path;
 

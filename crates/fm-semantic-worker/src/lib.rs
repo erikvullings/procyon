@@ -17,9 +17,13 @@ pub mod gemma_audio_decode;
 #[cfg(feature = "gemma-probe")]
 pub mod gemma_audio_features;
 #[cfg(feature = "gemma-probe")]
+mod gemma_compute;
+#[cfg(feature = "gemma-probe")]
 pub mod gemma_embedding;
 #[cfg(feature = "gemma-probe")]
 pub mod gemma_fusion;
+#[cfg(feature = "gemma-launch")]
+pub mod gemma_launch;
 #[cfg(feature = "gemma-probe")]
 pub mod gemma_multimodal;
 #[cfg(feature = "gemma-probe")]
@@ -33,6 +37,10 @@ pub mod gemma_visual;
 pub mod ingestion;
 pub mod knowledge_ipc;
 pub mod knowledge_retrieval;
+#[cfg(feature = "experimental-pdf-render")]
+mod pdf_render_child;
+#[cfg(feature = "experimental-large-pdf")]
+pub mod pdf_text_child;
 pub mod rag_retrieval;
 pub mod representative_selection;
 pub mod semantic_search;
@@ -56,7 +64,8 @@ use fm_semantic_protocol::{
     validate_query, write_frame,
 };
 use prost::Message;
-use tokio::io::{AsyncRead, AsyncWrite};
+use sha2::{Digest, Sha256};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{Mutex as AsyncMutex, Notify, OwnedSemaphorePermit, Semaphore, mpsc, watch};
 use tokio_util::sync::CancellationToken;
 
@@ -208,6 +217,8 @@ pub struct WorkerConfig {
     test_event_scan_delay: Duration,
     test_event_phase_bytes: usize,
     test_idle_wait_delay: Duration,
+    #[cfg(feature = "experimental-large-pdf")]
+    pdf_child_executable: Option<PathBuf>,
 }
 
 impl WorkerConfig {
@@ -228,6 +239,8 @@ impl WorkerConfig {
             test_event_scan_delay: Duration::ZERO,
             test_event_phase_bytes: 0,
             test_idle_wait_delay: Duration::ZERO,
+            #[cfg(feature = "experimental-large-pdf")]
+            pdf_child_executable: None,
         }
     }
 
@@ -337,6 +350,14 @@ impl WorkerConfig {
         self.test_idle_wait_delay = delay;
         self
     }
+
+    /// Overrides the same-executable child path for isolated integration tests.
+    #[cfg(feature = "experimental-large-pdf")]
+    #[must_use]
+    pub fn with_pdf_child_executable(mut self, executable: PathBuf) -> Self {
+        self.pdf_child_executable = Some(executable);
+        self
+    }
 }
 
 /// Worker-server startup or transport failure.
@@ -427,6 +448,11 @@ pub enum ClientError {
 
 enum ConnectorSource {
     Provisioned(LaunchSecret),
+    /// Joins a worker that another host process launched and owns, without
+    /// ever starting, replacing, or stopping it.
+    Attached {
+        runtime_directory: PathBuf,
+    },
     Desktop {
         runtime_directory: PathBuf,
         executable: PathBuf,
@@ -463,14 +489,14 @@ pub enum ManagedModel {
     /// Existing production E5 model pack.
     Pack(PathBuf),
     /// Original pinned EmbeddingGemma 2 files with immutable library settings.
-    #[cfg(feature = "gemma-native")]
+    #[cfg(feature = "gemma-launch")]
     Gemma {
         /// The five host-verified original model files.
-        files: crate::gemma_native::GemmaNativeFiles,
+        files: crate::gemma_launch::GemmaNativeFiles,
         /// Supported Matryoshka vector width.
         dimensions: usize,
         /// Enabled media encoders for this library.
-        media: crate::gemma_native::GemmaMedia,
+        media: crate::gemma_launch::GemmaMedia,
     },
 }
 
@@ -482,6 +508,10 @@ pub struct ManagedWorkerLaunch {
     native_library_directory: PathBuf,
     model: ManagedModel,
     ocrmypdf_executable: Option<PathBuf>,
+    #[cfg(feature = "gemma-launch")]
+    development_cpu_images: bool,
+    #[cfg(feature = "gemma-launch")]
+    forced_cpu: bool,
 }
 
 impl ManagedWorkerLaunch {
@@ -505,19 +535,23 @@ impl ManagedWorkerLaunch {
             native_library_directory,
             model: ManagedModel::Pack(model_pack),
             ocrmypdf_executable: None,
+            #[cfg(feature = "gemma-launch")]
+            development_cpu_images: false,
+            #[cfg(feature = "gemma-launch")]
+            forced_cpu: false,
         }
     }
 
     /// Construct a managed launch from the five verified original Gemma files.
-    #[cfg(feature = "gemma-native")]
+    #[cfg(feature = "gemma-launch")]
     #[must_use]
     pub fn new_gemma(
         executable: PathBuf,
         data_directory: PathBuf,
         native_library_directory: PathBuf,
-        files: crate::gemma_native::GemmaNativeFiles,
+        files: crate::gemma_launch::GemmaNativeFiles,
         dimensions: usize,
-        media: crate::gemma_native::GemmaMedia,
+        media: crate::gemma_launch::GemmaMedia,
     ) -> Self {
         Self {
             executable,
@@ -529,6 +563,8 @@ impl ManagedWorkerLaunch {
                 media,
             },
             ocrmypdf_executable: None,
+            development_cpu_images: false,
+            forced_cpu: false,
         }
     }
 
@@ -544,6 +580,36 @@ impl ManagedWorkerLaunch {
     pub fn with_ocrmypdf_executable(mut self, executable: Option<PathBuf>) -> Self {
         self.ocrmypdf_executable = sanitize_ocrmypdf_executable(executable);
         self
+    }
+
+    /// Force the development Gemma worker to CPU for baseline measurements.
+    #[cfg(feature = "gemma-launch")]
+    #[must_use]
+    pub fn with_development_cpu_images(mut self) -> Self {
+        self.development_cpu_images = true;
+        self
+    }
+
+    /// Force a Gemma worker onto its native CPU backend even when a GPU is available.
+    ///
+    /// Supported in production workers for CPU-fallback qualification; it has no
+    /// effect on E5 model-pack launches.
+    #[cfg(feature = "gemma-launch")]
+    #[must_use]
+    pub fn with_forced_cpu(mut self) -> Self {
+        self.forced_cpu = true;
+        self
+    }
+
+    /// Applies [`gemma_launch::GEMMA_FORCE_CPU_ENV`] from the host process environment.
+    #[cfg(feature = "gemma-launch")]
+    #[must_use]
+    fn with_host_cpu_override(self, value: Option<&std::ffi::OsStr>) -> Self {
+        if gemma_launch::gemma_cpu_forced(value) {
+            self.with_forced_cpu()
+        } else {
+            self
+        }
     }
 }
 
@@ -574,6 +640,30 @@ impl WorkerConnector {
             endpoint,
             source: ConnectorSource::Provisioned(secret),
         }
+    }
+
+    /// Joins the desktop host's already-running worker through its owner-only
+    /// runtime directory.
+    ///
+    /// The connector never launches, replaces, or shuts down that worker: when
+    /// the desktop host is not serving one, [`Self::connect`] reports the
+    /// endpoint as absent. It authenticates with the same per-launch secret
+    /// file the desktop host writes, so only the same OS user can attach.
+    #[must_use]
+    pub fn attached(runtime_directory: &Path) -> Self {
+        Self {
+            endpoint: Endpoint::for_runtime_directory(runtime_directory),
+            source: ConnectorSource::Attached {
+                runtime_directory: runtime_directory.to_owned(),
+            },
+        }
+    }
+
+    /// Reports whether this connector joins a worker owned by another host
+    /// process, which callers must then never stop or restart.
+    #[must_use]
+    pub const fn is_attached(&self) -> bool {
+        matches!(self.source, ConnectorSource::Attached { .. })
     }
 
     /// Creates an on-demand desktop launcher.
@@ -775,7 +865,8 @@ impl WorkerConnector {
             }
             ConnectorSource::Desktop {
                 runtime_directory, ..
-            } => {
+            }
+            | ConnectorSource::Attached { runtime_directory } => {
                 if !runtime_directory.is_dir() {
                     return Ok(None);
                 }
@@ -812,7 +903,10 @@ impl WorkerConnector {
             ConnectorSource::Provisioned(_) => true,
             ConnectorSource::Desktop {
                 runtime_directory, ..
-            } => !runtime_directory.join("worker.pid").exists(),
+            }
+            | ConnectorSource::Attached { runtime_directory } => {
+                !runtime_directory.join("worker.pid").exists()
+            }
         }
     }
 
@@ -824,6 +918,9 @@ impl WorkerConnector {
             &self.source,
             ConnectorSource::Desktop {
                 managed_worker: Some(_),
+                ..
+            } | ConnectorSource::Desktop {
+                developer_managed_worker: Some(_),
                 ..
             } | ConnectorSource::Desktop {
                 developer_model_pack: Some(_),
@@ -852,6 +949,12 @@ impl WorkerConnector {
             ConnectorSource::Provisioned(secret) => {
                 WorkerClient::connect(&self.endpoint, secret.clone()).await
             }
+            ConnectorSource::Attached { .. } => self.connect_existing().await?.ok_or_else(|| {
+                ClientError::Io(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "the desktop host is not running a semantic worker",
+                ))
+            }),
             ConnectorSource::Desktop {
                 runtime_directory,
                 executable,
@@ -908,6 +1011,12 @@ impl WorkerConnector {
                 } else {
                     None
                 };
+                #[cfg(feature = "gemma-launch")]
+                let managed_launch = managed_launch.map(|launch| {
+                    launch.with_host_cpu_override(
+                        std::env::var_os(gemma_launch::GEMMA_FORCE_CPU_ENV).as_deref(),
+                    )
+                });
                 let launch_executable = managed_launch
                     .as_ref()
                     .map_or(executable.as_path(), |launch| launch.executable.as_path());
@@ -941,7 +1050,23 @@ impl WorkerConnector {
                 let child = command
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
-                    .stderr(Stdio::null())
+                    .stderr(
+                        if managed_launch.as_ref().is_some_and(|launch| {
+                            #[cfg(feature = "gemma-launch")]
+                            {
+                                matches!(launch.model, ManagedModel::Gemma { .. })
+                            }
+                            #[cfg(not(feature = "gemma-launch"))]
+                            {
+                                let _ = launch;
+                                false
+                            }
+                        }) {
+                            Stdio::inherit()
+                        } else {
+                            Stdio::null()
+                        },
+                    )
                     .spawn()?;
                 spawn_child_reaper(child);
 
@@ -1088,7 +1213,7 @@ fn validate_managed_launch(
                 )));
             }
         }
-        #[cfg(feature = "gemma-native")]
+        #[cfg(feature = "gemma-launch")]
         ManagedModel::Gemma {
             files, dimensions, ..
         } => {
@@ -1139,7 +1264,7 @@ fn managed_launch_arguments(launch: &ManagedWorkerLaunch) -> Vec<std::ffi::OsStr
             arguments.push("--semantic-model-pack".into());
             arguments.push(path.clone().into_os_string());
         }
-        #[cfg(feature = "gemma-native")]
+        #[cfg(feature = "gemma-launch")]
         ManagedModel::Gemma {
             files,
             dimensions,
@@ -1165,6 +1290,11 @@ fn managed_launch_arguments(launch: &ManagedWorkerLaunch) -> Vec<std::ffi::OsStr
                 if enabled {
                     arguments.push(flag.into());
                 }
+            }
+            if launch.development_cpu_images {
+                arguments.push("--gemma-cpu-images".into());
+            } else if launch.forced_cpu {
+                arguments.push(crate::gemma_launch::GEMMA_FORCE_CPU_FLAG.into());
             }
         }
     }
@@ -1296,10 +1426,10 @@ mod developer_connector_tests {
         );
     }
 
-    #[cfg(feature = "gemma-native")]
+    #[cfg(feature = "gemma-launch")]
     #[test]
     fn managed_gemma_launch_passes_five_original_files_and_refuses_missing_files() {
-        use crate::gemma_native::{GemmaMedia, GemmaNativeFiles};
+        use crate::gemma_launch::{GEMMA_FORCE_CPU_FLAG, GemmaMedia, GemmaNativeFiles};
         let directory = tempfile::tempdir().unwrap();
         let files = GemmaNativeFiles::from_directory(directory.path());
         for path in [
@@ -1332,6 +1462,28 @@ mod developer_connector_tests {
         assert!(arguments.iter().any(|arg| arg == "--gemma-weights"));
         assert!(arguments.iter().any(|arg| arg == "--gemma-video"));
         assert!(!arguments.iter().any(|arg| arg == "--semantic-model-pack"));
+        assert!(!arguments.iter().any(|arg| arg == "--gemma-cpu-images"));
+        assert!(!arguments.iter().any(|arg| arg == GEMMA_FORCE_CPU_FLAG));
+        let unset = resolved.clone().with_host_cpu_override(None);
+        assert!(
+            !managed_launch_arguments(&unset)
+                .iter()
+                .any(|arg| arg == GEMMA_FORCE_CPU_FLAG)
+        );
+        let forced = resolved
+            .clone()
+            .with_host_cpu_override(Some(std::ffi::OsStr::new("1")));
+        assert!(
+            managed_launch_arguments(&forced)
+                .iter()
+                .any(|arg| arg == GEMMA_FORCE_CPU_FLAG)
+        );
+        #[cfg(feature = "developer-bundle")]
+        {
+            let cpu_arguments =
+                managed_launch_arguments(&resolved.clone().with_development_cpu_images());
+            assert!(cpu_arguments.iter().any(|arg| arg == "--gemma-cpu-images"));
+        }
         std::fs::remove_file(directory.path().join("tokenizer.json")).unwrap();
         assert!(matches!(
             resolve_managed_worker(&resolver),
@@ -1406,6 +1558,10 @@ mod developer_connector_tests {
             native_library_directory: native,
             model: ManagedModel::Pack(model),
             ocrmypdf_executable: Some(stale),
+            #[cfg(feature = "gemma-launch")]
+            development_cpu_images: false,
+            #[cfg(feature = "gemma-launch")]
+            forced_cpu: false,
         };
         let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
         let resolved = resolve_managed_worker(&resolver).expect("launch");
@@ -1677,7 +1833,9 @@ pub struct IngestionJobStatus {
     pub document_id: String,
     /// Current lifecycle state.
     pub state: IngestionState,
-    /// Sanitized failure or exclusion detail, when present.
+    /// Completed phase work units; zero when progress is not known.
+    pub completed_units: u64,
+    /// Failure, exclusion, or completed-job evidence-coverage detail.
     pub detail: Option<String>,
 }
 
@@ -1694,10 +1852,24 @@ pub struct WorkerIngestionInput {
     pub document_id: String,
     /// Trusted media type.
     pub media_type: String,
+    /// Host-authorized consent for PDF image embeddings.
+    pub pdf_images_consented: bool,
     /// Structured host metadata.
     pub metadata: BTreeMap<String, String>,
     /// Bounded source bytes.
     pub content: Vec<u8>,
+    /// Isolated text conversion of a verified PDF spool, never accompanied by bytes.
+    #[cfg(feature = "experimental-large-pdf")]
+    pub pdf_text: Option<ingestion::PdfTextSource>,
+}
+
+/// Trusted media type and host-authorized PDF image choice for one ingestion.
+#[derive(Debug, Clone, Copy)]
+pub struct IngestionMedia<'a> {
+    /// IANA media type.
+    pub media_type: &'a str,
+    /// Immutable library image choice for PDF content.
+    pub pdf_images_consented: bool,
 }
 
 /// Durable worker-job snapshot returned through the protocol.
@@ -1715,6 +1887,8 @@ pub struct WorkerIngestionJob {
     pub total: u64,
     /// Sanitized failure, if any.
     pub error: Option<String>,
+    /// Non-fatal evidence-coverage omissions on completed jobs only.
+    pub coverage_detail: Option<String>,
 }
 
 /// Injectable durable ingestion implementation used by the local IPC server.
@@ -2028,6 +2202,12 @@ impl WorkerClient {
         self.capabilities.contains(&capability)
     }
 
+    /// Maximum PDF source bytes offered by this authenticated worker session.
+    #[must_use]
+    pub fn max_pdf_ingestion_bytes(&self) -> u64 {
+        self.inner.limits().max_ingestion_bytes("application/pdf")
+    }
+
     /// Reads authenticated worker health.
     ///
     /// # Errors
@@ -2140,8 +2320,108 @@ impl WorkerClient {
         media_type: &str,
         content: Vec<u8>,
     ) -> Result<String, ClientError> {
-        if u64::try_from(content.len()).unwrap_or(u64::MAX) > self.inner.limits().max_stream_bytes()
-        {
+        self.ingest_with_pdf_images(
+            request_id,
+            scope,
+            document_id,
+            metadata,
+            IngestionMedia {
+                media_type,
+                pdf_images_consented: false,
+            },
+            content,
+        )
+        .await
+    }
+
+    /// Streams a document with its host-authorized PDF image consent.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed transport, authentication, cancellation, or limit error.
+    pub async fn ingest_with_pdf_images(
+        &self,
+        request_id: &str,
+        scope: IngestionScope,
+        document_id: &str,
+        metadata: BTreeMap<String, String>,
+        media: IngestionMedia<'_>,
+        content: Vec<u8>,
+    ) -> Result<String, ClientError> {
+        let length = u64::try_from(content.len()).unwrap_or(u64::MAX);
+        if length > self.inner.limits().max_stream_bytes() {
+            return Err(ClientError::Remote {
+                code: v1::ErrorCode::LimitExceeded,
+                message: "ingestion stream exceeds its negotiated limit".to_owned(),
+            });
+        }
+        self.ingest_reader(
+            request_id,
+            scope,
+            document_id,
+            metadata,
+            media,
+            std::io::Cursor::new(content),
+            length,
+            None,
+        )
+        .await
+    }
+
+    /// Streams a host-authorized PDF from a bounded reader without collecting it in memory.
+    /// Verifies the complete SHA-256, declared length, and EOF before finishing the stream.
+    /// Dropping this future cancels the outstanding worker request.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed transport, integrity, cancellation, or limit error.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "host-supplied PDF identity, consent, reader, and integrity are separate authority inputs"
+    )]
+    pub async fn ingest_pdf_reader<R: AsyncRead + Unpin>(
+        &self,
+        request_id: &str,
+        scope: IngestionScope,
+        document_id: &str,
+        metadata: BTreeMap<String, String>,
+        pdf_images_consented: bool,
+        reader: R,
+        expected_bytes: u64,
+        expected_sha256: [u8; 32],
+    ) -> Result<String, ClientError> {
+        self.ingest_reader(
+            request_id,
+            scope,
+            document_id,
+            metadata,
+            IngestionMedia {
+                media_type: "application/pdf",
+                pdf_images_consented,
+            },
+            reader,
+            expected_bytes,
+            Some(expected_sha256),
+        )
+        .await
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "shared implementation for legacy Vec and bounded PDF reader inputs"
+    )]
+    async fn ingest_reader<R: AsyncRead + Unpin>(
+        &self,
+        request_id: &str,
+        scope: IngestionScope,
+        document_id: &str,
+        metadata: BTreeMap<String, String>,
+        media: IngestionMedia<'_>,
+        mut reader: R,
+        expected_bytes: u64,
+        expected_sha256: Option<[u8; 32]>,
+    ) -> Result<String, ClientError> {
+        if expected_bytes > self.inner.limits().max_ingestion_bytes(media.media_type) {
             return Err(ClientError::Remote {
                 code: v1::ErrorCode::LimitExceeded,
                 message: "ingestion stream exceeds its negotiated limit".to_owned(),
@@ -2173,8 +2453,10 @@ impl WorkerClient {
                         .into_iter()
                         .map(|(key, value)| v1::MetadataEntry { key, value })
                         .collect(),
-                    media_type: media_type.to_owned(),
-                    expected_content_bytes: u64::try_from(content.len()).unwrap_or(u64::MAX),
+                    media_type: media.media_type.to_owned(),
+                    expected_content_bytes: expected_bytes,
+                    pdf_images_consented: media.pdf_images_consented,
+                    expected_sha256: expected_sha256.map_or_else(Vec::new, |hash| hash.to_vec()),
                 })),
             }),
             deadline,
@@ -2185,37 +2467,74 @@ impl WorkerClient {
             .limits()
             .max_message_bytes()
             .saturating_sub(1024)
-            .max(1);
-        if content.is_empty() {
+            .clamp(1, 1024 * 1024);
+        let mut buffer = vec![0; chunk_size];
+        let mut received = 0u64;
+        let mut sequence = 0u64;
+        let mut digest = Sha256::new();
+        while received < expected_bytes {
+            let remaining = usize::try_from(expected_bytes - received)
+                .unwrap_or(usize::MAX)
+                .min(chunk_size);
+            let read = tokio::time::timeout_at(deadline, reader.read(&mut buffer[..remaining]))
+                .await
+                .map_err(|_| ClientError::Remote {
+                    code: v1::ErrorCode::DeadlineExceeded,
+                    message: "PDF reader deadline exceeded".to_owned(),
+                })??;
+            if read == 0 {
+                return Err(ClientError::Remote {
+                    code: v1::ErrorCode::InvalidRequest,
+                    message: "source ended before declared length".to_owned(),
+                });
+            }
+            if expected_sha256.is_some() {
+                digest.update(&buffer[..read]);
+            }
+            received += read as u64;
             self.send_ingestion_chunk(
                 correlation_id,
-                scope,
-                request_id,
+                scope.clone(),
+                request_id.clone(),
                 v1::FileContentChunk {
-                    sequence: 0,
-                    content: Vec::new(),
-                    end_of_stream: true,
+                    sequence,
+                    content: buffer[..read].to_vec(),
+                    end_of_stream: false,
                 },
                 deadline,
             )
             .await?;
-        } else {
-            let chunk_count = content.len().div_ceil(chunk_size);
-            for (sequence, chunk) in content.chunks(chunk_size).enumerate() {
-                self.send_ingestion_chunk(
-                    correlation_id,
-                    scope.clone(),
-                    request_id.clone(),
-                    v1::FileContentChunk {
-                        sequence: u64::try_from(sequence).unwrap_or(u64::MAX),
-                        content: chunk.to_vec(),
-                        end_of_stream: sequence + 1 == chunk_count,
-                    },
-                    deadline,
-                )
-                .await?;
-            }
+            sequence = sequence
+                .checked_add(1)
+                .ok_or(ClientError::UnexpectedResponse)?;
         }
+        let mut extra = [0u8; 1];
+        let eof = tokio::time::timeout_at(deadline, reader.read(&mut extra))
+            .await
+            .map_err(|_| ClientError::Remote {
+                code: v1::ErrorCode::DeadlineExceeded,
+                message: "PDF reader deadline exceeded".to_owned(),
+            })??;
+        if eof != 0
+            || expected_sha256.is_some_and(|expected| digest.finalize().as_slice() != expected)
+        {
+            return Err(ClientError::Remote {
+                code: v1::ErrorCode::InvalidRequest,
+                message: "PDF source length or SHA-256 changed while streaming".to_owned(),
+            });
+        }
+        self.send_ingestion_chunk(
+            correlation_id,
+            scope,
+            request_id,
+            v1::FileContentChunk {
+                sequence,
+                content: Vec::new(),
+                end_of_stream: true,
+            },
+            deadline,
+        )
+        .await?;
         let responses = self
             .collect(
                 correlation_id,
@@ -2420,21 +2739,38 @@ impl WorkerClient {
             ))
             .await?;
         match payload {
-            v1::server_frame::Payload::IngestionJob(job) => Ok(IngestionJobStatus {
-                job_id: job.job_id,
-                document_id: job.document_id,
-                state: match v1::JobState::try_from(job.state).unwrap_or(v1::JobState::Unspecified)
+            v1::server_frame::Payload::IngestionJob(job) => {
+                let completed = job.state == v1::JobState::Completed as i32;
+                if (completed && job.error.is_some())
+                    || (!completed && job.coverage_detail.is_some())
                 {
-                    v1::JobState::Pending => IngestionState::Pending,
-                    v1::JobState::Running => IngestionState::Running,
-                    v1::JobState::Completed => IngestionState::Completed,
-                    v1::JobState::Failed => IngestionState::Failed,
-                    v1::JobState::Cancelled => IngestionState::Cancelled,
-                    v1::JobState::Skipped => IngestionState::Skipped,
-                    v1::JobState::Unspecified => return Err(ClientError::UnexpectedResponse),
-                },
-                detail: job.error.map(|error| error.message),
-            }),
+                    return Err(ClientError::UnexpectedResponse);
+                }
+                Ok(IngestionJobStatus {
+                    job_id: job.job_id,
+                    document_id: job.document_id,
+                    state: match v1::JobState::try_from(job.state)
+                        .unwrap_or(v1::JobState::Unspecified)
+                    {
+                        v1::JobState::Pending => IngestionState::Pending,
+                        v1::JobState::Running => IngestionState::Running,
+                        v1::JobState::Completed => IngestionState::Completed,
+                        v1::JobState::Failed => IngestionState::Failed,
+                        v1::JobState::Cancelled => IngestionState::Cancelled,
+                        v1::JobState::Skipped => IngestionState::Skipped,
+                        v1::JobState::Unspecified => return Err(ClientError::UnexpectedResponse),
+                    },
+                    completed_units: job
+                        .progress
+                        .as_ref()
+                        .map_or(0, |progress| progress.completed_units),
+                    detail: if completed {
+                        job.coverage_detail
+                    } else {
+                        job.error.map(|error| error.message)
+                    },
+                })
+            }
             _ => Err(ClientError::UnexpectedResponse),
         }
     }
@@ -2781,6 +3117,7 @@ struct RuntimeState {
     active_atomic: AtomicUsize,
     atomic_finished: Notify,
     concurrency: Arc<Semaphore>,
+    pdf_spool_concurrency: Arc<Semaphore>,
 }
 
 #[derive(Clone)]
@@ -2802,13 +3139,20 @@ struct PendingIngestion {
     request_id: String,
     scope: v1::ResourceScope,
     start: v1::IngestionStart,
-    content: Vec<u8>,
+    content: PendingContent,
     budget: StreamBudget,
+    digest: Option<Sha256>,
     next_sequence: u64,
     deadline: tokio::time::Instant,
     cancellation: CancellationToken,
     stream_finished: CancellationToken,
     _permit: OwnedSemaphorePermit,
+    _pdf_spool_permit: Option<OwnedSemaphorePermit>,
+}
+
+enum PendingContent {
+    Memory(Vec<u8>),
+    PdfSpool(tokio::fs::File),
 }
 
 struct ConnectionState {
@@ -3008,6 +3352,7 @@ impl WorkerServer {
                 active_atomic: AtomicUsize::new(0),
                 atomic_finished: Notify::new(),
                 concurrency,
+                pdf_spool_concurrency: Arc::new(Semaphore::new(1)),
             }),
         }
     }
@@ -3183,7 +3528,14 @@ async fn serve_connection(stream: BoxedIo, state: Arc<RuntimeState>) -> Result<(
                 }
                 _ => RequestRegistration::Unregistered,
             };
-            tokio::spawn(async move {
+            let handshake = matches!(
+                &frame.payload,
+                Some(
+                    v1::client_frame::Payload::Negotiate(_)
+                        | v1::client_frame::Payload::OpenSession(_)
+                )
+            );
+            let handle = async move {
                 handle_frame(
                     frame,
                     connection_state,
@@ -3193,7 +3545,13 @@ async fn serve_connection(stream: BoxedIo, state: Arc<RuntimeState>) -> Result<(
                     request_registration,
                 )
                 .await;
-            });
+            };
+            if handshake {
+                // Release the permit before reading the next handshake frame.
+                handle.await;
+            } else {
+                tokio::spawn(handle);
+            }
         }
     }
 }
@@ -3467,13 +3825,28 @@ async fn handle_frame(
                         .await;
                         return;
                     };
-                    if start.expected_content_bytes > state.config.limits.max_stream_bytes() {
+                    if start.expected_content_bytes
+                        > state.config.limits.max_ingestion_bytes(&start.media_type)
+                    {
                         send_error(
                             &writer,
                             correlation_id,
                             protocol_error(
                                 v1::ErrorCode::LimitExceeded,
                                 "declared content exceeds stream limit",
+                            ),
+                            state.config.limits,
+                        )
+                        .await;
+                        return;
+                    }
+                    if start.pdf_images_consented && start.media_type != "application/pdf" {
+                        send_error(
+                            &writer,
+                            correlation_id,
+                            protocol_error(
+                                v1::ErrorCode::InvalidRequest,
+                                "PDF image consent requires PDF content",
                             ),
                             state.config.limits,
                         )
@@ -3492,6 +3865,50 @@ async fn handle_frame(
                         )
                         .await;
                         return;
+                    };
+                    let (content, pdf_spool_permit) = if start.expected_content_bytes
+                        > state.config.limits.max_stream_bytes()
+                        || (cfg!(feature = "experimental-pdf-render")
+                            && start.media_type == "application/pdf"
+                            && start.pdf_images_consented)
+                    {
+                        let Ok(spool_permit) =
+                            Arc::clone(&state.pdf_spool_concurrency).try_acquire_owned()
+                        else {
+                            send_error(
+                                &writer,
+                                correlation_id,
+                                protocol_error(
+                                    v1::ErrorCode::LimitExceeded,
+                                    "PDF spool is occupied",
+                                ),
+                                state.config.limits,
+                            )
+                            .await;
+                            return;
+                        };
+                        let file = match tempfile::tempfile() {
+                            Ok(file) => file,
+                            Err(error) => {
+                                send_error(
+                                    &writer,
+                                    correlation_id,
+                                    protocol_error(
+                                        v1::ErrorCode::Internal,
+                                        format!("PDF spool creation failed: {error}"),
+                                    ),
+                                    state.config.limits,
+                                )
+                                .await;
+                                return;
+                            }
+                        };
+                        (
+                            PendingContent::PdfSpool(tokio::fs::File::from_std(file)),
+                            Some(spool_permit),
+                        )
+                    } else {
+                        (PendingContent::Memory(Vec::new()), None)
                     };
                     let Some(cancellation) =
                         register_cancellation(&connection, &request.request_id)
@@ -3512,19 +3929,27 @@ async fn handle_frame(
                     let request_id = request.request_id;
                     let ingestion_timeout = state.config.effective_ingestion_timeout();
                     let deadline = deadline_after(ingestion_timeout);
+                    let budget = StreamBudget::new(
+                        state.config.limits.max_ingestion_bytes(&start.media_type),
+                    );
+                    let digest = (!start.expected_sha256.is_empty()
+                        || matches!(content, PendingContent::PdfSpool(_)))
+                    .then(Sha256::new);
                     connection.ingestions.lock().await.insert(
                         correlation_id,
                         PendingIngestion {
                             request_id: request_id.clone(),
                             scope,
                             start,
-                            content: Vec::new(),
-                            budget: StreamBudget::new(state.config.limits.max_stream_bytes()),
+                            content,
+                            budget,
+                            digest,
                             next_sequence: 0,
                             deadline,
                             cancellation: cancellation.clone(),
                             stream_finished: stream_finished.clone(),
                             _permit: permit,
+                            _pdf_spool_permit: pdf_spool_permit,
                         },
                     );
                     tokio::spawn(expire_pending_ingestion(PendingIngestionExpiration {
@@ -3613,7 +4038,32 @@ async fn handle_frame(
                         return;
                     }
                     pending.next_sequence = next_sequence.unwrap_or(pending.next_sequence);
-                    pending.content.extend_from_slice(&chunk.content);
+                    if let Some(digest) = &mut pending.digest {
+                        digest.update(&chunk.content);
+                    }
+                    let write_result = match &mut pending.content {
+                        PendingContent::Memory(content) => {
+                            content.extend_from_slice(&chunk.content);
+                            Ok(())
+                        }
+                        PendingContent::PdfSpool(file) => file.write_all(&chunk.content).await,
+                    };
+                    if let Err(error) = write_result {
+                        let pending = ingestions.remove(&correlation_id);
+                        drop(ingestions);
+                        discard_pending_ingestion(&connection, pending.as_ref());
+                        send_error(
+                            &writer,
+                            correlation_id,
+                            protocol_error(
+                                v1::ErrorCode::Internal,
+                                format!("PDF spool write failed: {error}"),
+                            ),
+                            state.config.limits,
+                        )
+                        .await;
+                        return;
+                    }
                     if !chunk.end_of_stream {
                         return;
                     }
@@ -3946,6 +4396,7 @@ async fn handle_frame(
                     error: job
                         .error
                         .map(|error| protocol_error(v1::ErrorCode::Internal, error)),
+                    coverage_detail: job.coverage_detail,
                 });
                 send_payload_until(
                     &writer,
@@ -3993,6 +4444,7 @@ async fn handle_frame(
                     total_units: 1,
                 }),
                 error: None,
+                coverage_detail: None,
             })
         }
         Some(v1::client_frame::Payload::Events(request)) => {
@@ -4430,7 +4882,7 @@ async fn expire_pending_ingestion(expiration: PendingIngestionExpiration) {
 }
 
 async fn complete_ingestion(
-    pending: PendingIngestion,
+    mut pending: PendingIngestion,
     correlation_id: u64,
     state: Arc<RuntimeState>,
     connection: Arc<ConnectionState>,
@@ -4464,7 +4916,7 @@ async fn complete_ingestion(
     let response_deadline = pending.deadline;
     let response_cancellation = pending.cancellation.clone();
 
-    if pending.content.len() as u64 != pending.start.expected_content_bytes {
+    if pending.budget.consumed() != pending.start.expected_content_bytes {
         send_error(
             &writer,
             correlation_id,
@@ -4476,6 +4928,41 @@ async fn complete_ingestion(
         )
         .await;
         return;
+    }
+    if let Some(digest) = pending.digest.take() {
+        let actual = digest.finalize();
+        if pending.start.expected_sha256.is_empty() {
+            if !cfg!(feature = "experimental-pdf-render")
+                || !pending.start.pdf_images_consented
+                || pending.start.media_type != "application/pdf"
+                || pending.start.expected_content_bytes > state.config.limits.max_stream_bytes()
+            {
+                send_error(
+                    &writer,
+                    correlation_id,
+                    protocol_error(
+                        v1::ErrorCode::InvalidRequest,
+                        "PDF spool requires a declared SHA-256 digest",
+                    ),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            }
+            pending.start.expected_sha256 = actual.to_vec();
+        } else if actual.as_slice() != pending.start.expected_sha256 {
+            send_error(
+                &writer,
+                correlation_id,
+                protocol_error(
+                    v1::ErrorCode::InvalidRequest,
+                    "PDF SHA-256 does not match declaration",
+                ),
+                state.config.limits,
+            )
+            .await;
+            return;
+        }
     }
     tokio::select! {
         () = connection.disconnected.cancelled() => return,
@@ -4502,6 +4989,73 @@ async fn complete_ingestion(
         }
         () = tokio::time::sleep(state.config.atomic_ingestion_delay) => {}
     }
+    #[cfg(feature = "experimental-large-pdf")]
+    let mut pdf_text = None;
+    let content = match pending.content {
+        PendingContent::Memory(content) => content,
+        PendingContent::PdfSpool(file) => {
+            #[cfg(feature = "experimental-large-pdf")]
+            {
+                if state.ingestion_backend.is_none() {
+                    send_error(
+                        &writer,
+                        correlation_id,
+                        protocol_error(
+                            v1::ErrorCode::LimitExceeded,
+                            "large PDF text indexing backend is unavailable",
+                        ),
+                        state.config.limits,
+                    )
+                    .await;
+                    return;
+                }
+                let converted = pdf_text_child::convert_spool_in_worker(
+                    file,
+                    state.config.pdf_child_executable.as_deref(),
+                    &pending.start.expected_sha256,
+                    pending.start.pdf_images_consented,
+                    &pending.cancellation,
+                    pending.deadline,
+                    &connection.disconnected,
+                )
+                .await;
+                match converted {
+                    Ok(pdf) => {
+                        pdf_text = Some(pdf);
+                        Vec::new()
+                    }
+                    Err(error) => {
+                        send_error(
+                            &writer,
+                            correlation_id,
+                            protocol_error(
+                                v1::ErrorCode::Internal,
+                                format!("large PDF text conversion failed: {error}"),
+                            ),
+                            state.config.limits,
+                        )
+                        .await;
+                        return;
+                    }
+                }
+            }
+            #[cfg(not(feature = "experimental-large-pdf"))]
+            {
+                drop(file);
+                send_error(
+                    &writer,
+                    correlation_id,
+                    protocol_error(
+                        v1::ErrorCode::LimitExceeded,
+                        "large PDF conversion is not yet available",
+                    ),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            }
+        }
+    };
     let document_id = pending.start.document_id;
     let metadata = pending
         .start
@@ -4516,8 +5070,11 @@ async fn complete_ingestion(
             library_id: pending.scope.library_id,
             document_id,
             media_type: pending.start.media_type,
+            pdf_images_consented: pending.start.pdf_images_consented,
             metadata,
-            content: pending.content,
+            content,
+            #[cfg(feature = "experimental-large-pdf")]
+            pdf_text,
         };
         let job_id = match backend.enqueue(input, pending.cancellation) {
             Ok(job_id) => job_id,
@@ -4552,7 +5109,7 @@ async fn complete_ingestion(
             library_id: pending.scope.library_id.clone(),
             document_id: document_id.clone(),
             metadata,
-            content: pending.content,
+            content,
         }));
     let job_id = format!("job-{}", state.next_job.fetch_add(1, Ordering::Relaxed));
     {
@@ -5154,6 +5711,7 @@ fn request_validation_error(error: RequestValidationError) -> v1::ProtocolError 
         | RequestValidationError::MissingRequestId
         | RequestValidationError::MissingPayload
         | RequestValidationError::MissingDocumentId
+        | RequestValidationError::InvalidPdfDigest
         | RequestValidationError::EmptyQuery
         | RequestValidationError::InvalidConceptQuery
         | RequestValidationError::InvalidQueryIntent
@@ -5547,6 +6105,47 @@ mod tests {
     use super::{Endpoint, LaunchSecret, WorkerConfig};
     use std::path::Path;
     use std::time::Duration;
+
+    #[tokio::test]
+    async fn attached_connector_joins_a_running_worker_and_never_launches_one() {
+        let root = tempfile::tempdir().expect("temporary runtime root");
+        let runtime = root.path().join("worker-runtime");
+        let connector = super::WorkerConnector::attached(&runtime);
+        assert!(connector.is_attached());
+
+        let absent = connector.connect().await.expect_err("no worker is running");
+        assert!(matches!(
+            absent,
+            super::ClientError::Io(ref error) if error.kind() == std::io::ErrorKind::NotFound
+        ));
+        assert!(
+            !runtime.exists(),
+            "attaching must not create the desktop runtime directory"
+        );
+
+        super::ensure_runtime_directory(&runtime).expect("owner-only runtime directory");
+        let secret = LaunchSecret::generate();
+        super::write_secret_file(&runtime.join("launch.secret"), &secret).expect("secret file");
+        let endpoint = Endpoint::for_runtime_directory(&runtime);
+        let server = tokio::spawn(
+            super::WorkerServer::new(WorkerConfig::new(endpoint.clone(), secret)).run(),
+        );
+        for _ in 0..200 {
+            if endpoint.exists() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        let client = connector.connect().await.expect("join the running worker");
+        assert_eq!(client.protocol_version(), 1);
+        assert!(
+            !runtime.join("launch.lock").exists(),
+            "attaching must not take the desktop launch lock"
+        );
+        client.shutdown(Duration::from_millis(100)).await.unwrap();
+        server.await.unwrap().unwrap();
+    }
 
     #[test]
     fn authenticated_sessions_default_to_the_ipc_connection_lifetime() {

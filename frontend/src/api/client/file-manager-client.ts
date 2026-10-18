@@ -78,6 +78,7 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmModelLimits,
   LlmProfile,
   LlmProfileExport,
   LlmProfilePreset,
@@ -89,6 +90,7 @@ import type {
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
   OpenPptxPreviewRequest,
+  OpenSqliteViewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
@@ -99,11 +101,13 @@ import type {
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  PluginPreviewResult,
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
   PreviewRagRequest,
   PreviewSemanticEnrolmentRequest,
+  QuerySqliteViewRequest,
   RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
@@ -154,6 +158,9 @@ import type {
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
+  SqliteQueryResult,
+  SqliteView,
+  SqliteViewSessionRequest,
   StartChecksumRequest,
   StartChecksumResult,
   StartComparisonRequest,
@@ -175,6 +182,7 @@ import type {
   UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
+  UpdateGemmaMediaRequest,
   UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
@@ -295,6 +303,10 @@ export interface FileManagerClient {
   cancelSemanticOcrRemediation(jobId: string, signal?: AbortSignal): Promise<SemanticOcrJob>;
   getSemanticLibraryCapabilities(signal?: AbortSignal): Promise<SemanticLibraryCapabilities>;
   getSemanticLibraryStatus(signal?: AbortSignal): Promise<SemanticLibraryStatus>;
+  updateGemmaMedia(
+    request: UpdateGemmaMediaRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
   listSemanticVocabularies(signal?: AbortSignal): Promise<readonly SemanticVocabulary[]>;
   importSemanticVocabulary(skosJson: string, signal?: AbortSignal): Promise<SemanticVocabulary>;
   exportSemanticVocabulary(vocabularyId: string, signal?: AbortSignal): Promise<string>;
@@ -357,6 +369,16 @@ export interface FileManagerClient {
   /** Starts an OS file-reference drag from the desktop host. */
   startNativeDrag(locations: readonly Location[], signal?: AbortSignal): Promise<void>;
 
+  /** Publishes local files on the operating system clipboard as file references, so they paste
+   * in Finder or Explorer. Resolves `false`, leaving the OS clipboard untouched, when the host
+   * has no OS file clipboard (`RuntimeCapabilities.osFileClipboard`) or any entry is not a local
+   * file. Always a copy on the OS side: cut/move semantics stay inside Procyon. */
+  writeOsClipboardFiles(locations: readonly Location[], signal?: AbortSignal): Promise<boolean>;
+
+  /** Local files referenced on the operating system clipboard (e.g. copied in Finder or
+   * Explorer); empty when there are none or the host has no OS file clipboard. */
+  readOsClipboardFiles(signal?: AbortSignal): Promise<Location[]>;
+
   /** Opens the native Services (macOS) or Send To (Windows) submenu for a local selection. */
   showPlatformContextMenu(locations: readonly Location[], signal?: AbortSignal): Promise<void>;
 
@@ -398,6 +420,10 @@ export interface FileManagerClient {
    * no named workspace to fork from yet (ephemeral per-window workspaces spec follow-up).
    * Desktop-only, like {@link quit}: the browser/HTTP host has no window concept. */
   openWorkspaceWindow?(sourceWorkspaceId?: WorkspaceId): Promise<void>;
+
+  /** Opens the F3 viewer for one file in its own OS window; `payload` is the URL-safe viewer
+   * request token. Desktop-only: the browser host opens a popup of the same page instead. */
+  openViewerWindow?(payload: string, title: string): Promise<void>;
 
   /** Writes an ephemeral (per-window) workspace's current tabs/panes/layout back into
    * `targetWorkspaceId`, or - if omitted - the named workspace it was forked from, creating one
@@ -531,6 +557,14 @@ export interface FileManagerClient {
     signal?: AbortSignal,
   ): Promise<StructuredRowSearch>;
   closeStructuredView(request: StructuredViewSessionRequest, signal?: AbortSignal): Promise<void>;
+  /** Opens a read-only SQLite database session (task 0251): schema plus later paged queries. */
+  openSqliteView(request: OpenSqliteViewRequest, signal?: AbortSignal): Promise<SqliteView>;
+  /** Reads one page of a table/view (with search, filters, sort) or of a read-only SQL result. */
+  querySqliteView(
+    request: QuerySqliteViewRequest,
+    signal?: AbortSignal,
+  ): Promise<SqliteQueryResult>;
+  closeSqliteView(request: SqliteViewSessionRequest, signal?: AbortSignal): Promise<void>;
   loadEditableFile(request: LoadEditableFileRequest, signal?: AbortSignal): Promise<EditableFile>;
   saveEditableFile(
     request: SaveEditableFileRequest,
@@ -721,6 +755,15 @@ export interface FileManagerClient {
   setPluginEnabled(pluginId: PluginId, enabled: boolean, signal?: AbortSignal): Promise<void>;
 
   getPluginLogs(pluginId: PluginId, signal?: AbortSignal): Promise<PluginLogEntry[]>;
+  /**
+   * Renders `location` with an enabled plugin's sandboxed preview contribution (task 0142).
+   * The result is untrusted: `html` bodies must be sanitized before display.
+   */
+  renderPluginPreview(
+    pluginId: PluginId,
+    location: Location,
+    signal?: AbortSignal,
+  ): Promise<PluginPreviewResult>;
 
   /**
    * Fetches raw SVG markup for one icon-theme asset (task 0095); `assetPath` is a theme's
@@ -764,6 +807,10 @@ export interface FileManagerClient {
     request: SaveLlmProfileRequest,
     signal?: AbortSignal,
   ): Promise<string[]>;
+  discoverLlmProfileDraftModelLimits(
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmModelLimits>;
   previewDocumentSummary(
     request: PreviewDocumentSummaryRequest,
     signal?: AbortSignal,

@@ -575,6 +575,39 @@ export function createNavigationController(
     }
   }
 
+  /**
+   * Pushes a folder that could not be opened into the tab's history, so its tab title and
+   * breadcrumb name the failed target, retry reloads it, and back returns to the folder the user
+   * came from. Returns undefined (leaving history untouched) when the command itself fails.
+   */
+  async function recordFailedLocation(
+    workspace: WorkspaceProjection,
+    paneId: PaneId,
+    tab: TabProjection,
+    request: ActiveRequest,
+    location: Location,
+  ): Promise<Location | undefined> {
+    try {
+      const updated = await dispatchWorkspaceCommand(
+        options.client,
+        {
+          type: 'navigateTab',
+          workspaceId: workspace.id,
+          paneId,
+          tabId: tab.id,
+          navigationMode: 'push',
+          expectedRevision: options.getWorkspace()?.revision ?? workspace.revision,
+          location,
+        },
+        options.replaceWorkspace,
+        request.controller.signal,
+      );
+      return activeTab(updated, paneId)?.location;
+    } catch {
+      return undefined;
+    }
+  }
+
   async function navigateHistory(
     paneId: PaneId,
     navigationMode: 'push' | 'back' | 'forward',
@@ -623,10 +656,11 @@ export function createNavigationController(
         }
       });
     };
+    let validated = location === undefined;
     try {
-      // Explicit destinations can be validated without mutating workspace history. This keeps a
-      // failed archive open (for example an unsupported RAR-backed CBR) from replacing the tab's
-      // last usable location and poisoning retry, reload, and breadcrumb navigation.
+      // Explicit destinations are validated before mutating workspace history. A failed archive
+      // open (for example an unsupported RAR-backed CBR) leaves the tab's last usable location in
+      // place; a failed folder is recorded afterwards (see `recordFailedLocation`).
       const pendingSnapshot =
         location === undefined
           ? undefined
@@ -640,6 +674,7 @@ export function createNavigationController(
                 request.controller.signal,
               ),
             );
+      validated = true;
       if (!isCurrent(paneId, tab.id, request)) {
         return;
       }
@@ -696,11 +731,17 @@ export function createNavigationController(
           if (previousView !== undefined) publish(paneId, tab.id, previousView);
           throw error;
         }
+        const failedLocation =
+          location !== undefined && !validated && location.providerId !== 'archive'
+            ? await recordFailedLocation(workspace, paneId, tab, request, location)
+            : undefined;
+        if (!isCurrent(paneId, tab.id, request)) return;
         const currentTab = options.getWorkspace();
         publish(paneId, tab.id, {
           state: { type: 'error', message: errorMessage(error) },
           entries: [],
           location:
+            failedLocation ??
             (currentTab === undefined ? undefined : activeTab(currentTab, paneId)?.location) ??
             tab.location,
           requestId: request.id,

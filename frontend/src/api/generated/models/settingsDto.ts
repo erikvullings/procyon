@@ -92,4 +92,6 @@ export interface SettingsDto {
   terminalCommand?: string | null;
   /** Application theme. */
   theme: ThemeDto;
+  /** Whether F3 opens the viewer in its own window instead of a tab in the active pane. */
+  viewerInSeparateWindow: boolean;
 }

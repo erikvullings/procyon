@@ -72,7 +72,11 @@ deleted and remain subject to the warning shown when they were created.
 
 Desktop-managed components execute with the user's account but remain isolated from provider
 authority. Administrator-managed servers must additionally enforce tenant quotas, TLS, backup
-access controls, and per-tenant storage placement. Mac App Store builds cannot download executable
+access controls, and per-tenant storage placement. The opt-in desktop attachment (task 0250)
+deliberately exposes the device library to an `fm-server` process of the same OS user. It is only
+granted with a loopback bind and token authentication, so any local process holding the token can
+search the device library through it. Operators should treat that token like the library itself
+and stop the server when qualification is done. Mac App Store builds cannot download executable
 runtime components and therefore require bundled or administrator-provisioned capabilities.
 Plaintext whole-library exports contain sensitive metadata and retained conversation data; the UI
 must show the warning before writing them, and operators should encrypt them at rest.

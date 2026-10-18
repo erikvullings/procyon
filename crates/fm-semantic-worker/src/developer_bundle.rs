@@ -18,10 +18,27 @@ use fm_semantic_conversion::{ConversionBudgets, STRUCTURAL_CHUNKER_VERSION};
 use fm_semantic_docling::{
     DEFAULT_CONVERTER_PIPELINE_VERSION, OcrMyPdfConfiguration, converter_with_optional_ocr,
 };
+#[cfg(feature = "experimental-large-pdf")]
+use fm_semantic_protocol::{MAX_PDF_INGESTION_BYTES, ProtocolLimits};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
 use crate::developer_onnx::OnnxEmbeddingBackend;
+
+/// How a managed Gemma worker selects its compute backend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GemmaBackendSelection {
+    /// Use Metal when compiled in and available, otherwise native CPU.
+    #[default]
+    Automatic,
+    /// Development-only CPU baseline used to compare against Metal.
+    DevelopmentCpuBaseline,
+    /// Operator-requested CPU-only inference (`PROCYON_GEMMA_FORCE_CPU`).
+    ForcedCpu,
+}
+
+/// Status suffix written to `gemma-backend` when CPU was forced by the operator.
+pub const GEMMA_FORCED_CPU_STATUS: &str = "[CPU forced by PROCYON_GEMMA_FORCE_CPU]";
 use crate::embedding::{
     CpuEmbeddingBackend, CpuEmbeddingLoader, CuratedModelPackage, EMBEDDING_PREPROCESSING_VERSION,
     EmbeddingError, EmbeddingModelIdentity, EmbeddingResourceProfile, LocalEmbeddingRuntime,
@@ -52,7 +69,7 @@ use crate::{
 const INDEX_REBUILD_BATCH_SIZE: usize = 256;
 
 #[cfg(feature = "gemma-native")]
-fn gemma_embedding_space(dimensions: usize, media: GemmaMedia) -> String {
+fn legacy_gemma_embedding_space(dimensions: usize, media: GemmaMedia) -> String {
     format!(
         "embeddinggemma-2/{dimensions}/images-{}/audio-{}/video-{}/v1",
         u8::from(media.images),
@@ -62,16 +79,25 @@ fn gemma_embedding_space(dimensions: usize, media: GemmaMedia) -> String {
 }
 
 #[cfg(feature = "gemma-native")]
+fn gemma_embedding_space(dimensions: usize) -> String {
+    format!("embeddinggemma-2/{dimensions}/v1")
+}
+
+#[cfg(feature = "gemma-native")]
 fn prepare_gemma_index_marker(
     model_directory: &Path,
     dimensions: usize,
     media: GemmaMedia,
 ) -> Result<(), DeveloperBundleError> {
     let marker = model_directory.join("embedding-space");
-    let space = gemma_embedding_space(dimensions, media);
+    let space = gemma_embedding_space(dimensions);
     if marker.exists() {
-        if std::fs::read_to_string(&marker)? != space {
+        let existing = std::fs::read_to_string(&marker)?;
+        if existing != space && existing != legacy_gemma_embedding_space(dimensions, media) {
             return Err(DeveloperBundleError::GemmaIndexIdentityMismatch);
+        }
+        if existing != space {
+            std::fs::write(&marker, &space)?;
         }
     } else {
         if model_directory.join("catalog.sqlite").exists() || model_directory.join("zvec").exists()
@@ -372,6 +398,23 @@ impl DeveloperModel {
         files: &GemmaNativeFiles,
         dimensions: usize,
         media: GemmaMedia,
+        selection: GemmaBackendSelection,
+    ) -> Result<Self, DeveloperBundleError> {
+        #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+        let metal_available = selection == GemmaBackendSelection::Automatic
+            && lattice_inference::forward::metal_gemm::is_available();
+        #[cfg(not(all(target_os = "macos", feature = "gemma-metal")))]
+        let metal_available = false;
+        Self::resolve_gemma_with_device(files, dimensions, media, selection, metal_available)
+    }
+
+    #[cfg(feature = "gemma-native")]
+    fn resolve_gemma_with_device(
+        files: &GemmaNativeFiles,
+        dimensions: usize,
+        media: GemmaMedia,
+        selection: GemmaBackendSelection,
+        metal_available: bool,
     ) -> Result<Self, DeveloperBundleError> {
         for path in [
             &files.weights,
@@ -387,10 +430,45 @@ impl DeveloperModel {
                 return Err(DeveloperBundleError::InvalidGemmaFile(path.clone()));
             }
         }
-        let encoder = Arc::new(
+        let mut description = "google/embeddinggemma-2 (native CPU)".to_owned();
+        #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+        let encoder = if selection == GemmaBackendSelection::ForcedCpu {
+            description.push(' ');
+            description.push_str(GEMMA_FORCED_CPU_STATUS);
             GemmaNativeEncoder::open_files(files, dimensions, media)
-                .map_err(|error| DeveloperBundleError::Gemma(error.to_string()))?,
-        );
+        } else if selection == GemmaBackendSelection::DevelopmentCpuBaseline {
+            description.push_str(" [development CPU baseline]");
+            GemmaNativeEncoder::open_files(files, dimensions, media)
+        } else if !metal_available {
+            description.push_str(" [Metal unavailable; CPU fallback]");
+            GemmaNativeEncoder::open_files(files, dimensions, media)
+        } else {
+            match GemmaNativeEncoder::open_metal_files(files, dimensions, media) {
+                Ok(encoder) => {
+                    description = "google/embeddinggemma-2 (FP32 Metal)".to_owned();
+                    Ok(encoder)
+                }
+                Err(crate::gemma_native::GemmaNativeError::MetalUnavailable) => {
+                    description.push_str(" [Metal unavailable; CPU fallback]");
+                    GemmaNativeEncoder::open_files(files, dimensions, media)
+                }
+                Err(error) => Err(error),
+            }
+        };
+        #[cfg(not(all(target_os = "macos", feature = "gemma-metal")))]
+        let encoder = {
+            if selection == GemmaBackendSelection::ForcedCpu {
+                description.push(' ');
+                description.push_str(GEMMA_FORCED_CPU_STATUS);
+            }
+            eprintln!(
+                "Procyon Gemma backend: Metal is not compiled for this worker/target; using CPU"
+            );
+            let _ = metal_available;
+            GemmaNativeEncoder::open_files(files, dimensions, media)
+        };
+        let encoder =
+            Arc::new(encoder.map_err(|error| DeveloperBundleError::Gemma(error.to_string()))?);
         let identity =
             GemmaTextEmbeddingProvider::new(Arc::clone(&encoder), GemmaTextTask::Document)
                 .identity()
@@ -405,7 +483,7 @@ impl DeveloperModel {
                 .parent()
                 .ok_or_else(|| DeveloperBundleError::InvalidGemmaFile(files.weights.clone()))?
                 .to_owned(),
-            description: "google/embeddinggemma-2 (native CPU)".to_owned(),
+            description,
             gemma: Some((encoder, media)),
         })
     }
@@ -417,9 +495,9 @@ impl DeveloperModel {
         hasher.update(b"\0");
         hasher.update(self.identity.model_revision.as_bytes());
         #[cfg(feature = "gemma-native")]
-        if let Some((_, media)) = &self.gemma {
+        if self.gemma.is_some() {
             hasher.update(b"\0");
-            hasher.update(gemma_embedding_space(self.identity.dimensions, *media).as_bytes());
+            hasher.update(gemma_embedding_space(self.identity.dimensions).as_bytes());
         }
         let digest = hasher.finalize();
         let slug = self
@@ -436,14 +514,8 @@ impl DeveloperModel {
             .take(48)
             .collect::<String>();
         #[cfg(feature = "gemma-native")]
-        let slug = if let Some((_, media)) = &self.gemma {
-            format!(
-                "{slug}-d{}-i{}-a{}-v{}",
-                self.identity.dimensions,
-                u8::from(media.images),
-                u8::from(media.audio),
-                u8::from(media.video)
-            )
+        let slug = if self.gemma.is_some() {
+            format!("{slug}-d{}", self.identity.dimensions)
         } else {
             slug
         };
@@ -451,6 +523,82 @@ impl DeveloperModel {
             "{slug}-{:016x}",
             u64::from_be_bytes(digest[..8].try_into().unwrap_or([0; 8]))
         ))
+    }
+
+    #[cfg(feature = "gemma-native")]
+    fn migrate_gemma_index(
+        data_directory: &Path,
+        model: &DeveloperModel,
+        destination: &Path,
+    ) -> Result<(), DeveloperBundleError> {
+        if destination.exists() {
+            return Ok(());
+        }
+        if model.gemma.is_none() {
+            return Ok(());
+        }
+        // Only a directory carrying its own exact legacy marker is eligible.
+        // Never silently select one among several previously initialized indexes.
+        let mut source = None;
+        for flags in 0..8 {
+            let media = GemmaMedia {
+                images: flags & 1 != 0,
+                audio: flags & 2 != 0,
+                video: flags & 4 != 0,
+            };
+            let space = legacy_gemma_embedding_space(model.identity.dimensions, media);
+            let mut hasher = Sha256::new();
+            hasher.update(model.identity.model_id.as_bytes());
+            hasher.update(b"\0");
+            hasher.update(model.identity.model_revision.as_bytes());
+            hasher.update(b"\0");
+            hasher.update(space.as_bytes());
+            let digest = hasher.finalize();
+            let slug = model
+                .identity
+                .model_id
+                .chars()
+                .map(|character| {
+                    if character.is_ascii_alphanumeric() || character == '.' || character == '-' {
+                        character.to_ascii_lowercase()
+                    } else {
+                        '-'
+                    }
+                })
+                .take(48)
+                .collect::<String>();
+            let legacy = data_directory.join("indexes").join(format!(
+                "{slug}-d{}-i{}-a{}-v{}-{:016x}",
+                model.identity.dimensions,
+                u8::from(media.images),
+                u8::from(media.audio),
+                u8::from(media.video),
+                u64::from_be_bytes(digest[..8].try_into().unwrap_or([0; 8])),
+            ));
+            if !legacy.exists() {
+                continue;
+            }
+            if std::fs::read_to_string(legacy.join("embedding-space"))
+                .ok()
+                .as_deref()
+                != Some(space.as_str())
+            {
+                return Err(DeveloperBundleError::GemmaIndexIdentityMismatch);
+            }
+            if source.replace((legacy, media)).is_some() {
+                return Err(DeveloperBundleError::GemmaIndexIdentityMismatch);
+            }
+        }
+        if let Some((legacy, _)) = source {
+            std::fs::rename(legacy, destination)?;
+            // The vector space is independent of current permissions; a removed
+            // permission must not force an index reset.
+            std::fs::write(
+                destination.join("embedding-space"),
+                gemma_embedding_space(model.identity.dimensions),
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -507,8 +655,9 @@ fn prepare_active_model_index(
     let model_directory = model.index_directory(data_directory);
     #[cfg(feature = "gemma-native")]
     if model.gemma.is_some() {
-        // Gemma has a separate dimension/media-specific space. Do not touch
+        // Gemma has a separate dimension-specific space. Do not touch
         // E5's activation marker or clear E5's existing index on a switch.
+        DeveloperModel::migrate_gemma_index(data_directory, model, &model_directory)?;
         return Ok(model_directory);
     }
     let identity = format!(
@@ -550,6 +699,73 @@ fn prepare_active_model_index(
     }
     eprintln!("Procyon semantic developer bundle: prepared a clean index for the activated model");
     Ok(model_directory)
+}
+
+/// Manifest fields describing how source bytes become embedded records.
+///
+/// They change with the shipped worker, not with the user's model choice. A
+/// mismatch on these alone means the active model's derived records are stale
+/// but its embedding space is unchanged, so they can be rebuilt from sources.
+const REBUILDABLE_PIPELINE_FIELDS: [&str; 3] = [
+    "embedding_preprocessing",
+    "converter_version",
+    "chunker_version",
+];
+
+/// Discards the active model's index when only its source pipeline is stale.
+///
+/// A worker upgrade that changes conversion, chunking, or embedding
+/// preprocessing leaves records that no longer match what this worker would
+/// produce for the same bytes. Those records are derived from host-owned
+/// sources and must not be mixed with fresh ones, so the whole model-scoped
+/// directory is retired before anything opens it; the host's normal enrolled
+/// root reconciliation then repopulates it. Consent and enrolment state live
+/// in the host and are untouched.
+///
+/// Only this model's directory is considered, and a difference in any
+/// embedding-space field (model revision, tokenizer, dimensions, distance, or
+/// normalization) is never treated as rebuildable: that still fails closed
+/// later with a migration requirement. The retirement is a single rename
+/// followed by removal of the renamed directory, so an interruption at any
+/// point leaves either the untouched index or a leftover that the next launch
+/// finishes removing.
+fn discard_superseded_pipeline_index(
+    model_directory: &Path,
+    expected: &LibraryIndexManifest,
+) -> Result<bool, DeveloperBundleError> {
+    let mut retired_name = model_directory
+        .file_name()
+        .ok_or_else(|| DeveloperBundleError::InvalidDataDirectory(model_directory.to_owned()))?
+        .to_owned();
+    retired_name.push(".superseded-pipeline");
+    let retired = model_directory.with_file_name(retired_name);
+    if retired.exists() {
+        std::fs::remove_dir_all(&retired)?;
+    }
+    let catalog_path = model_directory.join("catalog.sqlite");
+    if !catalog_path.is_file() {
+        return Ok(false);
+    }
+    let differing = SemanticCatalog::open(&catalog_path)?
+        .registered_manifest_incompatibilities(expected)?
+        .into_iter()
+        .filter(|field| *field != "zvec_schema_version")
+        .collect::<Vec<_>>();
+    if differing.is_empty()
+        || differing
+            .iter()
+            .any(|field| !REBUILDABLE_PIPELINE_FIELDS.contains(field))
+    {
+        return Ok(false);
+    }
+    std::fs::rename(model_directory, &retired)?;
+    std::fs::remove_dir_all(&retired)?;
+    eprintln!(
+        "Procyon semantic worker: discarded the active model's index built by a superseded \
+pipeline ({}); enrolled folders will be reindexed",
+        differing.join(", ")
+    );
+    Ok(true)
 }
 
 struct OnnxPackLoader {
@@ -780,11 +996,6 @@ impl DeveloperWorker {
         // one embedding space is meaningless in another, so switching profiles
         // must start a new index rather than corrupt or reject the old one.
         let model_directory = prepare_active_model_index(data_directory, &model)?;
-        std::fs::create_dir_all(&model_directory)?;
-        #[cfg(feature = "gemma-native")]
-        if let Some((_, media)) = gemma {
-            prepare_gemma_index_marker(&model_directory, model.identity.dimensions, *media)?;
-        }
         let manifest = developer_manifest(&model.identity);
         #[cfg(feature = "gemma-native")]
         let manifest = if gemma.is_some() {
@@ -795,6 +1006,12 @@ impl DeveloperWorker {
         } else {
             manifest
         };
+        discard_superseded_pipeline_index(&model_directory, &manifest)?;
+        std::fs::create_dir_all(&model_directory)?;
+        #[cfg(feature = "gemma-native")]
+        if let Some((_, media)) = gemma {
+            prepare_gemma_index_marker(&model_directory, model.identity.dimensions, *media)?;
+        }
         let catalog = SemanticCatalog::open(model_directory.join("catalog.sqlite"))?;
         let index_directory = model_directory.join("zvec");
         let index = if ZvecStorage::migration_pending(&index_directory) {
@@ -820,6 +1037,14 @@ impl DeveloperWorker {
             ZvecStorage::open(&index_directory, model.identity.dimensions, false)?
         };
         catalog.validate_registered_library_manifests(&manifest)?;
+        #[cfg(feature = "gemma-native")]
+        if let Some((_, media)) = gemma {
+            let pending = catalog.revoke_gemma_media(media.images, media.audio, media.video)?;
+            if !pending.is_empty() {
+                index.delete(&pending.iter().map(String::as_str).collect::<Vec<_>>())?;
+                catalog.finish_gemma_media_cleanup(&pending)?;
+            }
+        }
         Ok(Self {
             catalog,
             passages,
@@ -840,6 +1065,7 @@ impl DeveloperWorker {
         data_directory: &Path,
         model: &ManagedModel,
         ocrmypdf_executable: Option<&Path>,
+        selection: GemmaBackendSelection,
     ) -> Result<Self, DeveloperBundleError> {
         if !data_directory.is_absolute() {
             return Err(DeveloperBundleError::RelativeDataDirectory);
@@ -851,13 +1077,26 @@ impl DeveloperWorker {
             ));
         }
         let model = match model {
-            ManagedModel::Pack(path) => DeveloperModel::resolve_managed(path)?,
+            ManagedModel::Pack(path) => {
+                if selection != GemmaBackendSelection::Automatic {
+                    return Err(DeveloperBundleError::CpuSelection(
+                        "CPU image override requires a Gemma model".to_owned(),
+                    ));
+                }
+                DeveloperModel::resolve_managed(path)?
+            }
             #[cfg(feature = "gemma-native")]
             ManagedModel::Gemma {
                 files,
                 dimensions,
                 media,
-            } => DeveloperModel::resolve_gemma(files, *dimensions, *media)?,
+            } => DeveloperModel::resolve_gemma(files, *dimensions, *media, selection)?,
+            #[cfg(all(feature = "gemma-launch", not(feature = "gemma-native")))]
+            ManagedModel::Gemma { .. } => {
+                return Err(DeveloperBundleError::Gemma(
+                    "this worker was built without native Gemma support".to_owned(),
+                ));
+            }
         };
         Self::open_with_model(
             data_directory,
@@ -995,6 +1234,12 @@ pub async fn run_developer_worker(
         data_directory.display()
     );
     run_desktop_worker_with_factory(runtime_directory, idle_timeout, |config| {
+        #[cfg(feature = "experimental-large-pdf")]
+        let config = config.with_limits(
+            ProtocolLimits::default()
+                .with_pdf_ingestion_bytes(MAX_PDF_INGESTION_BYTES)
+                .expect("fixed PDF ceiling is valid"),
+        );
         let worker = match ocrmypdf_executable {
             Some(executable) => {
                 DeveloperWorker::open_with_ocr(data_directory, model_pack, Some(executable))
@@ -1031,11 +1276,48 @@ pub async fn run_managed_worker(
     model: &ManagedModel,
     ocrmypdf_executable: Option<&Path>,
     idle_timeout: Duration,
+    gemma_backend: GemmaBackendSelection,
 ) -> Result<(), ServerError> {
     run_desktop_worker_with_factory(runtime_directory, idle_timeout, |config| {
-        DeveloperWorker::open_managed(data_directory, model, ocrmypdf_executable)
-            .map(|worker| worker.into_server(config))
-            .map_err(|error| ServerError::Io(io::Error::other(error)))
+        #[cfg(feature = "experimental-large-pdf")]
+        let config = config.with_limits(
+            ProtocolLimits::default()
+                .with_pdf_ingestion_bytes(MAX_PDF_INGESTION_BYTES)
+                .expect("fixed PDF ceiling is valid"),
+        );
+        #[cfg(feature = "gemma-native")]
+        let status = runtime_directory.join("gemma-backend");
+        #[cfg(feature = "gemma-native")]
+        match std::fs::remove_file(&status) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(ServerError::Io(error)),
+        }
+        let worker = DeveloperWorker::open_managed(
+            data_directory,
+            model,
+            ocrmypdf_executable,
+            gemma_backend,
+        )
+        .map_err(|error| ServerError::Io(io::Error::other(error)))?;
+        #[cfg(feature = "gemma-native")]
+        if matches!(model, ManagedModel::Gemma { .. }) {
+            let temporary = runtime_directory.join(format!(
+                "gemma-backend.{}-{}",
+                std::process::id(),
+                rand::random::<u64>()
+            ));
+            let mut file = std::fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&temporary)?;
+            use std::io::Write;
+            writeln!(file, "{}", worker.description)?;
+            file.sync_all()?;
+            std::fs::rename(temporary, status)?;
+            eprintln!("Procyon semantic managed worker: {}", worker.description);
+        }
+        Ok(worker.into_server(config))
     })
     .await
 }
@@ -1043,6 +1325,8 @@ pub async fn run_managed_worker(
 /// Failure to assemble the explicitly non-production developer worker.
 #[derive(Debug, thiserror::Error)]
 enum DeveloperBundleError {
+    #[error("invalid development CPU selection: {0}")]
+    CpuSelection(String),
     #[error("developer data directory must be an absolute host-provided path")]
     RelativeDataDirectory,
     #[error("developer model pack must be an absolute host-resolved path")]
@@ -1056,7 +1340,7 @@ enum DeveloperBundleError {
     #[cfg(feature = "gemma-native")]
     #[error("Gemma original file must be an absolute regular file: {0}")]
     InvalidGemmaFile(PathBuf),
-    #[cfg(feature = "gemma-native")]
+    #[cfg(feature = "gemma-launch")]
     #[error("native Gemma checkpoint failed: {0}")]
     Gemma(String),
     #[cfg(feature = "gemma-native")]
@@ -1118,7 +1402,7 @@ mod tests {
 
     #[cfg(feature = "gemma-native")]
     #[test]
-    fn gemma_space_marks_dimensions_and_each_media_without_touching_e5_activation() {
+    fn gemma_space_marks_dimensions_but_not_media_without_touching_e5_activation() {
         let directory = TestDirectory::new("gemma-index-identity");
         drop(DeveloperWorker::open(&directory.0, None).unwrap());
         let e5_directory = fixture_index_directory(&directory.0);
@@ -1134,11 +1418,10 @@ mod tests {
         prepare_gemma_index_marker(&gemma_index, 512, media).unwrap();
         assert_eq!(
             std::fs::read_to_string(gemma_index.join("embedding-space")).unwrap(),
-            "embeddinggemma-2/512/images-0/audio-0/video-1/v1"
+            "embeddinggemma-2/512/v1"
         );
         prepare_gemma_index_marker(&gemma_index, 512, media).unwrap();
         for other in [
-            (256, media),
             (
                 512,
                 GemmaMedia {
@@ -1161,11 +1444,12 @@ mod tests {
                 },
             ),
         ] {
-            assert!(matches!(
-                prepare_gemma_index_marker(&gemma_index, other.0, other.1),
-                Err(DeveloperBundleError::GemmaIndexIdentityMismatch)
-            ));
+            prepare_gemma_index_marker(&gemma_index, other.0, other.1).unwrap();
         }
+        assert!(matches!(
+            prepare_gemma_index_marker(&gemma_index, 256, media),
+            Err(DeveloperBundleError::GemmaIndexIdentityMismatch)
+        ));
         drop(DeveloperWorker::open(&directory.0, None).unwrap());
         assert_eq!(
             std::fs::read(directory.0.join("active-model-index")).unwrap(),
@@ -1188,7 +1472,7 @@ mod tests {
             video: false,
         };
         assert!(matches!(
-            DeveloperModel::resolve_gemma(&files, 128, media),
+            DeveloperModel::resolve_gemma(&files, 128, media, GemmaBackendSelection::Automatic),
             Err(DeveloperBundleError::InvalidGemmaFile(_))
         ));
         for path in [
@@ -1201,9 +1485,129 @@ mod tests {
             std::fs::write(path, b"original").unwrap();
         }
         assert!(matches!(
-            DeveloperModel::resolve_gemma(&files, 123, media),
+            DeveloperModel::resolve_gemma(&files, 123, media, GemmaBackendSelection::Automatic),
             Err(DeveloperBundleError::Gemma(_))
         ));
+    }
+
+    #[cfg(feature = "gemma-native")]
+    #[test]
+    #[ignore = "requires PROCYON_GEMMA_PROBE_MODEL_DIR with the pinned original files"]
+    fn managed_gemma_auto_selects_metal_and_reports_cpu_fallback() {
+        let original = PathBuf::from(
+            std::env::var_os("PROCYON_GEMMA_PROBE_MODEL_DIR").expect("pinned checkpoint directory"),
+        );
+        let files = GemmaNativeFiles::from_directory(&original);
+        let images = GemmaMedia {
+            images: true,
+            audio: false,
+            video: false,
+        };
+        let cpu = DeveloperModel::resolve_gemma(
+            &files,
+            128,
+            images,
+            GemmaBackendSelection::DevelopmentCpuBaseline,
+        )
+        .unwrap();
+        assert!(cpu.description.contains("native CPU"));
+        drop(cpu);
+        #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+        {
+            let metal = DeveloperModel::resolve_gemma(
+                &files,
+                128,
+                images,
+                GemmaBackendSelection::Automatic,
+            )
+            .unwrap();
+            assert!(metal.description.contains("FP32 Metal"));
+            drop(metal);
+            let unavailable = DeveloperModel::resolve_gemma_with_device(
+                &files,
+                128,
+                images,
+                GemmaBackendSelection::Automatic,
+                false,
+            )
+            .unwrap();
+            assert!(
+                unavailable
+                    .description
+                    .contains("Metal unavailable; CPU fallback")
+            );
+            assert_eq!(unavailable.gemma.unwrap().0.metal_dispatches(), 0);
+            let mixed = DeveloperModel::resolve_gemma(
+                &files,
+                128,
+                GemmaMedia {
+                    video: true,
+                    ..images
+                },
+                GemmaBackendSelection::Automatic,
+            )
+            .unwrap();
+            assert!(mixed.description.contains("FP32 Metal"));
+            assert_eq!(mixed.gemma.unwrap().0.metal_dispatches(), 0);
+            let unavailable_mixed = DeveloperModel::resolve_gemma_with_device(
+                &files,
+                128,
+                GemmaMedia {
+                    audio: true,
+                    video: true,
+                    ..images
+                },
+                GemmaBackendSelection::Automatic,
+                false,
+            )
+            .unwrap();
+            assert!(
+                unavailable_mixed
+                    .description
+                    .contains("Metal unavailable; CPU fallback")
+            );
+            assert_eq!(unavailable_mixed.gemma.unwrap().0.metal_dispatches(), 0);
+            let forced = DeveloperModel::resolve_gemma(
+                &files,
+                128,
+                images,
+                GemmaBackendSelection::ForcedCpu,
+            )
+            .unwrap();
+            assert!(forced.description.contains(GEMMA_FORCED_CPU_STATUS));
+            let forced_encoder = &forced.gemma.as_ref().unwrap().0;
+            forced_encoder
+                .encode_text(crate::gemma_probe::GemmaTextTask::Search, "test", None)
+                .unwrap();
+            assert_eq!(forced_encoder.metal_dispatches(), 0);
+            for media in [
+                GemmaMedia {
+                    images: false,
+                    audio: false,
+                    video: false,
+                },
+                GemmaMedia {
+                    images: false,
+                    audio: true,
+                    video: false,
+                },
+            ] {
+                let selected = DeveloperModel::resolve_gemma(
+                    &files,
+                    128,
+                    media,
+                    GemmaBackendSelection::Automatic,
+                )
+                .unwrap();
+                assert!(selected.description.contains("FP32 Metal"));
+                let encoder = &selected.gemma.as_ref().unwrap().0;
+                let before = encoder.metal_dispatches();
+                encoder
+                    .encode_text(crate::gemma_probe::GemmaTextTask::Search, "test", None)
+                    .unwrap();
+                assert!(encoder.metal_dispatches() > before);
+            }
+        }
     }
 
     #[cfg(feature = "gemma-native")]
@@ -1225,7 +1629,13 @@ mod tests {
                 video: true,
             },
         };
-        let worker = DeveloperWorker::open_managed(&directory.0, &model, None).unwrap();
+        let worker = DeveloperWorker::open_managed(
+            &directory.0,
+            &model,
+            None,
+            GemmaBackendSelection::Automatic,
+        )
+        .unwrap();
         let (ingestion, query) = worker.backends();
         let image = ImageBuffer::from_fn(128, 96, |x, y| {
             Rgb([
@@ -1258,6 +1668,7 @@ mod tests {
                         library_id: "library".into(),
                         document_id: format!("document-{name}"),
                         media_type: media_type.into(),
+                        pdf_images_consented: false,
                         metadata: BTreeMap::from([
                             ("occurrence_id".into(), format!("occurrence-{name}")),
                             ("source_id".into(), format!("source-{name}")),
@@ -1266,6 +1677,8 @@ mod tests {
                             ("title".into(), format!("Gemma {name}")),
                         ]),
                         content,
+                        #[cfg(feature = "experimental-large-pdf")]
+                        pdf_text: None,
                     },
                     CancellationToken::new(),
                 )
@@ -1317,6 +1730,7 @@ mod tests {
                     library_id: "library".into(),
                     document_id: "document-invalid-video".into(),
                     media_type: "video/mp4".into(),
+                    pdf_images_consented: false,
                     metadata: BTreeMap::from([
                         ("occurrence_id".into(), "occurrence-invalid-video".into()),
                         ("source_id".into(), "source-invalid-video".into()),
@@ -1324,6 +1738,8 @@ mod tests {
                         ("modified_at_ms".into(), "1".into()),
                     ]),
                     content: b"not an H.264 MP4".to_vec(),
+                    #[cfg(feature = "experimental-large-pdf")]
+                    pdf_text: None,
                 },
                 CancellationToken::new(),
             )
@@ -1387,7 +1803,13 @@ mod tests {
                 video: false,
             },
         };
-        let worker = DeveloperWorker::open_managed(&directory.0, &model, None).unwrap();
+        let worker = DeveloperWorker::open_managed(
+            &directory.0,
+            &model,
+            None,
+            GemmaBackendSelection::Automatic,
+        )
+        .unwrap();
         assert_eq!(
             worker.passages.identity().model_id,
             "google-embeddinggemma-2"
@@ -1461,6 +1883,7 @@ mod tests {
                     library_id: "library-gemma".into(),
                     document_id: "document-gemma".into(),
                     media_type: "text/plain".into(),
+                    pdf_images_consented: false,
                     metadata: BTreeMap::from([
                         ("occurrence_id".into(), "occurrence-gemma".into()),
                         ("source_id".into(), "source-gemma".into()),
@@ -1470,6 +1893,8 @@ mod tests {
                     ]),
                     content: b"Native Gemma semantic indexes preserve searchable evidence."
                         .to_vec(),
+                    #[cfg(feature = "experimental-large-pdf")]
+                    pdf_text: None,
                 },
                 CancellationToken::new(),
             )
@@ -1520,7 +1945,13 @@ mod tests {
         drop(query);
         drop(ingestion);
         drop(worker);
-        let reopened = DeveloperWorker::open_managed(&directory.0, &model, None).unwrap();
+        let reopened = DeveloperWorker::open_managed(
+            &directory.0,
+            &model,
+            None,
+            GemmaBackendSelection::Automatic,
+        )
+        .unwrap();
         let (_, query) = reopened.backends();
         let after = query.query(query_input, &CancellationToken::new()).unwrap();
         assert_eq!(after[0].document_id, "document-gemma");
@@ -1676,6 +2107,7 @@ mod tests {
                     library_id: "library-development".into(),
                     document_id: "document-development".into(),
                     media_type: "text/plain".into(),
+                    pdf_images_consented: false,
                     metadata: BTreeMap::from([
                         ("occurrence_id".into(), "occurrence-development".into()),
                         ("source_id".into(), "source-development".into()),
@@ -1683,6 +2115,8 @@ mod tests {
                         ("modified_at_ms".into(), "1".into()),
                     ]),
                     content: b"Durable semantic indexes preserve searchable evidence.".to_vec(),
+                    #[cfg(feature = "experimental-large-pdf")]
+                    pdf_text: None,
                 },
                 CancellationToken::new(),
             )
@@ -2111,6 +2545,7 @@ mod tests {
                         library_id: "library-multilingual".into(),
                         document_id: document.into(),
                         media_type: "text/plain".into(),
+                        pdf_images_consented: false,
                         metadata: BTreeMap::from([
                             ("occurrence_id".into(), format!("occurrence-{document}")),
                             ("source_id".into(), format!("source-{document}")),
@@ -2118,6 +2553,8 @@ mod tests {
                             ("modified_at_ms".into(), "1".into()),
                         ]),
                         content: content.as_bytes().to_vec(),
+                        #[cfg(feature = "experimental-large-pdf")]
+                        pdf_text: None,
                     },
                     CancellationToken::new(),
                 )
@@ -2363,5 +2800,225 @@ mod tests {
                 crate::semantic_storage::StorageError::MigrationRequired { .. }
             ))
         ));
+    }
+
+    /// Rewrites every registered manifest exactly as an older worker left it.
+    fn rewrite_registered_manifests(
+        model_directory: &Path,
+        rewrite: impl Fn(&mut LibraryIndexManifest),
+    ) {
+        let connection =
+            rusqlite::Connection::open(model_directory.join("catalog.sqlite")).expect("catalog");
+        let rows = connection
+            .prepare("SELECT tenant_id, library_id, manifest_json FROM libraries")
+            .expect("libraries")
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .expect("library rows")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("library rows");
+        assert!(!rows.is_empty(), "fixture must register a library");
+        for (tenant_id, library_id, manifest_json) in rows {
+            let mut manifest: LibraryIndexManifest =
+                serde_json::from_str(&manifest_json).expect("manifest");
+            rewrite(&mut manifest);
+            connection
+                .execute(
+                    "UPDATE libraries SET manifest_json = ?3
+                     WHERE tenant_id = ?1 AND library_id = ?2",
+                    rusqlite::params![
+                        tenant_id,
+                        library_id,
+                        serde_json::to_string(&manifest).expect("manifest json")
+                    ],
+                )
+                .expect("rewrite manifest");
+        }
+    }
+
+    fn ingest_and_wait(
+        ingestion: &Arc<dyn WorkerIngestionBackend>,
+        document_id: &str,
+        content: &[u8],
+    ) {
+        let job_id = ingestion
+            .enqueue(
+                WorkerIngestionInput {
+                    job_id: format!("job-{document_id}"),
+                    tenant_id: "tenant-upgrade".into(),
+                    library_id: "library-upgrade".into(),
+                    document_id: document_id.into(),
+                    media_type: "text/plain".into(),
+                    pdf_images_consented: false,
+                    metadata: BTreeMap::from([
+                        ("occurrence_id".into(), format!("occurrence-{document_id}")),
+                        ("source_id".into(), format!("source-{document_id}")),
+                        ("root_id".into(), "root-upgrade".into()),
+                        ("modified_at_ms".into(), "1".into()),
+                    ]),
+                    content: content.to_vec(),
+                    #[cfg(feature = "experimental-large-pdf")]
+                    pdf_text: None,
+                },
+                CancellationToken::new(),
+            )
+            .expect("enqueue");
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let job = ingestion
+                .job("tenant-upgrade", "library-upgrade", &job_id)
+                .expect("job")
+                .expect("registered job");
+            if job.state == IngestionState::Completed {
+                return;
+            }
+            assert_ne!(job.state, IngestionState::Failed, "{:?}", job.error);
+            assert!(std::time::Instant::now() < deadline, "ingestion timed out");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn upgrade_query(query: &Arc<dyn WorkerQueryBackend>) -> Vec<String> {
+        query
+            .query(
+                WorkerQueryInput {
+                    tenant_id: "tenant-upgrade".into(),
+                    library_id: "library-upgrade".into(),
+                    query: "orchard harvest".into(),
+                    intent: fm_semantic_protocol::v1::QueryIntent::Search,
+                    concept_query: None,
+                    maximum_results: 10,
+                },
+                &CancellationToken::new(),
+            )
+            .expect("query")
+            .into_iter()
+            .map(|result| result.document_id)
+            .collect()
+    }
+
+    fn index_built_by_previous_pipeline(name: &str) -> (TestDirectory, PathBuf) {
+        let directory = TestDirectory::new(name);
+        let worker = DeveloperWorker::open(&directory.0, None).expect("developer worker");
+        let (ingestion, query) = worker.backends();
+        ingest_and_wait(&ingestion, "document-stale", b"Orchard harvest notes.");
+        assert_eq!(upgrade_query(&query), ["document-stale"]);
+        drop((ingestion, query, worker));
+        let model_directory = fixture_index_directory(&directory.0);
+        // The exact identities v0.5.0-2 recorded before the converter and
+        // chunker contracts advanced.
+        rewrite_registered_manifests(&model_directory, |manifest| {
+            manifest.converter_version = "docling-pdf/1036000+baseline/2".into();
+            manifest.chunker_version = "structural/3".into();
+        });
+        std::fs::write(
+            model_directory.join("stale-derived-content"),
+            b"old pipeline",
+        )
+        .expect("stale marker");
+        (directory, model_directory)
+    }
+
+    #[test]
+    fn worker_upgrade_discards_an_index_built_by_a_superseded_pipeline_and_reindexes() {
+        let (directory, model_directory) = index_built_by_previous_pipeline("superseded-pipeline");
+
+        let upgraded = DeveloperWorker::open(&directory.0, None)
+            .expect("an upgraded worker must start instead of failing on stale pipeline records");
+
+        assert!(!model_directory.join("stale-derived-content").exists());
+        let (ingestion, query) = upgraded.backends();
+        assert!(
+            upgrade_query(&query).is_empty(),
+            "records from the superseded pipeline must never answer queries"
+        );
+        ingest_and_wait(&ingestion, "document-fresh", b"Orchard harvest notes.");
+        assert_eq!(upgrade_query(&query), ["document-fresh"]);
+        drop((ingestion, query, upgraded));
+        let reopened = DeveloperWorker::open(&directory.0, None).expect("reopen after reindex");
+        let (_, query) = reopened.backends();
+        assert_eq!(
+            upgrade_query(&query),
+            ["document-fresh"],
+            "a compatible rebuilt index is preserved across restarts"
+        );
+    }
+
+    #[test]
+    fn pipeline_recovery_finishes_an_interrupted_discard_without_touching_the_active_index() {
+        let directory = TestDirectory::new("superseded-pipeline-resume");
+        drop(DeveloperWorker::open(&directory.0, None).expect("developer worker"));
+        let model_directory = fixture_index_directory(&directory.0);
+        std::fs::write(model_directory.join("keep-me"), b"current").expect("current marker");
+        let mut retired = model_directory.file_name().expect("name").to_owned();
+        retired.push(".superseded-pipeline");
+        let retired = model_directory.with_file_name(retired);
+        std::fs::create_dir_all(retired.join("zvec")).expect("interrupted discard");
+        std::fs::write(retired.join("catalog.sqlite"), b"partial").expect("leftover");
+
+        drop(DeveloperWorker::open(&directory.0, None).expect("resumed worker"));
+
+        assert!(!retired.exists(), "the interrupted discard is completed");
+        assert!(model_directory.join("keep-me").is_file());
+    }
+
+    #[test]
+    fn pipeline_recovery_never_discards_a_different_embedding_space() {
+        let (directory, model_directory) =
+            index_built_by_previous_pipeline("superseded-pipeline-model");
+        rewrite_registered_manifests(&model_directory, |manifest| {
+            manifest.tokenizer = "different-tokenizer".into();
+        });
+
+        assert!(matches!(
+            DeveloperWorker::open(&directory.0, None),
+            Err(DeveloperBundleError::Catalog(
+                crate::semantic_storage::StorageError::MigrationRequired { .. }
+            ))
+        ));
+        assert!(
+            model_directory.join("stale-derived-content").is_file(),
+            "an embedding-space mismatch fails closed and keeps the index for inspection"
+        );
+    }
+
+    #[test]
+    fn pipeline_recovery_reports_only_rebuildable_fields_as_discardable() {
+        let directory = TestDirectory::new("superseded-pipeline-unit");
+        let model_directory = directory.0.join("indexes").join("model");
+        std::fs::create_dir_all(&model_directory).expect("model directory");
+        let expected = developer_manifest(&development_embedding_identity());
+        assert!(
+            !discard_superseded_pipeline_index(&model_directory, &expected).expect("empty"),
+            "a missing catalog is a fresh index, not a recovery"
+        );
+        let catalog =
+            SemanticCatalog::open(model_directory.join("catalog.sqlite")).expect("catalog");
+        catalog
+            .register_library("tenant", "library", &expected)
+            .expect("compatible library");
+        drop(catalog);
+        assert!(!discard_superseded_pipeline_index(&model_directory, &expected).expect("same"));
+        assert!(model_directory.is_dir());
+
+        rewrite_registered_manifests(&model_directory, |manifest| {
+            manifest.zvec_schema_version += 1;
+        });
+        assert!(
+            !discard_superseded_pipeline_index(&model_directory, &expected).expect("zvec"),
+            "Zvec schema changes keep using the in-place derived-index rebuild"
+        );
+
+        rewrite_registered_manifests(&model_directory, |manifest| {
+            manifest.zvec_schema_version = expected.zvec_schema_version;
+            manifest.embedding_preprocessing = "preserve-case/1".into();
+        });
+        assert!(discard_superseded_pipeline_index(&model_directory, &expected).expect("stale"));
+        assert!(!model_directory.exists());
     }
 }

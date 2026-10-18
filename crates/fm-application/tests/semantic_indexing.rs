@@ -7,13 +7,18 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+#[cfg(feature = "gemma-native")]
+use std::time::Instant;
 
 use async_trait::async_trait;
 use fm_application::FileManagerService;
+use fm_application::document_summary::{DocumentSummaryCapability, DocumentSummaryError};
+#[cfg(feature = "gemma-native")]
+use fm_application::semantic::IpcSemanticCapability;
 use fm_application::semantic::{
-    DocumentIngestion, FakeSemanticCapability, SemanticCapability, SemanticError, SemanticHealth,
-    SemanticIngestionJob, SemanticIngestionState, SemanticJobId, SemanticOperationId,
-    SemanticProgressEvent, SemanticQuery, SemanticScope, SemanticSearchResult,
+    DocumentIngestion, FakeSemanticCapability, PdfStreamIngestion, SemanticCapability,
+    SemanticError, SemanticHealth, SemanticIngestionJob, SemanticIngestionState, SemanticJobId,
+    SemanticOperationId, SemanticProgressEvent, SemanticQuery, SemanticScope, SemanticSearchResult,
 };
 #[cfg(unix)]
 use fm_application::semantic::{LibraryId as WorkerLibraryId, TenantId};
@@ -28,19 +33,66 @@ use fm_application::semantic_ocr::{
     OcrRemediationTarget, SemanticOcrError, SemanticOcrService,
 };
 use fm_domain::{Location, WorkspaceId};
+use fm_events::{BackendEventPayload, SessionId, SubscriptionEvent};
 use fm_semantic_library::{
-    DeviceLibraryIdentity, EligibilityOverride, EligibilityReason, EligibilityReasonCounts,
-    GemmaMediaSelection, LibraryId, ModelIdentity, ResourceBudgets, ResourceProfile,
-    ResourceProfileKind, RootId,
+    CPU_PDF_IMAGE_PAGE_BUDGET, DeviceLibraryIdentity, EligibilityOverride, EligibilityReason,
+    EligibilityReasonCounts, GemmaMediaSelection, LibraryId, ModelIdentity, ResourceBudgets,
+    ResourceProfile, ResourceProfileKind, RootId,
 };
-#[cfg(unix)]
+use fm_semantic_worker::document_summary::{
+    GeneratedSummary, PrepareDocumentSummary, PreparedDocumentSummary,
+};
+#[cfg(feature = "gemma-native")]
+use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeFiles};
+use fm_semantic_worker::semantic_storage::StoredDocumentSummary;
+#[cfg(feature = "gemma-native")]
+use fm_semantic_worker::{ManagedWorkerLaunch, ManagedWorkerResolver};
+#[cfg(any(unix, feature = "gemma-native"))]
 use fm_transport_dto::ResolveRagCitationRequestDto;
 use fm_transport_dto::RuntimeKindDto;
+#[cfg(all(unix, feature = "gemma-native"))]
+use fm_transport_dto::{
+    SearchModeDto, SearchQueryDto, SearchScopeDto, SearchSemanticPredicateDto,
+    SemanticSearchScopeDto, StartSearchRequestDto,
+};
+use sha2::{Digest, Sha256};
 use tempfile::TempDir;
+use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 const HOST: SemanticAccessContext = SemanticAccessContext::Host;
+
+struct MissingRebuildSummary(Arc<AtomicUsize>);
+
+#[async_trait]
+impl DocumentSummaryCapability for MissingRebuildSummary {
+    async fn prepare(
+        &self,
+        _request: PrepareDocumentSummary,
+        _cancellation: &CancellationToken,
+    ) -> Result<PreparedDocumentSummary, DocumentSummaryError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Err(DocumentSummaryError::NotFound)
+    }
+
+    async fn publish(
+        &self,
+        _prepared: &PreparedDocumentSummary,
+        _generated: GeneratedSummary,
+        _cancellation: &CancellationToken,
+    ) -> Result<StoredDocumentSummary, DocumentSummaryError> {
+        Err(DocumentSummaryError::NotFound)
+    }
+
+    async fn current(
+        &self,
+        _request: &PrepareDocumentSummary,
+    ) -> Result<Option<(StoredDocumentSummary, bool)>, DocumentSummaryError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Err(DocumentSummaryError::NotFound)
+    }
+}
 
 struct FailingDocumentCapability {
     inner: FakeSemanticCapability,
@@ -51,9 +103,11 @@ struct RemediatingDocumentCapability {
     ocr_enabled: AtomicBool,
     complete_after_restart: bool,
     restart_count: AtomicUsize,
+    health_count: AtomicUsize,
     cancel_count: AtomicUsize,
     remediated_contents: Mutex<Vec<Vec<u8>>>,
     ingested_titles: Mutex<Vec<String>>,
+    ingested_pdf_consents: Mutex<Vec<(String, bool)>>,
 }
 
 impl RemediatingDocumentCapability {
@@ -63,9 +117,11 @@ impl RemediatingDocumentCapability {
             ocr_enabled: AtomicBool::new(false),
             complete_after_restart: true,
             restart_count: AtomicUsize::new(0),
+            health_count: AtomicUsize::new(0),
             cancel_count: AtomicUsize::new(0),
             remediated_contents: Mutex::new(Vec::new()),
             ingested_titles: Mutex::new(Vec::new()),
+            ingested_pdf_consents: Mutex::new(Vec::new()),
         }
     }
 
@@ -80,10 +136,15 @@ impl RemediatingDocumentCapability {
 #[async_trait]
 impl SemanticCapability for RemediatingDocumentCapability {
     async fn health(&self) -> Result<SemanticHealth, SemanticError> {
+        self.health_count.fetch_add(1, Ordering::AcqRel);
         self.inner.health().await
     }
 
     async fn ingest(&self, ingestion: DocumentIngestion) -> Result<SemanticJobId, SemanticError> {
+        self.ingested_pdf_consents.lock().unwrap().push((
+            ingestion.metadata.get("title").cloned().unwrap_or_default(),
+            ingestion.pdf_images_consented,
+        ));
         self.ingested_titles.lock().unwrap().push(
             ingestion
                 .metadata
@@ -131,6 +192,7 @@ impl SemanticCapability for RemediatingDocumentCapability {
                 ),
                 job_id,
                 state: SemanticIngestionState::Skipped,
+                completed_units: 0,
                 detail: Some(
                     "Add a searchable text layer with OCRmyPDF, then reindex the file.".into(),
                 ),
@@ -143,6 +205,7 @@ impl SemanticCapability for RemediatingDocumentCapability {
                 ),
                 job_id,
                 state: SemanticIngestionState::Running,
+                completed_units: 0,
                 detail: None,
             });
         }
@@ -176,6 +239,103 @@ impl SemanticCapability for RemediatingDocumentCapability {
 
 struct AvailableOcrProbe;
 
+struct NegotiatedPdfCapability {
+    inner: FakeSemanticCapability,
+    streamed_bytes: Mutex<Option<u64>>,
+}
+
+#[async_trait]
+impl SemanticCapability for NegotiatedPdfCapability {
+    async fn health(&self) -> Result<SemanticHealth, SemanticError> {
+        self.inner.health().await
+    }
+
+    async fn ingest(&self, ingestion: DocumentIngestion) -> Result<SemanticJobId, SemanticError> {
+        self.inner.ingest(ingestion).await
+    }
+
+    async fn ingest_pdf_stream(
+        &self,
+        ingestion: PdfStreamIngestion<'_>,
+    ) -> Result<SemanticJobId, SemanticError> {
+        let PdfStreamIngestion {
+            scope,
+            operation_id,
+            document_id,
+            metadata,
+            pdf_images_consented,
+            content_bytes,
+            content_sha256,
+            reader,
+        } = ingestion;
+        let mut digest = Sha256::new();
+        let mut total = 0_u64;
+        let mut frame = [0_u8; 64 * 1024];
+        loop {
+            let read = reader
+                .read(&mut frame)
+                .await
+                .map_err(|error| SemanticError::WorkerFailure(error.to_string()))?;
+            if read == 0 {
+                break;
+            }
+            total += read as u64;
+            digest.update(&frame[..read]);
+        }
+        if total != content_bytes || <[u8; 32]>::from(digest.finalize()) != content_sha256 {
+            return Err(SemanticError::InvalidRequest(
+                "streamed PDF source changed".into(),
+            ));
+        }
+        *self.streamed_bytes.lock().unwrap() = Some(total);
+        self.inner
+            .ingest(DocumentIngestion {
+                scope,
+                operation_id,
+                document_id,
+                metadata,
+                media_type: "application/pdf".into(),
+                pdf_images_consented,
+                content: b"bounded synthetic PDF stream".to_vec(),
+            })
+            .await
+    }
+
+    async fn max_pdf_source_bytes(&self) -> Result<u64, SemanticError> {
+        Ok(200 * 1024 * 1024)
+    }
+
+    async fn query(
+        &self,
+        query: SemanticQuery,
+    ) -> Result<Vec<SemanticSearchResult>, SemanticError> {
+        self.inner.query(query).await
+    }
+
+    async fn ingestion_job(
+        &self,
+        scope: SemanticScope,
+        job_id: SemanticJobId,
+    ) -> Result<SemanticIngestionJob, SemanticError> {
+        self.inner.ingestion_job(scope, job_id).await
+    }
+
+    async fn events(
+        &self,
+        scope: SemanticScope,
+    ) -> Result<Vec<SemanticProgressEvent>, SemanticError> {
+        self.inner.events(scope).await
+    }
+
+    async fn cancel(&self, operation_id: SemanticOperationId) -> Result<bool, SemanticError> {
+        self.inner.cancel(operation_id).await
+    }
+
+    async fn shutdown(&self, grace: Duration) -> Result<(), SemanticError> {
+        self.inner.shutdown(grace).await
+    }
+}
+
 impl OcrExecutableProbe for AvailableOcrProbe {
     fn probe(&self) -> OcrAvailability {
         OcrAvailability::Available {
@@ -204,6 +364,12 @@ impl SemanticCapability for FailingDocumentCapability {
                 ingestion.document_id.as_str()
             )));
         }
+        if ingestion.content == b"coverage incomplete" {
+            return Ok(SemanticJobId::new(format!(
+                "coverage-{}",
+                ingestion.document_id.as_str()
+            )));
+        }
         self.inner.ingest(ingestion).await
     }
 
@@ -226,7 +392,11 @@ impl SemanticCapability for FailingDocumentCapability {
                 ),
                 job_id,
                 state: SemanticIngestionState::Failed,
-                detail: None,
+                completed_units: 0,
+                detail: Some(
+                    "page 33 image 1 exceeds the PDF visual limit; no partial generation published"
+                        .into(),
+                ),
             });
         }
         if job_id.as_str().starts_with("skipped-") {
@@ -236,9 +406,21 @@ impl SemanticCapability for FailingDocumentCapability {
                 ),
                 job_id,
                 state: SemanticIngestionState::Skipped,
+                completed_units: 0,
                 detail: Some(
                     "Add a searchable text layer with OCRmyPDF, then reindex the file.".into(),
                 ),
+            });
+        }
+        if job_id.as_str().starts_with("coverage-") {
+            return Ok(SemanticIngestionJob {
+                document_id: fm_application::semantic::DocumentId::new(
+                    job_id.as_str().trim_start_matches("coverage-"),
+                ),
+                job_id,
+                state: SemanticIngestionState::Completed,
+                completed_units: 1,
+                detail: Some("page 3 has no searchable image evidence".into()),
             });
         }
         self.inner.ingestion_job(scope, job_id).await
@@ -266,6 +448,77 @@ fn project_temp_dir(prefix: &str) -> TempDir {
         .prefix(prefix)
         .tempdir_in(parent)
         .unwrap()
+}
+
+#[cfg(feature = "gemma-native")]
+async fn sample_installed_pdf_processes(
+    worker_pid_file: Option<std::path::PathBuf>,
+    stop: Arc<AtomicBool>,
+) -> (u64, u64) {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+
+    let host_pid = Pid::from_u32(std::process::id());
+    let mut system = System::new();
+    let mut host_peak = 0;
+    let mut worker_peak = 0;
+    while !stop.load(Ordering::Acquire) {
+        let worker_pid = worker_pid_file
+            .as_ref()
+            .and_then(|file| std::fs::read_to_string(file).ok())
+            .and_then(|pid| pid.trim().parse::<u32>().ok())
+            .map(Pid::from_u32);
+        let pids = worker_pid.map_or_else(|| vec![host_pid], |pid| vec![host_pid, pid]);
+        system.refresh_processes_specifics(
+            ProcessesToUpdate::Some(&pids),
+            false,
+            ProcessRefreshKind::nothing().with_memory(),
+        );
+        if let Some(host) = system.process(host_pid) {
+            host_peak = host_peak.max(host.memory());
+        }
+        if let Some(worker) = worker_pid.and_then(|pid| system.process(pid)) {
+            worker_peak = worker_peak.max(worker.memory());
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    (host_peak, worker_peak)
+}
+
+#[cfg(feature = "gemma-native")]
+#[tokio::test]
+async fn installed_pdf_resource_sampler_observes_host_and_worker_processes() {
+    let runtime = project_temp_dir("gemma-resource-sampler-");
+    std::fs::write(
+        runtime.path().join("worker.pid"),
+        std::process::id().to_string(),
+    )
+    .unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let sampler = tokio::spawn(sample_installed_pdf_processes(
+        Some(runtime.path().join("worker.pid")),
+        Arc::clone(&stop),
+    ));
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    stop.store(true, Ordering::Release);
+    let (host, worker) = sampler.await.unwrap();
+    assert!(host > 0, "host RSS sampler produced no samples");
+    assert_eq!(
+        worker, host,
+        "synthetic worker PID points at the host process"
+    );
+    std::fs::remove_file(runtime.path().join("worker.pid")).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let sampler = tokio::spawn(sample_installed_pdf_processes(
+        Some(runtime.path().join("worker.pid")),
+        Arc::clone(&stop),
+    ));
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    stop.store(true, Ordering::Release);
+    let (_, missing_worker) = sampler.await.unwrap();
+    assert_eq!(
+        missing_worker, 0,
+        "missing worker PID must not fabricate RSS"
+    );
 }
 
 fn library(directory: &TempDir) -> SemanticLibraryService {
@@ -304,11 +557,141 @@ fn library_with_model(directory: &TempDir, model: ModelIdentity) -> SemanticLibr
 }
 
 #[tokio::test]
+async fn unindexed_summary_preview_extracts_on_demand_without_enrolling_the_folder() {
+    let source_root = project_temp_dir("summary-source-");
+    let source = source_root.path().join("unindexed-summary.txt");
+    std::fs::write(&source, "Opening passage for an unenrolled document.").unwrap();
+    let state = project_temp_dir("summary-state-");
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library(&state));
+    let target = fm_transport_dto::DocumentSummaryTargetDto {
+        workspace_id: Uuid::new_v4(),
+        entry_id: Uuid::new_v4(),
+        location: Location::from_native_path(&source).unwrap().into(),
+    };
+    let preview = service
+        .preview_document_summary(
+            &HOST,
+            fm_transport_dto::PreviewDocumentSummaryRequestDto {
+                target: target.clone(),
+                input_token_budget: 4_096,
+                profile_id: None,
+                include_images: false,
+            },
+        )
+        .await
+        .expect("on-demand conversion of an unenrolled source");
+    assert_eq!(
+        preview.selection_mode,
+        fm_transport_dto::DocumentSummarySelectionModeDto::FullDocument
+    );
+    assert_eq!(preview.key_passages.len(), 1);
+    assert!(preview.key_passages[0].content.contains("Opening passage"));
+    assert!(preview.source_tokens > 0);
+    assert!(
+        service
+            .get_document_summary(
+                &HOST,
+                fm_transport_dto::GetDocumentSummaryRequestDto { target },
+            )
+            .await
+            .expect("no persisted summary")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn enrolled_summary_preview_remains_available_during_worker_index_rebuild() {
+    let source_root = project_temp_dir("rebuilding-summary-source-");
+    let source = source_root.path().join("article.txt");
+    std::fs::write(&source, "Opening evidence for an enrolled article.").unwrap();
+    let state = project_temp_dir("rebuilding-summary-state-");
+    let library = library(&state);
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1910));
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(source_root.path()).unwrap(),
+    );
+    let missing_calls = Arc::new(AtomicUsize::new(0));
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(FakeSemanticCapability::new()))
+    .with_document_summary_capability(Arc::new(MissingRebuildSummary(Arc::clone(&missing_calls))));
+    let report = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(report.ingested_occurrences, 1);
+    let snapshot = service
+        .list_directory(fm_transport_dto::ListDirectoryRequest {
+            workspace_id: workspace_id.into(),
+            pane_id: Uuid::new_v4(),
+            request_id: Uuid::new_v4(),
+            location: Location::from_native_path(source_root.path())
+                .unwrap()
+                .into(),
+            continuation_token: None,
+            sort: Vec::new(),
+            show_hidden: false,
+            folders_first: false,
+            show_git_status: false,
+        })
+        .await
+        .unwrap();
+    let entry_id = snapshot
+        .entries
+        .iter()
+        .find(|entry| entry.name == "article.txt")
+        .unwrap()
+        .id;
+    let target = fm_transport_dto::DocumentSummaryTargetDto {
+        workspace_id: workspace_id.into(),
+        entry_id,
+        location: Location::from_native_path(&source).unwrap().into(),
+    };
+    let preview = service
+        .preview_document_summary(
+            &HOST,
+            fm_transport_dto::PreviewDocumentSummaryRequestDto {
+                target: target.clone(),
+                input_token_budget: 4_096,
+                profile_id: None,
+                include_images: false,
+            },
+        )
+        .await
+        .expect("foreground extracted text should not wait for derived vectors");
+    assert!(preview.text_preview.contains("Opening evidence"));
+    assert_eq!(missing_calls.load(Ordering::SeqCst), 1);
+    assert!(
+        service
+            .get_document_summary(
+                &HOST,
+                fm_transport_dto::GetDocumentSummaryRequestDto { target },
+            )
+            .await
+            .expect("missing derived summary is not a preview error")
+            .is_none()
+    );
+    assert_eq!(missing_calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
 async fn reconciliation_feeds_only_media_enabled_for_the_gemma_library() {
     let root = project_temp_dir("media-root-");
     for name in ["image.png", "sound.wav", "clip.mp4"] {
         std::fs::write(root.path().join(name), b"fixture-bytes").unwrap();
     }
+
     let state = project_temp_dir("media-state-");
     let library = library_with_model(
         &state,
@@ -341,6 +724,867 @@ async fn reconciliation_feeds_only_media_enabled_for_the_gemma_library() {
         .unwrap();
     assert_eq!(report.observed_files, 2);
     assert_eq!(report.ingested_occurrences, 2);
+}
+
+#[tokio::test]
+async fn enabling_media_indexes_only_newly_permitted_files_without_reindexing_text() {
+    let root = project_temp_dir("incremental-media-root-");
+    for (name, contents) in [
+        ("note.txt", b"original text".as_slice()),
+        ("image.png", b"image payload"),
+        ("sound.wav", b"audio payload"),
+        ("clip.mp4", b"video payload"),
+    ] {
+        std::fs::write(root.path().join(name), contents).unwrap();
+    }
+    let state = project_temp_dir("incremental-media-state-");
+    let library = library_with_model(
+        &state,
+        ModelIdentity::embeddinggemma_2(
+            256,
+            GemmaMediaSelection {
+                images: false,
+                audio: false,
+                video: false,
+            },
+        )
+        .unwrap(),
+    );
+    let root_id = enrol(
+        &library,
+        WorkspaceId::from(Uuid::from_u128(0x1911)),
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let capability = Arc::new(RemediatingDocumentCapability::new());
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(capability.clone());
+    let initial = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(initial.observed_files, 1);
+    let revision = service
+        .semantic_library_status(&HOST)
+        .await
+        .unwrap()
+        .revision;
+    let updated = service
+        .update_semantic_gemma_media(
+            &HOST,
+            GemmaMediaSelection {
+                images: true,
+                audio: true,
+                video: false,
+            },
+            revision,
+            false,
+        )
+        .await
+        .unwrap();
+    assert_eq!(capability.restart_count.load(Ordering::SeqCst), 1);
+    let mut ingested = capability.ingested_titles.lock().unwrap().clone();
+    assert_eq!(ingested.first().map(String::as_str), Some("note.txt"));
+    ingested[1..].sort();
+    assert_eq!(ingested, ["note.txt", "image.png", "sound.wav"]);
+    assert_eq!(
+        updated.roots[0].reconciliation_generation,
+        initial.reconciliation_generation
+    );
+    let health_before = capability.health_count.load(Ordering::SeqCst);
+    let disabled = service
+        .update_semantic_gemma_media(
+            &HOST,
+            GemmaMediaSelection {
+                images: false,
+                audio: true,
+                video: false,
+            },
+            updated.revision,
+            true,
+        )
+        .await
+        .unwrap();
+    assert!(!disabled.gemma_media.unwrap().images);
+    assert_eq!(capability.restart_count.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        capability.health_count.load(Ordering::SeqCst),
+        health_before + 1
+    );
+}
+
+#[tokio::test]
+async fn reconciliation_scopes_pdf_image_consent_to_the_selected_gemma_library() {
+    for images in [false, true] {
+        let root = project_temp_dir("pdf-consent-root-");
+        std::fs::write(root.path().join("report.pdf"), b"%PDF-1.7 synthetic").unwrap();
+        std::fs::write(root.path().join("notes.txt"), b"Text-only notes").unwrap();
+        let state = project_temp_dir("pdf-consent-state-");
+        let library = library_with_model(
+            &state,
+            ModelIdentity::embeddinggemma_2(
+                256,
+                GemmaMediaSelection {
+                    images,
+                    audio: false,
+                    video: false,
+                },
+            )
+            .unwrap(),
+        );
+        let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1912));
+        let location = Location::from_native_path(root.path()).unwrap();
+        let context = SemanticFolderContext::new(workspace_id, location.clone());
+        let page_budget = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            None
+        } else {
+            Some(CPU_PDF_IMAGE_PAGE_BUDGET)
+        };
+        let preview = library
+            .preview_enrolment_with_pdf_image_policy(
+                &HOST,
+                context.clone(),
+                true,
+                images,
+                if images { page_budget } else { None },
+            )
+            .unwrap();
+        let status = library
+            .confirm_enrolment(
+                &HOST,
+                &preview.confirmation_id,
+                preview.policy_revision,
+                &context,
+            )
+            .unwrap();
+        let root_id = status
+            .roots
+            .iter()
+            .find(|candidate| candidate.location == location)
+            .expect("newly enrolled root")
+            .id
+            .parse()
+            .unwrap();
+        let capability = Arc::new(RemediatingDocumentCapability::new());
+        let service = FileManagerService::new(
+            RuntimeKindDto::Tauri,
+            state.path().join("workspaces"),
+            state.path().join("settings"),
+        )
+        .with_semantic_library_service(library)
+        .with_semantic_capability(capability.clone());
+
+        service
+            .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+            .await
+            .unwrap();
+        let captured = capability.ingested_pdf_consents.lock().unwrap();
+        assert!(captured.contains(&("report.pdf".to_owned(), images)));
+        assert!(captured.contains(&("notes.txt".to_owned(), false)));
+    }
+}
+
+#[cfg(all(unix, feature = "gemma-native"))]
+#[tokio::test]
+#[ignore = "requires a signed Gemma worker, runtime, and verified original model files"]
+async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
+    use image::{ImageBuffer, ImageFormat, Rgb};
+
+    let files: BTreeMap<String, std::path::PathBuf> = serde_json::from_str(
+        &std::env::var("PROCYON_GEMMA_PACKAGED_FILES").expect("verified original-file paths"),
+    )
+    .unwrap();
+    let model = GemmaNativeFiles::from_original_files(&files).unwrap();
+    let root = project_temp_dir("gemma-host-media-");
+    let state = project_temp_dir("gemma-host-state-");
+    let runtime = project_temp_dir("gemma-host-runtime-");
+    let image = ImageBuffer::from_fn(128, 96, |x, y| {
+        Rgb([
+            ((x * 2 + y) % 256) as u8,
+            ((x + y * 2) % 256) as u8,
+            ((x + y) % 256) as u8,
+        ])
+    });
+    let mut png = std::io::Cursor::new(Vec::new());
+    image.write_to(&mut png, ImageFormat::Png).unwrap();
+    for (name, bytes) in [
+        ("photo.png", png.into_inner()),
+        (
+            "sound.mp3",
+            include_bytes!("../../fm-semantic-worker/tests/fixtures/gemma-audio-440hz-44k.mp3")
+                .to_vec(),
+        ),
+        (
+            "clip.mp4",
+            include_bytes!("../../fm-semantic-worker/tests/fixtures/gemma-video-2s.mp4").to_vec(),
+        ),
+        (
+            "notes.txt",
+            b"Searchable notes about the enrolled media.".to_vec(),
+        ),
+    ] {
+        std::fs::write(root.path().join(name), bytes).unwrap();
+    }
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1911));
+    let library = library_with_model(
+        &state,
+        ModelIdentity::embeddinggemma_2(
+            128,
+            GemmaMediaSelection {
+                images: true,
+                audio: true,
+                video: true,
+            },
+        )
+        .unwrap(),
+    );
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let launch = ManagedWorkerLaunch::new_gemma(
+        std::env::var("PROCYON_SEMANTIC_PRODUCTION_WORKER")
+            .expect("signed packaged worker")
+            .into(),
+        state.path().join("worker-data"),
+        std::env::var("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY")
+            .expect("verified native runtime directory")
+            .into(),
+        model,
+        128,
+        GemmaMedia {
+            images: true,
+            audio: true,
+            video: true,
+        },
+    );
+    let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(IpcSemanticCapability::desktop_managed(
+        runtime.path(),
+        resolver,
+    )));
+
+    let report = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(report.observed_files, 4);
+    assert_eq!(report.ingested_occurrences, 4, "{report:?}");
+    assert_eq!(report.failed_occurrences, 0, "{report:?}");
+    assert_eq!(report.excluded_occurrences, 0, "{report:?}");
+    let roots = service
+        .list_knowledge_roots(
+            &HOST,
+            fm_transport_dto::ListKnowledgeRootsRequestDto {
+                workspace_id: workspace_id.into_inner(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        roots[0].confirmed_completed_sources, 4,
+        "all four modalities completed"
+    );
+    #[cfg(target_os = "macos")]
+    assert!(
+        std::fs::read_to_string(runtime.path().join("gemma-backend"))
+            .unwrap()
+            .contains("FP32 Metal"),
+        "the signed macOS worker did not select Metal for the mixed-media library"
+    );
+    let results = service
+        .semantic_query(SemanticQuery {
+            scope: SemanticScope::new(
+                TenantId::new(workspace_id.to_string()),
+                WorkerLibraryId::new(report.library_id.clone()),
+            ),
+            request_id: SemanticOperationId::new("media-host-query"),
+            text: "search enrolled media".to_owned(),
+            concept: None,
+            maximum_results: 10,
+        })
+        .await
+        .unwrap();
+    let mut image_source_id = None;
+    for (name, media_type) in [
+        ("photo.png", "image/png"),
+        ("sound.mp3", "audio/mpeg"),
+        ("clip.mp4", "video/mp4"),
+        ("notes.txt", "text/plain"),
+    ] {
+        let result = results
+            .iter()
+            .find(|result| {
+                result
+                    .metadata
+                    .get("media_type")
+                    .is_some_and(|kind| kind == media_type)
+            })
+            .unwrap_or_else(|| panic!("enrolled {name} was not returned: {results:?}"));
+        if name == "photo.png" {
+            image_source_id = result.metadata.get("semantic.sourceId").cloned();
+        }
+        let resolved = service
+            .resolve_rag_citation(
+                &HOST,
+                ResolveRagCitationRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                    source_id: result.metadata.get("semantic.sourceId").unwrap().clone(),
+                },
+            )
+            .await
+            .unwrap();
+        let location: Location = resolved.location.into();
+        assert!(location.uri.ends_with(name), "{location:?}");
+        assert!(resolved.available);
+    }
+    let outside = service
+        .semantic_query(SemanticQuery {
+            scope: SemanticScope::new(
+                TenantId::new("other-workspace"),
+                WorkerLibraryId::new(report.library_id),
+            ),
+            request_id: SemanticOperationId::new("media-host-other-workspace"),
+            text: "photo.png".to_owned(),
+            concept: None,
+            maximum_results: 10,
+        })
+        .await
+        .unwrap();
+    assert!(outside.is_empty(), "unenrolled workspace saw media");
+
+    std::fs::remove_file(root.path().join("photo.png")).unwrap();
+    let after_deletion = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(after_deletion.observed_files, 3);
+    assert!(matches!(
+        service
+            .resolve_rag_citation(
+                &HOST,
+                ResolveRagCitationRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                    source_id: image_source_id.expect("indexed image source"),
+                },
+            )
+            .await,
+        Err(fm_application::ApplicationError::NotFound)
+    ));
+    let root_location: fm_transport_dto::LocationDto =
+        Location::from_native_path(root.path()).unwrap().into();
+    let remaining = service
+        .start_search(StartSearchRequestDto {
+            workspace_id: workspace_id.into_inner(),
+            roots: vec![root_location.clone()],
+            query: String::new(),
+            content_query: None,
+            content_regex: false,
+            content_case_sensitive: false,
+            content_whole_word: false,
+            recurse: true,
+            show_hidden: false,
+            structured_query: Some(SearchQueryDto {
+                schema_version: 2,
+                mode: SearchModeDto::Semantic,
+                scope: SearchScopeDto {
+                    locations: vec![root_location],
+                    recurse: true,
+                    show_hidden: false,
+                },
+                name: None,
+                entry_kinds: Vec::new(),
+                mime_types: Vec::new(),
+                min_size_bytes: None,
+                max_size_bytes: None,
+                modified_after: None,
+                modified_before: None,
+                content: None,
+                semantic: Some(SearchSemanticPredicateDto {
+                    query: "photo.png".to_owned(),
+                    library_id: after_deletion.library_id,
+                    scope: SemanticSearchScopeDto::CurrentFolder,
+                    enrolled_root_ids: Vec::new(),
+                    selected_concept: None,
+                }),
+                concept: None,
+                git_statuses: Vec::new(),
+                tags: Vec::new(),
+                metadata: BTreeMap::new(),
+            }),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        remaining.semantic_results.len(),
+        3,
+        "the audio, video, and text should remain visible after image deletion: {remaining:?}"
+    );
+    assert!(
+        remaining
+            .semantic_results
+            .iter()
+            .all(|result| !result.location.uri.ends_with("photo.png")),
+        "deleted image was still visible in file-primary search: {remaining:?}"
+    );
+    service
+        .semantic_shutdown(Duration::from_secs(10))
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(12), async {
+        while runtime.path().join("worker.pid").exists() {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("signed worker stopped before temporary index cleanup");
+}
+
+#[cfg(feature = "gemma-native")]
+#[tokio::test]
+#[ignore = "requires an exact signed PDFium-enabled Gemma worker and verified original model files"]
+async fn enrolled_synthetic_scan_keeps_pdf_page_citation_and_revokes_deleted_source() {
+    qualify_enrolled_synthetic_scan(1).await;
+}
+
+#[cfg(feature = "gemma-native")]
+#[tokio::test]
+#[ignore = "requires an exact signed PDFium-enabled Gemma worker and installed Gemma originals"]
+async fn enrolled_synthetic_scan_sample_reindexes_and_revokes_deleted_source() {
+    qualify_enrolled_synthetic_scan(8).await;
+}
+
+#[cfg(feature = "gemma-native")]
+async fn qualify_enrolled_synthetic_scan(pages: u32) {
+    let files: BTreeMap<String, std::path::PathBuf> = serde_json::from_str(
+        &std::env::var("PROCYON_GEMMA_PACKAGED_FILES").expect("verified installed original files"),
+    )
+    .unwrap();
+    let model = GemmaNativeFiles::from_original_files(&files).unwrap();
+    let root = project_temp_dir("gemma-host-scan-");
+    let state = project_temp_dir("gemma-host-scan-state-");
+    let runtime = project_temp_dir("gemma-host-scan-runtime-");
+    let source = root.path().join("synthetic-scan.pdf");
+    let generator =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/generate-large-pdf-fixture.mjs");
+    let output = std::process::Command::new("node")
+        .arg(&generator)
+        .args(["--variant", "rle-scan", "--pages"])
+        .arg(pages.to_string())
+        .arg("--output")
+        .arg(&source)
+        .output()
+        .expect("generate synthetic scan sample");
+    assert!(
+        output.status.success(),
+        "synthetic scan generation failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let source_bytes = std::fs::metadata(&source).unwrap().len();
+    if pages == 8 {
+        assert_eq!(source_bytes, 3_967_050);
+    }
+    let mut hasher = Sha256::new();
+    let mut input = std::fs::File::open(&source).unwrap();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = std::io::Read::read(&mut input, &mut buffer).unwrap();
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    let source_sha256 = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    if pages == 8 {
+        assert_eq!(
+            source_sha256,
+            "6fd090eee5fcdd7e547c8787f8ada4465e896fcff190b84e2b2f49e9c5b3d690"
+        );
+    }
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1913));
+    let library = library_with_model(
+        &state,
+        ModelIdentity::embeddinggemma_2(
+            128,
+            GemmaMediaSelection {
+                images: true,
+                audio: false,
+                video: false,
+            },
+        )
+        .unwrap(),
+    );
+    let root_id = enrol_with_pdf_image_policy(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let launch = ManagedWorkerLaunch::new_gemma(
+        std::env::var("PROCYON_SEMANTIC_PRODUCTION_WORKER")
+            .expect("signed installed worker")
+            .into(),
+        state.path().join("worker-data"),
+        std::env::var("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY")
+            .expect("verified native runtime directory")
+            .into(),
+        model,
+        128,
+        GemmaMedia {
+            images: true,
+            audio: false,
+            video: false,
+        },
+    );
+    let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(IpcSemanticCapability::desktop_managed(
+        runtime.path(),
+        resolver,
+    )));
+    let sampler_stop = Arc::new(AtomicBool::new(false));
+    let sampler = tokio::spawn(sample_installed_pdf_processes(
+        Some(runtime.path().join("worker.pid")),
+        Arc::clone(&sampler_stop),
+    ));
+    let started = Instant::now();
+    let indexed = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .expect("index enrolled synthetic scan");
+    assert_eq!(indexed.ingested_occurrences, 1, "{indexed:?}");
+    assert_eq!(indexed.failed_occurrences, 0, "{indexed:?}");
+    let elapsed_seconds = started.elapsed().as_secs_f64();
+    let backend = std::fs::read_to_string(runtime.path().join("gemma-backend"))
+        .expect("installed worker reports selected compute backend");
+    let expected_image_pages = if backend.contains("CPU") {
+        pages.min(fm_semantic_library::CPU_PDF_IMAGE_PAGE_BUDGET)
+    } else if backend.contains("Metal") {
+        pages
+    } else {
+        panic!("installed worker reported an unknown compute backend: {backend}");
+    };
+    let expected_skipped_pages = pages - expected_image_pages;
+    let results = service
+        .semantic_query(SemanticQuery {
+            scope: SemanticScope::new(
+                fm_application::semantic::TenantId::new(workspace_id.to_string()),
+                fm_application::semantic::LibraryId::new(indexed.library_id.clone()),
+            ),
+            request_id: SemanticOperationId::new("host-synthetic-scan-query"),
+            text: "synthetic image page".to_owned(),
+            concept: None,
+            maximum_results: 10,
+        })
+        .await
+        .expect("query indexed PDF image");
+    let image = results
+        .iter()
+        .find(|result| {
+            result
+                .metadata
+                .get("semantic.provenance")
+                .is_some_and(|provenance| provenance.contains("pdfPageRender"))
+        })
+        .unwrap_or_else(|| panic!("PDF image evidence was not returned: {results:?}"));
+    let provenance: serde_json::Value =
+        serde_json::from_str(image.metadata.get("semantic.provenance").unwrap()).unwrap();
+    assert_eq!(provenance["value"]["kind"], "pdfPageRender");
+    let hit_page = provenance["value"]["page_number"].as_u64().unwrap();
+    assert!(hit_page >= 1 && hit_page <= u64::from(pages));
+    assert_page_image_coverage(&state, expected_image_pages, expected_skipped_pages);
+    let mut source_id = image.metadata.get("semantic.sourceId").unwrap().clone();
+    let outside = service
+        .semantic_query(SemanticQuery {
+            scope: SemanticScope::new(
+                fm_application::semantic::TenantId::new("unenrolled-workspace"),
+                fm_application::semantic::LibraryId::new(indexed.library_id),
+            ),
+            request_id: SemanticOperationId::new("host-scan-outside-query"),
+            text: "synthetic image page".to_owned(),
+            concept: None,
+            maximum_results: 10,
+        })
+        .await
+        .expect("query non-enrolled workspace");
+    assert!(
+        outside.is_empty(),
+        "PDF image escaped its enrolled workspace"
+    );
+    let resolved = service
+        .resolve_rag_citation(
+            &HOST,
+            ResolveRagCitationRequestDto {
+                workspace_id: workspace_id.into_inner(),
+                source_id: source_id.clone(),
+            },
+        )
+        .await
+        .expect("resolve authorized page citation");
+    let location: Location = resolved.location.into();
+    assert_eq!(location, Location::from_native_path(&source).unwrap());
+    assert!(resolved.available);
+    let replacement_verified = pages > 1;
+    if replacement_verified {
+        let replacement = state.path().join("replacement-synthetic-scan.pdf");
+        let output = std::process::Command::new("node")
+            .arg(&generator)
+            .args(["--variant", "rle-scan", "--pages", "2", "--output"])
+            .arg(&replacement)
+            .output()
+            .expect("generate edited synthetic scan");
+        assert!(
+            output.status.success(),
+            "edited scan generation failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        std::fs::copy(replacement, &source).expect("replace synthetic scan before reconciliation");
+        let updated = service
+            .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+            .await
+            .expect("reindex edited synthetic scan");
+        assert_eq!(updated.ingested_occurrences, 1, "{updated:?}");
+        assert_eq!(updated.failed_occurrences, 0, "{updated:?}");
+        assert_page_image_coverage(&state, 2, 0);
+        let results = service
+            .semantic_query(SemanticQuery {
+                scope: SemanticScope::new(
+                    fm_application::semantic::TenantId::new(workspace_id.to_string()),
+                    fm_application::semantic::LibraryId::new(updated.library_id),
+                ),
+                request_id: SemanticOperationId::new("host-edited-scan-query"),
+                text: "synthetic image page".to_owned(),
+                concept: None,
+                maximum_results: 10,
+            })
+            .await
+            .expect("query edited PDF images");
+        let published = results
+            .iter()
+            .flat_map(|result| {
+                serde_json::from_str::<serde_json::Value>(
+                    result
+                        .metadata
+                        .get("semantic.evidence")
+                        .expect("file result includes supporting evidence"),
+                )
+                .expect("valid semantic evidence")
+                .as_array()
+                .expect("semantic evidence is an array")
+                .clone()
+            })
+            .map(|evidence| {
+                let provenance = &evidence["provenance"];
+                assert_eq!(provenance["value"]["kind"], "pdfPageRender");
+                (
+                    provenance["value"]["page_number"]
+                        .as_u64()
+                        .expect("edited scan page citation"),
+                    evidence["sourceId"]
+                        .as_str()
+                        .expect("edited scan source id")
+                        .to_owned(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            published.len(),
+            2,
+            "one current evidence item per edited page"
+        );
+        assert_eq!(
+            published
+                .iter()
+                .map(|(page, _)| *page)
+                .collect::<std::collections::BTreeSet<_>>(),
+            [1, 2].into_iter().collect(),
+            "only current edited scan pages are searchable"
+        );
+        source_id = published
+            .iter()
+            .find(|(page, _)| *page == 2)
+            .unwrap()
+            .1
+            .clone();
+    }
+    std::fs::remove_file(&source).unwrap();
+    service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .expect("reconcile deleted scan");
+    assert!(matches!(
+        service
+            .resolve_rag_citation(
+                &HOST,
+                ResolveRagCitationRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                    source_id,
+                },
+            )
+            .await,
+        Err(fm_application::ApplicationError::NotFound)
+    ));
+    service
+        .semantic_shutdown(Duration::from_secs(10))
+        .await
+        .unwrap();
+    sampler_stop.store(true, Ordering::Release);
+    let (host_peak_rss_bytes, worker_peak_rss_bytes) = sampler.await.unwrap();
+    assert!(host_peak_rss_bytes > 0, "host RSS was not sampled");
+    assert!(worker_peak_rss_bytes > 0, "worker RSS was not sampled");
+    tokio::time::timeout(Duration::from_secs(12), async {
+        while runtime.path().join("worker.pid").exists() {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("installed worker exited before isolated index cleanup");
+    let report_variable = if pages == 8 {
+        "PROCYON_GEMMA_PDF_HOST_SAMPLE_REPORT"
+    } else {
+        "PROCYON_GEMMA_PDF_HOST_REPORT"
+    };
+    if let Some(path) = std::env::var_os(report_variable) {
+        std::fs::write(
+            path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "scope": if pages == 8 {
+                    "installed-host-vfs-8-page-synthetic-pdf-sample"
+                } else {
+                    "installed-host-vfs-one-page-synthetic-pdf-smoke"
+                },
+                "pageCount": pages,
+                "imageEvidenceCount": expected_image_pages,
+                "pdfImageSkippedPages": expected_skipped_pages,
+                "backend": backend.trim(),
+                "completeGenerationVerified": true,
+                "sourceBytes": source_bytes,
+                "sourceSha256": source_sha256,
+                "elapsedSeconds": elapsed_seconds,
+                "secondsPerPage": elapsed_seconds / f64::from(pages),
+                "pagesPerSecond": f64::from(pages) / elapsed_seconds,
+                "secondsPerImagePage": elapsed_seconds / f64::from(expected_image_pages),
+                "imagePagesPerSecond": f64::from(expected_image_pages) / elapsed_seconds,
+                "hostPeakRssBytes": host_peak_rss_bytes,
+                "workerPeakRssBytes": worker_peak_rss_bytes,
+                "peakRssMethod": "200ms sysinfo host and worker RSS samples; transient peaks may be missed",
+                "hostVfsVerified": true,
+                "workspaceIsolationVerified": true,
+                "replacementVerified": replacement_verified,
+                "deletionVerified": true,
+                "currentContentAndDeletionVerified": replacement_verified,
+                "limitations": if pages == 8 {
+                    "Eight-page Tauri sample verifies replacement, page citations and deletion. CPU fallback indexes only the first four page images and discloses skipped pages; PDF text remains indexed. Full 354-page CPU throughput is a known limitation, not release-gating. No measured anonymous temporary disk, browser-server navigation, rollback, or query-quality approval."
+                } else {
+                    "One-page Tauri smoke checks deletion; no measured anonymous temporary disk, browser-server navigation, rollback, or CPU fallback qualification."
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
+}
+
+#[cfg(feature = "gemma-native")]
+fn assert_page_image_coverage(state: &TempDir, expected_images: u32, expected_skipped: u32) {
+    let indexes = std::fs::read_dir(state.path().join("worker-data/indexes"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path().join("catalog.sqlite"))
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    assert_eq!(indexes.len(), 1, "one isolated installed Gemma index");
+    let catalog = rusqlite::Connection::open(&indexes[0]).unwrap();
+    let mut query = catalog
+        .prepare(
+            "SELECT r.provenance FROM records r
+             JOIN generations g ON g.tenant_id = r.tenant_id
+               AND g.library_id = r.library_id AND g.document_id = r.document_id
+               AND g.generation = r.generation
+             JOIN occurrences o ON o.tenant_id = r.tenant_id
+               AND o.library_id = r.library_id AND o.document_id = r.document_id
+               AND o.occurrence_id = r.occurrence_id
+               AND o.generation = r.generation
+             WHERE r.record_kind = 'pdf_image' AND g.state = 'complete'",
+        )
+        .unwrap();
+    let page_numbers = query
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .map(|record| {
+            let provenance: serde_json::Value = serde_json::from_str(&record.unwrap()).unwrap();
+            assert_eq!(provenance["value"]["kind"], "pdfPageRender");
+            provenance["value"]["page_number"].as_u64().unwrap()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(page_numbers.len(), expected_images as usize);
+    assert_eq!(
+        page_numbers
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>(),
+        (1..=u64::from(expected_images)).collect(),
+        "published scan pages follow the active CPU/Metal image budget"
+    );
+    let skipped_pages: Option<i64> = catalog
+        .query_row(
+            "SELECT pdf_image_skipped_pages FROM generations WHERE state = 'complete'
+             ORDER BY generation DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(skipped_pages, Some(i64::from(expected_skipped)));
+}
+
+#[cfg(feature = "gemma-native")]
+fn enrol_with_pdf_image_policy(
+    library: &SemanticLibraryService,
+    workspace_id: WorkspaceId,
+    root: Location,
+) -> RootId {
+    let context = SemanticFolderContext::new(workspace_id, root.clone());
+    let budget = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        None
+    } else {
+        Some(fm_semantic_library::CPU_PDF_IMAGE_PAGE_BUDGET)
+    };
+    let preview = library
+        .preview_enrolment_with_pdf_image_policy(&HOST, context.clone(), true, true, budget)
+        .unwrap();
+    let status = library
+        .confirm_enrolment(
+            &HOST,
+            &preview.confirmation_id,
+            preview.policy_revision,
+            &context,
+        )
+        .unwrap();
+    status
+        .roots
+        .iter()
+        .find(|candidate| candidate.location == root)
+        .expect("newly enrolled root")
+        .id
+        .parse()
+        .unwrap()
 }
 
 fn enrol(library: &SemanticLibraryService, workspace_id: WorkspaceId, root: Location) -> RootId {
@@ -686,6 +1930,54 @@ async fn recursive_indexing_filters_entries_and_resolves_search_evidence() {
 }
 
 #[tokio::test]
+async fn negotiated_large_pdf_is_streamed_from_enrolled_local_root() {
+    let root = project_temp_dir("large-pdf-stream-root-");
+    let source_bytes = 65 * 1024 * 1024;
+    std::fs::File::create(root.path().join("synthetic.pdf"))
+        .unwrap()
+        .set_len(source_bytes)
+        .unwrap();
+    let state = project_temp_dir("large-pdf-stream-state-");
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1909));
+    let library = library(&state);
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let capability = Arc::new(NegotiatedPdfCapability {
+        inner: FakeSemanticCapability::new(),
+        streamed_bytes: Mutex::new(None),
+    });
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(capability.clone());
+
+    let report = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+
+    assert_eq!(report.observed_files, 1);
+    assert_eq!(report.ingested_occurrences, 1);
+    assert_eq!(report.failed_occurrences, 0);
+    assert_eq!(
+        *capability.streamed_bytes.lock().unwrap(),
+        Some(source_bytes)
+    );
+    assert!(
+        report
+            .skipped_reason_counts
+            .iter()
+            .all(|count| count.reason != EligibilityReason::Oversized)
+    );
+}
+
+#[tokio::test]
 async fn cancelled_indexing_never_commits_a_reconciliation() {
     let root = project_temp_dir("cancel-root-");
     std::fs::write(root.path().join("document.txt"), "semantic content").unwrap();
@@ -728,6 +2020,10 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
         .unwrap()
         .set_len(65 * 1024 * 1024)
         .unwrap();
+    std::fs::File::create(root.path().join("oversized.pdf"))
+        .unwrap()
+        .set_len(65 * 1024 * 1024)
+        .unwrap();
     let state = project_temp_dir("partial-state-");
     let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1903));
     let library = library(&state);
@@ -745,6 +2041,9 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
     .with_semantic_capability(Arc::new(FailingDocumentCapability {
         inner: FakeSemanticCapability::new(),
     }));
+    let mut events = service
+        .event_bus()
+        .subscribe(SessionId::new("partial-root"), [], Some(0));
 
     let report = service
         .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
@@ -755,14 +2054,249 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
     assert_eq!(report.ingested_occurrences, 1);
     assert_eq!(report.failed_occurrences, 1);
     assert_eq!(
+        report.failure_details,
+        ["page 33 image 1 exceeds the PDF visual limit; no partial generation published"]
+    );
+    assert!(!report.failure_details_truncated);
+    let roots = service
+        .list_knowledge_roots(
+            &HOST,
+            fm_transport_dto::ListKnowledgeRootsRequestDto {
+                workspace_id: workspace_id.into_inner(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        roots[0].confirmed_completed_sources, 1,
+        "failed observation is not indexed"
+    );
+    assert_eq!(
+        crate::library(&state).status(&HOST).unwrap().roots[0].completed_occurrences_by_workspace
+            [&workspace_id.into_inner()],
+        1,
+        "completion receipt survives reopening the library"
+    );
+    let failed_count = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let SubscriptionEvent::Event(envelope) = events.recv().await.unwrap() else {
+                continue;
+            };
+            if let BackendEventPayload::SemanticIngestionProgress { stage, errors, .. } =
+                envelope.payload
+                && stage == "failed"
+            {
+                break errors;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(failed_count, 1);
+    assert_eq!(
         report
             .skipped_reason_counts
             .iter()
             .find(|count| count.reason == EligibilityReason::Oversized)
             .map(|count| count.count),
-        Some(1)
+        Some(2)
+    );
+    let persisted = crate::library(&state).status(&HOST).unwrap();
+    assert_eq!(
+        persisted.roots[0]
+            .eligibility_reason_counts
+            .iter()
+            .find(|count| count.reason == EligibilityReason::Oversized)
+            .map(|count| count.count),
+        Some(2),
+        "the 64 MiB exclusion remains discoverable after reopening"
     );
     assert_eq!(report.reconciliation_generation, 1);
+
+    std::fs::remove_file(root.path().join("oversized.txt")).unwrap();
+    std::fs::remove_file(root.path().join("oversized.pdf")).unwrap();
+    service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(
+        crate::library(&state).status(&HOST).unwrap().roots[0]
+            .eligibility_reason_counts
+            .iter()
+            .all(|count| count.reason != EligibilityReason::Oversized),
+        "a completed reconciliation clears obsolete oversized exclusions"
+    );
+}
+
+#[tokio::test]
+async fn completed_pdf_coverage_omissions_are_not_reported_as_failures_on_either_host() {
+    let root = project_temp_dir("coverage-root-");
+    std::fs::write(root.path().join("scan.pdf"), "coverage incomplete").unwrap();
+    for runtime in [RuntimeKindDto::Tauri, RuntimeKindDto::BrowserServer] {
+        let state = project_temp_dir("coverage-state-");
+        let workspace_id = WorkspaceId::from(Uuid::from_u128(0x244));
+        let library = library(&state);
+        let root_id = enrol(
+            &library,
+            workspace_id,
+            Location::from_native_path(root.path()).unwrap(),
+        );
+        let service = FileManagerService::new(
+            runtime,
+            state.path().join("workspaces"),
+            state.path().join("settings"),
+        )
+        .with_semantic_library_service(library)
+        .with_semantic_capability(Arc::new(FailingDocumentCapability {
+            inner: FakeSemanticCapability::new(),
+        }));
+        let report = service
+            .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(report.ingested_occurrences, 1);
+        assert_eq!(report.failed_occurrences, 0);
+        assert_eq!(
+            report.coverage_details,
+            ["page 3 has no searchable image evidence"]
+        );
+        assert!(!report.coverage_details_truncated);
+    }
+}
+
+#[tokio::test]
+async fn enrolled_pdf_above_ordinary_limit_streams_only_when_capability_advertises_pdf_support() {
+    use std::io::Write;
+
+    let root = project_temp_dir("pdf-stream-root-");
+    let pdf = root.path().join("synthetic.pdf");
+    let mut file = std::fs::File::create(&pdf).unwrap();
+    file.write_all(b"%PDF-1.7\nsynthetic marker\n").unwrap();
+    file.set_len(65 * 1024 * 1024).unwrap();
+    drop(file);
+    std::fs::File::create(root.path().join("too-large.pdf"))
+        .unwrap()
+        .set_len(200 * 1024 * 1024 + 1)
+        .unwrap();
+    for runtime in [RuntimeKindDto::Tauri, RuntimeKindDto::BrowserServer] {
+        let state = project_temp_dir("pdf-stream-state-");
+        let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1993));
+        let second_workspace_id = WorkspaceId::from(Uuid::from_u128(0x1994));
+        let library = library(&state);
+        let location = Location::from_native_path(root.path()).unwrap();
+        let root_id = enrol(&library, workspace_id, location.clone());
+        assert_eq!(enrol(&library, second_workspace_id, location), root_id);
+        let service = FileManagerService::new(
+            runtime,
+            state.path().join("workspaces"),
+            state.path().join("settings"),
+        )
+        .with_semantic_library_service(library)
+        .with_semantic_capability(Arc::new(FakeSemanticCapability::new()));
+
+        let report = service
+            .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+            .await
+            .unwrap();
+
+        assert_eq!(report.ingested_occurrences, 2);
+        assert_eq!(
+            report
+                .skipped_reason_counts
+                .iter()
+                .find(|count| count.reason == EligibilityReason::Oversized)
+                .map(|count| count.count),
+            Some(1),
+            "the negotiated PDF ceiling excludes an over-limit source"
+        );
+    }
+}
+
+#[tokio::test]
+async fn failed_media_is_not_counted_until_worker_completion_and_removed_on_deletion() {
+    let root = project_temp_dir("media-count-root-");
+    let image = root.path().join("photo.png");
+    std::fs::write(&image, "conversion fails").unwrap();
+    let state = project_temp_dir("media-count-state-");
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1904));
+    let library = library_with_model(
+        &state,
+        ModelIdentity::embeddinggemma_2(
+            128,
+            GemmaMediaSelection {
+                images: true,
+                audio: true,
+                video: true,
+            },
+        )
+        .unwrap(),
+    );
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(FailingDocumentCapability {
+        inner: FakeSemanticCapability::new(),
+    }));
+    let roots = || async {
+        service
+            .list_knowledge_roots(
+                &HOST,
+                fm_transport_dto::ListKnowledgeRootsRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                },
+            )
+            .await
+            .unwrap()
+    };
+    assert_eq!(roots().await[0].confirmed_completed_sources, 0);
+    let failed = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(failed.observed_files, 1);
+    assert_eq!(failed.failed_occurrences, 1);
+    assert_eq!(roots().await[0].indexed_sources, 1);
+    assert_eq!(roots().await[0].confirmed_completed_sources, 0);
+    std::fs::write(&image, "embeddable image").unwrap();
+    let completed = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(completed.ingested_occurrences, 1);
+    assert_eq!(roots().await[0].confirmed_completed_sources, 1);
+    assert_eq!(
+        crate::library_with_model(
+            &state,
+            ModelIdentity::embeddinggemma_2(
+                128,
+                GemmaMediaSelection {
+                    images: true,
+                    audio: true,
+                    video: true,
+                },
+            )
+            .unwrap()
+        )
+        .status(&HOST)
+        .unwrap()
+        .roots[0]
+            .completed_occurrences_by_workspace[&workspace_id.into_inner()],
+        1
+    );
+    std::fs::remove_file(&image).unwrap();
+    service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(roots().await[0].confirmed_completed_sources, 0);
 }
 
 #[cfg(unix)]
@@ -1147,6 +2681,20 @@ async fn cancelling_running_ocr_stops_worker_ingestion_and_persists_cancelled_st
     .await
     .expect("job started");
 
+    assert_eq!(
+        service
+            .list_knowledge_roots(
+                &HOST,
+                fm_transport_dto::ListKnowledgeRootsRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                },
+            )
+            .await
+            .unwrap()[0]
+            .confirmed_completed_sources,
+        0,
+        "pending ingestion must not count as indexed"
+    );
     service.cancel_semantic_ocr_remediation(&job.id).unwrap();
     tokio::time::timeout(Duration::from_secs(2), async {
         loop {
@@ -1167,6 +2715,19 @@ async fn cancelling_running_ocr_stops_worker_ingestion_and_persists_cancelled_st
             .unwrap()
             .state,
         OcrRemediationState::Cancelled
+    );
+    assert_eq!(
+        service
+            .list_knowledge_roots(
+                &HOST,
+                fm_transport_dto::ListKnowledgeRootsRequestDto {
+                    workspace_id: workspace_id.into_inner(),
+                },
+            )
+            .await
+            .unwrap()[0]
+            .confirmed_completed_sources,
+        0
     );
     shutdown.cancel();
     runner.await.unwrap();

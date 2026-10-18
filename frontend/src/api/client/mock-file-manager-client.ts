@@ -86,6 +86,7 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmModelLimits,
   LlmProfile,
   LlmProfileExport,
   LlmProfilePreset,
@@ -97,6 +98,7 @@ import type {
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
   OpenPptxPreviewRequest,
+  OpenSqliteViewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
@@ -107,11 +109,13 @@ import type {
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  PluginPreviewResult,
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
   PreviewRagRequest,
   PreviewSemanticEnrolmentRequest,
+  QuerySqliteViewRequest,
   RagAnswer,
   RagPreview,
   ReadDocxPreviewResourceRequest,
@@ -175,6 +179,9 @@ import type {
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
+  SqliteQueryResult,
+  SqliteView,
+  SqliteViewSessionRequest,
   StartChecksumRequest,
   StartChecksumResult,
   StartComparisonRequest,
@@ -196,6 +203,7 @@ import type {
   UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
+  UpdateGemmaMediaRequest,
   UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
@@ -231,6 +239,7 @@ import {
   resolveMockKnowledgeScope,
   resolveMockKnowledgeSource,
 } from './mock-knowledge-search';
+import { MockSqliteDatabase } from './mock-sqlite-database';
 
 interface FixtureEntry {
   name: string;
@@ -287,6 +296,7 @@ export type MockClientMethod =
   | 'cancelSemanticOcrRemediation'
   | 'getSemanticLibraryCapabilities'
   | 'getSemanticLibraryStatus'
+  | 'updateGemmaMedia'
   | 'listSemanticVocabularies'
   | 'importSemanticVocabulary'
   | 'exportSemanticVocabulary'
@@ -308,6 +318,8 @@ export type MockClientMethod =
   | 'getVolumes'
   | 'getHomeDirectory'
   | 'startNativeDrag'
+  | 'writeOsClipboardFiles'
+  | 'readOsClipboardFiles'
   | 'showPlatformContextMenu'
   | 'getSettings'
   | 'updateSettings'
@@ -360,6 +372,7 @@ export type MockClientMethod =
   | 'listPlugins'
   | 'setPluginEnabled'
   | 'getPluginLogs'
+  | 'renderPluginPreview'
   | 'getPluginIconThemeAsset'
   | 'startSearch'
   | 'cancelSearch'
@@ -386,6 +399,7 @@ export type MockClientMethod =
   | 'testLlmProfile'
   | 'discoverLlmProfileModels'
   | 'discoverLlmProfileDraftModels'
+  | 'discoverLlmProfileDraftModelLimits'
   | 'previewDocumentSummary'
   | 'generateDocumentSummary'
   | 'getDocumentSummary'
@@ -1384,6 +1398,7 @@ export class MockFileManagerClient implements FileManagerClient {
     savedSearches: [],
     iconTheme: 'generic',
     checkForUpdatesAutomatically: true,
+    viewerInSeparateWindow: false,
   };
   private operationSequence = 0;
   private tabSequence = 0;
@@ -1427,6 +1442,7 @@ export class MockFileManagerClient implements FileManagerClient {
   private readonly fileContents = new Map<string, Uint8Array>();
   private readonly docxSessions = new Map<string, Map<string, DocxPreviewResource>>();
   private readonly pptxSessions = new Map<string, Uint8Array>();
+  private readonly sqliteSessions = new Map<string, MockSqliteDatabase>();
   private readonly structuredSessions = new Map<
     string,
     {
@@ -1486,6 +1502,7 @@ export class MockFileManagerClient implements FileManagerClient {
       clipboard: false,
       extendedAttributes: true,
       finderAliases: false,
+      osFileClipboard: false,
       finderTags: true,
       nativeDragOut: false,
       nativeFileIcons: this.nativeIconExtensions.size > 0,
@@ -1973,6 +1990,7 @@ export class MockFileManagerClient implements FileManagerClient {
         'pause',
         'resume',
         'updateEligibilityOverrides',
+        ...(this.semanticLibrary.gemmaMedia ? (['updateGemmaMedia'] as const) : []),
       ],
     }));
   }
@@ -1981,6 +1999,32 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('getSemanticLibraryStatus', signal, () =>
       structuredClone(this.semanticLibrary),
     );
+  }
+
+  updateGemmaMedia(
+    request: UpdateGemmaMediaRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.perform('updateGemmaMedia', signal, () => {
+      this.requireSemanticLibraryRevision(request.policyRevision);
+      const previous = this.semanticLibrary.gemmaMedia;
+      if (!previous) throw new MockClientError('invalidRequest', 'A Gemma library is required');
+      if (
+        !request.confirmRemoval &&
+        ((previous.images && !request.images) ||
+          (previous.audio && !request.audio) ||
+          (previous.video && !request.video))
+      ) {
+        throw new MockClientError('invalidRequest', 'Removing media requires confirmation');
+      }
+      this.semanticLibrary.gemmaMedia = {
+        images: request.images,
+        audio: request.audio,
+        video: request.video,
+      };
+      this.advanceSemanticLibraryRevision();
+      return structuredClone(this.semanticLibrary);
+    });
   }
 
   listSemanticVocabularies(signal?: AbortSignal): Promise<readonly SemanticVocabulary[]> {
@@ -2167,6 +2211,8 @@ export class MockFileManagerClient implements FileManagerClient {
         policyRevision: this.semanticLibrary.revision,
         location: structuredClone(request.location),
         recursive: request.recursive,
+        pdfImagesEnabled: request.pdfImagesEnabled ?? false,
+        pdfImagePageBudget: request.pdfImagePageBudget ?? null,
         normalizedExcerptsRetainedLocally: true,
         estimate: {
           completeness: 'partial',
@@ -2219,6 +2265,8 @@ export class MockFileManagerClient implements FileManagerClient {
           id: `00000000-0000-0000-0000-${String(this.semanticLibrarySequence).padStart(12, '0')}`,
           location: structuredClone(request.location),
           recursive: preview.recursive,
+          pdfImagesEnabled: preview.pdfImagesEnabled ?? false,
+          pdfImagePageBudget: preview.pdfImagePageBudget ?? null,
           stableIdentityVerified: true,
           workspaceReferences: [request.workspaceId],
           eligibilityOverrides: [],
@@ -2233,8 +2281,12 @@ export class MockFileManagerClient implements FileManagerClient {
           indexedGeneration: 0,
           exclusions: [],
         });
-      } else if (!existing.workspaceReferences.includes(request.workspaceId)) {
-        existing.workspaceReferences.push(request.workspaceId);
+      } else {
+        existing.pdfImagesEnabled = preview.pdfImagesEnabled ?? false;
+        existing.pdfImagePageBudget = preview.pdfImagePageBudget ?? null;
+        if (!existing.workspaceReferences.includes(request.workspaceId)) {
+          existing.workspaceReferences.push(request.workspaceId);
+        }
       }
       this.advanceSemanticLibraryRevision();
       return structuredClone(this.semanticLibrary);
@@ -2400,6 +2452,7 @@ export class MockFileManagerClient implements FileManagerClient {
         clipboard: false,
         extendedAttributes: true,
         finderAliases: false,
+        osFileClipboard: false,
         finderTags: true,
         nativeDragOut: false,
         nativeFileIcons: this.nativeIconExtensions.size > 0,
@@ -2458,6 +2511,15 @@ export class MockFileManagerClient implements FileManagerClient {
 
   startNativeDrag(_locations: readonly Location[], signal?: AbortSignal): Promise<void> {
     return this.perform('startNativeDrag', signal, () => undefined);
+  }
+
+  /** The mock host has no OS file clipboard (`osFileClipboard: false`). */
+  writeOsClipboardFiles(_locations: readonly Location[], signal?: AbortSignal): Promise<boolean> {
+    return this.perform('writeOsClipboardFiles', signal, () => false);
+  }
+
+  readOsClipboardFiles(signal?: AbortSignal): Promise<Location[]> {
+    return this.perform('readOsClipboardFiles', signal, () => []);
   }
 
   showPlatformContextMenu(_locations: readonly Location[], signal?: AbortSignal): Promise<void> {
@@ -3196,6 +3258,48 @@ export class MockFileManagerClient implements FileManagerClient {
     });
   }
 
+  openSqliteView(request: OpenSqliteViewRequest, signal?: AbortSignal): Promise<SqliteView> {
+    return this.perform('readFileRange', signal, () => {
+      const sessionId = crypto.randomUUID();
+      const database = new MockSqliteDatabase();
+      this.sqliteSessions.set(sessionId, database);
+      return {
+        sessionId,
+        sourceBytes: this.fileContentFor(request.location.uri).length,
+        sqliteVersion: 'mock',
+        objects: [...database.objects],
+      };
+    });
+  }
+
+  querySqliteView(
+    request: QuerySqliteViewRequest,
+    signal?: AbortSignal,
+  ): Promise<SqliteQueryResult> {
+    return this.perform('readFileRange', signal, () => {
+      const database = this.sqliteSessions.get(request.sessionId);
+      if (database === undefined) {
+        throw new MockClientError('notFound', 'SQLite viewer session not found');
+      }
+      try {
+        return database.query(request.source, request.offset ?? 0, request.limit);
+      } catch (error) {
+        throw new MockClientError(
+          'invalidRequest',
+          error instanceof Error ? error.message : 'query failed',
+        );
+      }
+    });
+  }
+
+  closeSqliteView(request: SqliteViewSessionRequest, signal?: AbortSignal): Promise<void> {
+    return this.perform('readFileRange', signal, () => {
+      if (!this.sqliteSessions.delete(request.sessionId)) {
+        throw new MockClientError('notFound', 'SQLite viewer session not found');
+      }
+    });
+  }
+
   loadEditableFile(request: LoadEditableFileRequest, signal?: AbortSignal): Promise<EditableFile> {
     return this.perform('readFileRange', signal, () => {
       const bytes = this.fileContentFor(request.location.uri);
@@ -3683,6 +3787,24 @@ export class MockFileManagerClient implements FileManagerClient {
       this.pluginState = this.pluginState.map((plugin) =>
         plugin.id === pluginId ? { ...plugin, enabled } : plugin,
       );
+    });
+  }
+
+  renderPluginPreview(
+    pluginId: PluginId,
+    location: Location,
+    signal?: AbortSignal,
+  ): Promise<PluginPreviewResult> {
+    return this.perform('renderPluginPreview', signal, () => {
+      const plugin = this.pluginState.find((candidate) => candidate.id === pluginId);
+      if (plugin?.enabled !== true || plugin.preview === undefined) {
+        throw new MockClientError('pluginNotFound', `No enabled mock preview plugin ${pluginId}`);
+      }
+      return {
+        kind: 'text' as const,
+        body: `${pluginId} previewed ${location.uri}`,
+        truncated: false,
+      };
     });
   }
 
@@ -4279,6 +4401,13 @@ export class MockFileManagerClient implements FileManagerClient {
         },
         {
           ...defaults,
+          name: 'mlx-serve',
+          preset: 'mlxServe',
+          baseUrl: 'http://127.0.0.1:11234',
+          redactFilenames: false,
+        },
+        {
+          ...defaults,
           name: 'OpenAI-compatible',
           preset: 'openAiCompatible',
           baseUrl: 'https://api.openai.com',
@@ -4334,14 +4463,15 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('updateLlmProfile', signal, () => {
       const current = this.requireLlmProfile(profileId);
       const host = new URL(request.baseUrl).hostname.toLowerCase();
-      const oldHost = new URL(current.baseUrl).hostname.toLowerCase();
+      const endpoint = new URL(request.baseUrl).href.replace(/\/$/u, '');
+      const oldEndpoint = new URL(current.baseUrl).href.replace(/\/$/u, '');
       const profile: LlmProfile = {
         ...structuredClone(request),
         id: profileId,
         hasCredential: request.credential != null || current.hasCredential,
         locality:
           host === 'localhost' || host === '127.0.0.1' || host === '::1' ? 'loopback' : 'cloud',
-        consentedHost: host === oldHost ? (current.consentedHost ?? null) : null,
+        consentedHost: endpoint === oldEndpoint ? (current.consentedHost ?? null) : null,
       };
       this.llmProfiles.set(profileId, profile);
       return structuredClone(profile);
@@ -4402,13 +4532,13 @@ export class MockFileManagerClient implements FileManagerClient {
   ): Promise<LlmProfile> {
     return this.perform('activateLlmProfile', signal, () => {
       const profile = this.requireLlmProfile(profileId);
-      if (profile.locality === 'cloud' && !consent && profile.consentedHost == null) {
+      const endpoint = new URL(profile.baseUrl).href.replace(/\/$/u, '');
+      if (profile.locality === 'cloud' && !consent && profile.consentedHost !== endpoint) {
         throw new MockClientError('invalidRequest', 'Cloud consent is required');
       }
       const activated: LlmProfile = {
         ...profile,
-        consentedHost:
-          profile.locality === 'cloud' ? new URL(profile.baseUrl).hostname.toLowerCase() : null,
+        consentedHost: profile.locality === 'cloud' ? endpoint : null,
       };
       this.llmProfiles.set(profileId, activated);
       this.activeLlmProfileId = profileId;
@@ -4458,6 +4588,18 @@ export class MockFileManagerClient implements FileManagerClient {
     );
   }
 
+  discoverLlmProfileDraftModelLimits(
+    request: SaveLlmProfileRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmModelLimits> {
+    return this.perform('discoverLlmProfileDraftModelLimits', signal, () => ({
+      contextWindow: request.model === 'model-a' ? 131_072 : null,
+      maximumAnswerTokens: request.model === 'model-a' ? 8_192 : null,
+      contextWindowCap: 1_048_576,
+      maximumAnswerTokensCap: 16_384,
+    }));
+  }
+
   previewDocumentSummary(
     request: PreviewDocumentSummaryRequest,
     signal?: AbortSignal,
@@ -4470,7 +4612,16 @@ export class MockFileManagerClient implements FileManagerClient {
       return {
         selectionFingerprint: `mock-summary-${request.target.entryId}`,
         representativeTokens: Math.min(request.inputTokenBudget, 72),
-        selectionMode: request.inputTokenBudget > 4_096 ? 'fullDocument' : 'representativePassages',
+        sourceTokens: request.target.location.uri.includes('large-report') ? 12_288 : 72,
+        textPreview: 'Overview\n\nA representative passage from the selected document.',
+        textPreviewTruncated: request.target.location.uri.includes('large-report'),
+        selectionMode:
+          request.inputTokenBudget > 4_096 && !request.target.location.uri.includes('large-report')
+            ? 'fullDocument'
+            : 'representativePassages',
+        sourcePassCount: request.target.location.uri.includes('large-report') ? 2 : 1,
+        effectiveContextWindow: profile?.advanced.contextWindow ?? null,
+        providerLimitVerified: profile?.preset === 'ollama',
         imageInputAvailable,
         includedImageCount: request.includeImages && imageInputAvailable ? visualCount : 0,
         omittedImageCount: 0,
@@ -4478,7 +4629,7 @@ export class MockFileManagerClient implements FileManagerClient {
           {
             label: 'S1',
             chunkId: `mock-chunk-${request.target.entryId}`,
-            content: 'A representative passage from the selected document.',
+            content: 'Overview\n\nA representative passage from the selected document.',
             sectionPath: ['Overview'],
             provenance: '{"kind":"textLines","start_line":1,"end_line":3}',
             clusterPopulation: 1,

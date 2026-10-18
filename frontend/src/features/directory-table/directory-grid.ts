@@ -39,8 +39,11 @@ export type GridIconSize = ThumbnailSize;
  * rows) differs. */
 export interface DirectoryGridAttrs {
   readonly state: LoadingState;
+  /** Display name of the directory being listed, used to name it in load errors. */
+  readonly directoryName?: string;
   readonly source?: DirectoryEntrySource;
   readonly cursorIndex?: number;
+  readonly contextTargetEntryId?: EntryId;
   readonly selectedEntryIds?: ReadonlySet<EntryId>;
   readonly cutEntryIds?: ReadonlySet<EntryId>;
   readonly activeSourceStates?: ReadonlyMap<string, ActiveSourceState>;
@@ -54,6 +57,7 @@ export interface DirectoryGridAttrs {
   readonly photoMode?: boolean;
   readonly nativeIconLoader?: NativeIconLoader;
   readonly thumbnailLoader?: ThumbnailLoader;
+  readonly thumbnailAllowed?: (entry: EntrySummary) => boolean;
   readonly onCursorChange?: (index: number, modifiers?: CursorClickModifiers) => void;
   readonly onActivate?: (index: number) => void;
   readonly onRetry?: () => void;
@@ -88,7 +92,10 @@ function stateView(attrs: DirectoryGridAttrs): m.Children | undefined {
     );
   }
   if (attrs.state.type === 'error') {
-    const genericMessage = t('table', 'unableToLoad');
+    const genericMessage =
+      attrs.directoryName === undefined || attrs.directoryName.length === 0
+        ? t('table', 'unableToLoad')
+        : t('table', 'unableToLoadNamed', { name: attrs.directoryName });
     const detail = attrs.state.message.trim();
     return m('.fm-directory-state.fm-directory-error', { role: 'alert' }, [
       m('strong', genericMessage),
@@ -139,7 +146,10 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
       entry.kind === 'directory'
         ? attrs.activeSourceStates?.get(`${entry.location.providerId}:${entry.location.uri}`)
         : undefined;
-    const thumbnailDataUri = thumbnailViewport?.thumbnailDataUri(entry, size);
+    const thumbnailDataUri =
+      attrs.thumbnailAllowed?.(entry) === false
+        ? undefined
+        : thumbnailViewport?.thumbnailDataUri(entry, size);
     const nativeIconDataUri = attrs.nativeIconLoader?.iconDataUri(entry);
     return m(
       '.fm-grid-tile',
@@ -193,6 +203,7 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
           entry.hidden ? 'fm-hidden-entry' : '',
           cursor ? 'fm-cursor-tile' : '',
           selected ? 'fm-selected-tile' : '',
+          attrs.contextTargetEntryId === entry.id ? 'fm-context-target-tile' : '',
           attrs.cutEntryIds?.has(entry.id) === true ? 'fm-cut-entry' : '',
           activeSource !== undefined ? 'fm-active-source' : '',
         ].join(' '),

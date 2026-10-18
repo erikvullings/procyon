@@ -531,6 +531,7 @@ mod tests {
             source_id: source_id.into(),
             provenance: r#"{"kind":"textLines","start_line":1,"end_line":2}"#.into(),
             generation: 1,
+            pdf_image_skipped_pages: None,
             record_kind: if generated { "summary" } else { "chunk" }.into(),
             excerpt: record_id.into(),
             content: format!("complete {record_id}"),

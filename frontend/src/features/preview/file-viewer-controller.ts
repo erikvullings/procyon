@@ -41,12 +41,27 @@ import {
   textMetadataFor,
 } from './file-metadata';
 import { loadPdfDocument, type PDFDocumentProxy } from './pdf-preview';
+import {
+  type PreviewPluginRoute,
+  previewPluginFor,
+  sanitizePluginPreviewHtml,
+} from './plugin-preview';
+import {
+  type FileViewerSqliteContent,
+  isSqliteCandidate,
+  loadSqliteData,
+  loadSqliteSql,
+  openSqliteContent,
+  type SqliteResultState,
+  type SqliteSort,
+} from './sqlite-browser';
 
 /** Client surface required to drive a Lister-style large-file viewer. `listDirectory` is only
  * used for comic (.cbz/.cbr) page listing. */
 export type FileViewerClient = Pick<
   FileManagerClient,
   | 'readFileRange'
+  | 'renderPluginPreview'
   | 'searchInFile'
   | 'listDirectory'
   | 'archiveSummary'
@@ -58,6 +73,9 @@ export type FileViewerClient = Pick<
   | 'readStructuredJsonWindow'
   | 'searchStructuredRows'
   | 'closeStructuredView'
+  | 'openSqliteView'
+  | 'querySqliteView'
+  | 'closeSqliteView'
   | 'openDocxPreview'
   | 'readDocxPreviewResource'
   | 'closeDocxPreview'
@@ -260,6 +278,27 @@ export interface FileViewerExternalPptxContent {
   readonly message: string;
 }
 
+/** One window of a binary file, rendered as a hex dump (the fallback when text sniffing fails). */
+export interface FileViewerHexContent {
+  readonly kind: 'hex';
+  readonly windowOffset: number;
+  readonly windowEnd: number;
+  readonly bytes: Uint8Array;
+  readonly atStart: boolean;
+  readonly atEnd: boolean;
+  readonly loadingMore: boolean;
+}
+
+/** A sandboxed plugin preview (task 0142). `body` is plain text, or - for `html` - already
+ * sanitized and safe to render as markup. */
+export interface FileViewerPluginPreviewContent {
+  readonly kind: 'pluginPreview';
+  readonly pluginId: string;
+  readonly format: 'text' | 'html';
+  readonly body: string;
+  readonly truncated: boolean;
+}
+
 /** Content-derived archive details plus provider-neutral recursive totals. */
 export interface FileViewerArchiveSummaryContent {
   readonly kind: 'archiveSummary';
@@ -319,6 +358,8 @@ export type FileViewerState =
       readonly entry: EntrySummary;
       readonly content:
         | FileViewerTextContent
+        | FileViewerHexContent
+        | FileViewerPluginPreviewContent
         | FileViewerImageContent
         | FileViewerAudioContent
         | FileViewerVideoContent
@@ -332,7 +373,8 @@ export type FileViewerState =
         | FileViewerArchiveSummaryContent
         | FileViewerStructuredTableContent
         | FileViewerStructuredJsonContent
-        | FileViewerStructuredFallbackContent;
+        | FileViewerStructuredFallbackContent
+        | FileViewerSqliteContent;
       readonly search?: FileViewerSearchState;
       /** Simple PDF text search state (`pdf` content only). */
       readonly pdfSearch?: FileViewerPdfSearchState;
@@ -362,6 +404,8 @@ export interface FileViewerControllerOptions {
    * controller mints its own throwaway pane id for this one-off request instead (see `loadComic`). */
   readonly workspaceId?: string;
   readonly update: (state: FileViewerState) => void;
+  /** Enabled plugin preview renderers (task 0142); built-in renderers always take precedence. */
+  readonly previewPlugins?: readonly PreviewPluginRoute[];
   /** Pre-populated search query to run as soon as text content is ready (task 0089). */
   readonly initialSearch?: {
     readonly query: string;
@@ -388,6 +432,22 @@ export interface FileViewerController {
   loadJsonWindow(offset: number): Promise<void>;
   searchStructuredRows(query: string, cursor?: number): Promise<void>;
   sortStructuredRows(column: number): Promise<void>;
+  /** SQLite database viewer (task 0251): switches between the data, structure and SQL tabs. */
+  setSqliteTab(tab: FileViewerSqliteContent['tab']): void;
+  /** Browses another table or view, resetting its search, filters and sort. */
+  selectSqliteObject(name: string): void;
+  /** Updates the table browser's search text, column filters or sort and reloads page one. */
+  updateSqliteBrowse(patch: {
+    readonly search?: string;
+    readonly filters?: FileViewerSqliteContent['filters'];
+    readonly sort?: SqliteSort | undefined;
+  }): void;
+  /** Loads another page of the table browser (`data`) or of the SQL console result (`sqlRun`). */
+  loadSqlitePage(slot: 'data' | 'sqlRun', offset: number): void;
+  /** Stores the SQL console text without running it. */
+  setSqliteSql(sql: string): void;
+  /** Runs the SQL console statement (read-only on the backend). */
+  runSqliteSql(): void;
   setSearchOptions(
     patch: Partial<Pick<FileViewerSearchState, 'query' | 'regex' | 'caseSensitive' | 'wholeWord'>>,
   ): void;
@@ -435,6 +495,8 @@ const DEFAULT_SEARCH_STATE: FileViewerSearchState = {
   searching: false,
   error: undefined,
 };
+
+const SQLITE_SEARCH_DEBOUNCE_MS = 250;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : t('viewer', 'unableToLoad');
@@ -565,6 +627,10 @@ export function createFileViewerController(
   let epubSearchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   let structuredStatusTimer: ReturnType<typeof setTimeout> | undefined;
   let structuredSessionId: string | undefined;
+  let sqliteSessionId: string | undefined;
+  let sqliteSearchTimer: ReturnType<typeof setTimeout> | undefined;
+  const sqliteGeneration: Record<'data' | 'sqlRun', number> = { data: 0, sqlRun: 0 };
+  const sqliteAborts: Partial<Record<'data' | 'sqlRun', AbortController>> = {};
   let docxSessionId: string | undefined;
   let pptxSessionId: string | undefined;
   const textWindowCache = new Map<number, FileViewerTextContent>();
@@ -602,7 +668,12 @@ export function createFileViewerController(
     );
     if (!isCurrent(controller)) return;
     if (chunk.probablyBinary === true) {
-      publish({ status: 'unsupported', entry });
+      publish({
+        status: 'ready',
+        entry,
+        content: hexWindow(0, chunk),
+        metadataPanelOpen: initialMetadataOpen,
+      });
       return;
     }
     const content: FileViewerTextContent = {
@@ -749,6 +820,109 @@ export function createFileViewerController(
       },
     });
     if (!opened.indexingComplete) scheduleStructuredStatusPoll();
+  }
+
+  async function loadSqlite(controller: AbortController): Promise<void> {
+    const content = await openSqliteContent(client, entry.location, controller.signal);
+    if (!isCurrent(controller)) {
+      void client.closeSqliteView({ sessionId: content.sessionId }).catch(() => undefined);
+      return;
+    }
+    sqliteSessionId = content.sessionId;
+    publish({ status: 'ready', entry, content, metadataPanelOpen: initialMetadataOpen });
+    if (content.selected !== undefined) await refreshSqlite('data', 0);
+  }
+
+  function sqliteContent(): FileViewerSqliteContent | undefined {
+    return current.status === 'ready' && current.content.kind === 'sqlite'
+      ? current.content
+      : undefined;
+  }
+
+  function publishSqlite(content: FileViewerSqliteContent): void {
+    if (current.status === 'ready' && !disposed) publish({ ...current, content });
+  }
+
+  /** Reloads a SQLite result slot; a newer request for the same slot supersedes older ones. */
+  async function refreshSqlite(slot: 'data' | 'sqlRun', offset: number): Promise<void> {
+    const content = sqliteContent();
+    if (content === undefined) return;
+    sqliteAborts[slot]?.abort();
+    const abort = new AbortController();
+    sqliteAborts[slot] = abort;
+    sqliteGeneration[slot] += 1;
+    const generation = sqliteGeneration[slot];
+    const loading: SqliteResultState = { ...content[slot], loading: true, error: undefined };
+    publishSqlite({ ...content, [slot]: loading });
+    const loaded = await (slot === 'data' ? loadSqliteData : loadSqliteSql)(
+      client,
+      content,
+      offset,
+      abort.signal,
+    );
+    const latest = sqliteContent();
+    if (disposed || latest === undefined || generation !== sqliteGeneration[slot]) return;
+    publishSqlite({ ...latest, [slot]: loaded });
+  }
+
+  function setSqliteTab(tab: FileViewerSqliteContent['tab']): void {
+    const content = sqliteContent();
+    if (content === undefined || content.tab === tab) return;
+    publishSqlite({ ...content, tab });
+  }
+
+  function selectSqliteObject(name: string): void {
+    const content = sqliteContent();
+    if (content === undefined || !content.objects.some((object) => object.name === name)) return;
+    clearTimeout(sqliteSearchTimer);
+    publishSqlite({
+      ...content,
+      tab: content.tab === 'sql' ? 'data' : content.tab,
+      selected: name,
+      search: '',
+      filters: [],
+      sort: undefined,
+      data: { ...content.data, result: undefined, totalRows: undefined, offset: 0 },
+    });
+    void refreshSqlite('data', 0);
+  }
+
+  function updateSqliteBrowse(patch: {
+    readonly search?: string;
+    readonly filters?: FileViewerSqliteContent['filters'];
+    readonly sort?: SqliteSort | undefined;
+  }): void {
+    const content = sqliteContent();
+    if (content === undefined) return;
+    publishSqlite({
+      ...content,
+      search: patch.search ?? content.search,
+      filters: patch.filters ?? content.filters,
+      sort: 'sort' in patch ? patch.sort : content.sort,
+    });
+    clearTimeout(sqliteSearchTimer);
+    // Typing in the search box or a filter value is debounced; a sort click is immediate.
+    if (!('sort' in patch)) {
+      sqliteSearchTimer = setTimeout(
+        () => void refreshSqlite('data', 0),
+        SQLITE_SEARCH_DEBOUNCE_MS,
+      );
+    } else {
+      void refreshSqlite('data', 0);
+    }
+  }
+
+  function loadSqlitePage(slot: 'data' | 'sqlRun', offset: number): void {
+    void refreshSqlite(slot, Math.max(0, offset));
+  }
+
+  function setSqliteSql(sql: string): void {
+    const content = sqliteContent();
+    if (content !== undefined) publishSqlite({ ...content, sql });
+  }
+
+  function runSqliteSql(): void {
+    void refreshSqlite('sqlRun', 0);
   }
 
   async function loadImage(controller: AbortController): Promise<void> {
@@ -1190,6 +1364,56 @@ export function createFileViewerController(
     });
   }
 
+  function previewRoute(): PreviewPluginRoute | undefined {
+    return previewPluginFor(entry, options.previewPlugins ?? []);
+  }
+
+  async function loadPluginPreview(
+    controller: AbortController,
+    route: PreviewPluginRoute,
+  ): Promise<void> {
+    try {
+      const result = await client.renderPluginPreview(
+        route.pluginId,
+        entry.location,
+        controller.signal,
+      );
+      if (!isCurrent(controller)) return;
+      publish({
+        status: 'ready',
+        entry,
+        content: {
+          kind: 'pluginPreview',
+          pluginId: route.pluginId,
+          format: result.kind,
+          body: result.kind === 'html' ? sanitizePluginPreviewHtml(result.body) : result.body,
+          truncated: result.truncated,
+        },
+        metadataPanelOpen: initialMetadataOpen,
+      });
+    } catch {
+      if (!isCurrent(controller)) return;
+      // A failing plugin must never hide the file: fall back to the built-in text/hex view.
+      await loadInitialText(controller);
+      if (search?.query.trim()) await runSearch();
+    }
+  }
+
+  /** Opens a SQLite browser; a file that is not (or not a readable) database falls back to the
+   * regular text/hex view of the file rather than a dead end. */
+  async function tryLoadSqlite(controller: AbortController): Promise<boolean> {
+    try {
+      await loadSqlite(controller);
+    } catch (error: unknown) {
+      if (!isCurrent(controller)) return true;
+      // Only "this is not a database" falls back to the plain view; other failures (session cap,
+      // size limit, I/O) are shown instead of silently presenting raw bytes.
+      if (error instanceof Error && /SQLite database/i.test(error.message)) return false;
+      publish({ status: 'error', entry, message: errorMessage(error) });
+    }
+    return true;
+  }
+
   async function load(): Promise<void> {
     const controller = beginRequest();
     publish({ status: 'loading', entry });
@@ -1198,6 +1422,8 @@ export function createFileViewerController(
       const kind = resolvePreviewKind(entry);
       if (format !== undefined) {
         await loadStructured(controller, format);
+      } else if (isSqliteCandidate(entry.extension) && (await tryLoadSqlite(controller))) {
+        // Opened as a database browser.
       } else if (kind === 'image') {
         await loadImage(controller);
       } else if (kind === 'audio') {
@@ -1216,6 +1442,8 @@ export function createFileViewerController(
         await loadPptx(controller);
       } else if (kind === 'archiveSummary') {
         await loadArchiveSummary(controller);
+      } else if (kind === 'text' && previewRoute() !== undefined) {
+        await loadPluginPreview(controller, previewRoute() as PreviewPluginRoute);
       } else if (kind === 'text') {
         await loadInitialText(controller);
         // Run initial search if pre-populated from content search results.
@@ -1318,7 +1546,50 @@ export function createFileViewerController(
     }
   }
 
+  function hexWindow(
+    offset: number,
+    chunk: { readonly data: readonly number[]; readonly length: number; readonly eof: boolean },
+  ): FileViewerHexContent {
+    return {
+      kind: 'hex',
+      windowOffset: offset,
+      windowEnd: offset + chunk.length,
+      bytes: new Uint8Array(chunk.data),
+      atStart: offset === 0,
+      atEnd: chunk.eof,
+      loadingMore: false,
+    };
+  }
+
+  async function loadHexPage(pageIndex: number): Promise<void> {
+    if (current.status !== 'ready' || current.content.kind !== 'hex') return;
+    const ready = current;
+    const content = current.content;
+    const offset = Math.max(0, Math.floor(pageIndex)) * TEXT_WINDOW_BYTES;
+    if (
+      content.loadingMore ||
+      offset === content.windowOffset ||
+      (entry.size !== undefined && offset >= entry.size)
+    )
+      return;
+    publish({ ...ready, content: { ...content, loadingMore: true } });
+    const controller = beginRequest();
+    try {
+      const chunk = await client.readFileRange(
+        { location: entry.location, offset, length: TEXT_WINDOW_BYTES },
+        controller.signal,
+      );
+      if (!isCurrent(controller)) return;
+      publish({ ...ready, content: hexWindow(offset, chunk) });
+    } catch (error: unknown) {
+      if (isCurrent(controller)) publish({ status: 'error', entry, message: errorMessage(error) });
+    }
+  }
+
   async function loadTextPage(pageIndex: number): Promise<void> {
+    if (current.status === 'ready' && current.content.kind === 'hex') {
+      return loadHexPage(pageIndex);
+    }
     const content = textContent();
     if (content === undefined || content.loadingMore) return;
     const offset = Math.max(0, Math.floor(pageIndex)) * TEXT_WINDOW_BYTES;
@@ -2629,6 +2900,12 @@ export function createFileViewerController(
     loadJsonWindow,
     searchStructuredRows,
     sortStructuredRows,
+    setSqliteTab,
+    selectSqliteObject,
+    updateSqliteBrowse,
+    loadSqlitePage,
+    setSqliteSql,
+    runSqliteSql,
     setSearchOptions,
     runSearch,
     goToNextMatch,
@@ -2676,6 +2953,13 @@ export function createFileViewerController(
       if (structuredSessionId !== undefined) {
         void client.closeStructuredView({ sessionId: structuredSessionId }).catch(() => undefined);
         structuredSessionId = undefined;
+      }
+      clearTimeout(sqliteSearchTimer);
+      sqliteAborts.data?.abort();
+      sqliteAborts.sqlRun?.abort();
+      if (sqliteSessionId !== undefined) {
+        void client.closeSqliteView({ sessionId: sqliteSessionId }).catch(() => undefined);
+        sqliteSessionId = undefined;
       }
       if (docxSessionId !== undefined) {
         void client.closeDocxPreview({ sessionId: docxSessionId }).catch(() => undefined);

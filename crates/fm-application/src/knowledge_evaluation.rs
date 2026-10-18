@@ -1690,6 +1690,7 @@ impl CorpusHarness {
                 .iter()
                 .map(|source_id| (source_id.clone(), content_hash(source_id)))
                 .collect(),
+            media: None,
         }
     }
 
@@ -2035,6 +2036,8 @@ fn stage_and_publish(
         library_id: corpus.library_id.clone(),
         document_id: document.document_id.clone(),
         content_hash: content_hash(&document.document_id),
+        source_complete: true,
+        pdf_image_skipped_pages: None,
         generation,
         occurrences,
         records,

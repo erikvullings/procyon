@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 1,
+  "target": "linux-aarch64",
+  "qualificationRunId": "37992680322",
+  "qualificationSourceRevision": "6a691a14b0d94d9a5d977502ab4f1be220cbb6e0",
+  "candidateRunId": "37974984924",
+  "candidateArtifactId": "11640886748",
+  "catalogRevision": "procyon-linux-aarch64-0.4.2-3c3c40bd67698b37e702aec3d379a1ac",
+  "catalogSha256": "b158c0b7c2f25aa16215fdacc34268d2326e1c26fb0f593a09617bd987e534df",
+  "hardware": {
+    "runnerImage": "ubuntu24-arm64",
+    "runnerName": "GitHub Actions 1000006973",
+    "cpuModel": "unknown",
+    "logicalCpuCount": 4,
+    "totalMemoryBytes": 16722046976,
+    "platform": "linux",
+    "arch": "arm64",
+    "osRelease": "6.17.0-1022-azure"
+  },
+  "dimensions": [
+    {
+      "schemaVersion": 1,
+      "dimensions": 128,
+      "totalWallSeconds": 177.607487966,
+      "workerStartupSeconds": 2.432628346,
+      "workerPeakRssBytes": 3716853760,
+      "workerPeakMethod": "kernel VmHWM for both worker processes",
+      "measurements": [
+        {
+          "modality": "image",
+          "inputBytes": 14037,
+          "ingestionSeconds": 106.916882436,
+          "ingestionItemsPerSecond": 0.009353059846265119,
+          "querySeconds": [
+            0.187481043,
+            0.186786295,
+            0.187610759
+          ]
+        },
+        {
+          "modality": "audio",
+          "inputBytes": 3088,
+          "ingestionSeconds": 2.7638388369999998,
+          "ingestionItemsPerSecond": 0.3618155974266021,
+          "querySeconds": [
+            0.190862319,
+            0.18975655,
+            0.189392803
+          ]
+        },
+        {
+          "modality": "video",
+          "inputBytes": 1537,
+          "ingestionSeconds": 59.525290784,
+          "ingestionItemsPerSecond": 0.016799581939527346,
+          "querySeconds": [
+            0.192794595,
+            0.194414713,
+            0.191124248
+          ]
+        },
+        {
+          "modality": "text",
+          "inputBytes": 68,
+          "ingestionSeconds": 0.310592424,
+          "ingestionItemsPerSecond": 3.2196535482784348,
+          "querySeconds": [
+            0.196345706,
+            0.19403503,
+            0.196284377
+          ]
+        }
+      ],
+      "workload": "one synthetic 128x96 PNG, one 440Hz MP3, one 2s H.264 MP4, one short plain-text document; three text queries per modality; fresh worker and index per dimension"
+    },
+    {
+      "schemaVersion": 1,
+      "dimensions": 256,
+      "totalWallSeconds": 174.810946201,
+      "workerStartupSeconds": 2.468585377,
+      "workerPeakRssBytes": 3716857856,
+      "workerPeakMethod": "kernel VmHWM for both worker processes",
+      "measurements": [
+        {
+          "modality": "image",
+          "inputBytes": 14037,
+          "ingestionSeconds": 105.603583513,
+          "ingestionItemsPerSecond": 0.009469375628497475,
+          "querySeconds": [
+            0.187365258,
+            0.18593596,
+            0.186990903
+          ]
+        },
+        {
+          "modality": "audio",
+          "inputBytes": 3088,
+          "ingestionSeconds": 2.774027878,
+          "ingestionItemsPerSecond": 0.3604866439629919,
+          "querySeconds": [
+            0.189617732,
+            0.188906447,
+            0.189514297
+          ]
+        },
+        {
+          "modality": "video",
+          "inputBytes": 1537,
+          "ingestionSeconds": 58.039884429,
+          "ingestionItemsPerSecond": 0.01722953120665319,
+          "querySeconds": [
+            0.192840137,
+            0.193213796,
+            0.192538728
+          ]
+        },
+        {
+          "modality": "text",
+          "inputBytes": 68,
+          "ingestionSeconds": 0.311211113,
+          "ingestionItemsPerSecond": 3.2132528634991258,
+          "querySeconds": [
+            0.194817194,
+            0.195426244,
+            0.195383121
+          ]
+        }
+      ],
+      "workload": "one synthetic 128x96 PNG, one 440Hz MP3, one 2s H.264 MP4, one short plain-text document; three text queries per modality; fresh worker and index per dimension"
+    },
+    {
+      "schemaVersion": 1,
+      "dimensions": 512,
+      "totalWallSeconds": 170.01179313,
+      "workerStartupSeconds": 2.466493837,
+      "workerPeakRssBytes": 3716866048,
+      "workerPeakMethod": "kernel VmHWM for both worker processes",
+      "measurements": [
+        {
+          "modality": "image",
+          "inputBytes": 14037,
+          "ingestionSeconds": 100.479689932,
+          "ingestionItemsPerSecond": 0.009952260010722105,
+          "querySeconds": [
+            0.188845645,
+            0.186740996,
+            0.185634238
+          ]
+        },
+        {
+          "modality": "audio",
+          "inputBytes": 3088,
+          "ingestionSeconds": 2.776781422,
+          "ingestionItemsPerSecond": 0.36012917404198913,
+          "querySeconds": [
+            0.189575928,
+            0.188215099,
+            0.189613321
+          ]
+        },
+        {
+          "modality": "video",
+          "inputBytes": 1537,
+          "ingestionSeconds": 58.317444549,
+          "ingestionItemsPerSecond": 0.017147527772067774,
+          "querySeconds": [
+            0.19260069,
+            0.191415234,
+            0.193217235
+          ]
+        },
+        {
+          "modality": "text",
+          "inputBytes": 68,
+          "ingestionSeconds": 0.310849271,
+          "ingestionItemsPerSecond": 3.216993228850133,
+          "querySeconds": [
+            0.194955172,
+            0.195187986,
+            0.194526064
+          ]
+        }
+      ],
+      "workload": "one synthetic 128x96 PNG, one 440Hz MP3, one 2s H.264 MP4, one short plain-text document; three text queries per modality; fresh worker and index per dimension"
+    },
+    {
+      "schemaVersion": 1,
+      "dimensions": 768,
+      "totalWallSeconds": 175.72117593,
+      "workerStartupSeconds": 2.476021755,
+      "workerPeakRssBytes": 3716870144,
+      "workerPeakMethod": "kernel VmHWM for both worker processes",
+      "measurements": [
+        {
+          "modality": "image",
+          "inputBytes": 14037,
+          "ingestionSeconds": 106.219060875,
+          "ingestionItemsPerSecond": 0.00941450613253692,
+          "querySeconds": [
+            0.190128394,
+            0.188921792,
+            0.188687802
+          ]
+        },
+        {
+          "modality": "audio",
+          "inputBytes": 3088,
+          "ingestionSeconds": 2.782409848,
+          "ingestionItemsPerSecond": 0.359400683087289,
+          "querySeconds": [
+            0.190647568,
+            0.19142731,
+            0.19113139
+          ]
+        },
+        {
+          "modality": "video",
+          "inputBytes": 1537,
+          "ingestionSeconds": 58.148174006,
+          "ingestionItemsPerSecond": 0.017197444581781973,
+          "querySeconds": [
+            0.192827568,
+            0.193137145,
+            0.192692573
+          ]
+        },
+        {
+          "modality": "text",
+          "inputBytes": 68,
+          "ingestionSeconds": 0.313758251,
+          "ingestionItemsPerSecond": 3.1871671798680445,
+          "querySeconds": [
+            0.19695666,
+            0.196498104,
+            0.197149674
+          ]
+        }
+      ],
+      "workload": "one synthetic 128x96 PNG, one 440Hz MP3, one 2s H.264 MP4, one short plain-text document; three text queries per modality; fresh worker and index per dimension"
+    }
+  ],
+  "limitations": "Single synthetic asset per modality and three text queries; fresh process and index per dimension; CPU runner class is virtualized; wall includes IPC and queueing; no quality labels, GPU measurements, sustained throughput, or user workload. macOS peak is sampled, not a kernel high-water mark."
+}

@@ -21,8 +21,10 @@ const confirmSemanticComponentModelMigration = vi.fn();
 const checkpointSemanticComponentModelMigration = vi.fn();
 const completeSemanticComponentModelMigration = vi.fn();
 const discoverLlmProfileDraftModels = vi.fn();
+const discoverLlmProfileDraftModelLimits = vi.fn();
 const getSemanticLibraryCapabilities = vi.fn();
 const getSemanticLibraryStatus = vi.fn();
+const updateGemmaMedia = vi.fn();
 const getSemanticFolderStatus = vi.fn();
 const previewSemanticEnrolment = vi.fn();
 const confirmSemanticEnrolment = vi.fn();
@@ -62,6 +64,7 @@ const requestListPlugins = vi.fn();
 const requestEnablePlugin = vi.fn();
 const requestDisablePlugin = vi.fn();
 const requestGetPluginLogs = vi.fn();
+const requestRenderPluginPreview = vi.fn();
 const requestReadFileRange = vi.fn();
 const requestOpenDocxPreview = vi.fn();
 const requestReadDocxPreviewResource = vi.fn();
@@ -115,8 +118,11 @@ vi.mock('../generated/file-manager-api', () => ({
   completeSemanticComponentModelMigration: (...args: unknown[]) =>
     completeSemanticComponentModelMigration(...args),
   discoverLlmProfileDraftModels: (...args: unknown[]) => discoverLlmProfileDraftModels(...args),
+  discoverLlmProfileDraftModelLimits: (...args: unknown[]) =>
+    discoverLlmProfileDraftModelLimits(...args),
   getSemanticLibraryCapabilities: (...args: unknown[]) => getSemanticLibraryCapabilities(...args),
   getSemanticLibraryStatus: (...args: unknown[]) => getSemanticLibraryStatus(...args),
+  updateGemmaMedia: (...args: unknown[]) => updateGemmaMedia(...args),
   getSemanticFolderStatus: (...args: unknown[]) => getSemanticFolderStatus(...args),
   previewSemanticEnrolment: (...args: unknown[]) => previewSemanticEnrolment(...args),
   confirmSemanticEnrolment: (...args: unknown[]) => confirmSemanticEnrolment(...args),
@@ -157,6 +163,7 @@ vi.mock('../generated/file-manager-api', () => ({
   enablePlugin: (...args: unknown[]) => requestEnablePlugin(...args),
   disablePlugin: (...args: unknown[]) => requestDisablePlugin(...args),
   getPluginLogs: (...args: unknown[]) => requestGetPluginLogs(...args),
+  renderPluginPreview: (...args: unknown[]) => requestRenderPluginPreview(...args),
   readFileRange: (...args: unknown[]) => requestReadFileRange(...args),
   openDocxPreview: (...args: unknown[]) => requestOpenDocxPreview(...args),
   readDocxPreviewResource: (...args: unknown[]) => requestReadDocxPreviewResource(...args),
@@ -197,6 +204,7 @@ function fixtureCapabilities() {
     clipboard: true,
     extendedAttributes: false,
     finderAliases: false,
+    osFileClipboard: false,
     finderTags: false,
     nativeDragOut: false,
     nativeFileIcons: false,
@@ -219,6 +227,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   getRuntimeCapabilities.mockReset();
   getSemanticComponentCapabilities.mockReset();
+  discoverLlmProfileDraftModelLimits.mockReset();
   getSemanticComponentStatus.mockReset();
   listSemanticComponentProfiles.mockReset();
   createSemanticComponentInstallationOffer.mockReset();
@@ -237,6 +246,7 @@ afterEach(() => {
   completeSemanticComponentModelMigration.mockReset();
   getSemanticLibraryCapabilities.mockReset();
   getSemanticLibraryStatus.mockReset();
+  updateGemmaMedia.mockReset();
   getSemanticFolderStatus.mockReset();
   previewSemanticEnrolment.mockReset();
   confirmSemanticEnrolment.mockReset();
@@ -274,6 +284,7 @@ afterEach(() => {
   requestEnablePlugin.mockReset();
   requestDisablePlugin.mockReset();
   requestGetPluginLogs.mockReset();
+  requestRenderPluginPreview.mockReset();
   requestReadFileRange.mockReset();
   requestSearchInFile.mockReset();
   requestOpenStructuredView.mockReset();
@@ -290,6 +301,53 @@ afterEach(() => {
 });
 
 describe('HttpFileManagerClient', () => {
+  it('forwards a draft model-limit request and retains nullable provider limits', async () => {
+    const request = {
+      name: 'Local',
+      preset: 'mlxServe' as const,
+      baseUrl: 'http://127.0.0.1:11234',
+      deployment: null,
+      apiVersion: null,
+      model: 'model-a',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate' as const,
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions' as const, 'modelDiscovery' as const],
+      redactFilenames: false,
+    };
+    const limits = {
+      contextWindow: 131_072,
+      maximumAnswerTokens: null,
+      contextWindowCap: 1_048_576,
+      maximumAnswerTokensCap: 16_384,
+    };
+    discoverLlmProfileDraftModelLimits.mockResolvedValue({ status: 200, data: limits });
+
+    await expect(
+      new HttpFileManagerClient().discoverLlmProfileDraftModelLimits(request),
+    ).resolves.toEqual(limits);
+    expect(discoverLlmProfileDraftModelLimits).toHaveBeenCalledWith(request, undefined);
+  });
+
+  it('keeps copies inside Procyon because a browser has no OS file clipboard', async () => {
+    const client = new HttpFileManagerClient();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    await expect(
+      client.writeOsClipboardFiles([{ providerId: 'local', uri: 'file:///srv/report.pdf' }]),
+    ).resolves.toBe(false);
+    await expect(client.readOsClipboardFiles()).resolves.toEqual([]);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
   it('reports OCR remediation unavailable without adding server endpoints', async () => {
     const client = new HttpFileManagerClient();
 
@@ -759,6 +817,7 @@ describe('HttpFileManagerClient', () => {
         response({ authority: 'deterministicMock', operations: ['viewStatus'] }),
       );
       getSemanticLibraryStatus.mockResolvedValue(response(status));
+      updateGemmaMedia.mockResolvedValue(response(status));
       getSemanticFolderStatus.mockResolvedValue(response(folder));
       previewSemanticEnrolment.mockResolvedValue(response(preview));
       confirmSemanticEnrolment.mockResolvedValue(response(status));
@@ -772,6 +831,14 @@ describe('HttpFileManagerClient', () => {
 
       await client.getSemanticLibraryCapabilities(controller.signal);
       await client.getSemanticLibraryStatus(controller.signal);
+      const mediaRequest = {
+        policyRevision: 1,
+        images: true,
+        audio: false,
+        video: true,
+        confirmRemoval: false,
+      };
+      await client.updateGemmaMedia(mediaRequest, controller.signal);
       await client.getSemanticFolderStatus(context, controller.signal);
       await client.previewSemanticEnrolment({ ...context, recursive: true }, controller.signal);
       await client.confirmSemanticEnrolment(enrolRequest, controller.signal);
@@ -784,6 +851,7 @@ describe('HttpFileManagerClient', () => {
 
       expect(getSemanticLibraryCapabilities).toHaveBeenCalledWith(options);
       expect(getSemanticLibraryStatus).toHaveBeenCalledWith(options);
+      expect(updateGemmaMedia).toHaveBeenCalledWith(mediaRequest, options);
       expect(getSemanticFolderStatus).toHaveBeenCalledWith(context, options);
       expect(previewSemanticEnrolment).toHaveBeenCalledWith(
         { ...context, recursive: true },
@@ -1801,6 +1869,31 @@ describe('HttpFileManagerClient', () => {
         { message: 'plugin execution timed out' },
       ]);
       expect(requestGetPluginLogs).toHaveBeenCalledWith('example.copy-markdown', undefined);
+    });
+
+    it('renders a plugin preview through the generated endpoint and rejects other statuses', async () => {
+      const location = { providerId: 'local', uri: 'file:///tmp/a.torrent' };
+      const result = { kind: 'html', body: '<p>x</p>', truncated: false };
+      requestRenderPluginPreview.mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        data: result,
+      });
+      const client = new HttpFileManagerClient();
+
+      await expect(client.renderPluginPreview('example.preview', location)).resolves.toEqual(
+        result,
+      );
+      expect(requestRenderPluginPreview).toHaveBeenCalledWith(
+        'example.preview',
+        { location },
+        undefined,
+      );
+
+      requestRenderPluginPreview.mockResolvedValue({ status: 404, headers: new Headers() });
+      await expect(client.renderPluginPreview('example.preview', location)).rejects.toThrow(
+        'Unexpected renderPluginPreview response status: 404',
+      );
     });
   });
 });

@@ -108,6 +108,9 @@ fn api_router() -> OpenApiRouter<AppState> {
             routes::semantic_library::get_semantic_library_status
         ))
         .routes(utoipa_axum::routes!(
+            routes::semantic_library::update_gemma_media
+        ))
+        .routes(utoipa_axum::routes!(
             routes::semantic_library::get_semantic_folder_status
         ))
         .routes(utoipa_axum::routes!(
@@ -172,6 +175,9 @@ fn api_router() -> OpenApiRouter<AppState> {
         ))
         .routes(utoipa_axum::routes!(routes::files::search_structured_rows))
         .routes(utoipa_axum::routes!(routes::files::close_structured_view))
+        .routes(utoipa_axum::routes!(routes::files::open_sqlite_view))
+        .routes(utoipa_axum::routes!(routes::files::query_sqlite_view))
+        .routes(utoipa_axum::routes!(routes::files::close_sqlite_view))
         .routes(utoipa_axum::routes!(routes::files::load_editable_file))
         .routes(utoipa_axum::routes!(routes::files::save_editable_file))
         .routes(utoipa_axum::routes!(routes::files::search_in_file))
@@ -239,6 +245,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::plugin::enable_plugin))
         .routes(utoipa_axum::routes!(routes::plugin::disable_plugin))
         .routes(utoipa_axum::routes!(routes::plugin::get_plugin_logs))
+        .routes(utoipa_axum::routes!(routes::plugin::render_plugin_preview))
         .routes(utoipa_axum::routes!(
             routes::plugin::get_plugin_icon_theme_asset
         ))
@@ -289,6 +296,9 @@ fn api_router() -> OpenApiRouter<AppState> {
         ))
         .routes(utoipa_axum::routes!(
             routes::llm_profile::discover_llm_profile_draft_models
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::discover_llm_profile_draft_model_limits
         ))
         .routes(utoipa_axum::routes!(
             routes::document_summary::preview_document_summary
@@ -360,7 +370,7 @@ pub fn openapi_document() -> utoipa::openapi::OpenApi {
 pub fn build_router(config: &ServerConfig) -> Router {
     // Browser clients browse the server process's filesystem, so discovery and
     // platform actions describe that machine rather than the browser device.
-    let service = Arc::new(
+    let service =
         FileManagerService::with_platform_adapter_and_credential_store_and_search_accelerator(
             RuntimeKindDto::BrowserServer,
             config.workspace_directory.clone(),
@@ -369,9 +379,20 @@ pub fn build_router(config: &ServerConfig) -> Router {
             platform::build_platform_adapter(),
             credentials::build_credential_store(),
             platform::build_search_accelerator(),
+        );
+    let service = match config.semantic_desktop_attachment() {
+        Ok(Some(attachment)) => service.with_attached_desktop_semantic_library(
+            &attachment.profile_directory,
+            attachment.accessible_roots,
         ),
-    );
-    build_router_with_service(config, service)
+        Ok(None) => service,
+        Err(error) => {
+            // `main` refuses to start; a library caller still fails closed.
+            tracing::error!(%error, "refusing the semantic desktop attachment");
+            service
+        }
+    };
+    build_router_with_service(config, Arc::new(service))
 }
 
 /// Builds the Axum router around an existing application service.
@@ -412,6 +433,25 @@ impl Default for DevelopmentSession {
     }
 }
 
+/// Selects the single semantic principal every request is served as.
+///
+/// A validated desktop attachment serves the desktop's device-local library,
+/// which only the device principal may read; everything else is served as
+/// the operator-configured server principal.
+fn semantic_access_context(
+    config: &ServerConfig,
+) -> fm_application::semantic_library::SemanticAccessContext {
+    use fm_application::semantic_library::SemanticAccessContext;
+    if matches!(config.semantic_desktop_attachment(), Ok(Some(_))) {
+        return SemanticAccessContext::Host;
+    }
+    SemanticAccessContext::server(
+        config.semantic_library_tenant_id.clone(),
+        config.semantic_library_user_id.clone(),
+    )
+    .unwrap_or(SemanticAccessContext::Anonymous)
+}
+
 /// Builds a router with a controllable local development session.
 pub fn build_router_with_service_and_session(
     config: &ServerConfig,
@@ -430,13 +470,7 @@ pub fn build_router_with_service_and_session(
         )),
         accessible_roots: Arc::from(config.roots.clone()),
         mutation_limiter: rate_limit::build_limiter(config.max_mutations_per_second),
-        semantic_access: Arc::new(
-            fm_application::semantic_library::SemanticAccessContext::server(
-                config.semantic_library_tenant_id.clone(),
-                config.semantic_library_user_id.clone(),
-            )
-            .unwrap_or(fm_application::semantic_library::SemanticAccessContext::Anonymous),
-        ),
+        semantic_access: Arc::new(semantic_access_context(config)),
     };
 
     let (router, api) = api_router().split_for_parts();
@@ -518,4 +552,37 @@ fn cors_layer(config: &ServerConfig) -> CorsLayer {
             axum::http::header::CONTENT_TYPE,
             HeaderName::from_static("idempotency-key"),
         ])
+}
+
+#[cfg(test)]
+mod semantic_access_tests {
+    use fm_application::semantic_library::SemanticAccessContext;
+
+    use super::*;
+
+    #[test]
+    fn only_a_validated_desktop_attachment_serves_the_device_principal() {
+        let profile = tempfile::tempdir().expect("tempdir");
+        let server = ServerConfig::default();
+        assert_eq!(
+            semantic_access_context(&server),
+            SemanticAccessContext::server("private", "administrator").unwrap()
+        );
+        let attached = ServerConfig {
+            semantic_desktop_profile: Some(profile.path().to_path_buf()),
+            ..ServerConfig::default()
+        };
+        assert_eq!(
+            semantic_access_context(&attached),
+            SemanticAccessContext::Host
+        );
+        let unauthenticated = ServerConfig {
+            dev_mode_auth_disabled: true,
+            ..attached
+        };
+        assert_ne!(
+            semantic_access_context(&unauthenticated),
+            SemanticAccessContext::Host
+        );
+    }
 }

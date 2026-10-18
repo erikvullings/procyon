@@ -241,7 +241,7 @@ fn epub_recognition_requires_the_exact_uncompressed_root_mimetype() {
 
 #[test]
 fn conversion_follows_the_namespace_neutral_spine_and_only_extracts_readable_html() {
-    assert_eq!(BASELINE_CONVERTER_VERSION.to_string(), "baseline/2");
+    assert_eq!(BASELINE_CONVERTER_VERSION.to_string(), "baseline/3");
 
     let outcome = convert(&representative_epub());
     let document = outcome.document().expect("converted EPUB");

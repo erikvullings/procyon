@@ -82,6 +82,9 @@ export interface ActionCommandControllerContext {
   ): Promise<readonly EntrySummary[] | undefined>;
   getClipboard(): ClipboardState;
   replaceClipboard(next?: ClipboardState): void;
+  /** The clipboard a paste uses, including newer file references from the system file manager
+   * (task 0247). Defaults to {@link getClipboard}. */
+  resolvePasteClipboard?(): Promise<ClipboardState>;
   toast(options: { html: string }): void;
   getOpenTerminalSupported(): boolean;
   openCreateDirectory(location?: import('../../models').Location): void;
@@ -113,6 +116,8 @@ export interface ActionCommandControllerContext {
   uninstallApplication(paneId: PaneId, entry: EntrySummary): void;
   /** Starts the pane's F2 rename flow (inline, or multi-rename for several entries). */
   requestRename?(paneId: PaneId, entryIds: readonly EntryId[]): void;
+  /** Opens the pane's breadcrumb path editor. */
+  requestLocationEdit?(paneId: PaneId): void;
   /** Opens the Create link dialog for `target`, creating the link in `destination` (task 0168). */
   openCreateLink?(target: Location, destination: Location): void;
   /** Toggles the directory-tree sidebar (task 0139). */
@@ -425,6 +430,10 @@ export function createActionCommandController(
       context.openCreateDirectory(undefined);
       return;
     }
+    if (action.id === 'core.focusLocation') {
+      if (contextParam.paneId !== undefined) context.requestLocationEdit?.(contextParam.paneId);
+      return;
+    }
     // These three actions carry no default keybinding by design (spec §18/§35, tasks 0077/0140)
     // - the command palette is their only entry point - so unlike keybinding dispatch they must be
     // special-cased here too, rather than falling through to the generic `invokeActionById`, which
@@ -582,18 +591,20 @@ export function createActionCommandController(
       return;
     }
     if (action.id === 'core.paste') {
-      const currentClipboard = context.getClipboard();
-      const mode = currentClipboard.mode;
-      if (mode === undefined || directory.location === undefined) return;
-      void (
-        mode === 'move'
-          ? context.getOpsController().move(currentClipboard.locations, directory.location)
-          : context.getOpsController().copy(currentClipboard.locations, directory.location)
-      ).then((operation) => {
-        if (operation === undefined) return;
-        if (mode === 'move') context.replaceClipboard(clearClipboard(currentClipboard));
-        context.redraw();
-      });
+      const destination = directory.location;
+      if (destination === undefined) return;
+      void (context.resolvePasteClipboard?.() ?? Promise.resolve(context.getClipboard()))
+        .then(async (currentClipboard) => {
+          const mode = currentClipboard.mode;
+          if (mode === undefined || currentClipboard.locations.length === 0) return;
+          const operation = await (mode === 'move'
+            ? context.getOpsController().move(currentClipboard.locations, destination)
+            : context.getOpsController().copy(currentClipboard.locations, destination));
+          if (operation === undefined) return;
+          if (mode === 'move') context.replaceClipboard(clearClipboard(currentClipboard));
+          context.redraw();
+        })
+        .catch(() => undefined);
       return;
     }
     if (action.id === 'core.pack' || action.id === 'core.moveToArchive') {

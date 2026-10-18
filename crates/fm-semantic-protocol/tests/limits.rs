@@ -5,7 +5,8 @@ use std::time::Duration;
 use fm_semantic_protocol::{
     ConcurrencyLimiter, DeadlineKind, InvalidLimits, LimitError, LimitField,
     MAX_CONCURRENT_REQUESTS, MAX_MESSAGE_BYTES, MAX_STREAM_BYTES, NegotiatedLimitsError,
-    ProtocolLimits, REQUEST_DEADLINE, SHUTDOWN_DEADLINE, STREAM_DEADLINE, StreamBudget, v1,
+    ProtocolLimits, REQUEST_DEADLINE, RequestValidationError, SHUTDOWN_DEADLINE, STREAM_DEADLINE,
+    StreamBudget, v1, validate_ingestion_with_limits,
 };
 
 #[test]
@@ -54,6 +55,152 @@ fn enforces_message_stream_concurrency_and_time_limits() {
 }
 
 #[test]
+fn pdf_ingestion_limit_requires_explicit_negotiation_and_never_widens_other_media() {
+    let ordinary = ProtocolLimits::default();
+    assert_eq!(
+        ordinary.max_ingestion_bytes("application/pdf"),
+        MAX_STREAM_BYTES
+    );
+    let pdf = ordinary
+        .with_pdf_ingestion_bytes(200 * 1024 * 1024)
+        .expect("bounded PDF-specific offer");
+    assert_eq!(
+        pdf.max_ingestion_bytes("application/pdf"),
+        200 * 1024 * 1024
+    );
+    let negotiated = ProtocolLimits::from_negotiated(&v1::ProtocolLimits {
+        maximum_message_bytes: MAX_MESSAGE_BYTES as u64,
+        maximum_stream_bytes: MAX_STREAM_BYTES,
+        maximum_concurrent_requests: MAX_CONCURRENT_REQUESTS as u32,
+        request_deadline_ms: REQUEST_DEADLINE.as_millis() as u64,
+        stream_deadline_ms: STREAM_DEADLINE.as_millis() as u64,
+        shutdown_deadline_ms: SHUTDOWN_DEADLINE.as_millis() as u64,
+        maximum_pdf_ingestion_bytes: 200 * 1024 * 1024,
+    })
+    .expect("bounded PDF-specific negotiation");
+    assert_eq!(
+        negotiated.max_ingestion_bytes("application/pdf"),
+        200 * 1024 * 1024
+    );
+    assert_eq!(
+        negotiated.max_ingestion_bytes("image/png"),
+        MAX_STREAM_BYTES
+    );
+    assert_eq!(
+        negotiated.max_ingestion_bytes("application/octet-stream"),
+        MAX_STREAM_BYTES
+    );
+    assert_eq!(negotiated.max_message_bytes(), MAX_MESSAGE_BYTES);
+    assert_eq!(negotiated.max_stream_bytes(), MAX_STREAM_BYTES);
+    assert!(matches!(
+        ordinary.with_pdf_ingestion_bytes(200 * 1024 * 1024 + 1),
+        Err(InvalidLimits::ExceedsGlobalCeiling {
+            field: LimitField::PdfIngestionBytes,
+            ..
+        })
+    ));
+    assert_eq!(
+        ordinary.with_pdf_ingestion_bytes(MAX_STREAM_BYTES - 1),
+        Err(InvalidLimits::PdfBelowStream)
+    );
+    assert_eq!(
+        ProtocolLimits::from_negotiated(&v1::ProtocolLimits {
+            maximum_pdf_ingestion_bytes: 0,
+            maximum_message_bytes: MAX_MESSAGE_BYTES as u64,
+            maximum_stream_bytes: MAX_STREAM_BYTES,
+            maximum_concurrent_requests: MAX_CONCURRENT_REQUESTS as u32,
+            request_deadline_ms: REQUEST_DEADLINE.as_millis() as u64,
+            stream_deadline_ms: STREAM_DEADLINE.as_millis() as u64,
+            shutdown_deadline_ms: SHUTDOWN_DEADLINE.as_millis() as u64,
+        })
+        .expect("older worker without PDF extension")
+        .max_ingestion_bytes("application/pdf"),
+        MAX_STREAM_BYTES
+    );
+}
+
+#[test]
+fn declared_pdf_can_use_negotiated_budget_but_identical_non_pdf_cannot() {
+    let limits = ProtocolLimits::default()
+        .with_pdf_ingestion_bytes(200 * 1024 * 1024)
+        .unwrap();
+    let mut request = v1::IngestionRequest {
+        session: Some(v1::SessionContext {
+            session_id: "session".into(),
+            session_token: vec![1],
+        }),
+        scope: Some(v1::ResourceScope {
+            tenant_id: "tenant".into(),
+            library_id: "library".into(),
+        }),
+        request_id: "request".into(),
+        payload: Some(v1::ingestion_request::Payload::Start(v1::IngestionStart {
+            document_id: "document".into(),
+            metadata: vec![],
+            media_type: "application/pdf".into(),
+            expected_content_bytes: 200 * 1024 * 1024,
+            pdf_images_consented: false,
+            expected_sha256: vec![0; 32],
+        })),
+    };
+    assert_eq!(validate_ingestion_with_limits(&request, limits), Ok(()));
+    if let Some(v1::ingestion_request::Payload::Start(start)) = &mut request.payload {
+        start.media_type = "image/png".into();
+    }
+    assert_eq!(
+        validate_ingestion_with_limits(&request, limits),
+        Err(RequestValidationError::DeclaredContentTooLarge)
+    );
+}
+
+#[test]
+fn oversized_pdf_requires_sha256_and_rejects_non_pdf_or_malformed_digests() {
+    let limits = ProtocolLimits::default()
+        .with_pdf_ingestion_bytes(MAX_STREAM_BYTES + 1)
+        .unwrap();
+    let mut start = v1::IngestionStart {
+        document_id: "document".into(),
+        metadata: vec![],
+        media_type: "application/pdf".into(),
+        expected_content_bytes: MAX_STREAM_BYTES + 1,
+        pdf_images_consented: false,
+        expected_sha256: Vec::new(),
+    };
+    let request = |start: &v1::IngestionStart| v1::IngestionRequest {
+        session: Some(v1::SessionContext {
+            session_id: "session".into(),
+            session_token: vec![1],
+        }),
+        scope: Some(v1::ResourceScope {
+            tenant_id: "tenant".into(),
+            library_id: "library".into(),
+        }),
+        request_id: "request".into(),
+        payload: Some(v1::ingestion_request::Payload::Start(start.clone())),
+    };
+    assert_eq!(
+        validate_ingestion_with_limits(&request(&start), limits),
+        Err(RequestValidationError::InvalidPdfDigest)
+    );
+    start.expected_sha256 = vec![0; 31];
+    assert_eq!(
+        validate_ingestion_with_limits(&request(&start), limits),
+        Err(RequestValidationError::InvalidPdfDigest)
+    );
+    start.expected_sha256.push(0);
+    assert_eq!(
+        validate_ingestion_with_limits(&request(&start), limits),
+        Ok(())
+    );
+    start.media_type = "image/png".into();
+    start.expected_content_bytes = 1;
+    assert_eq!(
+        validate_ingestion_with_limits(&request(&start), limits),
+        Err(RequestValidationError::InvalidPdfDigest)
+    );
+}
+
+#[test]
 fn rejects_negotiated_limits_above_immutable_client_ceilings() {
     let defaults = v1::ProtocolLimits {
         maximum_message_bytes: MAX_MESSAGE_BYTES as u64,
@@ -62,6 +209,7 @@ fn rejects_negotiated_limits_above_immutable_client_ceilings() {
         request_deadline_ms: REQUEST_DEADLINE.as_millis() as u64,
         stream_deadline_ms: STREAM_DEADLINE.as_millis() as u64,
         shutdown_deadline_ms: SHUTDOWN_DEADLINE.as_millis() as u64,
+        maximum_pdf_ingestion_bytes: 0,
     };
     let malicious = [
         (
@@ -77,6 +225,13 @@ fn rejects_negotiated_limits_above_immutable_client_ceilings() {
                 ..defaults
             },
             LimitField::StreamBytes,
+        ),
+        (
+            v1::ProtocolLimits {
+                maximum_pdf_ingestion_bytes: 200 * 1024 * 1024 + 1,
+                ..defaults
+            },
+            LimitField::PdfIngestionBytes,
         ),
         (
             v1::ProtocolLimits {

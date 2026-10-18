@@ -65,6 +65,14 @@ struct Cli {
     /// and impossible when binding to non-loopback addresses (task 0064).
     #[arg(long, env = "FM_SERVER_DEV_MODE_AUTH_DISABLED")]
     dev_mode_auth_disabled: bool,
+    /// Attach read-only to the desktop app's semantic library in this Procyon
+    /// profile directory, through the desktop's running worker. Requires a
+    /// loopback bind and authentication (task 0250).
+    #[arg(
+        long = "semantic-desktop-profile",
+        env = "FM_SERVER_SEMANTIC_DESKTOP_PROFILE"
+    )]
+    semantic_desktop_profile: Option<PathBuf>,
 }
 
 /// Subcommands that run instead of serving requests.
@@ -155,6 +163,11 @@ fn resolve_config(cli: &Cli, file: Option<&ServerFileConfig>) -> (ServerConfig, 
         .and_then(|f| f.semantic_library_user_id.clone())
         .unwrap_or_else(|| defaults.semantic_library_user_id.clone());
 
+    let semantic_desktop_profile = cli
+        .semantic_desktop_profile
+        .clone()
+        .or_else(|| file.and_then(|f| f.semantic_desktop_profile.clone()));
+
     let config = ServerConfig {
         bind_address,
         port,
@@ -165,8 +178,12 @@ fn resolve_config(cli: &Cli, file: Option<&ServerFileConfig>) -> (ServerConfig, 
         dev_mode_auth_disabled,
         semantic_library_tenant_id,
         semantic_library_user_id,
+        semantic_desktop_profile,
         ..defaults
     };
+    if let Err(error) = config.semantic_desktop_attachment() {
+        panic!("{error}");
+    }
     (config, tls)
 }
 
@@ -228,6 +245,14 @@ async fn main() {
 
     if config.roots.is_empty() {
         tracing::warn!("no accessible roots configured; server can access entire filesystem");
+    }
+
+    if let Ok(Some(attachment)) = config.semantic_desktop_attachment() {
+        tracing::warn!(
+            profile = %attachment.profile_directory.display(),
+            "attached read-only to the desktop semantic library; semantic features need the \
+             desktop app running"
+        );
     }
 
     tracing::info!(

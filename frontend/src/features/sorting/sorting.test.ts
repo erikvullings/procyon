@@ -79,6 +79,28 @@ describe('entry sorting', () => {
     ]);
   });
 
+  it('keeps folders contiguous when sorting search results by size', () => {
+    const entries = [
+      entry('large.png', {
+        size: 100,
+        location: { providerId: 'local', uri: 'file:///library/B/large.png' },
+      }),
+      entry('small.png', {
+        size: 1,
+        location: { providerId: 'local', uri: 'file:///library/A/small.png' },
+      }),
+      entry('medium.png', {
+        size: 50,
+        location: { providerId: 'local', uri: 'file:///library/A/medium.png' },
+      }),
+    ];
+    const sort: SortModel = [{ column: 'size', direction: 'descending' }];
+    const expected = ['medium.png', 'small.png', 'large.png'];
+    expect(
+      sortEntries(entries, sort, false, { groupByParentPath: true }).map(({ name }) => name),
+    ).toEqual(expected);
+  });
+
   it('sorts extensions by their raw values in either direction', () => {
     const entries = [
       entry('archive', { extension: 'zip' }),

@@ -75,15 +75,28 @@ fn run() -> Result<(), Box<dyn Error>> {
         verify_serialized_production_catalog(&catalog_bytes, &signature_bytes, &public_key)?;
     verify_production_payloads(&manifest, &artifacts)?;
 
+    let gemma_test = std::env::var_os("PROCYON_GEMMA_INSTALLED_TEST").map(PathBuf::from);
+    if let Some(test) = &gemma_test
+        && !test.is_file()
+    {
+        return Err("Gemma installed smoke requires an existing test executable".into());
+    }
+    let profile = if gemma_test.is_some() {
+        SemanticProfile::EmbeddingGemma2
+    } else {
+        SemanticProfile::MultilingualQuality
+    };
     let target = qualification_target(&catalog)?;
     let selected = catalog.installation_artifacts(
-        SemanticProfile::MultilingualQuality,
+        profile,
         &catalog
             .artifacts()
             .iter()
             .filter(|artifact| {
-                !matches!(artifact.kind(), ArtifactKind::Model(_))
-                    && artifact.compatibility().target() == Some(&target)
+                matches!(
+                    artifact.kind(),
+                    ArtifactKind::Worker | ArtifactKind::Runtime
+                ) && artifact.compatibility().target() == Some(&target)
             })
             .map(|artifact| artifact.id().clone())
             .collect::<Vec<_>>(),
@@ -109,7 +122,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     let low_disk_source = LocalArtifactSource::new(&artifacts);
     let low_disk = manager.install(
-        offer(&catalog, &selected, &target, semantic_root.path())?.consent(),
+        offer(&catalog, &selected, &target, semantic_root.path(), profile)?.consent(),
         &catalog,
         &environment,
         &low_disk_source,
@@ -158,6 +171,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             &selected,
             &target,
             SemanticDataRoot::from_app_data(&corrupt_root.join("app-data")).path(),
+            profile,
         )?
         .consent(),
         &catalog,
@@ -175,9 +189,18 @@ fn run() -> Result<(), Box<dyn Error>> {
     ));
     fs::remove_dir_all(corrupt_root)?;
 
-    let source = LocalArtifactSource::interrupt_once(&artifacts, first_artifact);
+    let mut interrupted_artifact = None;
+    for id in &selected {
+        if fs::metadata(artifacts.join(id.as_str()))?.len() > CHUNK_BYTES as u64 {
+            interrupted_artifact = Some(id.clone());
+            break;
+        }
+    }
+    let interrupted_artifact =
+        interrupted_artifact.ok_or("installation plan has no multi-chunk artifact to interrupt")?;
+    let source = LocalArtifactSource::interrupt_once(&artifacts, interrupted_artifact.clone());
     let interrupted = manager.install(
-        offer(&catalog, &selected, &target, semantic_root.path())?.consent(),
+        offer(&catalog, &selected, &target, semantic_root.path(), profile)?.consent(),
         &catalog,
         &environment,
         &source,
@@ -190,18 +213,14 @@ fn run() -> Result<(), Box<dyn Error>> {
         return Err("interrupted install exposed partial component state".into());
     }
     manager.install(
-        offer(&catalog, &selected, &target, semantic_root.path())?.consent(),
+        offer(&catalog, &selected, &target, semantic_root.path(), profile)?.consent(),
         &catalog,
         &environment,
         &source,
         &FixedFreeSpace(u64::MAX),
         &VerifyActivation,
     )?;
-    let resume_offsets = source.offsets_for(
-        selected
-            .first()
-            .ok_or("installation plan was empty after resume")?,
-    );
+    let resume_offsets = source.offsets_for(&interrupted_artifact);
     if resume_offsets.iter().filter(|offset| **offset == 0).count() != 1
         || !resume_offsets.iter().any(|offset| *offset > 0)
     {
@@ -234,6 +253,13 @@ fn run() -> Result<(), Box<dyn Error>> {
         "app-restart",
         "A new manager recovered durable state and revalidated every active payload.",
     ));
+    if let Some(test) = &gemma_test {
+        qualify_installed_gemma(&restarted, &catalog, &selected, &working_root, test)?;
+        checks.push(pass(
+            "gemma-installed-offline-media-restart",
+            "Verified installed worker, runtime, and original Gemma files ingested and queried image, audio, and video offline; a killed worker restarted and recovered all three indexes.",
+        ));
+    }
 
     let worker = catalog
         .artifacts()
@@ -283,7 +309,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     ));
 
     restarted.install(
-        offer(&catalog, &selected, &target, semantic_root.path())?.consent(),
+        offer(&catalog, &selected, &target, semantic_root.path(), profile)?.consent(),
         &catalog,
         &environment,
         &LocalArtifactSource::new(&artifacts),
@@ -303,7 +329,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     ));
 
     restarted.install(
-        offer(&catalog, &selected, &target, semantic_root.path())?.consent(),
+        offer(&catalog, &selected, &target, semantic_root.path(), profile)?.consent(),
         &catalog,
         &environment,
         &LocalArtifactSource::new(&artifacts),
@@ -381,15 +407,246 @@ fn offer(
     selected: &[ArtifactId],
     target: &TargetTriple,
     root: &Path,
+    profile: SemanticProfile,
 ) -> Result<fm_semantic_components::InstallationOffer, Box<dyn Error>> {
-    Ok(catalog.installation_offer(
-        SemanticProfile::MultilingualQuality,
-        selected,
-        target,
-        1,
-        root,
-        RESERVE_BYTES,
-    )?)
+    Ok(catalog.installation_offer(profile, selected, target, 1, root, RESERVE_BYTES)?)
+}
+
+fn qualify_installed_gemma(
+    manager: &ComponentManager,
+    catalog: &TrustedCatalog,
+    selected: &[ArtifactId],
+    root: &Path,
+    test: &Path,
+) -> Result<(), Box<dyn Error>> {
+    let identity = catalog
+        .resolve_profile(SemanticProfile::EmbeddingGemma2)
+        .ok_or("signed catalog has no Gemma profile")?;
+    let originals = manager
+        .verified_original_model_files(catalog, identity)?
+        .ok_or("installed Gemma originals are incomplete")?;
+    let installed = |component: &str| -> Result<PathBuf, Box<dyn Error>> {
+        let artifact = catalog
+            .artifacts()
+            .iter()
+            .find(|artifact| {
+                selected.contains(artifact.id()) && artifact.component_id().as_str() == component
+            })
+            .ok_or("selected installed binary was absent")?;
+        Ok(manager
+            .verified_installed_payload(artifact)?
+            .ok_or("installed binary did not match signed catalog")?)
+    };
+    let worker = installed("procyon.semantic.worker")?;
+    let runtime = installed("procyon.semantic.zvec-runtime")?;
+    let native = root.join("native");
+    fs::create_dir(&native)?;
+    let launch_worker = native.join(if cfg!(windows) {
+        "payload.exe"
+    } else {
+        "payload"
+    });
+    fs::copy(worker, &launch_worker)?;
+    let runtime_name = if cfg!(target_os = "macos") {
+        "libzvec_c_api.dylib"
+    } else if cfg!(windows) {
+        "zvec_c_api.dll"
+    } else {
+        "libzvec_c_api.so"
+    };
+    fs::copy(runtime, native.join(runtime_name))?;
+    if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        fs::copy(
+            installed("procyon.semantic.onnx-runtime")?,
+            native.join("libonnxruntime.so.1"),
+        )?;
+    }
+    let selected_component = |component: &str| {
+        catalog.artifacts().iter().any(|artifact| {
+            artifact.component_id().as_str() == component && selected.contains(artifact.id())
+        })
+    };
+    let pdfium = selected_component("procyon.semantic.pdfium-runtime")
+        .then(|| installed("procyon.semantic.pdfium-runtime"))
+        .transpose()?;
+    let notices = selected_component("procyon.semantic.pdfium-notices")
+        .then(|| installed("procyon.semantic.pdfium-notices"))
+        .transpose()?;
+    stage_pdfium_payloads(&native, pdfium.as_deref(), notices.as_deref())?;
+    let loader_variable = if cfg!(target_os = "macos") {
+        "DYLD_LIBRARY_PATH"
+    } else if cfg!(windows) {
+        "PATH"
+    } else {
+        "LD_LIBRARY_PATH"
+    };
+    let mut loader_paths = vec![native.clone()];
+    if let Some(existing) = std::env::var_os(loader_variable) {
+        loader_paths.extend(std::env::split_paths(&existing));
+    }
+    if let Some(host_test) = std::env::var_os("PROCYON_GEMMA_PDF_HOST_TEST") {
+        for (report_variable, test_name) in [
+            (
+                "PROCYON_GEMMA_PDF_HOST_REPORT",
+                "enrolled_synthetic_scan_keeps_pdf_page_citation_and_revokes_deleted_source",
+            ),
+            (
+                "PROCYON_GEMMA_PDF_HOST_SAMPLE_REPORT",
+                "enrolled_synthetic_scan_sample_reindexes_and_revokes_deleted_source",
+            ),
+        ] {
+            let Some(report_path) = std::env::var_os(report_variable) else {
+                continue;
+            };
+            let status = std::process::Command::new(&host_test)
+                .args(["--exact", test_name, "--ignored", "--nocapture"])
+                .env("PROCYON_SEMANTIC_PRODUCTION_WORKER", &launch_worker)
+                .env("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY", &native)
+                .env(loader_variable, std::env::join_paths(&loader_paths)?)
+                .env(
+                    "PROCYON_GEMMA_PACKAGED_FILES",
+                    serde_json::to_string(&originals)?,
+                )
+                .status()?;
+            if !status.success() {
+                return Err(
+                    format!("installed Gemma host PDF {test_name} failed: {status}").into(),
+                );
+            }
+            let report: serde_json::Value = serde_json::from_slice(&fs::read(report_path)?)?;
+            let expected_pages = if report_variable == "PROCYON_GEMMA_PDF_HOST_SAMPLE_REPORT" {
+                8
+            } else {
+                1
+            };
+            if report["pageCount"] != expected_pages
+                || report["hostVfsVerified"] != true
+                || report["workspaceIsolationVerified"] != true
+                || report["deletionVerified"] != true
+                || report["replacementVerified"] != (expected_pages == 8)
+                || report["currentContentAndDeletionVerified"] != (expected_pages == 8)
+            {
+                return Err(
+                    format!("installed Gemma host PDF {test_name} report is incomplete").into(),
+                );
+            }
+        }
+    }
+    let measure_dir = std::env::var_os("PROCYON_GEMMA_MEASURE_DIR").map(PathBuf::from);
+    if let Some(directory) = &measure_dir {
+        fs::create_dir(directory)?;
+    }
+    for dimensions in if measure_dir.is_some() {
+        vec![128, 256, 512, 768]
+    } else {
+        vec![128]
+    } {
+        let mut command = std::process::Command::new(test);
+        command
+            .args([
+                "--exact",
+                "packaged_gemma_worker_ingests_multimodal_sources_offline",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("PROCYON_SEMANTIC_PRODUCTION_WORKER", &launch_worker)
+            .env("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY", &native)
+            .env(loader_variable, std::env::join_paths(&loader_paths)?)
+            .env(
+                "PROCYON_GEMMA_PACKAGED_FILES",
+                serde_json::to_string(&originals)?,
+            )
+            .env("PROCYON_GEMMA_QUALIFY_RESTART", "1");
+        if let Some(directory) = &measure_dir {
+            command
+                .env("PROCYON_GEMMA_MEASURE_DIMENSIONS", dimensions.to_string())
+                .env(
+                    "PROCYON_GEMMA_MEASURE_REPORT",
+                    directory.join(format!("{dimensions}.json")),
+                );
+        }
+        let status = command.status()?;
+        if !status.success() {
+            return Err(
+                format!("installed Gemma {dimensions}d offline smoke failed: {status}").into(),
+            );
+        }
+    }
+    if let Some(report) = std::env::var_os("PROCYON_GEMMA_PDF_QUALIFICATION_REPORT") {
+        let status = std::process::Command::new(test)
+            .args([
+                "--exact",
+                "packaged_gemma_indexes_sampled_synthetic_scan_pages_offline",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("PROCYON_SEMANTIC_PRODUCTION_WORKER", &launch_worker)
+            .env("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY", &native)
+            .env(loader_variable, std::env::join_paths(&loader_paths)?)
+            .env(
+                "PROCYON_GEMMA_PACKAGED_FILES",
+                serde_json::to_string(&originals)?,
+            )
+            .env("PROCYON_GEMMA_PDF_QUALIFICATION_REPORT", report)
+            .status()?;
+        if !status.success() {
+            return Err(format!("installed sampled Gemma scan failed: {status}").into());
+        }
+    }
+    Ok(())
+}
+
+fn stage_pdfium_payloads(
+    native: &Path,
+    library: Option<&Path>,
+    notices: Option<&Path>,
+) -> Result<(), Box<dyn Error>> {
+    match (library, notices) {
+        (None, None) => Ok(()),
+        (Some(library), Some(notices)) => {
+            let filename = if cfg!(target_os = "macos") {
+                "libpdfium.dylib"
+            } else if cfg!(windows) {
+                "pdfium.dll"
+            } else {
+                "libpdfium.so"
+            };
+            fs::copy(library, native.join(filename))?;
+            fs::copy(notices, native.join("pdfium-licenses.txt"))?;
+            Ok(())
+        }
+        _ => Err("installed PDFium loader and notices must be paired".into()),
+    }
+}
+
+#[cfg(test)]
+mod pdfium_install_tests {
+    use super::*;
+
+    #[test]
+    fn installed_renderer_stages_loader_with_notices_or_fails_closed() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = directory.path().join("pinned-loader");
+        let notices = directory.path().join("pinned-notices");
+        fs::write(&library, b"loader").unwrap();
+        fs::write(&notices, b"all notices").unwrap();
+        let native = directory.path().join("native");
+        fs::create_dir(&native).unwrap();
+        assert!(stage_pdfium_payloads(&native, Some(&library), None).is_err());
+        stage_pdfium_payloads(&native, Some(&library), Some(&notices)).unwrap();
+        let library_name = if cfg!(target_os = "macos") {
+            "libpdfium.dylib"
+        } else if cfg!(windows) {
+            "pdfium.dll"
+        } else {
+            "libpdfium.so"
+        };
+        assert_eq!(fs::read(native.join(library_name)).unwrap(), b"loader");
+        assert_eq!(
+            fs::read(native.join("pdfium-licenses.txt")).unwrap(),
+            b"all notices"
+        );
+    }
 }
 
 fn qualify_concurrent_lifecycle(

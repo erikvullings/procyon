@@ -3,11 +3,11 @@ import m, { type FactoryComponent } from 'mithril';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type { SemanticVocabulary, WorkspaceId } from '../../models';
+import { busyButtonAttrs } from './busy-button';
 
 export interface SemanticVocabularyManagementAttrs {
   readonly client: FileManagerClient;
   readonly workspaceId?: WorkspaceId;
-  readonly onCreateConceptFolder: (vocabulary: SemanticVocabulary, conceptUri: string) => void;
 }
 
 function message(error: unknown): string {
@@ -21,6 +21,7 @@ export const SemanticVocabularyManagement: FactoryComponent<
   let source = '';
   let loading = true;
   let busy = false;
+  let importing = false;
   let error: string | undefined;
   let pendingDelete: string | undefined;
 
@@ -33,6 +34,27 @@ export const SemanticVocabularyManagement: FactoryComponent<
       error = message(cause);
     } finally {
       loading = false;
+      m.redraw();
+    }
+  };
+
+  const importVocabulary = async (
+    client: FileManagerClient,
+    skosJson: string,
+  ): Promise<boolean> => {
+    busy = true;
+    importing = true;
+    error = undefined;
+    try {
+      const imported = await client.importSemanticVocabulary(skosJson);
+      vocabularies = [...vocabularies, imported];
+      return true;
+    } catch (cause) {
+      error = message(cause);
+      return false;
+    } finally {
+      busy = false;
+      importing = false;
       m.redraw();
     }
   };
@@ -55,18 +77,11 @@ export const SemanticVocabularyManagement: FactoryComponent<
           'button.btn',
           {
             type: 'button',
-            disabled: busy || source.trim().length === 0,
+            ...busyButtonAttrs(importing),
+            disabled: busy || loading || source.trim().length === 0,
             onclick: async () => {
-              busy = true;
-              error = undefined;
-              try {
-                await attrs.client.importSemanticVocabulary(source);
+              if (await importVocabulary(attrs.client, source)) {
                 source = '';
-                vocabularies = await attrs.client.listSemanticVocabularies();
-              } catch (cause) {
-                error = message(cause);
-              } finally {
-                busy = false;
                 m.redraw();
               }
             },
@@ -154,23 +169,14 @@ export const SemanticVocabularyManagement: FactoryComponent<
                   m(
                     'ul.fm-semantic-concept-list',
                     vocabulary.concepts.map((concept) =>
-                      m('li', { key: concept.uri }, [
-                        m(
-                          'span',
-                          concept.prefLabels.en ??
-                            concept.prefLabels.nl ??
-                            Object.values(concept.prefLabels)[0] ??
-                            concept.uri,
-                        ),
-                        m(
-                          'button.btn-flat',
-                          {
-                            type: 'button',
-                            onclick: () => attrs.onCreateConceptFolder(vocabulary, concept.uri),
-                          },
-                          t('semanticVocabulary', 'createFolder'),
-                        ),
-                      ]),
+                      m(
+                        'li',
+                        { key: concept.uri },
+                        concept.prefLabels.en ??
+                          concept.prefLabels.nl ??
+                          Object.values(concept.prefLabels)[0] ??
+                          concept.uri,
+                      ),
                     ),
                   ),
                   vocabulary.reviewQueue

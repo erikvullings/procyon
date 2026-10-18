@@ -227,7 +227,7 @@ impl std::fmt::Display for FormatKind {
 }
 
 /// What a structural unit represents inside its document.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum UnitKind {
     /// A heading; also contributes to the section path of following units.
     Heading,
@@ -235,6 +235,8 @@ pub enum UnitKind {
     Paragraph,
     /// One item of a list.
     ListItem,
+    /// A navigational entry, such as a PDF table-of-contents line.
+    Navigation,
     /// A fenced or indented code block, or a run of source code.
     CodeBlock,
     /// A table, or a bounded band of spreadsheet rows.
@@ -281,6 +283,18 @@ pub enum Provenance {
         /// 0-based index of the text block within the page.
         block_index: u32,
     },
+    /// Reusable embedded JPEG evidence on a PDF page (not a rendered page).
+    PdfImage {
+        /// 1-based PDF page number.
+        page_number: u32,
+        /// 1-based image number on the page.
+        image_index: u32,
+    },
+    /// A rendered PDF page raster, not an extracted image XObject.
+    PdfPageRender {
+        /// 1-based PDF page number.
+        page_number: u32,
+    },
     /// A shape's text on a 1-based slide.
     Slide {
         /// 1-based slide number in presentation order.
@@ -325,12 +339,22 @@ pub enum Provenance {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum VisualProvenance {
+    /// A PDF page without extractable text or retained image evidence.
+    PdfPage {
+        /// 1-based page number.
+        page_number: u32,
+    },
     /// An image XObject on a 1-based PDF page.
     PdfImage {
         /// 1-based page number.
         page_number: u32,
         /// 0-based image index on that page.
         image_index: u32,
+    },
+    /// A rasterized whole page, not an embedded image.
+    PdfPageRender {
+        /// 1-based page number.
+        page_number: u32,
     },
     /// An image referenced from a DOCX body block.
     DocxImage {
@@ -437,7 +461,7 @@ pub struct StructuralUnit {
 }
 
 /// A non-fatal observation about a conversion.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConversionWarning {
     /// Bytes did not decode cleanly in the chosen encoding.
     LossyDecoding {

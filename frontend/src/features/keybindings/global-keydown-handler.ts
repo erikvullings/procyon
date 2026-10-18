@@ -33,6 +33,7 @@ import { canUseSystemTrash } from '../operations/system-trash';
 import { isParentEntry } from '../panes/parent-entry';
 import type { TabController } from '../panes/tab-controller';
 import type { FileViewerController, FileViewerState } from '../preview/file-viewer-controller';
+import { FILE_CLIPBOARD_PASSTHROUGH_ATTRIBUTE } from '../quick-filter/quick-filter';
 import type { SelectionPlatform } from '../selection/keybindings';
 import { getSelectedEntriesOrCursor, type SelectionState } from '../selection/selection';
 
@@ -111,6 +112,9 @@ export interface GlobalKeydownContext {
   actionsWithFavourites(): readonly ActionDescriptor[];
   openFindFiles(): void;
   replaceClipboard(next?: ClipboardState): void;
+  /** The clipboard a paste uses: Procyon's own, or file references copied in the system file
+   * manager when those are newer (task 0247). */
+  resolvePasteClipboard(): Promise<ClipboardState>;
   selectedLocations(): readonly Location[];
   /** Consumes bare F5 when the collection basket is the visible destination. */
   collectIntoBasketIfVisible(): boolean;
@@ -126,6 +130,7 @@ export interface GlobalKeydownContext {
     entry: EntrySummary,
     initialSearch?: InitialSearch,
     openMetadata?: boolean,
+    initialPage?: number,
   ): void;
   openEditor(paneId: PaneId, entry: EntrySummary): void;
   /** Recursively sums a directory's total size and fills in its Size cell once known (task 0071's
@@ -140,6 +145,7 @@ export interface GlobalKeydownContext {
     paneId?: PaneId,
   ): CommandAvailabilityContext;
   contentSearchInitialQuery(locationUri: string, entry: EntrySummary): InitialSearch | undefined;
+  pdfImagePageForEntry?(locationUri: string, entry: EntrySummary): number | undefined;
   refetchAffectedPanes(paneId?: PaneId): void;
   platformActionParameters(
     actionId: string,
@@ -170,6 +176,8 @@ export interface GlobalKeydownContext {
   setSort(paneId: PaneId, sort: readonly SortDescriptor[]): void;
   /** Swaps `paneAId` and `paneBId`'s entire tab sets (Ctrl+Shift+U), not just their active locations. */
   swapPaneTabSets(paneAId: PaneId, paneBId: PaneId): void;
+  /** Opens the breadcrumb path editor of `paneId` (Cmd/Ctrl+L), like a browser's address bar. */
+  requestLocationEdit(paneId: PaneId): void;
   /** Opens the Multi-Rename Tool directly (Ctrl+M), defaulting to every entry when none is selected. */
   openMultiRenameForActivePane(): void;
   /** Opens the Properties dialog for the active pane's selection (Alt+Enter), falling back to the
@@ -200,6 +208,28 @@ function isEditableTarget(target: EventTarget | null): boolean {
     target instanceof HTMLTextAreaElement ||
     target instanceof HTMLSelectElement ||
     (target instanceof HTMLElement && target.isContentEditable)
+  );
+}
+
+function isEditableEvent(event: KeyboardEvent): boolean {
+  return (
+    isEditableTarget(event.target) ||
+    event.composedPath().some((target) => isEditableTarget(target))
+  );
+}
+
+/**
+ * Cmd/Ctrl+C or Cmd/Ctrl+X in a text input that opts into file-clipboard pass-through (the quick
+ * filter) with no text selected: there is no text to copy, so the shortcut targets the files.
+ */
+function isFileClipboardPassthrough(event: KeyboardEvent): boolean {
+  const key = event.key.toLowerCase();
+  const target = event.target;
+  return (
+    (key === 'c' || key === 'x') &&
+    target instanceof HTMLInputElement &&
+    target.hasAttribute(FILE_CLIPBOARD_PASSTHROUGH_ATTRIBUTE) &&
+    target.selectionStart === target.selectionEnd
   );
 }
 
@@ -254,6 +284,7 @@ function resolveViewTarget(context: GlobalKeydownContext):
       readonly paneId: PaneId;
       readonly entry: EntrySummary;
       readonly initialSearch?: InitialSearch;
+      readonly initialPage?: number;
     }
   | undefined {
   const workspace = context.getWorkspace();
@@ -283,10 +314,15 @@ function resolveViewTarget(context: GlobalKeydownContext):
     active === undefined
       ? undefined
       : context.contentSearchInitialQuery(active.location.uri, viewEntry);
+  const initialPage =
+    active === undefined || viewEntry.mimeType !== 'application/pdf'
+      ? undefined
+      : context.pdfImagePageForEntry?.(active.location.uri, viewEntry);
   return {
     paneId: otherPaneId,
     entry: viewEntry,
     ...(initialSearch === undefined ? {} : { initialSearch }),
+    ...(initialPage === undefined ? {} : { initialPage }),
   };
 }
 
@@ -470,7 +506,7 @@ const ACTION_KEYDOWN_ROUTES = [
     id: 'viewer-paged',
     tryHandle: (context, event) => {
       if (
-        !isEditableTarget(event.target) &&
+        !isEditableEvent(event) &&
         !event.altKey &&
         !event.ctrlKey &&
         !event.metaKey &&
@@ -687,7 +723,7 @@ const ACTION_KEYDOWN_ROUTES = [
   {
     id: 'alt-space',
     tryHandle: (context, event) => {
-      if (!isEditableTarget(event.target) && event.altKey && event.code === 'Space') {
+      if (!isEditableEvent(event) && event.altKey && event.code === 'Space') {
         const active = context.activeDirectory();
         const selection =
           active === undefined
@@ -720,7 +756,17 @@ const ACTION_KEYDOWN_ROUTES = [
         const target = resolveViewTarget(context);
         if (target !== undefined) {
           event.preventDefault();
-          context.openViewer(target.paneId, target.entry, target.initialSearch, true);
+          if (target.initialPage === undefined) {
+            context.openViewer(target.paneId, target.entry, target.initialSearch, true);
+          } else {
+            context.openViewer(
+              target.paneId,
+              target.entry,
+              target.initialSearch,
+              true,
+              target.initialPage,
+            );
+          }
           return;
         }
       }
@@ -758,8 +804,25 @@ const ACTION_KEYDOWN_ROUTES = [
   {
     id: 'primary-modifier',
     tryHandle: (context, event) => {
+      if (isFileClipboardPassthrough(event)) {
+        if (!hasPrimaryModifier(event, context.getPlatform()) || event.altKey) return false;
+        const key = event.key.toLowerCase();
+        const sources = context.selectedLocations();
+        // Nothing selected in the input and no files to copy: swallow the chord rather than
+        // letting the host beep for an empty text copy.
+        event.preventDefault();
+        if (sources.length === 0) return;
+        context.replaceClipboard(
+          key === 'c'
+            ? copyToClipboard(context.clipboard(), sources)
+            : cutToClipboard(context.clipboard(), sources),
+        );
+        context.setClipboardMessage(undefined);
+        context.redraw();
+        return;
+      }
       if (
-        !isEditableTarget(event.target) &&
+        !isEditableEvent(event) &&
         hasPrimaryModifier(event, context.getPlatform()) &&
         !event.altKey
       ) {
@@ -778,47 +841,7 @@ const ACTION_KEYDOWN_ROUTES = [
         }
         if (key === 'v') {
           event.preventDefault();
-          const active = context.activeDirectory();
-          const directory =
-            active === undefined
-              ? undefined
-              : context.getDirectories().get(context.activeTabKey(active.paneId));
-          const currentClipboard = context.clipboard();
-          const target =
-            active === undefined || directory === undefined
-              ? undefined
-              : {
-                  location: active.location,
-                  writable: directory.writable === true,
-                  loaded: directory.state.type === 'loaded',
-                };
-          const validation = validatePasteTarget(currentClipboard, target);
-          if (!validation.ok) {
-            context.setClipboardMessage(validation.message);
-            context.redraw();
-            return;
-          }
-          const mode = currentClipboard.mode;
-          if (mode === undefined || active === undefined) return;
-          context.setClipboardMessage(undefined);
-          void (
-            mode === 'move'
-              ? context.getOpsController().move(currentClipboard.locations, active.location)
-              : isSameFolderPaste(currentClipboard, active.location)
-                ? context.getOpsController().duplicate(currentClipboard.locations)
-                : context.getOpsController().copy(currentClipboard.locations, active.location)
-          )
-            .then((operation) => {
-              if (operation === undefined) return;
-              if (mode === 'move') context.replaceClipboard(clearClipboard(currentClipboard));
-              context.redraw();
-            })
-            .catch((error: unknown) => {
-              context.setClipboardMessage(
-                error instanceof Error ? error.message : t('clipboard', 'pasteFailed'),
-              );
-              context.redraw();
-            });
+          void pasteIntoActiveDirectory(context);
           return;
         }
         if (key >= '1' && key <= '9') {
@@ -843,7 +866,7 @@ const ACTION_KEYDOWN_ROUTES = [
         event.ctrlKey ||
         event.metaKey ||
         event.shiftKey ||
-        isEditableTarget(event.target)
+        isEditableEvent(event)
       ) {
         return false;
       }
@@ -862,7 +885,7 @@ const ACTION_KEYDOWN_ROUTES = [
           !event.ctrlKey &&
           !event.metaKey &&
           !event.shiftKey &&
-          !isEditableTarget(event.target) &&
+          !isEditableEvent(event) &&
           context.collectIntoBasketIfVisible()
         ) {
           event.preventDefault();
@@ -1110,6 +1133,24 @@ const ACTION_KEYDOWN_ROUTES = [
         return;
       }
       return false;
+    },
+  },
+  {
+    // The focused pane handles Cmd/Ctrl+L itself; this covers focus elsewhere (tree, toolbar,
+    // document body) so the shortcut always reaches the active pane's breadcrumb.
+    id: 'core.focusLocation',
+    tryHandle: (context, event, state) => {
+      if (
+        state.dispatchedAction !== 'core.focusLocation' ||
+        event.defaultPrevented ||
+        isEditableEvent(event)
+      )
+        return false;
+      const active = context.activeDirectory();
+      if (active === undefined) return false;
+      event.preventDefault();
+      context.requestLocationEdit(active.paneId);
+      return;
     },
   },
   {
@@ -1586,7 +1627,17 @@ const ACTION_KEYDOWN_ROUTES = [
         const target = resolveViewTarget(context);
         if (target !== undefined) {
           event.preventDefault();
-          context.openViewer(target.paneId, target.entry, target.initialSearch);
+          if (target.initialPage === undefined) {
+            context.openViewer(target.paneId, target.entry, target.initialSearch);
+          } else {
+            context.openViewer(
+              target.paneId,
+              target.entry,
+              target.initialSearch,
+              undefined,
+              target.initialPage,
+            );
+          }
           return;
         }
       }
@@ -1813,7 +1864,7 @@ export function dispatchGlobalKeydown(
   let dispatchedAction = dispatchKeybinding(
     event,
     {
-      scope: isEditableTarget(event.target) ? 'pathInput' : 'table',
+      scope: isEditableEvent(event) ? 'pathInput' : 'table',
       platform: context.getPlatform(),
       runtime: context.getKeybindingRuntime(),
     },
@@ -1821,7 +1872,7 @@ export function dispatchGlobalKeydown(
     context.getCurrentSettings()?.keybindings ?? {},
   );
   if (
-    !isEditableTarget(event.target) &&
+    !isEditableEvent(event) &&
     !event.altKey &&
     !event.ctrlKey &&
     !event.metaKey &&
@@ -1841,10 +1892,9 @@ export function dispatchGlobalKeydown(
   // platform fallback to preserve the established external-view behaviour.
   const state: KeydownRouteState = {
     dispatchedAction,
-    forceSystemView:
-      !isEditableTarget(event.target) && event.altKey && event.key.toUpperCase() === 'F3',
+    forceSystemView: !isEditableEvent(event) && event.altKey && event.key.toUpperCase() === 'F3',
     forceSystemEdit:
-      !isEditableTarget(event.target) &&
+      !isEditableEvent(event) &&
       event.shiftKey &&
       event.altKey &&
       !event.ctrlKey &&
@@ -1867,4 +1917,46 @@ export function isTerminalToggleShortcut(
     ((bareModifiers && event.ctrlKey && backquoteKey) ||
       (bareModifiers && !event.ctrlKey && f12Key))
   );
+}
+
+/** Pastes the resolved clipboard into the active directory through the operation engine. */
+async function pasteIntoActiveDirectory(context: GlobalKeydownContext): Promise<void> {
+  const currentClipboard = await context.resolvePasteClipboard();
+  const active = context.activeDirectory();
+  const directory =
+    active === undefined
+      ? undefined
+      : context.getDirectories().get(context.activeTabKey(active.paneId));
+  const target =
+    active === undefined || directory === undefined
+      ? undefined
+      : {
+          location: active.location,
+          writable: directory.writable === true,
+          loaded: directory.state.type === 'loaded',
+        };
+  const validation = validatePasteTarget(currentClipboard, target);
+  if (!validation.ok) {
+    context.setClipboardMessage(validation.message);
+    context.redraw();
+    return;
+  }
+  const mode = currentClipboard.mode;
+  if (mode === undefined || active === undefined) return;
+  context.setClipboardMessage(undefined);
+  try {
+    const operation = await (mode === 'move'
+      ? context.getOpsController().move(currentClipboard.locations, active.location)
+      : isSameFolderPaste(currentClipboard, active.location)
+        ? context.getOpsController().duplicate(currentClipboard.locations)
+        : context.getOpsController().copy(currentClipboard.locations, active.location));
+    if (operation === undefined) return;
+    if (mode === 'move') context.replaceClipboard(clearClipboard(currentClipboard));
+    context.redraw();
+  } catch (error: unknown) {
+    context.setClipboardMessage(
+      error instanceof Error ? error.message : t('clipboard', 'pasteFailed'),
+    );
+    context.redraw();
+  }
 }

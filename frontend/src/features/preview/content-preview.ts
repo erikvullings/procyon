@@ -48,7 +48,7 @@ export function resolvePreviewKind(entry: EntrySummary): PreviewKind {
   if (entry.kind !== 'file') {
     return 'metadata';
   }
-  const extension = entry.extension?.toLowerCase();
+  const extension = previewExtension(entry);
   if (extension !== undefined && IMAGE_EXTENSIONS.includes(extension)) {
     return 'image';
   }
@@ -80,6 +80,12 @@ export function resolvePreviewKind(entry: EntrySummary): PreviewKind {
   return 'text';
 }
 
+/** Lowercase extension of `entry` (a leading-dot name such as `.eml` has none). */
+export function previewExtension(entry: EntrySummary): string | undefined {
+  const dot = entry.name.lastIndexOf('.');
+  return (entry.extension ?? (dot > 0 ? entry.name.slice(dot + 1) : undefined))?.toLowerCase();
+}
+
 const IMAGE_MIME_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -95,7 +101,7 @@ const IMAGE_MIME_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
 /** The MIME type to use for an `<img>` data URI, preferring the extension over a stale/generic
  * server-reported `mimeType`. */
 export function imageMimeTypeFor(entry: EntrySummary): string {
-  const extension = entry.extension?.toLowerCase();
+  const extension = previewExtension(entry);
   const byExtension =
     extension === undefined ? undefined : IMAGE_MIME_TYPES_BY_EXTENSION[extension];
   return byExtension ?? entry.mimeType ?? 'application/octet-stream';
@@ -113,7 +119,7 @@ const AUDIO_MIME_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
 /** The MIME type to use for an `<audio>` data URI, preferring the extension over a stale/generic
  * server-reported `mimeType`. */
 export function audioMimeTypeFor(entry: EntrySummary): string {
-  const extension = entry.extension?.toLowerCase();
+  const extension = previewExtension(entry);
   const byExtension =
     extension === undefined ? undefined : AUDIO_MIME_TYPES_BY_EXTENSION[extension];
   return byExtension ?? entry.mimeType ?? 'application/octet-stream';
@@ -130,7 +136,7 @@ const VIDEO_MIME_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
 /** The MIME type to use for a `<video>` data URI. MKV is intentionally omitted because browser
  * support depends on the codecs in the container, so it is routed to external playback instead. */
 export function videoMimeTypeFor(entry: EntrySummary): string {
-  const extension = entry.extension?.toLowerCase();
+  const extension = previewExtension(entry);
   const byExtension =
     extension === undefined ? undefined : VIDEO_MIME_TYPES_BY_EXTENSION[extension];
   return byExtension ?? entry.mimeType ?? 'application/octet-stream';

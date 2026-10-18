@@ -10,6 +10,7 @@ license.workspace = true
 blake3.workspace = true
 calamine.workspace = true
 encoding_rs.workspace = true
+image.workspace = true
 lopdf.workspace = true
 pulldown-cmark.workspace = true
 quick-xml.workspace = true
@@ -19,6 +20,8 @@ zip.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+sha2.workspace = true
+sysinfo = "0.39.6"
 zip.workspace = true
 
 [lints]

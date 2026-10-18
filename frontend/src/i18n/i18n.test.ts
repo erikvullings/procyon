@@ -48,6 +48,14 @@ describe('i18n', () => {
   });
 
   describe('runtime switching', () => {
+    it.each(LOCALES)('localises the concept-search empty state in %s', (locale) => {
+      setLocale(locale);
+      expect(t('search', 'noMatches')).toBe(catalogues[locale].search.noMatches);
+      if (locale !== 'en') {
+        expect(t('search', 'noMatches')).not.toBe(catalogues.en.search.noMatches);
+      }
+    });
+
     it.each(LOCALES)('localises both basket clipboard tooltips in %s', (locale) => {
       setLocale(locale);
       const basketTooltipKeys = [
@@ -69,6 +77,41 @@ describe('i18n', () => {
         expect(t('basket', 'copyNames')).not.toBe(catalogues.en.basket.copyNames);
         expect(t('basket', 'copyPaths')).not.toBe(catalogues.en.basket.copyPaths);
       }
+    });
+
+    it.each(LOCALES)('localises experimental Gemma wording and media labels in %s', (locale) => {
+      setLocale(locale);
+      expect(t('semanticComponents', 'gemmaName')).toMatch(/\(.*\)/u);
+      expect(t('semanticComponents', 'gemmaQualifiedName')).toBe('EmbeddingGemma 2');
+      expect(t('semanticComponents', 'gemmaFreshLibraryExplanation')).toMatch(
+        /dimension|dimension|dimensi|dimens|dimensió|wymiar/iu,
+      );
+      expect(t('semanticComponents', 'gemmaExistingSetup')).toBeTruthy();
+      for (const key of [
+        'gemmaMediaTitle',
+        'gemmaMediaSave',
+        'gemmaMediaConfirmRemoval',
+        'gemmaMediaRemovingWarning',
+        'gemmaMediaAddingHelp',
+      ] as const) {
+        expect(t('semanticLibrary', key).trim().length).toBeGreaterThan(0);
+      }
+      expect(t('semanticLibrary', 'pdfToolsEnabled').trim().length).toBeGreaterThan(0);
+      expect(t('semanticLibrary', 'pdfToolsDisabled').trim().length).toBeGreaterThan(0);
+      if (locale !== 'en') {
+        expect(t('semanticLibrary', 'gemmaMediaSave')).not.toBe(
+          catalogues.en.semanticLibrary.gemmaMediaSave,
+        );
+      }
+    });
+
+    it('uses the requested scanned-PDF enabled and disabled labels in English', () => {
+      expect(catalogues.en.semanticLibrary.pdfToolsEnabled).toBe(
+        'Make scanned PDFs searchable (enabled)',
+      );
+      expect(catalogues.en.semanticLibrary.pdfToolsDisabled).toBe(
+        'Make scanned PDFs searchable (disabled)',
+      );
     });
 
     it('switches to Dutch without a page reload', () => {
@@ -240,6 +283,30 @@ describe('i18n', () => {
     it('LOCALES covers every catalogue entry', () => {
       expect(LOCALES).toEqual(['en', 'nl', 'de', 'fr', 'es', 'it', 'pt', 'pl']);
     });
+
+    it.each(LOCALES.filter((locale) => locale !== 'en'))(
+      'localises the new Knowledge, summary, and activity copy in %s',
+      (locale) => {
+        const translated = catalogues[locale];
+        expect(translated.knowledgeSearch.subjectsPlaceholder).not.toBe(
+          catalogues.en.knowledgeSearch.subjectsPlaceholder,
+        );
+        expect(translated.knowledgeSearch.includeOnlyCurrentFolder).not.toBe(
+          catalogues.en.knowledgeSearch.includeOnlyCurrentFolder,
+        );
+        for (const key of ['profileRequired', 'documentText', 'textPreviewLimit'] as const) {
+          expect(translated.documentSummary[key]).not.toBe(catalogues.en.documentSummary[key]);
+        }
+        expect(translated.shell.indexingScannedOne).not.toBe(
+          catalogues.en.shell.indexingScannedOne,
+        );
+        expect(translated.menu.cutText).not.toBe(catalogues.en.menu.cutText);
+        setLocale(locale);
+        expect(t('knowledgeSearch', 'includeOnlyCurrentFolder', { folder: 'A B' })).toContain(
+          'A B',
+        );
+      },
+    );
   });
 
   describe('component redraws on locale change', () => {

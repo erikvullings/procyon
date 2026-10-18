@@ -1,12 +1,14 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import type { FindFilesSearchParams } from './find-files-dialog';
 import { FindFilesDialog } from './find-files-dialog';
 
 let root: HTMLElement;
 
 beforeEach(() => {
+  localStorage.clear();
   root = document.createElement('div');
   document.body.appendChild(root);
 });
@@ -17,6 +19,434 @@ afterEach(() => {
 });
 
 describe('FindFilesDialog', () => {
+  async function indexedClient(options?: {
+    indexedSources?: number;
+    workspaceId?: string;
+  }): Promise<MockFileManagerClient> {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    const status = await client.getSemanticLibraryStatus();
+    const [indexed] = await client.listKnowledgeRoots({ workspaceId: 'workspace-a' });
+    if (!indexed) throw new Error('Missing indexed mock root');
+    vi.spyOn(client, 'getSemanticLibraryStatus').mockResolvedValue({
+      ...status,
+      roots: [
+        {
+          id: indexed.rootId,
+          location: indexed.location,
+          recursive: true,
+          stableIdentityVerified: true,
+          workspaceReferences: [options?.workspaceId ?? 'workspace-a'],
+          eligibilityOverrides: [],
+          attachedVocabularyIds: [],
+          eligibilityReasonCounts: [],
+          ocrRequiredFiles: [],
+          availability: { state: 'available' },
+          reconciliationGeneration: 4,
+          indexedGeneration: 4,
+          exclusions: [],
+        },
+      ],
+    });
+    vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([
+      { ...indexed, indexedSources: options?.indexedSources ?? 3 },
+    ]);
+    return client;
+  }
+
+  it.each([
+    ['disabled components', async () => new MockFileManagerClient()],
+    [
+      'no indexed roots',
+      async () => new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' }),
+    ],
+    ['no indexed documents', async () => indexedClient({ indexedSources: 0 })],
+    ['another workspace root', async () => indexedClient({ workspaceId: 'workspace-b' })],
+  ])('hides the concept tab with %s', async (_reason, createClient) => {
+    const client = await createClient();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          client,
+          workspaceId: 'workspace-a',
+          scopeLabel: '/Documents',
+          onSearch: vi.fn(),
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await vi.waitFor(() => expect(client.getSemanticComponentStatus).toBeDefined());
+    expect(document.querySelector('.fm-find-files-modes')).toBeNull();
+    expect(document.querySelector('#find-files-query')).not.toBeNull();
+  });
+
+  it('surfaces availability errors while leaving file search usable', async () => {
+    const client = await indexedClient();
+    vi.spyOn(client, 'getSemanticComponentStatus').mockRejectedValue(
+      new Error('Status unavailable'),
+    );
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          client,
+          workspaceId: 'workspace-a',
+          scopeLabel: '/Documents',
+          onSearch: vi.fn(),
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await vi.waitFor(() => expect(root.textContent).toContain('Status unavailable'));
+    expect(document.querySelector('.fm-find-files-modes')).toBeNull();
+    expect(document.querySelector('#find-files-query')).not.toBeNull();
+  });
+
+  it('keeps a reserved status slot while search submission is pending', () => {
+    let searchPending = false;
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          scopeLabel: '/Documents',
+          searchPending,
+          onSearch: vi.fn(),
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    const slot = root.querySelector('.fm-find-search-status[role="status"]');
+    expect(slot?.textContent).toBe('');
+    searchPending = true;
+    m.redraw.sync();
+    expect(root.querySelector('.fm-find-search-status')).toBe(slot);
+    expect(slot?.textContent).toBe('Starting search…');
+    searchPending = false;
+    m.redraw.sync();
+    expect(root.querySelector('.fm-find-search-status')).toBe(slot);
+    expect(slot?.textContent).toBe('');
+  });
+
+  it('searches unattached imported concepts and suggests recent selections', async () => {
+    const client = await indexedClient();
+    await client.importSemanticVocabulary(
+      JSON.stringify({
+        format: 'procyon-skos-1',
+        id: 'topics',
+        name: 'Topics',
+        concepts: [
+          {
+            uri: 'https://example.test/ml',
+            prefLabels: { en: 'Machine learning' },
+            definitions: { en: 'Learning from examples' },
+          },
+        ],
+      }),
+    );
+    const listVocabularies = vi.spyOn(client, 'listSemanticVocabularies');
+    const getLibrary = vi.spyOn(client, 'getSemanticLibraryStatus');
+    const onSearch = vi.fn();
+    const onSave = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          client,
+          workspaceId: 'workspace-a',
+          scopeLabel: '/Documents',
+          savedSearches: [],
+          onSearch,
+          onSave,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    expect(listVocabularies).not.toHaveBeenCalled();
+    expect(getLibrary).toHaveBeenCalledOnce();
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector('.fm-find-files-modes button[aria-pressed="false"]')?.textContent,
+      ).toBe('Find by concept'),
+    );
+    [...document.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    m.redraw.sync();
+    expect(document.querySelector('.fm-find-concept-list button')).toBeNull();
+    const filter = document.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!filter) throw new Error('concept filter missing');
+    filter.value = 'machine';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(
+        [...document.querySelectorAll<HTMLButtonElement>('.fm-find-concept-list button')].some(
+          (button) => button.textContent?.includes('Machine learning · Topics'),
+        ),
+      ).toBe(true),
+    );
+    const choice = [
+      ...document.querySelectorAll<HTMLButtonElement>('.fm-find-concept-list button'),
+    ].find((button) => button.textContent?.includes('Machine learning · Topics'));
+    expect(choice?.textContent).toContain('Machine learning');
+    expect(choice?.textContent).toContain('Learning from examples');
+    choice?.click();
+    m.redraw.sync();
+    expect(root.querySelector<HTMLInputElement>('.fm-find-concept-scope input')?.checked).toBe(
+      false,
+    );
+    [...document.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
+      .find((button) => button.textContent?.trim() === 'Search')
+      ?.click();
+    await vi.waitFor(() => expect(onSearch).toHaveBeenCalledOnce());
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'semantic',
+        semanticQuery: 'Machine learning. Learning from examples',
+        semanticLibraryId: (await client.getSemanticLibraryStatus()).library?.libraryId,
+        semanticScope: 'entireLibrary',
+      }),
+    );
+    expect(localStorage.getItem('procyon.recentConceptSearches.v1')).toContain(
+      'https://example.test/ml',
+    );
+
+    m.mount(root, null);
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          client,
+          workspaceId: 'workspace-a',
+          scopeLabel: '/Documents',
+          savedSearches: [],
+          onSearch,
+          onSave,
+          onCancel: vi.fn(),
+        }),
+    });
+
+    m.redraw.sync();
+    await vi.waitFor(() => expect(document.querySelector('.fm-find-files-modes')).not.toBeNull());
+    [...document.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(
+        [...document.querySelectorAll<HTMLButtonElement>('.fm-find-concept-list button')].some(
+          (button) => button.textContent?.includes('Machine learning · Topics'),
+        ),
+      ).toBe(true),
+    );
+    [...document.querySelectorAll<HTMLButtonElement>('.fm-find-concept-list button')]
+      .find((button) => button.textContent?.includes('Machine learning · Topics'))
+      ?.click();
+    document.querySelector<HTMLInputElement>('.fm-find-concept-scope input')?.click();
+    m.redraw.sync();
+    expect(root.querySelector<HTMLInputElement>('.fm-find-concept-scope input')?.checked).toBe(
+      true,
+    );
+    expect(document.querySelector('.fm-save-search-button')?.textContent).toBe(
+      'Save as smart folder',
+    );
+    document.querySelector<HTMLButtonElement>('.fm-save-search-button')?.click();
+    expect(onSave).toHaveBeenCalledWith(
+      'Machine learning (Topics)',
+      expect.objectContaining({ semanticScope: 'currentFolder' }),
+      undefined,
+    );
+  });
+
+  it('offers bundled concepts with source and license without importing them', async () => {
+    const client = await indexedClient();
+    const importSpy = vi.spyOn(client, 'importSemanticVocabulary');
+    const onSearch = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          client,
+          workspaceId: 'workspace-a',
+          scopeLabel: '/Documents',
+          onSearch,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-files-modes')).not.toBeNull());
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    m.redraw.sync();
+    const filter = root.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!filter) throw new Error('Concept filter missing');
+    filter.value = 'renewable energy';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-concept-choice')?.textContent).toContain(
+        'renewable energy',
+      ),
+    );
+    expect(root.querySelector('.fm-find-concept-source')?.textContent).toContain('CC BY 4.0');
+    expect(root.querySelector('.fm-find-concept-source a')).not.toBeNull();
+    root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
+      .find((button) => button.textContent?.trim() === 'Search')
+      ?.click();
+    expect(onSearch).toHaveBeenCalledOnce();
+    expect(importSpy).not.toHaveBeenCalled();
+  });
+
+  it('names the selected UNESCO concept concisely without losing its identity', async () => {
+    const client = await indexedClient();
+    const onSearch = vi.fn();
+    const onSave = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          client,
+          workspaceId: 'workspace-a',
+          scopeLabel: '/Documents',
+          savedSearches: [],
+          onSearch,
+          onSave,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-files-modes')).not.toBeNull());
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    m.redraw.sync();
+    const filter = root.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!filter) throw new Error('Concept filter missing');
+    filter.value = 'Mental stress';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-find-concept-choice')?.textContent).toContain(
+        'Mental stress · Psychology (UNESCO',
+      ),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
+    m.redraw.sync();
+    expect(root.querySelector<HTMLInputElement>('.fm-saved-search-save input')?.value).toBe(
+      'Mental stress (UNESCO)',
+    );
+    root.querySelector<HTMLButtonElement>('.fm-save-search-button')?.click();
+    expect(onSave).toHaveBeenCalledWith(
+      'Mental stress (UNESCO)',
+      expect.objectContaining({
+        conceptLabel: 'Mental stress (UNESCO)',
+        selectedConcept: {
+          vocabularyId: 'unesco-psychology',
+          conceptUri: 'http://vocabularies.unesco.org/thesaurus/concept13013',
+        },
+      }),
+      undefined,
+    );
+    [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
+      .find((button) => button.textContent?.trim() === 'Search')
+      ?.click();
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conceptLabel: 'Mental stress (UNESCO)',
+        selectedConcept: {
+          vocabularyId: 'unesco-psychology',
+          conceptUri: 'http://vocabularies.unesco.org/thesaurus/concept13013',
+        },
+      }),
+    );
+  });
+
+  it('filters concept choices by vocabulary and submits only a choice from that vocabulary', async () => {
+    const client = await indexedClient();
+    const onSearch = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(FindFilesDialog, {
+          open: true,
+          client,
+          workspaceId: 'workspace-a',
+          scopeLabel: '/Documents',
+          onSearch,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await vi.waitFor(() => expect(root.querySelector('.fm-find-files-modes')).not.toBeNull());
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
+      .find((button) => button.textContent === 'Find by concept')
+      ?.click();
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelectorAll('select[name="concept-vocabulary"] option').length,
+      ).toBeGreaterThan(2),
+    );
+    const vocabulary = root.querySelector<HTMLSelectElement>('select[name="concept-vocabulary"]');
+    const filter = root.querySelector<HTMLInputElement>('#find-files-concept');
+    if (!vocabulary || !filter) throw new Error('concept controls missing');
+    expect(vocabulary.options[0]?.textContent).toBe('All vocabularies');
+    expect(
+      vocabulary.compareDocumentPosition(filter) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    filter.value = 'energy';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    const all = [...root.querySelectorAll<HTMLButtonElement>('.fm-find-concept-choice')];
+    expect(all.length).toBeGreaterThan(1);
+    const chosen = all.find((button) => button.textContent?.includes('renewable energy'));
+    const sourceName = chosen?.querySelector('span')?.textContent?.replace(/^ · /u, '');
+    const source = [...vocabulary.options].find((option) => option.textContent === sourceName);
+    if (!chosen || !source) throw new Error('bundled energy concept missing');
+    chosen.click();
+    m.redraw.sync();
+    vocabulary.value = source.value;
+    vocabulary.dispatchEvent(new Event('change', { bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-find-concept-choice[aria-pressed="true"]')).toBeNull();
+    expect(
+      [...root.querySelectorAll('.fm-find-concept-choice')].every((choice) =>
+        choice.textContent?.includes(` · ${sourceName}`),
+      ),
+    ).toBe(true);
+    vocabulary.value = '';
+    vocabulary.dispatchEvent(new Event('change', { bubbles: true }));
+    filter.value = 'energy';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelectorAll('.fm-find-concept-choice').length).toBe(all.length);
+    vocabulary.value = source.value;
+    vocabulary.dispatchEvent(new Event('change', { bubbles: true }));
+    filter.value = 'no matching concept exists';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector('.fm-find-concept-list .fm-find-concept-empty')?.textContent).toBe(
+      'No matching concept in the available vocabularies.',
+    );
+    filter.value = 'energy';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    root.querySelector<HTMLButtonElement>('.fm-find-concept-choice')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll<HTMLButtonElement>('.modal-footer button')]
+      .find((button) => button.textContent?.trim() === 'Search')
+      ?.click();
+    expect(onSearch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'semantic',
+        conceptLabel: expect.stringMatching(/\(GEMET\)$/u),
+        semanticScope: 'entireLibrary',
+      }),
+    );
+  });
+
   it('is focused on open and submits the trimmed query with Enter', async () => {
     const onSearch = vi.fn();
     const onCancel = vi.fn();

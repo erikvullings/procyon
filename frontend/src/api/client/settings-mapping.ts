@@ -36,7 +36,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
 
 function searchQueryFromDto(query: SettingsDto['savedSearches'][number]['query']): SearchQuery {
   return {
-    schemaVersion: query.schemaVersion === 1 ? 1 : 2,
+    schemaVersion: query.schemaVersion === 1 ? 1 : query.schemaVersion === 3 ? 3 : 2,
     mode: query.schemaVersion === 1 && query.content != null ? 'content' : (query.mode ?? 'name'),
     scope: {
       ...query.scope,
@@ -54,8 +54,21 @@ function searchQueryFromDto(query: SettingsDto['savedSearches'][number]['query']
       ? {}
       : {
           semantic: {
-            ...query.semantic,
+            query: query.semantic.query,
+            libraryId: query.semantic.libraryId,
+            scope: query.semantic.scope,
             enrolledRootIds: [...(query.semantic.enrolledRootIds ?? [])],
+            ...(query.semantic.selectedConcept == null
+              ? {}
+              : { selectedConcept: { ...query.semantic.selectedConcept } }),
+          },
+        }),
+    ...(query.concept == null
+      ? {}
+      : {
+          concept: {
+            ...query.concept,
+            enrolledRootIds: [...(query.concept.enrolledRootIds ?? [])],
           },
         }),
     gitStatuses: query.gitStatuses ?? [],

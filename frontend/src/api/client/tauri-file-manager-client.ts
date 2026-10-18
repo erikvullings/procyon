@@ -84,6 +84,7 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmModelLimits,
   LlmProfile,
   LlmProfileExport,
   LlmProfilePreset,
@@ -95,6 +96,7 @@ import type {
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
   OpenPptxPreviewRequest,
+  OpenSqliteViewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
@@ -105,11 +107,13 @@ import type {
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  PluginPreviewResult,
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
   PreviewRagRequest,
   PreviewSemanticEnrolmentRequest,
+  QuerySqliteViewRequest,
   RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
@@ -160,6 +164,9 @@ import type {
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
+  SqliteQueryResult,
+  SqliteView,
+  SqliteViewSessionRequest,
   StartChecksumRequest,
   StartChecksumResult,
   StartComparisonRequest,
@@ -181,6 +188,7 @@ import type {
   UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
+  UpdateGemmaMediaRequest,
   UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
@@ -428,6 +436,13 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<SemanticLibraryStatus>('get_semantic_library_status');
   }
 
+  async updateGemmaMedia(
+    request: UpdateGemmaMediaRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('update_gemma_media', { request });
+  }
+
   async listSemanticVocabularies(_signal?: AbortSignal): Promise<readonly SemanticVocabulary[]> {
     return invoke<SemanticVocabulary[]>('list_semantic_vocabularies');
   }
@@ -559,6 +574,14 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<void>('start_native_drag', { locations });
   }
 
+  writeOsClipboardFiles(locations: readonly Location[], _signal?: AbortSignal): Promise<boolean> {
+    return invoke<boolean>('write_os_clipboard_files', { locations });
+  }
+
+  readOsClipboardFiles(_signal?: AbortSignal): Promise<Location[]> {
+    return invoke<Location[]>('read_os_clipboard_files');
+  }
+
   showPlatformContextMenu(locations: readonly Location[], _signal?: AbortSignal): Promise<void> {
     return invoke<void>('show_platform_context_menu', { locations });
   }
@@ -583,6 +606,10 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   async openWorkspaceWindow(sourceWorkspaceId?: WorkspaceId): Promise<void> {
     await invoke<void>('open_workspace_window', { sourceWorkspaceId });
+  }
+
+  async openViewerWindow(payload: string, title: string): Promise<void> {
+    await invoke<void>('open_viewer_window', { payload, title });
   }
 
   async resyncWorkspace(
@@ -914,6 +941,21 @@ export class TauriFileManagerClient implements FileManagerClient {
     await invoke<void>('close_structured_view', { request });
   }
 
+  openSqliteView(request: OpenSqliteViewRequest, _signal?: AbortSignal): Promise<SqliteView> {
+    return invoke<SqliteView>('open_sqlite_view', { request });
+  }
+
+  querySqliteView(
+    request: QuerySqliteViewRequest,
+    _signal?: AbortSignal,
+  ): Promise<SqliteQueryResult> {
+    return invoke<SqliteQueryResult>('query_sqlite_view', { request });
+  }
+
+  async closeSqliteView(request: SqliteViewSessionRequest, _signal?: AbortSignal): Promise<void> {
+    await invoke<void>('close_sqlite_view', { request });
+  }
+
   loadEditableFile(request: LoadEditableFileRequest, _signal?: AbortSignal): Promise<EditableFile> {
     return invoke<EditableFile>('load_editable_file', { request });
   }
@@ -1194,6 +1236,17 @@ export class TauriFileManagerClient implements FileManagerClient {
     await invoke(enabled ? 'enable_plugin' : 'disable_plugin', { pluginId });
   }
 
+  renderPluginPreview(
+    pluginId: PluginId,
+    location: Location,
+    _signal?: AbortSignal,
+  ): Promise<PluginPreviewResult> {
+    return invoke<PluginPreviewResult>('render_plugin_preview', {
+      pluginId,
+      request: { location },
+    });
+  }
+
   getPluginLogs(pluginId: PluginId, _signal?: AbortSignal): Promise<PluginLogEntry[]> {
     return invoke<PluginLogEntry[]>('get_plugin_logs', { pluginId });
   }
@@ -1280,6 +1333,13 @@ export class TauriFileManagerClient implements FileManagerClient {
     _signal?: AbortSignal,
   ): Promise<string[]> {
     return invoke<string[]>('discover_llm_profile_draft_models', { request });
+  }
+
+  discoverLlmProfileDraftModelLimits(
+    request: SaveLlmProfileRequest,
+    _signal?: AbortSignal,
+  ): Promise<LlmModelLimits> {
+    return invoke<LlmModelLimits>('discover_llm_profile_draft_model_limits', { request });
   }
 
   previewDocumentSummary(

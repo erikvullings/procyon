@@ -3,9 +3,10 @@
 #![cfg(feature = "semantic-runtime")]
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::Instant;
 
 #[cfg(feature = "gemma-native")]
 use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeFiles};
@@ -13,6 +14,18 @@ use fm_semantic_worker::{
     IngestionScope, IngestionState, ManagedWorkerLaunch, ManagedWorkerResolver, WorkerConnector,
     WorkerHealth,
 };
+#[cfg(feature = "gemma-native")]
+use serde_json::json;
+#[cfg(feature = "gemma-native")]
+use sha2::{Digest, Sha256};
+
+#[cfg(feature = "gemma-native")]
+const PDF_VISION_SAMPLE_PAGES: u32 = 8;
+#[cfg(feature = "gemma-native")]
+const PDF_VISION_SAMPLE_BYTES: u64 = 3_967_050;
+#[cfg(feature = "gemma-native")]
+const PDF_VISION_SAMPLE_SHA256: &str =
+    "6fd090eee5fcdd7e547c8787f8ada4465e896fcff190b84e2b2f49e9c5b3d690";
 
 fn required_path(variable: &str) -> PathBuf {
     PathBuf::from(std::env::var_os(variable).unwrap_or_else(|| panic!("{variable} is required")))
@@ -46,8 +59,10 @@ fn privacy_canaries() -> BTreeMap<String, String> {
 async fn wait_for_ingestion(
     client: &fm_semantic_worker::WorkerClient,
     job_id: &str,
+    timeout: Duration,
 ) -> IngestionState {
-    for _ in 0..600 {
+    let started = Instant::now();
+    while started.elapsed() < timeout {
         let state = client
             .ingestion_job("qualification-tenant", "qualification-library", job_id)
             .await
@@ -64,7 +79,342 @@ async fn wait_for_ingestion(
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    panic!("packaged ingestion did not finish within 60 seconds");
+    panic!("packaged ingestion did not finish within {timeout:?}");
+}
+
+#[cfg(feature = "gemma-native")]
+fn owned_disk_bytes(root: &Path) -> u64 {
+    let entries = match std::fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return 0,
+        Err(error) => panic!("read isolated worker data: {error}"),
+    };
+    entries
+        .map(|entry| {
+            let entry = entry.expect("read isolated worker entry");
+            let metadata = match std::fs::symlink_metadata(entry.path()) {
+                Ok(metadata) => metadata,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return 0,
+                Err(error) => panic!("stat worker entry: {error}"),
+            };
+            if metadata.is_dir() {
+                owned_disk_bytes(&entry.path())
+            } else if metadata.is_file() {
+                metadata.len()
+            } else {
+                0
+            }
+        })
+        .sum()
+}
+
+#[cfg(all(feature = "gemma-native", target_os = "macos"))]
+fn sample_macos_worker_rss(
+    pid_path: PathBuf,
+) -> (
+    Arc<std::sync::atomic::AtomicBool>,
+    tokio::task::JoinHandle<u64>,
+) {
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let finished = Arc::clone(&stop);
+    let task = tokio::spawn(async move {
+        let mut maximum = 0;
+        while !finished.load(std::sync::atomic::Ordering::Relaxed) {
+            if let Ok(pid) = std::fs::read_to_string(&pid_path) {
+                let output = std::process::Command::new("ps")
+                    .args(["-o", "rss=", "-p", pid.trim()])
+                    .output()
+                    .expect("sample macOS worker RSS");
+                if output.status.success() {
+                    maximum = maximum.max(
+                        String::from_utf8(output.stdout)
+                            .unwrap()
+                            .trim()
+                            .parse::<u64>()
+                            .expect("macOS worker RSS is numeric")
+                            * 1024,
+                    );
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        maximum
+    });
+    (stop, task)
+}
+
+#[cfg(feature = "gemma-native")]
+#[test]
+fn isolated_worker_disk_accounting_excludes_symlink_targets() {
+    let root = tempfile::tempdir().unwrap();
+    let nested = root.path().join("nested");
+    std::fs::create_dir(&nested).unwrap();
+    std::fs::write(nested.join("file"), b"12345").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(nested.join("file"), root.path().join("link")).unwrap();
+    assert_eq!(owned_disk_bytes(root.path()), 5);
+}
+
+#[cfg(feature = "gemma-native")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires an exact signed PDFium-enabled Gemma worker and installed originals"]
+async fn packaged_gemma_indexes_sampled_synthetic_scan_pages_offline() {
+    let original_files: BTreeMap<String, PathBuf> = serde_json::from_str(
+        &std::env::var("PROCYON_GEMMA_PACKAGED_FILES").expect("verified installed original files"),
+    )
+    .unwrap();
+    let files = GemmaNativeFiles::from_original_files(&original_files).unwrap();
+    let native = required_path("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY");
+    let pdfium_name = if cfg!(target_os = "macos") {
+        "libpdfium.dylib"
+    } else if cfg!(windows) {
+        "pdfium.dll"
+    } else {
+        "libpdfium.so"
+    };
+    assert!(native.join(pdfium_name).is_file());
+    assert!(native.join("pdfium-licenses.txt").is_file());
+    let fixture_root = tempfile::tempdir().unwrap();
+    let source = fixture_root.path().join("synthetic-8-page-rle-scan.pdf");
+    let generator = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/generate-large-pdf-fixture.mjs");
+    let output = std::process::Command::new("node")
+        .args([
+            "--",
+            generator.to_str().unwrap(),
+            "--variant",
+            "rle-scan",
+            "--pages",
+            &PDF_VISION_SAMPLE_PAGES.to_string(),
+            "--output",
+        ])
+        .arg(&source)
+        .output()
+        .expect("generate deterministic synthetic scan");
+    assert!(
+        output.status.success(),
+        "synthetic scan generation failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let mut input = std::fs::File::open(&source).unwrap();
+    let bytes = input.metadata().unwrap().len();
+    assert_eq!(bytes, PDF_VISION_SAMPLE_BYTES);
+    let mut hasher = Sha256::new();
+    let mut chunk = [0_u8; 64 * 1024];
+    loop {
+        let count = std::io::Read::read(&mut input, &mut chunk).unwrap();
+        if count == 0 {
+            break;
+        }
+        hasher.update(&chunk[..count]);
+    }
+    let digest: [u8; 32] = hasher.finalize().into();
+    let digest_hex = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    assert_eq!(digest_hex, PDF_VISION_SAMPLE_SHA256);
+    let runtime = tempfile::tempdir().unwrap();
+    let data = tempfile::tempdir().unwrap();
+    let launch = ManagedWorkerLaunch::new_gemma(
+        required_path("PROCYON_SEMANTIC_PRODUCTION_WORKER"),
+        data.path().to_owned(),
+        native,
+        files,
+        128,
+        GemmaMedia {
+            images: true,
+            audio: false,
+            video: false,
+        },
+    );
+    let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
+    let report_path = std::env::var_os("PROCYON_GEMMA_PDF_QUALIFICATION_REPORT");
+    #[cfg(target_os = "macos")]
+    let sampler = report_path
+        .as_ref()
+        .map(|_| sample_macos_worker_rss(runtime.path().join("worker.pid")));
+    let client = WorkerConnector::desktop_managed_resolved(runtime.path(), resolver)
+        .with_startup_timeout(Duration::from_secs(30))
+        .connect()
+        .await
+        .expect("start signed installed Gemma worker");
+    let backend = std::fs::read_to_string(runtime.path().join("gemma-backend"))
+        .expect("installed worker reports selected compute backend");
+    let expected_image_pages = if backend.contains("CPU") {
+        4
+    } else if backend.contains("Metal") {
+        PDF_VISION_SAMPLE_PAGES
+    } else {
+        panic!("installed worker reported an unknown compute backend: {backend}");
+    };
+    let started = Instant::now();
+    let job_id = client
+        .ingest_pdf_reader(
+            "qualify-8-page-scan",
+            IngestionScope::new("qualification-tenant", "qualification-library"),
+            "synthetic-8-page-scan",
+            BTreeMap::from([
+                ("occurrence_id".into(), "synthetic-scan-occurrence".into()),
+                ("source_id".into(), "synthetic-scan-source".into()),
+                ("root_id".into(), "synthetic-scan-root".into()),
+            ]),
+            true,
+            tokio::fs::File::open(&source).await.unwrap(),
+            bytes,
+            digest,
+        )
+        .await
+        .expect("authenticated PDF stream");
+    let mut max_progress = 0;
+    let mut worker_data_disk_peak_bytes = 0;
+    let completed_units = loop {
+        let job = client
+            .ingestion_job("qualification-tenant", "qualification-library", &job_id)
+            .await
+            .expect("signed worker job progress");
+        assert_ne!(job.state, IngestionState::Failed, "{:?}", job.detail);
+        assert_ne!(job.state, IngestionState::Cancelled);
+        if job.completed_units > max_progress {
+            max_progress = job.completed_units;
+            eprintln!(
+                "synthetic installed scan progress: {}/{} units after {:.0}s",
+                max_progress,
+                PDF_VISION_SAMPLE_PAGES,
+                started.elapsed().as_secs_f64()
+            );
+        }
+        if report_path.is_some() {
+            worker_data_disk_peak_bytes =
+                worker_data_disk_peak_bytes.max(owned_disk_bytes(data.path()));
+        }
+        if job.state == IngestionState::Completed {
+            break job.completed_units;
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(15 * 60),
+            "synthetic installed qualification exceeded the 15-minute sample limit after {max_progress}/{PDF_VISION_SAMPLE_PAGES} units"
+        );
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    };
+    assert_eq!(
+        completed_units,
+        u64::from(expected_image_pages),
+        "worker completed the backend-appropriate image budget"
+    );
+    let index_root = data.path().join("indexes");
+    let catalogs = std::fs::read_dir(index_root)
+        .unwrap()
+        .map(|entry| entry.unwrap().path().join("catalog.sqlite"))
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    assert_eq!(catalogs.len(), 1, "one isolated Gemma image index");
+    let catalog = rusqlite::Connection::open(&catalogs[0]).unwrap();
+    let mut statement = catalog
+        .prepare(
+            "SELECT r.provenance FROM records r
+             JOIN generations g ON g.tenant_id = r.tenant_id
+               AND g.library_id = r.library_id AND g.document_id = r.document_id
+               AND g.generation = r.generation
+             WHERE r.document_id = 'synthetic-8-page-scan'
+               AND r.record_kind = 'pdf_image' AND g.state = 'complete'",
+        )
+        .unwrap();
+    let records = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .map(|record| {
+            let record = record.unwrap();
+            let provenance: serde_json::Value = serde_json::from_str(&record).unwrap();
+            assert_eq!(provenance["value"]["kind"], "pdfPageRender");
+            provenance["value"]["page_number"].as_u64().unwrap()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        records.len(),
+        expected_image_pages as usize,
+        "image record count follows the active Gemma backend policy"
+    );
+    let pages = records
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        pages,
+        (1..=u64::from(expected_image_pages)).collect(),
+        "CPU fallback indexes only the first four pages"
+    );
+    let skipped_pages: i64 = catalog
+        .query_row(
+            "SELECT pdf_image_skipped_pages FROM generations
+             WHERE document_id = 'synthetic-8-page-scan' AND state = 'complete'
+             ORDER BY generation DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        skipped_pages,
+        i64::from(PDF_VISION_SAMPLE_PAGES - expected_image_pages),
+        "published coverage records pages omitted by the CPU cap"
+    );
+    if let Some(report) = report_path {
+        let elapsed_seconds = started.elapsed().as_secs_f64();
+        let seconds_per_page = elapsed_seconds / f64::from(PDF_VISION_SAMPLE_PAGES);
+        let seconds_per_image_page = elapsed_seconds / f64::from(expected_image_pages);
+        #[cfg(target_os = "macos")]
+        let (worker_peak_rss_bytes, worker_peak_method) = {
+            let (stop, task) = sampler.expect("macOS RSS sampler");
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+            (
+                task.await.expect("macOS RSS sampling task"),
+                "200ms ps RSS samples; startup/transient peaks may be missed",
+            )
+        };
+        #[cfg(not(target_os = "macos"))]
+        let (worker_peak_rss_bytes, worker_peak_method) = (
+            peak_worker_rss_bytes(
+                std::fs::read_to_string(runtime.path().join("worker.pid"))
+                    .expect("installed worker pid")
+                    .trim(),
+            ),
+            if cfg!(windows) {
+                "kernel PeakWorkingSet64 for worker process"
+            } else {
+                "kernel VmHWM for worker process"
+            },
+        );
+        assert!(
+            worker_peak_rss_bytes > 0,
+            "worker peak RSS was not observed"
+        );
+        assert!(
+            worker_data_disk_peak_bytes > 0,
+            "worker data disk use was not observed"
+        );
+        std::fs::write(
+            report,
+            serde_json::to_vec_pretty(&json!({
+                "sourceBytes": bytes,
+                "sourceSha256": digest_hex,
+                "pageCount": PDF_VISION_SAMPLE_PAGES,
+                "imageEvidenceCount": pages.len(),
+                "pdfImageSkippedPages": skipped_pages,
+                "completeGenerationVerified": true,
+                "elapsedSeconds": elapsed_seconds,
+                "secondsPerPage": seconds_per_page,
+                "pagesPerSecond": f64::from(PDF_VISION_SAMPLE_PAGES) / elapsed_seconds,
+                "secondsPerImagePage": seconds_per_image_page,
+                "imagePagesPerSecond": f64::from(expected_image_pages) / elapsed_seconds,
+                "backend": backend.trim(),
+                "workerPeakRssBytes": worker_peak_rss_bytes,
+                "workerPeakMethod": worker_peak_method,
+                "workerDataDiskPeakBytes": worker_data_disk_peak_bytes,
+                "workerDataDiskPeakMethod": "1s linked worker-data directory samples; anonymous PDF spools and transient peaks are excluded",
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
 }
 
 fn terminate_worker(pid: &str) {
@@ -79,6 +429,46 @@ fn terminate_worker(pid: &str) {
         .status()
         .expect("terminate packaged worker");
     assert!(status.success(), "packaged worker could not be terminated");
+}
+
+#[cfg(all(feature = "gemma-native", not(target_os = "macos")))]
+fn peak_worker_rss_bytes(pid: &str) -> u64 {
+    #[cfg(target_os = "linux")]
+    {
+        let status = std::fs::read_to_string(format!("/proc/{pid}/status")).unwrap();
+        let value = status
+            .lines()
+            .find_map(|line| line.strip_prefix("VmHWM:"))
+            .expect("Linux worker high-water RSS");
+        value
+            .split_whitespace()
+            .next()
+            .unwrap()
+            .parse::<u64>()
+            .unwrap()
+            * 1024
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let output = std::process::Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                &format!("(Get-Process -Id {pid} -ErrorAction Stop).PeakWorkingSet64"),
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "Windows worker peak working set unavailable"
+        );
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap()
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -120,7 +510,7 @@ async fn packaged_worker_ingests_recovers_after_crash_and_reopens_offline() {
         .await
         .expect("ingest privacy fixture through packaged worker");
     assert_eq!(
-        wait_for_ingestion(&client, &job_id).await,
+        wait_for_ingestion(&client, &job_id, Duration::from_secs(60)).await,
         IngestionState::Completed
     );
     assert!(
@@ -174,6 +564,20 @@ async fn packaged_worker_ingests_recovers_after_crash_and_reopens_offline() {
 async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
     use image::{ImageBuffer, ImageFormat, Rgb};
 
+    let report_path = std::env::var_os("PROCYON_GEMMA_MEASURE_REPORT").map(PathBuf::from);
+    assert!(
+        report_path.is_none() || std::env::var_os("PROCYON_GEMMA_QUALIFY_RESTART").is_some(),
+        "measurement requires the existing worker-restart check"
+    );
+    let dimensions = if report_path.is_some() {
+        std::env::var("PROCYON_GEMMA_MEASURE_DIMENSIONS")
+            .expect("measurement dimension is required")
+            .parse::<usize>()
+            .expect("measurement dimension must be numeric")
+    } else {
+        128
+    };
+    assert!([128, 256, 512, 768].contains(&dimensions));
     let original_files: BTreeMap<String, PathBuf> = serde_json::from_str(
         &std::env::var("PROCYON_GEMMA_PACKAGED_FILES").expect("verified original-file paths"),
     )
@@ -186,7 +590,7 @@ async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
         data.path().to_owned(),
         required_path("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY"),
         files,
-        128,
+        dimensions,
         GemmaMedia {
             images: true,
             audio: true,
@@ -196,11 +600,20 @@ async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
     let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
     let connector = WorkerConnector::desktop_managed_resolved(runtime.path(), resolver)
         .with_startup_timeout(Duration::from_secs(30));
+    #[cfg(target_os = "macos")]
+    let sampler = report_path
+        .as_ref()
+        .map(|_| sample_macos_worker_rss(runtime.path().join("worker.pid")));
+    let started = Instant::now();
     let client = connector
         .connect()
         .await
         .expect("start packaged Gemma worker");
+    let startup_seconds = started.elapsed().as_secs_f64();
     assert_eq!(client.health().await.unwrap(), WorkerHealth::Serving);
+    let backend = std::fs::read_to_string(runtime.path().join("gemma-backend"))
+        .expect("installed Gemma worker reports its selected compute backend");
+    eprintln!("packaged Gemma selected backend: {}", backend.trim());
 
     let image = ImageBuffer::from_fn(128, 96, |x, y| {
         Rgb([
@@ -211,7 +624,8 @@ async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
     });
     let mut png = std::io::Cursor::new(Vec::new());
     image.write_to(&mut png, ImageFormat::Png).unwrap();
-    for (name, media_type, content) in [
+    let mut measurements = Vec::new();
+    let mut sources = vec![
         ("image", "image/png", png.into_inner()),
         (
             "audio",
@@ -223,7 +637,17 @@ async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
             "video/mp4",
             include_bytes!("fixtures/gemma-video-2s.mp4").to_vec(),
         ),
-    ] {
+    ];
+    if report_path.is_some() {
+        sources.push((
+            "text",
+            "text/plain",
+            b"Gemma text qualification paragraph describing filesystem navigation.".to_vec(),
+        ));
+    }
+    for (name, media_type, content) in sources {
+        let bytes = content.len();
+        let started = Instant::now();
         let job_id = client
             .ingest(
                 &format!("gemma-{name}"),
@@ -241,31 +665,130 @@ async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
             .await
             .expect("submit packaged media");
         assert_eq!(
-            wait_for_ingestion(&client, &job_id).await,
+            wait_for_ingestion(&client, &job_id, Duration::from_secs(300)).await,
             IngestionState::Completed,
             "{name}"
         );
-        let results = client
-            .query(
-                "qualification-tenant",
-                "qualification-library",
-                &format!("Gemma {name}"),
-                10,
-            )
-            .await
-            .expect("search packaged media");
-        let result = results
-            .iter()
-            .find(|result| result.document_id == format!("document-{name}"))
-            .expect("packaged media is retrievable");
-        assert_eq!(result.metadata.get("media_type").unwrap(), media_type);
-        if name == "video" {
-            let provenance = result.metadata.get("semantic.provenance").unwrap();
-            assert!(provenance.contains("sampledTimestampsMs"), "{provenance}");
-            assert!(provenance.contains("1000"), "{provenance}");
+        println!(
+            "Gemma {name} packaged ingestion completed in {:.1}s",
+            started.elapsed().as_secs_f64()
+        );
+        let ingestion_seconds = started.elapsed().as_secs_f64();
+        let mut query_seconds = Vec::new();
+        for _ in 0..if report_path.is_some() { 3 } else { 1 } {
+            let queried = Instant::now();
+            let results = client
+                .query(
+                    "qualification-tenant",
+                    "qualification-library",
+                    &format!("Gemma {name}"),
+                    10,
+                )
+                .await
+                .expect("search packaged media");
+            query_seconds.push(queried.elapsed().as_secs_f64());
+            let result = results
+                .iter()
+                .find(|result| result.document_id == format!("document-{name}"))
+                .expect("packaged media is retrievable");
+            assert_eq!(result.metadata.get("media_type").unwrap(), media_type);
+            if name == "video" {
+                let provenance = result.metadata.get("semantic.provenance").unwrap();
+                assert!(provenance.contains("sampledTimestampsMs"), "{provenance}");
+                assert!(provenance.contains("1000"), "{provenance}");
+            }
         }
+        measurements.push(json!({
+            "modality": name,
+            "inputBytes": bytes,
+            "ingestionSeconds": ingestion_seconds,
+            "ingestionItemsPerSecond": 1.0 / ingestion_seconds,
+            "querySeconds": query_seconds,
+        }));
     }
-    client.shutdown(Duration::from_secs(10)).await.unwrap();
+    let first_pid = std::fs::read_to_string(runtime.path().join("worker.pid"))
+        .expect("read installed Gemma worker pid");
+    #[cfg(not(target_os = "macos"))]
+    let first_peak = report_path
+        .as_ref()
+        .map(|_| peak_worker_rss_bytes(first_pid.trim()));
+    if std::env::var_os("PROCYON_GEMMA_QUALIFY_RESTART").is_some() {
+        terminate_worker(first_pid.trim());
+        drop(client);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let restarted = connector
+            .connect()
+            .await
+            .expect("restart installed Gemma worker");
+        let second_pid = std::fs::read_to_string(runtime.path().join("worker.pid"))
+            .expect("read restarted Gemma worker pid");
+        assert_ne!(first_pid.trim(), second_pid.trim());
+        for name in if report_path.is_some() {
+            &["image", "audio", "video", "text"][..]
+        } else {
+            &["image", "audio", "video"][..]
+        } {
+            assert!(
+                restarted
+                    .query(
+                        "qualification-tenant",
+                        "qualification-library",
+                        &format!("Gemma {name}"),
+                        10,
+                    )
+                    .await
+                    .expect("query recovered installed Gemma index")
+                    .iter()
+                    .any(|result| result.document_id == format!("document-{name}")),
+                "{name} was not retrievable after worker restart"
+            );
+        }
+        #[cfg(not(target_os = "macos"))]
+        let second_peak = report_path
+            .as_ref()
+            .map(|_| peak_worker_rss_bytes(second_pid.trim()));
+        if let Some(path) = &report_path {
+            #[cfg(target_os = "macos")]
+            let (peak_rss_bytes, peak_method) = {
+                let (stop, task) = sampler.expect("macOS RSS sampler");
+                stop.store(true, std::sync::atomic::Ordering::Relaxed);
+                (
+                    task.await.expect("macOS RSS sampling task"),
+                    "200ms ps RSS samples; startup/transient peaks may be missed",
+                )
+            };
+            #[cfg(target_os = "linux")]
+            let (peak_rss_bytes, peak_method) = (
+                first_peak.unwrap().max(second_peak.unwrap()),
+                "kernel VmHWM for both worker processes",
+            );
+            #[cfg(target_os = "windows")]
+            let (peak_rss_bytes, peak_method) = (
+                first_peak.unwrap().max(second_peak.unwrap()),
+                "PeakWorkingSet64 for both worker processes",
+            );
+            assert!(peak_rss_bytes > 0, "worker peak RSS was not observed");
+            std::fs::write(
+                path,
+                serde_json::to_vec_pretty(&json!({
+                    "schemaVersion": 1,
+                    "dimensions": dimensions,
+                    "totalWallSeconds": started.elapsed().as_secs_f64(),
+                    "workerStartupSeconds": startup_seconds,
+                    "workerPeakRssBytes": peak_rss_bytes,
+                    "workerPeakMethod": peak_method,
+                    "workerComputeBackend": backend.trim(),
+                    "measurements": measurements,
+                    "workload": "one synthetic 128x96 PNG, one 440Hz MP3, one 2s H.264 MP4, one short plain-text document; three text queries per modality; fresh worker and index per dimension",
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        }
+        restarted.shutdown(Duration::from_secs(10)).await.unwrap();
+    } else {
+        client.shutdown(Duration::from_secs(10)).await.unwrap();
+    }
     connector
         .wait_until_stopped(Duration::from_secs(12))
         .await

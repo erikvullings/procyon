@@ -6,6 +6,7 @@
 //! bounded file bytes.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::io::SeekFrom;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
@@ -14,7 +15,7 @@ use fm_domain::{EntryKind, EntrySummary, GitFileStatus, Location, LocationError,
 use fm_events::{BackendEventPayload, EventAudience, EventBus};
 use fm_semantic_library::{
     ContentFingerprint, EligibilityCandidate, EligibilityEntryKind, EligibilityReason,
-    OccurrenceId, RootId,
+    GemmaMediaSelection, OccurrenceId, OccurrenceScope, RootId,
 };
 use fm_vcs_status::{GitIgnoreError, ignored_entries};
 use fm_vfs::{
@@ -22,14 +23,14 @@ use fm_vfs::{
 };
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::time::{Instant, MissedTickBehavior, interval_at, sleep};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::semantic::{
-    DocumentId, DocumentIngestion, LibraryId, SemanticError, SemanticIngestionState,
-    SemanticOperationId, SemanticScope, SemanticService, TenantId,
+    DocumentId, DocumentIngestion, LibraryId, PdfStreamIngestion, SemanticError,
+    SemanticIngestionState, SemanticOperationId, SemanticScope, SemanticService, TenantId,
 };
 use crate::semantic_library::{
     SemanticAccessContext, SemanticEligibilityReasonCount, SemanticFeedCandidate,
@@ -41,11 +42,12 @@ const PAGE_SIZE: usize = 128;
 const MAX_ENTRIES: u64 = 100_000;
 const MAX_DIRECTORIES: u64 = 10_000;
 const MAX_RECURSION_DEPTH: u16 = 64;
-const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_FAILURE_DETAILS: usize = 16;
+const MAX_FAILURE_DETAIL_CHARS: usize = 512;
+pub(crate) const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
 const INGESTION_POLL_INTERVAL: Duration = Duration::from_millis(25);
-// Covers conversion, chunking, local CPU embedding, and publication. Durable
-// embedding checkpoints make retries resumable; expiry isolates one stranded
-// document instead of aborting the enrolled-root reconciliation.
+// Ingestion without PDF images has a total deadline. For consented PDF
+// images this is an idle deadline, renewed only by durable worker progress.
 const INGESTION_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 /// Outcome of one complete root enumeration and worker feed.
@@ -66,6 +68,14 @@ pub struct SemanticIndexingReport {
     pub ingested_occurrences: u64,
     /// Workspace-scoped occurrences whose worker ingestion job failed.
     pub failed_occurrences: u64,
+    /// Sanitized reasons for worker failures, including page-local PDF limits.
+    pub failure_details: Vec<String>,
+    /// Additional or overlong failure reasons were not retained in this report.
+    pub failure_details_truncated: bool,
+    /// Completed PDF jobs with non-fatal image/page evidence omissions.
+    pub coverage_details: Vec<String>,
+    /// Additional or overlong coverage reasons were not retained.
+    pub coverage_details_truncated: bool,
     /// Workspace-scoped occurrences intentionally excluded during conversion.
     pub excluded_occurrences: u64,
     /// Actionable, sanitized reasons for conversion-time exclusions.
@@ -187,7 +197,7 @@ impl SemanticIndexingService {
         self.scanned_entries.store(0, Ordering::Relaxed);
         let job_id = format!("root:{root_id}");
         self.publish_progress(&job_id, "reconciling", 0, 0);
-        let work = self.reconcile_root(library, access, root_id, cancellation);
+        let work = self.reconcile_root(library, access, root_id, cancellation, None);
         tokio::pin!(work);
         let mut heartbeat = interval_at(
             Instant::now() + Duration::from_secs(1),
@@ -208,12 +218,16 @@ impl SemanticIndexingService {
         self.publish_progress(
             &job_id,
             match &result {
+                Ok(report) if report.failed_occurrences > 0 => "failed",
                 Ok(_) => "complete",
                 Err(SemanticIndexingError::Cancelled) => "cancelled",
                 Err(_) => "failed",
             },
             self.scanned_entries.load(Ordering::Relaxed),
-            u64::from(result.is_err()),
+            match &result {
+                Ok(report) => report.failed_occurrences,
+                Err(_) => 1,
+            },
         );
         result
     }
@@ -231,12 +245,29 @@ impl SemanticIndexingService {
         );
     }
 
+    /// Scans only newly permitted modalities; existing text and media files
+    /// never need their vectors regenerated. PDF is revisited only for roots
+    /// that separately opted in to page images.
+    pub(crate) async fn index_added_media(
+        &self,
+        library: Arc<SemanticLibraryService>,
+        access: &SemanticAccessContext,
+        root_id: RootId,
+        media: GemmaMediaSelection,
+        cancellation: CancellationToken,
+    ) -> Result<SemanticIndexingReport, SemanticIndexingError> {
+        let _run = self.run_lock.lock().await;
+        self.reconcile_root(library, access, root_id, cancellation, Some(media))
+            .await
+    }
+
     async fn reconcile_root(
         &self,
         library: Arc<SemanticLibraryService>,
         access: &SemanticAccessContext,
         root_id: RootId,
         cancellation: CancellationToken,
+        added_media: Option<GemmaMediaSelection>,
     ) -> Result<SemanticIndexingReport, SemanticIndexingError> {
         check_cancelled(&cancellation)?;
 
@@ -251,6 +282,10 @@ impl SemanticIndexingService {
         let mut observed_files = 0_u64;
         let mut ingested_occurrences = 0_u64;
         let mut failed_occurrences = 0_u64;
+        let mut failure_details = BTreeSet::new();
+        let mut failure_details_truncated = false;
+        let mut coverage_details = BTreeSet::new();
+        let mut coverage_details_truncated = false;
         let mut excluded_occurrences = 0_u64;
         let mut exclusion_details = BTreeSet::new();
         let mut ocr_required_files = Vec::new();
@@ -300,9 +335,10 @@ impl SemanticIndexingService {
                         return Err(SemanticIndexingError::LimitExceeded("entry count"));
                     }
                     let candidate = eligibility_candidate(entry.clone());
-                    let plan = library.worker_feed_plan(
+                    let plan = library.worker_feed_plan_with_pdf_limit(
                         access,
                         &[SemanticFeedCandidate { root_id, candidate }],
+                        context.max_pdf_source_bytes,
                     )?;
                     for count in plan.skipped_reason_counts {
                         *skipped.entry(count.reason).or_insert(0) += count.count;
@@ -322,6 +358,20 @@ impl SemanticIndexingService {
                         }
                         EntryKind::Directory | EntryKind::Symlink => {}
                         EntryKind::File => {
+                            if let Some(media) = added_media {
+                                let mime = media_type(&entry);
+                                let selected = (media.images
+                                    && (mime.is_some_and(|mime| mime.starts_with("image/"))
+                                        || (context.pdf_images_enabled
+                                            && mime == Some("application/pdf"))))
+                                    || (media.audio
+                                        && mime.is_some_and(|mime| mime.starts_with("audio/")))
+                                    || (media.video
+                                        && mime.is_some_and(|mime| mime.starts_with("video/")));
+                                if !selected {
+                                    continue;
+                                }
+                            }
                             match self
                                 .ingest_entry(EntryIngestRequest {
                                     library: &library,
@@ -337,6 +387,7 @@ impl SemanticIndexingService {
                                 EntryIngestOutcome::Oversized => {
                                     *skipped.entry(EligibilityReason::Oversized).or_insert(0) += 1;
                                 }
+                                EntryIngestOutcome::Ineligible => {}
                                 EntryIngestOutcome::Unreadable(error) => {
                                     tracing::debug!(%error, "semantic reconciliation skipped an unreadable file");
                                     unreadable_files = unreadable_files.saturating_add(1);
@@ -349,6 +400,20 @@ impl SemanticIndexingService {
                                         ingested_occurrences.saturating_add(report.ingested);
                                     failed_occurrences =
                                         failed_occurrences.saturating_add(report.failed);
+                                    for detail in report.failure_details {
+                                        retain_failure_detail(
+                                            &mut failure_details,
+                                            &mut failure_details_truncated,
+                                            &detail,
+                                        );
+                                    }
+                                    for detail in report.coverage_details {
+                                        retain_failure_detail(
+                                            &mut coverage_details,
+                                            &mut coverage_details_truncated,
+                                            &detail,
+                                        );
+                                    }
                                     excluded_occurrences =
                                         excluded_occurrences.saturating_add(report.excluded);
                                     for detail in report.exclusion_details {
@@ -376,12 +441,23 @@ impl SemanticIndexingService {
         }
 
         check_cancelled(&cancellation)?;
-        let reconciliation_generation =
-            library.complete_reconciliation_preserving(access, root_id, &observed, &preserved)?;
-        self.ocr_required_files
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(root_id, ocr_required_files.clone());
+        let reconciliation_generation = if added_media.is_some() {
+            library
+                .status(access)?
+                .roots
+                .iter()
+                .find(|root| root.id == root_id.to_string())
+                .map_or(0, |root| root.reconciliation_generation)
+        } else {
+            let generation = library.complete_reconciliation_preserving(
+                access, root_id, &observed, &preserved, &skipped,
+            )?;
+            self.ocr_required_files
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(root_id, ocr_required_files.clone());
+            generation
+        };
         let tenant_ids = match access {
             SemanticAccessContext::Host => context
                 .workspace_ids
@@ -400,6 +476,10 @@ impl SemanticIndexingService {
             observed_files,
             ingested_occurrences,
             failed_occurrences,
+            failure_details: failure_details.into_iter().collect(),
+            failure_details_truncated,
+            coverage_details: coverage_details.into_iter().collect(),
+            coverage_details_truncated,
             excluded_occurrences,
             exclusion_details: exclusion_details.into_iter().collect(),
             ocr_required_files,
@@ -446,12 +526,12 @@ impl SemanticIndexingService {
             .library
             .ok_or(SemanticLibraryError::Unavailable)?
             .library_id;
-        let max_source_bytes = status
+        let profile_source_bytes = status
             .resource_profile
             .ok_or(SemanticLibraryError::Unavailable)?
             .budgets
-            .max_source_bytes_per_document
-            .min(MAX_SOURCE_BYTES);
+            .max_source_bytes_per_document;
+        let max_source_bytes = profile_source_bytes.min(MAX_SOURCE_BYTES);
         let workspace_ids = root
             .workspace_references
             .iter()
@@ -471,14 +551,27 @@ impl SemanticIndexingService {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
         semantic.health().await?;
+        let max_pdf_source_bytes = semantic.max_pdf_source_bytes().await?;
+        if !(MAX_SOURCE_BYTES..=fm_semantic_protocol::MAX_PDF_INGESTION_BYTES)
+            .contains(&max_pdf_source_bytes)
+        {
+            return Err(SemanticError::InvalidRequest(
+                "semantic capability advertised an invalid PDF source limit".into(),
+            )
+            .into());
+        }
         Ok((
             RootIngestContext {
                 root_id,
                 library_id,
                 max_source_bytes,
+                max_pdf_source_bytes,
+                profile_source_bytes,
                 workspace_ids,
                 location: root.location,
                 recursive: root.recursive,
+                pdf_images_enabled: root.pdf_images_enabled,
+                pdf_image_page_budget: root.pdf_image_page_budget,
             },
             provider,
             semantic,
@@ -504,37 +597,62 @@ impl SemanticIndexingService {
             semantic,
             cancellation,
         } = request;
-        let bytes =
-            match read_bounded(provider, entry, context.max_source_bytes, cancellation).await {
-                Ok(Some(bytes)) => bytes,
-                Ok(None) => return Ok(EntryIngestOutcome::Oversized),
-                Err(SemanticIndexingError::Provider(error)) if is_entry_local_failure(&error) => {
-                    return Ok(EntryIngestOutcome::Unreadable(error));
-                }
-                Err(error) => return Err(error),
-            };
-        let fingerprint = ContentFingerprint::new(sha256_fingerprint(&bytes))
+        let media_type = media_type(entry).ok_or(SemanticLibraryError::InvalidRequest)?;
+        let source = if media_type == "application/pdf"
+            && context.max_pdf_source_bytes > MAX_SOURCE_BYTES
+            && entry.size.is_none_or(|size| size > MAX_SOURCE_BYTES)
+        {
+            read_pdf_snapshot(
+                provider,
+                entry,
+                context
+                    .profile_source_bytes
+                    .min(context.max_pdf_source_bytes),
+                cancellation,
+            )
+            .await
+            .map(|source| source.map(SourceBytes::Pdf))
+        } else {
+            read_bounded(provider, entry, context.max_source_bytes, cancellation)
+                .await
+                .map(|source| source.map(SourceBytes::Buffered))
+        };
+        let mut source = match source {
+            Ok(Some(source)) => source,
+            Ok(None) => return Ok(EntryIngestOutcome::Oversized),
+            Err(SemanticIndexingError::Provider(error)) if is_entry_local_failure(&error) => {
+                return Ok(EntryIngestOutcome::Unreadable(error));
+            }
+            Err(error) => return Err(error),
+        };
+        let fingerprint = ContentFingerprint::new(source.fingerprint())
             .map_err(|_| SemanticLibraryError::InvalidRequest)?;
         let occurrence_id = library.record_indexing_observation(
             access,
             SemanticIndexingObservation {
                 entry_id: entry.id,
                 location: entry.location.clone(),
-                content_fingerprint: fingerprint,
+                content_fingerprint: fingerprint.clone(),
                 root_id: context.root_id,
                 workspace_ids: context.workspace_ids.clone(),
-                source_bytes: u64::try_from(bytes.len())
-                    .map_err(|_| SemanticIndexingError::LimitExceeded("source bytes"))?,
+                source_bytes: source.len(),
             },
         )?;
 
-        let feed = library.worker_feed_plan(
+        let feed = library.worker_feed_plan_with_pdf_limit(
             access,
             &[SemanticFeedCandidate {
                 root_id: context.root_id,
                 candidate: eligibility_candidate(entry.clone()),
             }],
+            context.max_pdf_source_bytes,
         )?;
+        if feed.eligible_locations.first() != Some(&entry.location) {
+            return Ok(EntryIngestOutcome::Ineligible);
+        }
+        let pdf_images_consented = feed.pdf_images_consented
+            && context.pdf_images_enabled
+            && media_type == "application/pdf";
         let decision = feed
             .decisions
             .into_iter()
@@ -547,11 +665,14 @@ impl SemanticIndexingService {
             occurrence_id,
             ingested: 0,
             failed: 0,
+            failure_details: Vec::new(),
+            coverage_details: Vec::new(),
             excluded: 0,
             exclusion_details: Vec::new(),
             requires_ocr: false,
         };
         for workspace_id in &context.workspace_ids {
+            check_cancelled(cancellation)?;
             let tenant_id = match access {
                 SemanticAccessContext::Host => workspace_id.to_string(),
                 SemanticAccessContext::Server(_) => access.tenant_id()?,
@@ -564,6 +685,25 @@ impl SemanticIndexingService {
             {
                 return Err(SemanticLibraryError::AccessDenied.into());
             }
+            let content = match &mut source {
+                SourceBytes::Buffered(bytes) => FeedContent::Buffered(bytes.clone()),
+                SourceBytes::Pdf(snapshot) => {
+                    snapshot
+                        .file
+                        .seek(SeekFrom::Start(0))
+                        .await
+                        .map_err(|error| {
+                            SemanticIndexingError::Provider(VfsError::Io {
+                                message: error.to_string(),
+                            })
+                        })?;
+                    FeedContent::Pdf {
+                        reader: &mut snapshot.file,
+                        content_bytes: snapshot.len,
+                        content_sha256: snapshot.digest,
+                    }
+                }
+            };
             match ingest_and_wait(
                 semantic,
                 &decision,
@@ -572,18 +712,36 @@ impl SemanticIndexingService {
                     title: entry.name.clone(),
                     root_id: context.root_id,
                     workspace_id: *workspace_id,
-                    media_type: media_type(entry).ok_or(SemanticLibraryError::InvalidRequest)?,
+                    media_type,
+                    pdf_images_consented,
+                    pdf_image_page_budget: pdf_images_consented
+                        .then_some(context.pdf_image_page_budget)
+                        .flatten(),
                     modified_at_ms: entry
                         .modified_at
                         .map_or(0, |value| value.timestamp_millis()),
-                    content: bytes.clone(),
+                    content,
                 },
                 cancellation,
             )
             .await?
             {
-                IngestionOutcome::Completed => report.ingested = report.ingested.saturating_add(1),
-                IngestionOutcome::Failed => report.failed = report.failed.saturating_add(1),
+                IngestionOutcome::Completed(coverage_detail) => {
+                    if let Some(detail) = coverage_detail {
+                        report.coverage_details.push(detail);
+                    }
+                    library.confirm_indexed_observation(
+                        access,
+                        occurrence_id,
+                        &fingerprint,
+                        OccurrenceScope::new(*workspace_id, context.root_id),
+                    )?;
+                    report.ingested = report.ingested.saturating_add(1);
+                }
+                IngestionOutcome::Failed(detail) => {
+                    report.failed = report.failed.saturating_add(1);
+                    report.failure_details.push(detail);
+                }
                 IngestionOutcome::Excluded(detail) => {
                     report.excluded = report.excluded.saturating_add(1);
                     report.requires_ocr |= detail.contains("OCRmyPDF");
@@ -665,12 +823,13 @@ impl SemanticIndexingService {
         annotate_git_ignored(&parent, std::slice::from_mut(&mut entry)).await?;
         // Only remediate files the curated policy would still admit for this
         // root: an unrelated or newly excluded file must never be OCR'd.
-        let plan = library.worker_feed_plan(
+        let plan = library.worker_feed_plan_with_pdf_limit(
             access,
             &[SemanticFeedCandidate {
                 root_id,
                 candidate: eligibility_candidate(entry.clone()),
             }],
+            context.max_pdf_source_bytes,
         )?;
         if plan.eligible_locations.first() != Some(&entry.location) {
             return Ok(SingleFileIngestOutcome::Ineligible);
@@ -688,6 +847,7 @@ impl SemanticIndexingService {
             .await?
         {
             EntryIngestOutcome::Oversized => Ok(SingleFileIngestOutcome::Oversized),
+            EntryIngestOutcome::Ineligible => Ok(SingleFileIngestOutcome::Ineligible),
             EntryIngestOutcome::Unreadable(error) => Err(error.into()),
             EntryIngestOutcome::Ingested(report) => Ok(SingleFileIngestOutcome::Ingested(report)),
         }
@@ -715,9 +875,13 @@ struct RootIngestContext {
     root_id: RootId,
     library_id: String,
     max_source_bytes: u64,
+    max_pdf_source_bytes: u64,
+    profile_source_bytes: u64,
     workspace_ids: Vec<WorkspaceId>,
     location: Location,
     recursive: bool,
+    pdf_images_enabled: bool,
+    pdf_image_page_budget: Option<u32>,
 }
 
 struct EntryIngestRequest<'a> {
@@ -735,6 +899,8 @@ pub(crate) struct EntryIngestReport {
     pub(crate) occurrence_id: OccurrenceId,
     pub(crate) ingested: u64,
     pub(crate) failed: u64,
+    pub(crate) failure_details: Vec<String>,
+    pub(crate) coverage_details: Vec<String>,
     pub(crate) excluded: u64,
     pub(crate) exclusion_details: Vec<String>,
     pub(crate) requires_ocr: bool,
@@ -742,6 +908,7 @@ pub(crate) struct EntryIngestReport {
 
 enum EntryIngestOutcome {
     Oversized,
+    Ineligible,
     Unreadable(VfsError),
     Ingested(EntryIngestReport),
 }
@@ -906,20 +1073,166 @@ async fn read_bounded(
     Ok(Some(bytes))
 }
 
+struct PdfSnapshot {
+    file: tokio::fs::File,
+    len: u64,
+    digest: [u8; 32],
+}
+
+enum SourceBytes {
+    Buffered(Vec<u8>),
+    Pdf(PdfSnapshot),
+}
+
+impl SourceBytes {
+    fn len(&self) -> u64 {
+        match self {
+            Self::Buffered(bytes) => bytes.len() as u64,
+            Self::Pdf(snapshot) => snapshot.len,
+        }
+    }
+
+    fn fingerprint(&self) -> String {
+        match self {
+            Self::Buffered(bytes) => sha256_fingerprint(bytes),
+            Self::Pdf(snapshot) => sha256_fingerprint_digest(&snapshot.digest),
+        }
+    }
+}
+
+async fn read_pdf_snapshot(
+    provider: &dyn FileSystemProvider,
+    entry: &EntrySummary,
+    maximum_bytes: u64,
+    cancellation: &CancellationToken,
+) -> Result<Option<PdfSnapshot>, SemanticIndexingError> {
+    if entry.size.is_some_and(|size| size > maximum_bytes) {
+        return Ok(None);
+    }
+    let deadline = Instant::now() + fm_semantic_protocol::STREAM_DEADLINE;
+    let source = EntryRef {
+        id: entry.id,
+        location: entry.location.clone(),
+    };
+    let mut reader = tokio::select! {
+        () = cancellation.cancelled() => return Err(SemanticIndexingError::Cancelled),
+        () = tokio::time::sleep_until(deadline) =>
+            return Err(SemanticIndexingError::LimitExceeded("PDF source streaming deadline")),
+        result = provider.open_read(&source, cancellation.child_token()) => result?,
+    };
+    let tempfile = tempfile::tempfile().map_err(|error| VfsError::Io {
+        message: error.to_string(),
+    })?;
+    let mut file = tokio::fs::File::from_std(tempfile);
+    let mut digest = Sha256::new();
+    let mut len = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = tokio::select! {
+            () = cancellation.cancelled() => return Err(SemanticIndexingError::Cancelled),
+            () = tokio::time::sleep_until(deadline) =>
+                return Err(SemanticIndexingError::LimitExceeded("PDF source streaming deadline")),
+            result = reader.read(&mut buffer) => result,
+        }
+        .map_err(|error| VfsError::Io {
+            message: error.to_string(),
+        })?;
+        if read == 0 {
+            break;
+        }
+        len = len
+            .checked_add(read as u64)
+            .ok_or(SemanticIndexingError::LimitExceeded("PDF source bytes"))?;
+        if len > maximum_bytes {
+            return Ok(None);
+        }
+        tokio::select! {
+            () = cancellation.cancelled() => return Err(SemanticIndexingError::Cancelled),
+            () = tokio::time::sleep_until(deadline) =>
+                return Err(SemanticIndexingError::LimitExceeded("PDF source streaming deadline")),
+            result = file.write_all(&buffer[..read]) => result,
+        }
+        .map_err(|error| VfsError::Io {
+            message: error.to_string(),
+        })?;
+        digest.update(&buffer[..read]);
+    }
+    check_cancelled(cancellation)?;
+    tokio::time::timeout_at(deadline, file.flush())
+        .await
+        .map_err(|_| SemanticIndexingError::LimitExceeded("PDF source streaming deadline"))?
+        .map_err(|error| VfsError::Io {
+            message: error.to_string(),
+        })?;
+    let digest = digest.finalize().into();
+    Ok(Some(PdfSnapshot { file, len, digest }))
+}
+
+enum FeedContent<'content> {
+    Buffered(Vec<u8>),
+    Pdf {
+        reader: &'content mut tokio::fs::File,
+        content_bytes: u64,
+        content_sha256: [u8; 32],
+    },
+}
+
 struct FeedDocument<'content> {
     tenant_id: String,
     title: String,
     root_id: RootId,
     workspace_id: WorkspaceId,
     media_type: &'content str,
+    pdf_images_consented: bool,
+    pdf_image_page_budget: Option<u32>,
     modified_at_ms: i64,
-    content: Vec<u8>,
+    content: FeedContent<'content>,
 }
 
 enum IngestionOutcome {
-    Completed,
-    Failed,
+    Completed(Option<String>),
+    Failed(String),
     Excluded(String),
+}
+
+struct IngestionDeadline {
+    deadline: Instant,
+    observed_progress: u64,
+}
+
+impl IngestionDeadline {
+    fn new(now: Instant) -> Self {
+        Self {
+            deadline: now + INGESTION_TIMEOUT,
+            observed_progress: 0,
+        }
+    }
+
+    fn expired(&mut self, now: Instant, completed_units: u64, pdf_images_consented: bool) -> bool {
+        if pdf_images_consented && completed_units > self.observed_progress {
+            self.observed_progress = completed_units;
+            self.deadline = now + INGESTION_TIMEOUT;
+        }
+        now >= self.deadline
+    }
+}
+
+fn retain_failure_detail(details: &mut BTreeSet<String>, truncated: &mut bool, detail: &str) {
+    let sanitized = fm_semantic_conversion::sanitize(detail, 0);
+    let bounded = sanitized
+        .text
+        .chars()
+        .take(MAX_FAILURE_DETAIL_CHARS)
+        .collect::<String>();
+    *truncated |= sanitized.removed > 0 || bounded.len() != sanitized.text.len();
+    if details.contains(&bounded) {
+        return;
+    }
+    if details.len() == MAX_FAILURE_DETAILS {
+        *truncated = true;
+        return;
+    }
+    details.insert(bounded);
 }
 
 async fn ingest_and_wait(
@@ -950,22 +1263,49 @@ async fn ingest_and_wait(
         ),
     ]);
     metadata.insert("title".to_owned(), document.title);
-    let job_id = semantic
-        .ingest(DocumentIngestion {
-            scope: scope.clone(),
-            operation_id: operation_id.clone(),
-            document_id: DocumentId::new(decision.document_id().to_string()),
-            metadata,
-            media_type: document.media_type.to_owned(),
-            content: document.content,
-        })
-        .await?;
-    let deadline = Instant::now() + INGESTION_TIMEOUT;
-    loop {
-        if Instant::now() >= deadline {
-            semantic.cancel(operation_id).await?;
-            return Ok(IngestionOutcome::Failed);
+    if let Some(page_budget) = document.pdf_image_page_budget {
+        metadata.insert("pdf_image_page_budget".to_owned(), page_budget.to_string());
+    }
+    let document_id = DocumentId::new(decision.document_id().to_string());
+    let pdf_images_consented =
+        document.pdf_images_consented && document.media_type == "application/pdf";
+    let job_id = match document.content {
+        FeedContent::Buffered(content) => {
+            semantic
+                .ingest(DocumentIngestion {
+                    scope: scope.clone(),
+                    operation_id: operation_id.clone(),
+                    document_id,
+                    metadata,
+                    media_type: document.media_type.to_owned(),
+                    pdf_images_consented,
+                    content,
+                })
+                .await?
         }
+        FeedContent::Pdf {
+            reader,
+            content_bytes,
+            content_sha256,
+        } => {
+            let ingestion = semantic.ingest_pdf_stream(PdfStreamIngestion {
+                scope: scope.clone(),
+                operation_id: operation_id.clone(),
+                document_id,
+                metadata,
+                pdf_images_consented,
+                content_bytes,
+                content_sha256,
+                reader,
+            });
+            tokio::select! {
+                () = cancellation.cancelled() => return Err(SemanticIndexingError::Cancelled),
+                result = ingestion => result?,
+            }
+        }
+    };
+    let mut deadline = IngestionDeadline::new(Instant::now());
+    loop {
         let job = tokio::select! {
             () = cancellation.cancelled() => {
                 semantic.cancel(operation_id).await?;
@@ -974,8 +1314,14 @@ async fn ingest_and_wait(
             result = semantic.ingestion_job(scope.clone(), job_id.clone()) => result?,
         };
         match job.state {
-            SemanticIngestionState::Completed => return Ok(IngestionOutcome::Completed),
-            SemanticIngestionState::Failed => return Ok(IngestionOutcome::Failed),
+            SemanticIngestionState::Completed => {
+                return Ok(IngestionOutcome::Completed(job.detail));
+            }
+            SemanticIngestionState::Failed => {
+                return Ok(IngestionOutcome::Failed(job.detail.unwrap_or_else(|| {
+                    "semantic ingestion failed without a worker reason".to_owned()
+                })));
+            }
             SemanticIngestionState::Skipped => {
                 return Ok(IngestionOutcome::Excluded(job.detail.unwrap_or_else(
                     || "The document was excluded from semantic indexing.".to_owned(),
@@ -985,6 +1331,12 @@ async fn ingest_and_wait(
                 return Err(SemanticIndexingError::Cancelled);
             }
             SemanticIngestionState::Pending | SemanticIngestionState::Running => {
+                if deadline.expired(Instant::now(), job.completed_units, pdf_images_consented) {
+                    semantic.cancel(operation_id).await?;
+                    return Ok(IngestionOutcome::Failed(
+                        "semantic ingestion exceeded the worker deadline".to_owned(),
+                    ));
+                }
                 tokio::select! {
                     () = cancellation.cancelled() => {
                         semantic.cancel(operation_id).await?;
@@ -999,6 +1351,10 @@ async fn ingest_and_wait(
 
 fn sha256_fingerprint(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
+    sha256_fingerprint_digest(&digest.into())
+}
+
+fn sha256_fingerprint_digest(digest: &[u8; 32]) -> String {
     let mut value = String::with_capacity(7 + digest.len() * 2);
     value.push_str("sha256:");
     for byte in digest {
@@ -1013,5 +1369,72 @@ fn check_cancelled(cancellation: &CancellationToken) -> Result<(), SemanticIndex
         Err(SemanticIndexingError::Cancelled)
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod failure_detail_tests {
+    use super::*;
+
+    #[test]
+    fn bounds_distinct_worker_diagnostics_and_preserves_utf8() {
+        let mut details = BTreeSet::new();
+        let mut truncated = false;
+        for index in 0..=MAX_FAILURE_DETAILS {
+            retain_failure_detail(
+                &mut details,
+                &mut truncated,
+                &format!("page {index} failed"),
+            );
+        }
+        assert_eq!(details.len(), MAX_FAILURE_DETAILS);
+        assert!(truncated);
+        let long = "€".repeat(MAX_FAILURE_DETAIL_CHARS + 1);
+        let mut details = BTreeSet::new();
+        let mut truncated = false;
+        retain_failure_detail(&mut details, &mut truncated, &long);
+        assert_eq!(
+            details.iter().next().unwrap().chars().count(),
+            MAX_FAILURE_DETAIL_CHARS
+        );
+        assert!(truncated);
+        let mut details = BTreeSet::new();
+        let mut truncated = false;
+        retain_failure_detail(&mut details, &mut truncated, "page 33\u{202e} image 1");
+        assert_eq!(details.iter().next().unwrap(), "page 33 image 1");
+        assert!(truncated);
+    }
+
+    #[test]
+    fn pdf_image_heartbeat_renews_idle_deadline_without_renewing_stalled_work() {
+        let start = Instant::now();
+        let mut images = IngestionDeadline::new(start);
+        let later = start + INGESTION_TIMEOUT - Duration::from_secs(1);
+        assert!(!images.expired(later, 2, true));
+        assert!(!images.expired(start + INGESTION_TIMEOUT, 2, true));
+        assert!(images.expired(later + INGESTION_TIMEOUT, 2, true));
+
+        let mut text = IngestionDeadline::new(start);
+        assert!(!text.expired(later, 2, false));
+        assert!(text.expired(start + INGESTION_TIMEOUT, 3, false));
+    }
+
+    #[test]
+    fn three_hundred_fifty_four_page_image_job_outlives_five_minutes_but_stalls() {
+        let start = Instant::now();
+        let mut deadline = IngestionDeadline::new(start);
+        for page in 1..=354 {
+            assert!(!deadline.expired(start + Duration::from_secs(page * 28), page, true));
+        }
+        assert!(!deadline.expired(
+            start + Duration::from_secs(354 * 28) + INGESTION_TIMEOUT - Duration::from_millis(1),
+            354,
+            true
+        ));
+        assert!(deadline.expired(
+            start + Duration::from_secs(354 * 28) + INGESTION_TIMEOUT,
+            354,
+            true
+        ));
     }
 }

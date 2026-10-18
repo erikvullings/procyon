@@ -54,6 +54,7 @@ import type { PaneRenameRequest } from '../panes/pane';
 import { isParentEntry, withParentEntry } from '../panes/parent-entry';
 import { PluginPanelHost, type PluginPaneState } from '../plugins/plugin-panel-host';
 import { FileViewer } from '../preview/file-viewer';
+import { fileViewerAttrs } from '../preview/file-viewer-attrs';
 import type { FileViewerController, FileViewerState } from '../preview/file-viewer-controller';
 import { hiddenSelectedEntryCount } from '../quick-filter/quick-filter';
 import { saveSearch } from '../search/saved-searches';
@@ -98,6 +99,7 @@ export interface PaneContentContext {
   // Scalar state getters
   getWorkspace(): WorkspaceProjection | undefined;
   getCurrentSettings(): Settings | undefined;
+  getKnowledgeAnswerRevision(): number;
   getSystemLocations(): readonly SystemLocation[];
   getSystemLocationsError(): string | undefined;
   getVolumes(): readonly Volume[];
@@ -116,8 +118,13 @@ export interface PaneContentContext {
   getNativeDropInProgress(): boolean;
   getAppState(): AppState | undefined;
   getOperations(): readonly Operation[];
+  getContextMenu():
+    | { readonly paneId: PaneId; readonly entries: readonly EntrySummary[] }
+    | undefined;
   /** Revision bumped when the context menu or palette asks this pane to start renaming. */
   getRenameRequest?(paneId: PaneId): PaneRenameRequest | undefined;
+  /** Revision bumped when Cmd/Ctrl+L or the palette asks this pane to edit its path. */
+  getLocationEditRequest?(paneId: PaneId): number | undefined;
   clipboard(): ClipboardState;
 
   // Map state (mutable reference — callers may .get()/.set()/.delete() directly)
@@ -204,14 +211,17 @@ export interface PaneContentContext {
     entry: EntrySummary,
     initialSearch?: InitialSearch,
     openMetadata?: boolean,
+    initialPage?: number,
   ): void;
   closeViewer(paneId: PaneId): void;
   isDocumentSummaryAvailable?(): boolean;
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
   /** Opens search-only knowledge search defaulted to the visible result set (task 0206). */
   openKnowledgeSearch?(): void;
+  openKnowledgeAnswerSettings?(): void;
   closeKnowledgeSearch(paneId: PaneId, tabId: TabId): void;
   openKnowledgeSource(paneId: PaneId, evidence: KnowledgeEvidence): Promise<void>;
+  isKnowledgeSourceOpen(evidence: KnowledgeEvidence): boolean;
   closeEditor(paneId: PaneId): void;
   updateLocationSettings(
     client: FileManagerClient,
@@ -333,9 +343,16 @@ export function createPaneContentBuilder(
         : withParentEntry(pathFromUri(tab.location.uri), filteredFresh);
     }
     const renameRequest = context.getRenameRequest?.(paneId);
+    const locationEditRequest = context.getLocationEditRequest?.(paneId);
     const cursorIndex =
       selection.cursorEntryId === undefined ? undefined : entryIds.indexOf(selection.cursorEntryId);
     const selectedEntryIds = new Set<EntryId>(selection.selectedEntryIds);
+    const menu = context.getContextMenu();
+    const menuEntry = menu?.paneId === paneId ? menu.entries[0] : undefined;
+    const contextTargetEntryId =
+      menu?.entries.length === 1 && menuEntry !== undefined && !selectedEntryIds.has(menuEntry.id)
+        ? menuEntry.id
+        : undefined;
     // While filtering, the true directory total can't be projected past what's loaded and
     // matched so far; otherwise use the backend's real count (plus the synthetic ".." row)
     // so the scrollbar is sized correctly from the very first page, not just once fully loaded.
@@ -489,7 +506,9 @@ export function createPaneContentBuilder(
       actions: context.getRegisteredActions(),
       keybindingOverrides: currentSettings?.keybindings ?? {},
       ...(cursorIndex === undefined || cursorIndex < 0 ? {} : { cursorIndex }),
+      ...(contextTargetEntryId === undefined ? {} : { contextTargetEntryId }),
       ...(renameRequest === undefined ? {} : { renameRequest }),
+      ...(locationEditRequest === undefined ? {} : { locationEditRequest }),
       onNavigate: async (path) => {
         if (tab !== undefined) {
           await context
@@ -561,13 +580,21 @@ export function createPaneContentBuilder(
         tab?.location.uri.startsWith('search://')
           ? context.getNavigation().back(paneId)
           : context.getNavigation().parent(paneId),
-      onOpenEntry: (entry, evidenceQuery) => {
+      onOpenEntry: (entry, evidenceQuery, initialPage) => {
         if (isParentEntry(entry.id)) {
           return tab?.location.uri.startsWith('search://')
             ? context.getNavigation().back(paneId)
             : context.getNavigation().parent(paneId);
         }
         if (tab?.location.uri.startsWith('search://')) {
+          if (initialPage !== undefined) {
+            const otherPaneId = workspace?.paneOrder.find(
+              (candidatePaneId) => candidatePaneId !== paneId,
+            );
+            if (otherPaneId) {
+              return context.openViewer(otherPaneId, entry, undefined, undefined, initialPage);
+            }
+          }
           const initialSearch =
             evidenceQuery === undefined
               ? context.contentSearchInitialQuery(tab.location.uri, entry)
@@ -986,8 +1013,13 @@ export function createPaneContentBuilder(
                       currentFolder: knowledgeSearch.currentFolder,
                       semanticSourceIds: knowledgeSearch.semanticSourceIds,
                       initialSubject: knowledgeSearch.initialSubject,
+                      profileRevision: context.getKnowledgeAnswerRevision(),
+                      ...(context.openKnowledgeAnswerSettings === undefined
+                        ? {}
+                        : { onConfigureAnswers: context.openKnowledgeAnswerSettings }),
                       onClose: () => context.closeKnowledgeSearch(paneId, knowledgeSearch.tabId),
                       onOpenSource: (evidence) => context.openKnowledgeSource(paneId, evidence),
+                      isSourceOpen: context.isKnowledgeSourceOpen,
                     });
                   }
                   const viewer = context.getViewerByTab().get(key);
@@ -1006,80 +1038,41 @@ export function createPaneContentBuilder(
                           action.id === 'core.quickLook' &&
                           action.contextRequirements.featureAvailable !== false,
                       );
-                  return m(FileViewer, {
-                    state: viewer.state,
-                    onLoadMore: () => void viewer.controller.loadMore(),
-                    onLoadPrevious: () => void viewer.controller.loadPrevious(),
-                    onLoadTextPage: (pageIndex) => void viewer.controller.loadTextPage(pageIndex),
-                    onLoadStructuredRows: (startRow) =>
-                      void viewer.controller.loadStructuredRows(startRow),
-                    onStructuredOptionsChange: (delimiter, headerMode) =>
-                      void viewer.controller.setStructuredOptions(delimiter, headerMode),
-                    onSelectStructuredSheet: (sheetName) =>
-                      void viewer.controller.selectStructuredSheet(sheetName),
-                    onToggleStructuredRowNumbers: () =>
-                      viewer.controller.toggleStructuredRowNumbers(),
-                    onLoadJsonWindow: (offset) => void viewer.controller.loadJsonWindow(offset),
-                    onSearchStructuredRows: (query, cursor) =>
-                      void viewer.controller.searchStructuredRows(query, cursor),
-                    onSortStructuredRows: (column) =>
-                      void viewer.controller.sortStructuredRows(column),
-                    onSearchQueryChange: (query) => viewer.controller.setSearchOptions({ query }),
-                    onSearchOptionChange: (patch) => viewer.controller.setSearchOptions(patch),
-                    onRunSearch: () => void viewer.controller.runSearch(),
-                    onNextMatch: () => void viewer.controller.goToNextMatch(),
-                    onPreviousMatch: () => void viewer.controller.goToPreviousMatch(),
-                    onZoomIn: () => viewer.controller.zoomIn(),
-                    onZoomOut: () => viewer.controller.zoomOut(),
-                    onZoomChange: (zoom) => viewer.controller.setZoom(zoom),
-                    onResetZoom: () => viewer.controller.resetZoom(),
-                    onCopy: () => viewer.controller.copyContent(),
-                    onToggleMetadata: () => viewer.controller.toggleMetadataPanel(),
-                    onNextPage: () => viewer.controller.nextPage(),
-                    onPreviousPage: () => viewer.controller.previousPage(),
-                    onPdfSearchQueryChange: (query) => viewer.controller.setPdfSearchQuery(query),
-                    onNextPdfMatch: () => viewer.controller.goToNextPdfMatch(),
-                    onPreviousPdfMatch: () => viewer.controller.goToPreviousPdfMatch(),
-                    onEpubSearchQueryChange: (query) => viewer.controller.setEpubSearchQuery(query),
-                    onNextEpubMatch: () => viewer.controller.goToNextEpubMatch(),
-                    onPreviousEpubMatch: () => viewer.controller.goToPreviousEpubMatch(),
-                    onSelectEpubSection: (sectionIndex, fragment) =>
-                      viewer.controller.goToEpubSection(sectionIndex, fragment),
-                    onFollowEpubLink: (href) => viewer.controller.followEpubLink(href),
-                    onSelectPdfPage: (pageNumber) => viewer.controller.goToPdfPage(pageNumber),
-                    onNavigateTextOffset: (offset, length) =>
-                      viewer.controller.goToTextOffset(offset, length),
-                    onOpenExternalLink: (url) => void client.openExternalUrl(url),
-                    ...(videoPosterDataUri === undefined ? {} : { videoPosterDataUri }),
-                    quickLookAvailable,
-                    onQuickLook: () =>
-                      context.invokeActionById(
-                        'core.quickLook',
-                        { uri: viewer.state.entry.location.uri },
-                        {
-                          paneId,
-                          selectedEntryIds: [viewer.state.entry.id],
-                          cursorEntryId: viewer.state.entry.id,
-                        },
-                      ),
-                    onOpenExternally: () =>
-                      context.invokeActionById(
-                        'core.open',
-                        { uri: viewer.state.entry.location.uri },
-                        {
-                          paneId,
-                          selectedEntryIds: [viewer.state.entry.id],
-                          cursorEntryId: viewer.state.entry.id,
-                        },
-                      ),
-                    ...(context.isDocumentSummaryAvailable?.() === true
-                      ? {
-                          onDocumentSummary: () =>
-                            context.openDocumentSummary?.(paneId, viewer.state.entry),
-                        }
-                      : {}),
-                    onClose: () => context.closeViewer(paneId),
-                  });
+                  return m(
+                    FileViewer,
+                    fileViewerAttrs(viewer.state, viewer.controller, {
+                      openExternalUrl: (url) => void client.openExternalUrl(url),
+                      ...(videoPosterDataUri === undefined ? {} : { videoPosterDataUri }),
+                      quickLookAvailable,
+                      onQuickLook: () =>
+                        context.invokeActionById(
+                          'core.quickLook',
+                          { uri: viewer.state.entry.location.uri },
+                          {
+                            paneId,
+                            selectedEntryIds: [viewer.state.entry.id],
+                            cursorEntryId: viewer.state.entry.id,
+                          },
+                        ),
+                      onOpenExternally: () =>
+                        context.invokeActionById(
+                          'core.open',
+                          { uri: viewer.state.entry.location.uri },
+                          {
+                            paneId,
+                            selectedEntryIds: [viewer.state.entry.id],
+                            cursorEntryId: viewer.state.entry.id,
+                          },
+                        ),
+                      ...(context.isDocumentSummaryAvailable?.() === true
+                        ? {
+                            onDocumentSummary: () =>
+                              context.openDocumentSummary?.(paneId, viewer.state.entry),
+                          }
+                        : {}),
+                      onClose: () => context.closeViewer(paneId),
+                    }),
+                  );
                 })(),
               }
             : {}),

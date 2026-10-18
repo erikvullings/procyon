@@ -9,8 +9,8 @@ use fm_semantic_conversion::{
 use fm_semantic_docling::{DOCLING_PDF_CONVERTER_VERSION, converter_with_baseline_fallback};
 #[cfg(unix)]
 use fm_semantic_docling::{
-    OCRMYPDF_CONVERTER_VERSION, OcrMyPdfAvailability, OcrMyPdfConfiguration, OcrMyPdfConverter,
-    OcrMyPdfRejectionReason, OcrMyPdfVersion,
+    OCRMYPDF_CONVERTER_VERSION, OCRMYPDF_JOBS, OcrMyPdfAvailability, OcrMyPdfConfiguration,
+    OcrMyPdfConverter, OcrMyPdfRejectionReason, OcrMyPdfVersion,
 };
 use lopdf::{Document, Object, Stream, dictionary};
 
@@ -383,6 +383,69 @@ mod ocrmypdf {
             fm_semantic_conversion::ConversionWarning::OcrAssessment { .. }
         )));
         assert_temporary_root_is_empty(temporary_root.path());
+    }
+
+    #[test]
+    fn ocr_launch_caps_page_workers_and_keeps_the_redo_ocr_invocation() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let temporary_root = tempfile::tempdir().expect("OCR temporary root");
+        let searchable = text_pdf(&[&[
+            "Recognized evidence from a single OCR page worker remains searchable.",
+            "Capping parallel page workers must not change the reconverted text layer.",
+        ]]);
+        let executable = recording_executable(directory.path(), &searchable);
+        let converter = ocr_converter(
+            OcrMyPdfConfiguration::new(executable).with_temporary_root(temporary_root.path()),
+        );
+
+        let outcome = convert(&converter, &no_text_pdf(), &ConversionContext::new());
+        let document = outcome.document().expect("OCR-converted document");
+        assert_eq!(document.converter(), OCRMYPDF_CONVERTER_VERSION);
+        assert!(document.units()[0].text.contains("single OCR page worker"));
+
+        let arguments =
+            fs::read_to_string(directory.path().join("arguments")).expect("captured arguments");
+        let arguments = arguments.lines().collect::<Vec<_>>();
+        assert_eq!(OCRMYPDF_JOBS, 1);
+        assert_eq!(
+            arguments[..arguments.len() - 2],
+            [
+                "--output-type",
+                "pdf",
+                "--redo-ocr",
+                "--optimize",
+                "0",
+                "--jobs",
+                "1",
+                "--quiet",
+            ]
+        );
+        assert!(arguments[arguments.len() - 2].ends_with("input.pdf"));
+        assert!(arguments[arguments.len() - 1].ends_with("output.pdf"));
+        assert_temporary_root_is_empty(temporary_root.path());
+    }
+
+    fn recording_executable(root: &Path, fixture: &[u8]) -> PathBuf {
+        fake_executable(
+            root,
+            "cp \"$(dirname \"$0\")/fixture.pdf\" \"$output\"",
+            Some(fixture),
+        );
+        let executable = root.join("recording-ocrmypdf");
+        fs::write(
+            &executable,
+            "#!/bin/sh\n\
+             directory=\"$(dirname \"$0\")\"\n\
+             printf '%s\\n' \"$@\" > \"$directory/arguments\"\n\
+             exec \"$directory/fake-ocrmypdf\" \"$@\"\n",
+        )
+        .expect("write recording OCRmyPDF");
+        let mut permissions = fs::metadata(&executable)
+            .expect("recording metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(&executable, permissions).expect("make recording executable");
+        executable
     }
 
     #[test]

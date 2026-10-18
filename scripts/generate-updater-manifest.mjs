@@ -27,7 +27,14 @@ function releaseUrl(repository, tag, artifact) {
   return `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(basename(artifact))}`;
 }
 
-export function generateUpdaterManifest({ assetsDirectory, repository, tag, version }) {
+export function generateUpdaterManifest({
+  assetsDirectory,
+  repository,
+  tag,
+  version,
+  experimentalGemma = false,
+  gemmaArm64Only = false,
+}) {
   const files = filesBelow(assetsDirectory);
   const macos = oneArtifact(files, /\.app\.tar\.gz$/, 'macOS updater');
   const linux = oneArtifact(files, /\.AppImage$/, 'Linux updater');
@@ -41,7 +48,7 @@ export function generateUpdaterManifest({ assetsDirectory, repository, tag, vers
     version,
     platforms: {
       'darwin-aarch64': macosPlatform,
-      'darwin-x86_64': macosPlatform,
+      ...(!experimentalGemma && !gemmaArm64Only ? { 'darwin-x86_64': macosPlatform } : {}),
       'linux-x86_64': platform(linux),
       'windows-x86_64': platform(windows),
     },
@@ -62,6 +69,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     repository: argument('--repository'),
     tag: argument('--tag'),
     version: argument('--version'),
+    experimentalGemma: process.argv.includes('--experimental-gemma'),
+    gemmaArm64Only: process.argv.includes('--gemma-arm64-only'),
   });
   writeFileSync(output, `${JSON.stringify(manifest, null, 2)}\n`);
 }

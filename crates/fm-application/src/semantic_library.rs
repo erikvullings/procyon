@@ -55,6 +55,8 @@ pub enum SemanticLibraryOperation {
     Resume,
     /// Replace safe per-root eligibility overrides.
     UpdateEligibilityOverrides,
+    /// Change optional Gemma media permissions without changing vector dimensions.
+    UpdateGemmaMedia,
 }
 
 /// Authority and operations exposed by the active semantic-library service.
@@ -317,6 +319,10 @@ pub struct SemanticEnrolmentPreview {
     pub location: Location,
     /// Whether consent is recursive.
     pub recursive: bool,
+    /// Whether this root separately consents to PDF page-image embeddings.
+    pub pdf_images_enabled: bool,
+    /// Per-document page-image budget, or `None` for no cap.
+    pub pdf_image_page_budget: Option<u32>,
     /// Bounded estimate projection.
     pub estimate: SemanticEnrolmentEstimateStatus,
     /// Explicit retention disclosure.
@@ -420,6 +426,10 @@ pub struct SemanticRootStatus {
     pub location: Location,
     /// Whether descendants inherit consent.
     pub recursive: bool,
+    /// Whether this root separately consents to PDF page-image embeddings.
+    pub pdf_images_enabled: bool,
+    /// Per-document page-image budget, or `None` for no cap.
+    pub pdf_image_page_budget: Option<u32>,
     /// Whether the provider supplied stable filesystem identity.
     pub stable_identity_verified: bool,
     /// Workspaces referring to this global consent.
@@ -438,9 +448,12 @@ pub struct SemanticRootStatus {
     pub reconciliation_generation: u64,
     /// Last generation committed to runtime state.
     pub indexed_generation: u64,
-    /// Indexed occurrences already searchable through this root, including
-    /// those recorded by a still-incomplete enumeration.
+    /// Observed occurrences, which may not yet have completed worker ingestion.
     pub indexed_occurrences: u64,
+    /// Worker-completed occurrences per attached workspace, including incomplete passes.
+    pub completed_occurrences_by_workspace: BTreeMap<Uuid, u64>,
+    /// Older occurrences without worker-completion receipts per workspace.
+    pub unverified_legacy_occurrences_by_workspace: BTreeMap<Uuid, u64>,
     /// Explicit descendant/root exclusions.
     pub exclusions: Vec<SemanticExclusionStatus>,
 }
@@ -487,6 +500,8 @@ pub struct SemanticLibraryStatus {
     pub paused: bool,
     /// Stable library/model identity, when configured.
     pub library: Option<SemanticLibraryIdentity>,
+    /// Current optional Gemma media consent; text is always permitted.
+    pub gemma_media: Option<core::GemmaMediaSelection>,
     /// Resource policy, when configured.
     pub resource_profile: Option<SemanticResourceProfile>,
     /// Reconciliation cadence.
@@ -504,6 +519,7 @@ impl SemanticLibraryStatus {
             revision: 0,
             paused: false,
             library: None,
+            gemma_media: None,
             resource_profile: None,
             reconciliation_interval_seconds: None,
             roots: Vec::new(),
@@ -920,6 +936,9 @@ struct ServerAccess {
 struct ManagedSemanticLibrary {
     authority: SemanticLibraryAuthority,
     read_only: bool,
+    /// Joined from another host process that owns and maintains the library,
+    /// so this process must not run even internal reconciliation commits.
+    attached: bool,
     deterministic: bool,
     coordinator: Option<core::SemanticLibraryCoordinator>,
     initial_policy: core::SemanticLibraryPolicy,
@@ -982,6 +1001,38 @@ impl SemanticLibraryService {
                 estimator,
                 None,
             )?)),
+        })
+    }
+
+    /// Opens the desktop host's device-local library read-only from another
+    /// process on the same device, such as an operator-attached `fm-server`.
+    ///
+    /// The desktop host keeps sole ownership: callers may only read status
+    /// and query through the device principal
+    /// ([`SemanticAccessContext::Host`]). Every user mutation is denied by the
+    /// read-only capability set, and internal reconciliation commits — root
+    /// availability, identity observation, reconciliation, and worker feed
+    /// planning — are refused so the attached process never maintains the
+    /// library behind the desktop host's back.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an invalid model identity or resource profile.
+    pub fn desktop_attached_read_only(
+        configuration: SemanticLibraryConfiguration,
+        estimator: Arc<dyn SemanticEnrolmentEstimator>,
+    ) -> Result<Self, SemanticLibraryError> {
+        let mut managed = build_managed(
+            configuration,
+            SemanticLibraryAuthority::DesktopManaged,
+            true,
+            false,
+            estimator,
+            None,
+        )?;
+        managed.attached = true;
+        Ok(Self {
+            backend: SemanticLibraryBackend::Managed(Arc::new(managed)),
         })
     }
 
@@ -1147,7 +1198,7 @@ impl SemanticLibraryService {
                         SemanticLibraryOperation::ViewFolderStatus,
                     ]
                 } else {
-                    vec![
+                    let mut operations = vec![
                         SemanticLibraryOperation::ViewStatus,
                         SemanticLibraryOperation::ViewFolderStatus,
                         SemanticLibraryOperation::PreviewEnrolment,
@@ -1158,7 +1209,17 @@ impl SemanticLibraryService {
                         SemanticLibraryOperation::Pause,
                         SemanticLibraryOperation::Resume,
                         SemanticLibraryOperation::UpdateEligibilityOverrides,
-                    ]
+                    ];
+                    if managed
+                        .initial_policy
+                        .library()
+                        .model()
+                        .gemma_media()
+                        .is_some()
+                    {
+                        operations.push(SemanticLibraryOperation::UpdateGemmaMedia);
+                    }
+                    operations
                 },
             },
         }
@@ -1244,6 +1305,24 @@ impl SemanticLibraryService {
         context: SemanticFolderContext,
         recursive: bool,
     ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
+        self.preview_enrolment_with_pdf_image_policy(access, context, recursive, false, None)
+    }
+
+    /// Creates a bounded enrolment disclosure with an additional, validated
+    /// per-root PDF page-image choice.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, request-validation, lock, or
+    /// persistence failure.
+    pub fn preview_enrolment_with_pdf_image_policy(
+        &self,
+        access: &SemanticAccessContext,
+        context: SemanticFolderContext,
+        recursive: bool,
+        pdf_images_enabled: bool,
+        pdf_image_page_budget: Option<u32>,
+    ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
         self.ensure_operation_allowed(access, SemanticLibraryOperation::PreviewEnrolment)?;
         let managed = self.managed_backend()?;
         managed.authorize(access)?;
@@ -1251,7 +1330,7 @@ impl SemanticLibraryService {
             return Err(SemanticLibraryError::InvalidRequest);
         }
         let mut locked = managed.lock()?;
-        let (existing_root, revision, budgets) = {
+        let (existing_root, revision, budgets, gemma_images_allowed) = {
             let data = locked.data()?;
             data.policy
                 .consent_state(&context.location)
@@ -1264,8 +1343,24 @@ impl SemanticLibraryService {
                     .cloned(),
                 data.policy.revision(),
                 data.policy.resource_profile().budgets,
+                data.policy
+                    .library()
+                    .model()
+                    .gemma_media()
+                    .is_some_and(|media| media.images),
             )
         };
+        let expected_budget = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            None
+        } else {
+            Some(core::CPU_PDF_IMAGE_PAGE_BUDGET)
+        };
+        if (pdf_images_enabled
+            && (!gemma_images_allowed || pdf_image_page_budget != expected_budget))
+            || (!pdf_images_enabled && pdf_image_page_budget.is_some())
+        {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
         let deterministic = managed.deterministic;
         let root_id = match existing_root.as_ref() {
             Some(root) => root.id(),
@@ -1288,6 +1383,8 @@ impl SemanticLibraryService {
                 recursive,
             )
         });
+        root.set_pdf_image_policy(pdf_images_enabled, pdf_image_page_budget)
+            .map_err(map_policy_error)?;
         root.attach_workspace(context.workspace_id);
         let confirmation_id = next_confirmation(&mut locked.cache, deterministic, "enrol");
         locked.cache.enrolment_confirmations.insert(
@@ -1304,6 +1401,8 @@ impl SemanticLibraryService {
             policy_revision: revision,
             location: context.location,
             recursive,
+            pdf_images_enabled,
+            pdf_image_page_budget,
             estimate: project_estimate(&estimate, budgets),
             normalized_excerpts_retained_locally: true,
         })
@@ -1343,10 +1442,16 @@ impl SemanticLibraryService {
             .find(|root| root.location() == &context.location)
             .map(core::EnrolledRoot::id)
         {
-            next.policy
+            let root = next
+                .policy
                 .root_mut(existing)
-                .ok_or(SemanticLibraryError::NotFound)?
-                .attach_workspace(context.workspace_id);
+                .ok_or(SemanticLibraryError::NotFound)?;
+            root.attach_workspace(context.workspace_id);
+            root.set_pdf_image_policy(
+                pending.root.pdf_images_enabled(),
+                pending.root.pdf_image_page_budget(),
+            )
+            .map_err(map_policy_error)?;
             existing
         } else {
             let root_id = pending.root.id();
@@ -1613,6 +1718,41 @@ impl SemanticLibraryService {
         locked.status()
     }
 
+    /// Updates optional Gemma media consent at an optimistic policy revision.
+    ///
+    /// Removals require explicit confirmation. The durable policy is committed
+    /// before returning, so every subsequent feed uses the new permissions.
+    pub fn update_gemma_media(
+        &self,
+        access: &SemanticAccessContext,
+        media: core::GemmaMediaSelection,
+        expected_revision: u64,
+        confirm_removal: bool,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        self.ensure_operation_allowed(access, SemanticLibraryOperation::UpdateGemmaMedia)?;
+        let managed = self.managed_backend()?;
+        managed.authorize(access)?;
+        let mut locked = managed.lock()?;
+        let mut next = locked.checked_data(expected_revision)?.clone();
+        if next.policy.library().model().gemma_media().is_none() {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
+        if !next
+            .policy
+            .set_gemma_media(media, confirm_removal)
+            .map_err(|error| match error {
+                core::PolicyError::MediaRemovalRequiresConfirmation => {
+                    SemanticLibraryError::RemovalRequiresConfirmation
+                }
+                _ => SemanticLibraryError::InvalidRequest,
+            })?
+        {
+            return locked.status();
+        }
+        locked.commit(next, core::LibraryOperation::Enrolment)?;
+        locked.status()
+    }
+
     /// Detaches an *already deleted* workspace while retaining global root
     /// consent and deduplicated content.
     ///
@@ -1694,7 +1834,7 @@ impl SemanticLibraryService {
         root_id: core::RootId,
         reason: core::RootUnavailabilityReason,
     ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
-        let managed = self.managed_backend()?;
+        let managed = self.maintainable_backend()?;
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let mut next = locked.data()?.clone();
@@ -1798,7 +1938,7 @@ impl SemanticLibraryService {
         root_id: core::RootId,
         observations: &[core::ObservedRootIdentity],
     ) -> Result<core::RootMoveResolution, SemanticLibraryError> {
-        let managed = self.managed_backend()?;
+        let managed = self.maintainable_backend()?;
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let mut next = locked.data()?.clone();
@@ -1825,7 +1965,13 @@ impl SemanticLibraryService {
         root_id: core::RootId,
         observed_occurrences: &BTreeSet<core::OccurrenceId>,
     ) -> Result<u64, SemanticLibraryError> {
-        self.complete_reconciliation_preserving(access, root_id, observed_occurrences, &[])
+        self.complete_reconciliation_preserving(
+            access,
+            root_id,
+            observed_occurrences,
+            &[],
+            &BTreeMap::new(),
+        )
     }
 
     /// Commits an enumeration that could not read some entries, retaining
@@ -1840,8 +1986,9 @@ impl SemanticLibraryService {
         root_id: core::RootId,
         observed_occurrences: &BTreeSet<core::OccurrenceId>,
         preserved: &[Location],
+        skipped: &BTreeMap<core::EligibilityReason, u64>,
     ) -> Result<u64, SemanticLibraryError> {
-        let managed = self.managed_backend()?;
+        let managed = self.maintainable_backend()?;
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let mut next = locked.data()?.clone();
@@ -1858,6 +2005,12 @@ impl SemanticLibraryService {
         next.state
             .record_indexed_generation(root_id, generation)
             .map_err(|_| SemanticLibraryError::InvalidRequest)?;
+        next.state.set_eligibility_reason_counts(
+            root_id,
+            core::EligibilityReasonCounts::from_counts(
+                skipped.iter().map(|(reason, count)| (*reason, *count)),
+            ),
+        );
         locked.commit(next, core::LibraryOperation::Reconciliation)?;
         Ok(generation)
     }
@@ -1884,13 +2037,32 @@ impl SemanticLibraryService {
         access: &SemanticAccessContext,
         candidates: &[SemanticFeedCandidate],
     ) -> Result<SemanticWorkerFeedPlan, SemanticLibraryError> {
-        let managed = self.managed_backend()?;
+        self.worker_feed_plan_with_pdf_limit(
+            access,
+            candidates,
+            crate::semantic_indexing::MAX_SOURCE_BYTES,
+        )
+    }
+
+    pub(crate) fn worker_feed_plan_with_pdf_limit(
+        &self,
+        access: &SemanticAccessContext,
+        candidates: &[SemanticFeedCandidate],
+        max_pdf_source_bytes: u64,
+    ) -> Result<SemanticWorkerFeedPlan, SemanticLibraryError> {
+        if !(crate::semantic_indexing::MAX_SOURCE_BYTES
+            ..=fm_semantic_protocol::MAX_PDF_INGESTION_BYTES)
+            .contains(&max_pdf_source_bytes)
+        {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
+        let managed = self.maintainable_backend()?;
         managed.authorize(access)?;
         let tenant = managed.tenant_for(access)?;
         let mut locked = managed.lock()?;
         let data = locked.data()?;
         let mut policy = core::EligibilityPolicy::curated_defaults();
-        if let Some(media) = data.policy.library().model().gemma_media() {
+        if let Some(media) = data.policy.gemma_media() {
             policy = policy.with_gemma_media(media);
         }
         let budgets = data.policy.resource_profile().budgets;
@@ -1898,6 +2070,15 @@ impl SemanticLibraryService {
         let mut eligible = Vec::new();
         let mut decisions = Vec::new();
         for candidate in candidates {
+            let mut candidate_budgets = budgets;
+            candidate_budgets.max_source_bytes_per_document =
+                candidate_budgets.max_source_bytes_per_document.min(
+                    if candidate.candidate.mime_type.as_deref() == Some("application/pdf") {
+                        max_pdf_source_bytes
+                    } else {
+                        crate::semantic_indexing::MAX_SOURCE_BYTES
+                    },
+                );
             let root = data
                 .policy
                 .root(candidate.root_id)
@@ -1917,7 +2098,7 @@ impl SemanticLibraryService {
                 .evaluate(
                     root.location(),
                     &candidate.candidate,
-                    &budgets,
+                    &candidate_budgets,
                     usage,
                     root.eligibility_overrides(),
                 )
@@ -1937,6 +2118,7 @@ impl SemanticLibraryService {
         };
         Ok(SemanticWorkerFeedPlan {
             paused,
+            pdf_images_consented: data.policy.gemma_media().is_some_and(|media| media.images),
             decisions: worker_decisions,
             eligible_locations: eligible,
             skipped_reason_counts: reason_counts(&core::EligibilityReasonCounts::from_decisions(
@@ -2006,6 +2188,33 @@ impl SemanticLibraryService {
         Ok(occurrence_id)
     }
 
+    /// Persists a scope-bound receipt after the worker confirms ingestion.
+    pub(crate) fn confirm_indexed_observation(
+        &self,
+        access: &SemanticAccessContext,
+        occurrence_id: core::OccurrenceId,
+        fingerprint: &core::ContentFingerprint,
+        scope: core::OccurrenceScope,
+    ) -> Result<(), SemanticLibraryError> {
+        let managed = self.managed_backend()?;
+        managed.authorize(access)?;
+        let mut locked = managed.lock()?;
+        let mut next = locked.data()?.clone();
+        if next
+            .catalog
+            .authorized_occurrence(&next.policy, scope.workspace_id(), occurrence_id)
+            .map_err(|_| SemanticLibraryError::InvalidRequest)?
+            .is_none()
+            || !next
+                .catalog
+                .confirm_indexed(occurrence_id, fingerprint, scope)
+        {
+            return Err(SemanticLibraryError::InvalidRequest);
+        }
+        locked.commit(next, core::LibraryOperation::Reconciliation)?;
+        Ok(())
+    }
+
     /// Resolves one path-free worker source against the current host catalog.
     ///
     /// Authorization and consent are rechecked at activation time so a stale
@@ -2024,6 +2233,7 @@ impl SemanticLibraryService {
         managed.authorize(access)?;
         let mut locked = managed.lock()?;
         let data = locked.data()?;
+        let mut authorized_root_id = None;
         let occurrence = if matches!(access, SemanticAccessContext::Host) {
             let candidate = data
                 .catalog
@@ -2037,6 +2247,7 @@ impl SemanticLibraryService {
                         .authorized_occurrence(&data.policy, scope.workspace_id(), occurrence_id)
                         .map_err(|_| SemanticLibraryError::InvalidRequest)?
                     {
+                        authorized_root_id = Some(scope.root_id());
                         authorized = Some(occurrence);
                         break;
                     }
@@ -2051,9 +2262,20 @@ impl SemanticLibraryService {
         let Some(occurrence) = occurrence else {
             return Ok(None);
         };
+        let root_id = if matches!(access, SemanticAccessContext::Host) {
+            authorized_root_id.ok_or(SemanticLibraryError::NotFound)?
+        } else {
+            occurrence
+                .scopes()
+                .iter()
+                .find(|scope| scope.workspace_id() == workspace_id)
+                .map(|scope| scope.root_id())
+                .ok_or(SemanticLibraryError::NotFound)?
+        };
         Ok(Some(ResolvedSemanticOccurrence {
             entry_id: occurrence.entry_id(),
             location: occurrence.location().clone(),
+            root_id,
             available: data.catalog.source_availability(occurrence_id)
                 == Some(core::SourceAvailability::Available),
         }))
@@ -2129,20 +2351,17 @@ impl SemanticLibraryService {
     /// Resolves a user-visible Structured Knowledge scope into current
     /// authorization.
     ///
-    /// A desktop whole-library search spans every workspace tenant that still
-    /// owns indexed occurrences. The device library outlives individual
-    /// workspaces, so replacing a workspace must not orphan its indexed roots.
-    /// Server callers remain confined to their authenticated tenant.
+    /// Knowledge search stays within the requested workspace, including an
+    /// explicit whole-library selection; roots in other workspaces remain
+    /// available to those workspaces without joining this search.
     pub(crate) fn resolve_knowledge_scope(
         &self,
         access: &SemanticAccessContext,
         workspace_id: WorkspaceId,
         selection: &RagScopeSelection,
     ) -> Result<ResolvedKnowledgeScope, SemanticLibraryError> {
-        let cross_workspace = matches!(access, SemanticAccessContext::Host)
-            && matches!(selection, RagScopeSelection::EntireLibrary);
-        let sources =
-            self.resolve_scope_sources(access, workspace_id, selection, cross_workspace)?;
+        let sources = self.resolve_scope_sources(access, workspace_id, selection, false)?;
+        let media = self.status(access)?.gemma_media;
         Ok(ResolvedKnowledgeScope {
             filters: QueryFilters {
                 tenant_id: sources.tenant_id,
@@ -2153,7 +2372,7 @@ impl SemanticLibraryService {
                 // are written per ingesting workspace, so a workspace filter
                 // there could hide evidence that is authorized through a later
                 // co-enrolment; the exact source restriction covers that case.
-                workspace_id: (matches!(access, SemanticAccessContext::Host) && !cross_workspace)
+                workspace_id: matches!(access, SemanticAccessContext::Host)
                     .then(|| workspace_id.to_string()),
                 include_unavailable: true,
                 ..QueryFilters::default()
@@ -2173,6 +2392,7 @@ impl SemanticLibraryService {
             fingerprints: sources.fingerprints,
             titles: sources.titles,
             eligible: sources.eligible,
+            media,
         })
     }
 
@@ -2385,6 +2605,17 @@ impl SemanticLibraryService {
         self.resolved_backend()
             .ok_or(SemanticLibraryError::Unavailable)
     }
+
+    /// Resolves a backend this process may maintain with internal
+    /// reconciliation commits; an attached library is maintained only by the
+    /// host process that owns it.
+    fn maintainable_backend(&self) -> Result<Arc<ManagedSemanticLibrary>, SemanticLibraryError> {
+        let managed = self.managed_backend()?;
+        if managed.attached {
+            return Err(SemanticLibraryError::AccessDenied);
+        }
+        Ok(managed)
+    }
 }
 
 /// One host-enumerated entry offered to the semantic feed.
@@ -2411,6 +2642,8 @@ pub(crate) struct SemanticIndexingObservation {
 pub struct SemanticWorkerFeedPlan {
     /// Whether ingestion is paused; queries still use existing generations.
     pub paused: bool,
+    /// Immutable library image consent for PDF visual ingestion; false for E5.
+    pub pdf_images_consented: bool,
     /// Path-free decisions the host may send to the isolated worker.
     pub decisions: Vec<core::WorkerFeedDecision>,
     /// Candidate locations the curated policy admitted, retained by the host.
@@ -2424,6 +2657,7 @@ pub struct SemanticWorkerFeedPlan {
 pub(crate) struct ResolvedSemanticOccurrence {
     pub(crate) entry_id: fm_domain::EntryId,
     pub(crate) location: Location,
+    pub(crate) root_id: core::RootId,
     pub(crate) available: bool,
 }
 
@@ -2493,6 +2727,8 @@ pub(crate) struct ResolvedKnowledgeScope {
     pub(crate) fingerprints: HashMap<String, String>,
     pub(crate) titles: HashMap<String, String>,
     pub(crate) eligible: u64,
+    /// Current optional media permissions for evidence projection.
+    pub(crate) media: Option<core::GemmaMediaSelection>,
 }
 
 fn semantic_worker_tenant(
@@ -2581,7 +2817,7 @@ mod tenant_tests {
     }
 
     #[test]
-    fn desktop_entire_library_knowledge_scope_survives_workspace_replacement() {
+    fn desktop_knowledge_scopes_exclude_other_workspaces() {
         let service = SemanticLibraryService::deterministic_mock();
         let enrolled_workspace = WorkspaceId::new();
         let other_workspace = WorkspaceId::new();
@@ -2654,9 +2890,8 @@ mod tenant_tests {
         assert!(authorized.unavailable_source_ids.is_empty());
         assert_eq!(authorized.eligible, 1);
 
-        // The device library outlives individual workspaces. Replacing the
-        // workspace must not orphan already indexed roots from a host-wide
-        // "entire library" search.
+        // Even an explicit whole-library Knowledge scope cannot search a root
+        // that belongs only to another workspace.
         let foreign = service
             .resolve_knowledge_scope(
                 &SemanticAccessContext::Host,
@@ -2664,12 +2899,25 @@ mod tenant_tests {
                 &RagScopeSelection::EntireLibrary,
             )
             .unwrap();
-        assert_eq!(foreign.filters.tenant_id, enrolled_workspace.to_string());
-        assert_eq!(foreign.filters.workspace_id, None);
-        assert!(foreign.additional_tenant_ids.is_empty());
+        assert_eq!(foreign.filters.tenant_id, other_workspace.to_string());
         assert_eq!(
-            foreign.allowed_source_ids,
-            BTreeSet::from([occurrence_id.to_string()])
+            foreign.filters.workspace_id,
+            Some(other_workspace.to_string())
+        );
+        assert!(foreign.additional_tenant_ids.is_empty());
+        assert!(foreign.allowed_source_ids.is_empty());
+        assert_eq!(foreign.eligible, 0);
+        let own_library = service
+            .resolve_knowledge_scope(
+                &SemanticAccessContext::Host,
+                enrolled_workspace,
+                &RagScopeSelection::EntireLibrary,
+            )
+            .unwrap();
+        assert!(
+            own_library
+                .allowed_source_ids
+                .contains(&occurrence_id.to_string())
         );
         let opened = service
             .resolve_occurrence(
@@ -2679,6 +2927,7 @@ mod tenant_tests {
             )
             .unwrap()
             .expect("host-wide evidence remains openable after workspace replacement");
+        assert_eq!(opened.root_id, root_id);
         assert_eq!(opened.location.uri, "file:///semantic-library/turbines.md");
 
         // A root enrolled through another workspace cannot be named as a scope.
@@ -2817,6 +3066,7 @@ fn build_managed(
     Ok(ManagedSemanticLibrary {
         authority,
         read_only,
+        attached: false,
         deterministic,
         coordinator: (!deterministic).then(|| {
             core::SemanticLibraryCoordinator::new(
@@ -3358,6 +3608,7 @@ fn project_status(data: &LibraryData) -> SemanticLibraryStatus {
                 embedding_space: model.embedding_space().to_owned(),
             },
         }),
+        gemma_media: data.policy.gemma_media(),
         resource_profile: Some(SemanticResourceProfile {
             kind: data.policy.resource_profile().kind,
             budgets: data.policy.resource_profile().budgets,
@@ -3382,6 +3633,8 @@ fn project_root(
         id: root.id().to_string(),
         location: root.location().clone(),
         recursive: root.recursive(),
+        pdf_images_enabled: root.pdf_images_enabled(),
+        pdf_image_page_budget: root.pdf_image_page_budget(),
         stable_identity_verified: root.filesystem_identity().is_some(),
         workspace_references: root
             .workspace_references()
@@ -3416,6 +3669,36 @@ fn project_root(
         indexed_generation: data.state.indexed_generation(root.id()),
         indexed_occurrences: u64::try_from(data.catalog.root_occurrence_count(root.id()))
             .unwrap_or(u64::MAX),
+        completed_occurrences_by_workspace: root
+            .workspace_references()
+            .iter()
+            .map(|workspace_id| {
+                (
+                    Uuid::from(*workspace_id),
+                    u64::try_from(
+                        data.catalog
+                            .root_completed_count(core::OccurrenceScope::new(
+                                *workspace_id,
+                                root.id(),
+                            )),
+                    )
+                    .unwrap_or(u64::MAX),
+                )
+            })
+            .collect(),
+        unverified_legacy_occurrences_by_workspace: root
+            .workspace_references()
+            .iter()
+            .map(|workspace_id| {
+                (
+                    Uuid::from(*workspace_id),
+                    u64::try_from(data.catalog.root_unverified_legacy_count(
+                        core::OccurrenceScope::new(*workspace_id, root.id()),
+                    ))
+                    .unwrap_or(u64::MAX),
+                )
+            })
+            .collect(),
         exclusions: root
             .exclusions()
             .iter()
@@ -3673,6 +3956,9 @@ pub enum SemanticLibraryError {
     /// Request data is malformed or violates policy.
     #[error("semantic library request is invalid")]
     InvalidRequest,
+    /// The caller did not explicitly confirm removing a currently enabled modality.
+    #[error("removing Gemma media consent requires confirmation")]
+    RemovalRequiresConfirmation,
     /// The supplied workspace is not attached to the active root.
     #[error("an active workspace/root is required")]
     WorkspaceRequired,
@@ -3756,6 +4042,14 @@ pub(crate) enum SemanticLibraryComposition {
         configuration_directory: PathBuf,
         resolved: tokio::sync::Mutex<Option<(DesktopCompositionKey, Arc<SemanticLibraryService>)>>,
     },
+    /// The desktop host's library, opened read-only by another process from
+    /// the desktop profile's durable component state (no catalog, worker
+    /// launch, or component authority is needed or granted).
+    AttachedDesktop {
+        profile_directory: PathBuf,
+        accessible_roots: Vec<PathBuf>,
+        resolved: tokio::sync::Mutex<Option<(DesktopCompositionKey, Arc<SemanticLibraryService>)>>,
+    },
 }
 
 /// Choices permanently bound to a separately initialized Gemma library.
@@ -3765,6 +4059,10 @@ pub struct GemmaLibrarySetup {
     pub dimensions: u32,
     /// Fixed media permissions.
     pub media: core::GemmaMediaSelection,
+    /// Default page-image device selected by the signed worker target.
+    pub image_device: &'static str,
+    /// Default CPU page-image budget; absent for the Metal target.
+    pub pdf_image_page_budget: Option<u32>,
 }
 
 impl SemanticLibraryComposition {
@@ -3803,9 +4101,22 @@ impl SemanticLibraryComposition {
                 let model = policy.library().model();
                 Ok(GemmaLibrarySetup {
                     dimensions: model.dimensions(),
-                    media: model
+                    media: policy
                         .gemma_media()
                         .ok_or(SemanticLibraryError::IncompatibleLibraryIdentity)?,
+                    image_device: if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+                        "metal"
+                    } else {
+                        "cpu"
+                    },
+                    pdf_image_page_budget: if cfg!(all(
+                        target_os = "macos",
+                        target_arch = "aarch64"
+                    )) {
+                        None
+                    } else {
+                        Some(core::CPU_PDF_IMAGE_PAGE_BUDGET)
+                    },
                 })
             })
             .transpose()
@@ -3915,6 +4226,22 @@ impl SemanticLibraryComposition {
         Self::Fixed(Arc::new(service))
     }
 
+    /// Whether this host is read-only attached to a desktop app's library.
+    pub(crate) const fn is_attached_desktop(&self) -> bool {
+        matches!(self, Self::AttachedDesktop { .. })
+    }
+
+    pub(crate) fn attached_desktop(
+        profile_directory: impl Into<PathBuf>,
+        accessible_roots: Vec<PathBuf>,
+    ) -> Self {
+        Self::AttachedDesktop {
+            profile_directory: profile_directory.into(),
+            accessible_roots,
+            resolved: tokio::sync::Mutex::new(None),
+        }
+    }
+
     pub(crate) async fn resolve(
         &self,
         components: &crate::semantic_components::SemanticComponentService,
@@ -3958,8 +4285,160 @@ impl SemanticLibraryComposition {
                 }
                 service
             }
+            Self::AttachedDesktop {
+                profile_directory,
+                accessible_roots,
+                resolved,
+            } => {
+                let mut resolved = resolved.lock().await;
+                let Some(key) = attached_desktop_composition_key(profile_directory) else {
+                    *resolved = None;
+                    return Arc::new(SemanticLibraryService::unavailable());
+                };
+                let service = match resolved.as_ref() {
+                    Some((cached_key, service)) if *cached_key == key => Arc::clone(service),
+                    _ => match attached_desktop_library(&key, profile_directory) {
+                        Some(service) => {
+                            let service = Arc::new(service);
+                            *resolved = Some((key, Arc::clone(&service)));
+                            service
+                        }
+                        None => {
+                            *resolved = None;
+                            return Arc::new(SemanticLibraryService::unavailable());
+                        }
+                    },
+                };
+                // Re-checked on every use because the desktop may enrol more
+                // roots at any time: the library is exposed only while all of
+                // it lies inside this host's accessible roots.
+                if attached_roots_are_accessible(&service, accessible_roots) {
+                    service
+                } else {
+                    tracing::warn!(
+                        "attached desktop semantic library has roots outside the accessible roots; \
+                         reporting it unavailable"
+                    );
+                    Arc::new(SemanticLibraryService::unavailable())
+                }
+            }
         }
     }
+}
+
+/// Reads the desktop profile's durable component state without recovering,
+/// installing, or activating anything.
+///
+/// The desktop host shares one directory for configuration and app data, so
+/// the profile directory is both the component-state parent and the default
+/// semantic-data root parent.
+fn attached_desktop_composition_key(
+    profile_directory: &std::path::Path,
+) -> Option<DesktopCompositionKey> {
+    let state = fm_semantic_components::SemanticStateStore::new(
+        profile_directory.join("semantic-components"),
+    )
+    .read_without_recovery(profile_directory)
+    .map_err(|error| {
+        tracing::debug!(%error, "attached desktop semantic component state is unavailable");
+    })
+    .ok()??;
+    let active = state.active_model()?;
+    Some(DesktopCompositionKey {
+        data_root: state.data_root().path().to_path_buf(),
+        model_id: active.identity().model_id().as_str().to_owned(),
+        model_revision: active.identity().revision().as_str().to_owned(),
+    })
+}
+
+/// Returns the desktop worker runtime directory below the profile's configured
+/// semantic-data root, defaulting like the desktop host when no component
+/// state has been persisted yet.
+pub(crate) fn attached_desktop_runtime_directory(profile_directory: &std::path::Path) -> PathBuf {
+    attached_desktop_composition_key(profile_directory).map_or_else(
+        || {
+            fm_semantic_components::SemanticDataRoot::from_app_data(profile_directory)
+                .path()
+                .join("worker-runtime")
+        },
+        |key| key.data_root.join("worker-runtime"),
+    )
+}
+
+/// Whether every enrolled root of an attached library is a local folder inside
+/// one of the host's canonical accessible roots. An empty allowlist means the
+/// host is unrestricted, exactly as for its file routes.
+fn attached_roots_are_accessible(
+    service: &SemanticLibraryService,
+    accessible_roots: &[PathBuf],
+) -> bool {
+    if accessible_roots.is_empty() {
+        return true;
+    }
+    let Ok(status) = service.status(&SemanticAccessContext::Host) else {
+        return false;
+    };
+    status.roots.iter().all(|root| {
+        // A root that cannot be resolved (missing, renamed, or unreadable)
+        // cannot be proven inside the allowlist, so it fails closed.
+        root.location
+            .to_native_path()
+            .ok()
+            .and_then(|path| path.canonicalize().ok())
+            .is_some_and(|path| {
+                accessible_roots
+                    .iter()
+                    .any(|allowed| path.starts_with(allowed))
+            })
+    })
+}
+
+/// Opens the desktop's persisted library for the active model read-only.
+///
+/// Only an existing, consented policy whose embedding identity matches the
+/// desktop's active model is opened; nothing is created or migrated.
+fn attached_desktop_library(
+    key: &DesktopCompositionKey,
+    profile_directory: &std::path::Path,
+) -> Option<SemanticLibraryService> {
+    let (configuration_directory, semantic_data_root) = if key.model_id == "google-embeddinggemma-2"
+    {
+        (
+            profile_directory.join("semantic-library-gemma"),
+            key.data_root.join("library-gemma"),
+        )
+    } else {
+        (
+            profile_directory.to_path_buf(),
+            key.data_root.join("library"),
+        )
+    };
+    // Loading an absent library creates its directories; an attached host
+    // must not create anything before the desktop has persisted consent.
+    if !std::fs::symlink_metadata(configuration_directory.join(core::POLICY_FILE_NAME))
+        .is_ok_and(|metadata| metadata.is_file())
+    {
+        return None;
+    }
+    let policy =
+        core::SemanticLibraryCoordinator::new(&configuration_directory, &semantic_data_root)
+            .load()
+            .ok()?
+            .policy;
+    let model = policy.library().model();
+    if model.model_id() != key.model_id || model.revision() != key.model_revision {
+        return None;
+    }
+    SemanticLibraryService::desktop_attached_read_only(
+        SemanticLibraryConfiguration::new(
+            configuration_directory,
+            semantic_data_root,
+            policy.library().clone(),
+            policy.resource_profile().clone(),
+        ),
+        Arc::new(LocalSemanticEnrolmentEstimator),
+    )
+    .ok()
 }
 
 /// Returns the authoritative composition inputs, or `None` when no desktop

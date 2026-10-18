@@ -22,8 +22,9 @@ collection basket gathers files across folders and providers.
 | **Handle large collections** | Virtualized lists tested with one million entries, grid view, thumbnails, folder grouping, sorting, Git status, and disk-usage treemaps |
 | **Move data safely** | Cancellable and resumable copy, move, rename, duplicate, trash, archive, and synchronization jobs with explicit conflict handling |
 | **Work across providers** | Local files, SFTP, FTP/FTPS, WebDAV, S3-compatible storage, OneDrive, archives, and mounted network volumes |
-| **Inspect files in place** | Fast text, image, video, PDF, archive, CSV, JSON, Excel, DOCX, and PPTX previews plus an integrated text editor |
-| **Adapt the workflow** | Configurable shortcuts, light and dark themes, native platform actions, and resource-limited Lua and JavaScript plugins |
+| **Inspect files in place** | Fast text with syntax highlighting for 40+ languages, hex dumps of binary files, SQLite databases (browse, search, filter, read-only SQL), image, video, PDF, archive, CSV/TSV, JSON, Excel, DOCX, and PPTX previews plus an integrated text editor |
+| **Search by meaning and ask** | Optional local-only semantic search, enabled with consent per folder and powered by multilingual E5 by default. Knowledge search finds relevant passages; Ask produces retrieval-augmented answers with page-level citations. EmbeddingGemma 2 is an opt-in alternative for image, audio, and video indexing; the v0.6.0 release is risk-accepted, not five-gate qualified, and CPU-only PDF page-image indexing is capped and slow. |
+| **Adapt the workflow** | Configurable shortcuts, light and dark themes, native platform actions, an optional separate viewer window, and resource-limited Lua and JavaScript plugins |
 
 Procyon never implements file mutations in the frontend. Every operation goes through the same
 typed Rust engine, whether the app is running through Tauri, Axum, or the in-process mock client.
@@ -160,6 +161,15 @@ space for the catalog and installed copies; the UI discloses an 8 GiB RAM
 estimate. The model download may require access to Google's gated Hugging Face
 repository. To build the bundle without launching Tauri, run
 `pnpm semantic:bundle:dev --gemma`.
+On macOS arm64, `pnpm dev:tauri:semantic:gemma:metal` instead compiles the
+experimental image-only Metal path; the worker selects Metal automatically
+when a device is available and falls back to CPU for unavailable devices or
+mixed image/audio/video libraries. Audio and video are CPU-only.
+EmbeddingGemma 2 ships in v0.6.0 as an opt-in, risk-accepted package. It has
+not passed the repository's five-gate installed-app qualification; see the
+[release risk and limitations](docs/evaluations/embeddinggemma-risk-accepted-release-2026-10-18.md).
+E5 remains the default. On CPU-only machines, PDF page-image indexing is capped
+and slow; PDF text remains indexed.
 
 In the desktop, open **Settings → Semantic components**, choose **EmbeddingGemma
 2 (optional)**, select 128/256/512/768 dimensions and the desired image, audio,
@@ -169,10 +179,21 @@ The signed offer loads automatically; individual artifact files are available un
 activates the separately initialized Gemma library. Open the folder
 you want to compare in a pane; in **Settings → Semantic library**, review its
 inclusion and choose **Include and index folder**. Once indexing progresses,
-search or Ask within the indexed folder. The selected dimensions and media
-permissions cannot be changed for that Gemma library. Existing E5 data is not
-deleted; no migration or representative quality result is implied by this
-development bundle. Standard release builds remain Gemma-disabled. Included
+search or Ask within the indexed folder. The selected embedding dimension is
+locked for that Gemma library; image, audio, and video consent can be changed
+later in Settings, with explicit confirmation before removing indexed data.
+Existing E5 data is not deleted; no migration or representative quality result
+is implied by this development bundle. In v0.6.0, Gemma is opt-in in macOS
+Apple Silicon (arm64), Linux x86-64, and Windows x86-64 desktop packages;
+Intel Macs remain E5-only. Gemma uses a separate signed updater channel and
+does not replace the regular E5 build. Windows GPU behavior and CPU
+performance have not been qualified; report issues with platform and hardware
+details.
+Standard release builds remain Gemma-disabled unless the release owner records
+the required risk acceptance and approves a **new**, signed Gemma candidate.
+The desktop release compiles `semantic-gemma` and fetches that candidate's
+reviewed, signed target catalog. E5 stays the default, and Gemma search quality
+is not established. Included
 folders can be removed directly from **Settings → Semantic library**, even when
 their sources are unavailable; confirm the displayed cleanup inventory to
 remove their local index data without deleting original files. Moving, deleting,
@@ -217,13 +238,22 @@ Procyon uses **Cmd** as the primary modifier on macOS and **Ctrl** on Windows an
 | Trash | `F8` or `Delete` |
 | Rename | `F2` |
 | Command palette | `Cmd/Ctrl+P` |
-| Focus location | `Cmd/Ctrl+L` |
+| Edit location path | `Cmd/Ctrl+L` or double-click the breadcrumb |
 | Quick filter | `Cmd/Ctrl+F` |
 | Find files | `Option/Alt+F7` |
 | Toggle directory tree | `Option/Alt+F10` |
 | Disk usage | `Cmd/Ctrl+Shift+L` |
 | Embedded terminal | `Ctrl+Backtick` or `F12` |
 | Shortcut reference | `F1` |
+
+The quick filter matches plain text anywhere in a name. Use `*` and `?` for a glob that must match
+the whole name, and `;` to combine masks, such as `*.jpg;*.png`. Press `Esc` or the clear button to
+remove the filter. While the filter box has focus, `Cmd/Ctrl+C` and `Cmd/Ctrl+X` copy or cut the
+selected files when no filter text is selected.
+
+The location editor accepts absolute paths, `~` or `~/...` for your home folder, and a file path
+(which opens its folder). Pasted paths are cleaned up: surrounding whitespace, backticks or code
+fences, and single or double quotes are removed, and a Markdown-escaped `\~` is read as `~`.
 
 Disk usage scans the active directory in a transient tab in the other pane. Selecting a
 treemap folder opens it in the original pane while zooming the treemap; selecting a file
@@ -235,6 +265,14 @@ table entries can also be dropped onto tree folders. A valid target is outlined.
 default; hold Command or Option on macOS, or Control on Windows/Linux, to copy instead. The
 ordinary operation confirmation and conflict handling still apply. Use Cut/Copy and Paste for
 the keyboard equivalent.
+
+In the desktop app, `Cmd/Ctrl+C` and `Cmd/Ctrl+X` on local files also put them on the system
+clipboard, so they can be pasted in Finder, Explorer or a Linux file manager (best effort, X11).
+A cut is offered to other applications as a copy; only Procyon's own paste moves the files.
+Remote or archive entries stay on Procyon's internal clipboard and are never downloaded. Files
+copied in the system file manager can be pasted into a pane with `Cmd/Ctrl+V`, which runs a
+normal copy job with the usual conflict handling. The browser host cannot access file references
+on the system clipboard, so there copy and paste work within Procyon only.
 
 The in-app `F1` reference is the authoritative list. Browser-reserved shortcuts may only be
 available in the desktop app. The
@@ -323,6 +361,16 @@ macOS releases are signed and notarized. Windows releases are currently unsigned
 Microsoft Defender SmartScreen warning. Desktop builds verify signed update artifacts before
 installation. Automatic checks can be disabled in Settings; checks never download, install, or
 restart without user confirmation, and a manual **Check now** action remains available.
+The v0.6.0 opt-in Gemma macOS package is **Apple Silicon (arm64) only**; it
+cannot run on Intel Macs. Gemma is also available in the Linux x86-64 and
+Windows x86-64 installers. Its signed updater uses a separate Gemma channel.
+The regular non-Gemma universal macOS build and Homebrew cask remain available
+to Intel users; the Gemma package is downloaded directly from its GitHub
+Release and does not replace the stable cask or Chocolatey package. E5 remains
+the default. This risk-accepted release is not five-gate qualified; CPU
+resource ceilings, CPU fallback, Windows GPU behavior, cross-host citation
+parity, and upgrade/rollback remain unverified. Use E5 if Gemma does not meet
+your needs and report reproducible issues.
 
 ## Desktop releases
 
@@ -342,6 +390,29 @@ Optional semantic workers, native runtimes, models, and signed catalogs use the 
 Qualification emits a reviewed fingerprint lock; publication reuses the exact retained artifacts.
 Desktop releases only fetch catalogs named by that lock, so semantic component failures do not
 block base application packaging and application failures do not rebuild component assets.
+The separately opt-in `qualify_pdf_vision` input runs a read-only installed Gemma worker test on
+an eight-page deterministic synthetic scan when paired with `qualify_installed_gemma` and an exact
+retained signed candidate. It runs on all four worker targets, reports per-page throughput and
+measured worker peaks, and cannot publish a release; its candidate-bound report explicitly remains
+**no-go** without host/VFS, resource-ceiling, fallback, and quality evidence.
+The five-gate-qualified Gemma publication check separately requires reviewed four-target
+installed PDF evidence from a successful exact-source qualification run; merely adding signed
+PDFium payloads or a worker-only synthetic report cannot satisfy that gate. The distinct
+risk-accepted path records the release owner's acceptance of the outstanding risks and does not
+represent missing qualification evidence as passing.
+The read-only PDF qualification also runs a separate one-page enrolled-host smoke through
+the installed worker, replaces that synthetic file with a two-page scan, and checks that
+the edited source's two page citations replace the old generation before checking deletion.
+That smoke is not full-scan current-content coverage or release approval.
+A distinct read-only `qualify_pdf_host_sample` workflow input runs the same
+eight-page synthetic scan through the enrolled host, then replaces it with a
+two-page scan and verifies current page citations and deletion. Its report
+includes per-page throughput and sampled host/worker RSS; it does not claim a
+hard peak or temporary-disk ceiling. A previous full 354-page scan remains
+supplementary macOS evidence; full-scan CPU throughput is documented as a
+known limitation, not a release gate. Anonymous temporary-disk peak,
+cross-host navigation, fallback, rollback, and release resource ceilings
+remain unqualified, so these reports do not approve a release.
 
 ## CI
 

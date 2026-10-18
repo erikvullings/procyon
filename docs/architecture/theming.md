@@ -28,6 +28,9 @@ density and shape layer for mm components in use.
 The palette tokens are `--fm-background`, `--fm-surface`, `--fm-surface-elevated`, `--fm-text`,
 `--fm-text-muted`, `--fm-border`, `--fm-accent`, `--fm-selection`,
 `--fm-selection-inactive`, `--fm-hover`, `--fm-error`, `--fm-warning`, and `--fm-success`.
+`--fm-default-folder-icon` colors only the built-in directory glyph (muted amber in both
+light and dark palettes); custom theme icons and native/thumbnail images retain their own colors.
+The focused cursor row still overrides the glyph with its high-contrast foreground.
 Density and shape use `--fm-row-height`, `--fm-font-family`, `--fm-font-size`, `--fm-radius`, and
 `--fm-shadow`.
 
@@ -77,9 +80,10 @@ entryIconRegistry.extensionIcons.set('psd', psdIcon);
 the same defaults as the shared `entryIconRegistry` singleton. Every icon renderer has the shape
 `(attrs?: IconAttrs) => m.Children`, matching the plain SVG helpers in
 `frontend/src/components/icons.ts` (`.fm-icon` class, `currentColor` fill, consistent `viewBox`).
-This is a themeable rendering layer only; native OS icons served from the backend
-(`runtimeCapabilities.nativeFileIcons`) are a separate, not-yet-implemented overlay tracked by a
-follow-up task.
+`entryIcon()` adds `.fm-default-folder-icon` only when a directory resolves to the built-in
+`folderIcon`; plugin replacements, even if they use `.fm-icon-folder`, are not recolored.
+Native OS icons (`runtimeCapabilities.nativeFileIcons`) and thumbnails replace the glyph when
+available; the built-in folder tint applies only to the fallback SVG, not these images.
 
 ### Distributable icon theme plugins (task 0095)
 

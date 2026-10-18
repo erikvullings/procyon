@@ -259,6 +259,12 @@ describe('MockFileManagerClient API', () => {
     await expect(client.getFileIcon('mock:///notes.txt')).resolves.toBeUndefined();
   });
 
+  it('renders a plugin preview only for an enabled plugin that contributes one', async () => {
+    const client = new MockFileManagerClient();
+    const location = { providerId: 'file', uri: 'mock:///a.demo' };
+    await expect(client.renderPluginPreview('missing.plugin', location)).rejects.toThrow();
+  });
+
   it('provides deterministic capabilities, workspace, metadata, actions, and plugins', async () => {
     const client = new MockFileManagerClient();
 
@@ -701,6 +707,15 @@ describe('MockFileManagerClient semantic library lifecycle', () => {
     expect(paused.paused).toBe(true);
     const resumed = await client.resumeSemanticLibrary({ policyRevision: paused.revision });
     expect(resumed.paused).toBe(false);
+    await expect(
+      client.updateGemmaMedia({
+        policyRevision: resumed.revision,
+        images: true,
+        audio: false,
+        video: false,
+        confirmRemoval: false,
+      }),
+    ).rejects.toMatchObject({ code: 'invalidRequest' });
 
     const plan = await client.planSemanticExclusion({
       policyRevision: resumed.revision,
@@ -1323,5 +1338,17 @@ describe('MockFileManagerClient file range and content search methods', () => {
     });
 
     expect(result).toEqual({ removed: false });
+  });
+});
+
+describe('MockFileManagerClient OS file clipboard', () => {
+  it('reports the capability as unsupported and leaves copies internal', async () => {
+    const client = new MockFileManagerClient();
+
+    expect((await client.getRuntimeCapabilities()).osFileClipboard).toBe(false);
+    await expect(
+      client.writeOsClipboardFiles([{ providerId: 'local', uri: 'file:///home/report.pdf' }]),
+    ).resolves.toBe(false);
+    await expect(client.readOsClipboardFiles()).resolves.toEqual([]);
   });
 });

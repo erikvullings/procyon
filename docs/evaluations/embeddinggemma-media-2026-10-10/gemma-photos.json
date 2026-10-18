@@ -1,0 +1,237 @@
+{
+  "model": "google/embeddinggemma-2",
+  "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "runtime": "native-rust-cpu-fp32",
+  "measurementWidth": 768,
+  "dimensionMethod": "truncate and L2 renormalize both sides",
+  "os": "macos",
+  "architecture": "aarch64",
+  "modelLoadSeconds": 0.630189833,
+  "result": {
+    "fixtureSha256": "4243048f67caf46d3fb1cd4005e1aa6041ddb5a6ee42bdd2ff1bd70a5e92332c",
+    "pairCount": 10,
+    "task": "real-photo image versus independently validated positive/hard-negative captions",
+    "dimensions": {
+      "128": {
+        "accuracy": 0.8,
+        "cases": [
+          {
+            "id": "579635",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.021142277783086305
+          },
+          {
+            "id": "232348",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.0171590741789156
+          },
+          {
+            "id": "355610",
+            "positiveBeatsHardNegative": false,
+            "cosineMargin": -0.0011697051914234535
+          },
+          {
+            "id": "179174",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.02966748274348252
+          },
+          {
+            "id": "7511",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.0046767247288880265
+          },
+          {
+            "id": "102805",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.029617773985286533
+          },
+          {
+            "id": "11511",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.009816274237596123
+          },
+          {
+            "id": "563349",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.012032356479428685
+          },
+          {
+            "id": "175364",
+            "positiveBeatsHardNegative": false,
+            "cosineMargin": -0.016256765878654766
+          },
+          {
+            "id": "447314",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.02361696773424038
+          }
+        ]
+      },
+      "256": {
+        "accuracy": 0.8,
+        "cases": [
+          {
+            "id": "579635",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.03397060489223391
+          },
+          {
+            "id": "232348",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.02277531623658724
+          },
+          {
+            "id": "355610",
+            "positiveBeatsHardNegative": false,
+            "cosineMargin": -0.009968410481492884
+          },
+          {
+            "id": "179174",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.060380769567796366
+          },
+          {
+            "id": "7511",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.009630053521756166
+          },
+          {
+            "id": "102805",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.029951626904725415
+          },
+          {
+            "id": "11511",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.008078097179234245
+          },
+          {
+            "id": "563349",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.013773607231458151
+          },
+          {
+            "id": "175364",
+            "positiveBeatsHardNegative": false,
+            "cosineMargin": -0.031120623115790225
+          },
+          {
+            "id": "447314",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.03777331804590556
+          }
+        ]
+      },
+      "512": {
+        "accuracy": 0.8,
+        "cases": [
+          {
+            "id": "579635",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.030211590279743183
+          },
+          {
+            "id": "232348",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.019988968916936023
+          },
+          {
+            "id": "355610",
+            "positiveBeatsHardNegative": false,
+            "cosineMargin": -0.005152957449703344
+          },
+          {
+            "id": "179174",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.06538275102524005
+          },
+          {
+            "id": "7511",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.011637427614254126
+          },
+          {
+            "id": "102805",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.0313908181587248
+          },
+          {
+            "id": "11511",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.015858487144888245
+          },
+          {
+            "id": "563349",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.02345097483460168
+          },
+          {
+            "id": "175364",
+            "positiveBeatsHardNegative": false,
+            "cosineMargin": -0.029485408295126803
+          },
+          {
+            "id": "447314",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.0484718897076265
+          }
+        ]
+      },
+      "768": {
+        "accuracy": 0.8,
+        "cases": [
+          {
+            "id": "579635",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.03038915088059546
+          },
+          {
+            "id": "232348",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.022333635931401474
+          },
+          {
+            "id": "355610",
+            "positiveBeatsHardNegative": false,
+            "cosineMargin": -0.006190005747869987
+          },
+          {
+            "id": "179174",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.0592087921297334
+          },
+          {
+            "id": "7511",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.01087312841755217
+          },
+          {
+            "id": "102805",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.031406730310580167
+          },
+          {
+            "id": "11511",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.013328785171553892
+          },
+          {
+            "id": "563349",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.02016464362308934
+          },
+          {
+            "id": "175364",
+            "positiveBeatsHardNegative": false,
+            "cosineMargin": -0.027771754344435573
+          },
+          {
+            "id": "447314",
+            "positiveBeatsHardNegative": true,
+            "cosineMargin": 0.04430894398989449
+          }
+        ]
+      }
+    }
+  }
+}

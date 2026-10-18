@@ -60,6 +60,8 @@ message ProtocolLimits {
   uint64 stream_deadline_ms = 5;
   // Maximum graceful-shutdown duration.
   uint64 shutdown_deadline_ms = 6;
+  // PDF ingestion only; zero means the ordinary stream limit for older workers.
+  uint64 maximum_pdf_ingestion_bytes = 7;
 }
 
 // Tenant and library ownership of a request.
@@ -118,6 +120,10 @@ message IngestionStart {
   string media_type = 3;
   // Declared total content bytes.
   uint64 expected_content_bytes = 4;
+  // Host-authorized PDF image consent from the immutable library policy.
+  bool pdf_images_consented = 5;
+  // Optional SHA-256 of the complete PDF source, required for oversized PDF spools.
+  bytes expected_sha256 = 6;
 }
 
 // One ordered segment of document content.
@@ -175,6 +181,8 @@ message IngestionJob {
   Progress progress = 4;
   // Typed failure or exclusion detail, when present.
   ProtocolError error = 5;
+  // A completed job's bounded, non-fatal evidence-coverage omissions.
+  optional string coverage_detail = 6;
 }
 
 // Ingestion job lifecycle states.
@@ -548,6 +556,7 @@ message KnowledgeEvidence {
   bool stale = 20;
   bool adjacent = 21;
   uint32 final_rank = 22;
+  optional uint32 pdf_image_skipped_pages = 23;
 }
 
 // One route/query rank that contributed to a fused candidate.

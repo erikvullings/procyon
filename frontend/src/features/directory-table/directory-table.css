@@ -248,6 +248,58 @@
   align-items: center;
 }
 
+.fm-directory-group-toggle,
+.fm-directory-group-copy {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.fm-directory-group-toggle {
+  min-width: 0;
+  gap: 0.25rem;
+  padding: 0;
+}
+
+.fm-directory-group-chevron {
+  display: inline-flex;
+  flex: 0 0 14px;
+  transform-origin: center;
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fm-directory-group-toggle[aria-expanded="false"] .fm-directory-group-chevron {
+  transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-directory-group-chevron {
+    transition: none;
+  }
+}
+
+.fm-directory-group-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-directory-group-copy {
+  margin-inline-start: auto;
+  padding: 0 0.25rem;
+}
+
+.fm-directory-group-toggle:focus-visible,
+.fm-directory-group-copy:focus-visible {
+  outline: 2px solid var(--fm-selection);
+  outline-offset: -2px;
+}
+
 .fm-directory-cell {
   overflow: hidden;
   box-sizing: border-box;
@@ -262,6 +314,10 @@
   align-self: stretch;
   align-items: center;
   gap: 0.375rem;
+}
+
+.fm-grouped-entry .fm-directory-name {
+  padding-inline-start: calc(0.5rem + 14px + 0.25rem);
 }
 
 .fm-entry-icon {

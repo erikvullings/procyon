@@ -5,6 +5,7 @@ import { t } from '../../i18n';
 import type {
   ImportSemanticLocalModelRequest,
   InstalledSemanticComponent,
+  Location,
   SemanticComponentCapabilities,
   SemanticComponentKind,
   SemanticComponentOperation,
@@ -17,15 +18,31 @@ import type {
   SemanticModelProfile,
   SemanticModelSelection,
   SemanticProfile,
+  Volume,
 } from '../../models';
 import type {
   GemmaLibrarySetup,
   InitializeGemmaLibraryRequest,
 } from '../../models/semantic-components';
+import { DirectoryTree } from '../directory-tree/directory-tree';
+import {
+  createTreeChildrenState,
+  type TreeChildrenState,
+  withChildren,
+  withError,
+  withExpanded,
+  withLoading,
+} from '../directory-tree/directory-tree-state';
+import { busyButtonAttrs } from './busy-button';
 
 export interface SemanticComponentManagementAttrs {
   readonly client: FileManagerClient;
   readonly onStatusChange?: (status: SemanticComponentStatus) => void;
+  readonly onInstallationChange?: (
+    state: 'installing' | 'succeeded' | 'failed',
+    message: string,
+  ) => void;
+  readonly installInProgress?: boolean;
 }
 
 type LoadState = 'loading' | 'loaded' | 'error';
@@ -102,7 +119,14 @@ function profileName(profile: SemanticProfile): string {
     case 'multilingualQuality':
       return t('semanticComponents', 'multilingualQualityName');
     case 'embeddingGemma2':
-      return t('semanticComponents', 'gemmaName');
+      return t(
+        'semanticComponents',
+        import.meta.env.VITE_GEMMA_RISK_ACCEPTED === 'true'
+          ? 'gemmaRiskAcceptedName'
+          : import.meta.env.VITE_GEMMA_QUALIFIED === 'true'
+            ? 'gemmaQualifiedName'
+            : 'gemmaName',
+      );
   }
 }
 
@@ -115,7 +139,12 @@ function profileDescription(profile: SemanticProfile): string {
     case 'multilingualQuality':
       return t('semanticComponents', 'multilingualQualityDescription');
     case 'embeddingGemma2':
-      return t('semanticComponents', 'gemmaDescription');
+      return t(
+        'semanticComponents',
+        import.meta.env.VITE_GEMMA_RISK_ACCEPTED === 'true'
+          ? 'gemmaRiskAcceptedDescription'
+          : 'gemmaDescription',
+      );
   }
 }
 
@@ -510,6 +539,7 @@ function offerView(
       'button.btn.fm-semantic-action.fm-semantic-accept',
       {
         type: 'button',
+        ...busyButtonAttrs(busy === 'install'),
         disabled: busy !== undefined || !canAccept,
         onclick: onAccept,
       },
@@ -562,6 +592,7 @@ function indexRemovalPlanView(
         'button.fm-semantic-action',
         {
           type: 'button',
+          ...busyButtonAttrs(busy === 'confirmRemoval'),
           disabled: busy !== undefined || !confirmed,
           onclick: onConfirm,
         },
@@ -638,6 +669,7 @@ function migrationProgressView(
             'button.fm-semantic-action',
             {
               type: 'button',
+              ...busyButtonAttrs(busy === 'checkpointMigration'),
               disabled:
                 busy !== undefined ||
                 completedDocuments.trim().length === 0 ||
@@ -656,6 +688,7 @@ function migrationProgressView(
           'button.fm-semantic-action',
           {
             type: 'button',
+            ...busyButtonAttrs(busy === 'completeMigration'),
             disabled:
               busy !== undefined || progress.completedDocuments < progress.estimate.documents,
             onclick: onComplete,
@@ -678,6 +711,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
 }) => {
   const client = attrs.client;
   const onStatusChange = attrs.onStatusChange;
+  const onInstallationChange = attrs.onInstallationChange;
   const loadController = new AbortController();
   let loadState: LoadState = 'loading';
   let loaded: LoadedState | undefined;
@@ -697,9 +731,16 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
   let confirmFreshIndex = false;
   let migrationProfile: SemanticProfile = 'compactMultilingual';
   let localModelProfile: SemanticProfile = 'compactMultilingual';
+  let showDeveloperTools = false;
   let checkpointDocuments = '';
   let checkpointCursor = '';
   let moveDestination = '';
+  let movePickerOpen = false;
+  let movePickerLoading = false;
+  let movePickerError: string | undefined;
+  let moveVolumes: Volume[] = [];
+  let moveRoot: Volume | undefined;
+  let moveTreeState: TreeChildrenState = createTreeChildrenState();
   let enrolmentId = '';
   let removeConfirmed = false;
   let uninstallDecision: 'retain' | 'delete' | undefined;
@@ -795,8 +836,13 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
     actionError = undefined;
     actionErrorAction = undefined;
     actionMessage = undefined;
+    if (name === 'install') {
+      onInstallationChange?.('installing', t('semanticComponents', 'installing'));
+    }
+    let actionCompleted = false;
     try {
       await action();
+      actionCompleted = true;
       actionMessage = success?.();
     } catch (error: unknown) {
       actionError = errorMessage(error);
@@ -811,6 +857,18 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         }
       }
       busy = undefined;
+      if (name === 'install') {
+        onInstallationChange?.(
+          actionError === undefined ? 'succeeded' : 'failed',
+          actionError === undefined
+            ? t('semanticComponents', 'statusInstalledEnabled')
+            : t(
+                'semanticComponents',
+                actionCompleted ? 'installationUnconfirmed' : 'installationFailed',
+                { error: actionError },
+              ),
+        );
+      }
       m.redraw();
     }
   }
@@ -826,6 +884,21 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
 
   function inputNumber(value: string): number {
     return Math.max(0, Number.parseInt(value, 10) || 0);
+  }
+
+  function localPathFromLocation(location: Location): string | undefined {
+    try {
+      const url = new URL(location.uri);
+      if (url.protocol === 'file:') {
+        const path = decodeURIComponent(url.pathname);
+        if (url.host.length > 0 && url.host !== 'localhost') return `//${url.host}${path}`;
+        return /^\/[A-Za-z]:\//u.test(path) ? path.slice(1) : path;
+      }
+      if (url.protocol === 'mock:') return decodeURIComponent(location.uri.slice('mock://'.length));
+    } catch {
+      return undefined;
+    }
+    return undefined;
   }
 
   function validLocalModel(): boolean {
@@ -874,7 +947,10 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
           };
           await client.initializeGemmaLibrary(selected);
           if (loaded !== undefined) {
-            loaded = { ...loaded, gemmaSetup: selected };
+            loaded = {
+              ...loaded,
+              gemmaSetup: await client.getGemmaLibrarySetup(),
+            };
           }
         }
         await client.acceptSemanticComponentInstallationOffer({ offerId: acceptedOffer.offerId });
@@ -926,6 +1002,60 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
       () => client.moveSemanticComponentData({ destination }).then(() => undefined),
       () => t('semanticComponents', 'dataMoved', { destination }),
     );
+  }
+
+  async function loadMoveRoot(volume: Volume): Promise<void> {
+    moveRoot = volume;
+    moveTreeState = createTreeChildrenState();
+    movePickerError = undefined;
+    movePickerLoading = true;
+    try {
+      const children = await client.listDirectoryChildren(volume.location, false);
+      moveTreeState = withChildren(moveTreeState, volume.location.uri, children);
+    } catch (error) {
+      movePickerError = errorMessage(error);
+    } finally {
+      movePickerLoading = false;
+      m.redraw();
+    }
+  }
+
+  async function toggleMovePicker(): Promise<void> {
+    movePickerOpen = !movePickerOpen;
+    if (!movePickerOpen || moveVolumes.length > 0) return;
+    movePickerLoading = true;
+    movePickerError = undefined;
+    try {
+      moveVolumes = await client.getVolumes();
+      const first = moveVolumes[0];
+      if (first === undefined) {
+        movePickerError = t('semanticComponents', 'movePickerNoVolumes');
+      } else {
+        await loadMoveRoot(first);
+      }
+    } catch (error) {
+      movePickerError = errorMessage(error);
+    } finally {
+      movePickerLoading = false;
+      m.redraw();
+    }
+  }
+
+  function toggleMoveDirectory(location: Location): void {
+    const uri = location.uri;
+    const expanding = !moveTreeState.expanded.has(uri);
+    moveTreeState = withExpanded(moveTreeState, uri, expanding);
+    if (!expanding || Object.hasOwn(moveTreeState.childrenByUri, uri)) return;
+    moveTreeState = withLoading(moveTreeState, uri, true);
+    void client
+      .listDirectoryChildren(location, false)
+      .then((children) => {
+        moveTreeState = withChildren(moveTreeState, uri, children);
+      })
+      .catch((error: unknown) => {
+        moveTreeState = withError(moveTreeState, uri, errorMessage(error));
+      })
+      .finally(() => m.redraw());
   }
 
   function uninstall(): void {
@@ -1089,6 +1219,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
             'button.fm-semantic-action',
             {
               type: 'button',
+              ...busyButtonAttrs(busy === 'confirmMigration'),
               disabled: busy !== undefined,
               onclick: confirmMigration,
             },
@@ -1104,6 +1235,55 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
             { role: 'alert' },
             t('semanticComponents', 'actionFailed', { error: actionError }),
           ),
+    ]);
+  }
+
+  function renderMovePicker(): Vnode | undefined {
+    if (!movePickerOpen) return undefined;
+    return m('.fm-semantic-move-picker', [
+      moveVolumes.length > 1
+        ? m('label.fm-semantic-field', { for: 'fm-semantic-move-volume' }, [
+            m('span', t('semanticComponents', 'movePickerVolume')),
+            m(
+              'select#fm-semantic-move-volume.browser-default',
+              {
+                value: moveRoot?.location.uri ?? '',
+                onchange: (event: Event) => {
+                  const uri = (event.target as HTMLSelectElement).value;
+                  const volume = moveVolumes.find((item) => item.location.uri === uri);
+                  if (volume !== undefined) void loadMoveRoot(volume);
+                },
+              },
+              moveVolumes.map((volume) =>
+                m('option', { key: volume.location.uri, value: volume.location.uri }, volume.name),
+              ),
+            ),
+          ])
+        : undefined,
+      movePickerLoading
+        ? m('p', { role: 'status' }, t('semanticComponents', 'loadingMovePicker'))
+        : undefined,
+      movePickerError === undefined
+        ? undefined
+        : m('p.fm-semantic-action-error', { role: 'alert' }, movePickerError),
+      moveRoot === undefined
+        ? undefined
+        : m(DirectoryTree, {
+            root: { location: moveRoot.location, name: moveRoot.name },
+            state: moveTreeState,
+            onToggleExpand: toggleMoveDirectory,
+            onActivate: (location: Location) => {
+              const path = localPathFromLocation(location);
+              if (path === undefined) {
+                movePickerError = t('semanticComponents', 'movePickerUnsupportedLocation');
+                return;
+              }
+              moveDestination = path;
+              movePickerOpen = false;
+            },
+            label: t('semanticComponents', 'movePickerLabel'),
+            viewportHeight: 200,
+          }),
     ]);
   }
 
@@ -1137,6 +1317,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
     }
 
     const canOffer =
+      !attrs.installInProgress &&
       can('createInstallationOffer') &&
       (capabilities.runtimeExecutableDownload === 'directDistribution' ||
         capabilities.runtimeExecutableDownload === 'simulated');
@@ -1154,7 +1335,16 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         ? m('p.fm-semantic-authority-note', t('semanticComponents', 'developmentSimulation'))
         : undefined,
       developerBundle
-        ? m('p.fm-semantic-authority-note', t('semanticComponents', 'developmentBundle'))
+        ? m(
+            'p.fm-semantic-authority-note',
+            t(
+              'semanticComponents',
+              installProfile === 'embeddingGemma2' ||
+                status.activeModel?.profile === 'embeddingGemma2'
+                ? 'developmentGemmaBundle'
+                : 'developmentBundle',
+            ),
+          )
         : undefined,
       canOffer && (installableLifecycle || switchProfiles.length > 0)
         ? m(
@@ -1191,6 +1381,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                       'button.btn.fm-semantic-action',
                       {
                         type: 'button',
+                        ...busyButtonAttrs(busy === 'offer'),
                         disabled: busy !== undefined || switchProfiles.length === 0,
                         onclick: createOffer,
                       },
@@ -1331,6 +1522,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                 'button.fm-semantic-action',
                 {
                   type: 'button',
+                  ...busyButtonAttrs(busy === 'pause'),
                   disabled: busy !== undefined,
                   onclick: () =>
                     void runAction('pause', () => client.pauseSemanticComponentIndexing()),
@@ -1345,6 +1537,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                 'button.fm-semantic-action',
                 {
                   type: 'button',
+                  ...busyButtonAttrs(busy === 'resume'),
                   disabled: busy !== undefined,
                   onclick: () =>
                     void runAction('resume', () => client.resumeSemanticComponentIndexing()),
@@ -1375,6 +1568,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                   'button.fm-semantic-action',
                   {
                     type: 'button',
+                    ...busyButtonAttrs(busy === 'planRemoval'),
                     disabled: busy !== undefined || enrolmentId.trim().length === 0,
                     onclick: planIndexRemoval,
                   },
@@ -1399,7 +1593,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         can('moveData')
           ? m('details.fm-semantic-action-details.fm-semantic-move-details', [
               m('summary', t('semanticComponents', 'moveDataSummary')),
-              m('.fm-semantic-inline-form', [
+              m('.fm-semantic-move-row', [
                 textField(
                   'fm-semantic-move-destination',
                   t('semanticComponents', 'moveDestination'),
@@ -1412,6 +1606,17 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                   'button.fm-semantic-action',
                   {
                     type: 'button',
+                    'aria-expanded': movePickerOpen,
+                    disabled: movePickerLoading,
+                    onclick: () => void toggleMovePicker(),
+                  },
+                  t('semanticComponents', movePickerOpen ? 'closeMovePicker' : 'browseDestination'),
+                ),
+                m(
+                  'button.fm-semantic-action',
+                  {
+                    type: 'button',
+                    ...busyButtonAttrs(busy === 'move'),
                     disabled: busy !== undefined || moveDestination.trim().length === 0,
                     onclick: moveData,
                   },
@@ -1420,6 +1625,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                     : t('semanticComponents', 'moveData'),
                 ),
               ]),
+              renderMovePicker(),
             ])
           : undefined,
         can('uninstallComponents') && status.components.length > 0
@@ -1461,6 +1667,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                   'button.fm-semantic-action.fm-semantic-uninstall-confirm',
                   {
                     type: 'button',
+                    ...busyButtonAttrs(busy === 'uninstall'),
                     disabled: busy !== undefined || uninstallDecision === undefined,
                     onclick: uninstall,
                   },
@@ -1497,22 +1704,41 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
             m('summary', t('semanticComponents', 'migrationSummary')),
             m('p.fm-semantic-guidance', t('semanticComponents', 'migrationExplanation')),
             m('fieldset.fm-semantic-form-grid', [
-              m('legend', t('semanticComponents', 'migrationTargetLegend')),
-              profileChoices(
-                'fm-semantic-migration-profile',
-                profiles.filter((profile) => profile.profile !== 'embeddingGemma2'),
-                migrationProfile,
-                (profile) => {
-                  migrationProfile = profile;
-                  pendingMigration = undefined;
-                },
-                t('semanticComponents', 'migrationTargetLegend'),
-                status.activeModel,
-              ),
+              m('label.fm-semantic-field', { for: 'fm-semantic-migration-profile' }, [
+                m('span', t('semanticComponents', 'migrationTargetLegend')),
+                m(
+                  'select#fm-semantic-migration-profile.browser-default',
+                  {
+                    value: migrationProfile,
+                    onchange: (event: Event) => {
+                      migrationProfile = (event.target as HTMLSelectElement)
+                        .value as SemanticProfile;
+                      pendingMigration = undefined;
+                    },
+                  },
+                  profiles
+                    .filter((profile) => profile.profile !== 'embeddingGemma2')
+                    .map((profile) =>
+                      m(
+                        'option',
+                        {
+                          key: profile.profile,
+                          value: profile.profile,
+                        },
+                        modelSelectionMatchesProfile(status.activeModel ?? undefined, profile)
+                          ? `${profileName(profile.profile)} · ${t('semanticComponents', 'componentStateActive')}`
+                          : status.activeModel?.profile === profile.profile
+                            ? `${profileName(profile.profile)} · ${t('semanticComponents', 'profileUpdateAvailable')}`
+                            : profileName(profile.profile),
+                      ),
+                    ),
+                ),
+              ]),
               m(
                 'button.fm-semantic-action',
                 {
                   type: 'button',
+                  ...busyButtonAttrs(busy === 'planMigration'),
                   disabled:
                     busy !== undefined ||
                     migrationTarget === undefined ||
@@ -1528,20 +1754,43 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         : undefined,
       pendingMigration === undefined ? undefined : renderPendingMigration(pendingMigration),
       can('importLocalModel')
+        ? m('label.fm-semantic-developer-tools-toggle', [
+            m('input', {
+              type: 'checkbox',
+              checked: showDeveloperTools,
+              onchange: (event: Event) => {
+                showDeveloperTools = (event.target as HTMLInputElement).checked;
+              },
+            }),
+            m('span', t('semanticComponents', 'showDeveloperTools')),
+          ])
+        : undefined,
+      can('importLocalModel') && showDeveloperTools
         ? m('details.fm-semantic-action-details.fm-semantic-local-model-details', [
             m('summary', t('semanticComponents', 'localModelSummary')),
             m('p', t('semanticComponents', 'localModelExplanation')),
             m('.fm-semantic-form-grid', [
-              profileChoices(
-                'fm-semantic-local-profile',
-                profiles,
-                localModelProfile,
-                (profile) => {
-                  localModelProfile = profile;
-                  pendingMigration = undefined;
-                },
-                t('semanticComponents', 'localModelProfileLegend'),
-              ),
+              m('label.fm-semantic-field', { for: 'fm-semantic-local-profile' }, [
+                m('span', t('semanticComponents', 'localModelProfileLegend')),
+                m(
+                  'select#fm-semantic-local-profile.browser-default',
+                  {
+                    value: localModelProfile,
+                    onchange: (event: Event) => {
+                      localModelProfile = (event.target as HTMLSelectElement)
+                        .value as SemanticProfile;
+                      pendingMigration = undefined;
+                    },
+                  },
+                  profiles.map((profile) =>
+                    m(
+                      'option',
+                      { key: profile.profile, value: profile.profile },
+                      profileName(profile.profile),
+                    ),
+                  ),
+                ),
+              ]),
               textField(
                 'fm-semantic-local-source-path',
                 t('semanticComponents', 'sourcePath'),
@@ -1692,6 +1941,7 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                 'button.fm-semantic-action',
                 {
                   type: 'button',
+                  ...busyButtonAttrs(busy === 'importModel'),
                   disabled: busy !== undefined || !validLocalModel(),
                   onclick: importLocalModel,
                 },

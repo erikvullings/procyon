@@ -30,7 +30,8 @@ pub use menu::{NativeMenu, NativeMenuItem, NativeMenuRole, NativeMenuSpec};
 pub use search::{
     ConceptHierarchyScope, SEARCH_QUERY_SCHEMA_VERSION, SavedSearch, SearchConceptPredicate,
     SearchContentPredicate, SearchEntryKind, SearchMode, SearchNameMode, SearchNamePredicate,
-    SearchQuery, SearchScope, SearchSemanticPredicate, SemanticSearchScope,
+    SearchQuery, SearchScope, SearchSemanticConceptSource, SearchSemanticPredicate,
+    SemanticSearchScope,
 };
 pub use snapshot::{DirectoryDelta, DirectorySnapshot, LoadingState};
 pub use workspace::{

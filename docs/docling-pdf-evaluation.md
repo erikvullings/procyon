@@ -27,7 +27,7 @@ own release key.
 The Adapter imports only `docling-core` and `docling-pdf`; enabling its `ml` feature brings
 `docling-onnx` transitively. It does not import Docling RAG, server, CLI, Python, Node, FFI, WASM,
 HEIF, CUDA, TensorRT, DirectML, or CoreML Modules. The audited crates require Rust 1.88 or older;
-Procyon's pinned Rust 1.97 toolchain is compatible.
+Procyon's pinned Rust 1.98.1 toolchain is compatible.
 
 ## Native and model supply chain
 
@@ -49,11 +49,14 @@ A release build must:
    installed inventory before loading a model.
 5. Run with no network authority. Model and runtime resolution is confined to installed files.
 
-The candidate targets are `aarch64-apple-darwin`, `x86_64-apple-darwin`,
-`x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`, and
-`aarch64-unknown-linux-gnu`, subject to an artifact smoke test on each target. Upstream does not
-currently publish or continuously exercise the complete ML pipeline on all of these targets;
-declaration alone is not release evidence.
+Procyon's four shipped target triples are `aarch64-apple-darwin`, `x86_64-apple-darwin`,
+`x86_64-pc-windows-msvc`, and `x86_64-unknown-linux-gnu`. The separately evaluated
+`aarch64-unknown-linux-gnu` is a fifth *candidate*, not a current desktop release target.
+Every shipped target needs its own artifact smoke test. Upstream does not currently publish or
+continuously exercise the complete ML pipeline on all of these targets; declaration alone is not
+release evidence. The current no-ML build has no PDF page rasterizer; native PDFium and all
+required third-party notices must be verified and packaged before enabling scanned-page
+rendering.
 
 ## Conversion behavior
 
@@ -70,7 +73,8 @@ enables heading hierarchy, complex layout, local OCR, and TableFormer. Procyon's
 - drops Docling furniture layers and exact page-number-only paragraphs while retaining legitimate
   repeated body content;
 - exposes OCR language and aggregate confidence as `ConversionWarning::OcrAssessment`;
-- records page-level failures as typed `UnreadablePart` omissions when other pages succeed;
+- records page-level failures as typed `UnreadablePart` outcomes; ingestion must not publish a
+  partial PDF generation when another page succeeds;
 - applies source, page, nesting, unit, per-unit, total-output, cancellation, and wall-time limits.
 
 ML conversion uses one-page windows. This bounds resident page raster/tensor data and places

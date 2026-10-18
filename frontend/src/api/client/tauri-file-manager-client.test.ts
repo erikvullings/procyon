@@ -51,6 +51,7 @@ function fixtureCapabilities() {
     clipboard: true,
     extendedAttributes: false,
     finderAliases: false,
+    osFileClipboard: false,
     finderTags: false,
     nativeDragOut: false,
     nativeFileIcons: false,
@@ -78,6 +79,40 @@ afterEach(() => {
 });
 
 describe('TauriFileManagerClient', () => {
+  it('sends draft model-limit discovery through the native command', async () => {
+    const request = {
+      name: 'Local',
+      preset: 'mlxServe' as const,
+      baseUrl: 'http://127.0.0.1:11234',
+      deployment: null,
+      apiVersion: null,
+      model: 'model-a',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate' as const,
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions' as const],
+      redactFilenames: false,
+    };
+    const limits = {
+      contextWindow: null,
+      maximumAnswerTokens: 8_192,
+      contextWindowCap: 1_048_576,
+      maximumAnswerTokensCap: 16_384,
+    };
+    invoke.mockResolvedValue(limits);
+
+    await expect(
+      new TauriFileManagerClient().discoverLlmProfileDraftModelLimits(request),
+    ).resolves.toEqual(limits);
+    expect(invoke).toHaveBeenCalledWith('discover_llm_profile_draft_model_limits', { request });
+  });
+
   it('passes panel placement, theme, and visibility only through trusted host commands', async () => {
     invoke.mockResolvedValue(undefined);
     const client = new TauriFileManagerClient();
@@ -442,6 +477,22 @@ describe('TauriFileManagerClient', () => {
     });
   });
 
+  describe('plugin previews', () => {
+    it('invokes the preview command with the plugin id and wrapped location', async () => {
+      const location = { providerId: 'local', uri: 'file:///tmp/a.torrent' };
+      const result = { kind: 'text', body: 'x', truncated: true };
+      vi.mocked(invoke).mockResolvedValueOnce(result);
+
+      await expect(
+        new TauriFileManagerClient().renderPluginPreview('example.preview', location),
+      ).resolves.toEqual(result);
+      expect(invoke).toHaveBeenCalledWith('render_plugin_preview', {
+        pluginId: 'example.preview',
+        request: { location },
+      });
+    });
+  });
+
   describe('OneDrive authorization', () => {
     it('begins through IPC and opens Microsoft in the system browser', async () => {
       const response = {
@@ -489,6 +540,20 @@ describe('TauriFileManagerClient', () => {
         new TauriFileManagerClient().beginOneDriveAuthorization('connection-1'),
       ).rejects.toThrow('Microsoft authorization URL');
       expect(openUrl).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('OS file clipboard', () => {
+    it('publishes and reads file references through the desktop commands', async () => {
+      const client = new TauriFileManagerClient();
+      const locations = [{ providerId: 'local', uri: 'file:///Users/example/report.pdf' }];
+      invoke.mockResolvedValueOnce(true).mockResolvedValueOnce(locations);
+
+      await expect(client.writeOsClipboardFiles(locations)).resolves.toBe(true);
+      await expect(client.readOsClipboardFiles()).resolves.toEqual(locations);
+
+      expect(invoke).toHaveBeenNthCalledWith(1, 'write_os_clipboard_files', { locations });
+      expect(invoke).toHaveBeenNthCalledWith(2, 'read_os_clipboard_files');
     });
   });
 
@@ -699,6 +764,13 @@ describe('TauriFileManagerClient', () => {
       const planRequest = { policyRevision: 1, ...context };
       const cleanupRequest = { planId: 'plan-1', policyRevision: 1 };
       const revisionRequest = { policyRevision: 1 };
+      const mediaRequest = {
+        policyRevision: 1,
+        images: true,
+        audio: true,
+        video: false,
+        confirmRemoval: false,
+      };
       const overridesRequest = {
         rootId: 'root-1',
         workspaceId: context.workspaceId,
@@ -708,6 +780,7 @@ describe('TauriFileManagerClient', () => {
 
       await client.getSemanticLibraryCapabilities();
       await client.getSemanticLibraryStatus();
+      await client.updateGemmaMedia(mediaRequest);
       await client.getSemanticFolderStatus(context);
       await client.previewSemanticEnrolment(previewRequest);
       await client.confirmSemanticEnrolment(confirmation);
@@ -721,6 +794,7 @@ describe('TauriFileManagerClient', () => {
       expect(invoke.mock.calls).toEqual([
         ['get_semantic_library_capabilities'],
         ['get_semantic_library_status'],
+        ['update_gemma_media', { request: mediaRequest }],
         ['get_semantic_folder_status', { request: context }],
         ['preview_semantic_enrolment', { request: previewRequest }],
         ['confirm_semantic_enrolment', { request: confirmation }],

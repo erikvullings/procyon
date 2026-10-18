@@ -3,6 +3,12 @@ name: Release desktop
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing desktop release tag to build
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -10,23 +16,98 @@ permissions:
 jobs:
   release:
     name: Create GitHub prerelease
-    if: github.event_name == 'push'
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
+    environment: desktop-release
+    outputs:
+      release_commit: ${{ steps.validate-release-tag.outputs.commit }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Validate the release tag and its source commit
+        id: validate-release-tag
+        run: |
+          node scripts/check-desktop-release.mjs "$RELEASE_TAG"
+          git fetch origin main:refs/remotes/origin/main
+          git fetch origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          RELEASE_COMMIT="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
+          echo "commit=$RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.validate-release-tag.outputs.commit }}
+          path: release-source
+          fetch-depth: 0
+      - name: Require tagged source to match its Cargo-owned version
+        working-directory: release-source
+        run: node scripts/check-desktop-release.mjs "$RELEASE_TAG"
+      - name: Reject simultaneous Gemma release modes
+        env:
+          EXPERIMENTAL_GEMMA: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
+          QUALIFIED_GEMMA: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          RISK_ACCEPTED_GEMMA: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
+        run: |
+          MODE_COUNT=0
+          for MODE in "$EXPERIMENTAL_GEMMA" "$QUALIFIED_GEMMA" "$RISK_ACCEPTED_GEMMA"; do
+            [[ "$MODE" == "true" ]] && ((MODE_COUNT+=1))
+          done
+          if (( MODE_COUNT > 1 )); then
+            echo "::error::Experimental, five-gate-qualified, and risk-accepted Gemma modes cannot be combined."
+            exit 1
+          fi
+      - name: Require exact experimental Gemma approval before publishing
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        working-directory: release-source
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
+          RELEASE_SOURCE_REVISION: ${{ steps.validate-release-tag.outputs.commit }}
+        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+      - name: Require exact five-gate Gemma approval before publishing
+        if: vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'
+        working-directory: release-source
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          RELEASE_SOURCE_REVISION: ${{ steps.validate-release-tag.outputs.commit }}
+        run: node scripts/check-qualified-gemma-release.mjs --desktop --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+      - name: Require explicit risk acceptance for unqualified Gemma
+        if: vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'
+        working-directory: release-source
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
+          RELEASE_SOURCE_REVISION: ${{ steps.validate-release-tag.outputs.commit }}
+        run: node scripts/gemma-risk-acceptance.mjs --desktop --target macos-aarch64 --release-source-revision "$RELEASE_SOURCE_REVISION"
       - uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' && (vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' || contains(env.RELEASE_TAG, '-')) }}
+          make_latest: ${{ (vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' || vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true') && 'false' || '' }}
+          name: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && format('Procyon {0} - Experimental Gemma', env.RELEASE_TAG) || vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' && format('Procyon {0} - Gemma', env.RELEASE_TAG) || vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true' && format('Procyon {0} - Gemma (risk accepted)', env.RELEASE_TAG) || env.RELEASE_TAG }}
+          body: >-
+            ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && 'EXPERIMENTAL OPT-IN: multilingual E5 remains the default. No model-quality claim is made; the candidate and evaluation remain no-go for model quality, with E5 used only as a negative control. Resource ceilings and anonymous PDF spool peak are unqualified. CPU fallback, cross-host navigation, and upgrade/rollback are unqualified. CPU PDF page-image indexing is slow (up to about 106 seconds per indexed page); the four-page CPU budget takes about eight minutes. PDF text indexing is unaffected. The Gemma macOS package requires Apple Silicon (arm64) and does not run on Intel Macs.' || vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' && 'EmbeddingGemma 2 passed the release-owner five-gate qualification and remains opt-in. Existing E5 libraries are unchanged. The Gemma macOS package requires Apple Silicon (arm64); no Intel package is supplied.' || vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true' && 'RISK-ACCEPTED, NOT FIVE-GATE QUALIFIED: EmbeddingGemma 2 is opt-in; multilingual E5 remains the default. The release owner explicitly accepted known gaps: resource gates 1a/1c failed; CPU performance, Windows GPU, and remaining qualification gates are unqualified. Users may choose E5 instead and should file issues for platform problems. Existing E5 libraries are unchanged. Gemma macOS support is Apple Silicon (arm64) only; Intel Macs are unsupported.' || '' }}
 
   macos:
     name: Signed and notarized macOS bundles
     needs: release
-    if: ${{ github.event_name == 'push' && needs.release.result == 'success' }}
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.release.result == 'success' }}
     runs-on: macos-latest
     timeout-minutes: 120
     environment: desktop-release
+    env:
+      MACOS_TARGET: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && 'aarch64-apple-darwin' || vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' && 'aarch64-apple-darwin' || vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true' && 'aarch64-apple-darwin' || 'universal-apple-darwin' }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.release_commit }}
+          fetch-depth: 0
       - uses: Swatinem/rust-cache@v2
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -35,20 +116,61 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Require exact experimental Gemma desktop approval
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
+          RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
+        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+      - name: Require exact five-gate Gemma desktop approval
+        if: vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'
+        shell: bash
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
+        run: node scripts/check-qualified-gemma-release.mjs --desktop --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+      - name: Require explicit risk acceptance for unqualified Gemma
+        if: vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'
+        shell: bash
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
+          RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
+        run: node scripts/gemma-risk-acceptance.mjs --desktop --target macos-aarch64 --release-source-revision "$RELEASE_SOURCE_REVISION"
       - name: Compile the production semantic catalog trust key
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
           VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
         run: >
           node scripts/export-semantic-verifying-key.mjs
           "$GITHUB_ENV" "$RUNNER_TEMP/semantic-catalog.pub"
       - name: Fetch the approved macOS arm64 semantic catalog
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: vars.SEMANTIC_RELEASE_QUALIFIED == 'true' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true'
         run: >
           node scripts/fetch-approved-semantic-catalog.mjs
           macos-aarch64 apps/fm-desktop/src-tauri/resources/semantic
+      - name: Fetch the approved experimental macOS arm64 semantic catalog
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          macos-aarch64 apps/fm-desktop/src-tauri/resources/semantic
+          docs/evaluations/semantic-gemma-experimental-v1.json
+      - name: Fetch the five-gate-approved macOS arm64 semantic catalog
+        if: vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          macos-aarch64 apps/fm-desktop/src-tauri/resources/semantic
+          docs/evaluations/semantic-gemma-qualified-v1.json
+      - name: Fetch the risk-accepted macOS arm64 semantic catalog
+        if: vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          macos-aarch64 apps/fm-desktop/src-tauri/resources/semantic
+          docs/evaluations/semantic-gemma-risk-accepted-v1.json
       - name: Verify the approved semantic catalog signature
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         run: >
           cargo run --quiet --locked -p fm-semantic-components
           --example semantic_production_catalog --
@@ -56,13 +178,21 @@ jobs:
           apps/fm-desktop/src-tauri/resources/semantic/catalog.json
           apps/fm-desktop/src-tauri/resources/semantic/catalog.sig
           "$RUNNER_TEMP/semantic-catalog.pub"
-      - name: Install universal macOS Rust targets
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Install macOS Rust targets
+        env:
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
+          GEMMA_DESKTOP_NON_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          GEMMA_DESKTOP_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
+        run: |
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_NON_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_RISK_ACCEPTED" == "true" ]]; then
+            rustup target add aarch64-apple-darwin
+          else
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          fi
       - name: Install lld
         run: brew install lld
       - name: Require tag to match the Cargo-owned desktop version
-        if: github.event_name == 'push'
-        run: node scripts/check-desktop-release.mjs "${{ github.ref_name }}"
+        run: node scripts/check-desktop-release.mjs "$RELEASE_TAG"
       - name: Record the Structured Knowledge Search visibility decision
         env:
           KNOWLEDGE_SEARCH_RELEASE_QUALIFIED: ${{ vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED }}
@@ -120,14 +250,24 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm run build:tauri --target universal-apple-darwin
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
+          GEMMA_DESKTOP_NON_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          GEMMA_DESKTOP_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
+          VITE_GEMMA_QUALIFIED: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          VITE_GEMMA_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
+        run: |
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_NON_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_RISK_ACCEPTED" == "true" ]]; then
+            pnpm run build:tauri --target aarch64-apple-darwin --features semantic-gemma
+          else
+            pnpm run build:tauri --target universal-apple-darwin
+          fi
       - name: Notarize and staple the DMG
         env:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
         run: |
           DMG_PATH="$(
-            find target/universal-apple-darwin/release/bundle/dmg \
+            find "target/$MACOS_TARGET/release/bundle/dmg" \
               -maxdepth 1 -type f -name '*.dmg' -print -quit
           )"
           test -n "$DMG_PATH"
@@ -139,14 +279,18 @@ jobs:
             --timeout 45m \
             --no-s3-acceleration
           xcrun stapler staple "$DMG_PATH"
-      - name: Verify signature, notarization, stapling, and universal binary
+      - name: Verify signature, notarization, stapling, and macOS architecture
+        env:
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
+          GEMMA_DESKTOP_NON_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          GEMMA_DESKTOP_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
         run: |
           APP_PATH="$(
-            find target/universal-apple-darwin/release/bundle/macos \
+            find "target/$MACOS_TARGET/release/bundle/macos" \
               -maxdepth 1 -type d -name '*.app' -print -quit
           )"
           DMG_PATH="$(
-            find target/universal-apple-darwin/release/bundle/dmg \
+            find "target/$MACOS_TARGET/release/bundle/dmg" \
               -maxdepth 1 -type f -name '*.dmg' -print -quit
           )"
           test -n "$APP_PATH"
@@ -176,15 +320,20 @@ jobs:
           spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH"
           hdiutil verify "$DMG_PATH"
           ARCHITECTURES="$(lipo -archs "$APP_PATH/Contents/MacOS/Procyon")"
-          grep -qw arm64 <<< "$ARCHITECTURES"
-          grep -qw x86_64 <<< "$ARCHITECTURES"
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_NON_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_RISK_ACCEPTED" == "true" ]]; then
+            test "$ARCHITECTURES" == "arm64"
+            [[ "$(basename "$DMG_PATH")" == *aarch64*.dmg ]]
+          else
+            grep -qw arm64 <<< "$ARCHITECTURES"
+            grep -qw x86_64 <<< "$ARCHITECTURES"
+          fi
       - uses: softprops/action-gh-release@v3
-        if: github.event_name == 'push'
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
-            target/universal-apple-darwin/release/bundle/dmg/*.dmg
-            target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
-            target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
+            target/${{ env.MACOS_TARGET }}/release/bundle/dmg/*.dmg
+            target/${{ env.MACOS_TARGET }}/release/bundle/macos/*.app.tar.gz
+            target/${{ env.MACOS_TARGET }}/release/bundle/macos/*.app.tar.gz.sig
       - name: Remove temporary signing credentials
         if: always()
         run: rm -f "$APPLE_API_KEY_PATH"
@@ -192,11 +341,16 @@ jobs:
   linux:
     name: Linux packages
     needs: release
-    if: ${{ github.event_name == 'push' && needs.release.result == 'success' }}
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.release.result == 'success' }}
     runs-on: ubuntu-22.04
     environment: desktop-release
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.release_commit }}
+          fetch-depth: 0
       - uses: Swatinem/rust-cache@v2
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -213,20 +367,61 @@ jobs:
             patchelf
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Require exact experimental Gemma desktop approval
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
+          RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
+        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+      - name: Require exact five-gate Gemma desktop approval
+        if: vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'
+        shell: bash
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
+        run: node scripts/check-qualified-gemma-release.mjs --desktop --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+      - name: Require explicit risk acceptance for unqualified Gemma
+        if: vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'
+        shell: bash
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
+          RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
+        run: node scripts/gemma-risk-acceptance.mjs --desktop --target linux-x86_64 --release-source-revision "$RELEASE_SOURCE_REVISION"
       - name: Compile the production semantic catalog trust key
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
           VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
         run: >
           node scripts/export-semantic-verifying-key.mjs
           "$GITHUB_ENV" "$RUNNER_TEMP/semantic-catalog.pub"
       - name: Fetch the approved Linux x86-64 semantic catalog
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: vars.SEMANTIC_RELEASE_QUALIFIED == 'true' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true'
         run: >
           node scripts/fetch-approved-semantic-catalog.mjs
           linux-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+      - name: Fetch the approved experimental Linux x86-64 semantic catalog
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          linux-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+          docs/evaluations/semantic-gemma-experimental-v1.json
+      - name: Fetch the five-gate-approved Linux x86-64 semantic catalog
+        if: vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          linux-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+          docs/evaluations/semantic-gemma-qualified-v1.json
+      - name: Fetch the risk-accepted Linux x86-64 semantic catalog
+        if: vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          linux-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+          docs/evaluations/semantic-gemma-risk-accepted-v1.json
       - name: Verify the approved semantic catalog signature
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         run: >
           cargo run --quiet --locked -p fm-semantic-components
           --example semantic_production_catalog --
@@ -235,8 +430,7 @@ jobs:
           apps/fm-desktop/src-tauri/resources/semantic/catalog.sig
           "$RUNNER_TEMP/semantic-catalog.pub"
       - name: Require tag to match the Cargo-owned desktop version
-        if: github.event_name == 'push'
-        run: node scripts/check-desktop-release.mjs "$GITHUB_REF_NAME"
+        run: node scripts/check-desktop-release.mjs "$RELEASE_TAG"
       - name: Record the Structured Knowledge Search visibility decision
         env:
           KNOWLEDGE_SEARCH_RELEASE_QUALIFIED: ${{ vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED }}
@@ -250,10 +444,20 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm run build:tauri
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
+          GEMMA_DESKTOP_NON_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          GEMMA_DESKTOP_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
+          VITE_GEMMA_QUALIFIED: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          VITE_GEMMA_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
+        run: |
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_NON_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_RISK_ACCEPTED" == "true" ]]; then
+            pnpm run build:tauri --features semantic-gemma
+          else
+            pnpm run build:tauri
+          fi
       - uses: softprops/action-gh-release@v3
-        if: github.event_name == 'push'
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             target/release/bundle/deb/*.deb
             target/release/bundle/appimage/*.AppImage
@@ -262,11 +466,16 @@ jobs:
   windows:
     name: Unsigned Windows installers
     needs: release
-    if: ${{ github.event_name == 'push' && needs.release.result == 'success' }}
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.release.result == 'success' }}
     runs-on: windows-latest
     environment: desktop-release
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.release_commit }}
+          fetch-depth: 0
       - uses: Swatinem/rust-cache@v2
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -275,20 +484,62 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Require exact experimental Gemma desktop approval
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        shell: bash
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
+          RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
+        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+      - name: Require exact five-gate Gemma desktop approval
+        if: vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'
+        shell: bash
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
+        run: node scripts/check-qualified-gemma-release.mjs --desktop --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+      - name: Require explicit risk acceptance for unqualified Gemma
+        if: vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'
+        shell: bash
+        env:
+          SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
+          SEMANTIC_GEMMA_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
+          RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
+        run: node scripts/gemma-risk-acceptance.mjs --desktop --target windows-x86_64 --release-source-revision "$RELEASE_SOURCE_REVISION"
       - name: Compile the production semantic catalog trust key
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         env:
           VERIFYING_KEY_BASE64: ${{ vars.SEMANTIC_CATALOG_VERIFYING_KEY_BASE64 }}
         run: >
           node scripts/export-semantic-verifying-key.mjs
           "$env:GITHUB_ENV" "$env:RUNNER_TEMP/semantic-catalog.pub"
       - name: Fetch the approved Windows x86-64 semantic catalog
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: vars.SEMANTIC_RELEASE_QUALIFIED == 'true' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true'
         run: >
           node scripts/fetch-approved-semantic-catalog.mjs
           windows-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+      - name: Fetch the approved experimental Windows x86-64 semantic catalog
+        if: vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          windows-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+          docs/evaluations/semantic-gemma-experimental-v1.json
+      - name: Fetch the five-gate-approved Windows x86-64 semantic catalog
+        if: vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          windows-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+          docs/evaluations/semantic-gemma-qualified-v1.json
+      - name: Fetch the risk-accepted Windows x86-64 semantic catalog
+        if: vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'
+        run: >
+          node scripts/fetch-approved-semantic-catalog.mjs
+          windows-x86_64 apps/fm-desktop/src-tauri/resources/semantic
+          docs/evaluations/semantic-gemma-risk-accepted-v1.json
       - name: Verify the approved semantic catalog signature
-        if: github.event_name == 'push' && vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
+        if: vars.SEMANTIC_RELEASE_QUALIFIED == 'true'
         run: >
           cargo run --quiet --locked -p fm-semantic-components
           --example semantic_production_catalog --
@@ -297,8 +548,7 @@ jobs:
           apps/fm-desktop/src-tauri/resources/semantic/catalog.sig
           "$env:RUNNER_TEMP/semantic-catalog.pub"
       - name: Require tag to match the Cargo-owned desktop version
-        if: github.event_name == 'push'
-        run: node scripts/check-desktop-release.mjs "$env:GITHUB_REF_NAME"
+        run: node scripts/check-desktop-release.mjs "$env:RELEASE_TAG"
       - name: Record the Structured Knowledge Search visibility decision
         env:
           KNOWLEDGE_SEARCH_RELEASE_QUALIFIED: ${{ vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED }}
@@ -309,13 +559,24 @@ jobs:
         if: vars.KNOWLEDGE_SEARCH_RELEASE_QUALIFIED == 'true'
         run: node scripts/check-knowledge-search-preconditions.mjs --allow-unqualified
       - name: Build unsigned Windows installers
+        shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm run build:tauri
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
+          GEMMA_DESKTOP_NON_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          GEMMA_DESKTOP_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
+          VITE_GEMMA_QUALIFIED: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          VITE_GEMMA_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
+        run: |
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_NON_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_RISK_ACCEPTED" == "true" ]]; then
+            pnpm run build:tauri --features semantic-gemma
+          else
+            pnpm run build:tauri
+          fi
       - uses: softprops/action-gh-release@v3
-        if: github.event_name == 'push'
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             target/release/bundle/msi/*.msi
             target/release/bundle/nsis/*-setup.exe
@@ -324,17 +585,21 @@ jobs:
   updater-manifest:
     name: Publish signed updater manifest
     needs: [macos, linux, windows]
-    if: ${{ always() && github.event_name == 'push' && needs.macos.result == 'success' && needs.linux.result == 'success' && needs.windows.result == 'success' }}
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.macos.result == 'success' && needs.linux.result == 'success' && needs.windows.result == 'success' }}
     runs-on: ubuntu-latest
     environment: desktop-release
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.release_commit }}
       - name: Download signed updater artifacts
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir updater-assets
-          gh release download "$GITHUB_REF_NAME" \
+          gh release download "$RELEASE_TAG" \
             --pattern "*.app.tar.gz" \
             --pattern "*.app.tar.gz.sig" \
             --pattern "*.AppImage" \
@@ -343,38 +608,66 @@ jobs:
             --pattern "*-setup.exe.sig" \
             --dir updater-assets
       - name: Generate signed update metadata
-        run: >
-          node scripts/generate-updater-manifest.mjs
-          --assets updater-assets
-          --repository "$GITHUB_REPOSITORY"
-          --tag "$GITHUB_REF_NAME"
-          --version "${GITHUB_REF_NAME#v}"
-          --output latest.json
-      - name: Publish stable update endpoint
+        env:
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
+          GEMMA_DESKTOP_NON_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          GEMMA_DESKTOP_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
+        run: |
+          EXTRA_ARGS=()
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" ]]; then
+            EXTRA_ARGS=(--experimental-gemma --gemma-arm64-only)
+          elif [[ "$GEMMA_DESKTOP_NON_EXPERIMENTAL" == "true" ]]; then
+            EXTRA_ARGS=(--gemma-arm64-only)
+          elif [[ "$GEMMA_DESKTOP_RISK_ACCEPTED" == "true" ]]; then
+            EXTRA_ARGS=(--gemma-arm64-only)
+          fi
+          node scripts/generate-updater-manifest.mjs \
+            --assets updater-assets \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --version "${RELEASE_TAG#v}" \
+            --output latest.json \
+            "${EXTRA_ARGS[@]}"
+      - name: Publish selected update endpoint
         env:
           GH_TOKEN: ${{ github.token }}
+          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
+          GEMMA_DESKTOP_NON_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
+          GEMMA_DESKTOP_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
         run: |
-          if ! gh release view updater-latest >/dev/null 2>&1; then
-            gh release create updater-latest \
+          UPDATE_TAG=updater-latest
+          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" ]]; then
+            UPDATE_TAG=updater-gemma-experimental
+          elif [[ "$GEMMA_DESKTOP_NON_EXPERIMENTAL" == "true" ]]; then
+            UPDATE_TAG=updater-gemma
+          elif [[ "$GEMMA_DESKTOP_RISK_ACCEPTED" == "true" ]]; then
+            UPDATE_TAG=updater-gemma-risk-accepted
+          fi
+          if ! gh release view "$UPDATE_TAG" >/dev/null 2>&1; then
+            gh release create "$UPDATE_TAG" \
               --prerelease \
               --title "Procyon updater metadata" \
               --notes "Managed endpoint for signed desktop update metadata."
           fi
-          gh release upload updater-latest latest.json --clobber
+          gh release upload "$UPDATE_TAG" latest.json --clobber
 
   homebrew:
     name: Publish cross-platform Homebrew cask
     needs: [macos, linux]
-    if: ${{ always() && github.event_name == 'push' && needs.macos.result == 'success' && needs.linux.result == 'success' }}
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.macos.result == 'success' && needs.linux.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}
     runs-on: macos-latest
     environment: desktop-release
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.release_commit }}
       - name: Download the macOS and Linux release packages
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download "$GITHUB_REF_NAME" \
+          gh release download "$RELEASE_TAG" \
             --pattern "*.dmg" \
             --pattern "*.AppImage" \
             --dir package-input
@@ -384,7 +677,7 @@ jobs:
           APPIMAGE_PATH="$(find package-input -type f -name '*.AppImage' -print -quit)"
           test -n "$DMG_PATH"
           test -n "$APPIMAGE_PATH"
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RELEASE_TAG#v}"
           DMG_SHA256="$(shasum -a 256 "$DMG_PATH" | cut -d ' ' -f 1)"
           APPIMAGE_SHA256="$(shasum -a 256 "$APPIMAGE_PATH" | cut -d ' ' -f 1)"
           node scripts/generate-package-manager-files.mjs homebrew \
@@ -410,13 +703,13 @@ jobs:
           git -C homebrew-tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C homebrew-tap add Casks/procyon.rb
           git -C homebrew-tap diff --cached --quiet && exit 0
-          git -C homebrew-tap commit -m "procyon ${GITHUB_REF_NAME#v}"
+          git -C homebrew-tap commit -m "procyon ${RELEASE_TAG#v}"
           git -C homebrew-tap push
 
   chocolatey:
     needs: windows
-    if: ${{ always() && github.event_name == 'push' && needs.windows.result == 'success' }}
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.windows.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}
     uses: ./.github/workflows/publish-chocolatey.yml
     with:
-      release_tag: ${{ github.ref_name }}
+      release_tag: ${{ inputs.release_tag || github.ref_name }}
     secrets: inherit

@@ -101,6 +101,9 @@ pub struct SemanticEvidence {
     pub indexed_content_hash: String,
     /// Published generation.
     pub generation: u64,
+    /// PDF pages omitted by the configured page-image budget.
+    #[serde(default)]
+    pub pdf_image_skipped_pages: Option<u32>,
     /// Source is currently unavailable.
     pub unavailable: bool,
     /// Current known bytes differ from the indexed generation.
@@ -452,6 +455,7 @@ impl SemanticSearchService {
                             provenance,
                             indexed_content_hash: item.content_hash,
                             generation: item.generation,
+                            pdf_image_skipped_pages: item.pdf_image_skipped_pages,
                             unavailable: !item.available,
                             stale,
                             generated: item.generated,
@@ -483,7 +487,18 @@ fn group_evidence(
     evidence_limit: usize,
 ) -> Vec<SemanticFileResult> {
     let mut by_document: HashMap<String, Vec<SemanticEvidence>> = HashMap::new();
-    for (document_id, evidence) in candidates {
+    for (document_id, mut evidence) in candidates {
+        if evidence.media_type.as_deref() == Some("application/pdf") {
+            if crate::ingestion::is_pdf_navigation(
+                "application/pdf",
+                &evidence.chunk_kind,
+                &evidence.section_path,
+                &evidence.excerpt,
+            ) {
+                evidence.chunk_kind = "navigation".into();
+            }
+            evidence.excerpt = fm_semantic_conversion::clean_pdf_toc_text(&evidence.excerpt).0;
+        }
         by_document.entry(document_id).or_default().push(evidence);
     }
     let mut results = by_document
@@ -492,6 +507,9 @@ fn group_evidence(
             evidence.sort_by(|left, right| {
                 left.generated
                     .cmp(&right.generated)
+                    .then_with(|| {
+                        (left.chunk_kind == "navigation").cmp(&(right.chunk_kind == "navigation"))
+                    })
                     .then_with(|| right.score.total_cmp(&left.score))
                     .then_with(|| left.source_position.cmp(&right.source_position))
                     .then_with(|| left.record_id.cmp(&right.record_id))
@@ -503,7 +521,12 @@ fn group_evidence(
                 .map(|(index, evidence)| {
                     let diversity_weight = if index == 0 { 1.0 } else { 0.1 / index as f32 };
                     let generated_weight = if evidence.generated { 0.5 } else { 1.0 };
-                    evidence.score * diversity_weight * generated_weight
+                    let navigation_weight = if evidence.chunk_kind == "navigation" {
+                        0.25
+                    } else {
+                        1.0
+                    };
+                    evidence.score * diversity_weight * generated_weight * navigation_weight
                 })
                 .sum::<f32>();
             let primary_source_id = evidence[0].source_id.clone();
@@ -672,6 +695,7 @@ mod tests {
                 }),
                 indexed_content_hash: "hash".into(),
                 generation: 1,
+                pdf_image_skipped_pages: None,
                 unavailable: false,
                 stale: false,
                 generated,
@@ -704,6 +728,28 @@ mod tests {
         assert_eq!(grouped[0].evidence.len(), 2);
         assert_eq!(grouped[0].additional_source_ids, ["source-copy"]);
         assert!(grouped[0].score > grouped[1].score);
+    }
+
+    #[test]
+    fn pdf_navigation_is_retained_but_does_not_displace_substantive_passages() {
+        let mut navigation = evidence("toc", "toc-source", "toc-0", 0.98, 0, false);
+        navigation.1.media_type = Some("application/pdf".into());
+        navigation.1.chunk_kind = "navigation".into();
+        navigation.1.excerpt = "........ Aggression".into();
+        let mut passage = evidence("body", "body-source", "body-0", 0.75, 1, false);
+        passage.1.media_type = Some("application/pdf".into());
+        let results = group_evidence(vec![navigation, passage], 1);
+
+        assert_eq!(
+            results
+                .iter()
+                .map(|result| (
+                    result.document_id.as_str(),
+                    result.evidence[0].excerpt.as_str()
+                ))
+                .collect::<Vec<_>>(),
+            [("body", "excerpt body-0"), ("toc", "Aggression")]
+        );
     }
 
     #[test]

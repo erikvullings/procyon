@@ -1,0 +1,2061 @@
+{
+  "model": "google/embeddinggemma-2",
+  "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "runtime": "native-rust-cpu-fp32",
+  "measurementWidth": 768,
+  "dimensionMethod": "truncate and L2 renormalize both sides",
+  "os": "macos",
+  "architecture": "aarch64",
+  "modelLoadSeconds": 0.696867584,
+  "result": {
+    "corpusSha256": "be5e544d9864ae60152184dc9c8bed4c00f8f811eb04896fc0cb2ba74b012f41",
+    "documentCount": 197,
+    "queryCount": 50,
+    "documentSeconds": 169.073563958,
+    "documentsPerSecond": 1.1651732854518717,
+    "queryLatencyMedianMs": 270.45764599999995,
+    "queryLatencyP95Ms": 332.309875,
+    "dimensions": {
+      "128": {
+        "positiveCases": 50,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 0.76,
+        "hitAt3": 0.98,
+        "recallAt2": 0.92,
+        "mrr": 0.865,
+        "cases": [
+          {
+            "id": "bn-4",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "717942#0",
+              "659471#0",
+              "626097#0"
+            ]
+          },
+          {
+            "id": "bn-7",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "625049#0",
+              "272865#2",
+              "625049#11"
+            ]
+          },
+          {
+            "id": "bn-21",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "579216#0",
+              "452067#21",
+              "378894#2"
+            ]
+          },
+          {
+            "id": "bn-23",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "264520#2",
+              "264520#11",
+              "264520#13"
+            ]
+          },
+          {
+            "id": "bn-36",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "108310#0",
+              "107698#0",
+              "6025#0"
+            ]
+          },
+          {
+            "id": "bn-42",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "252004#2",
+              "4428#1",
+              "63977#12"
+            ]
+          },
+          {
+            "id": "bn-53",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "435865#3",
+              "435865#5",
+              "427750#5"
+            ]
+          },
+          {
+            "id": "bn-56",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "2139#1",
+              "1526#4",
+              "16160#2"
+            ]
+          },
+          {
+            "id": "bn-57",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "420649#0",
+              "460414#3",
+              "465067#5"
+            ]
+          },
+          {
+            "id": "bn-63",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "306492#0",
+              "11825#0",
+              "11817#0"
+            ]
+          },
+          {
+            "id": "bn-64",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4710#2",
+              "4710#15",
+              "4710#14"
+            ]
+          },
+          {
+            "id": "bn-67",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "486957#11",
+              "486957#12",
+              "487074#0"
+            ]
+          },
+          {
+            "id": "bn-69",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4763#10",
+              "12113#6",
+              "8289#9"
+            ]
+          },
+          {
+            "id": "bn-72",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "63946#5",
+              "177624#0",
+              "177624#7"
+            ]
+          },
+          {
+            "id": "bn-90",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "15596#1",
+              "15596#2",
+              "2522#2"
+            ]
+          },
+          {
+            "id": "bn-93",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4763#2",
+              "113544#0",
+              "111756#0"
+            ]
+          },
+          {
+            "id": "bn-102",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "80727#3",
+              "274199#1",
+              "353461#1"
+            ]
+          },
+          {
+            "id": "bn-103",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "370400#10",
+              "4520#1",
+              "370400#9"
+            ]
+          },
+          {
+            "id": "bn-115",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "3134#5",
+              "18340#0",
+              "3134#6"
+            ]
+          },
+          {
+            "id": "bn-116",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "453826#0",
+              "453826#10",
+              "453826#1"
+            ]
+          },
+          {
+            "id": "bn-128",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "282430#4",
+              "282430#0",
+              "282430#2"
+            ]
+          },
+          {
+            "id": "bn-129",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105741#0",
+              "105741#1",
+              "76161#0"
+            ]
+          },
+          {
+            "id": "bn-149",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "296930#9",
+              "64498#0",
+              "640415#3"
+            ]
+          },
+          {
+            "id": "bn-161",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4763#4",
+              "4763#2",
+              "370400#27"
+            ]
+          },
+          {
+            "id": "bn-168",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "419647#0",
+              "419647#1",
+              "420158#0"
+            ]
+          },
+          {
+            "id": "bn-174",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "1366#0",
+              "463481#1",
+              "507610#16"
+            ]
+          },
+          {
+            "id": "bn-175",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "138716#0",
+              "138716#13",
+              "138716#6"
+            ]
+          },
+          {
+            "id": "bn-177",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "1497#20",
+              "1497#21",
+              "2898#0"
+            ]
+          },
+          {
+            "id": "bn-178",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "83491#1",
+              "286173#18",
+              "35404#1"
+            ]
+          },
+          {
+            "id": "bn-181",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "446228#1",
+              "1612#0",
+              "10991#0"
+            ]
+          },
+          {
+            "id": "bn-182",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "256809#2",
+              "256809#1",
+              "286173#5"
+            ]
+          },
+          {
+            "id": "bn-183",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "6468#0",
+              "6468#2",
+              "6468#15"
+            ]
+          },
+          {
+            "id": "bn-184",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "324714#2",
+              "364709#0",
+              "394246#0"
+            ]
+          },
+          {
+            "id": "bn-191",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "12079#0",
+              "348032#1",
+              "64741#5"
+            ]
+          },
+          {
+            "id": "bn-195",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "494154#0",
+              "494154#2",
+              "547902#1"
+            ]
+          },
+          {
+            "id": "bn-204",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "83947#0",
+              "465344#0",
+              "465344#17"
+            ]
+          },
+          {
+            "id": "bn-206",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "508288#1",
+              "6629#0",
+              "6594#0"
+            ]
+          },
+          {
+            "id": "bn-208",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "249249#3",
+              "63623#9",
+              "64498#4"
+            ]
+          },
+          {
+            "id": "bn-210",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "2656#3",
+              "369118#0",
+              "398524#0"
+            ]
+          },
+          {
+            "id": "bn-213",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "260034#2",
+              "260034#1",
+              "3120#5"
+            ]
+          },
+          {
+            "id": "bn-220",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "76161#1",
+              "105741#1",
+              "2730#11"
+            ]
+          },
+          {
+            "id": "bn-226",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "112527#0",
+              "107698#0",
+              "107671#0"
+            ]
+          },
+          {
+            "id": "bn-231",
+            "firstRelevantRank": 4,
+            "recallAt2": 0.0,
+            "topIds": [
+              "17736#6",
+              "17736#3",
+              "17736#0"
+            ]
+          },
+          {
+            "id": "bn-238",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "5210#6",
+              "389021#11",
+              "564590#0"
+            ]
+          },
+          {
+            "id": "bn-241",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "483238#0",
+              "1495#6",
+              "4318#0"
+            ]
+          },
+          {
+            "id": "bn-246",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "407539#0",
+              "33117#1",
+              "540267#0"
+            ]
+          },
+          {
+            "id": "bn-248",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "575675#3",
+              "575675#0",
+              "575675#5"
+            ]
+          },
+          {
+            "id": "bn-259",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "113557#0",
+              "2965#3",
+              "579015#2"
+            ]
+          },
+          {
+            "id": "bn-262",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "96096#2",
+              "18096#5",
+              "474411#1"
+            ]
+          },
+          {
+            "id": "bn-263",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "369720#16",
+              "9989#1",
+              "9989#16"
+            ]
+          }
+        ]
+      },
+      "256": {
+        "positiveCases": 50,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 0.78,
+        "hitAt3": 0.98,
+        "recallAt2": 0.88,
+        "mrr": 0.8683333333333333,
+        "cases": [
+          {
+            "id": "bn-4",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "717942#0",
+              "626097#0",
+              "659471#0"
+            ]
+          },
+          {
+            "id": "bn-7",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "625049#0",
+              "625049#11",
+              "272865#2"
+            ]
+          },
+          {
+            "id": "bn-21",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "579216#0",
+              "378894#2",
+              "452067#21"
+            ]
+          },
+          {
+            "id": "bn-23",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "264520#2",
+              "264520#11",
+              "264520#14"
+            ]
+          },
+          {
+            "id": "bn-36",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "108310#0",
+              "107698#0",
+              "6025#0"
+            ]
+          },
+          {
+            "id": "bn-42",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "252004#2",
+              "4428#1",
+              "63977#12"
+            ]
+          },
+          {
+            "id": "bn-53",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "435865#3",
+              "435865#5",
+              "294449#2"
+            ]
+          },
+          {
+            "id": "bn-56",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "2139#1",
+              "1526#4",
+              "16160#2"
+            ]
+          },
+          {
+            "id": "bn-57",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "420649#0",
+              "460414#3",
+              "465067#5"
+            ]
+          },
+          {
+            "id": "bn-63",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "11825#0",
+              "11817#0",
+              "306492#0"
+            ]
+          },
+          {
+            "id": "bn-64",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4710#2",
+              "4710#14",
+              "4710#15"
+            ]
+          },
+          {
+            "id": "bn-67",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "486957#11",
+              "487074#0",
+              "486957#12"
+            ]
+          },
+          {
+            "id": "bn-69",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4763#10",
+              "12113#6",
+              "8289#9"
+            ]
+          },
+          {
+            "id": "bn-72",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "1528#25",
+              "177624#7",
+              "177624#0"
+            ]
+          },
+          {
+            "id": "bn-90",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "15596#2",
+              "15596#1",
+              "2522#2"
+            ]
+          },
+          {
+            "id": "bn-93",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4763#2",
+              "113544#0",
+              "64215#0"
+            ]
+          },
+          {
+            "id": "bn-102",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "80727#3",
+              "283338#1",
+              "274199#1"
+            ]
+          },
+          {
+            "id": "bn-103",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "370400#10",
+              "4520#1",
+              "370400#9"
+            ]
+          },
+          {
+            "id": "bn-115",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "3134#5",
+              "3134#6",
+              "18340#0"
+            ]
+          },
+          {
+            "id": "bn-116",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "453826#0",
+              "453826#1",
+              "453826#10"
+            ]
+          },
+          {
+            "id": "bn-128",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "282430#4",
+              "282430#0",
+              "282430#2"
+            ]
+          },
+          {
+            "id": "bn-129",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105741#0",
+              "105741#1",
+              "76161#0"
+            ]
+          },
+          {
+            "id": "bn-149",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "64498#0",
+              "296930#9",
+              "640415#3"
+            ]
+          },
+          {
+            "id": "bn-161",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4763#4",
+              "4763#2",
+              "370400#27"
+            ]
+          },
+          {
+            "id": "bn-168",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "419647#0",
+              "419647#1",
+              "313583#5"
+            ]
+          },
+          {
+            "id": "bn-174",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "1366#0",
+              "463481#1",
+              "354685#6"
+            ]
+          },
+          {
+            "id": "bn-175",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "138716#0",
+              "138716#13",
+              "138716#6"
+            ]
+          },
+          {
+            "id": "bn-177",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "1497#21",
+              "1497#20",
+              "2898#0"
+            ]
+          },
+          {
+            "id": "bn-178",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "83491#1",
+              "286173#18",
+              "35404#1"
+            ]
+          },
+          {
+            "id": "bn-181",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "446228#1",
+              "1612#0",
+              "10991#0"
+            ]
+          },
+          {
+            "id": "bn-182",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "256809#2",
+              "256809#1",
+              "286173#5"
+            ]
+          },
+          {
+            "id": "bn-183",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "6468#0",
+              "6468#2",
+              "6468#15"
+            ]
+          },
+          {
+            "id": "bn-184",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "324714#2",
+              "364709#0",
+              "394246#0"
+            ]
+          },
+          {
+            "id": "bn-191",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "12079#0",
+              "348032#1",
+              "64741#5"
+            ]
+          },
+          {
+            "id": "bn-195",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "494154#0",
+              "547902#1",
+              "494154#2"
+            ]
+          },
+          {
+            "id": "bn-204",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "83947#0",
+              "465344#17",
+              "465344#0"
+            ]
+          },
+          {
+            "id": "bn-206",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "508288#1",
+              "6634#0",
+              "6629#0"
+            ]
+          },
+          {
+            "id": "bn-208",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "249249#3",
+              "63623#9",
+              "64498#4"
+            ]
+          },
+          {
+            "id": "bn-210",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "2656#3",
+              "369118#0",
+              "398524#0"
+            ]
+          },
+          {
+            "id": "bn-213",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "260034#2",
+              "260034#1",
+              "3120#5"
+            ]
+          },
+          {
+            "id": "bn-220",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "76161#1",
+              "105741#1",
+              "2730#11"
+            ]
+          },
+          {
+            "id": "bn-226",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "107698#0",
+              "108251#0",
+              "112527#0"
+            ]
+          },
+          {
+            "id": "bn-231",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "17736#6",
+              "17736#3",
+              "17736#5"
+            ]
+          },
+          {
+            "id": "bn-238",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "5210#6",
+              "389021#11",
+              "564590#0"
+            ]
+          },
+          {
+            "id": "bn-241",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "483238#0",
+              "4318#0",
+              "1495#6"
+            ]
+          },
+          {
+            "id": "bn-246",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "33117#1",
+              "540267#0",
+              "407539#0"
+            ]
+          },
+          {
+            "id": "bn-248",
+            "firstRelevantRank": 4,
+            "recallAt2": 0.0,
+            "topIds": [
+              "575675#3",
+              "575675#5",
+              "575675#7"
+            ]
+          },
+          {
+            "id": "bn-259",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "113557#0",
+              "2965#3",
+              "17791#3"
+            ]
+          },
+          {
+            "id": "bn-262",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "96096#2",
+              "18096#5",
+              "474411#1"
+            ]
+          },
+          {
+            "id": "bn-263",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "369720#16",
+              "9989#1",
+              "9989#16"
+            ]
+          }
+        ]
+      },
+      "512": {
+        "positiveCases": 50,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 0.74,
+        "hitAt3": 0.96,
+        "recallAt2": 0.88,
+        "mrr": 0.8466666666666667,
+        "cases": [
+          {
+            "id": "bn-4",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "717942#0",
+              "626097#0",
+              "659471#0"
+            ]
+          },
+          {
+            "id": "bn-7",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "625049#0",
+              "625049#11",
+              "272865#2"
+            ]
+          },
+          {
+            "id": "bn-21",
+            "firstRelevantRank": 4,
+            "recallAt2": 0.0,
+            "topIds": [
+              "579216#0",
+              "378894#79",
+              "452067#21"
+            ]
+          },
+          {
+            "id": "bn-23",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "264520#2",
+              "264520#11",
+              "264520#13"
+            ]
+          },
+          {
+            "id": "bn-36",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "108310#0",
+              "107698#0",
+              "6025#0"
+            ]
+          },
+          {
+            "id": "bn-42",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4428#1",
+              "252004#2",
+              "63977#12"
+            ]
+          },
+          {
+            "id": "bn-53",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "435865#3",
+              "435865#5",
+              "427750#5"
+            ]
+          },
+          {
+            "id": "bn-56",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "2139#1",
+              "1526#4",
+              "16160#2"
+            ]
+          },
+          {
+            "id": "bn-57",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "420649#0",
+              "460414#3",
+              "465067#5"
+            ]
+          },
+          {
+            "id": "bn-63",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "11825#0",
+              "306492#0",
+              "11817#0"
+            ]
+          },
+          {
+            "id": "bn-64",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4710#2",
+              "4710#14",
+              "4710#15"
+            ]
+          },
+          {
+            "id": "bn-67",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "486957#11",
+              "487074#0",
+              "486957#12"
+            ]
+          },
+          {
+            "id": "bn-69",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4763#10",
+              "12113#6",
+              "8289#0"
+            ]
+          },
+          {
+            "id": "bn-72",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "1528#25",
+              "177624#7",
+              "177624#0"
+            ]
+          },
+          {
+            "id": "bn-90",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "15596#2",
+              "15596#1",
+              "2522#2"
+            ]
+          },
+          {
+            "id": "bn-93",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4763#2",
+              "64215#0",
+              "113544#0"
+            ]
+          },
+          {
+            "id": "bn-102",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "80727#3",
+              "274199#1",
+              "283338#1"
+            ]
+          },
+          {
+            "id": "bn-103",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4520#1",
+              "370400#10",
+              "370400#9"
+            ]
+          },
+          {
+            "id": "bn-115",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "3134#6",
+              "3134#5",
+              "18340#0"
+            ]
+          },
+          {
+            "id": "bn-116",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "453826#0",
+              "453826#1",
+              "453826#10"
+            ]
+          },
+          {
+            "id": "bn-128",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "282430#4",
+              "282430#2",
+              "282430#0"
+            ]
+          },
+          {
+            "id": "bn-129",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105741#0",
+              "105741#1",
+              "76161#0"
+            ]
+          },
+          {
+            "id": "bn-149",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "64498#0",
+              "640415#3",
+              "296930#9"
+            ]
+          },
+          {
+            "id": "bn-161",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4763#4",
+              "4763#2",
+              "370400#27"
+            ]
+          },
+          {
+            "id": "bn-168",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "419647#0",
+              "419647#1",
+              "420158#0"
+            ]
+          },
+          {
+            "id": "bn-174",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "1366#0",
+              "463481#1",
+              "354685#6"
+            ]
+          },
+          {
+            "id": "bn-175",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "138716#0",
+              "138716#13",
+              "138716#6"
+            ]
+          },
+          {
+            "id": "bn-177",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "1497#20",
+              "1497#21",
+              "2898#0"
+            ]
+          },
+          {
+            "id": "bn-178",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "83491#1",
+              "286173#18",
+              "35404#1"
+            ]
+          },
+          {
+            "id": "bn-181",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "1612#0",
+              "446228#1",
+              "10991#0"
+            ]
+          },
+          {
+            "id": "bn-182",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "256809#2",
+              "256809#1",
+              "286173#5"
+            ]
+          },
+          {
+            "id": "bn-183",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "6468#0",
+              "6468#2",
+              "6468#15"
+            ]
+          },
+          {
+            "id": "bn-184",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "324714#2",
+              "364709#0",
+              "394246#0"
+            ]
+          },
+          {
+            "id": "bn-191",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "12079#0",
+              "348032#1",
+              "64741#5"
+            ]
+          },
+          {
+            "id": "bn-195",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "494154#0",
+              "547902#1",
+              "494154#2"
+            ]
+          },
+          {
+            "id": "bn-204",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "83947#0",
+              "465344#17",
+              "465344#0"
+            ]
+          },
+          {
+            "id": "bn-206",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "508288#1",
+              "6594#0",
+              "6634#0"
+            ]
+          },
+          {
+            "id": "bn-208",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "249249#3",
+              "63623#9",
+              "64498#4"
+            ]
+          },
+          {
+            "id": "bn-210",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "2656#3",
+              "369118#0",
+              "398524#0"
+            ]
+          },
+          {
+            "id": "bn-213",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "260034#2",
+              "260034#1",
+              "3120#5"
+            ]
+          },
+          {
+            "id": "bn-220",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "76161#1",
+              "105741#1",
+              "2730#11"
+            ]
+          },
+          {
+            "id": "bn-226",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "107698#0",
+              "108251#0",
+              "107671#0"
+            ]
+          },
+          {
+            "id": "bn-231",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "17736#6",
+              "17736#3",
+              "17736#5"
+            ]
+          },
+          {
+            "id": "bn-238",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "5210#6",
+              "389021#11",
+              "564590#0"
+            ]
+          },
+          {
+            "id": "bn-241",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "483238#0",
+              "4318#0",
+              "1495#6"
+            ]
+          },
+          {
+            "id": "bn-246",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "33117#1",
+              "407539#0",
+              "540267#0"
+            ]
+          },
+          {
+            "id": "bn-248",
+            "firstRelevantRank": 4,
+            "recallAt2": 0.0,
+            "topIds": [
+              "575675#3",
+              "575675#5",
+              "575675#7"
+            ]
+          },
+          {
+            "id": "bn-259",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "113557#0",
+              "2965#3",
+              "17791#3"
+            ]
+          },
+          {
+            "id": "bn-262",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "96096#2",
+              "18096#5",
+              "474411#1"
+            ]
+          },
+          {
+            "id": "bn-263",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "369720#16",
+              "9989#1",
+              "9989#16"
+            ]
+          }
+        ]
+      },
+      "768": {
+        "positiveCases": 50,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 0.8,
+        "hitAt3": 0.96,
+        "recallAt2": 0.88,
+        "mrr": 0.8766666666666667,
+        "cases": [
+          {
+            "id": "bn-4",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "717942#0",
+              "626097#0",
+              "659471#0"
+            ]
+          },
+          {
+            "id": "bn-7",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "625049#0",
+              "625049#11",
+              "3145#54"
+            ]
+          },
+          {
+            "id": "bn-21",
+            "firstRelevantRank": 4,
+            "recallAt2": 0.0,
+            "topIds": [
+              "579216#0",
+              "378894#79",
+              "452067#21"
+            ]
+          },
+          {
+            "id": "bn-23",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "264520#2",
+              "264520#11",
+              "264520#13"
+            ]
+          },
+          {
+            "id": "bn-36",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "108310#0",
+              "107698#0",
+              "6025#0"
+            ]
+          },
+          {
+            "id": "bn-42",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4428#1",
+              "252004#2",
+              "63977#12"
+            ]
+          },
+          {
+            "id": "bn-53",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "435865#3",
+              "435865#5",
+              "427750#5"
+            ]
+          },
+          {
+            "id": "bn-56",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "2139#1",
+              "1526#4",
+              "16160#2"
+            ]
+          },
+          {
+            "id": "bn-57",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "420649#0",
+              "460414#3",
+              "465067#5"
+            ]
+          },
+          {
+            "id": "bn-63",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "306492#0",
+              "11825#0",
+              "11817#0"
+            ]
+          },
+          {
+            "id": "bn-64",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4710#2",
+              "4710#14",
+              "4710#15"
+            ]
+          },
+          {
+            "id": "bn-67",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "486957#11",
+              "486957#12",
+              "487074#0"
+            ]
+          },
+          {
+            "id": "bn-69",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4763#10",
+              "12113#6",
+              "8289#9"
+            ]
+          },
+          {
+            "id": "bn-72",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "1528#25",
+              "177624#7",
+              "177624#0"
+            ]
+          },
+          {
+            "id": "bn-90",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "15596#2",
+              "15596#1",
+              "2522#2"
+            ]
+          },
+          {
+            "id": "bn-93",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4763#2",
+              "113544#0",
+              "64215#0"
+            ]
+          },
+          {
+            "id": "bn-102",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "80727#3",
+              "283338#1",
+              "353461#1"
+            ]
+          },
+          {
+            "id": "bn-103",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "370400#10",
+              "4520#1",
+              "370400#9"
+            ]
+          },
+          {
+            "id": "bn-115",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "3134#6",
+              "3134#5",
+              "18340#0"
+            ]
+          },
+          {
+            "id": "bn-116",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "453826#0",
+              "453826#1",
+              "453826#10"
+            ]
+          },
+          {
+            "id": "bn-128",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "282430#4",
+              "282430#0",
+              "282430#2"
+            ]
+          },
+          {
+            "id": "bn-129",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "105741#0",
+              "105741#1",
+              "76161#0"
+            ]
+          },
+          {
+            "id": "bn-149",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "64498#0",
+              "640415#3",
+              "296930#9"
+            ]
+          },
+          {
+            "id": "bn-161",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "4763#4",
+              "4763#2",
+              "370400#27"
+            ]
+          },
+          {
+            "id": "bn-168",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "419647#0",
+              "419647#1",
+              "420158#0"
+            ]
+          },
+          {
+            "id": "bn-174",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "1366#0",
+              "463481#1",
+              "354685#6"
+            ]
+          },
+          {
+            "id": "bn-175",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "138716#0",
+              "138716#13",
+              "138716#6"
+            ]
+          },
+          {
+            "id": "bn-177",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "1497#20",
+              "1497#21",
+              "2898#0"
+            ]
+          },
+          {
+            "id": "bn-178",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "83491#1",
+              "286173#18",
+              "35404#1"
+            ]
+          },
+          {
+            "id": "bn-181",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "446228#1",
+              "1612#0",
+              "10991#0"
+            ]
+          },
+          {
+            "id": "bn-182",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "256809#2",
+              "256809#1",
+              "286173#5"
+            ]
+          },
+          {
+            "id": "bn-183",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "6468#0",
+              "6468#2",
+              "6468#15"
+            ]
+          },
+          {
+            "id": "bn-184",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "324714#2",
+              "364709#0",
+              "394246#0"
+            ]
+          },
+          {
+            "id": "bn-191",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "12079#0",
+              "348032#1",
+              "64741#5"
+            ]
+          },
+          {
+            "id": "bn-195",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "494154#0",
+              "547902#1",
+              "494154#2"
+            ]
+          },
+          {
+            "id": "bn-204",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "83947#0",
+              "465344#17",
+              "465344#0"
+            ]
+          },
+          {
+            "id": "bn-206",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "508288#1",
+              "6634#0",
+              "6594#0"
+            ]
+          },
+          {
+            "id": "bn-208",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "249249#3",
+              "63623#9",
+              "64498#4"
+            ]
+          },
+          {
+            "id": "bn-210",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "2656#3",
+              "369118#0",
+              "398524#0"
+            ]
+          },
+          {
+            "id": "bn-213",
+            "firstRelevantRank": 2,
+            "recallAt2": 1.0,
+            "topIds": [
+              "260034#2",
+              "260034#1",
+              "3120#5"
+            ]
+          },
+          {
+            "id": "bn-220",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "76161#1",
+              "105741#1",
+              "2730#11"
+            ]
+          },
+          {
+            "id": "bn-226",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "107698#0",
+              "108251#0",
+              "107671#0"
+            ]
+          },
+          {
+            "id": "bn-231",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "17736#3",
+              "17736#6",
+              "17736#5"
+            ]
+          },
+          {
+            "id": "bn-238",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "5210#6",
+              "389021#11",
+              "564590#0"
+            ]
+          },
+          {
+            "id": "bn-241",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "483238#0",
+              "4318#0",
+              "1495#6"
+            ]
+          },
+          {
+            "id": "bn-246",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "33117#1",
+              "407539#0",
+              "540267#0"
+            ]
+          },
+          {
+            "id": "bn-248",
+            "firstRelevantRank": 4,
+            "recallAt2": 0.0,
+            "topIds": [
+              "575675#3",
+              "575675#5",
+              "575675#7"
+            ]
+          },
+          {
+            "id": "bn-259",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "113557#0",
+              "2965#3",
+              "17791#3"
+            ]
+          },
+          {
+            "id": "bn-262",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "96096#2",
+              "18096#5",
+              "474411#1"
+            ]
+          },
+          {
+            "id": "bn-263",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "369720#16",
+              "9989#16",
+              "9989#1"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

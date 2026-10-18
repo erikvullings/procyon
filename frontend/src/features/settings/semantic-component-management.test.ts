@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MockClientError, MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import { setLocale } from '../../i18n';
-import type { SemanticModelProfile } from '../../models';
+import type { EntrySummary, SemanticModelProfile } from '../../models';
 import { SemanticComponentManagement } from './semantic-component-management';
 
 let root: HTMLElement;
@@ -15,6 +15,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   setLocale('en');
   m.mount(root, null);
   root.remove();
@@ -64,6 +65,46 @@ async function withGemmaProfile(client: MockFileManagerClient): Promise<void> {
 }
 
 describe('SemanticComponentManagement', () => {
+  it('browses local folders while keeping the semantic data destination editable', async () => {
+    const client = new MockFileManagerClient();
+    const documents: EntrySummary = {
+      id: 'documents',
+      location: { providerId: 'file', uri: 'file:///Documents' },
+      name: 'Documents',
+      kind: 'directory',
+      hidden: false,
+      readOnly: false,
+      metadataRevision: 1,
+    };
+    vi.spyOn(client, 'getVolumes').mockResolvedValue([
+      { name: 'Macintosh HD', location: { providerId: 'file', uri: 'file:///' } },
+    ]);
+    vi.spyOn(client, 'listDirectoryChildren').mockImplementation(async (location) =>
+      location.uri === 'file:///' ? [documents] : [],
+    );
+    mountComponent(client);
+    await waitForLoaded();
+    root.querySelector<HTMLDetailsElement>('.fm-semantic-move-details')?.setAttribute('open', '');
+
+    const destination = root.querySelector<HTMLInputElement>('#fm-semantic-move-destination');
+    expect(destination).not.toBeNull();
+    expect(destination?.type).toBe('text');
+    button('Browse…').click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-tree-row')).not.toBeNull());
+    const documentsRow = [...root.querySelectorAll<HTMLElement>('.fm-tree-row')].find((row) =>
+      row.textContent?.includes('Documents'),
+    );
+    documentsRow?.click();
+    m.redraw.sync();
+
+    expect(destination?.value).toBe('/Documents');
+    expect(root.querySelector('.fm-semantic-move-picker')).toBeNull();
+    expect(client.listDirectoryChildren).toHaveBeenCalledWith(
+      { providerId: 'file', uri: 'file:///' },
+      false,
+    );
+  });
+
   it('offers Gemma choices directly and hides artifact files behind optional details', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     await withGemmaProfile(client);
@@ -86,6 +127,66 @@ describe('SemanticComponentManagement', () => {
     expect(details?.open).toBe(false);
     expect(details?.querySelectorAll('.fm-semantic-offer-component')).toHaveLength(3);
     expect(root.querySelector('.fm-semantic-offer')?.textContent).toContain('Total download');
+  });
+
+  it('shows the non-experimental Gemma label only in an approved release build', async () => {
+    vi.stubEnv('VITE_GEMMA_QUALIFIED', 'true');
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await withGemmaProfile(client);
+    mountComponent(client);
+    await waitForLoaded();
+
+    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
+      'EmbeddingGemma 2',
+    );
+    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).not.toContain(
+      'experimental',
+    );
+  });
+
+  it('labels risk-accepted Gemma as unqualified in Settings', async () => {
+    vi.stubEnv('VITE_GEMMA_RISK_ACCEPTED', 'true');
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await withGemmaProfile(client);
+    mountComponent(client);
+    await waitForLoaded();
+
+    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
+      'risk accepted; not five-gate qualified',
+    );
+    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
+      'has not passed the five-gate qualification',
+    );
+    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
+      'file an issue for CPU or Windows GPU problems',
+    );
+  });
+
+  it('gives the Gemma setup and consent focusable, labelled controls', async () => {
+    const client = new MockFileManagerClient();
+    await withGemmaProfile(client);
+    mountComponent(client);
+    await waitForLoaded();
+    root
+      .querySelector<HTMLInputElement>('.fm-semantic-install input[value="embeddingGemma2"]')
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-gemma-setup')).not.toBeNull());
+
+    const controls = [
+      '#fm-semantic-gemma-dimensions',
+      '#fm-semantic-gemma-images',
+      '#fm-semantic-gemma-audio',
+      '#fm-semantic-gemma-video',
+      '.fm-semantic-gemma-setup .fm-semantic-confirmation:last-child input',
+    ];
+    for (const selector of controls) {
+      const input = root.querySelector<HTMLInputElement | HTMLSelectElement>(selector);
+      expect(input, selector).not.toBeNull();
+      expect(input?.labels?.[0]?.textContent?.trim(), selector).toBeTruthy();
+      input?.focus();
+      expect(document.activeElement, selector).toBe(input);
+    }
+    expect(button('Accept and install').disabled).toBe(true);
   });
 
   it('requires immutable Gemma choices and fresh-index consent before installing beside E5', async () => {
@@ -170,10 +271,14 @@ describe('SemanticComponentManagement', () => {
     expect(root.querySelector('.fm-semantic-offer [role="status"]')?.textContent).toContain(
       'Starting the signed model download',
     );
-    expect(button('Installing…').disabled).toBe(true);
+    const installing = button('Installing…');
+    expect(installing.disabled).toBe(true);
+    expect(installing.getAttribute('aria-busy')).toBe('true');
+    expect(installing.classList.contains('fm-busy-button')).toBe(true);
     await vi.waitFor(() => expect(finishInstall).toBeTypeOf('function'));
     finishInstall?.();
     await vi.waitFor(() => expect(root.textContent).toContain('Installed and enabled'));
+    expect(root.querySelector('[aria-busy="true"].fm-busy-button')).toBeNull();
     expect(root.querySelector('.fm-semantic-offer [role="status"]')).toBeNull();
   });
 
@@ -185,6 +290,8 @@ describe('SemanticComponentManagement', () => {
       images: false,
       audio: true,
       video: false,
+      imageDevice: 'cpu',
+      pdfImagePageBudget: 4,
     });
     const initialize = vi.spyOn(client, 'initializeGemmaLibrary');
     mountComponent(client);
@@ -221,6 +328,7 @@ describe('SemanticComponentManagement', () => {
 
   it('labels an installed developer catalog as non-production', async () => {
     const client = new MockFileManagerClient();
+    await withGemmaProfile(client);
     const profiles = await client.listSemanticComponentProfiles();
     vi.spyOn(client, 'getSemanticComponentCapabilities').mockResolvedValue({
       authority: 'desktopManaged',
@@ -232,7 +340,10 @@ describe('SemanticComponentManagement', () => {
         ...profile,
         resolvedModel: {
           ...profile.resolvedModel,
-          modelId: 'procyon.dev.hashing-embedding',
+          modelId:
+            profile.profile === 'embeddingGemma2'
+              ? profile.resolvedModel.modelId
+              : 'procyon.dev.hashing-embedding',
         },
       })),
     );
@@ -241,7 +352,16 @@ describe('SemanticComponentManagement', () => {
     await waitForLoaded();
 
     expect(root.textContent).toContain('Development-only bundle');
+    expect(root.textContent).toContain('deterministic test embedder');
     expect(root.textContent).toContain('must not be used in production');
+
+    root
+      .querySelector<HTMLInputElement>('.fm-semantic-install input[value="embeddingGemma2"]')
+      ?.click();
+    m.redraw.sync();
+    expect(root.textContent).toContain('Development-only Gemma bundle');
+    expect(root.textContent).toContain('pinned native model');
+    expect(root.textContent).not.toContain('deterministic test embedder');
   });
 
   it('shows administrator-provisioned status read-only without forbidden controls', async () => {
@@ -664,11 +784,9 @@ describe('SemanticComponentManagement', () => {
     root
       .querySelector<HTMLDetailsElement>('.fm-semantic-migration-details')
       ?.setAttribute('open', '');
-    expect(
-      root.querySelector<HTMLInputElement>(
-        'input[name="fm-semantic-migration-profile"][value="multilingualQuality"]',
-      )?.checked,
-    ).toBe(true);
+    expect(root.querySelector<HTMLSelectElement>('#fm-semantic-migration-profile')?.value).toBe(
+      'multilingualQuality',
+    );
     expect(button('Review model change').disabled).toBe(false);
     button('Review model change').click();
 
@@ -727,10 +845,12 @@ describe('SemanticComponentManagement', () => {
       ?.setAttribute('open', '');
     expect(root.querySelector('#fm-semantic-migration-documents')).toBeNull();
     expect(root.querySelector('#fm-semantic-migration-source-bytes')).toBeNull();
-    const quality = root.querySelector<HTMLInputElement>(
-      'input[name="fm-semantic-migration-profile"][value="multilingualQuality"]',
-    );
-    quality?.click();
+    const targetProfile = root.querySelector<HTMLSelectElement>('#fm-semantic-migration-profile');
+    expect(targetProfile?.classList).toContain('browser-default');
+    expect(root.querySelector('.fm-semantic-migration-details input[type="radio"]')).toBeNull();
+    if (targetProfile === null) throw new Error('Migration target profile select is missing');
+    targetProfile.value = 'multilingualQuality';
+    targetProfile.dispatchEvent(new Event('change', { bubbles: true }));
     m.redraw.sync();
     expect(button('Review model change').disabled).toBe(false);
     button('Review model change').click();
@@ -768,11 +888,10 @@ describe('SemanticComponentManagement', () => {
     root
       .querySelector<HTMLDetailsElement>('.fm-semantic-migration-details')
       ?.setAttribute('open', '');
-    root
-      .querySelector<HTMLInputElement>(
-        'input[name="fm-semantic-migration-profile"][value="multilingualQuality"]',
-      )
-      ?.click();
+    const targetProfile = root.querySelector<HTMLSelectElement>('#fm-semantic-migration-profile');
+    if (targetProfile === null) throw new Error('Migration target profile select is missing');
+    targetProfile.value = 'multilingualQuality';
+    targetProfile.dispatchEvent(new Event('change', { bubbles: true }));
     m.redraw.sync();
     button('Review model change').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Full reindex required'));
@@ -795,6 +914,13 @@ describe('SemanticComponentManagement', () => {
     mountComponent(client);
     await waitForLoaded();
 
+    expect(root.querySelector('.fm-semantic-local-model-details')).toBeNull();
+    const developerTools = root.querySelector<HTMLInputElement>(
+      '.fm-semantic-developer-tools-toggle input[type="checkbox"]',
+    );
+    expect(developerTools?.checked).toBe(false);
+    developerTools?.click();
+    m.redraw.sync();
     root
       .querySelector<HTMLDetailsElement>('.fm-semantic-local-model-details')
       ?.setAttribute('open', '');
@@ -835,11 +961,13 @@ describe('SemanticComponentManagement', () => {
     expect(root.querySelector('input[type="url"]')).toBeNull();
     expect(button('Review local model migration').disabled).toBe(true);
     setInput('#fm-semantic-local-source-path', '/models/local');
-    root
-      .querySelector<HTMLInputElement>(
-        'input[name="fm-semantic-local-profile"][value="compactEnglish"]',
-      )
-      ?.click();
+    const profile = root.querySelector<HTMLSelectElement>('#fm-semantic-local-profile');
+    expect(profile).not.toBeNull();
+    expect(localModelDetails?.querySelector('input[type="radio"]')).toBeNull();
+    if (profile === null) throw new Error('Developer target profile select is missing');
+    profile.value = 'compactEnglish';
+    profile.dispatchEvent(new Event('change', { bubbles: true }));
+    m.redraw.sync();
     button('Review local model migration').click();
 
     await vi.waitFor(() => expect(importModel).toHaveBeenCalledOnce());
@@ -868,6 +996,8 @@ describe('SemanticComponentManagement', () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     mountComponent(client);
     await waitForLoaded();
+    root.querySelector<HTMLInputElement>('.fm-semantic-developer-tools-toggle input')?.click();
+    m.redraw.sync();
 
     for (const selector of [
       '.fm-semantic-remove-details',

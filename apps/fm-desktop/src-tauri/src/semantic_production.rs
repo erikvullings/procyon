@@ -19,13 +19,14 @@ use fm_semantic_components::{
     ArtifactSource, ArtifactSourceError, CatalogArtifact, ComponentManager, ComponentQuiescer,
     DataCategory, FreeSpaceError, FreeSpaceProbe, IndexingController, IndexingPauseGuard,
     InstallEnvironment, ModelPack, PRODUCTION_ONNX_RUNTIME_COMPONENT_ID,
+    PRODUCTION_PDFIUM_NOTICES_COMPONENT_ID, PRODUCTION_PDFIUM_RUNTIME_COMPONENT_ID,
     PRODUCTION_WORKER_COMPONENT_ID, PRODUCTION_ZVEC_RUNTIME_COMPONENT_ID, PauseError,
     ProductionCatalogManifest, QuiesceError, SemanticDataRoot, SemanticStateStore,
     SignedProductionCatalogManifest, TargetTriple, TrustedCatalog,
     embedded_production_verifying_key, production_pipeline_identity,
 };
 #[cfg(feature = "semantic-gemma")]
-use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeFiles};
+use fm_semantic_worker::gemma_launch::{GemmaMedia, GemmaNativeFiles};
 
 const ARTIFACT_CHUNK_BYTES: u64 = 8 * 1024 * 1024;
 const SMALL_MEMBER_VERIFICATION_BYTES: u64 = 32 * 1024 * 1024;
@@ -88,6 +89,9 @@ impl ProductionSemanticBundle {
         if let Some(onnx_runtime) = artifacts.onnx_runtime {
             runtime_and_worker_artifacts.push(onnx_runtime.id().clone());
         }
+        if let Some((pdfium, notices)) = artifacts.pdfium {
+            runtime_and_worker_artifacts.extend([pdfium.id().clone(), notices.id().clone()]);
+        }
         runtime_and_worker_artifacts.push(artifacts.worker.id().clone());
         let manager = ComponentManager::new(
             SemanticStateStore::new(configuration_directory.join("semantic-components")),
@@ -147,6 +151,7 @@ struct TargetArtifacts<'a> {
     worker: &'a CatalogArtifact,
     zvec_runtime: &'a CatalogArtifact,
     onnx_runtime: Option<&'a CatalogArtifact>,
+    pdfium: Option<(&'a CatalogArtifact, &'a CatalogArtifact)>,
 }
 
 fn one_target_component<'a>(
@@ -217,10 +222,38 @@ fn target_artifacts<'a>(
             ));
         }
     };
+    let pdfium_runtime = catalog
+        .artifacts()
+        .iter()
+        .filter(|artifact| {
+            artifact.component_id().as_str() == PRODUCTION_PDFIUM_RUNTIME_COMPONENT_ID
+                && artifact.compatibility().target() == Some(target)
+                && matches!(artifact.kind(), ArtifactKind::Runtime)
+        })
+        .collect::<Vec<_>>();
+    let pdfium_notices = catalog
+        .artifacts()
+        .iter()
+        .filter(|artifact| {
+            artifact.component_id().as_str() == PRODUCTION_PDFIUM_NOTICES_COMPONENT_ID
+                && artifact.compatibility().target() == Some(target)
+                && matches!(artifact.kind(), ArtifactKind::Runtime)
+        })
+        .collect::<Vec<_>>();
+    let pdfium = match (pdfium_runtime.as_slice(), pdfium_notices.as_slice()) {
+        ([], []) => None,
+        ([library], [notices]) => Some((*library, *notices)),
+        _ => {
+            return Err(ProductionSemanticError::ArtifactLayout(
+                "PDFium loader and license notices must be paired for this desktop target",
+            ));
+        }
+    };
     Ok(TargetArtifacts {
         worker,
         zvec_runtime,
         onnx_runtime,
+        pdfium,
     })
 }
 
@@ -262,9 +295,22 @@ fn managed_worker_resolver(
             .onnx_runtime
             .map(|artifact| required_verified_payload(&manager, artifact, "ONNX Runtime"))
             .transpose()?;
+        let pdfium = artifacts
+            .pdfium
+            .map(|(library, notices)| {
+                Ok::<_, String>((
+                    required_verified_payload(&manager, library, "PDFium runtime")?,
+                    required_verified_payload(&manager, notices, "PDFium license notices")?,
+                ))
+            })
+            .transpose()?;
         let mut native_payloads = vec![(zvec_runtime.as_path(), zvec_library_file_name())];
         if let Some(onnx_runtime) = onnx_runtime.as_deref() {
             native_payloads.push((onnx_runtime, onnx_runtime_file_name()));
+        }
+        if let Some((library, notices)) = &pdfium {
+            native_payloads.push((library.as_path(), pdfium_runtime_file_name()));
+            native_payloads.push((notices.as_path(), "pdfium-licenses.txt"));
         }
         let launch_executable = prepare_worker_launch_directory(
             &native_library_directory,
@@ -334,9 +380,9 @@ pub(crate) fn gemma_library_settings(
     {
         return Err("Gemma library identity does not match the signed active model".to_owned());
     }
-    let media = model
+    let media = policy
         .gemma_media()
-        .ok_or_else(|| "Gemma library is missing immutable media choices".to_owned())?;
+        .ok_or_else(|| "Gemma library is missing media consent".to_owned())?;
     let dimensions = usize::try_from(model.dimensions())
         .map_err(|_| "Gemma dimensions exceed the worker's address space".to_owned())?;
     Ok((
@@ -587,6 +633,10 @@ fn runtime_loader_file_name(component_id: &str) -> Option<&'static str> {
         && cfg!(all(target_os = "linux", target_arch = "x86_64"))
     {
         Some(onnx_runtime_file_name())
+    } else if component_id == PRODUCTION_PDFIUM_RUNTIME_COMPONENT_ID {
+        Some(pdfium_runtime_file_name())
+    } else if component_id == PRODUCTION_PDFIUM_NOTICES_COMPONENT_ID {
+        Some("pdfium-licenses.txt")
     } else {
         None
     }
@@ -604,6 +654,16 @@ fn zvec_library_file_name() -> &'static str {
 
 fn onnx_runtime_file_name() -> &'static str {
     "libonnxruntime.so.1"
+}
+
+fn pdfium_runtime_file_name() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "libpdfium.dylib"
+    } else if cfg!(target_os = "windows") {
+        "pdfium.dll"
+    } else {
+        "libpdfium.so"
+    }
 }
 
 #[derive(Default)]
@@ -816,10 +876,14 @@ mod tests {
         let worker = root.path().join("worker");
         let first = root.path().join("first");
         let second = root.path().join("second");
+        let pdfium = root.path().join("pdfium");
+        let notices = root.path().join("notices");
         let native = root.path().join("worker-native");
         fs::write(&worker, b"worker").expect("worker payload");
         fs::write(&first, b"zvec").expect("first payload");
         fs::write(&second, b"onnx").expect("second payload");
+        fs::write(&pdfium, b"pdfium").expect("PDFium payload");
+        fs::write(&notices, b"license and third-party notices").expect("PDFium notices");
         fs::create_dir(&native).expect("stale native directory");
         fs::write(native.join("stale"), b"stale").expect("stale payload");
 
@@ -829,6 +893,8 @@ mod tests {
             &[
                 (first.as_path(), "libzvec_c_api.so"),
                 (second.as_path(), "libonnxruntime.so.1"),
+                (pdfium.as_path(), pdfium_runtime_file_name()),
+                (notices.as_path(), "pdfium-licenses.txt"),
             ],
         )
         .expect("worker launch assembly");
@@ -841,6 +907,27 @@ mod tests {
             b"onnx"
         );
         assert!(!native.join("stale").exists());
+        assert_eq!(
+            fs::read(native.join(pdfium_runtime_file_name())).unwrap(),
+            b"pdfium"
+        );
+        assert_eq!(
+            fs::read(native.join("pdfium-licenses.txt")).unwrap(),
+            b"license and third-party notices"
+        );
         assert!(!native.with_extension("building").exists());
+    }
+
+    #[test]
+    fn production_activation_recognizes_only_the_paired_pdfium_runtime_roles() {
+        assert_eq!(
+            runtime_loader_file_name(PRODUCTION_PDFIUM_RUNTIME_COMPONENT_ID),
+            Some(pdfium_runtime_file_name())
+        );
+        assert_eq!(
+            runtime_loader_file_name(PRODUCTION_PDFIUM_NOTICES_COMPONENT_ID),
+            Some("pdfium-licenses.txt")
+        );
+        assert_eq!(runtime_loader_file_name("unknown-runtime"), None);
     }
 }

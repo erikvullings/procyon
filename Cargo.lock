@@ -735,6 +735,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "block"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
+
+[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1186,6 +1192,31 @@ name = "clap_lex"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
+
+[[package]]
+name = "clipboard-rs"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1c988a897ea030e32f0668c90b0192800e0c561b3d941fc366f9ad5a1bf26ba"
+dependencies = [
+ "clipboard-win",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "objc2-ui-kit",
+ "windows 0.59.0",
+ "x11rb",
+]
+
+[[package]]
+name = "clipboard-win"
+version = "5.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bde03770d3df201d4fb868f2c9c59e66a3e4e2bd06692a0fe701e7103c7e84d4"
+dependencies = [
+ "error-code",
+ "windows-win",
+]
 
 [[package]]
 name = "cmake"
@@ -2531,6 +2562,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "error-code"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b5343afd4a8365a643ac588dab4cf234a190c7f6c88c9f6dd6ffe00837661b7"
+
+[[package]]
 name = "esaxx-rs"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2792,7 +2829,7 @@ dependencies = [
 
 [[package]]
 name = "fm-application"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2847,11 +2884,13 @@ dependencies = [
  "quick-xml 0.41.0",
  "rayon",
  "reqwest",
+ "rusqlite",
  "russh",
  "serde",
  "serde_json",
  "sevenz-rust2",
  "sha2 0.11.0",
+ "sysinfo",
  "tar",
  "tempfile",
  "thiserror 2.0.20",
@@ -2866,7 +2905,7 @@ dependencies = [
 
 [[package]]
 name = "fm-archive"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "bzip2",
@@ -2890,7 +2929,7 @@ dependencies = [
 
 [[package]]
 name = "fm-auth-oauth"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "base64 0.22.1",
  "rand 0.10.2",
@@ -2907,7 +2946,7 @@ dependencies = [
 
 [[package]]
 name = "fm-checksum"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "blake3",
  "crc32fast",
@@ -2929,7 +2968,7 @@ dependencies = [
 
 [[package]]
 name = "fm-cli"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2940,7 +2979,7 @@ dependencies = [
 
 [[package]]
 name = "fm-comparison"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "chrono",
  "fm-checksum",
@@ -2958,7 +2997,7 @@ dependencies = [
 
 [[package]]
 name = "fm-connections"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2974,7 +3013,7 @@ dependencies = [
 
 [[package]]
 name = "fm-credentials"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -2987,7 +3026,7 @@ dependencies = [
 
 [[package]]
 name = "fm-credentials-macos"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "fm-credentials",
@@ -2998,7 +3037,7 @@ dependencies = [
 
 [[package]]
 name = "fm-credentials-windows"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "fm-credentials",
@@ -3009,9 +3048,10 @@ dependencies = [
 
 [[package]]
 name = "fm-desktop"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "chrono",
+ "clipboard-rs",
  "dirs",
  "drag",
  "ed25519-dalek",
@@ -3030,6 +3070,7 @@ dependencies = [
  "fm-semantic-worker",
  "fm-transport-dto",
  "fs2",
+ "image",
  "portable-pty",
  "raw-window-handle",
  "reqwest",
@@ -3058,7 +3099,7 @@ dependencies = [
 
 [[package]]
 name = "fm-domain"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "chrono",
  "criterion",
@@ -3071,7 +3112,7 @@ dependencies = [
 
 [[package]]
 name = "fm-events"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "chrono",
  "fm-domain",
@@ -3083,7 +3124,7 @@ dependencies = [
 
 [[package]]
 name = "fm-metadata"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "flate2",
  "image",
@@ -3097,7 +3138,7 @@ dependencies = [
 
 [[package]]
 name = "fm-operations"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3115,7 +3156,7 @@ dependencies = [
 
 [[package]]
 name = "fm-platform"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "bitflags 2.13.1",
  "fm-domain",
@@ -3124,7 +3165,7 @@ dependencies = [
 
 [[package]]
 name = "fm-platform-macos"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "block2",
  "dirs",
@@ -3144,7 +3185,7 @@ dependencies = [
 
 [[package]]
 name = "fm-platform-windows"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "fm-domain",
  "fm-platform",
@@ -3158,7 +3199,7 @@ dependencies = [
 
 [[package]]
 name = "fm-plugin-api"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3168,7 +3209,7 @@ dependencies = [
 
 [[package]]
 name = "fm-plugin-runtime"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "fm-plugin-api",
  "mlua",
@@ -3182,7 +3223,7 @@ dependencies = [
 
 [[package]]
 name = "fm-pptx-renderer"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "ooxmlsdk-pdf",
  "thiserror 2.0.20",
@@ -3191,7 +3232,7 @@ dependencies = [
 
 [[package]]
 name = "fm-search"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3209,7 +3250,7 @@ dependencies = [
 
 [[package]]
 name = "fm-search-acceleration"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "thiserror 2.0.20",
  "tokio-util",
@@ -3217,7 +3258,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-components"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "ed25519-dalek",
  "fs2",
@@ -3235,23 +3276,26 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-conversion"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "blake3",
  "calamine",
  "encoding_rs",
+ "image",
  "lopdf",
  "pulldown-cmark",
  "quick-xml 0.41.0",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
+ "sysinfo",
  "thiserror 2.0.20",
  "zip 8.6.0",
 ]
 
 [[package]]
 name = "fm-semantic-docling"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "docling-core",
  "docling-pdf",
@@ -3263,7 +3307,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-library"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "fm-domain",
  "fm-settings",
@@ -3278,7 +3322,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-protocol"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "prost",
  "prost-build",
@@ -3289,9 +3333,11 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-worker"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
+ "blake3",
  "caseless",
+ "dunce",
  "fm-metadata",
  "fm-semantic-components",
  "fm-semantic-conversion",
@@ -3303,6 +3349,7 @@ dependencies = [
  "lattice-inference",
  "lopdf",
  "ort",
+ "pdfium-render",
  "prost",
  "rand 0.10.2",
  "rusqlite",
@@ -3311,6 +3358,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "symphonia",
+ "sysinfo",
  "tempfile",
  "thiserror 2.0.20",
  "tokenizers 0.23.2",
@@ -3323,7 +3371,7 @@ dependencies = [
 
 [[package]]
 name = "fm-server"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "axum",
  "axum-server",
@@ -3346,6 +3394,7 @@ dependencies = [
  "image",
  "rand 0.10.2",
  "reqwest",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -3368,7 +3417,7 @@ dependencies = [
 
 [[package]]
 name = "fm-settings"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "dirs",
  "fm-domain",
@@ -3381,7 +3430,7 @@ dependencies = [
 
 [[package]]
 name = "fm-ssh"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3401,7 +3450,7 @@ dependencies = [
 
 [[package]]
 name = "fm-test-support"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3409,7 +3458,7 @@ dependencies = [
 
 [[package]]
 name = "fm-transport-dto"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "chrono",
  "fm-domain",
@@ -3422,7 +3471,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vcs-status"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "chrono",
  "dunce",
@@ -3436,7 +3485,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "bitflags 2.13.1",
@@ -3452,7 +3501,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-ftp"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "fm-domain",
@@ -3468,7 +3517,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-local"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3487,7 +3536,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-onedrive"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3507,7 +3556,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-s3"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3524,7 +3573,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-sftp"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3541,7 +3590,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-webdav"
-version = "0.4.2"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -3967,6 +4016,16 @@ dependencies = [
  "generic-array 0.14.9",
  "rustversion",
  "typenum",
+]
+
+[[package]]
+name = "gethostname"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bd49230192a3797a9a4d6abe9b3eed6f7fa4c8a8a4947977c6f80025f92cbd8"
+dependencies = [
+ "rustix",
+ "windows-link 0.2.1",
 ]
 
 [[package]]
@@ -5551,6 +5610,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-fann"
+version = "0.11.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=17915f3748a4047c0af61bd8bc7066d1dccf24b4#17915f3748a4047c0af61bd8bc7066d1dccf24b4"
+dependencies = [
+ "rand 0.8.8",
+ "rand_distr",
+ "thiserror 2.0.20",
+ "tracing",
+]
+
+[[package]]
 name = "lattice-inference"
 version = "0.11.0"
 source = "git+https://github.com/ohdearquant/lattice.git?rev=17915f3748a4047c0af61bd8bc7066d1dccf24b4#17915f3748a4047c0af61bd8bc7066d1dccf24b4"
@@ -5560,8 +5630,11 @@ dependencies = [
  "half",
  "image",
  "indexmap 2.14.0",
+ "lattice-fann",
  "libc",
  "memmap2",
+ "metal",
+ "objc",
  "rayon",
  "rustc-hash",
  "serde",
@@ -5889,6 +5962,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc04a4c58212d57930a24bf47d3fa87485264a3a054e9c10e042eb373573ad3c"
 
 [[package]]
+name = "malloc_buf"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6001,6 +6083,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "metal"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7047791b5bc903b8cd963014b355f71dc9864a9a0b727057676c1dcae5cbc15"
+dependencies = [
+ "bitflags 2.13.1",
+ "block",
+ "core-graphics-types",
+ "foreign-types 0.5.0",
+ "log",
+ "objc",
+ "paste",
 ]
 
 [[package]]
@@ -6428,6 +6525,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
+ "libm",
 ]
 
 [[package]]
@@ -6450,6 +6548,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "objc"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "915b1b472bc21c53464d6c8461c9d3af805ba1ef837e1cac254428f4a77177b1"
+dependencies = [
+ "malloc_buf",
 ]
 
 [[package]]
@@ -8219,6 +8326,16 @@ name = "rand_core"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
+
+[[package]]
+name = "rand_distr"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
+dependencies = [
+ "num-traits",
+ "rand 0.8.8",
+]
 
 [[package]]
 name = "rand_pcg"
@@ -12113,6 +12230,16 @@ dependencies = [
 
 [[package]]
 name = "windows"
+version = "0.59.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f919aee0a93304be7f62e8e5027811bbba96bcb1de84d6618be56e43f8a32a1"
+dependencies = [
+ "windows-core 0.59.0",
+ "windows-targets 0.53.5",
+]
+
+[[package]]
+name = "windows"
 version = "0.61.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9babd3a767a4c1aef6900409f85f5d53ce2544ccdfaa86dad48c91782c6d6893"
@@ -12174,6 +12301,19 @@ dependencies = [
  "windows-result 0.2.0",
  "windows-strings 0.1.0",
  "windows-targets 0.52.6",
+]
+
+[[package]]
+name = "windows-core"
+version = "0.59.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "810ce18ed2112484b0d4e15d022e5f598113e220c53e373fb31e67e21670c1ce"
+dependencies = [
+ "windows-implement 0.59.0",
+ "windows-interface 0.59.3",
+ "windows-result 0.3.4",
+ "windows-strings 0.3.1",
+ "windows-targets 0.53.5",
 ]
 
 [[package]]
@@ -12240,6 +12380,17 @@ name = "windows-implement"
 version = "0.58.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bbd5b46c938e506ecbce286b6628a02171d56153ba733b6c741fc627ec9579b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "windows-implement"
+version = "0.59.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83577b051e2f49a058c308f17f273b570a6a758386fc291b5f6a934dd84e48c1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -12382,6 +12533,15 @@ dependencies = [
 
 [[package]]
 name = "windows-strings"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87fa48cc5d406560701792be122a10132491cff9d0aeb23583cc2dcafc847319"
+dependencies = [
+ "windows-link 0.1.3",
+]
+
+[[package]]
+name = "windows-strings"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56e6c93f3a0c3b36176cb1327a4958a0353d5d166c2a35cb268ace15e91d3b57"
@@ -12516,6 +12676,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4060a1da109b9d0326b7262c8e12c84df67cc0dbc9e33cf49e01ccc2eb63631"
 dependencies = [
  "windows-link 0.2.1",
+]
+
+[[package]]
+name = "windows-win"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58e23e33622b3b52f948049acbec9bcc34bf6e26d74176b88941f213c75cf2dc"
+dependencies = [
+ "error-code",
 ]
 
 [[package]]
@@ -12808,6 +12977,23 @@ dependencies = [
  "once_cell",
  "pkg-config",
 ]
+
+[[package]]
+name = "x11rb"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9993aa5be5a26815fe2c3eacfc1fde061fc1a1f094bf1ad2a18bf9c495dd7414"
+dependencies = [
+ "gethostname",
+ "rustix",
+ "x11rb-protocol",
+]
+
+[[package]]
+name = "x11rb-protocol"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
 name = "x509-parser"

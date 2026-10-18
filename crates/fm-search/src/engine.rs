@@ -183,9 +183,25 @@ impl SearchEngine {
     /// store. Semantic retrieval uses this seam so panes, paging, cancellation,
     /// and stable entry navigation do not need a second result system.
     #[must_use]
-    pub fn start_materialized(&self, search_id: Uuid, entries: Vec<EntrySummary>) -> SearchStart {
+    pub fn start_materialized(
+        &self,
+        search_id: Uuid,
+        entries: Vec<EntrySummary>,
+        audience: EventAudience,
+    ) -> SearchStart {
+        let payload_entries = entries.iter().cloned().map(Into::into).collect();
         self.store.register(search_id, CancellationToken::new());
         self.store.append(search_id, entries, 0);
+        self.events.publish(
+            audience,
+            BackendEventPayload::SearchResultsBatch {
+                search_id,
+                entries: payload_entries,
+                is_complete: true,
+                warnings_count: 0,
+                execution_mode: SearchExecutionModePayload::Semantic,
+            },
+        );
         SearchStart {
             location: Location::new(
                 ProviderId::new("search"),
@@ -1542,6 +1558,48 @@ mod tests {
             if is_complete {
                 return batches;
             }
+        }
+    }
+
+    #[tokio::test]
+    async fn materialized_search_delivers_result_and_empty_completion_events() {
+        let store = Arc::new(SearchResultsStore::new());
+        let events = EventBus::new(16);
+        let engine = SearchEngine::new(Arc::clone(&store), events.clone(), ProviderRegistry::new());
+        let entry = EntrySummary {
+            id: EntryId::new(),
+            location: Location::new(ProviderId::new("local"), "file:///synthetic.txt"),
+            name: "synthetic.txt".to_owned(),
+            kind: EntryKind::File,
+            size: None,
+            modified_at: None,
+            created_at: None,
+            hidden: false,
+            read_only: false,
+            extension: Some("txt".to_owned()),
+            mime_type: None,
+            icon_key: None,
+            metadata_revision: 0,
+            git_status: None,
+        };
+        for entries in [vec![entry], Vec::new()] {
+            let subscription = subscribe(&events);
+            let mode_subscription = subscribe(&events);
+            let search_id = Uuid::new_v4();
+            let started =
+                engine.start_materialized(search_id, entries.clone(), EventAudience::Global);
+            assert_eq!(started.execution_mode, SearchExecutionModePayload::Semantic);
+            let batches =
+                tokio::time::timeout(Duration::from_millis(100), collect_batches(subscription))
+                    .await
+                    .expect("materialized search must emit completion");
+            assert_eq!(batches.len(), 1);
+            assert_eq!(batches[0].0.len(), entries.len());
+            assert!(batches[0].1);
+            assert_eq!(
+                collect_final_execution_mode(mode_subscription).await,
+                SearchExecutionModePayload::Semantic
+            );
         }
     }
 

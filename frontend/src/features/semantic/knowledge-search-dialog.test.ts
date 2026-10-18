@@ -18,11 +18,16 @@ const preferencesStorageKey = 'procyon.knowledgeSearch.preferences.v1';
 
 interface MountOptions {
   readonly client?: MockFileManagerClient;
-  readonly currentFolder?: { providerId: string; uri: string };
+  readonly currentFolder?:
+    | { providerId: string; uri: string }
+    | (() => { providerId: string; uri: string });
   readonly semanticSourceIds?: readonly string[];
   readonly initialSubject?: string;
   readonly onClose?: () => void;
   readonly onOpenSource?: (evidence: KnowledgeEvidence) => void | Promise<void>;
+  readonly isSourceOpen?: (evidence: KnowledgeEvidence) => boolean;
+  readonly profileRevision?: () => number;
+  readonly onConfigureAnswers?: () => void;
 }
 
 function mount(options: MountOptions = {}): MockFileManagerClient {
@@ -33,11 +38,19 @@ function mount(options: MountOptions = {}): MockFileManagerClient {
         open: true,
         client,
         workspaceId,
-        currentFolder: options.currentFolder,
+        currentFolder:
+          typeof options.currentFolder === 'function'
+            ? options.currentFolder()
+            : options.currentFolder,
         semanticSourceIds: options.semanticSourceIds ?? [],
         initialSubject: options.initialSubject,
+        profileRevision: options.profileRevision?.() ?? 0,
         onClose: options.onClose ?? vi.fn(),
         ...(options.onOpenSource === undefined ? {} : { onOpenSource: options.onOpenSource }),
+        ...(options.isSourceOpen === undefined ? {} : { isSourceOpen: options.isSourceOpen }),
+        ...(options.onConfigureAnswers === undefined
+          ? {}
+          : { onConfigureAnswers: options.onConfigureAnswers }),
       }),
   });
   m.redraw.sync();
@@ -112,6 +125,7 @@ afterEach(() => {
   m.mount(root, null);
   root.remove();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('numberKnowledgeAnswer', () => {
@@ -286,6 +300,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
   it('offers one-way inclusion for an unindexed current folder', async () => {
     const currentFolder = { providerId: 'local', uri: 'file:///documents' };
+    let displayedFolder = currentFolder;
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'getSemanticFolderStatus').mockResolvedValue({
       consent: 'notIncluded',
@@ -295,17 +310,25 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       sourceAvailable: true,
       unavailableReason: null,
     });
-    mount({ client, currentFolder });
+    mount({ client, currentFolder: () => displayedFolder });
 
     await ready();
 
-    const include = root.querySelector<HTMLInputElement>(
-      '.fm-knowledge-include-folder input[type="checkbox"]',
-    );
-    expect(include?.checked).toBe(false);
-    expect(include?.parentElement?.textContent).toContain('Include folder');
+    const include = root.querySelector<HTMLButtonElement>('.fm-knowledge-include-folder-action');
+    expect(include?.textContent).toBe('Include folder for semantic search');
+    const confirm = vi.spyOn(client, 'confirmSemanticEnrolment');
+    const preview = vi.spyOn(client, 'previewSemanticEnrolment');
+    include?.focus();
+    expect(document.activeElement).toBe(include);
+    expect(confirm).not.toHaveBeenCalled();
+    displayedFolder = { providerId: 'local', uri: 'file:///other' };
+    m.redraw.sync();
     include?.click();
     await vi.waitFor(() => expect(root.querySelector('.fm-semantic-folder-prompt')).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(preview).toHaveBeenCalledWith(expect.objectContaining({ location: currentFolder })),
+    );
+    expect(confirm).not.toHaveBeenCalled();
   });
 
   it('does not offer folder removal when the current folder is already included', async () => {
@@ -321,9 +344,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     });
     mount({ client, currentFolder });
 
-    await ready();
+    expect(root.querySelector('.fm-knowledge-include-folder-action')).toBeNull();
 
-    expect(root.querySelector('.fm-knowledge-include-folder')).toBeNull();
     expect(root.querySelector('.fm-knowledge-search-options')).toBeNull();
   });
 
@@ -448,7 +470,9 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
         location: { providerId: 'local', uri: 'file:///Users/me/OneDrive/Basisschool' },
         recursive: true,
         indexedGeneration: 0,
-        indexedSources: 0,
+        indexedSources: 2,
+        confirmedCompletedSources: 0,
+        unverifiedLegacySources: 0,
         available: true,
       },
     ]);
@@ -457,11 +481,49 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await ready();
 
     expect(root.textContent).toContain(
-      'The folder “Basisschool” is included and still being indexed. You can search documents that are already available.',
+      'The folder “Basisschool” is included and still being indexed. Search becomes available after the first document is indexed.',
     );
     expect(root.textContent).not.toContain('/Users/me/OneDrive/Basisschool is included');
     expect(root.textContent).not.toContain('No indexed documents are available in this scope.');
-    expect(searchButton().disabled).toBe(false);
+    expect(searchButton().disabled).toBe(true);
+  });
+
+  it('enables search when the first indexed source arrives without reopening the pane', async () => {
+    const client = new MockFileManagerClient();
+    const indexedSources = 1;
+    let confirmedCompletedSources = 0;
+    const roots = vi.spyOn(client, 'listKnowledgeRoots').mockImplementation(async () => [
+      {
+        rootId: 'new-root',
+        label: 'New folder',
+        location: { providerId: 'local', uri: 'file:///new-folder' },
+        recursive: true,
+        indexedGeneration: 0,
+        indexedSources,
+        confirmedCompletedSources,
+        unverifiedLegacySources: 0,
+        available: true,
+      },
+    ]);
+    await client.subscribe(() => undefined);
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
+    expect(searchButton().disabled).toBe(true);
+    confirmedCompletedSources = 1;
+    client.emit({
+      eventId: 1,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: 'root:new-root',
+        stage: 'reconciling',
+        completed: 4,
+        total: 0,
+        errors: 0,
+      },
+    });
+    await vi.waitFor(() => expect(roots).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(searchButton().disabled).toBe(false));
   });
 
   it('does not call a root pending once it already has searchable documents', async () => {
@@ -474,6 +536,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
         recursive: true,
         indexedGeneration: 0,
         indexedSources: 42,
+        confirmedCompletedSources: 42,
+        unverifiedLegacySources: 0,
         available: true,
       },
     ]);
@@ -482,6 +546,26 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await ready();
 
     expect(root.textContent).not.toContain('still being indexed');
+    expect(searchButton().disabled).toBe(false);
+  });
+
+  it('keeps search available for a pre-upgrade index without inventing completion receipts', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([
+      {
+        rootId: 'legacy-root',
+        label: 'Previously indexed',
+        location: { providerId: 'local', uri: 'file:///previously-indexed' },
+        recursive: true,
+        indexedGeneration: 1,
+        indexedSources: 3,
+        confirmedCompletedSources: 0,
+        unverifiedLegacySources: 3,
+        available: true,
+      },
+    ]);
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
     expect(searchButton().disabled).toBe(false);
   });
 
@@ -494,6 +578,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       recursive: true,
       indexedGeneration: 0,
       indexedSources: 0,
+      confirmedCompletedSources: 0,
+      unverifiedLegacySources: 0,
       available: true,
     });
     vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([
@@ -505,7 +591,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await ready();
 
     expect(root.textContent).toContain(
-      'The folders “semantic”, “Research notes” are included and still being indexed.',
+      'The folders “semantic”, “Research notes” are included and still being indexed. Search becomes available after the first document is indexed.',
     );
   });
 
@@ -519,7 +605,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.querySelector('.fm-rag-answer')).toBeNull();
   });
 
-  it('offers every knowledge need and every scope', async () => {
+  it('offers every knowledge need and keeps current folder as a separate filter', async () => {
     mount();
 
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-needs')).not.toBeNull());
@@ -539,9 +625,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     ]);
     const scope = root.querySelector<HTMLSelectElement>('#fm-knowledge-scope');
     expect([...(scope?.options ?? [])].map((option) => option.text)).toEqual([
-      'Entire authorized library',
+      'All indexed folders in this workspace',
       'Selected indexed roots',
-      'Current indexed folder',
       'Current semantic result set',
     ]);
   });
@@ -621,7 +706,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(searches?.textContent).toContain('subject');
     expect(searches?.textContent).toContain('Need: Definition');
     expect(root.textContent).toContain('Planner structured-knowledge-planner/1');
-    expect(root.textContent).toContain('Entire indexed library');
+    expect(root.textContent).toContain('Scope: 2 indexed root(s)');
   });
 
   it('runs a complete search with no language model as ranked documents', async () => {
@@ -668,6 +753,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
             provenance:
               '{"kind":"exact","value":{"kind":"pdfBlock","page_number":167,"block_index":3}}',
             unavailable: false,
+            pdfImageSkippedPages: 2,
           },
           {
             ...first,
@@ -700,6 +786,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.querySelector('.fm-knowledge-section-title')?.textContent).toBe(
       'Standards / Su-Field synthesis',
     );
+    expect(root.textContent).toContain('2 PDF page image(s) were skipped');
     const pages = root.querySelectorAll<HTMLButtonElement>('.fm-knowledge-page-link');
     expect(pages[0]?.textContent).toBe('Page 167');
     expect(pages[1]?.textContent).toBe('Page 168');
@@ -733,6 +820,725 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
         provenance: expect.stringContaining('"page_number":167'),
       }),
     );
+  });
+
+  it.each([
+    [
+      'embedded image',
+      '{"kind":"exact","value":{"kind":"pdfImage","page_number":3,"image_index":1}}',
+      'Embedded PDF image',
+      'Page 3 · Image 1',
+      'Ingesloten PDF-afbeelding',
+      'Pagina 3 · Afbeelding 1',
+    ],
+    [
+      'rendered page',
+      '{"kind":"exact","value":{"kind":"pdfPageRender","page_number":3}}',
+      'Rendered PDF page (not an embedded image)',
+      'Page 3',
+      'Gerenderde PDF-pagina (geen ingesloten afbeelding)',
+      'Pagina 3',
+    ],
+  ])(
+    'shows page-specific PDF %s evidence without pretending the whole PDF is an image',
+    async (_, provenance, badge, citation, dutchBadge, dutchCitation) => {
+      const client = new MockFileManagerClient();
+      const original = client.executeKnowledgeSearch.bind(client);
+      vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+        const result = await original(request, signal);
+        const first = result.evidence[0];
+        if (first === undefined) return result;
+        return {
+          ...result,
+          evidence: [
+            {
+              ...first,
+              title: 'scanned.pdf',
+              mediaType: 'application/pdf',
+              chunkKind: 'pdf_image',
+              excerpt: 'PDF page 3, image 1',
+              content: '',
+              sectionPath: [],
+              provenance,
+              unavailable: false,
+            },
+          ],
+        };
+      });
+      const onOpenSource = vi.fn();
+      mount({ client, initialSubject: 'retrieval', onOpenSource });
+      await ready();
+      await search();
+
+      expect(root.querySelector('.fm-knowledge-pdf-image-evidence')?.textContent).toBe(badge);
+      const page = root.querySelector<HTMLButtonElement>('.fm-knowledge-page-link');
+      expect(page?.textContent).toBe(citation);
+      expect(root.querySelector('.fm-knowledge-result-markdown')).toBeNull();
+      expect(root.querySelector('.fm-knowledge-image-preview')).toBeNull();
+      expect(root.querySelector('.fm-knowledge-media-copy')).toBeNull();
+      page?.click();
+      expect(onOpenSource).toHaveBeenCalledWith(
+        expect.objectContaining({ chunkKind: 'pdf_image', mediaType: 'application/pdf' }),
+      );
+      setLocale('nl');
+      m.redraw.sync();
+      expect(root.querySelector('.fm-knowledge-pdf-image-evidence')?.textContent).toBe(dutchBadge);
+      expect(root.querySelector('.fm-knowledge-page-link')?.textContent).toBe(dutchCitation);
+    },
+  );
+
+  it('decodes PDF entities as selectable text and opens only valid web links externally', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    const openExternal = vi.spyOn(client, 'openExternalUrl').mockResolvedValue();
+    const openSource = vi.fn();
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            title: 'content.pdf',
+            mediaType: 'application/pdf',
+            unavailable: false,
+            sectionPath: [],
+            provenance:
+              '{"kind":"exact","value":{"kind":"pdfBlock","page_number":1,"block_index":0}}',
+            content:
+              'Child Abuse &amp; Neglect &le; 3 &#x2264; 4 &lt; 5 <img src=x> https://doi.org/10.1234/example?q=1&amp;page=2. javascript:alert(1)',
+          },
+        ],
+      };
+    });
+    mount({ client, initialSubject: 'retrieval', onOpenSource: openSource });
+    await ready();
+    await search();
+
+    const excerpt = root.querySelector<HTMLElement>('.fm-knowledge-result-markdown');
+    expect(excerpt?.textContent).toContain('Child Abuse & Neglect ≤ 3 ≤ 4 < 5 <img src=x>');
+    expect(excerpt?.querySelector('img')).toBeNull();
+    const page = root.querySelector<HTMLButtonElement>(
+      '.fm-knowledge-document-heading .fm-knowledge-page-link',
+    );
+    expect(page?.textContent).toBe('Page 1');
+    expect(page?.closest('.fm-knowledge-document-heading')?.textContent).toContain('content.pdf');
+    expect(root.querySelector('.fm-knowledge-section-heading')).toBeNull();
+    const link = excerpt?.querySelector<HTMLAnchorElement>('a');
+    expect(link?.textContent).toBe('https://doi.org/10.1234/example?q=1&page=2');
+    expect(link?.href).toBe('https://doi.org/10.1234/example?q=1&page=2');
+    expect(excerpt?.querySelectorAll('a')).toHaveLength(1);
+    expect(excerpt?.textContent).toContain('page=2. javascript:alert(1)');
+
+    const selection = vi.spyOn(document, 'getSelection').mockReturnValue({
+      toString: () => 'Child Abuse',
+    } as Selection);
+    link?.click();
+    expect(openExternal).not.toHaveBeenCalled();
+    selection.mockReturnValue(null);
+    link?.click();
+    expect(openExternal).toHaveBeenCalledOnce();
+    expect(openExternal).toHaveBeenCalledWith('https://doi.org/10.1234/example?q=1&page=2');
+    expect(openSource).not.toHaveBeenCalled();
+    page?.click();
+    expect(openSource).toHaveBeenCalledWith(expect.objectContaining({ title: 'content.pdf' }));
+
+    openExternal.mockRejectedValueOnce(new Error('No browser available'));
+    link?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('[role="alert"]')?.textContent).toContain(
+        'The link could not be opened in your default browser.',
+      ),
+    );
+  });
+
+  it('copies a displayed PDF chunk as decoded text with a source reference, never markup', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            title: 'content.pdf',
+            mediaType: 'application/pdf',
+            provenance:
+              '{"kind":"exact","value":{"kind":"pdfBlock","page_number":1,"block_index":0}}',
+            sectionPath: [],
+            content: 'Child Abuse &amp; Neglect &le; 3 https://doi.org/10.1234/example',
+          },
+        ],
+      };
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+    const oldClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: write },
+    });
+    try {
+      mount({ client, initialSubject: 'retrieval' });
+      await ready();
+      await search();
+      const copy = button('Copy text chunk');
+      copy.click();
+      await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+      expect(write).toHaveBeenCalledWith(
+        'Child Abuse & Neglect ≤ 3 https://doi.org/10.1234/example\n\nSource: content.pdf, Page 1',
+      );
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-knowledge-chunk-copy [role="status"]')?.textContent).toBe(
+          'Text chunk copied',
+        ),
+      );
+      setLocale('nl');
+      m.redraw.sync();
+      button('Tekstfragment kopiëren').click();
+      await vi.waitFor(() =>
+        expect(write).toHaveBeenLastCalledWith(
+          'Child Abuse & Neglect ≤ 3 https://doi.org/10.1234/example\n\nBron: content.pdf, Pagina 1',
+        ),
+      );
+    } finally {
+      if (oldClipboard === undefined) Reflect.deleteProperty(navigator, 'clipboard');
+      else Object.defineProperty(navigator, 'clipboard', oldClipboard);
+    }
+  });
+
+  it('repairs an already-indexed split Elsevier DOI without joining unrelated prose', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    const openExternal = vi.spyOn(client, 'openExternalUrl').mockResolvedValue();
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (!first) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            mediaType: 'application/pdf',
+            content:
+              'https://doi.org/10.1016/j. chiabu.2011.01.002. Another sentence: j. chiabu.2011.01.002 is not a DOI. https://doi.org/10.1016/j.chiabu.2018.07.034.',
+          },
+        ],
+      };
+    });
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
+    await search();
+    const excerpt = root.querySelector('.fm-knowledge-result-markdown');
+    const links = [...(excerpt?.querySelectorAll<HTMLAnchorElement>('a') ?? [])];
+    expect(links.map((link) => link.href)).toEqual([
+      'https://doi.org/10.1016/j.chiabu.2011.01.002',
+      'https://doi.org/10.1016/j.chiabu.2018.07.034',
+    ]);
+    expect(excerpt?.textContent).toContain('j. chiabu.2011.01.002 is not a DOI');
+    links[0]?.click();
+    expect(openExternal).toHaveBeenCalledWith('https://doi.org/10.1016/j.chiabu.2011.01.002');
+  });
+
+  it.each([
+    ['image/png', 'Image', 'Open image'],
+    ['audio/mpeg', 'Audio', 'Open audio'],
+    ['video/mp4', 'Video', 'Open video'],
+  ])(
+    'presents %s as media evidence with authorized source navigation',
+    async (mediaType, label, action) => {
+      const client = new MockFileManagerClient();
+      const original = client.executeKnowledgeSearch.bind(client);
+      vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+        const result = await original(request, signal);
+        const first = result.evidence[0];
+        if (first === undefined) throw new Error('missing knowledge fixture');
+        return {
+          ...result,
+          evidence: [
+            {
+              ...first,
+              mediaType,
+              modifiedAtMs: Date.parse('2026-04-12T09:30:00.000Z'),
+              content: '# <|image|> **not markdown**',
+              excerpt: 'A garden path beside a stone wall.',
+              unavailable: false,
+              provenance: '',
+              sectionPath: [],
+            },
+          ],
+        };
+      });
+      const onOpenSource = vi.fn();
+      mount({ client, initialSubject: 'retrieval', onOpenSource });
+      await ready();
+      await search();
+
+      const media = root.querySelector('.fm-knowledge-media-evidence');
+      expect(media?.textContent).toContain(label);
+      expect(media?.textContent).toContain('Modified');
+      expect(media?.textContent).toContain('A garden path beside a stone wall.');
+      expect(media?.textContent).not.toContain('<|image|>');
+      expect(root.querySelector('.fm-knowledge-result-markdown')).toBeNull();
+      root.querySelector<HTMLButtonElement>('.fm-knowledge-media-open')?.click();
+      expect(root.querySelector<HTMLButtonElement>('.fm-knowledge-media-open')?.textContent).toBe(
+        action,
+      );
+      expect(onOpenSource).toHaveBeenCalledWith(expect.objectContaining({ mediaType }));
+    },
+  );
+
+  it('keeps a file-primary image result compact without hiding its relevance or action', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            title: 'page_019.png',
+            mediaType: 'image/png',
+            modifiedAtMs: Date.parse('2026-05-04T17:14:00.000Z'),
+            excerpt: 'image: page_019.png (file-level evidence)',
+            sectionPath: [],
+            provenance: '',
+          },
+        ],
+      };
+    });
+    mount({ client, initialSubject: 'retrieval', onOpenSource: vi.fn() });
+    await ready();
+    await search();
+
+    const heading = root.querySelector('.fm-knowledge-document-heading');
+    expect(heading?.textContent).toContain('page_019.png');
+    expect(heading?.querySelector('.fm-knowledge-relevance-indicator')).not.toBeNull();
+    expect(
+      heading?.querySelector('.fm-knowledge-relevance-indicator')?.getAttribute('aria-label'),
+    ).toContain('relevance');
+    expect(root.querySelector('.fm-knowledge-group-compact-media')).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-section-heading')).toBeNull();
+    const summary = root.querySelector('.fm-knowledge-media-summary');
+    expect(summary?.textContent).toContain('Modified');
+    expect(summary?.querySelector('.fm-knowledge-media-open')?.textContent).toBe('Open image');
+    expect(root.querySelector('.fm-knowledge-media-evidence p')).toBeNull();
+  });
+
+  it('copies authorized image bytes, not its preview, only after a successful clipboard write', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            title: 'garden.png',
+            mediaType: 'image/png',
+            sectionPath: [],
+            provenance: '',
+            unavailable: false,
+            stale: false,
+          },
+        ],
+      };
+    });
+    vi.spyOn(client, 'resolveKnowledgeSource').mockResolvedValue({
+      available: true,
+      entryId: 'garden',
+      location: { providerId: 'local', uri: 'file:///garden.png' },
+    });
+    const data = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    const read = vi.spyOn(client, 'readFileRange').mockResolvedValue({
+      data,
+      offset: 0,
+      length: data.length,
+      eof: true,
+      probablyBinary: true,
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+    class ClipboardItemStub {
+      constructor(readonly items: Record<string, Blob>) {}
+    }
+    vi.stubGlobal('ClipboardItem', ClipboardItemStub);
+    const oldClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { write } });
+    try {
+      mount({ client, initialSubject: 'retrieval' });
+      await ready();
+      await search();
+      button('Copy image').click();
+      await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+      expect(read).toHaveBeenCalledWith(
+        {
+          location: { providerId: 'local', uri: 'file:///garden.png' },
+          offset: 0,
+          length: 1048576,
+        },
+        expect.any(AbortSignal),
+      );
+      const item = write.mock.calls[0]?.[0]?.[0] as ClipboardItemStub;
+      const blob = item.items['image/png'];
+      if (blob === undefined) throw new Error('missing image/png clipboard payload');
+      expect([...new Uint8Array(await blob.arrayBuffer())]).toEqual(data);
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-knowledge-media-copy [role="status"]')?.textContent).toBe(
+          'Image copied',
+        ),
+      );
+    } finally {
+      if (oldClipboard === undefined) Reflect.deleteProperty(navigator, 'clipboard');
+      else Object.defineProperty(navigator, 'clipboard', oldClipboard);
+    }
+  });
+
+  it('copies audio details with a local link, but never treats a remote URI as portable', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            title: 'birds.mp3',
+            mediaType: 'audio/mpeg',
+            excerpt: 'Birds &amp; wind',
+            sectionPath: [],
+            provenance: '',
+            unavailable: false,
+            stale: false,
+          },
+        ],
+      };
+    });
+    const resolve = vi.spyOn(client, 'resolveKnowledgeSource').mockResolvedValue({
+      available: true,
+      entryId: 'birds',
+      location: { providerId: 'local', uri: 'file:///birds.mp3' },
+    });
+    const write = vi.fn().mockResolvedValue(undefined);
+    const oldClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: write },
+    });
+    try {
+      mount({ client, initialSubject: 'retrieval' });
+      await ready();
+      await search();
+      button('Copy details and local source link').click();
+      await vi.waitFor(() =>
+        expect(write).toHaveBeenCalledWith('Birds & wind\n\nSource: birds.mp3\nfile:///birds.mp3'),
+      );
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-knowledge-media-copy [role="status"]')?.textContent).toBe(
+          'Details and local source link copied',
+        ),
+      );
+      resolve.mockResolvedValue({
+        available: true,
+        entryId: 'remote-birds',
+        location: { providerId: 'sftp', uri: 'sftp://private/birds.mp3' },
+      });
+      button('Copy details and local source link').click();
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-knowledge-media-copy [role="alert"]')?.textContent).toBe(
+          'A portable source link is unavailable for this remote file.',
+        ),
+      );
+      expect(write).toHaveBeenCalledOnce();
+      expect(root.querySelector('.fm-knowledge-media-copy [role="status"]')).toBeNull();
+    } finally {
+      if (oldClipboard === undefined) Reflect.deleteProperty(navigator, 'clipboard');
+      else Object.defineProperty(navigator, 'clipboard', oldClipboard);
+    }
+  });
+
+  it('lazily resolves authorized image sources and shows a bounded preview in both locales', async () => {
+    let intersect: ((entries: IntersectionObserverEntry[]) => void) | undefined;
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: (entries: IntersectionObserverEntry[]) => void) {
+          intersect = callback;
+        }
+        observe(): void {}
+        disconnect(): void {
+          disconnect();
+        }
+      },
+    );
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            title: 'garden.png',
+            mediaType: 'image/png',
+            provenance: '',
+            sectionPath: [],
+            unavailable: false,
+            stale: false,
+          },
+        ],
+      };
+    });
+    const resolve = vi.spyOn(client, 'resolveKnowledgeSource').mockResolvedValue({
+      available: true,
+      entryId: 'garden',
+      location: { providerId: 'local', uri: 'file:///garden.png' },
+    });
+    const thumbnail = vi
+      .spyOn(client, 'getThumbnail')
+      .mockResolvedValue(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]));
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
+    await search();
+    expect(resolve).not.toHaveBeenCalled();
+    expect(root.querySelector('.fm-knowledge-image-placeholder')?.getAttribute('aria-label')).toBe(
+      'Loading image preview',
+    );
+
+    intersect?.([{ isIntersecting: true } as IntersectionObserverEntry]);
+    await vi.waitFor(() =>
+      expect(thumbnail).toHaveBeenCalledWith(
+        'file:///garden.png',
+        'small',
+        expect.any(AbortSignal),
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLImageElement>('.fm-knowledge-image-preview img')?.alt).toBe(
+        'Preview of garden.png',
+      ),
+    );
+    expect(resolve).toHaveBeenCalledWith(
+      { workspaceId, sourceId: expect.any(String) },
+      expect.any(AbortSignal),
+    );
+    expect(root.querySelector<HTMLImageElement>('.fm-knowledge-image-preview img')?.src).toContain(
+      'data:image/jpeg;base64,',
+    );
+    m.mount(root, null);
+    expect(disconnect).toHaveBeenCalled();
+
+    setLocale('nl');
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
+    await search();
+    intersect?.([{ isIntersecting: true } as IntersectionObserverEntry]);
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLImageElement>('.fm-knowledge-image-preview img')?.alt).toBe(
+        'Voorbeeld van garden.png',
+      ),
+    );
+  });
+
+  it('does not substitute a PDF source thumbnail for an indexed image', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            mediaType: 'image/jpeg',
+            title: 'scanned.pdf',
+            provenance: '',
+            sectionPath: [],
+            unavailable: false,
+            stale: false,
+          },
+        ],
+      };
+    });
+    vi.spyOn(client, 'resolveKnowledgeSource').mockResolvedValue({
+      available: true,
+      entryId: 'pdf',
+      location: { providerId: 'local', uri: 'file:///scanned.pdf' },
+    });
+    const thumbnail = vi.spyOn(client, 'getThumbnail');
+    mount({ client, initialSubject: 'retrieval' });
+    await ready();
+    await search();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector('.fm-knowledge-image-placeholder')?.getAttribute('aria-label'),
+      ).toBe('Image preview unavailable'),
+    );
+    expect(thumbnail).not.toHaveBeenCalled();
+  });
+
+  it('reflects the actual image viewer state in the action label and expanded state', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [{ ...first, mediaType: 'image/png', unavailable: false }],
+      };
+    });
+    let openSourceId: string | undefined;
+    const onOpenSource = vi.fn((evidence: KnowledgeEvidence) => {
+      openSourceId = openSourceId === evidence.sourceId ? undefined : evidence.sourceId;
+    });
+    mount({
+      client,
+      initialSubject: 'retrieval',
+      onOpenSource,
+      isSourceOpen: (evidence) => openSourceId === evidence.sourceId,
+    });
+    await ready();
+    await search();
+
+    const button = root.querySelector<HTMLButtonElement>('.fm-knowledge-media-open');
+    expect(button?.textContent).toBe('Open image');
+    expect(button?.getAttribute('aria-expanded')).toBe('false');
+    button?.focus();
+    expect(document.activeElement).toBe(button);
+    button?.click();
+    await vi.waitFor(() => expect(button?.textContent).toBe('Close image'));
+    expect(button?.getAttribute('aria-expanded')).toBe('true');
+    button?.click();
+    await vi.waitFor(() => expect(button?.textContent).toBe('Open image'));
+    expect(button?.getAttribute('aria-expanded')).toBe('false');
+    expect(onOpenSource).toHaveBeenCalledTimes(2);
+
+    openSourceId = 'unrelated-source';
+    m.redraw.sync();
+    expect(button?.textContent).toBe('Open image');
+    expect(button?.getAttribute('aria-expanded')).toBe('false');
+    setLocale('nl');
+    m.redraw.sync();
+    expect(button?.textContent).toBe('Open afbeelding');
+    button?.click();
+    await vi.waitFor(() => expect(button?.textContent).toBe('Sluit afbeelding'));
+  });
+
+  it('returns the first image to Open when a different image becomes the active preview', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          { ...first, mediaType: 'image/png', unavailable: false },
+          {
+            ...first,
+            documentId: 'second-image-document',
+            sourceId: 'second-image-source',
+            recordId: 'second-image-record',
+            title: 'second.png',
+            finalRank: 2,
+            mediaType: 'image/png',
+            unavailable: false,
+          },
+        ],
+      };
+    });
+    let displayedSourceId: string | undefined;
+    mount({
+      client,
+      initialSubject: 'retrieval',
+      onOpenSource: (evidence) => {
+        displayedSourceId = displayedSourceId === evidence.sourceId ? undefined : evidence.sourceId;
+      },
+      isSourceOpen: (evidence) => displayedSourceId === evidence.sourceId,
+    });
+    await ready();
+    await search();
+
+    const [first, second] = root.querySelectorAll<HTMLButtonElement>('.fm-knowledge-media-open');
+    expect(first?.textContent).toBe('Open image');
+    expect(second?.textContent).toBe('Open image');
+    first?.focus();
+    expect(document.activeElement).toBe(first);
+    first?.click();
+    await vi.waitFor(() => expect(first?.textContent).toBe('Close image'));
+    expect(first?.getAttribute('aria-expanded')).toBe('true');
+    second?.click();
+    await vi.waitFor(() => expect(second?.textContent).toBe('Close image'));
+    expect(first?.textContent).toBe('Open image');
+    expect(first?.getAttribute('aria-expanded')).toBe('false');
+    expect(second?.getAttribute('aria-expanded')).toBe('true');
+    second?.click();
+    await vi.waitFor(() => expect(second?.textContent).toBe('Open image'));
+    expect(second?.getAttribute('aria-expanded')).toBe('false');
+    first?.click();
+    await vi.waitFor(() => expect(first?.textContent).toBe('Close image'));
+    const firstSourceId = displayedSourceId;
+    displayedSourceId = undefined;
+    m.redraw.sync();
+    expect(first?.textContent).toBe('Open image');
+    displayedSourceId = firstSourceId;
+    m.redraw.sync();
+    expect(first?.textContent).toBe('Close image');
+    expect(second?.textContent).toBe('Open image');
+  });
+
+  it('does not open unavailable media and never treats media placeholders as markdown', async () => {
+    const client = new MockFileManagerClient();
+    const original = client.executeKnowledgeSearch.bind(client);
+    vi.spyOn(client, 'executeKnowledgeSearch').mockImplementation(async (request, signal) => {
+      const result = await original(request, signal);
+      const first = result.evidence[0];
+      if (first === undefined) throw new Error('missing knowledge fixture');
+      return {
+        ...result,
+        evidence: [
+          {
+            ...first,
+            mediaType: 'audio/wav',
+            excerpt: '<|audio|>',
+            content: '[audio]',
+            unavailable: true,
+          },
+        ],
+      };
+    });
+    const onOpenSource = vi.fn();
+    mount({ client, initialSubject: 'retrieval', onOpenSource });
+    await ready();
+    await search();
+    expect(root.querySelector('.fm-knowledge-media-evidence')?.textContent).toContain(
+      'Open the source',
+    );
+    expect(root.querySelector<HTMLButtonElement>('.fm-knowledge-media-open')?.disabled).toBe(true);
+    expect(root.querySelector('.fm-knowledge-source-link')?.hasAttribute('disabled')).toBe(true);
+    expect(onOpenSource).not.toHaveBeenCalled();
   });
 
   it('explains that a hybrid request ran as full text when embeddings are unavailable', async () => {
@@ -939,23 +1745,145 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     }
   });
 
-  it('defaults the scope to the current semantic result set when no indexed folder is active', async () => {
+  it('defaults to enrolled workspace roots even with semantic results available', async () => {
     mount({ semanticSourceIds: ['mock-knowledge-source-onboarding'] });
     await ready();
 
     expect(root.querySelector<HTMLSelectElement>('#fm-knowledge-scope')?.value).toBe(
-      'semanticResults',
+      'enrolledRoots',
     );
   });
 
-  it('falls back to the entire authorized library with no other scope', async () => {
+  it('defaults to enrolled workspace roots without a displayed folder', async () => {
     mount();
     await ready();
 
     expect(root.querySelector<HTMLSelectElement>('#fm-knowledge-scope')?.value).toBe(
-      'entireLibrary',
+      'enrolledRoots',
     );
+    const input = root.querySelector<HTMLTextAreaElement>('#fm-knowledge-subjects');
+    expect(input?.placeholder).toBe('Enter your search terms');
+    expect(input?.getAttribute('aria-label')).toBeTruthy();
+    expect(input?.getAttribute('autocomplete')).toBe('off');
+    expect(input?.getAttribute('autocorrect')).toBe('off');
+    expect(input?.getAttribute('autocapitalize')).toBe('off');
+    expect(input?.getAttribute('spellcheck')).toBeNull();
   });
+
+  it('uses a distinct Dutch search placeholder while keeping a programmatic label', async () => {
+    setLocale('nl');
+    mount();
+    await ready();
+    const input = root.querySelector<HTMLTextAreaElement>('#fm-knowledge-subjects');
+    expect(input?.placeholder).toBe('Voer je zoektermen in');
+    expect(input?.getAttribute('aria-label')).toBeTruthy();
+  });
+
+  it('searches enrolled roots across navigation and pins the optional folder filter', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getSemanticFolderStatus').mockResolvedValue({
+      consent: 'includedHere',
+      rootId: 'mock-knowledge-root-handbook',
+      exclusionId: null,
+      workspaceReferenced: true,
+      sourceAvailable: true,
+      unavailableReason: null,
+    });
+
+    const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+    let displayedFolder = { providerId: 'local', uri: 'file:///documents/first' };
+    mount({
+      client,
+      initialSubject: 'retrieval',
+      currentFolder: () => displayedFolder,
+    });
+    await ready();
+    const folderFilter = () =>
+      root.querySelector<HTMLInputElement>('.fm-knowledge-folder-filter input');
+    expect(folderFilter()?.checked).toBe(false);
+    expect(folderFilter()?.closest('label')?.textContent).toContain('first');
+
+    submitSearch();
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+    expect(execute.mock.lastCall?.[0].scope).toMatchObject({
+      workspaceId,
+      kind: 'enrolledRoots',
+      folder: null,
+    });
+    await vi.waitFor(() => expect(searchButton().disabled).toBe(false));
+    displayedFolder = { providerId: 'local', uri: 'file:///documents/second' };
+    m.redraw.sync();
+    expect(folderFilter()?.closest('label')?.textContent).toContain('first');
+    submitSearch();
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(2));
+    expect(execute.mock.lastCall?.[0].scope).toMatchObject({
+      workspaceId,
+      kind: 'enrolledRoots',
+      folder: null,
+    });
+    await vi.waitFor(() => expect(searchButton().disabled).toBe(false));
+
+    folderFilter()?.click();
+    m.redraw.sync();
+    expect(folderFilter()?.checked).toBe(true);
+    expect(root.querySelector('#fm-knowledge-scope')).toBeNull();
+    submitSearch();
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(3));
+    expect(execute.mock.lastCall?.[0].scope).toMatchObject({
+      workspaceId,
+      kind: 'currentFolder',
+      folder: { uri: 'file:///documents/first' },
+    });
+    await vi.waitFor(() => expect(searchButton().disabled).toBe(false));
+
+    folderFilter()?.click();
+    m.redraw.sync();
+    expect(folderFilter()?.checked).toBe(false);
+    submitSearch();
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(4));
+    expect(execute.mock.lastCall?.[0].scope).toMatchObject({
+      workspaceId,
+      kind: 'enrolledRoots',
+      folder: null,
+    });
+  });
+
+  it.each([
+    ['file:///Custom%20Chat%20Leiden', 'Custom Chat Leiden'],
+    ['file:///A%2520B%2C%20C', 'A%20B, C'],
+    ['file:///A%22B%27', 'A"B\''],
+    ['file:///', '/'],
+  ])(
+    'displays a decoded folder label without changing the pinned URI for %s',
+    async (uri, name) => {
+      const client = new MockFileManagerClient();
+      vi.spyOn(client, 'getSemanticFolderStatus').mockResolvedValue({
+        consent: 'includedHere',
+        rootId: 'mock-knowledge-root-handbook',
+        exclusionId: null,
+        workspaceReferenced: true,
+        sourceAvailable: true,
+        unavailableReason: null,
+      });
+      const execute = vi.spyOn(client, 'executeKnowledgeSearch');
+      mount({
+        client,
+        initialSubject: 'retrieval',
+        currentFolder: { providerId: 'local', uri },
+      });
+      await ready();
+      const filter = root.querySelector<HTMLInputElement>('.fm-knowledge-folder-filter input');
+      expect(filter?.closest('label')?.textContent).toContain(`"${name}"`);
+      filter?.click();
+      submitSearch();
+      await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+      expect(execute.mock.lastCall?.[0].scope).toMatchObject({
+        workspaceId,
+        kind: 'currentFolder',
+        folder: { uri },
+      });
+    },
+  );
 
   it('lists selectable indexed roots and marks the unavailable one', async () => {
     mount();
@@ -1141,7 +2069,10 @@ function mountLifecycle(options: MountOptions = {}): {
         open: isOpen,
         client,
         workspaceId,
-        currentFolder: options.currentFolder,
+        currentFolder:
+          typeof options.currentFolder === 'function'
+            ? options.currentFolder()
+            : options.currentFolder,
         semanticSourceIds: options.semanticSourceIds ?? [],
         initialSubject: options.initialSubject,
         onClose: options.onClose ?? vi.fn(),
@@ -1181,6 +2112,35 @@ function scopeSelect(): HTMLSelectElement {
 }
 
 describe('KnowledgeSearchDialog canonical query state (task 0206)', () => {
+  it('discloses capped PDF page-image coverage for enrolled roots', async () => {
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'listKnowledgeRoots').mockResolvedValue([
+      {
+        rootId: 'limited-root',
+        label: 'Scans',
+        location: { providerId: 'local', uri: 'file:///documents/scans' },
+        recursive: true,
+        available: true,
+        indexedSources: 2,
+        confirmedCompletedSources: 2,
+        unverifiedLegacySources: 0,
+        indexedGeneration: 1,
+        pdfImagesEnabled: true,
+        pdfImagePageBudget: 4,
+      },
+    ]);
+    mount({ client });
+    await ready();
+    scopeSelect().value = 'enrolledRoots';
+    scopeSelect().dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain(
+        'Some included folders limit PDF page-image indexing to the first 4 pages per PDF',
+      ),
+    );
+    expect(root.textContent).toContain('Text remains indexed');
+  });
+
   it('keeps a quoted subject as one element through both editors', async () => {
     const client = new MockFileManagerClient();
     const execute = vi.spyOn(client, 'executeKnowledgeSearch');
@@ -1340,7 +2300,13 @@ describe('KnowledgeSearchDialog DSL scopes (task 0206)', () => {
 
     type(dsl(), 'about: retrieval scope: root:mock-knowledge-root-handbook');
 
-    await vi.waitFor(() => expect(scopeSelect().value).toBe('enrolledRoots'));
+    await vi.waitFor(() =>
+      expect(
+        [...root.querySelectorAll<HTMLInputElement>('.fm-knowledge-roots input')].map(
+          (input) => input.checked,
+        ),
+      ).toEqual([true, false]),
+    );
     const checked = [...root.querySelectorAll<HTMLInputElement>('.fm-knowledge-roots input')].map(
       (input) => input.checked,
     );
@@ -1360,7 +2326,8 @@ describe('KnowledgeSearchDialog DSL scopes (task 0206)', () => {
 
     type(dsl(), 'about: retrieval scope: library');
     await vi.waitFor(() => expect(subjects().value).toBe('retrieval'));
-    expect(scopeSelect().value).toBe('entireLibrary');
+    await vi.waitFor(() => expect(dsl().value).toContain('scope: library'));
+    expect(scopeSelect().value).toBe('enrolledRoots');
 
     type(subjects(), 'retrieval\nfusion');
 
@@ -1858,6 +2825,61 @@ async function answersReady(): Promise<void> {
 }
 
 describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
+  it('offers Ask for an activated Ollama profile without reopening an existing Knowledge tab', async () => {
+    const client = new MockFileManagerClient();
+    let revision = 0;
+    mount({ client, initialSubject: 'retrieval', profileRevision: () => revision });
+    await ready();
+    await search();
+    expect(answerSection()).toBeNull();
+
+    const profile = await client.createLlmProfile({
+      name: 'Local Ollama',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'mock-model',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
+    await client.activateLlmProfile(profile.id, false);
+    revision++;
+    m.redraw.sync();
+
+    await askBarReady();
+    expect(root.querySelector('.fm-knowledge-ask-bar')).not.toBeNull();
+    expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+  });
+
+  it('hides Ask if refreshed host capabilities revoke generation without losing search results', async () => {
+    const client = new MockFileManagerClient();
+    await configureProfile(client);
+    let revision = 0;
+    mount({ client, initialSubject: 'retrieval', profileRevision: () => revision });
+    await askBarReady();
+    await search();
+    vi.spyOn(client, 'getKnowledgeCapabilities').mockResolvedValue({
+      fullText: true,
+      semantic: false,
+      answerGeneration: false,
+    });
+    revision++;
+    m.redraw.sync();
+
+    await vi.waitFor(() => expect(answerSection()).toBeNull());
+    expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+  });
+
   it('retrieves once and answers only after an explicit question', async () => {
     const client = new MockFileManagerClient();
     await configureProfile(client);
@@ -1925,6 +2947,28 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     expect(root.querySelector('#fm-knowledge-question')).toBeNull();
     expect(() => button('Ask')).toThrow();
     expect(root.querySelectorAll('.fm-knowledge-result').length).toBeGreaterThan(0);
+  });
+
+  it('explains a missing saved Ollama profile in the docked Ask bar and opens Settings', async () => {
+    const client = new MockFileManagerClient();
+    const configure = vi.fn();
+    mount({ client, initialSubject: 'retrieval', onConfigureAnswers: configure });
+    await ready();
+    await search();
+
+    const bar = root.querySelector('.fm-knowledge-ask-unavailable');
+    expect(bar?.textContent).toContain(
+      'To use Ask, choose a model and save a generation profile in Settings.',
+    );
+    expect(root.querySelector('#fm-knowledge-question')).toBeNull();
+    bar?.querySelector<HTMLButtonElement>('.fm-knowledge-configure-answers')?.click();
+    expect(configure).toHaveBeenCalledOnce();
+
+    setLocale('nl');
+    m.redraw.sync();
+    expect(bar?.textContent).toContain(
+      'Kies een model en sla een generatieprofiel op in Instellingen om Ask te gebruiken.',
+    );
   });
 
   it('searches with the question first when asked before any search', async () => {
@@ -2354,16 +3398,55 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     expect(references?.querySelector('.fm-knowledge-reference-number')?.textContent).toBe('[1]');
 
     const body = root.querySelector<HTMLElement>('.fm-knowledge-answer-body');
+    expect(button('Hide answer').getAttribute('aria-expanded')).toBe('true');
+    expect(button('Hide answer').querySelector('.fm-icon-chevron-up')).not.toBeNull();
     button('Hide answer').click();
     m.redraw.sync();
     expect(body?.hidden).toBe(true);
+    expect(button('Show answer').getAttribute('aria-expanded')).toBe('false');
+    expect(button('Show answer').querySelector('.fm-icon-chevron-down')).not.toBeNull();
     button('Show answer').click();
     m.redraw.sync();
     expect(body?.hidden).toBe(false);
 
     button('Copy answer').click();
     await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(button('Copied').querySelector('.fm-icon-check')).not.toBeNull());
+    expect(root.querySelector('.fm-knowledge-answer [role="status"]')?.textContent).toBe('Copied');
     expect(write.mock.calls[0]?.[0]).toMatch(/\n\nSources \(\d+\)\n\[1\] /u);
+  });
+
+  it('does not claim an answer was copied when both clipboard methods fail', async () => {
+    const client = new MockFileManagerClient();
+    await configureProfile(client);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error('clipboard denied')) },
+    });
+    const previousCopyCommand = Object.getOwnPropertyDescriptor(document, 'execCommand');
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn(() => false),
+    });
+    try {
+      mount({ client, initialSubject: 'retrieval' });
+      await answersReady();
+      await search();
+      openAsk();
+      await generateAnswer();
+
+      button('Copy answer').click();
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-knowledge-answer [role="alert"]')?.textContent).toContain(
+          'The answer could not be copied.',
+        ),
+      );
+      expect(button('Copy answer').querySelector('.fm-icon-copy')).not.toBeNull();
+      expect(root.querySelector('.fm-knowledge-answer .fm-icon-check')).toBeNull();
+    } finally {
+      if (previousCopyCommand === undefined) Reflect.deleteProperty(document, 'execCommand');
+      else Object.defineProperty(document, 'execCommand', previousCopyCommand);
+    }
   });
 
   it('opens a citation from the answer text itself', async () => {
@@ -2522,9 +3605,48 @@ describe('KnowledgeSearchDialog optional answers (task 0207)', () => {
     );
 
     openAsk();
+    question().focus();
     await generateAnswer();
 
-    expect(document.activeElement).toBe(root.querySelector('.fm-knowledge-answer-body'));
+    expect(document.activeElement).toBe(question());
+    expect(root.querySelector('.fm-knowledge-answer-body')?.hasAttribute('tabindex')).toBe(false);
+  });
+
+  it('shows an accessible answer skeleton only while generating', async () => {
+    const client = new MockFileManagerClient();
+    await configureProfile(client);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await search();
+    openAsk();
+    const original = client.generateKnowledgeAnswer.bind(client);
+    let finish: (() => void) | undefined;
+    vi.spyOn(client, 'generateKnowledgeAnswer').mockImplementation(async (request, signal) => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return original(request, signal);
+    });
+
+    button('Ask').click();
+    m.redraw.sync();
+    expect(answerSection()?.getAttribute('aria-busy')).toBe('true');
+    const progress = root.querySelector('.fm-knowledge-answer-progress');
+    expect(progress?.getAttribute('role')).toBe('status');
+    expect(progress?.textContent).toContain('Generating');
+    expect(progress?.querySelectorAll('.fm-knowledge-answer-skeleton .mm-skeleton')).toHaveLength(
+      3,
+    );
+    expect(
+      progress?.querySelector('.fm-knowledge-answer-skeleton')?.getAttribute('aria-hidden'),
+    ).toBe('true');
+    expect(progress?.querySelector('.fm-knowledge-search-spinner')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-ask-cancel')).not.toBeNull();
+
+    finish?.();
+    await vi.waitFor(() => expect(answerSection()?.getAttribute('aria-busy')).toBe('false'));
+    expect(root.querySelector('.fm-knowledge-answer-progress')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-ask-cancel')).toBeNull();
   });
 
   it('cancels a running generation when the dialog is closed', async () => {

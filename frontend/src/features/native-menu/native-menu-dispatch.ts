@@ -10,6 +10,7 @@ import type {
 } from '../../models';
 import { isBrowsable, remoteRootLocation } from '../connections/connections-model';
 import { SORT_SHORTCUT_DESCRIPTORS } from '../keybindings/global-keydown-handler';
+import type { EditCommand } from './edit-command';
 
 /** Frontend-local id for the App menu's Preferences item; never an action-registry id (there is
  * no `core.preferences` backend action - Preferences is, and must remain, a pure UI toggle). */
@@ -31,6 +32,14 @@ export const NEW_WORKSPACE_WINDOW_MENU_ID = 'ui.newWorkspaceWindow';
  * source (ephemeral per-window workspaces spec follow-up) is desktop-window plumbing, not a
  * backend action. */
 export const SYNC_WORKSPACE_MENU_ID = 'ui.syncWorkspace';
+
+/** macOS Edit-menu items (Cut/Copy/Paste/Select All); never action-registry ids. */
+export const EDIT_MENU_IDS = {
+  cut: 'ui.edit.cut',
+  copy: 'ui.edit.copy',
+  paste: 'ui.edit.paste',
+  selectAll: 'ui.edit.selectAll',
+} as const satisfies Record<EditCommand, string>;
 
 /** File-menu tab actions are frontend-owned, despite being registered in the shared action list. */
 export const NEW_TAB_MENU_ID = 'core.newTab';
@@ -110,6 +119,8 @@ export interface NativeMenuDispatchContext {
   /** Navigates the active pane to `location` - the same navigation path `pane.ts`'s
    * `navigateFavourite` uses (task 0144), shared here rather than duplicated. */
   readonly navigateToLocation: (location: Location) => void;
+  /** Runs an Edit-menu command against whatever has focus (see `replayEditCommand`). */
+  readonly performEditCommand: (command: EditCommand) => void;
 }
 
 /**
@@ -123,6 +134,13 @@ export function dispatchNativeMenuAction(context: NativeMenuDispatchContext, id:
   }
   if (id === OPEN_DIAGNOSTICS_MENU_ID) {
     context.openDiagnostics();
+    return;
+  }
+  const editCommand = (Object.keys(EDIT_MENU_IDS) as EditCommand[]).find(
+    (command) => EDIT_MENU_IDS[command] === id,
+  );
+  if (editCommand !== undefined) {
+    context.performEditCommand(editCommand);
     return;
   }
   if (id === OPEN_SHORTCUTS_MENU_ID) {

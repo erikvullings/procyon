@@ -12,6 +12,7 @@ import {
 
 import './connection-editor.css';
 
+import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import { t } from '../../i18n';
 import type {
   BeginOneDriveAuthorizationResponse,
@@ -73,12 +74,7 @@ export interface ConnectionsManagerAttrs {
  * misspelled while the user is typing. `InputAttrs` extends Mithril's
  * `Attributes`, so these pass straight through to the underlying `<input>`.
  */
-const TECHNICAL_TEXT_ATTRS = {
-  autocomplete: 'off',
-  autocapitalize: 'off',
-  autocorrect: 'off',
-  spellcheck: false,
-} as const;
+const TECHNICAL_TEXT_ATTRS = technicalTextInputAttrs;
 
 function preserveNativeClipboardShortcut(event: KeyboardEvent): void {
   if (

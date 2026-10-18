@@ -224,12 +224,22 @@ pub struct KnowledgeRootDto {
     pub label: String,
     /// Whether descendants inherit consent.
     pub recursive: bool,
+    /// Whether this root separately consents to PDF page-image embeddings.
+    #[serde(default)]
+    pub pdf_images_enabled: bool,
+    /// Maximum PDF page images embedded per document, or `None` for no cap.
+    #[serde(default)]
+    pub pdf_image_page_budget: Option<u32>,
     /// Whether the indexed source is currently reachable.
     pub available: bool,
     /// Last generation committed to runtime state.
     pub indexed_generation: u64,
-    /// Indexed sources already searchable, even before a full pass completes.
+    /// Observed occurrences; not proof of completed worker ingestion.
     pub indexed_sources: u64,
+    /// Document occurrences with an acknowledged worker completion in this workspace/root.
+    pub confirmed_completed_sources: u64,
+    /// Pre-upgrade occurrences whose earlier worker completion cannot yet be verified.
+    pub unverified_legacy_sources: u64,
 }
 
 /// Requests the indexed roots authorized through one workspace.
@@ -621,6 +631,9 @@ pub struct KnowledgeEvidenceDto {
     pub modified_at_ms: Option<i64>,
     /// Document order.
     pub source_position: u32,
+    /// PDF pages omitted by the configured page-image budget.
+    #[serde(default)]
+    pub pdf_image_skipped_pages: Option<u32>,
     /// Generated rather than extracted evidence.
     pub generated: bool,
     /// Source is currently unavailable, as of a fresh host snapshot.

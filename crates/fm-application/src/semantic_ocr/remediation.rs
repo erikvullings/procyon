@@ -781,7 +781,13 @@ fn now_ms() -> i64 {
 /// The worker emits distinct, stable diagnostics for its OCR paths; this maps
 /// them to the four user-visible outcomes without changing the converter.
 pub(crate) fn classify_ingest_report(report: &EntryIngestReport) -> OcrRemediationOutcome {
-    let joined = report.exclusion_details.join(" \u{2014} ");
+    let joined = report
+        .exclusion_details
+        .iter()
+        .chain(&report.failure_details)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" \u{2014} ");
     if joined.contains(POST_OCR_NO_TEXT_MARKER) {
         return OcrRemediationOutcome::PostOcrNoText { detail: joined };
     }
@@ -1062,6 +1068,8 @@ mod tests {
             occurrence_id: fm_semantic_library::OccurrenceId::from_uuid(Uuid::from_u128(1)),
             ingested: 1,
             failed: 0,
+            failure_details: Vec::new(),
+            coverage_details: Vec::new(),
             excluded: 0,
             exclusion_details: Vec::new(),
             requires_ocr: false,
@@ -1075,6 +1083,8 @@ mod tests {
             occurrence_id: fm_semantic_library::OccurrenceId::from_uuid(Uuid::from_u128(2)),
             ingested: 0,
             failed: 0,
+            failure_details: Vec::new(),
+            coverage_details: Vec::new(),
             excluded: 1,
             exclusion_details: vec![
                 "OCRmyPDF completed, but deterministic conversion still found no searchable text."
@@ -1091,6 +1101,8 @@ mod tests {
             occurrence_id: fm_semantic_library::OccurrenceId::from_uuid(Uuid::from_u128(3)),
             ingested: 0,
             failed: 0,
+            failure_details: Vec::new(),
+            coverage_details: Vec::new(),
             excluded: 1,
             exclusion_details: vec!["OCRmyPDF exited unsuccessfully (exit status: 2).".to_owned()],
             requires_ocr: true,
@@ -1104,13 +1116,16 @@ mod tests {
             occurrence_id: fm_semantic_library::OccurrenceId::from_uuid(Uuid::from_u128(4)),
             ingested: 0,
             failed: 1,
+            failure_details: vec!["PDF page 33 image 1 exceeds the visual limit".to_owned()],
+            coverage_details: Vec::new(),
             excluded: 0,
             exclusion_details: Vec::new(),
             requires_ocr: false,
         };
         assert!(matches!(
             classify_ingest_report(&ingestion_failed),
-            OcrRemediationOutcome::ExecutionFailure { .. }
+            OcrRemediationOutcome::ExecutionFailure { detail }
+                if detail.contains("page 33 image 1")
         ));
     }
 }

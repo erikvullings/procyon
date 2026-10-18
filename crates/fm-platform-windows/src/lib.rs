@@ -4,14 +4,15 @@
 //! application, terminal integration, and native menu bar hook point (task
 //! 0131). The crate is a workspace member everywhere but compiles to nothing
 //! off Windows. Native drag-to-Explorer is provided by the Tauri window host
-//! (task 0062).
+//! (task 0062). Clipboard file references use `CF_HDROP` (see `clipboard`).
 //!
-//! Deliberately unimplemented (capability bits stay unset, per specification
-//! §23/§35): shell thumbnails and clipboard file references.
+//! Deliberately unimplemented (capability bit stays unset, per specification
+//! §23/§35): shell thumbnails.
 
 #![cfg(target_os = "windows")]
 #![allow(unsafe_code)]
 
+mod clipboard;
 pub mod search;
 
 use std::collections::HashMap;
@@ -131,6 +132,7 @@ fn role_label(role: fm_domain::NativeMenuRole) -> &'static str {
         NativeMenuRole::Zoom => "Maximize",
         NativeMenuRole::BringAllToFront => "Bring All to Front",
         NativeMenuRole::Copy => "Copy",
+        NativeMenuRole::Cut => "Cut",
         NativeMenuRole::Paste => "Paste",
         NativeMenuRole::SelectAll => "Select All",
     }
@@ -982,6 +984,16 @@ impl WindowsPlatformAdapter {
         }
     }
 
+    /// The app window owns clipboard data once known; before that the clipboard
+    /// is opened without an owner window.
+    fn clipboard_owner(&self) -> HWND {
+        self.window_handle
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .as_ref()
+            .map_or(std::ptr::null_mut(), |SendSyncHwnd(hwnd)| *hwnd)
+    }
+
     /// Sets the Tauri window handle for native menu bar installation
     /// (task 0131). Called by the desktop host (`fm-desktop`) after the
     /// window is created and ready to receive a menu bar.
@@ -1059,6 +1071,7 @@ impl PlatformAdapter for WindowsPlatformAdapter {
             | PlatformCapabilities::NATIVE_MENUS
             | PlatformCapabilities::PLATFORM_CONTEXT_MENU
             | PlatformCapabilities::CREATE_SHORTCUT
+            | PlatformCapabilities::CLIPBOARD_FILE_REFERENCES
     }
 
     fn create_shortcut(&self, shortcut: &Path, target: &Path) -> Result<(), PlatformError> {
@@ -1208,11 +1221,11 @@ impl PlatformAdapter for WindowsPlatformAdapter {
     }
 
     fn read_clipboard_file_references(&self) -> Result<Vec<PathBuf>, PlatformError> {
-        self.fallback.read_clipboard_file_references()
+        clipboard::read_file_references(self.clipboard_owner())
     }
 
     fn write_clipboard_file_references(&self, paths: &[PathBuf]) -> Result<(), PlatformError> {
-        self.fallback.write_clipboard_file_references(paths)
+        clipboard::write_file_references(self.clipboard_owner(), paths)
     }
 
     fn mounted_volumes(&self) -> Result<Vec<MountedVolume>, PlatformError> {
@@ -1625,26 +1638,6 @@ mod tests {
             adapter.thumbnail(path, 64).unwrap_err().to_string(),
             fallback.thumbnail(path, 64).unwrap_err().to_string()
         );
-        assert_eq!(
-            adapter
-                .read_clipboard_file_references()
-                .unwrap_err()
-                .to_string(),
-            fallback
-                .read_clipboard_file_references()
-                .unwrap_err()
-                .to_string()
-        );
-        assert_eq!(
-            adapter
-                .write_clipboard_file_references(&[path.to_path_buf()])
-                .unwrap_err()
-                .to_string(),
-            fallback
-                .write_clipboard_file_references(&[path.to_path_buf()])
-                .unwrap_err()
-                .to_string()
-        );
         // Note: native menu installation requires the window handle to be set first
         // (task 0131). The adapter returns PlatformError::Io when HWND is not initialized.
         let spec = fm_domain::NativeMenuSpec::default();
@@ -1723,6 +1716,7 @@ mod tests {
             PlatformCapabilities::OPEN_TERMINAL,
             PlatformCapabilities::MOUNTED_VOLUMES,
             PlatformCapabilities::PLATFORM_CONTEXT_MENU,
+            PlatformCapabilities::CLIPBOARD_FILE_REFERENCES,
         ] {
             assert!(capabilities.contains(expected), "missing {expected:?}");
         }

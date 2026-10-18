@@ -209,6 +209,19 @@ impl EligibilityReasonCounts {
         Self(counts)
     }
 
+    /// Retains aggregated non-zero counts from a completed host reconciliation.
+    #[must_use]
+    pub fn from_counts(counts: impl IntoIterator<Item = (EligibilityReason, u64)>) -> Self {
+        let mut result = BTreeMap::<EligibilityReason, u64>::new();
+        for (reason, count) in counts {
+            if count > 0 {
+                let entry = result.entry(reason).or_default();
+                *entry = entry.saturating_add(count);
+            }
+        }
+        Self(result)
+    }
+
     /// Returns the count for a reason.
     #[must_use]
     pub fn get(&self, reason: EligibilityReason) -> u64 {

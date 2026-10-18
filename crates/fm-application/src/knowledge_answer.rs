@@ -103,6 +103,10 @@ pub(crate) struct KnowledgeAnswerEvidence {
     pub(crate) record_id: String,
     /// Source occurrence identity used for exact source navigation.
     pub(crate) source_id: String,
+    /// Evidence modality retained for rechecking media consent at answer time.
+    pub(crate) media_type: Option<String>,
+    /// Distinguishes a PDF image from the PDF's consent-independent text.
+    pub(crate) chunk_kind: String,
     /// User-visible title, suppressed when the profile redacts filenames.
     pub(crate) title: String,
     /// Complete structurally bounded chunk content.
@@ -307,6 +311,7 @@ impl KnowledgeAnswerCoordinator {
                     user_prompt,
                     images: Vec::new(),
                     maximum_tokens: MAX_ANSWER_TOKENS,
+                    context_window: None,
                     temperature: ANSWER_TEMPERATURE,
                 },
                 &cancellation,
@@ -375,7 +380,15 @@ impl Retained {
         let mut stale = 0u64;
         let mut unavailable = 0u64;
         for mut row in evidence {
-            if !current.permits(&row.source_id) {
+            if !current.permits(&row.source_id)
+                || current.media.is_some_and(|media| {
+                    row.media_type.as_deref().is_some_and(|mime| {
+                        mime.starts_with("image/") && !media.images
+                            || mime.starts_with("audio/") && !media.audio
+                            || mime.starts_with("video/") && !media.video
+                    }) || row.chunk_kind == "pdf_image" && !media.images
+                })
+            {
                 withheld = withheld.saturating_add(1);
                 continue;
             }
@@ -654,6 +667,8 @@ mod tests {
             label: citation_label(index),
             record_id: format!("record-{index}"),
             source_id: source_id.to_owned(),
+            media_type: Some("text/plain".to_owned()),
+            chunk_kind: "chunk".to_owned(),
             title: "turbines.md".to_owned(),
             content: "Rotor blades convert wind into torque.".to_owned(),
             section_path: vec!["Design".to_owned()],
@@ -675,6 +690,7 @@ mod tests {
                 .collect::<BTreeSet<_>>(),
             unavailable_source_ids: BTreeSet::new(),
             fingerprints: HashMap::new(),
+            media: None,
         }
     }
 
@@ -901,6 +917,44 @@ mod tests {
             "removed evidence must never reach the prompt"
         );
         assert!(generation.user_prompt.contains("\"E2\""));
+    }
+
+    #[tokio::test]
+    async fn answer_refuses_previously_displayed_media_after_consent_is_revoked() {
+        let transport = Arc::new(RecordingTransport::new("Text remains [E2]."));
+        let fixture = fixture(transport).await;
+        let coordinator = KnowledgeAnswerCoordinator::default();
+        let mut image = evidence(0, "source-image");
+        image.media_type = Some("image/png".to_owned());
+        let mut current = snapshot(&["source-image", "source-b"]);
+        current.media = Some(fm_semantic_library::GemmaMediaSelection {
+            images: false,
+            audio: true,
+            video: false,
+        });
+        let answer = coordinator
+            .generate(
+                InspectedKnowledgeEvidence {
+                    request_id: Uuid::new_v4(),
+                    fingerprint: "sha256:set",
+                    plan: &plan(),
+                    evidence: vec![image, evidence(1, "source-b")],
+                },
+                &intent(fixture.profile_id, "sha256:set"),
+                &StaticKnowledgeAuthorizationRefresh(current),
+                &fixture.profiles,
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(answer.withheld_unauthorized, 1);
+        assert_eq!(answer.citations.len(), 1);
+        assert_eq!(answer.citations[0].source_id, "source-b");
+        assert!(
+            !fixture.transport.generations()[0]
+                .user_prompt
+                .contains("source-image")
+        );
     }
 
     #[tokio::test]

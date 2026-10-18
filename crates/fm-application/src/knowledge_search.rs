@@ -211,6 +211,8 @@ pub struct KnowledgeAuthorizationSnapshot {
     pub unavailable_source_ids: BTreeSet<String>,
     /// Current host content fingerprints keyed by opaque source identity.
     pub fingerprints: HashMap<String, String>,
+    /// Current Gemma media consent. `None` denotes the unchanged E5 path.
+    pub media: Option<fm_semantic_library::GemmaMediaSelection>,
 }
 
 impl KnowledgeAuthorizationSnapshot {
@@ -794,8 +796,15 @@ fn authorize_retrieval(
         // with and by the snapshot taken just now: retrieval can never widen
         // what the caller was allowed to see, and revocation takes effect
         // immediately.
-        let visible =
-            authorized.snapshot.permits(&row.source_id) && current.permits(&row.source_id);
+        let visible = authorized.snapshot.permits(&row.source_id)
+            && current.permits(&row.source_id)
+            && current.media.is_none_or(|media| {
+                (row.media_type.as_deref().is_none_or(|mime| {
+                    !(mime.starts_with("image/") && !media.images
+                        || mime.starts_with("audio/") && !media.audio
+                        || mime.starts_with("video/") && !media.video)
+                })) && (row.chunk_kind != "pdf_image" || media.images)
+            });
         if !visible {
             if !row.adjacent {
                 dropped_ranks.insert(row.final_rank);
@@ -1061,6 +1070,7 @@ mod tests {
             modified_at_ms: Some(10),
             indexed_content_hash: "sha256:indexed".to_owned(),
             generation: 1,
+            pdf_image_skipped_pages: None,
             source_position: 0,
             generated: false,
             unavailable: false,
@@ -1123,6 +1133,7 @@ mod tests {
                 .iter()
                 .map(|value| ((*value).to_owned(), "sha256:indexed".to_owned()))
                 .collect(),
+            media: None,
         }
     }
 
@@ -1333,6 +1344,42 @@ mod tests {
         assert_eq!(outcome.evidence[0].source_id, "source-a");
         assert_eq!(outcome.withheld_unauthorized, 1);
         assert_eq!(outcome.coverage.eligible, 1);
+    }
+
+    #[tokio::test]
+    async fn revoked_media_is_withheld_even_when_the_worker_returns_stale_rows() {
+        let mut image = evidence("image", "source-image", false, 1);
+        image.media_type = Some("image/png".into());
+        let mut pdf_page = evidence("page", "source-pdf", false, 2);
+        pdf_page.media_type = Some("application/pdf".into());
+        pdf_page.chunk_kind = "pdf_image".into();
+        let mut pdf_text = evidence("text", "source-pdf", false, 3);
+        pdf_text.media_type = Some("application/pdf".into());
+        let coordinator = KnowledgeSearchCoordinator::new(Arc::new(FixedCapability::new(
+            WorkerKnowledgeCapabilities {
+                full_text: true,
+                query_embeddings: false,
+            },
+            retrieval(vec![image, pdf_page, pdf_text], None),
+        )));
+        let mut current = snapshot(&["source-image", "source-pdf"]);
+        current.media = Some(fm_semantic_library::GemmaMediaSelection {
+            images: false,
+            audio: true,
+            video: false,
+        });
+        let outcome = coordinator
+            .execute(
+                Uuid::new_v4(),
+                authorized(plan(Vec::new()), &["source-image", "source-pdf"]),
+                &NarrowingRefresh::new(vec![current]),
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(outcome.withheld_unauthorized, 2);
+        assert_eq!(outcome.evidence.len(), 1);
+        assert_eq!(outcome.evidence[0].record_id, "text");
     }
 
     #[tokio::test]

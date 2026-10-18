@@ -293,6 +293,19 @@ pub struct OccurrenceRecord {
     pub(crate) location: Location,
     pub(crate) document_id: DocumentId,
     pub(crate) scopes: Vec<OccurrenceScope>,
+    /// Scopes for which the worker acknowledged a completed ingestion of this content.
+    #[serde(default)]
+    pub(crate) completed_scopes: Vec<OccurrenceScope>,
+    /// Older catalogs cannot prove which worker ingestions completed.
+    #[serde(default = "legacy_receipts_unverified")]
+    pub(crate) legacy_receipts_unverified: bool,
+    /// Captures the pre-upgrade scopes before a new workspace can inherit them.
+    #[serde(default)]
+    pub(crate) legacy_unverified_scopes: Option<Vec<OccurrenceScope>>,
+}
+
+const fn legacy_receipts_unverified() -> bool {
+    true
 }
 
 impl OccurrenceRecord {
@@ -691,6 +704,19 @@ impl SemanticCatalog {
             match self.occurrences.get_mut(&occurrence_id) {
                 Some(occurrence) => {
                     occurrence.location = observation.location;
+                    if occurrence.legacy_unverified_scopes.is_none() {
+                        occurrence.legacy_unverified_scopes =
+                            Some(if occurrence.legacy_receipts_unverified {
+                                occurrence.scopes.clone()
+                            } else {
+                                Vec::new()
+                            });
+                    }
+                    if occurrence.document_id != document_id {
+                        occurrence.completed_scopes.clear();
+                        occurrence.legacy_receipts_unverified = false;
+                        occurrence.legacy_unverified_scopes = Some(Vec::new());
+                    }
                     occurrence.document_id = document_id;
                     if !occurrence.scopes.contains(&observation.scope) {
                         occurrence.scopes.push(observation.scope);
@@ -705,6 +731,9 @@ impl SemanticCatalog {
                             location: observation.location,
                             document_id,
                             scopes: vec![observation.scope],
+                            completed_scopes: Vec::new(),
+                            legacy_receipts_unverified: false,
+                            legacy_unverified_scopes: Some(Vec::new()),
                         },
                     );
                 }
@@ -741,6 +770,12 @@ impl SemanticCatalog {
             occurrence
                 .scopes
                 .retain(|scope| scope.workspace_id != workspace_id);
+            occurrence
+                .completed_scopes
+                .retain(|scope| scope.workspace_id != workspace_id);
+            if let Some(scopes) = &mut occurrence.legacy_unverified_scopes {
+                scopes.retain(|scope| scope.workspace_id != workspace_id);
+            }
         }
         self.conversation_pins
             .retain(|_, pin| pin.scope().workspace_id() != workspace_id);
@@ -851,6 +886,9 @@ impl SemanticCatalog {
                     location,
                     document_id: occurrence.document_id,
                     scopes: occurrence.scopes.clone(),
+                    completed_scopes: occurrence.completed_scopes.clone(),
+                    legacy_receipts_unverified: occurrence.legacy_receipts_unverified,
+                    legacy_unverified_scopes: occurrence.legacy_unverified_scopes.clone(),
                 },
             );
             remapped.insert(*id, new_id);
@@ -887,10 +925,7 @@ impl SemanticCatalog {
         )
     }
 
-    /// Returns the number of indexed occurrences authorized through a root.
-    ///
-    /// Unlike [`Self::reconciliation_generation`], this reflects documents that
-    /// are already searchable while a full enumeration is still incomplete.
+    /// Returns the number of observed occurrences authorized through a root.
     #[must_use]
     pub fn root_occurrence_count(&self, root_id: RootId) -> usize {
         self.occurrences
@@ -900,6 +935,58 @@ impl SemanticCatalog {
                     .scopes
                     .iter()
                     .any(|scope| scope.root_id == root_id)
+            })
+            .count()
+    }
+
+    /// Confirms one workspace/root occurrence only after successful worker ingestion.
+    ///
+    /// A late completion cannot mark changed or removed content as indexed.
+    #[must_use]
+    pub fn confirm_indexed(
+        &mut self,
+        occurrence_id: OccurrenceId,
+        fingerprint: &ContentFingerprint,
+        scope: OccurrenceScope,
+    ) -> bool {
+        let expected_document = document_id(self.library_id, fingerprint);
+        let Some(occurrence) = self.occurrences.get_mut(&occurrence_id) else {
+            return false;
+        };
+        if occurrence.document_id != expected_document || !occurrence.scopes.contains(&scope) {
+            return false;
+        }
+        if !occurrence.completed_scopes.contains(&scope) {
+            occurrence.completed_scopes.push(scope);
+        }
+        true
+    }
+
+    /// Counts distinct worker-completed occurrences within one workspace/root scope.
+    #[must_use]
+    pub fn root_completed_count(&self, scope: OccurrenceScope) -> usize {
+        self.occurrences
+            .values()
+            .filter(|occurrence| {
+                occurrence.scopes.contains(&scope) && occurrence.completed_scopes.contains(&scope)
+            })
+            .count()
+    }
+
+    /// Existing worker data without receipts remains unknown, not zero.
+    #[must_use]
+    pub fn root_unverified_legacy_count(&self, scope: OccurrenceScope) -> usize {
+        self.occurrences
+            .values()
+            .filter(|occurrence| {
+                occurrence.scopes.contains(&scope)
+                    && occurrence
+                        .legacy_unverified_scopes
+                        .as_ref()
+                        .map_or(occurrence.legacy_receipts_unverified, |scopes| {
+                            scopes.contains(&scope)
+                        })
+                    && !occurrence.completed_scopes.contains(&scope)
             })
             .count()
     }
@@ -985,6 +1072,12 @@ impl SemanticCatalog {
         for occurrence_id in &missing {
             if let Some(occurrence) = self.occurrences.get_mut(occurrence_id) {
                 occurrence.scopes.retain(|scope| scope.root_id != root_id);
+                occurrence
+                    .completed_scopes
+                    .retain(|scope| scope.root_id != root_id);
+                if let Some(scopes) = &mut occurrence.legacy_unverified_scopes {
+                    scopes.retain(|scope| scope.root_id != root_id);
+                }
             }
         }
         self.conversation_pins.retain(|_, pin| {
@@ -1126,6 +1219,12 @@ impl SemanticCatalog {
                 }
             }
             occurrence.scopes = proven;
+            occurrence
+                .completed_scopes
+                .retain(|scope| occurrence.scopes.contains(scope));
+            if let Some(scopes) = &mut occurrence.legacy_unverified_scopes {
+                scopes.retain(|scope| occurrence.scopes.contains(scope));
+            }
         }
         self.conversation_pins.retain(|_, pin| {
             self.occurrences
@@ -1147,6 +1246,18 @@ impl SemanticCatalog {
         for (occurrence_id, occurrence) in &self.occurrences {
             if *occurrence_id != occurrence.id
                 || !self.documents.contains_key(&occurrence.document_id)
+                || occurrence
+                    .completed_scopes
+                    .iter()
+                    .any(|scope| !occurrence.scopes.contains(scope))
+                || occurrence
+                    .legacy_unverified_scopes
+                    .as_ref()
+                    .is_some_and(|scopes| {
+                        scopes
+                            .iter()
+                            .any(|scope| !occurrence.scopes.contains(scope))
+                    })
             {
                 return Err(CatalogError::InconsistentRecordId);
             }

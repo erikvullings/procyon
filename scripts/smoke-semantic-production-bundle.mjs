@@ -9,6 +9,7 @@ import {
   preparePinnedOnnxRuntime,
   verifyOnnxRuntimeQualification,
 } from './onnx-runtime-qualification.mjs';
+import { smokePackagedPdfiumRenderer } from './smoke-pdfium-renderer.mjs';
 import {
   preparePinnedZvecRuntime,
   verifyZvecRuntimeQualification,
@@ -126,7 +127,6 @@ if (onnxDescriptor) {
     path.join(isolatedRuntimeDirectory, onnxDescriptor.loader.name),
   );
 }
-
 function run(args, environment = {}) {
   commandIndex += 1;
   const output = evidenceRoot
@@ -183,6 +183,31 @@ function runEvaluation(executable, report) {
 }
 
 try {
+  const pdfiumSmoke = await smokePackagedPdfiumRenderer(
+    bundle,
+    manifest,
+    isolatedRuntimeDirectory,
+    runtimeLoaderEnvironment,
+    path.join(cargoTarget, 'semantic-pdfium-runtime-cache'),
+  );
+  if (pdfiumSmoke) {
+    fs.writeFileSync(
+      path.join(bundle, 'pdfium-renderer-qualification.json'),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          stage: 'packaged-pdfium-renderer',
+          target: `${process.platform}-${process.arch}`,
+          result: 'pass',
+          fixture: 'deterministic one-page RLE scan, 32x32 RGB',
+          citation: 'pdfPageRender:1',
+          image: pdfiumSmoke,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  }
   run(
     [
       'test',

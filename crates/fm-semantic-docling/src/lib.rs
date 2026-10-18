@@ -23,7 +23,8 @@ use fm_semantic_conversion::{
     BaselineConverter, ComponentVersion, ConversionContext, ConversionError, ConversionOutcome,
     ConversionWarning, ConvertedDocument, DocumentConverter, DocumentMetadata, FormatKind,
     Omission, OptionalConverter, Provenance, ProvenancePrecision, SourceContent, SourceMap,
-    StructuralUnit, TopLevelBoundary, UnitKind, instruction_like_excerpt, sanitize,
+    StructuralUnit, TopLevelBoundary, UnitKind, clean_pdf_toc_text, instruction_like_excerpt,
+    is_pdf_toc_section, repair_spaced_elsevier_doi, sanitize,
 };
 
 const OCR_REQUIRED_GUIDANCE: &str = "This PDF has no searchable text layer and was excluded from \
@@ -32,7 +33,7 @@ const OCR_REQUIRED_GUIDANCE: &str = "This PDF has no searchable text layer and w
 
 /// Version of the Docling extraction and Procyon structural mapping behavior.
 pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
-    ComponentVersion::new("docling-pdf", 1_036_000);
+    ComponentVersion::new("docling-pdf", 1_036_001);
 /// Stable identity of the production conversion pipeline.
 ///
 /// This changes whenever the preferred converter or fallback behaviour can
@@ -40,20 +41,29 @@ pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
 /// included: enabling it retries only previously textless PDFs, while
 /// disabling it makes reconciliation remove their OCR-derived occurrences.
 /// OCR-derived documents carry [`OCRMYPDF_CONVERTER_VERSION`] themselves.
-pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/1036000+baseline/2";
+pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/1036001+baseline/3";
 /// Version of the optional OCRmyPDF plus deterministic Docling composition.
 pub const OCRMYPDF_CONVERTER_VERSION: ComponentVersion =
-    ComponentVersion::new("ocrmypdf-docling", 1);
+    ComponentVersion::new("ocrmypdf-docling", 2);
 /// Explicit environment opt-in read by the local semantic worker.
 pub const OCRMYPDF_ENABLED_ENV: &str = "PROCYON_SEMANTIC_OCRMYPDF";
 /// Optional trusted executable override for non-standard installations.
 pub const OCRMYPDF_EXECUTABLE_ENV: &str = "PROCYON_OCRMYPDF_EXECUTABLE";
 const DEFAULT_OCR_TIMEOUT: Duration = Duration::from_secs(4 * 60);
+/// OCRmyPDF page-worker processes per conversion (`--jobs`).
+///
+/// OCRmyPDF otherwise starts one worker per CPU, each rasterizing a page and
+/// running Tesseract concurrently, which multiplies the semantic worker tree's
+/// resident memory by the CPU count (issue #134). A single job keeps the OCR
+/// helpers to roughly one rasterized page at a time. Recognized text is
+/// unchanged: only page scheduling differs, so throughput is traded for the
+/// tree-memory ceiling and slow documents end in the explicit OCR deadline.
+pub const OCRMYPDF_JOBS: u32 = 1;
 const OCR_POLL_INTERVAL: Duration = Duration::from_millis(25);
 const OCRMYPDF_VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 const OCRMYPDF_VERSION_OUTPUT_LIMIT: usize = 16 * 1024;
 /// Oldest stable OCRmyPDF release audited for the converter's
-/// `--output-type pdf --redo-ocr --optimize 0 --quiet` invocation.
+/// `--output-type pdf --redo-ocr --optimize 0 --jobs 1 --quiet` invocation.
 pub const OCRMYPDF_MINIMUM_SUPPORTED_VERSION: &str = "16.0.0";
 /// Exclusive upper bound for audited OCRmyPDF releases.
 ///
@@ -641,6 +651,8 @@ impl OcrMyPdfConverter {
             .arg("--redo-ocr")
             .arg("--optimize")
             .arg("0")
+            .arg("--jobs")
+            .arg(OCRMYPDF_JOBS.to_string())
             .arg("--quiet")
             .arg(&input_path)
             .arg(&output_path);
@@ -1095,7 +1107,12 @@ fn convert_text_layer(
         return conversion(outcome);
     }
 
-    let pdf = match lopdf::Document::load_mem(bytes) {
+    let pdf = match lopdf::Document::load_mem_with_options(
+        bytes,
+        lopdf::LoadOptions::with_max_decompressed_size(
+            fm_semantic_conversion::MAX_PDF_STRUCTURAL_STREAM_BYTES,
+        ),
+    ) {
         Ok(pdf) => pdf,
         Err(error) => {
             return conversion(ConversionOutcome::Malformed {
@@ -1109,7 +1126,10 @@ fn convert_text_layer(
         });
     }
 
-    let total_pages = pdf.get_pages().len();
+    let total_pages = match fm_semantic_conversion::checked_pdf_pages(&pdf) {
+        Ok(pages) => pages.len(),
+        Err(detail) => return conversion(ConversionOutcome::Malformed { detail }),
+    };
     if total_pages > 0 && context.budgets().max_items == 0 {
         return conversion(ConversionOutcome::OverBudget {
             budget: fm_semantic_conversion::BudgetKind::Items,
@@ -1142,7 +1162,12 @@ fn convert_ml(
     if let Some(outcome) = stopped(context) {
         return conversion(outcome);
     }
-    let pdf = match lopdf::Document::load_mem(bytes) {
+    let pdf = match lopdf::Document::load_mem_with_options(
+        bytes,
+        lopdf::LoadOptions::with_max_decompressed_size(
+            fm_semantic_conversion::MAX_PDF_STRUCTURAL_STREAM_BYTES,
+        ),
+    ) {
         Ok(pdf) => pdf,
         Err(error) => {
             return conversion(ConversionOutcome::Malformed {
@@ -1155,7 +1180,10 @@ fn convert_ml(
             detail: "Docling does not open password-protected PDFs".into(),
         });
     }
-    let total_pages = pdf.get_pages().len();
+    let total_pages = match fm_semantic_conversion::checked_pdf_pages(&pdf) {
+        Ok(pages) => pages.len(),
+        Err(detail) => return conversion(ConversionOutcome::Malformed { detail }),
+    };
     if total_pages > 0 && context.budgets().max_items == 0 {
         return conversion(ConversionOutcome::OverBudget {
             budget: fm_semantic_conversion::BudgetKind::Items,
@@ -1180,8 +1208,6 @@ fn convert_ml(
         }
     };
     let mut combined = DoclingDocument::new("document.pdf");
-    let mut omissions = Vec::new();
-    let mut first_error = None;
     for page in 1..=selected_pages {
         if let Some(outcome) = stopped(context) {
             pipeline.set_pages(None);
@@ -1200,20 +1226,20 @@ fn convert_ml(
                 }
             }
             Err(error) => {
-                let detail = format!("Docling could not convert PDF page {page}: {error}");
-                if first_error.is_none() {
-                    first_error = Some(error);
-                }
-                omissions.push(Omission::UnreadablePart { detail });
+                pipeline.set_pages(None);
+                return conversion(match pdf_error_outcome(error) {
+                    ConversionOutcome::Encrypted { detail } => ConversionOutcome::Encrypted {
+                        detail: format!("PDF page {page}: {detail}"),
+                    },
+                    ConversionOutcome::Malformed { detail } => ConversionOutcome::Malformed {
+                        detail: format!("PDF page {page}: {detail}"),
+                    },
+                    _ => unreachable!("PDF errors classify as encrypted or malformed"),
+                });
             }
         }
     }
     pipeline.set_pages(None);
-    if combined.nodes.is_empty()
-        && let Some(error) = first_error
-    {
-        return conversion(pdf_error_outcome(error));
-    }
 
     let mut mapper = Mapper::new(
         version,
@@ -1222,9 +1248,6 @@ fn convert_ml(
         selected_pages,
         Some(language),
     );
-    for omission in omissions {
-        mapper.omit(omission);
-    }
     mapper.map_document(combined);
     conversion(mapper.finish())
 }
@@ -1452,7 +1475,14 @@ impl<'a> Mapper<'a> {
             return false;
         }
         let order = self.units.len() as u32;
-        let mut text = sanitized.text;
+        let (mut text, has_leader) =
+            clean_pdf_toc_text(&repair_spaced_elsevier_doi(&sanitized.text));
+        let kind = if kind != UnitKind::Heading && (has_leader || is_pdf_toc_section(&section_path))
+        {
+            UnitKind::Navigation
+        } else {
+            kind
+        };
         let mut truncated = false;
         let unit_limit = self.context.budgets().max_unit_chars as usize;
         if text.chars().count() > unit_limit {
@@ -1622,6 +1652,154 @@ fn is_pdf(bytes: &[u8], metadata: &DocumentMetadata) -> bool {
 mod tests {
     use super::*;
     use docling_core::Table;
+    use lopdf::{Object, Stream, dictionary};
+
+    fn pdf_with_oversized_page(include_text_page: bool) -> Vec<u8> {
+        let mut pdf = lopdf::Document::with_version("1.5");
+        let pages_id = pdf.new_object_id();
+        let mut content = Stream::new(dictionary! {}, vec![b' '; 17 * 1024 * 1024]);
+        content.compress().expect("compress fixture");
+        let content_id = pdf.add_object(content);
+        let page_id = pdf.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "Contents" => content_id,
+            "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        });
+        let mut kids = vec![Object::Reference(page_id)];
+        if include_text_page {
+            let font_id = pdf.add_object(dictionary! {
+                "Type" => "Font",
+                "Subtype" => "Type1",
+                "BaseFont" => "Helvetica",
+            });
+            let text_id = pdf.add_object(Stream::new(
+                dictionary! {},
+                b"BT /F1 12 Tf 12 12 Td (substantive second page) Tj ET".to_vec(),
+            ));
+            let text_page = pdf.add_object(dictionary! {
+                "Type" => "Page",
+                "Parent" => pages_id,
+                "Contents" => text_id,
+                "Resources" => dictionary! { "Font" => dictionary! { "F1" => font_id } },
+                "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+            });
+            kids.push(Object::Reference(text_page));
+        }
+        let count = kids.len() as i64;
+        pdf.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => kids,
+                "Count" => count,
+            }),
+        );
+        let catalog_id = pdf.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+        pdf.trailer.set("Root", catalog_id);
+        let mut bytes = Vec::new();
+        pdf.save_to(&mut bytes).expect("save fixture");
+        bytes
+    }
+
+    #[test]
+    fn compressed_page_object_bomb_cannot_be_mistaken_for_an_ocr_only_pdf() {
+        let mut pdf =
+            lopdf::Document::load_mem(&pdf_with_oversized_page(false)).expect("load fixture");
+        let page_id = pdf.get_pages()[&1];
+        pdf.get_dictionary_mut(page_id)
+            .expect("page dictionary")
+            .set(
+                "LargeStructuralValue",
+                Object::string_literal(vec![
+                    b' ';
+                    fm_semantic_conversion::MAX_PDF_STRUCTURAL_STREAM_BYTES
+                        + 1
+                ]),
+            );
+        let mut bytes = Vec::new();
+        pdf.save_modern(&mut bytes)
+            .expect("save compressed fixture");
+        assert!(bytes.len() < 1024 * 1024);
+
+        let result = converter_with_baseline_fallback()
+            .convert(
+                SourceContent::Bytes(&bytes),
+                &DocumentMetadata::unknown().with_media_type("application/pdf"),
+                &ConversionContext::new(),
+            )
+            .expect("convert");
+        assert!(
+            matches!(result, ConversionOutcome::Malformed { .. }),
+            "missing page structure must fail, not offer OCR or publish partial evidence"
+        );
+    }
+
+    #[test]
+    fn preferred_converter_cannot_publish_a_remaining_page_after_object_stream_loss() {
+        let mut pdf =
+            lopdf::Document::load_mem(&pdf_with_oversized_page(true)).expect("load fixture");
+        let first = pdf.get_pages()[&1];
+        pdf.get_dictionary_mut(first).expect("page dictionary").set(
+            "LargeStructuralValue",
+            Object::string_literal(vec![
+                b' ';
+                fm_semantic_conversion::MAX_PDF_STRUCTURAL_STREAM_BYTES
+                    + 1
+            ]),
+        );
+        let options = lopdf::SaveOptions::builder()
+            .use_object_streams(true)
+            .use_xref_streams(true)
+            .max_objects_per_stream(1)
+            .build();
+        let mut bytes = Vec::new();
+        pdf.save_with_options(&mut bytes, options)
+            .expect("save split compressed PDF");
+
+        let result = converter_with_baseline_fallback()
+            .convert(
+                SourceContent::Bytes(&bytes),
+                &DocumentMetadata::unknown().with_media_type("application/pdf"),
+                &ConversionContext::new(),
+            )
+            .expect("convert");
+        assert!(
+            matches!(result, ConversionOutcome::Malformed { detail } if detail.contains("declared 2 pages, loaded 1")),
+            "Docling cannot publish only the second page"
+        );
+    }
+
+    #[test]
+    fn preferred_pdf_converter_does_not_call_an_unreadable_page_ocr_required() {
+        let bytes = pdf_with_oversized_page(false);
+        let result = converter_with_baseline_fallback()
+            .convert(
+                SourceContent::Bytes(&bytes),
+                &DocumentMetadata::unknown().with_media_type("application/pdf"),
+                &ConversionContext::new(),
+            )
+            .expect("convert");
+        assert!(
+            matches!(result, ConversionOutcome::Malformed { detail } if detail.contains("page 1"))
+        );
+    }
+
+    #[test]
+    fn preferred_converter_cannot_publish_a_body_page_when_another_page_is_unreadable() {
+        let bytes = pdf_with_oversized_page(true);
+        let result = converter_with_baseline_fallback()
+            .convert(
+                SourceContent::Bytes(&bytes),
+                &DocumentMetadata::unknown().with_media_type("application/pdf"),
+                &ConversionContext::new(),
+            )
+            .expect("convert");
+        assert!(
+            matches!(result, ConversionOutcome::Malformed { detail } if detail.contains("page 1")),
+            "one readable body page must not hide an unreadable page or blame OCR"
+        );
+    }
 
     #[cfg(unix)]
     fn fake_version_executable(root: &Path, body: &str) -> PathBuf {
@@ -1713,6 +1891,135 @@ mod tests {
                 .units()
                 .iter()
                 .all(|unit| !unit.text.contains("Repeated footer"))
+        );
+    }
+
+    #[test]
+    fn pdf_abstract_heading_and_long_text_index_as_one_section() {
+        let document = DoclingDocument {
+            name: "fixture".into(),
+            nodes: vec![
+                Node::PageInfo {
+                    page_no: 1,
+                    width: 612.0,
+                    height: 792.0,
+                },
+                Node::Heading {
+                    level: 1,
+                    text: "Abstract".into(),
+                },
+                Node::Paragraph {
+                    text: "finding ".repeat(140),
+                },
+                Node::Heading {
+                    level: 1,
+                    text: "Methods".into(),
+                },
+                Node::Paragraph {
+                    text: "We tested the method.".into(),
+                },
+            ],
+            strict_markdown: false,
+            compact_tables: false,
+            links: Vec::new(),
+            confidence: None,
+        };
+        let context = ConversionContext::new();
+        let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 1, 1, None);
+        mapper.map_document(document);
+        let outcome = mapper.finish();
+        let converted = outcome.document().expect("converted");
+        let chunks = fm_semantic_conversion::Chunker::default().chunk(converted);
+
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].section_path, ["Abstract"]);
+        assert_eq!(chunks[0].unit_orders, [0, 1]);
+        assert!(chunks[0].embedding_input.contains("finding"));
+        assert_eq!(chunks[1].section_path, ["Methods"]);
+    }
+
+    #[test]
+    fn docling_pdf_repairs_spaced_doi_before_chunking() {
+        let document = DoclingDocument {
+            name: "fixture".into(),
+            nodes: vec![
+                Node::PageInfo {
+                    page_no: 1,
+                    width: 612.0,
+                    height: 792.0,
+                },
+                Node::Paragraph {
+                    text: "https://doi.org/10.1016/j. chiabu.2011.01.002 and j. chiabu.2011.01.002"
+                        .into(),
+                },
+            ],
+            strict_markdown: false,
+            compact_tables: false,
+            links: Vec::new(),
+            confidence: None,
+        };
+        let context = ConversionContext::new();
+        let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 1, 1, None);
+        mapper.map_document(document);
+        let converted = mapper.finish();
+        let text = &converted.document().expect("converted").units()[0].text;
+        assert!(text.contains("https://doi.org/10.1016/j.chiabu.2011.01.002"));
+        assert!(text.contains("j. chiabu.2011.01.002"));
+    }
+
+    #[test]
+    fn toc_leaders_are_removed_before_embedding_and_navigation_is_separate_from_prose() {
+        let document = DoclingDocument {
+            name: "fixture".into(),
+            nodes: vec![
+                Node::PageInfo {
+                    page_no: 1,
+                    width: 612.0,
+                    height: 792.0,
+                },
+                Node::Heading {
+                    level: 1,
+                    text: "Table of Contents".into(),
+                },
+                Node::Paragraph {
+                    text: "........................ Aggression\nAlcohol/drug abuse .......... 12"
+                        .into(),
+                },
+                Node::Heading {
+                    level: 1,
+                    text: "Introduction".into(),
+                },
+                Node::Paragraph {
+                    text: "A substantive passage... with ordinary ellipses.".into(),
+                },
+            ],
+            strict_markdown: false,
+            compact_tables: false,
+            links: Vec::new(),
+            confidence: None,
+        };
+        let context = ConversionContext::new();
+        let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 1, 1, None);
+        mapper.map_document(document);
+        let converted = mapper.finish().document().expect("converted").clone();
+        let chunks = fm_semantic_conversion::Chunker::default().chunk(&converted);
+
+        assert_eq!(
+            chunks
+                .iter()
+                .map(|chunk| (chunk.is_navigation, chunk.embedding_input.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                (true, "Table of Contents\n\nTable of Contents"),
+                (
+                    true,
+                    "Table of Contents\n\nAggression\nAlcohol/drug abuse 12"
+                ),
+                (
+                    false,
+                    "Introduction\n\nA substantive passage... with ordinary ellipses."
+                )
+            ]
         );
     }
 

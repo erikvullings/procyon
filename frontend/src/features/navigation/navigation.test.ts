@@ -599,27 +599,87 @@ describe('navigation controller', () => {
     });
   });
 
-  it('keeps a tab recoverable when a mounted network share disappears', async () => {
+  it('presents a folder that fails to open as the current location so back returns to its origin', async () => {
     const context = setup();
-    const original = context.getWorkspace();
-    const share = {
+    const downloads = {
       providerId: 'local',
-      uri: 'file:///Volumes/Team%20Files',
+      uri: 'file:///home/erik/Downloads',
     } as const;
-    vi.mocked(context.client.navigatePane).mockRejectedValue(new Error('Share unavailable'));
+    const failed = workspace(downloads.uri);
+    vi.mocked(context.client.navigatePane).mockRejectedValue({
+      code: 'permissionDenied',
+      message: 'permission denied',
+    });
+    vi.mocked(context.client.dispatchWorkspaceCommand).mockResolvedValueOnce(failed);
     const onLocationUnavailable = vi.fn();
+    const onLocationVisited = vi.fn();
     const controller = createNavigationController({
       client: context.client,
       getWorkspace: context.getWorkspace,
       replaceWorkspace: context.replaceWorkspace,
       updatePane: (_paneId, _tabId, view) => context.views.push(view),
       onLocationUnavailable,
+      onLocationVisited,
+    });
+
+    await controller.navigate('left', downloads);
+
+    expect(onLocationUnavailable).toHaveBeenCalledWith('workspace', downloads);
+    expect(onLocationVisited).not.toHaveBeenCalled();
+    expect(context.client.dispatchWorkspaceCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'navigateTab',
+        navigationMode: 'push',
+        location: downloads,
+      }),
+      expect.any(AbortSignal),
+    );
+    expect(context.getWorkspace()).toBe(failed);
+    expect(context.views.at(-1)).toMatchObject({
+      state: { type: 'error', message: 'permission denied' },
+      location: downloads,
+    });
+
+    // Back pops the failed folder, landing on the folder the user came from.
+    const home = workspace('file:///home/erik');
+    vi.mocked(context.client.dispatchWorkspaceCommand).mockResolvedValueOnce(home);
+    vi.mocked(context.client.navigatePane).mockImplementationOnce(async (request) =>
+      snapshot(request.requestId, 'file:///home/erik', ['Downloads']),
+    );
+
+    await controller.back('left');
+
+    expect(context.client.dispatchWorkspaceCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: 'navigateTab', navigationMode: 'back' }),
+      expect.any(AbortSignal),
+    );
+    expect(context.client.dispatchWorkspaceCommand).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ location: expect.anything() }),
+      expect.any(AbortSignal),
+    );
+    expect(context.views.at(-1)).toMatchObject({
+      state: { type: 'loaded' },
+      location: { providerId: 'local', uri: 'file:///home/erik' },
+    });
+  });
+
+  it('keeps the previous location when recording a failed folder in history fails', async () => {
+    const context = setup();
+    const original = context.getWorkspace();
+    const share = { providerId: 'local', uri: 'file:///Volumes/Team%20Files' } as const;
+    vi.mocked(context.client.navigatePane).mockRejectedValue(new Error('Share unavailable'));
+    vi.mocked(context.client.dispatchWorkspaceCommand).mockRejectedValue(
+      new Error('workspace store unavailable'),
+    );
+    const controller = createNavigationController({
+      client: context.client,
+      getWorkspace: context.getWorkspace,
+      replaceWorkspace: context.replaceWorkspace,
+      updatePane: (_paneId, _tabId, view) => context.views.push(view),
     });
 
     await controller.navigate('left', share);
 
-    expect(onLocationUnavailable).toHaveBeenCalledWith('workspace', share);
-    expect(context.client.dispatchWorkspaceCommand).not.toHaveBeenCalled();
     expect(context.getWorkspace()).toBe(original);
     expect(context.views.at(-1)).toMatchObject({
       state: { type: 'error', message: 'Share unavailable' },

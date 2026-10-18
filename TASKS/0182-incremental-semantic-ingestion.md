@@ -88,3 +88,7 @@ application closes rather than installing an always-running login service.
   to eligibility instead of depending on pane-only Git status. Per-run rule evaluation notices
   ignore changes without a status-cache invalidation; a completed reconciliation prunes
   previously indexed files that become ignored. Single-file OCR remediation uses the same check.
+- 2026-10-11: Completed host reconciliations persist per-root eligibility exclusions, including
+  the actual 64 MiB per-file read limit (even when the broader library quota allows 512 MiB).
+  A skipped oversized file is not an active job and cannot appear in search; its durable count
+  remains visible on the root after indexing activity ends and the app reopens. Single-file OCR remediation uses the same check.

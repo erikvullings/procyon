@@ -12,6 +12,8 @@ default = []
 # full-text indexes. Off by default: the official SDK dynamically links Zvec and
 # downloads a native artifact at build time unless ZVEC_LIB_DIR is supplied.
 zvec = ["fm-semantic-worker/zvec"]
+# Opt-in installed-worker integration probe; normal application builds stay E5-only.
+gemma-native = ["fm-semantic-worker/gemma-native"]
 
 [dependencies]
 async-trait.workspace = true
@@ -67,6 +69,7 @@ serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 tempfile.workspace = true
+rusqlite.workspace = true
 tokio = { workspace = true, features = ["fs", "sync", "time"] }
 tokio-util.workspace = true
 tracing.workspace = true
@@ -89,5 +92,6 @@ russh.workspace = true
 sevenz-rust2.workspace = true
 tar.workspace = true
 tempfile.workspace = true
+sysinfo = "0.39.6"
 tokio = { workspace = true, features = ["macros", "rt", "test-util"] }
 zip.workspace = true

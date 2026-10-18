@@ -126,6 +126,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
             .collect(),
         icon_theme: settings.icon_theme,
         check_for_updates_automatically: settings.check_for_updates_automatically,
+        viewer_in_separate_window: settings.viewer_in_separate_window,
     }
 }
 
@@ -238,6 +239,7 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
             .collect(),
         icon_theme: settings.icon_theme,
         check_for_updates_automatically: settings.check_for_updates_automatically,
+        viewer_in_separate_window: settings.viewer_in_separate_window,
     }
 }
 
@@ -298,6 +300,12 @@ fn search_query_to_dto(query: fm_domain::SearchQuery) -> SearchQueryDto {
                 }
             },
             enrolled_root_ids: semantic.enrolled_root_ids,
+            selected_concept: semantic.selected_concept.map(|source| {
+                fm_transport_dto::SearchSemanticConceptSourceDto {
+                    vocabulary_id: source.vocabulary_id,
+                    concept_uri: source.concept_uri,
+                }
+            }),
         }),
         concept: query.concept.map(|concept| SearchConceptPredicateDto {
             vocabulary_id: concept.vocabulary_id,
@@ -393,6 +401,12 @@ fn search_query_from_dto(query: SearchQueryDto) -> fm_domain::SearchQuery {
                     }
                 },
                 enrolled_root_ids: semantic.enrolled_root_ids,
+                selected_concept: semantic.selected_concept.map(|source| {
+                    fm_domain::SearchSemanticConceptSource {
+                        vocabulary_id: source.vocabulary_id,
+                        concept_uri: source.concept_uri,
+                    }
+                }),
             }),
         concept: query
             .concept
@@ -425,5 +439,60 @@ fn search_query_from_dto(query: SearchQueryDto) -> fm_domain::SearchQuery {
             .collect(),
         tags: query.tags,
         metadata: query.metadata,
+    }
+}
+
+#[cfg(test)]
+mod semantic_source_tests {
+    use super::*;
+
+    #[test]
+    fn selected_concept_identity_survives_saved_semantic_query_mapping() {
+        let query = SearchQueryDto {
+            schema_version: fm_domain::SEARCH_QUERY_SCHEMA_VERSION,
+            mode: SearchModeDto::Semantic,
+            scope: SearchScopeDto {
+                locations: Vec::new(),
+                recurse: true,
+                show_hidden: false,
+            },
+            name: None,
+            entry_kinds: Vec::new(),
+            mime_types: Vec::new(),
+            min_size_bytes: None,
+            max_size_bytes: None,
+            modified_after: None,
+            modified_before: None,
+            content: None,
+            semantic: Some(SearchSemanticPredicateDto {
+                query: "Mental stress".into(),
+                library_id: "library-1".into(),
+                scope: SemanticSearchScopeDto::EntireLibrary,
+                enrolled_root_ids: Vec::new(),
+                selected_concept: Some(fm_transport_dto::SearchSemanticConceptSourceDto {
+                    vocabulary_id: "unesco-psychology".into(),
+                    concept_uri: "http://vocabularies.unesco.org/thesaurus/concept13013".into(),
+                }),
+            }),
+            concept: None,
+            git_statuses: Vec::new(),
+            tags: Vec::new(),
+            metadata: Default::default(),
+        };
+        assert_eq!(
+            search_query_to_dto(search_query_from_dto(query.clone())),
+            query
+        );
+    }
+
+    #[test]
+    fn older_semantic_queries_without_source_identity_still_load() {
+        let query: SearchSemanticPredicateDto = serde_json::from_value(serde_json::json!({
+            "query": "reports",
+            "libraryId": "library-1",
+            "scope": "entireLibrary"
+        }))
+        .expect("older semantic query");
+        assert_eq!(query.selected_concept, None);
     }
 }

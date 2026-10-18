@@ -91,6 +91,7 @@ import type {
   ListKnowledgeRootsRequestDto,
   ListOperationsParams,
   ListSavedRagConversationsRequestDto,
+  LlmModelLimitsDto,
   LlmProfileDto,
   LlmProfileExportDto,
   LlmProfilePresetDto,
@@ -104,6 +105,8 @@ import type {
   OpenDocxPreviewResponseDto,
   OpenPptxPreviewRequestDto,
   OpenPptxPreviewResponseDto,
+  OpenSqliteViewRequestDto,
+  OpenSqliteViewResponseDto,
   OpenStructuredViewRequestDto,
   OpenStructuredViewResponseDto,
   OperationDto,
@@ -114,10 +117,13 @@ import type {
   PlanSemanticModelMigrationRequestDto,
   PluginDescriptorDto,
   PluginLogEntryDto,
+  PluginPreviewResultDto,
   PptxPreviewSessionRequestDto,
   PreviewDocumentSummaryRequestDto,
   PreviewRagRequestDto,
   PreviewSemanticEnrolmentRequestDto,
+  QuerySqliteViewRequestDto,
+  QuerySqliteViewResponseDto,
   RagPreviewDto,
   ReadDocxPreviewResourceRequestDto,
   ReadDocxPreviewResourceResponseDto,
@@ -131,6 +137,7 @@ import type {
   RemoveApplicationDockIconRequestDto,
   RemoveApplicationDockIconResponseDto,
   RenderChecksumFileRequestDto,
+  RenderPluginPreviewRequestDto,
   ResolveKnowledgeSourceRequestDto,
   ResolveLinkTargetRequestDto,
   ResolveOperationConflictRequestDto,
@@ -178,6 +185,7 @@ import type {
   SetSpotlightCommentParams,
   SettingsDto,
   SpotlightCommentDto,
+  SqliteViewSessionRequestDto,
   StartChecksumRequestDto,
   StartChecksumResponseDto,
   StartComparisonRequestDto,
@@ -194,6 +202,7 @@ import type {
   SystemLocationDto,
   UninstallSemanticComponentsRequestDto,
   UpdateConnectionRequestDto,
+  UpdateGemmaMediaRequestDto,
   UpdateSemanticEligibilityOverridesRequestDto,
   UpdateStructuredViewRequestDto,
   VerificationReportDto,
@@ -3153,6 +3162,187 @@ return fetchMutator<searchInFileResponse>(getSearchInFileUrl(),
 
 
 
+export type closeSqliteViewResponse204 = {
+  data: void
+  status: 204
+}
+
+export type closeSqliteViewResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type closeSqliteViewResponseSuccess = (closeSqliteViewResponse204) & {
+  headers: Headers;
+};
+export type closeSqliteViewResponseError = (closeSqliteViewResponse404) & {
+  headers: Headers;
+};
+
+export type closeSqliteViewResponse = (closeSqliteViewResponseSuccess | closeSqliteViewResponseError)
+
+export const getCloseSqliteViewUrl = () => {
+
+
+
+
+  return `/api/v1/files/sqlite/close`
+}
+
+/**
+ * @summary Closes a SQLite viewer session.
+ */
+export const closeSqliteView = async (sqliteViewSessionRequestDto: SqliteViewSessionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<closeSqliteViewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<closeSqliteViewResponse>(getCloseSqliteViewUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(sqliteViewSessionRequestDto)
+  }
+);}
+
+
+
+export type openSqliteViewResponse200 = {
+  data: OpenSqliteViewResponseDto
+  status: 200
+}
+
+export type openSqliteViewResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type openSqliteViewResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type openSqliteViewResponseSuccess = (openSqliteViewResponse200) & {
+  headers: Headers;
+};
+export type openSqliteViewResponseError = (openSqliteViewResponse400 | openSqliteViewResponse404) & {
+  headers: Headers;
+};
+
+export type openSqliteViewResponse = (openSqliteViewResponseSuccess | openSqliteViewResponseError)
+
+export const getOpenSqliteViewUrl = () => {
+
+
+
+
+  return `/api/v1/files/sqlite/open`
+}
+
+/**
+ * @summary Opens a read-only SQLite database viewer session.
+ */
+export const openSqliteView = async (openSqliteViewRequestDto: OpenSqliteViewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<openSqliteViewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<openSqliteViewResponse>(getOpenSqliteViewUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(openSqliteViewRequestDto)
+  }
+);}
+
+
+
+export type querySqliteViewResponse200 = {
+  data: QuerySqliteViewResponseDto
+  status: 200
+}
+
+export type querySqliteViewResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type querySqliteViewResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type querySqliteViewResponseSuccess = (querySqliteViewResponse200) & {
+  headers: Headers;
+};
+export type querySqliteViewResponseError = (querySqliteViewResponse400 | querySqliteViewResponse404) & {
+  headers: Headers;
+};
+
+export type querySqliteViewResponse = (querySqliteViewResponseSuccess | querySqliteViewResponseError)
+
+export const getQuerySqliteViewUrl = () => {
+
+
+
+
+  return `/api/v1/files/sqlite/query`
+}
+
+/**
+ * @summary Reads one bounded page of a SQLite table, view or read-only SQL result.
+ */
+export const querySqliteView = async (querySqliteViewRequestDto: QuerySqliteViewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<querySqliteViewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<querySqliteViewResponse>(getQuerySqliteViewUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(querySqliteViewRequestDto)
+  }
+);}
+
+
+
 export type closeStructuredViewResponse204 = {
   data: void
   status: 204
@@ -4003,6 +4193,65 @@ export const createLlmProfile = async (saveLlmProfileRequestDto: SaveLlmProfileR
     return headers;
   };
 return fetchMutator<createLlmProfileResponse>(getCreateLlmProfileUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(saveLlmProfileRequestDto)
+  }
+);}
+
+
+
+export type discoverLlmProfileDraftModelLimitsResponse200 = {
+  data: LlmModelLimitsDto
+  status: 200
+}
+
+export type discoverLlmProfileDraftModelLimitsResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type discoverLlmProfileDraftModelLimitsResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type discoverLlmProfileDraftModelLimitsResponseSuccess = (discoverLlmProfileDraftModelLimitsResponse200) & {
+  headers: Headers;
+};
+export type discoverLlmProfileDraftModelLimitsResponseError = (discoverLlmProfileDraftModelLimitsResponse400 | discoverLlmProfileDraftModelLimitsResponse403) & {
+  headers: Headers;
+};
+
+export type discoverLlmProfileDraftModelLimitsResponse = (discoverLlmProfileDraftModelLimitsResponseSuccess | discoverLlmProfileDraftModelLimitsResponseError)
+
+export const getDiscoverLlmProfileDraftModelLimitsUrl = () => {
+
+
+
+
+  return `/api/v1/llm-profiles/discover-model-limits`
+}
+
+export const discoverLlmProfileDraftModelLimits = async (saveLlmProfileRequestDto: SaveLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<discoverLlmProfileDraftModelLimitsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<discoverLlmProfileDraftModelLimitsResponse>(getDiscoverLlmProfileDraftModelLimitsUrl(),
   {
     ...options,
     method: 'POST',
@@ -5173,6 +5422,69 @@ export const getPluginLogs = async (pluginId: string, options?: Parameters<typeo
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type renderPluginPreviewResponse200 = {
+  data: PluginPreviewResultDto
+  status: 200
+}
+
+export type renderPluginPreviewResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type renderPluginPreviewResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type renderPluginPreviewResponseSuccess = (renderPluginPreviewResponse200) & {
+  headers: Headers;
+};
+export type renderPluginPreviewResponseError = (renderPluginPreviewResponse400 | renderPluginPreviewResponse404) & {
+  headers: Headers;
+};
+
+export type renderPluginPreviewResponse = (renderPluginPreviewResponseSuccess | renderPluginPreviewResponseError)
+
+export const getRenderPluginPreviewUrl = (pluginId: string,) => {
+
+
+
+
+  return `/api/v1/plugins/${pluginId}/preview`
+}
+
+/**
+ * @summary Renders one file with an enabled plugin's sandboxed preview contribution (task 0142).
+ */
+export const renderPluginPreview = async (pluginId: string,
+    renderPluginPreviewRequestDto: RenderPluginPreviewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<renderPluginPreviewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<renderPluginPreviewResponse>(getRenderPluginPreviewUrl(pluginId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(renderPluginPreviewRequestDto)
   }
 );}
 
@@ -7861,6 +8173,70 @@ return fetchMutator<getSemanticFolderStatusResponse>(getGetSemanticFolderStatusU
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(getSemanticFolderStatusRequestDto)
+  }
+);}
+
+
+
+export type updateGemmaMediaResponse200 = {
+  data: SemanticLibraryStatusDto
+  status: 200
+}
+
+export type updateGemmaMediaResponse400 = {
+  data: SemanticLibraryErrorDto
+  status: 400
+}
+
+export type updateGemmaMediaResponse403 = {
+  data: SemanticLibraryErrorDto
+  status: 403
+}
+
+export type updateGemmaMediaResponse409 = {
+  data: SemanticLibraryErrorDto
+  status: 409
+}
+
+export type updateGemmaMediaResponseSuccess = (updateGemmaMediaResponse200) & {
+  headers: Headers;
+};
+export type updateGemmaMediaResponseError = (updateGemmaMediaResponse400 | updateGemmaMediaResponse403 | updateGemmaMediaResponse409) & {
+  headers: Headers;
+};
+
+export type updateGemmaMediaResponse = (updateGemmaMediaResponseSuccess | updateGemmaMediaResponseError)
+
+export const getUpdateGemmaMediaUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/library/gemma-media`
+}
+
+export const updateGemmaMedia = async (updateGemmaMediaRequestDto: UpdateGemmaMediaRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<updateGemmaMediaResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<updateGemmaMediaResponse>(getUpdateGemmaMediaUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateGemmaMediaRequestDto)
   }
 );}
 

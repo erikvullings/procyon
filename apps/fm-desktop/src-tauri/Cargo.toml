@@ -32,7 +32,7 @@ crate-type = ["rlib"]
 
 [features]
 native-spa-smoke = ["tauri/custom-protocol"]
-semantic-gemma = ["fm-semantic-worker/gemma-native"]
+semantic-gemma = ["fm-semantic-worker/gemma-launch"]
 
 [build-dependencies]
 tauri-build = { workspace = true, features = [] }
@@ -72,6 +72,7 @@ semver.workspace = true
 portable-pty = "0.9.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+clipboard-rs = { version = "0.3.5", default-features = false }
 tempfile.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -89,6 +90,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation"] }
 [dev-dependencies]
 tauri = { workspace = true, features = ["test"] }
 chrono.workspace = true
+image.workspace = true
 tempfile.workspace = true
 sha2.workspace = true
 

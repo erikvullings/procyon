@@ -39,6 +39,12 @@ function desktopConfig() {
 
   const windowsThumbprint = process.env.FM_WINDOWS_CERTIFICATE_THUMBPRINT?.trim();
   const createUpdaterArtifacts = Boolean(process.env.TAURI_SIGNING_PRIVATE_KEY?.trim());
+  const experimentalGemma = process.env.GEMMA_DESKTOP_EXPERIMENTAL === 'true';
+  const qualifiedGemma = process.env.GEMMA_DESKTOP_NON_EXPERIMENTAL === 'true';
+  const riskAcceptedGemma = process.env.GEMMA_DESKTOP_RISK_ACCEPTED === 'true';
+  if ([experimentalGemma, qualifiedGemma, riskAcceptedGemma].filter(Boolean).length > 1) {
+    fail('experimental, qualified, and risk-accepted Gemma release modes cannot be combined');
+  }
   return {
     productName: metadata['product-name'],
     version: desktopPackage.version,
@@ -56,6 +62,23 @@ function desktopConfig() {
           }
         : {}),
     },
+    ...(experimentalGemma || qualifiedGemma || riskAcceptedGemma
+      ? {
+          plugins: {
+            updater: {
+              endpoints: [
+                `https://github.com/erikvullings/procyon/releases/download/${
+                  experimentalGemma
+                    ? 'updater-gemma-experimental'
+                    : riskAcceptedGemma
+                      ? 'updater-gemma-risk-accepted'
+                      : 'updater-gemma'
+                }/latest.json`,
+              ],
+            },
+          },
+        }
+      : {}),
   };
 }
 

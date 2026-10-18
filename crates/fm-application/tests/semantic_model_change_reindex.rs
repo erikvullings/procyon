@@ -295,6 +295,46 @@ async fn startup_reconciliation_feeds_every_enrolled_root_without_restarting_the
 }
 
 #[tokio::test]
+async fn startup_reconciliation_refeeds_unchanged_documents_after_a_worker_upgrade() {
+    // A worker upgrade may discard an index built by a superseded conversion
+    // pipeline. The host keeps its own unchanged observations, so the next
+    // startup reconciliation must still feed every document rather than skip
+    // files the host has already seen.
+    let root = project_temp_dir("root-upgrade-");
+    std::fs::write(
+        root.path().join("upgrade.txt"),
+        "An upgraded worker must receive unchanged documents again.",
+    )
+    .unwrap();
+    let state = project_temp_dir("state-upgrade-");
+    let library = library(&state);
+    enrol(
+        &library,
+        WorkspaceId::from(Uuid::from_u128(0x1914)),
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let capability = Arc::new(RecordingCapability::new(None));
+    let service = service(&state, library, Arc::clone(&capability));
+
+    for launch in 1..=2 {
+        let report = service
+            .semantic_reconcile_all_enrolled_roots(&HOST, CancellationToken::new())
+            .await;
+        assert!(report.is_complete(), "launch {launch}: {report:?}");
+        assert_eq!(report.ingested_occurrences, 1, "launch {launch}");
+    }
+    let ingested = capability
+        .interactions()
+        .into_iter()
+        .filter(|interaction| matches!(interaction, Interaction::Ingested(_)))
+        .count();
+    assert_eq!(
+        ingested, 2,
+        "each startup must re-offer unchanged documents"
+    );
+}
+
+#[tokio::test]
 async fn a_failed_worker_restart_is_reported_without_feeding_the_old_model() {
     let root = project_temp_dir("root-c-");
     std::fs::write(root.path().join("orchard.txt"), "Semantic apples again.").unwrap();

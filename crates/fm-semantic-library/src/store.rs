@@ -54,6 +54,58 @@ impl VersionedDocument for SemanticLibraryPolicy {
                 value["schemaVersion"] = Value::from(CURRENT_POLICY_SCHEMA_VERSION);
                 Ok(value)
             }
+            3 => {
+                value["schemaVersion"] = Value::from(4);
+                Self::migrate(value, 4)
+            }
+            4 => {
+                if let Some(model) = value
+                    .get_mut("library")
+                    .and_then(|library| library.get_mut("model"))
+                    .and_then(Value::as_object_mut)
+                    && model.get("modelId").and_then(Value::as_str)
+                        == Some("google-embeddinggemma-2")
+                {
+                    let dimensions = model
+                        .get("dimensions")
+                        .and_then(Value::as_u64)
+                        .ok_or(PolicyError::InvalidModelIdentity)?;
+                    let media = model
+                        .get("gemmaMedia")
+                        .cloned()
+                        .ok_or(PolicyError::InvalidModelIdentity)?;
+                    let old_space = format!(
+                        "embeddinggemma-2/{dimensions}/images-{}/audio-{}/video-{}/v1",
+                        u8::from(
+                            media["images"]
+                                .as_bool()
+                                .ok_or(PolicyError::InvalidModelIdentity)?
+                        ),
+                        u8::from(
+                            media["audio"]
+                                .as_bool()
+                                .ok_or(PolicyError::InvalidModelIdentity)?
+                        ),
+                        u8::from(
+                            media["video"]
+                                .as_bool()
+                                .ok_or(PolicyError::InvalidModelIdentity)?
+                        ),
+                    );
+                    if model.get("embeddingSpace").and_then(Value::as_str)
+                        != Some(old_space.as_str())
+                    {
+                        return Err(PolicyError::InvalidModelIdentity);
+                    }
+                    model.insert(
+                        "embeddingSpace".to_owned(),
+                        Value::from(format!("embeddinggemma-2/{dimensions}/v1")),
+                    );
+                    value["gemmaMedia"] = media;
+                }
+                value["schemaVersion"] = Value::from(CURRENT_POLICY_SCHEMA_VERSION);
+                Ok(value)
+            }
             CURRENT_POLICY_SCHEMA_VERSION => Ok(value),
             unsupported => Err(PolicyError::UnsupportedSchema(unsupported)),
         }

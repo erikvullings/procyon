@@ -106,3 +106,17 @@ currently loaded directory and must stay entirely responsive.
     `pnpm --dir frontend test -- --run` (46 files / 317 tests, all pass).
   - Left `frontend/src/api/client/tauri-file-manager-client.ts`'s pre-existing unrelated 1-line
     change (`import type { FileManagerClient }`) untouched and unstaged, per instructions.
+- 2026-10-16 copilot: Follow-up — glob masks, clear button, and file clipboard while filtering.
+  - `quick-filter.ts`: `QuickFilterMode` is now `'plainText' | 'glob'`, auto-detected per mask
+    (`*`/`?` → whole-name case-insensitive glob, otherwise substring). `;` separates OR-ed masks;
+    each is trimmed and blanks are ignored. `compileQuickFilter` compiles once per query so the
+    100k-entry perf test still holds. Regex is still not implemented.
+  - `QuickFilterInput` gained a labelled clear (×) button (`quickFilter.clear`, all locales). Clear
+    and `Esc` share `onClose` (remove filter + close), and the pane then refocuses its file list.
+    A blur caused by closing, or by tabbing to the clear button, no longer commits first.
+  - Cmd/Ctrl+C beeped because the input stopped propagation of every keydown and the global
+    `primary-modifier` route also skips editable targets. The input now lets Cmd/Ctrl+C/X through
+    when no text is selected, and the global route recognises inputs carrying
+    `data-file-clipboard-passthrough` to copy/cut the selected files into the in-app file clipboard
+    (same as the pane). With text selected, native text copy/cut is untouched. Cmd/Ctrl+V stays a
+    native text paste into the filter box, since pasting a mask is the expected editing action.

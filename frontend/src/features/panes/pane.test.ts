@@ -1,5 +1,6 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import type { KeybindingRuntime } from '../../keybindings/dispatcher';
 import type {
   ActionDescriptor,
@@ -20,6 +21,7 @@ import type {
 import type { GridIconSize } from '../directory-table/directory-grid';
 import type { DirectoryColumnDescriptor } from '../directory-table/directory-table';
 import type { NativeIconLoader } from '../directory-table/native-icon-loader';
+import { ThumbnailLoader } from '../directory-table/thumbnail-loader';
 import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
 import type { SearchPresentation } from '../search/search-presentation';
@@ -31,7 +33,7 @@ import {
   type PaneAttrs,
   type PaneTab,
   SELECTION_MASK_STORAGE_KEY,
-  searchBreadcrumbSegments,
+  searchResultTitle,
 } from './pane';
 
 let root: HTMLElement;
@@ -206,6 +208,7 @@ type FlatAttrsInput = Partial<{
   formatSettings: EntryFormatSettings;
   pluginColumns: readonly DirectoryColumnDescriptor[];
   nativeIconLoader: NativeIconLoader;
+  thumbnailLoader: ThumbnailLoader;
   viewMode: 'table' | 'grid';
   iconSize: GridIconSize;
   onViewModeChange: (viewMode: 'table' | 'grid', iconSize: GridIconSize) => void;
@@ -251,6 +254,7 @@ type FlatAttrsInput = Partial<{
   onRename: (entry: EntrySummary, name: string) => void | Promise<void>;
   onMultiRename: (entries: readonly EntrySummary[]) => void;
   onContextMenu: (entries: readonly EntrySummary[], x: number, y: number) => void;
+  contextTargetEntryId: EntryId;
   onDragStart: (entries: readonly EntrySummary[], event: DragEvent) => void;
   onDragOver: (entry: EntrySummary | undefined, event: DropEventState) => boolean;
   onDrop: (entry: EntrySummary | undefined, event: DropModifiers) => void;
@@ -304,6 +308,7 @@ function attrs(input: FlatAttrsInput = {}): PaneAttrs {
       formatSettings: input.formatSettings,
       pluginColumns: input.pluginColumns,
       nativeIconLoader: input.nativeIconLoader,
+      thumbnailLoader: input.thumbnailLoader,
       viewMode: input.viewMode,
       iconSize: input.iconSize,
       onViewModeChange: input.onViewModeChange,
@@ -338,6 +343,9 @@ function attrs(input: FlatAttrsInput = {}): PaneAttrs {
     cutEntryIds: input.cutEntryIds ?? new Set<EntryId>(),
     active: input.active ?? true,
     ...(input.cursorIndex === undefined ? {} : { cursorIndex: input.cursorIndex }),
+    ...(input.contextTargetEntryId === undefined
+      ? {}
+      : { contextTargetEntryId: input.contextTargetEntryId }),
     platform: input.platform ?? 'linux',
     keybindingRuntime: input.keybindingRuntime ?? 'desktop',
     actions: input.actions ?? keybindingActions,
@@ -472,6 +480,98 @@ describe('Pane inline rename', () => {
   });
 
   describe('Pane context menu', () => {
+    it.each([
+      ['directory table', '/home/erik', 'table', '.fm-directory-row'],
+      ['directory grid', '/home/erik', 'grid', '.fm-grid-tile'],
+      ['search results', 'search://local/synthetic', 'table', '.fm-directory-row'],
+    ] as const)(
+      'keeps the selection when right-clicking a different file in %s',
+      (_label, path, viewMode, rowSelector) => {
+        const onContextMenu = vi.fn();
+        const onSelectionAction = vi.fn();
+        const selected = new Set<EntryId>(['one' as EntryId]);
+        const paneAttrs = attrs({
+          path,
+          viewMode,
+          selectedEntryIds: selected,
+          onContextMenu,
+          onSelectionAction,
+        });
+        const rerender = mountUpdating(paneAttrs);
+        const row = root.querySelector<HTMLElement>(`${rowSelector}[data-entry-index="1"]`);
+        row?.dispatchEvent(
+          new MouseEvent('contextmenu', { bubbles: true, clientX: 12, clientY: 24 }),
+        );
+        expect(onSelectionAction).toHaveBeenCalledWith({
+          type: 'setCursor',
+          entryId: entries[1]?.id,
+        });
+        expect(selected).toEqual(new Set(['one']));
+        expect(onContextMenu).toHaveBeenLastCalledWith([entries[1]], 12, 24);
+        expect(root.querySelector(`${rowSelector}[data-entry-index="0"]`)?.className).toContain(
+          viewMode === 'grid' ? 'fm-selected-tile' : 'fm-selected-row',
+        );
+        rerender({
+          ...paneAttrs,
+          active: false,
+          cursorIndex: 1,
+          contextTargetEntryId: 'two' as EntryId,
+        });
+        const target = root.querySelector<HTMLElement>(`${rowSelector}[data-entry-index="1"]`);
+        expect(root.querySelector('.fm-pane')?.getAttribute('data-active')).toBe('false');
+        expect(target?.classList).toContain(
+          viewMode === 'grid' ? 'fm-context-target-tile' : 'fm-context-target-row',
+        );
+        expect(target?.getAttribute('aria-selected')).toBe('false');
+        expect(root.querySelector(`${rowSelector}[data-entry-index="0"]`)?.className).toContain(
+          viewMode === 'grid' ? 'fm-selected-tile' : 'fm-selected-row',
+        );
+        rerender({ ...paneAttrs, active: false, cursorIndex: 1 });
+        expect(root.querySelector(`${rowSelector}[data-entry-index="1"]`)?.classList).toContain(
+          viewMode === 'grid' ? 'fm-cursor-tile' : 'fm-cursor-row',
+        );
+        expect(root.querySelector(`${rowSelector}[data-entry-index="1"]`)?.classList).not.toContain(
+          viewMode === 'grid' ? 'fm-context-target-tile' : 'fm-context-target-row',
+        );
+
+        rerender({
+          ...paneAttrs,
+          selectedEntryIds: new Set<EntryId>(['one' as EntryId, 'two' as EntryId]),
+        });
+        onSelectionAction.mockClear();
+        root
+          .querySelector<HTMLElement>(`${rowSelector}[data-entry-index="1"]`)
+          ?.dispatchEvent(
+            new MouseEvent('contextmenu', { bubbles: true, clientX: 12, clientY: 24 }),
+          );
+        expect(onContextMenu).toHaveBeenLastCalledWith(entries, 12, 24);
+        expect(onSelectionAction).not.toHaveBeenCalled();
+      },
+    );
+
+    it('uses the cursor for a keyboard context menu and leaves background selection alone', () => {
+      const onContextMenu = vi.fn();
+      const onSelectionAction = vi.fn();
+      const selected = new Set<EntryId>(['one' as EntryId]);
+      mount(
+        attrs({
+          cursorIndex: 1,
+          selectedEntryIds: selected,
+          onContextMenu,
+          onSelectionAction,
+        }),
+      );
+      const viewport = root.querySelector<HTMLElement>('.fm-directory-viewport');
+      viewport?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true }));
+      expect(onContextMenu).toHaveBeenLastCalledWith([entries[1]], 12, 12);
+      viewport?.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 6 }),
+      );
+      expect(onContextMenu).toHaveBeenLastCalledWith([], 5, 6);
+      expect(selected).toEqual(new Set(['one']));
+      expect(onSelectionAction).not.toHaveBeenCalled();
+    });
+
     it('passes the synthetic parent row to its restricted context menu', () => {
       const parent: EntrySummary = {
         id: 'fm:parent:/home/erik' as EntryId,
@@ -757,34 +857,195 @@ describe('breadcrumbSegments', () => {
   });
 });
 
-describe('searchBreadcrumbSegments', () => {
-  it('shows the originating query in place of the opaque search id', () => {
+describe('searchResultTitle', () => {
+  it('labels the actual result set without an invented filesystem breadcrumb', () => {
     expect(
-      searchBreadcrumbSegments('search://local/abc-123', {
+      searchResultTitle({
         kind: 'filename',
         term: '*.svg',
         executionMode: 'liveRecursive',
       }),
-    ).toEqual([
-      { label: '/', path: '/' },
-      { label: 'search', path: 'search' },
-      { label: 'local', path: 'local' },
-      { label: 'file: *.svg', path: '*.svg' },
-    ]);
+    ).toBe('Search results · *.svg');
   });
 
-  it('falls back to the raw search id when the query is not known', () => {
-    expect(searchBreadcrumbSegments('search://local/abc-123', undefined)).toEqual([
-      { label: '/', path: '/' },
-      { label: 'search', path: 'search' },
-      { label: 'local', path: 'local' },
-      { label: 'abc-123', path: 'abc-123' },
-    ]);
+  it('does not show the opaque search id when the query is unknown', () => {
+    expect(searchResultTitle(undefined)).toBe('Search results');
   });
 });
 
 describe('Pane search breadcrumb rendering', () => {
-  it('renders search:// breadcrumbs as non-clickable spans instead of navigable buttons', () => {
+  it('uses the selected Size column and format for a grouped search file with known bytes', () => {
+    const first = entries[0];
+    if (first === undefined) throw new Error('missing entry fixture');
+    const paneAttrs = attrs({
+      path: 'search://local/synthetic-size',
+      entries: [
+        {
+          ...first,
+          name: 'page_000.png',
+          location: { providerId: 'local', uri: 'file:///library/page_000.png' },
+          size: 1_029,
+        },
+      ],
+    });
+    mount({
+      ...paneAttrs,
+      tableConfig: {
+        ...paneAttrs.tableConfig,
+        visibleColumnIds: new Set(['core.size']),
+        columnWidths: [{ columnId: 'core.name', width: 310 }],
+      },
+    });
+    expect(
+      [...root.querySelectorAll('.fm-directory-header button')].map((column) =>
+        column.textContent?.trim(),
+      ),
+    ).toEqual(['Name', 'Size']);
+    expect(root.querySelector('.fm-grouped-entry .fm-directory-size')?.textContent).toBe('1 K');
+    expect(
+      root.querySelector<HTMLElement>('.fm-grouped-entry')?.style.gridTemplateColumns,
+    ).toContain('310px');
+  });
+
+  it('omits indexing coverage above virtual results while keeping the normal table header', () => {
+    const syntheticResults = entries.map((entry) => ({
+      ...entry,
+      location: { providerId: 'local', uri: `file:///library/A/${entry.name}` },
+    }));
+    const searchAttrs = attrs({
+      path: 'search://local/synthetic',
+      entries: syntheticResults,
+      searchPresentation: {
+        kind: 'semantic',
+        term: 'synthetic',
+        executionMode: 'semantic',
+        semanticCoverage: {
+          eligible: 0,
+          indexed: 0,
+          excluded: 0,
+          failed: 0,
+          pending: 0,
+          skipped: 0,
+          stale: 0,
+          unavailable: 0,
+          partial: false,
+        },
+        semanticResults: [],
+      },
+    });
+    const tableConfig = {
+      ...searchAttrs.tableConfig,
+      visibleColumnIds: new Set(['core.modified']),
+      columnWidths: [{ columnId: 'core.name', width: 310 }],
+    };
+    mount({ ...searchAttrs, tableConfig });
+    const searchTable = root.querySelector('.fm-directory-table');
+    expect(root.querySelector('.fm-semantic-evidence')).toBeNull();
+    expect(searchTable?.previousElementSibling?.classList.contains('fm-breadcrumb-row')).toBe(true);
+    expect(
+      [...root.querySelectorAll('.fm-directory-header button')].map((column) =>
+        column.textContent?.trim(),
+      ),
+    ).toEqual(['Name', 'Modified']);
+    expect(
+      root.querySelector<HTMLElement>('.fm-grouped-entry')?.style.gridTemplateColumns,
+    ).toContain('310px');
+
+    mount({ ...attrs({ entries: syntheticResults }), tableConfig });
+    const normalTable = root.querySelector('.fm-directory-table');
+    expect(normalTable?.previousElementSibling?.classList.contains('fm-breadcrumb-row')).toBe(true);
+    expect(
+      [...root.querySelectorAll('.fm-directory-header button')].map((column) =>
+        column.textContent?.trim(),
+      ),
+    ).toEqual(['Name', 'Modified']);
+    expect(searchTable?.className).toBe(normalTable?.className);
+  });
+
+  it('retains the no-matches message for an empty concept result without indexing coverage', () => {
+    mount(
+      attrs({
+        path: 'search://local/empty-concept',
+        entries: [],
+        searchPresentation: {
+          kind: 'semantic',
+          term: 'Mental stress',
+          label: 'Mental stress (UNESCO)',
+          conceptSearch: true,
+          executionMode: 'semantic',
+          semanticCoverage: {
+            eligible: 0,
+            indexed: 0,
+            excluded: 0,
+            failed: 0,
+            pending: 0,
+            skipped: 0,
+            stale: 0,
+            unavailable: 0,
+            partial: false,
+          },
+          semanticResults: [],
+        },
+      }),
+    );
+    expect(root.querySelector('.fm-semantic-evidence')?.textContent).toContain('No matches');
+    expect(root.querySelector('.fm-semantic-evidence')?.textContent).not.toContain('eligible');
+    expect(root.querySelector('.fm-directory-header')).not.toBeNull();
+  });
+
+  it('skips collapsed search folders with arrow keys and expands them with Right', () => {
+    const onSelectionAction = vi.fn();
+    const resultEntries = ['A/first.png', 'B/second.png', 'B/third.png', 'C/fourth.png'].map(
+      (path, index): EntrySummary => ({
+        id: `hit-${index}`,
+        location: { providerId: 'local', uri: `file:///library/${path}` },
+        name: path.split('/').at(-1) ?? path,
+        kind: 'file',
+        hidden: false,
+        readOnly: false,
+        metadataRevision: 0,
+      }),
+    );
+    mount(
+      attrs({
+        path: 'search://local/synthetic',
+        entries: resultEntries,
+        cursorIndex: 0,
+        onSelectionAction,
+      }),
+    );
+    const group = root.querySelector<HTMLButtonElement>(
+      '.fm-directory-group-toggle[title="/library/B"]',
+    );
+    group?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    m.redraw.sync();
+    expect(group?.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelectorAll('.fm-grouped-entry')).toHaveLength(2);
+    root
+      .querySelector('.fm-pane')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(onSelectionAction).toHaveBeenLastCalledWith({
+      type: 'positionCursor',
+      entryId: 'hit-3',
+    });
+    group?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelectorAll('.fm-grouped-entry')).toHaveLength(4);
+    root
+      .querySelector('.fm-pane')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(onSelectionAction).toHaveBeenLastCalledWith({ type: 'moveCursor', offset: 1 });
+    root
+      .querySelector<HTMLButtonElement>('.fm-directory-group-toggle[title="/library/A"]')
+      ?.click();
+    m.redraw.sync();
+    expect(onSelectionAction).toHaveBeenLastCalledWith({
+      type: 'positionCursor',
+      entryId: 'hit-1',
+    });
+  });
+
+  it('renders a non-navigable result title and the query-selected folder scope', () => {
     mount(
       attrs({
         path: 'search://local/abc-123',
@@ -792,26 +1053,31 @@ describe('Pane search breadcrumb rendering', () => {
           kind: 'filename',
           term: '*.svg',
           executionMode: 'liveRecursive',
+          scope: {
+            kind: 'folder',
+            location: { providerId: 'local', uri: 'file:///Documents/Work' },
+          },
         },
         tabs: [{ id: 'tab-1' as TabId, title: 'search: *.svg', path: 'search://local/abc-123' }],
       }),
     );
 
     const segments = [...root.querySelectorAll<HTMLElement>('.fm-breadcrumb-segment')];
-    expect(segments.map((segment) => segment.tagName)).toEqual(['SPAN', 'SPAN', 'SPAN', 'SPAN']);
-    expect(segments.map((segment) => segment.textContent)).toEqual([
-      '/',
-      'search',
-      'local',
-      'file: *.svg',
-    ]);
+    expect(segments.map((segment) => segment.tagName)).toEqual(['SPAN']);
+    expect(segments.map((segment) => segment.textContent)).toEqual(['Search results · *.svg']);
+    expect(root.querySelector('.fm-search-result-scope')?.textContent).toBe(
+      'Folder: /Documents/Work',
+    );
+    expect(root.querySelector('.fm-breadcrumb')?.tagName).toBe('DIV');
+    expect(root.querySelector('.fm-breadcrumb')?.getAttribute('role')).toBe('group');
+    expect(root.querySelector('.fm-breadcrumb')?.textContent).not.toContain('local');
 
-    segments[3]?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    segments[0]?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     m.redraw.sync();
     expect(root.querySelector('.fm-path-input')).toBeNull();
   });
 
-  it('shows the execution mode and makes a search refresh actionable', () => {
+  it('shows all enrolled folders from the actual semantic scope and keeps refresh actionable', () => {
     const onRefreshSearch = vi.fn();
     mount(
       attrs({
@@ -820,12 +1086,13 @@ describe('Pane search breadcrumb rendering', () => {
           kind: 'filename',
           term: '*.svg',
           executionMode: 'indexed',
+          scope: { kind: 'allEnrolled' },
         },
         onRefreshSearch,
       }),
     );
 
-    expect(root.querySelector('.fm-search-execution-mode')?.textContent).toBe('Indexed');
+    expect(root.querySelector('.fm-search-result-scope')?.textContent).toBe('All enrolled folders');
     expect(
       root
         .querySelector<HTMLButtonElement>('[aria-label="Refresh search"] svg')
@@ -888,11 +1155,333 @@ describe('Pane search breadcrumb rendering', () => {
       }),
     );
 
-    expect(root.querySelector('.fm-semantic-evidence')?.textContent).toContain(
+    expect(root.querySelector('.fm-semantic-evidence')?.textContent).not.toContain(
       '3 of 4 eligible documents indexed',
+    );
+    expect(root.querySelector('.fm-semantic-evidence')?.textContent).toContain(
+      'Beste bewijs voor het rapport.',
     );
     root.querySelector<HTMLButtonElement>('.fm-semantic-evidence-actions button')?.click();
     expect(onOpenEntry).toHaveBeenCalledWith(selectedEntry, 'Beste bewijs voor het rapport.');
+  });
+
+  it('discloses the PDF page-image cap alongside the matching file result', () => {
+    const source = entries[0];
+    if (source === undefined) throw new Error('missing entry fixture');
+    const entry: EntrySummary = {
+      ...source,
+      name: 'scan.pdf',
+      extension: 'pdf',
+      mimeType: 'application/pdf',
+    };
+    mount(
+      attrs({
+        entries: [entry],
+        selectedEntryIds: new Set([entry.id]),
+        searchPresentation: {
+          kind: 'semantic',
+          term: 'page image',
+          executionMode: 'semantic',
+          semanticResults: [
+            {
+              entryId: entry.id,
+              location: entry.location,
+              score: 0.91,
+              pdfImagesEnabled: true,
+              pdfImagePageBudget: 4,
+              bestEvidence: {
+                recordId: 'record-1',
+                sourceId: 'source-1',
+                score: 0.91,
+                chunkKind: 'pdf_image',
+                excerpt: 'PDF page evidence',
+                provenanceJson: '{}',
+                indexedContentHash: 'sha256:fixture',
+                generation: 2,
+                pdfImageSkippedPages: 2,
+                available: true,
+                stale: false,
+                generated: false,
+                sourcePosition: 0,
+              },
+              additionalEvidence: [],
+              additionalSourceIds: [],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(root.querySelector('.fm-semantic-pdf-image-evidence')?.textContent).toContain(
+      'first 4 pages per PDF',
+    );
+    const coverage = root.querySelectorAll('.fm-semantic-pdf-image-evidence');
+    expect(coverage).toHaveLength(2);
+    expect(coverage[1]?.textContent).toContain('2 PDF page image(s) were skipped');
+  });
+
+  it.each([
+    ['image/png', 'Image', 'Open image', true],
+    ['audio/mpeg', 'Audio', 'Open audio', false],
+    ['video/mp4', 'Video', 'Open video', true],
+  ])(
+    'renders %s evidence and opens the file without searching its excerpt',
+    (mimeType, label, action, hasThumbnail) => {
+      const onOpenEntry = vi.fn();
+      const source = entries[0];
+      if (source === undefined) throw new Error('missing entry fixture');
+      const entry: EntrySummary = {
+        ...source,
+        mimeType,
+        extension: mimeType === 'image/png' ? 'png' : mimeType === 'audio/mpeg' ? 'mp3' : 'mp4',
+        modifiedAt: '2026-04-12T09:30:00.000Z',
+      };
+      const thumbnailLoader = new ThumbnailLoader(new MockFileManagerClient());
+      const rowThumbnail = vi.spyOn(thumbnailLoader, 'thumbnailDataUri').mockReturnValue(undefined);
+      const viewport = thumbnailLoader.createViewport();
+      const thumbnailDataUri = vi
+        .spyOn(viewport, 'thumbnailDataUri')
+        .mockReturnValue('data:image/jpeg;base64,/9j/4A==');
+      const dispose = vi.spyOn(viewport, 'dispose');
+      vi.spyOn(thumbnailLoader, 'createViewport').mockReturnValue(viewport);
+      mount(
+        attrs({
+          entries: [entry],
+          selectedEntryIds: new Set([entry.id]),
+          onOpenEntry,
+          thumbnailLoader,
+          searchPresentation: {
+            kind: 'semantic',
+            term: 'landscape',
+            executionMode: 'semantic',
+            semanticResults: [
+              {
+                entryId: entry.id,
+                location: entry.location,
+                score: 0.91,
+                bestEvidence: {
+                  recordId: 'media-record',
+                  sourceId: 'media-source',
+                  score: 0.91,
+                  chunkKind: 'chunk',
+                  excerpt: '<|image|>',
+                  provenanceJson: '{}',
+                  indexedContentHash: 'sha256:media',
+                  generation: 1,
+                  available: true,
+                  stale: false,
+                  generated: false,
+                  sourcePosition: 0,
+                },
+                additionalEvidence: [],
+                additionalSourceIds: [],
+              },
+            ],
+          },
+        }),
+      );
+      expect(root.querySelector('.fm-semantic-media')?.textContent).toContain(label);
+      expect(root.querySelector('.fm-semantic-media')?.textContent).toContain('Modified');
+      expect(root.querySelector('.fm-semantic-evidence-item')?.textContent).not.toContain(
+        '<|image|>',
+      );
+      expect(root.querySelector('.fm-semantic-evidence-item')?.textContent).toContain(
+        'Open the source',
+      );
+      expect(root.querySelector('.fm-semantic-media-thumbnail') !== null).toBe(hasThumbnail);
+      expect(thumbnailDataUri).toHaveBeenCalledTimes(hasThumbnail ? 1 : 0);
+      expect(rowThumbnail).toHaveBeenCalledTimes(mimeType === 'video/mp4' ? 0 : 1);
+      const open = [
+        ...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-evidence-actions button'),
+      ].find((button) => button.textContent === action);
+      open?.click();
+      expect(onOpenEntry).toHaveBeenCalledWith(entry, undefined);
+      m.mount(root, null);
+      expect(dispose).toHaveBeenCalledTimes(hasThumbnail ? 1 : 0);
+    },
+  );
+
+  it('does not fetch a thumbnail for stale media or open an unavailable source', () => {
+    const source = entries[0];
+    if (source === undefined) throw new Error('missing entry fixture');
+    const entry: EntrySummary = { ...source, mimeType: 'image/png', extension: 'png' };
+    const onOpenEntry = vi.fn();
+    const thumbnailLoader = new ThumbnailLoader(new MockFileManagerClient());
+    const rowThumbnail = vi.spyOn(thumbnailLoader, 'thumbnailDataUri');
+    const createViewport = vi.spyOn(thumbnailLoader, 'createViewport');
+    mount(
+      attrs({
+        entries: [entry],
+        selectedEntryIds: new Set([entry.id]),
+        onOpenEntry,
+        thumbnailLoader,
+        searchPresentation: {
+          kind: 'semantic',
+          term: 'landscape',
+          executionMode: 'semantic',
+          semanticResults: [
+            {
+              entryId: entry.id,
+              location: entry.location,
+              score: 0.7,
+              bestEvidence: {
+                recordId: 'old-media',
+                sourceId: 'old-source',
+                score: 0.7,
+                chunkKind: 'chunk',
+                excerpt: 'Landscape',
+                provenanceJson: '{}',
+                indexedContentHash: 'sha256:old',
+                generation: 1,
+                available: false,
+                stale: true,
+                generated: false,
+                sourcePosition: 0,
+              },
+              additionalEvidence: [],
+              additionalSourceIds: [],
+            },
+          ],
+        },
+      }),
+    );
+    expect(createViewport).not.toHaveBeenCalled();
+    expect(rowThumbnail).not.toHaveBeenCalled();
+    expect(root.querySelector('.fm-semantic-evidence')?.textContent).toContain(
+      'Source is unavailable',
+    );
+    expect(root.querySelector('.fm-semantic-evidence')?.textContent).toContain(
+      'Indexed content has changed',
+    );
+    const open = [
+      ...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-evidence-actions button'),
+    ].find((button) => button.textContent === 'Open image');
+    expect(open?.disabled).toBe(true);
+    open?.click();
+    expect(onOpenEntry).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'embedded image',
+      '{"kind":"exact","value":{"kind":"pdfImage","page_number":3,"image_index":1}}',
+      'Embedded PDF image · Page 3 · Image 1',
+    ],
+    [
+      'rendered page',
+      '{"kind":"exact","value":{"kind":"pdfPageRender","page_number":3}}',
+      'Rendered PDF page · Page 3',
+    ],
+  ])(
+    'opens PDF %s evidence at its cited page without searching its English excerpt',
+    (_, provenance, label) => {
+      const source = entries[0];
+      if (source === undefined) throw new Error('missing entry fixture');
+      const entry: EntrySummary = {
+        ...source,
+        name: 'scan.pdf',
+        extension: 'pdf',
+        mimeType: 'application/pdf',
+      };
+      const onOpenEntry = vi.fn();
+      const thumbnailLoader = new ThumbnailLoader(new MockFileManagerClient());
+      const thumbnail = vi.spyOn(thumbnailLoader, 'createViewport');
+      mount(
+        attrs({
+          entries: [entry],
+          selectedEntryIds: new Set([entry.id]),
+          onOpenEntry,
+          thumbnailLoader,
+          searchPresentation: {
+            kind: 'semantic',
+            term: 'illustration',
+            executionMode: 'semantic',
+            semanticResults: [
+              {
+                entryId: entry.id,
+                location: entry.location,
+                score: 0.9,
+                bestEvidence: {
+                  recordId: 'pdf-image',
+                  sourceId: 'pdf-source',
+                  score: 0.9,
+                  chunkKind: 'pdf_image',
+                  excerpt: 'PDF page 3, image 1',
+                  provenanceJson: provenance,
+                  indexedContentHash: 'sha256:fixture',
+                  generation: 1,
+                  available: true,
+                  stale: false,
+                  generated: false,
+                  sourcePosition: 3,
+                },
+                additionalEvidence: [],
+                additionalSourceIds: [],
+              },
+            ],
+          },
+        }),
+      );
+      expect(root.querySelector('.fm-semantic-pdf-image-evidence')?.textContent).toBe(label);
+      expect(thumbnail).not.toHaveBeenCalled();
+      const open = root.querySelector<HTMLButtonElement>('.fm-semantic-evidence-actions button');
+      open?.click();
+      expect(onOpenEntry).toHaveBeenCalledWith(entry, undefined, 3);
+    },
+  );
+
+  it('suppresses stale media thumbnails in grid view while keeping available media visible', () => {
+    const source = entries[0];
+    if (source === undefined) throw new Error('missing entry fixture');
+    const image: EntrySummary = { ...source, mimeType: 'image/png', extension: 'png' };
+    const current: EntrySummary = {
+      ...source,
+      id: 'current-image' as EntryId,
+      location: { providerId: 'file', uri: 'file:///home/erik/current.png' },
+      name: 'current.png',
+      mimeType: 'image/png',
+      extension: 'png',
+    };
+    const evidence = (entry: EntrySummary, stale: boolean) => ({
+      entryId: entry.id,
+      location: entry.location,
+      score: 0.8,
+      bestEvidence: {
+        recordId: entry.id,
+        sourceId: entry.id,
+        score: 0.8,
+        chunkKind: 'chunk',
+        excerpt: 'landscape',
+        provenanceJson: '{}',
+        indexedContentHash: 'hash',
+        generation: 1,
+        available: true,
+        stale,
+        generated: false,
+        sourcePosition: 0,
+      },
+      additionalEvidence: [],
+      additionalSourceIds: [],
+    });
+    const thumbnailLoader = new ThumbnailLoader(new MockFileManagerClient());
+    const viewport = thumbnailLoader.createViewport();
+    const thumbnailDataUri = vi.spyOn(viewport, 'thumbnailDataUri').mockReturnValue(undefined);
+    vi.spyOn(thumbnailLoader, 'createViewport').mockReturnValue(viewport);
+    mount(
+      attrs({
+        entries: [image, current],
+        viewMode: 'grid',
+        thumbnailLoader,
+        searchPresentation: {
+          kind: 'semantic',
+          term: 'landscape',
+          executionMode: 'semantic',
+          semanticResults: [evidence(image, true), evidence(current, false)],
+        },
+      }),
+    );
+    expect(thumbnailDataUri).not.toHaveBeenCalledWith(image, expect.anything());
+    expect(thumbnailDataUri).toHaveBeenCalledWith(current, expect.anything());
   });
 
   it('offers Search Knowledge from the semantic result set when the shell supports it (task 0206)', () => {
@@ -1000,7 +1589,7 @@ describe('Pane search breadcrumb rendering', () => {
     );
 
     const segments = [...root.querySelectorAll<HTMLElement>('.fm-breadcrumb-segment')];
-    expect(segments.at(-1)?.textContent).toBe('file: Readable documents');
+    expect(segments.at(-1)?.textContent).toBe('Search results · Readable documents');
   });
 });
 
@@ -1258,7 +1847,7 @@ describe('Pane breadcrumb editing', () => {
       {
         path: 'search://local/abc-123',
         locationUri: 'search://local/abc-123',
-        last: 'file: long-query-for-a-narrow-pane',
+        last: 'Search results · long-query-for-a-narrow-pane',
       },
     ])('preserves the final $last segment of $path', ({ path, locationUri, last }) => {
       mount(
@@ -1302,6 +1891,38 @@ describe('Pane breadcrumb editing', () => {
 
     await vi.waitFor(() => expect(onNavigate).toHaveBeenCalledWith('~/My Files'));
     await vi.waitFor(() => expect(root.querySelector('.fm-path-input')).toBeNull());
+  });
+
+  it('opens the path editor when the location-edit request changes, not on first render', () => {
+    const base = attrs();
+    const rerender = mountUpdating({ ...base, locationEditRequest: 2 });
+    m.redraw.sync();
+    expect(root.querySelector('.fm-path-input')).toBeNull();
+
+    rerender({ ...base, locationEditRequest: 3 });
+    expect(root.querySelector<HTMLInputElement>('.fm-path-input')?.value).toBe('/home/erik');
+  });
+
+  it.each([
+    ['`~/.copilot/session-state/files/plan.json`', '~/.copilot/session-state/files/plan.json'],
+    ['"/Users/erik/My Files"', '/Users/erik/My Files'],
+    ["  '/tmp/report.md'  ", '/tmp/report.md'],
+    ['\\~/Documents', '~/Documents'],
+  ])('strips quoting from pasted path %j before navigating', async (typed, expected) => {
+    const onNavigate = vi.fn();
+    mount(attrs({ onNavigate }));
+
+    root
+      .querySelector<HTMLElement>('.fm-breadcrumb')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    m.redraw.sync();
+    const input = root.querySelector<HTMLInputElement>('.fm-path-input');
+    if (input === null) throw new Error('path input missing');
+    input.value = typed;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    await vi.waitFor(() => expect(onNavigate).toHaveBeenCalledWith(expected));
   });
 
   it('cancels an edited path when focus leaves the input without navigating', () => {
@@ -1934,11 +2555,39 @@ describe('Pane quick filter', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(onFilterCommit).toHaveBeenCalledOnce();
 
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    expect(onFilterClose).toHaveBeenCalledOnce();
-
     input.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
     expect(onFilterCommit).toHaveBeenCalledTimes(2);
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(onFilterClose).toHaveBeenCalledOnce();
+    expect(onFilterCommit).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears the filter from the labelled clear button and returns focus to the file list', () => {
+    const onFilterCommit = vi.fn();
+    const onFilterClose = vi.fn();
+    mount(attrs({ filterOpen: true, filterQuery: '*.txt', onFilterCommit, onFilterClose }));
+    const clear = root.querySelector<HTMLButtonElement>('button[aria-label="Clear filter"]');
+    if (clear === null) throw new Error('clear button missing');
+    expect(clear.type).toBe('button');
+
+    clear.focus();
+    clear.click();
+
+    expect(onFilterClose).toHaveBeenCalledOnce();
+    expect(onFilterCommit).not.toHaveBeenCalled();
+    expect(document.activeElement?.closest('.fm-pane')).not.toBeNull();
+    expect(document.activeElement?.closest('.fm-quick-filter')).toBeNull();
+  });
+
+  it('returns focus to the file list when Escape closes the filter', () => {
+    const onFilterClose = vi.fn();
+    mount(attrs({ filterOpen: true, filterQuery: 'one', onFilterClose }));
+    const input = root.querySelector<HTMLInputElement>('.fm-quick-filter-input');
+    input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(onFilterClose).toHaveBeenCalledOnce();
+    expect(document.activeElement?.closest('.fm-pane')).not.toBeNull();
+    expect(document.activeElement?.closest('.fm-quick-filter')).toBeNull();
   });
 
   it('shows "N of M shown", the paging note, and reverts to the plain count when cleared', () => {

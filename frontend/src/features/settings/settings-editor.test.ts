@@ -47,6 +47,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     savedSearches: [],
     iconTheme: 'generic',
     checkForUpdatesAutomatically: true,
+    viewerInSeparateWindow: false,
     ...overrides,
   };
 }
@@ -188,36 +189,100 @@ describe('SettingsEditor', () => {
   });
 
   it('shows only semantic activation until components are installed', async () => {
-    const { client } = mountEditor();
+    const client = new MockFileManagerClient();
     const status = vi.spyOn(client, 'getSemanticComponentStatus');
     const library = vi.spyOn(client, 'getSemanticLibraryStatus');
+    mountEditor({ client });
 
-    expect(status).not.toHaveBeenCalled();
-    openSection('Semantic');
+    await vi.waitFor(() => expect(status).toHaveBeenCalledOnce());
+    openSection('Semantic (RAG)');
 
     await vi.waitFor(() => expect(root.querySelector('.fm-semantic-management')).not.toBeNull());
     expect(root.textContent).toContain('Semantic components');
-    expect(status).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(status).toHaveBeenCalledOnce());
     expect(root.textContent).not.toContain('Semantic libraries');
     expect(root.textContent).not.toContain('Vocabularies');
     expect(library).not.toHaveBeenCalled();
   });
 
+  it('preloads semantic settings without blocking Appearance or loading again on navigation', async () => {
+    const client = new MockFileManagerClient();
+    const originalStatus = client.getSemanticComponentStatus.bind(client);
+    let finishLoad: (() => void) | undefined;
+    const status = vi.spyOn(client, 'getSemanticComponentStatus').mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        finishLoad = resolve;
+      });
+      return originalStatus();
+    });
+
+    mountEditor({ client });
+    await vi.waitFor(() => expect(status).toHaveBeenCalledOnce());
+    expect(root.textContent).toContain('Appearance');
+    expect(numberInput('Font size (px)').value).toBe('13');
+    openSection('Semantic (RAG)');
+    expect(root.textContent).toContain('Loading');
+
+    finishLoad?.();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-management')).not.toBeNull());
+    openSection('Appearance');
+    openSection('Semantic (RAG)');
+    expect(status).toHaveBeenCalledOnce();
+  });
+
+  it('preloads the generation profiles for installed Semantic components', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    const profiles = vi.spyOn(client, 'listLlmProfiles');
+    mountEditor({ client });
+
+    await vi.waitFor(() => expect(profiles).toHaveBeenCalledOnce());
+    openSection('Semantic (RAG)');
+    await vi.waitFor(() => expect(root.textContent).toContain('Provider preset'));
+    expect(profiles).toHaveBeenCalledOnce();
+  });
+
   it('reveals semantic configuration after components are enabled', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     mountEditor({ client });
-    openSection('Semantic');
+    openSection('Semantic (RAG)');
 
     await vi.waitFor(() => expect(root.textContent).toContain('Semantic library'));
     expect(root.textContent).toContain('Concept vocabularies');
-    expect(root.textContent).toContain('Generation profiles');
+    expect(root.textContent).toContain('AI summaries and answers');
+    const ocr = [...root.querySelectorAll<HTMLDetailsElement>('.fm-settings-semantic-tools')].find(
+      (section) =>
+        section.querySelector('summary')?.textContent?.startsWith('Make scanned PDFs searchable'),
+    );
+    if (ocr === undefined) throw new Error('OCR section missing');
+    await vi.waitFor(() =>
+      expect(ocr.querySelector('summary')?.textContent).toBe(
+        'Make scanned PDFs searchable (disabled)',
+      ),
+    );
+    ocr.open = true;
+    await vi.waitFor(() =>
+      expect(ocr?.querySelector('.fm-semantic-ocr-management')).not.toBeNull(),
+    );
+    expect(ocr?.querySelectorAll('h4')).toHaveLength(0);
+    expect(ocr?.querySelector('.fm-semantic-ocr-management')?.getAttribute('aria-label')).toBe(
+      'Make scanned PDFs searchable',
+    );
+    expect(
+      ocr?.querySelector('label.fm-semantic-ocr-consent input[type="checkbox"]'),
+    ).not.toBeNull();
+    ocr.querySelector<HTMLInputElement>('label.fm-semantic-ocr-consent input')?.click();
+    await vi.waitFor(() =>
+      expect(ocr.querySelector('summary')?.textContent).toBe(
+        'Make scanned PDFs searchable (enabled)',
+      ),
+    );
   });
 
   it('saves a changed generation profile through the main settings action', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     const createProfile = vi.spyOn(client, 'createLlmProfile');
     const { onSave } = mountEditor({ client });
-    openSection('Semantic');
+    openSection('Semantic (RAG)');
 
     await vi.waitFor(() => expect(root.textContent).toContain('Provider preset'));
     const nameInput = [...root.querySelectorAll<HTMLInputElement>('input')].find(
@@ -236,6 +301,32 @@ describe('SettingsEditor', () => {
 
     await vi.waitFor(() => expect(createProfile).toHaveBeenCalledOnce());
     expect(createProfile.mock.calls[0]?.[0].name).toBe('Local assistant');
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+  });
+
+  it('saves the visible first Ollama model through Settings without requiring a dropdown change', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    vi.spyOn(client, 'discoverLlmProfileDraftModels').mockResolvedValue([
+      'llama3.2:3b',
+      'qwen3:14b',
+    ]);
+    const createProfile = vi.spyOn(client, 'createLlmProfile');
+    const { onSave } = mountEditor({ client });
+    openSection('Semantic (RAG)');
+
+    await vi.waitFor(() => {
+      const model = [...root.querySelectorAll<HTMLInputElement>('.select-dropdown')].find(
+        (input) => input.value === 'llama3.2:3b',
+      );
+      expect(model).not.toBeUndefined();
+    });
+    const save = root.querySelector<HTMLButtonElement>('.fm-settings-save');
+    expect(save?.disabled).toBe(false);
+    save?.click();
+    await vi.waitFor(() => expect(createProfile).toHaveBeenCalledOnce());
+    expect(createProfile.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ preset: 'ollama', model: 'llama3.2:3b' }),
+    );
     await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
   });
 

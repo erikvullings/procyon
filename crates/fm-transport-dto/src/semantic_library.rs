@@ -38,6 +38,19 @@ pub enum SemanticLibraryOperationDto {
     Pause,
     Resume,
     UpdateEligibilityOverrides,
+    UpdateGemmaMedia,
+}
+
+/// Mutable media indexing consent for a Gemma library; text is always indexed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GemmaMediaSelectionDto {
+    /// Image and consented PDF-page visual indexing.
+    pub images: bool,
+    /// Audio indexing.
+    pub audio: bool,
+    /// Video indexing.
+    pub video: bool,
 }
 
 /// Semantic-library authority and supported operations.
@@ -172,6 +185,12 @@ pub struct SemanticEnrolmentPreviewDto {
     pub location: LocationDto,
     /// Whether descendants will inherit consent.
     pub recursive: bool,
+    /// Whether this root separately consents to PDF page-image embeddings.
+    #[serde(default)]
+    pub pdf_images_enabled: bool,
+    /// Maximum PDF page images embedded per document, or `None` for no cap.
+    #[serde(default)]
+    pub pdf_image_page_budget: Option<u32>,
     /// Bounded estimate; values are never represented as exact promises.
     pub estimate: SemanticEnrolmentEstimateDto,
     /// Explicit local normalized-excerpt retention disclosure.
@@ -354,6 +373,12 @@ pub struct SemanticRootStatusDto {
     pub location: LocationDto,
     /// Whether descendants inherit consent.
     pub recursive: bool,
+    /// Whether this root separately consents to PDF page-image embeddings.
+    #[serde(default)]
+    pub pdf_images_enabled: bool,
+    /// Maximum PDF page images embedded per document, or `None` for no cap.
+    #[serde(default)]
+    pub pdf_image_page_budget: Option<u32>,
     /// Whether a provider supplied stable identity.
     pub stable_identity_verified: bool,
     /// Workspaces attached to this global consent.
@@ -388,6 +413,9 @@ pub struct SemanticLibraryStatusDto {
     pub paused: bool,
     /// Stable library/model identity.
     pub library: Option<SemanticLibraryIdentityDto>,
+    /// Current media consent, present only for a Gemma library.
+    #[serde(default)]
+    pub gemma_media: Option<GemmaMediaSelectionDto>,
     /// Selected resource policy.
     pub resource_profile: Option<SemanticLibraryResourceProfileDto>,
     /// Reconciliation cadence.
@@ -396,6 +424,22 @@ pub struct SemanticLibraryStatusDto {
     pub roots: Vec<SemanticRootStatusDto>,
     /// Explicit retention disclosure.
     pub normalized_excerpts_retained_locally: bool,
+}
+
+/// Replaces the Gemma library's media consent at an expected policy revision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpdateGemmaMediaRequestDto {
+    /// Expected durable policy revision.
+    pub policy_revision: u64,
+    /// Image consent.
+    pub images: bool,
+    /// Audio consent.
+    pub audio: bool,
+    /// Video consent.
+    pub video: bool,
+    /// Explicit acknowledgement when any currently indexed medium is disabled.
+    pub confirm_removal: bool,
 }
 
 /// Requests consent status for the active workspace folder.
@@ -418,6 +462,12 @@ pub struct PreviewSemanticEnrolmentRequestDto {
     pub location: LocationDto,
     /// Whether descendants inherit consent.
     pub recursive: bool,
+    /// Additional per-root PDF page-image consent; defaults safely to off.
+    #[serde(default)]
+    pub pdf_images_enabled: bool,
+    /// Per-document page-image budget; `None` allows every page on Metal.
+    #[serde(default)]
+    pub pdf_image_page_budget: Option<u32>,
 }
 
 /// Confirms one live enrolment preview.

@@ -83,6 +83,7 @@ export interface WorkspacePaneContent {
   readonly thumbnailLoader?: ThumbnailLoader;
   readonly finderTagsLoader?: FinderTagsLoader;
   readonly cursorIndex?: number;
+  readonly contextTargetEntryId?: EntryId;
   readonly platform: SelectionPlatform;
   readonly keybindingRuntime?: KeybindingRuntime;
   readonly actions?: readonly ActionDescriptor[];
@@ -116,7 +117,11 @@ export interface WorkspacePaneContent {
   readonly onBack: () => void | Promise<void>;
   readonly onForward: () => void | Promise<void>;
   readonly onParent: () => void | Promise<void>;
-  readonly onOpenEntry: (entry: EntrySummary, evidenceQuery?: string) => void | Promise<void>;
+  readonly onOpenEntry: (
+    entry: EntrySummary,
+    evidenceQuery?: string,
+    initialPage?: number,
+  ) => void | Promise<void>;
   readonly onDocumentSummary?: (entry: EntrySummary) => void;
   readonly onSearchKnowledge?: () => void;
   readonly onSelectionAction: (action: SelectionAction) => void;
@@ -137,6 +142,7 @@ export interface WorkspacePaneContent {
    * the single-entry inline rename input. */
   readonly onMultiRename?: (entries: readonly EntrySummary[]) => void;
   readonly renameRequest?: PaneRenameRequest;
+  readonly locationEditRequest?: number;
   readonly onContextMenu?: (entries: readonly EntrySummary[], x: number, y: number) => void;
   readonly onDragStart?: (entries: readonly EntrySummary[], event: DragEvent) => void;
   readonly onDragOver?: (entry: EntrySummary | undefined, event: DropEventState) => boolean;
@@ -698,6 +704,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             ? {}
             : { keybindingOverrides: content.keybindingOverrides }),
           ...(content.cursorIndex === undefined ? {} : { cursorIndex: content.cursorIndex }),
+          ...(content.contextTargetEntryId === undefined
+            ? {}
+            : { contextTargetEntryId: content.contextTargetEntryId }),
           onOpenEntry: content.onOpenEntry,
           ...(content.onDocumentSummary === undefined
             ? {}
@@ -712,6 +721,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           onRename: content.onRename,
           ...(content.onMultiRename === undefined ? {} : { onMultiRename: content.onMultiRename }),
           ...(content.renameRequest === undefined ? {} : { renameRequest: content.renameRequest }),
+          ...(content.locationEditRequest === undefined
+            ? {}
+            : { locationEditRequest: content.locationEditRequest }),
           onContextMenu: content.onContextMenu ?? (() => undefined),
           ...(content.onDragStart === undefined ? {} : { onDragStart: content.onDragStart }),
           ...(content.onPointerDragStart === undefined

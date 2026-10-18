@@ -8,7 +8,7 @@
 //!   <worker> <zvec-runtime> <onnx-runtime-or-dash> <model-cache> <output> \
 //!   <target-os> <target-arch> <release-base-url> \
 //!   <procyon-source-revision> <converter-identity> <chunker-identity> \
-//!   [<verified-gemma-original-files-directory>]
+//!   [<verified-gemma-original-files-directory> [<signed-pdfium-loader> <pdfium-notices>]]
 //! ```
 //!
 //! Every input is explicit, including the release target, so a CI
@@ -44,6 +44,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let converter_identity = required(&mut arguments, "converter identity")?;
     let chunker_identity = required(&mut arguments, "chunker identity")?;
     let gemma_cache_directory = arguments.next().map(PathBuf::from);
+    let pdfium_runtime_library = arguments.next().map(PathBuf::from);
+    let pdfium_notices = arguments.next().map(PathBuf::from);
     if arguments.next().is_some() {
         return Err("unexpected extra argument".into());
     }
@@ -57,6 +59,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         worker_executable,
         zvec_runtime_library,
         onnx_runtime_library,
+        pdfium_runtime_library,
+        pdfium_notices,
         model_cache_directory,
         release_base_url,
         output_directory: output_directory.clone(),

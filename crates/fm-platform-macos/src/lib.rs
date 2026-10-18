@@ -10,8 +10,9 @@
 //! resolved). Finder tags and the Spotlight
 //! "Finder comment" extended attribute are implemented (task 0136), via the
 //! `xattr`/`plist` crates rather than AppKit - see [`read_finder_tags`] and
-//! [`read_spotlight_comment`]. Native drag-to-Finder is provided by the Tauri window host (task 0062),
-//! while clipboard file references stay delegated to the fallback adapter.
+//! [`read_spotlight_comment`]. Native drag-to-Finder is provided by the Tauri window host (task 0062).
+//! Clipboard file references use the general pasteboard's file URLs (see
+//! `clipboard`), so Finder and Procyon can copy and paste files to each other.
 //! `open_with_default_application` (task
 //! 0061) shells out to `open <path>`. `open_with_chooser` (task 0061
 //! follow-up) queries Launch Services (`NSWorkspace
@@ -36,6 +37,7 @@
 // (see docs/decisions/0010-native-platform-adapters.md).
 #![allow(unsafe_code)]
 
+pub(crate) mod clipboard;
 pub(crate) mod dock;
 pub mod search;
 pub(crate) mod uninstall;
@@ -632,6 +634,7 @@ impl PlatformAdapter for MacosPlatformAdapter {
             | PlatformCapabilities::APPLICATION_UNINSTALL
             | PlatformCapabilities::PLATFORM_CONTEXT_MENU
             | PlatformCapabilities::QUICK_LOOK
+            | PlatformCapabilities::CLIPBOARD_FILE_REFERENCES
     }
 
     fn file_icon(&self, path: &Path) -> Result<Vec<u8>, PlatformError> {
@@ -810,11 +813,13 @@ impl PlatformAdapter for MacosPlatformAdapter {
     }
 
     fn read_clipboard_file_references(&self) -> Result<Vec<PathBuf>, PlatformError> {
-        self.fallback.read_clipboard_file_references()
+        Ok(clipboard::read_file_references(
+            &clipboard::general_pasteboard(),
+        ))
     }
 
     fn write_clipboard_file_references(&self, paths: &[PathBuf]) -> Result<(), PlatformError> {
-        self.fallback.write_clipboard_file_references(paths)
+        clipboard::write_file_references(&clipboard::general_pasteboard(), paths)
     }
 
     fn mounted_volumes(&self) -> Result<Vec<MountedVolume>, PlatformError> {
@@ -1224,6 +1229,44 @@ impl ServicesRequestor {
     }
 }
 
+/// A standard text-editing command the Edit menu forwards to the responder chain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StandardEditCommand {
+    /// `cut:`
+    Cut,
+    /// `copy:`
+    Copy,
+    /// `paste:`
+    Paste,
+    /// `selectAll:`
+    SelectAll,
+}
+
+impl StandardEditCommand {
+    fn selector(self) -> Sel {
+        match self {
+            Self::Cut => sel!(cut:),
+            Self::Copy => sel!(copy:),
+            Self::Paste => sel!(paste:),
+            Self::SelectAll => sel!(selectAll:),
+        }
+    }
+}
+
+/// Sends `command` down the key window's responder chain, exactly as a role-based Edit menu item
+/// would. The Edit menu uses app-dispatched items so Cmd+C reaches the webview as a keydown first
+/// (file clipboard); this is the fallback when the page leaves the command to native text editing.
+/// Returns whether a responder handled it. Must run on the main thread.
+pub fn perform_standard_edit_command(command: StandardEditCommand) -> Result<bool, PlatformError> {
+    let mtm = MainThreadMarker::new().ok_or_else(|| PlatformError::Io {
+        message: "edit commands must be performed on the main thread".to_owned(),
+    })?;
+    let app = NSApplication::sharedApplication(mtm);
+    // SAFETY: a nil target makes AppKit walk the responder chain, and every selector here takes
+    // a single sender argument, matching the standard `cut:`/`copy:`/`paste:`/`selectAll:`.
+    Ok(unsafe { app.sendAction_to_from(command.selector(), None, None) })
+}
+
 /// Opens AppKit's OS-populated Services menu for `paths` at the current pointer position.
 ///
 /// The caller must schedule this on the process main thread. While the menu is open, a temporary
@@ -1490,6 +1533,7 @@ fn build_role_item(mtm: MainThreadMarker, role: fm_domain::NativeMenuRole) -> Re
         NativeMenuRole::Zoom => ("Zoom", sel!(performZoom:), "", 0),
         NativeMenuRole::BringAllToFront => ("Bring All to Front", sel!(arrangeInFront:), "", 0),
         NativeMenuRole::Copy => ("Copy", sel!(copy:), "c", MODIFIER_COMMAND_BIT),
+        NativeMenuRole::Cut => ("Cut", sel!(cut:), "x", MODIFIER_COMMAND_BIT),
         NativeMenuRole::Paste => ("Paste", sel!(paste:), "v", MODIFIER_COMMAND_BIT),
         NativeMenuRole::SelectAll => ("Select All", sel!(selectAll:), "a", MODIFIER_COMMAND_BIT),
     };
@@ -1804,16 +1848,12 @@ mod tests {
             PlatformCapabilities::APPLICATION_UNINSTALL,
             PlatformCapabilities::PLATFORM_CONTEXT_MENU,
             PlatformCapabilities::QUICK_LOOK,
+            PlatformCapabilities::CLIPBOARD_FILE_REFERENCES,
         ] {
             assert!(capabilities.contains(expected), "{expected:?}");
         }
 
-        for unimplemented in [
-            PlatformCapabilities::THUMBNAILS,
-            PlatformCapabilities::CLIPBOARD_FILE_REFERENCES,
-        ] {
-            assert!(!capabilities.contains(unimplemented), "{unimplemented:?}");
-        }
+        assert!(!capabilities.contains(PlatformCapabilities::THUMBNAILS));
     }
 
     #[test]
@@ -1824,7 +1864,7 @@ mod tests {
     }
 
     #[test]
-    fn thumbnail_and_clipboard_still_delegate_to_fallback() {
+    fn thumbnail_still_delegates_to_fallback() {
         let adapter = MacosPlatformAdapter::new();
         let fallback = FallbackPlatformAdapter;
         let path = Path::new("/tmp/fm-platform-macos-test.txt");
@@ -1832,26 +1872,6 @@ mod tests {
         assert_eq!(
             adapter.thumbnail(path, 64).unwrap_err().to_string(),
             fallback.thumbnail(path, 64).unwrap_err().to_string()
-        );
-        assert_eq!(
-            adapter
-                .read_clipboard_file_references()
-                .unwrap_err()
-                .to_string(),
-            fallback
-                .read_clipboard_file_references()
-                .unwrap_err()
-                .to_string()
-        );
-        assert_eq!(
-            adapter
-                .write_clipboard_file_references(&[path.to_path_buf()])
-                .unwrap_err()
-                .to_string(),
-            fallback
-                .write_clipboard_file_references(&[path.to_path_buf()])
-                .unwrap_err()
-                .to_string()
         );
     }
 

@@ -1,0 +1,621 @@
+{
+  "model": "google/embeddinggemma-2",
+  "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "runtime": "native-rust-cpu-fp32",
+  "measurementWidth": 768,
+  "dimensionMethod": "truncate and L2 renormalize both sides",
+  "os": "macos",
+  "architecture": "aarch64",
+  "modelLoadSeconds": 0.699739916,
+  "result": {
+    "corpusSha256": "4845d62f091b10e8eb74c605336b7a171c90b8512b568e6dd4e31fa3b7c455e7",
+    "documentCount": 48,
+    "queryCount": 14,
+    "documentSeconds": 78.478558666,
+    "documentsPerSecond": 0.6116320281095515,
+    "queryLatencyMedianMs": 50.7694795,
+    "queryLatencyP95Ms": 52.74625,
+    "dimensions": {
+      "128": {
+        "positiveCases": 14,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 0.7142857142857143,
+        "hitAt3": 1.0,
+        "recallAt2": 0.7857142857142857,
+        "mrr": 0.8452380952380951,
+        "cases": [
+          {
+            "id": "aes encryption",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "ea6cdc812e480162",
+              "37aca16028c85a06",
+              "0261626e8a18c58b"
+            ]
+          },
+          {
+            "id": "binomial distribution",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "b19c4bfd8cc51c05",
+              "19c707e86d390b3f",
+              "8d2555df1be4615f"
+            ]
+          },
+          {
+            "id": "buffered file reader read text",
+            "firstRelevantRank": 2,
+            "recallAt2": 0.5,
+            "topIds": [
+              "da83961fee320cb6",
+              "8e08e980f230856b",
+              "418d32ab415de93b"
+            ]
+          },
+          {
+            "id": "convert a date string into yyyymmdd",
+            "firstRelevantRank": 2,
+            "recallAt2": 0.5,
+            "topIds": [
+              "5c29a70c60213a38",
+              "c11ea1c9e74f1061",
+              "8dc9ffddbdbfa689"
+            ]
+          },
+          {
+            "id": "convert json to csv",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "abbed5cf26130316",
+              "aa9b113440949383",
+              "bf3cfd339e0b5808"
+            ]
+          },
+          {
+            "id": "convert string to number",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "9466fa804fbef5e8",
+              "6a3725dd46c4a082",
+              "dec269c84372f2df"
+            ]
+          },
+          {
+            "id": "deducting the median from each column",
+            "firstRelevantRank": 2,
+            "recallAt2": 0.5,
+            "topIds": [
+              "50354731d30755cf",
+              "09976b076c06eb90",
+              "8039bda8f744bd20"
+            ]
+          },
+          {
+            "id": "find int in string",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "efed3b73eb0fcdfa",
+              "3e22bfdd7f625f89",
+              "74822d9bf0df9297"
+            ]
+          },
+          {
+            "id": "fuzzy match ranking",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "6ea49b762c4ce96b",
+              "b7b16bc6891850f1",
+              "bc245380ad936de4"
+            ]
+          },
+          {
+            "id": "get current ip address",
+            "firstRelevantRank": 1,
+            "recallAt2": 0.5,
+            "topIds": [
+              "31f968bb4c96ea55",
+              "839a3ee02e408443",
+              "390da04cf73edf61"
+            ]
+          },
+          {
+            "id": "hash set for counting distinct elements",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "0827a2f735e3be87",
+              "58c86ff2bdc8c2fa",
+              "3182dd626cdc9798"
+            ]
+          },
+          {
+            "id": "how to reverse a string",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "c31b47b47b659f10",
+              "2d6dc771926419a6",
+              "1a1eefbbd197f1b9"
+            ]
+          },
+          {
+            "id": "parse binary file to custom class",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "021a51e9a03e6b18",
+              "d3350195deecd134",
+              "2e88d544feba99fd"
+            ]
+          },
+          {
+            "id": "priority queue",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "b42dac123f3fe541",
+              "a91ba7ed7bdcdc58",
+              "419978abfd98cf87"
+            ]
+          }
+        ]
+      },
+      "256": {
+        "positiveCases": 14,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 0.8571428571428571,
+        "hitAt3": 1.0,
+        "recallAt2": 0.8214285714285714,
+        "mrr": 0.9166666666666667,
+        "cases": [
+          {
+            "id": "aes encryption",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "ea6cdc812e480162",
+              "37aca16028c85a06",
+              "0261626e8a18c58b"
+            ]
+          },
+          {
+            "id": "binomial distribution",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "b19c4bfd8cc51c05",
+              "19c707e86d390b3f",
+              "8d2555df1be4615f"
+            ]
+          },
+          {
+            "id": "buffered file reader read text",
+            "firstRelevantRank": 3,
+            "recallAt2": 0.0,
+            "topIds": [
+              "da83961fee320cb6",
+              "418d32ab415de93b",
+              "8e08e980f230856b"
+            ]
+          },
+          {
+            "id": "convert a date string into yyyymmdd",
+            "firstRelevantRank": 2,
+            "recallAt2": 0.5,
+            "topIds": [
+              "5c29a70c60213a38",
+              "c11ea1c9e74f1061",
+              "8dc9ffddbdbfa689"
+            ]
+          },
+          {
+            "id": "convert json to csv",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "abbed5cf26130316",
+              "bf3cfd339e0b5808",
+              "aa9b113440949383"
+            ]
+          },
+          {
+            "id": "convert string to number",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "9466fa804fbef5e8",
+              "dec269c84372f2df",
+              "6a3725dd46c4a082"
+            ]
+          },
+          {
+            "id": "deducting the median from each column",
+            "firstRelevantRank": 1,
+            "recallAt2": 0.5,
+            "topIds": [
+              "09976b076c06eb90",
+              "50354731d30755cf",
+              "8039bda8f744bd20"
+            ]
+          },
+          {
+            "id": "find int in string",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "74822d9bf0df9297",
+              "efed3b73eb0fcdfa",
+              "3e22bfdd7f625f89"
+            ]
+          },
+          {
+            "id": "fuzzy match ranking",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "6ea49b762c4ce96b",
+              "b7b16bc6891850f1",
+              "5ec346235cd39b14"
+            ]
+          },
+          {
+            "id": "get current ip address",
+            "firstRelevantRank": 1,
+            "recallAt2": 0.5,
+            "topIds": [
+              "31f968bb4c96ea55",
+              "839a3ee02e408443",
+              "390da04cf73edf61"
+            ]
+          },
+          {
+            "id": "hash set for counting distinct elements",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "0827a2f735e3be87",
+              "58c86ff2bdc8c2fa",
+              "3182dd626cdc9798"
+            ]
+          },
+          {
+            "id": "how to reverse a string",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "c31b47b47b659f10",
+              "2d6dc771926419a6",
+              "1a1eefbbd197f1b9"
+            ]
+          },
+          {
+            "id": "parse binary file to custom class",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "021a51e9a03e6b18",
+              "d3350195deecd134",
+              "e25e416f64381ca6"
+            ]
+          },
+          {
+            "id": "priority queue",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "b42dac123f3fe541",
+              "a91ba7ed7bdcdc58",
+              "419978abfd98cf87"
+            ]
+          }
+        ]
+      },
+      "512": {
+        "positiveCases": 14,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 0.8571428571428571,
+        "hitAt3": 1.0,
+        "recallAt2": 0.8571428571428571,
+        "mrr": 0.9285714285714286,
+        "cases": [
+          {
+            "id": "aes encryption",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "ea6cdc812e480162",
+              "37aca16028c85a06",
+              "0261626e8a18c58b"
+            ]
+          },
+          {
+            "id": "binomial distribution",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "b19c4bfd8cc51c05",
+              "19c707e86d390b3f",
+              "8d2555df1be4615f"
+            ]
+          },
+          {
+            "id": "buffered file reader read text",
+            "firstRelevantRank": 2,
+            "recallAt2": 0.5,
+            "topIds": [
+              "da83961fee320cb6",
+              "8e08e980f230856b",
+              "418d32ab415de93b"
+            ]
+          },
+          {
+            "id": "convert a date string into yyyymmdd",
+            "firstRelevantRank": 2,
+            "recallAt2": 0.5,
+            "topIds": [
+              "5c29a70c60213a38",
+              "c11ea1c9e74f1061",
+              "8dc9ffddbdbfa689"
+            ]
+          },
+          {
+            "id": "convert json to csv",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "abbed5cf26130316",
+              "bf3cfd339e0b5808",
+              "aa9b113440949383"
+            ]
+          },
+          {
+            "id": "convert string to number",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "9466fa804fbef5e8",
+              "dec269c84372f2df",
+              "6a3725dd46c4a082"
+            ]
+          },
+          {
+            "id": "deducting the median from each column",
+            "firstRelevantRank": 1,
+            "recallAt2": 0.5,
+            "topIds": [
+              "09976b076c06eb90",
+              "50354731d30755cf",
+              "8039bda8f744bd20"
+            ]
+          },
+          {
+            "id": "find int in string",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "74822d9bf0df9297",
+              "efed3b73eb0fcdfa",
+              "3e22bfdd7f625f89"
+            ]
+          },
+          {
+            "id": "fuzzy match ranking",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "6ea49b762c4ce96b",
+              "b7b16bc6891850f1",
+              "5ec346235cd39b14"
+            ]
+          },
+          {
+            "id": "get current ip address",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "31f968bb4c96ea55",
+              "390da04cf73edf61",
+              "839a3ee02e408443"
+            ]
+          },
+          {
+            "id": "hash set for counting distinct elements",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "0827a2f735e3be87",
+              "58c86ff2bdc8c2fa",
+              "3182dd626cdc9798"
+            ]
+          },
+          {
+            "id": "how to reverse a string",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "c31b47b47b659f10",
+              "2d6dc771926419a6",
+              "1a1eefbbd197f1b9"
+            ]
+          },
+          {
+            "id": "parse binary file to custom class",
+            "firstRelevantRank": 1,
+            "recallAt2": 0.5,
+            "topIds": [
+              "021a51e9a03e6b18",
+              "e25e416f64381ca6",
+              "d3350195deecd134"
+            ]
+          },
+          {
+            "id": "priority queue",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "b42dac123f3fe541",
+              "a91ba7ed7bdcdc58",
+              "419978abfd98cf87"
+            ]
+          }
+        ]
+      },
+      "768": {
+        "positiveCases": 14,
+        "negativeControlsWithoutThreshold": 0,
+        "hitAt1": 0.8571428571428571,
+        "hitAt3": 1.0,
+        "recallAt2": 0.8571428571428571,
+        "mrr": 0.9285714285714286,
+        "cases": [
+          {
+            "id": "aes encryption",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "ea6cdc812e480162",
+              "37aca16028c85a06",
+              "0261626e8a18c58b"
+            ]
+          },
+          {
+            "id": "binomial distribution",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "b19c4bfd8cc51c05",
+              "19c707e86d390b3f",
+              "8d2555df1be4615f"
+            ]
+          },
+          {
+            "id": "buffered file reader read text",
+            "firstRelevantRank": 2,
+            "recallAt2": 0.5,
+            "topIds": [
+              "da83961fee320cb6",
+              "8e08e980f230856b",
+              "418d32ab415de93b"
+            ]
+          },
+          {
+            "id": "convert a date string into yyyymmdd",
+            "firstRelevantRank": 2,
+            "recallAt2": 0.5,
+            "topIds": [
+              "5c29a70c60213a38",
+              "c11ea1c9e74f1061",
+              "8dc9ffddbdbfa689"
+            ]
+          },
+          {
+            "id": "convert json to csv",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "abbed5cf26130316",
+              "bf3cfd339e0b5808",
+              "aa9b113440949383"
+            ]
+          },
+          {
+            "id": "convert string to number",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "9466fa804fbef5e8",
+              "6a3725dd46c4a082",
+              "dec269c84372f2df"
+            ]
+          },
+          {
+            "id": "deducting the median from each column",
+            "firstRelevantRank": 1,
+            "recallAt2": 0.5,
+            "topIds": [
+              "09976b076c06eb90",
+              "50354731d30755cf",
+              "8039bda8f744bd20"
+            ]
+          },
+          {
+            "id": "find int in string",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "74822d9bf0df9297",
+              "efed3b73eb0fcdfa",
+              "3e22bfdd7f625f89"
+            ]
+          },
+          {
+            "id": "fuzzy match ranking",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "6ea49b762c4ce96b",
+              "b7b16bc6891850f1",
+              "5ec346235cd39b14"
+            ]
+          },
+          {
+            "id": "get current ip address",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "31f968bb4c96ea55",
+              "390da04cf73edf61",
+              "839a3ee02e408443"
+            ]
+          },
+          {
+            "id": "hash set for counting distinct elements",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "0827a2f735e3be87",
+              "58c86ff2bdc8c2fa",
+              "3182dd626cdc9798"
+            ]
+          },
+          {
+            "id": "how to reverse a string",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "c31b47b47b659f10",
+              "2d6dc771926419a6",
+              "1a1eefbbd197f1b9"
+            ]
+          },
+          {
+            "id": "parse binary file to custom class",
+            "firstRelevantRank": 1,
+            "recallAt2": 0.5,
+            "topIds": [
+              "021a51e9a03e6b18",
+              "e25e416f64381ca6",
+              "d3350195deecd134"
+            ]
+          },
+          {
+            "id": "priority queue",
+            "firstRelevantRank": 1,
+            "recallAt2": 1.0,
+            "topIds": [
+              "b42dac123f3fe541",
+              "a91ba7ed7bdcdc58",
+              "419978abfd98cf87"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

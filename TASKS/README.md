@@ -147,8 +147,23 @@ semantic components are not installed.
 - [ ] 0225 Semantic production qualification follow-up *(needs 0198; Windows/Linux native manual
   accessibility, semantic-to-semantic upgrade/rollback, and full stable-release evidence)*
 - [x] 0227 Multiformat summary visual evidence *(needs 0180, 0184, 0185, 0192)*
-- [ ] 0239 Optional EmbeddingGemma 2 semantic package *(needs 0195, 0196;
-  separately installed alongside default E5, with measured qualification)*
+- [x] 0239 Optional EmbeddingGemma 2 semantic package *(needs 0195, 0196;
+  v0.6.0 is opt-in and risk-accepted; five-gate qualification remains unclaimed)*
+- [x] 0241 Restore Include folder in semantic search *(consent copy simplified; native manual preflight remains open)*
+- [x] 0242 Curated SKOS starter vocabularies *(needs 0187; opt-in, independent of release gates)*
+- [x] 0243 Generation profile UX and model limits *(needs 0184; independent follow-up)*
+- [x] 0244 Bounded large-PDF text and Gemma page vision *(cancelled — remaining installed
+  qualification waived for v0.6.0 risk-accepted release; no resource Pass claimed)*
+- [ ] 0245 PDF footnote reading order and separation *(needs 0180, 0192; tracked follow-up,
+  not an experimental release gate)*
+- [x] 0246 Shift Gemma qualification failures left *(cancelled — release owner waived the
+  additional qualification rehearsal for v0.6.0; existing gates remain unqualified)*
+- [x] 0247 Change Gemma library media consent *(needs 0239; manual release qualification is
+  tracked separately and was waived for risk-accepted v0.6.0)*
+- [ ] 0248 Gemma non-experimental qualification tooling *(needs 0244; risk-acceptance tooling is
+  implemented; exact candidate-bound owner record remains pending; qualification results unchanged)*
+- [x] 0250 Read-only fm-server attachment to the desktop semantic library *(needs 0248; feature
+  implementation complete; manual citation qualification waived for risk-accepted v0.6.0)*
 
 ## Structured knowledge search
 
@@ -243,7 +258,7 @@ Looking at and editing file contents without leaving the app.
 - [x] 0100 Read-only streaming structured-data viewer
 - [x] 0140 File/folder Properties dialog *(split out of 0129)*
 - [x] 0141 Archive summary preview *(split out of 0071)*
-- [ ] 0142 Plugin-contributed preview renderers *(split out of 0071)*
+- [x] 0142 Plugin-contributed preview renderers *(split out of 0071; bundled torrent/eml/vcard-ical previews on by default)*
 - [x] 0149 Saved Multi-Rename presets *(needs 0072; quick win layered on the existing rule engine)*
 - [x] 0150 Video playback in the F3 Lister viewer *(needs 0088; native `<video>`, mirrors the
   existing `<audio>` path — see the task for the large-file caveat)*
@@ -251,6 +266,8 @@ Looking at and editing file contents without leaving the app.
 - [x] 0159 Structured viewer Tauri UX regressions *(needs 0100)*
 - [x] 0171 DOCX preview in the F3 viewer *(needs 0088)*
 - [x] 0172 Bounded spreadsheet preview *(needs 0100)*
+- [x] 0251 SQLite database preview *(needs 0100, 0142; builtin with search, filters and read-only SQL)*
+- [x] 0252 Open the F3 viewer in a separate window *(needs 0088; setting `viewerInSeparateWindow`)*
 - [x] 0173 PPTX content preview *(needs 0088)*
 - [x] 0174 macOS Quick Look action *(needs 0059, 0088)*
 
@@ -292,7 +309,7 @@ The Lua plugin runtime, sample plugins, and icon-theme plugins.
 - [x] 0057 Plugin management UI
 - [x] 0092 Catppuccin icon theme *(after 0085)*
 - [x] 0095 Distributable icon theme plugins *(after 0053, 0085, 0092)*
-- [ ] 0226 Sandboxed JavaScript and SPA plugins *(needs 0053, 0054, 0057)*
+- [x] 0226 Sandboxed JavaScript and SPA plugins *(needs 0053, 0054, 0057; closed with Linux smoke and macOS shortcut check unverified - see task notes)*
 
 ## Remote & cloud connections
 
@@ -353,6 +370,8 @@ behavior.
   and automated coverage complete; manual macOS and Windows invocation checks remain)*
 - [x] 0148 Application deleter (macOS) *(needs 0059, 0061; macOS-only — Windows/Linux already have
   their own uninstall conventions)*
+- [ ] 0249 OS file clipboard in the desktop app *(needs 0048, 0058; in_progress — macOS manual
+  round-trip verified; Windows and Linux compile-checked only, manual round-trips remain)*
 
 ## Settings & workspace management
 

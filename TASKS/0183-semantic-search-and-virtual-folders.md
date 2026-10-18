@@ -69,3 +69,19 @@ the evidence without flooding the pane with duplicate rows.
   remains the separate confirmed Semantic Library action.
 - 2026-09-05: Verified all 2,133 Rust tests, 1,767 frontend tests, 41 script tests, full workspace
   lint, generated API stability, and the real feature-gated Zvec suite.
+- 2026-10-11: Search readiness for newly enrolled roots now requires a worker-acknowledged
+  ingestion, not merely an observed file. Existing pre-receipt indices remain searchable while
+  their unverified older occurrences are reprocessed; Settings reports confirmed completions
+  separately from that unverified backlog.
+- 2026-10-12: Materialized hits inherit the file extension from their authorized location when
+  metadata omits it, so F3 selects the same image/media renderer as a normal directory entry.
+  Search-only result tables group file rows under expandable parent folders while preserving
+  normal pane columns, density, selection, sorting and virtualization. The non-navigable result
+  header shows the selected query and saved scope rather than treating `search://` as a filesystem
+  breadcrumb. File icons align with folder labels; folder chevrons animate without changing row
+  geometry or virtualization. The virtual result table omits indexing coverage above its
+  column header; indexing health remains available in Knowledge/library surfaces.
+- 2026-10-12: Existing semantic occurrence/index records have no byte-size field. Materialized
+  semantic and exact-concept hits obtain missing sizes through bounded, concurrent VFS provider
+  lookups before publishing the usual search result event; unavailable provider data remains
+  unknown rather than fabricating bytes or requiring a user-data reindex.

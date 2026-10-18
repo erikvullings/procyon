@@ -41,6 +41,16 @@ pub struct SearchSemanticPredicateDto {
     pub scope: SemanticSearchScopeDto,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub enrolled_root_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_concept: Option<SearchSemanticConceptSourceDto>,
+}
+
+/// Identity of the concept used to compose an exploratory similarity query.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchSemanticConceptSourceDto {
+    pub vocabulary_id: String,
+    pub concept_uri: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, Default)]
@@ -254,6 +264,8 @@ pub struct SemanticEvidenceDto {
     pub source_id: String,
     pub score: f32,
     pub chunk_kind: String,
+    /// Indexed IANA media type.
+    pub media_type: Option<String>,
     pub excerpt: String,
     /// Versioned JSON emitted by `fm-semantic-conversion`.
     pub provenance_json: String,
@@ -263,6 +275,9 @@ pub struct SemanticEvidenceDto {
     pub stale: bool,
     pub generated: bool,
     pub source_position: u32,
+    /// PDF pages omitted by the configured page-image budget.
+    #[serde(default)]
+    pub pdf_image_skipped_pages: Option<u32>,
 }
 
 /// Evidence attached to one actionable file-primary search row.
@@ -272,6 +287,12 @@ pub struct SemanticSearchResultDto {
     pub entry_id: Uuid,
     pub location: LocationDto,
     pub score: f32,
+    /// Whether the primary PDF root consents to page-image indexing.
+    #[serde(default)]
+    pub pdf_images_enabled: bool,
+    /// Per-document page-image budget, or `None` for all pages.
+    #[serde(default)]
+    pub pdf_image_page_budget: Option<u32>,
     pub best_evidence: SemanticEvidenceDto,
     pub additional_evidence: Vec<SemanticEvidenceDto>,
     pub additional_source_ids: Vec<String>,

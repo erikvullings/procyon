@@ -1,0 +1,258 @@
+{
+  "format": "procyon-skos-1",
+  "id": "unesco-defence",
+  "name": "Defence and military engineering (UNESCO Thesaurus 2026-08-31 snapshot excerpt)",
+  "concepts": [
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept10301",
+      "prefLabels": {
+        "en": "Military strategy"
+      },
+      "altLabels": {
+        "en": ["Military tactics"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept613"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept11677",
+      "prefLabels": {
+        "en": "Urban warfare"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept12047"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept11682",
+      "prefLabels": {
+        "en": "Nuclear warfare"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept12047"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept2866"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept12047",
+      "prefLabels": {
+        "en": "Warfare"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept613"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept11677",
+        "http://vocabularies.unesco.org/thesaurus/concept11682",
+        "http://vocabularies.unesco.org/thesaurus/concept1964",
+        "http://vocabularies.unesco.org/thesaurus/concept4043"
+      ],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept2864"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept14160",
+      "prefLabels": {
+        "en": "Military operations"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept613"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept14200",
+      "prefLabels": {
+        "en": "Missiles"
+      },
+      "altLabels": {
+        "en": ["Ballistic missiles"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2864"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept1964",
+      "prefLabels": {
+        "en": "Air warfare"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept12047"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2864",
+      "prefLabels": {
+        "en": "Weapons"
+      },
+      "altLabels": {
+        "en": ["Armaments"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept652"],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept14200",
+        "http://vocabularies.unesco.org/thesaurus/concept2866",
+        "http://vocabularies.unesco.org/thesaurus/concept7376"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept12047",
+        "http://vocabularies.unesco.org/thesaurus/concept4043",
+        "http://vocabularies.unesco.org/thesaurus/concept613"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2866",
+      "prefLabels": {
+        "en": "Nuclear weapons"
+      },
+      "altLabels": {
+        "en": ["Atomic bomb", "Atomic weapons", "Weapons of mass destruction"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2864"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept11682"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2877",
+      "prefLabels": {
+        "en": "Defence"
+      },
+      "altLabels": {
+        "en": ["Civil defence", "Military defence"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept2894",
+        "http://vocabularies.unesco.org/thesaurus/concept2901"
+      ],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept613"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2894",
+      "prefLabels": {
+        "en": "Arms race"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2877"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept2901",
+      "prefLabels": {
+        "en": "Arms sales"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2877"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept4043",
+      "prefLabels": {
+        "en": "Chemical/biological warfare"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept12047"],
+      "narrower": [],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept2864"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept613",
+      "prefLabels": {
+        "en": "Military engineering"
+      },
+      "altLabels": {
+        "en": ["Military technology"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": [
+        "http://vocabularies.unesco.org/thesaurus/concept10301",
+        "http://vocabularies.unesco.org/thesaurus/concept12047",
+        "http://vocabularies.unesco.org/thesaurus/concept14160"
+      ],
+      "related": [
+        "http://vocabularies.unesco.org/thesaurus/concept2864",
+        "http://vocabularies.unesco.org/thesaurus/concept2877",
+        "http://vocabularies.unesco.org/thesaurus/concept652"
+      ],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept652",
+      "prefLabels": {
+        "en": "Military equipment"
+      },
+      "altLabels": {},
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": [],
+      "narrower": ["http://vocabularies.unesco.org/thesaurus/concept2864"],
+      "related": ["http://vocabularies.unesco.org/thesaurus/concept613"],
+      "extensions": {}
+    },
+    {
+      "uri": "http://vocabularies.unesco.org/thesaurus/concept7376",
+      "prefLabels": {
+        "en": "Land mines"
+      },
+      "altLabels": {
+        "en": ["Antipersonnel mines"]
+      },
+      "definitions": {},
+      "scopeNotes": {},
+      "broader": ["http://vocabularies.unesco.org/thesaurus/concept2864"],
+      "narrower": [],
+      "related": [],
+      "extensions": {}
+    }
+  ],
+  "extensions": {
+    "https://procyon.app/ns/skos-starter/source": "https://vocabularies.unesco.org/exports/thesaurus/latest/unesco-thesaurus.rdf",
+    "https://procyon.app/ns/skos-starter/license": "https://creativecommons.org/licenses/by-sa/3.0/igo/",
+    "https://procyon.app/ns/skos-starter/selection": ["concept2877", "concept613", "concept652"]
+  }
+}

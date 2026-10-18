@@ -36,6 +36,25 @@ from desktop releases.
 `SEMANTIC_RELEASE_QUALIFIED` independently controls whether a Procyon desktop build embeds the
 approved component catalog. Structured Knowledge Search keeps its existing independent gate.
 
+EmbeddingGemma promotion has separate experimental and non-experimental paths. The existing
+`SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED` path and its checked-in approval remain unchanged. The
+`SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED` path defaults off and additionally requires a
+reviewed `docs/evaluations/semantic-gemma-qualified-v1.json` record bound to a new exact-source
+candidate, all five passing results in the Gemma qualification checklist, and a candidate lock
+whose bytes and signed catalog/payload hashes match that record. The release workflow also requires
+the independent `SEMANTIC_RELEASE_QUALIFIED` approval. Desktop releases must descend from the
+candidate source without changing any semantic-worker build inputs; both desktop paths check this
+against the signed candidate source before packaging. Until the release owner records all five
+passes and explicitly enables the new variable, the non-experimental path cannot publish or embed
+Gemma.
+
+Both Gemma desktop modes produce an arm64-only macOS app because no Intel worker/catalog is
+approved. The qualified GitHub release is not marked as a prerelease, but is explicitly excluded
+from GitHub's default latest release; it uses a separate `updater-gemma` endpoint, omits the Intel
+updater entry, and does not publish cross-platform package-manager metadata. Only that build uses
+the non-experimental Gemma label in Settings; the default and experimental builds retain the
+experimental label.
+
 ## Consequences
 
 - Component build/signing failures cannot fail a Procyon desktop release.

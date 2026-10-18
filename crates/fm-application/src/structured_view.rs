@@ -1195,7 +1195,7 @@ fn parse_initial_ndjson_rows(sample: &[u8]) -> (Vec<String>, Vec<StructuredRowDt
     (vec!["JSON object".to_owned()], rows)
 }
 
-async fn read_source_range(
+pub(crate) async fn read_source_range(
     provider: &Arc<dyn FileSystemProvider>,
     entry: &EntryRef,
     random_access: bool,

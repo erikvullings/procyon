@@ -65,3 +65,25 @@ optional advanced converters and must not block useful local semantic search.
   with hierarchy-aware hard token limits, bounded overlap, display excerpts, and versioned BLAKE3
   fingerprints that exclude path metadata. Verified 114 crate tests, 6 application bridge tests,
   the workspace architecture test, and the full Rust/Biome lint gate.
+- Fixed PDF-style heading orphaning when its first paragraph crosses the chunk target or needs
+  splitting under the hard maximum. Same-page headings remain associated with their first text
+  window and retain source order/provenance; section and page boundaries remain respected.
+  The chunker pipeline identity advances to `structural/4`: existing libraries with a
+  `structural/3` manifest require an explicitly authorized migration/reindex; this change does
+  not touch user data automatically. A new signed worker candidate must reflect the new identity.
+  `S1`/`S2` passage labels are summary evidence identifiers, not PDF text; the
+  Document text list now displays actual section paths instead.
+- Layout follow-up (not yet a release gate): a read-only, page-1-only geometry probe of a
+  user-authorized local PDF showed two body columns, a lower left-column horizontal separator,
+  smaller text below it, and right-column body text continuing alongside that lower text.
+  The page-bounded word extractor ordered left body, lower note, then right body. The baseline
+  `lopdf` converter has no glyph geometry, font metrics, or vector-rule information. Docling PDF
+  internally detects a `footnote` region and computes reading order, but version 1.36 assembles
+  `footnote` as a plain `Node::Paragraph`; its public `Pipeline::convert` returns no role or
+  font/rule geometry. Our mapper also drops `Node::Located` bounding boxes. Neither path can
+  reliably distinguish a ruled footnote from ordinary small print at the adapter seam alone.
+  A future layout-aware regression should create a synthetic one-page, two-column PDF with
+  left/right body boxes, a lower left horizontal rule and smaller text beneath it, plus
+  continued right-column body alongside; assert left body then right body then a distinct
+  footnote unit/chunk with page provenance. Preserve the layout role from a verified upstream
+  renderer or an equivalent supported API; do not infer footnotes from font size alone.

@@ -2424,6 +2424,133 @@
         }
       }
     },
+    "/api/v1/files/sqlite/close": {
+      "post": {
+        "summary": "Closes a SQLite viewer session.",
+        "operationId": "closeSqliteView",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SqliteViewSessionRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/sqlite/open": {
+      "post": {
+        "summary": "Opens a read-only SQLite database viewer session.",
+        "operationId": "openSqliteView",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenSqliteViewRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenSqliteViewResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/sqlite/query": {
+      "post": {
+        "summary": "Reads one bounded page of a SQLite table, view or read-only SQL result.",
+        "operationId": "querySqliteView",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuerySqliteViewRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuerySqliteViewResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/files/structured/close": {
       "post": {
         "operationId": "closeStructuredView",
@@ -3083,6 +3210,53 @@
           },
           "400": {
             "description": "Invalid profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/llm-profiles/discover-model-limits": {
+      "post": {
+        "operationId": "discoverLlmProfileDraftModelLimits",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveLlmProfileRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded advertised limits for the selected model; null fields are unknown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmModelLimitsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid provider configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Host denied by administrator policy",
             "content": {
               "application/json": {
                 "schema": {
@@ -4105,6 +4279,64 @@
                   "items": {
                     "$ref": "#/components/schemas/PluginLogEntryDto"
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/{pluginId}/preview": {
+      "post": {
+        "summary": "Renders one file with an enabled plugin's sandboxed preview contribution (task 0142).",
+        "operationId": "renderPluginPreview",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderPluginPreviewRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginPreviewResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
                 }
               }
             }
@@ -6280,6 +6512,63 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SemanticFolderStatusDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/library/gemma-media": {
+      "post": {
+        "operationId": "updateGemmaMedia",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGemmaMediaRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryStatusDto"
                 }
               }
             }
@@ -9660,6 +9949,13 @@
           "stale"
         ],
         "properties": {
+          "authors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SummaryAttributionDto"
+            },
+            "description": "Explicit or evidence-backed author names."
+          },
           "brief": {
             "type": "string",
             "description": "Concise overview."
@@ -9709,6 +10005,17 @@
               "format": "float"
             },
             "description": "Population weights aligned with supporting chunks."
+          },
+          "title": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SummaryAttributionDto",
+                "description": "Optional verified title (not inferred from the file name)."
+              }
+            ]
           }
         }
       },
@@ -9718,14 +10025,27 @@
         "required": [
           "selectionFingerprint",
           "representativeTokens",
+          "sourceTokens",
+          "textPreview",
+          "textPreviewTruncated",
           "selectionMode",
           "imageInputAvailable",
           "includedImageCount",
           "omittedImageCount",
           "keyPassages",
-          "reusedSelection"
+          "reusedSelection",
+          "sourcePassCount"
         ],
         "properties": {
+          "effectiveContextWindow": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Context window used for summary budgeting; may be trusted from the saved profile.",
+            "minimum": 0
+          },
           "imageInputAvailable": {
             "type": "boolean",
             "description": "Whether the selected model and document support bounded image input."
@@ -9760,6 +10080,10 @@
               }
             ]
           },
+          "providerLimitVerified": {
+            "type": "boolean",
+            "description": "Whether the provider's context limit was verified."
+          },
           "representativeTokens": {
             "type": "integer",
             "format": "int32",
@@ -9777,6 +10101,26 @@
           "selectionMode": {
             "$ref": "#/components/schemas/DocumentSummarySelectionModeDto",
             "description": "Whether the preview contains the complete extracted text or selected passages."
+          },
+          "sourcePassCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of bounded generation passes over complete source evidence.",
+            "minimum": 0
+          },
+          "sourceTokens": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Estimated tokens across the entire extracted text, including passages not previewed.",
+            "minimum": 0
+          },
+          "textPreview": {
+            "type": "string",
+            "description": "First bounded characters of extracted text in source order, not representative chunks."
+          },
+          "textPreviewTruncated": {
+            "type": "boolean",
+            "description": "Whether the source contains more extracted text than the visible preview."
           }
         }
       },
@@ -10470,6 +10814,29 @@
           "username": {
             "type": "string",
             "description": "Remote username."
+          }
+        }
+      },
+      "GemmaMediaSelectionDto": {
+        "type": "object",
+        "description": "Mutable media indexing consent for a Gemma library; text is always indexed.",
+        "required": [
+          "images",
+          "audio",
+          "video"
+        ],
+        "properties": {
+          "audio": {
+            "type": "boolean",
+            "description": "Audio indexing."
+          },
+          "images": {
+            "type": "boolean",
+            "description": "Image and consented PDF-page visual indexing."
+          },
+          "video": {
+            "type": "boolean",
+            "description": "Video indexing."
           }
         }
       },
@@ -11640,6 +12007,15 @@
             "format": "int64",
             "description": "Indexed source modification time."
           },
+          "pdfImageSkippedPages": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "PDF pages omitted by the configured page-image budget.",
+            "minimum": 0
+          },
           "provenance": {
             "type": "string",
             "description": "Serialized structural provenance."
@@ -12003,12 +12379,20 @@
           "recursive",
           "available",
           "indexedGeneration",
-          "indexedSources"
+          "indexedSources",
+          "confirmedCompletedSources",
+          "unverifiedLegacySources"
         ],
         "properties": {
           "available": {
             "type": "boolean",
             "description": "Whether the indexed source is currently reachable."
+          },
+          "confirmedCompletedSources": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Document occurrences with an acknowledged worker completion in this workspace/root.",
+            "minimum": 0
           },
           "indexedGeneration": {
             "type": "integer",
@@ -12019,7 +12403,7 @@
           "indexedSources": {
             "type": "integer",
             "format": "int64",
-            "description": "Indexed sources already searchable, even before a full pass completes.",
+            "description": "Observed occurrences; not proof of completed worker ingestion.",
             "minimum": 0
           },
           "label": {
@@ -12030,6 +12414,19 @@
             "$ref": "#/components/schemas/LocationDto",
             "description": "Provider-neutral location already visible in the file manager."
           },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Maximum PDF page images embedded per document, or `None` for no cap.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Whether this root separately consents to PDF page-image embeddings."
+          },
           "recursive": {
             "type": "boolean",
             "description": "Whether descendants inherit consent."
@@ -12037,6 +12434,12 @@
           "rootId": {
             "type": "string",
             "description": "Stable path-independent root identity."
+          },
+          "unverifiedLegacySources": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Pre-upgrade occurrences whose earlier worker completion cannot yet be verified.",
+            "minimum": 0
           }
         }
       },
@@ -12849,6 +13252,42 @@
           "cloud"
         ]
       },
+      "LlmModelLimitsDto": {
+        "type": "object",
+        "description": "Effective model-advertised generation limits, or null when undiscoverable.",
+        "required": [
+          "contextWindowCap",
+          "maximumAnswerTokensCap"
+        ],
+        "properties": {
+          "contextWindow": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "contextWindowCap": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "maximumAnswerTokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "maximumAnswerTokensCap": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "LlmPresetDto": {
         "type": "string",
         "enum": [
@@ -12857,6 +13296,7 @@
           "vllm",
           "sglang",
           "omlx",
+          "mlxServe",
           "openAiCompatible",
           "azureOpenAi"
         ]
@@ -13767,6 +14207,60 @@
           }
         }
       },
+      "OpenSqliteViewRequestDto": {
+        "type": "object",
+        "description": "Opens a read-only SQLite viewer session on a database file.",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Provider-neutral database location."
+          }
+        }
+      },
+      "OpenSqliteViewResponseDto": {
+        "type": "object",
+        "description": "An opened viewer session and the database schema.",
+        "required": [
+          "sessionId",
+          "sourceBytes",
+          "sqliteVersion",
+          "objects"
+        ],
+        "properties": {
+          "objects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SqliteObjectDto"
+            },
+            "description": "Tables and views, sorted by name; internal `sqlite_*` tables are omitted."
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Session handle for later queries."
+          },
+          "sourceBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Database file size in bytes.",
+            "minimum": 0
+          },
+          "sqliteVersion": {
+            "type": "string",
+            "description": "SQLite library version used to read the file."
+          },
+          "warning": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A user-facing caveat, e.g. a WAL file whose recent writes are not shown."
+          }
+        }
+      },
       "OpenStructuredViewRequestDto": {
         "type": "object",
         "description": "Opens a provider-neutral, read-only structured-data viewer session.",
@@ -14570,6 +15064,17 @@
             "$ref": "#/components/schemas/PluginPermissionsDto",
             "description": "Capabilities the manifest requests; ungranted capabilities are denied (spec §19)."
           },
+          "preview": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PluginPreviewDto",
+                "description": "F3 preview renderer metadata, present only for enabled, valid plugins."
+              }
+            ]
+          },
           "spaPanel": {
             "oneOf": [
               {
@@ -14780,6 +15285,53 @@
           }
         }
       },
+      "PluginPreviewDto": {
+        "type": "object",
+        "description": "A sandboxed F3 preview renderer a plugin contributes (task 0142).",
+        "required": [
+          "extensions"
+        ],
+        "properties": {
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Lowercase extensions (no dot) the plugin renders; built-in renderers always win."
+          }
+        }
+      },
+      "PluginPreviewKindDto": {
+        "type": "string",
+        "description": "How a plugin preview body must be displayed.",
+        "enum": [
+          "text",
+          "html"
+        ]
+      },
+      "PluginPreviewResultDto": {
+        "type": "object",
+        "description": "A plugin-rendered preview.",
+        "required": [
+          "kind",
+          "body",
+          "truncated"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "The rendered preview; never trusted, always sanitized by the host UI."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PluginPreviewKindDto",
+            "description": "How to display `body`."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether the plugin only saw a prefix of the file."
+          }
+        }
+      },
       "PluginSpaPanelDto": {
         "type": "object",
         "description": "A packaged SPA panel that is available only in the isolated desktop host.",
@@ -14923,6 +15475,19 @@
             "$ref": "#/components/schemas/LocationDto",
             "description": "Active folder."
           },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Per-document page-image budget; `None` allows every page on Metal.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Additional per-root PDF page-image consent; defaults safely to off."
+          },
           "recursive": {
             "type": "boolean",
             "description": "Whether descendants inherit consent."
@@ -14934,6 +15499,98 @@
           }
         },
         "additionalProperties": false
+      },
+      "QuerySqliteViewRequestDto": {
+        "type": "object",
+        "description": "Reads one bounded page from a viewer session.",
+        "required": [
+          "sessionId",
+          "source",
+          "limit"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Maximum rows in the page (capped by the server).",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Zero-based index of the first row of the page.",
+            "minimum": 0
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Session handle."
+          },
+          "source": {
+            "$ref": "#/components/schemas/SqliteQuerySourceDto",
+            "description": "What to read."
+          }
+        }
+      },
+      "QuerySqliteViewResponseDto": {
+        "type": "object",
+        "description": "One bounded result page.",
+        "required": [
+          "columns",
+          "rows",
+          "offset",
+          "hasMore",
+          "truncated",
+          "elapsedMs"
+        ],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Result column names."
+          },
+          "elapsedMs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Wall-clock query time in milliseconds.",
+            "minimum": 0
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "Whether more rows exist after this page."
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Zero-based index of the first returned row.",
+            "minimum": 0
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/SqliteCellDto"
+              }
+            },
+            "description": "Rows of this page."
+          },
+          "totalRows": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Total matching rows for a browse query, when counting finished in time.",
+            "minimum": 0
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether the page was cut short by the response size budget."
+          }
+        }
       },
       "QuickFilterPatchDto": {
         "oneOf": [
@@ -15760,6 +16417,19 @@
           }
         }
       },
+      "RenderPluginPreviewRequestDto": {
+        "type": "object",
+        "description": "Request to render one file with a plugin's preview contribution.",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The file to preview; its extension must be one the plugin claims."
+          }
+        }
+      },
       "ResolveKnowledgeSourceRequestDto": {
         "type": "object",
         "description": "Resolves one opaque evidence source against current authorization.",
@@ -15933,6 +16603,7 @@
           "extendedAttributes",
           "finderTags",
           "finderAliases",
+          "osFileClipboard",
           "semanticComponentAuthority",
           "semanticRuntimeExecutableDownload"
         ],
@@ -15972,6 +16643,10 @@
           "openTerminal": {
             "type": "boolean",
             "description": "Whether opening a terminal at a location is supported."
+          },
+          "osFileClipboard": {
+            "type": "boolean",
+            "description": "Whether copied local files are shared with the operating system's\nclipboard as file references, and file references copied in the system\nfile manager can be pasted (task 0247). Desktop host only."
           },
           "platform": {
             "$ref": "#/components/schemas/PlatformKindDto",
@@ -16027,6 +16702,7 @@
           "extendedAttributes": false,
           "finderTags": false,
           "finderAliases": false,
+          "osFileClipboard": false,
           "semanticComponentAuthority": "administratorProvisioned",
           "semanticRuntimeExecutableDownload": "administratorProvisioned"
         }
@@ -16838,6 +17514,22 @@
           }
         }
       },
+      "SearchSemanticConceptSourceDto": {
+        "type": "object",
+        "description": "Identity of the concept used to compose an exploratory similarity query.",
+        "required": [
+          "vocabularyId",
+          "conceptUri"
+        ],
+        "properties": {
+          "conceptUri": {
+            "type": "string"
+          },
+          "vocabularyId": {
+            "type": "string"
+          }
+        }
+      },
       "SearchSemanticPredicateDto": {
         "type": "object",
         "required": [
@@ -16860,6 +17552,16 @@
           },
           "scope": {
             "$ref": "#/components/schemas/SemanticSearchScopeDto"
+          },
+          "selectedConcept": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SearchSemanticConceptSourceDto"
+              }
+            ]
           }
         }
       },
@@ -17923,6 +18625,19 @@
             "type": "boolean",
             "description": "Explicit local normalized-excerpt retention disclosure."
           },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Maximum PDF page images embedded per document, or `None` for no cap.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Whether this root separately consents to PDF page-image embeddings."
+          },
           "policyRevision": {
             "type": "integer",
             "format": "int64",
@@ -17981,6 +18696,22 @@
           },
           "indexedContentHash": {
             "type": "string"
+          },
+          "mediaType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Indexed IANA media type."
+          },
+          "pdfImageSkippedPages": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "PDF pages omitted by the configured page-image budget.",
+            "minimum": 0
           },
           "provenanceJson": {
             "type": "string",
@@ -18500,7 +19231,8 @@
           "resumeCleanup",
           "pause",
           "resume",
-          "updateEligibilityOverrides"
+          "updateEligibilityOverrides",
+          "updateGemmaMedia"
         ]
       },
       "SemanticLibraryResourceBudgetsDto": {
@@ -18603,6 +19335,17 @@
           "available": {
             "type": "boolean",
             "description": "Whether a library is configured."
+          },
+          "gemmaMedia": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GemmaMediaSelectionDto",
+                "description": "Current media consent, present only for a Gemma library."
+              }
+            ]
           },
           "library": {
             "oneOf": [
@@ -19118,6 +19861,19 @@
             },
             "description": "Files whose latest completed reconciliation requires OCR."
           },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Maximum PDF page images embedded per document, or `None` for no cap.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Whether this root separately consents to PDF page-image embeddings."
+          },
           "reconciliationGeneration": {
             "type": "integer",
             "format": "int64",
@@ -19246,6 +20002,19 @@
           },
           "location": {
             "$ref": "#/components/schemas/LocationDto"
+          },
+          "pdfImagePageBudget": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Per-document page-image budget, or `None` for all pages.",
+            "minimum": 0
+          },
+          "pdfImagesEnabled": {
+            "type": "boolean",
+            "description": "Whether the primary PDF root consents to page-image indexing."
           },
           "score": {
             "type": "number",
@@ -19398,7 +20167,8 @@
           "multiRenamePresets",
           "savedSearches",
           "iconTheme",
-          "checkForUpdatesAutomatically"
+          "checkForUpdatesAutomatically",
+          "viewerInSeparateWindow"
         ],
         "properties": {
           "checkForUpdatesAutomatically": {
@@ -19563,6 +20333,10 @@
           "theme": {
             "$ref": "#/components/schemas/ThemeDto",
             "description": "Application theme."
+          },
+          "viewerInSeparateWindow": {
+            "type": "boolean",
+            "description": "Whether F3 opens the viewer in its own window instead of a tab in the active pane."
           }
         }
       },
@@ -19716,6 +20490,252 @@
               "null"
             ],
             "description": "The comment text, or `None` if unset."
+          }
+        }
+      },
+      "SqliteCellDto": {
+        "type": "object",
+        "description": "One cell of a result row.",
+        "required": [
+          "valueType"
+        ],
+        "properties": {
+          "byteLength": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Full size in bytes of a truncated text or blob value.",
+            "minimum": 0
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display text; absent for `null`."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether `text` omits part of the stored value."
+          },
+          "valueType": {
+            "$ref": "#/components/schemas/SqliteValueTypeDto",
+            "description": "Storage class."
+          }
+        }
+      },
+      "SqliteColumnDto": {
+        "type": "object",
+        "description": "One column of a table or view.",
+        "required": [
+          "name",
+          "declaredType",
+          "notNull",
+          "primaryKey"
+        ],
+        "properties": {
+          "declaredType": {
+            "type": "string",
+            "description": "Declared type text, empty when the column is untyped."
+          },
+          "name": {
+            "type": "string",
+            "description": "Column name."
+          },
+          "notNull": {
+            "type": "boolean",
+            "description": "Whether the column is declared `NOT NULL`."
+          },
+          "primaryKey": {
+            "type": "boolean",
+            "description": "Whether the column is part of the primary key."
+          }
+        }
+      },
+      "SqliteColumnFilterDto": {
+        "type": "object",
+        "description": "One per-column filter; all filters of a request are combined with `AND`.",
+        "required": [
+          "column",
+          "operator"
+        ],
+        "properties": {
+          "column": {
+            "type": "string",
+            "description": "Column to filter on; must exist in the browsed object."
+          },
+          "operator": {
+            "$ref": "#/components/schemas/SqliteFilterOperatorDto",
+            "description": "Comparison to apply."
+          },
+          "value": {
+            "type": "string",
+            "description": "Comparison operand; ignored for `isNull` and `isNotNull`."
+          }
+        }
+      },
+      "SqliteFilterOperatorDto": {
+        "type": "string",
+        "description": "Comparison applied by a per-column filter.",
+        "enum": [
+          "contains",
+          "equals",
+          "notEquals",
+          "greater",
+          "less",
+          "isNull",
+          "isNotNull"
+        ]
+      },
+      "SqliteObjectDto": {
+        "type": "object",
+        "description": "One table or view in the database schema.",
+        "required": [
+          "name",
+          "kind",
+          "columns"
+        ],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SqliteColumnDto"
+            },
+            "description": "Columns in declaration order."
+          },
+          "createSql": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The original `CREATE` statement, when SQLite stores one."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SqliteObjectKindDto",
+            "description": "Table or view."
+          },
+          "name": {
+            "type": "string",
+            "description": "Object name."
+          }
+        }
+      },
+      "SqliteObjectKindDto": {
+        "type": "string",
+        "description": "Whether a schema object is a table or a view.",
+        "enum": [
+          "table",
+          "view"
+        ]
+      },
+      "SqliteQuerySourceDto": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Browse a table or view.",
+            "required": [
+              "object",
+              "type"
+            ],
+            "properties": {
+              "filters": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SqliteColumnFilterDto"
+                },
+                "description": "Per-column filters."
+              },
+              "object": {
+                "type": "string",
+                "description": "Table or view name."
+              },
+              "search": {
+                "type": "string",
+                "description": "Free-text search across every column (case-insensitive substring)."
+              },
+              "sort": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SqliteSortDto",
+                    "description": "Optional sort."
+                  }
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "browse"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Run one read-only SQL statement.",
+            "required": [
+              "sql",
+              "type"
+            ],
+            "properties": {
+              "sql": {
+                "type": "string",
+                "description": "A single `SELECT`, `WITH`, `EXPLAIN` or read-only `PRAGMA` statement."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "sql"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "What a query reads: a stored table/view with filters, or a user SQL statement."
+      },
+      "SqliteSortDto": {
+        "type": "object",
+        "description": "Sort order for a browsed table.",
+        "required": [
+          "column"
+        ],
+        "properties": {
+          "column": {
+            "type": "string",
+            "description": "Column to sort by; must exist in the browsed object."
+          },
+          "descending": {
+            "type": "boolean",
+            "description": "Sort descending instead of ascending."
+          }
+        }
+      },
+      "SqliteValueTypeDto": {
+        "type": "string",
+        "description": "SQLite storage class of a cell.",
+        "enum": [
+          "null",
+          "integer",
+          "real",
+          "text",
+          "blob"
+        ]
+      },
+      "SqliteViewSessionRequestDto": {
+        "type": "object",
+        "description": "Request addressing an existing viewer session.",
+        "required": [
+          "sessionId"
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Session handle from [`OpenSqliteViewResponseDto`]."
           }
         }
       },
@@ -20369,6 +21389,54 @@
           }
         }
       },
+      "SummaryAttributionDto": {
+        "type": "object",
+        "description": "Source-backed title or author name, with optional passage identity.",
+        "required": [
+          "value",
+          "source"
+        ],
+        "properties": {
+          "provenance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Structured source position of that passage."
+          },
+          "quote": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Exact supplied source excerpt establishing an AI-extracted value."
+          },
+          "source": {
+            "$ref": "#/components/schemas/SummaryAttributionSourceDto",
+            "description": "Explicit or AI-extracted origin."
+          },
+          "supportingChunkId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Extracted passage identity when sourced from document text."
+          },
+          "value": {
+            "type": "string",
+            "description": "Exact document title or person name."
+          }
+        }
+      },
+      "SummaryAttributionSourceDto": {
+        "type": "string",
+        "description": "Origin of a document title or author name.",
+        "enum": [
+          "metadata",
+          "byline",
+          "aiExtracted"
+        ]
+      },
       "SummaryKeyPassageDto": {
         "type": "object",
         "description": "One complete, unmodified source passage selected by the semantic worker.",
@@ -20714,6 +21782,42 @@
             ]
           }
         }
+      },
+      "UpdateGemmaMediaRequestDto": {
+        "type": "object",
+        "description": "Replaces the Gemma library's media consent at an expected policy revision.",
+        "required": [
+          "policyRevision",
+          "images",
+          "audio",
+          "video",
+          "confirmRemoval"
+        ],
+        "properties": {
+          "audio": {
+            "type": "boolean",
+            "description": "Audio consent."
+          },
+          "confirmRemoval": {
+            "type": "boolean",
+            "description": "Explicit acknowledgement when any currently indexed medium is disabled."
+          },
+          "images": {
+            "type": "boolean",
+            "description": "Image consent."
+          },
+          "policyRevision": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Expected durable policy revision.",
+            "minimum": 0
+          },
+          "video": {
+            "type": "boolean",
+            "description": "Video consent."
+          }
+        },
+        "additionalProperties": false
       },
       "UpdateSemanticEligibilityOverridesRequestDto": {
         "type": "object",

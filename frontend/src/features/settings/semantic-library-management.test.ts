@@ -54,6 +54,164 @@ function button(label: string): HTMLButtonElement {
 }
 
 describe('SemanticLibraryManagement', () => {
+  it('makes clear that the open folder is not automatically indexed', async () => {
+    mountComponent(client);
+    await waitForLoaded();
+
+    expect(root.textContent).toContain('Folder open in a pane');
+    expect(root.textContent).toContain('This folder is not indexed');
+    expect(root.textContent).toContain('Opening it does not start indexing');
+    expect(root.textContent).toContain('Only these folders and eligible subfolders are indexed');
+    expect(root.querySelector('.fm-semantic-library-folder button')?.textContent).toBe(
+      'Review indexing',
+    );
+  });
+
+  it('changes existing Gemma media only after confirming removal', async () => {
+    const component = await client.getSemanticComponentStatus();
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...component,
+      activeModel: {
+        profile: 'embeddingGemma2',
+        identity: { modelId: 'gemma', revision: 'test' },
+      },
+    });
+    vi.spyOn(client, 'getGemmaLibrarySetup').mockResolvedValue({
+      dimensions: 512,
+      images: true,
+      audio: false,
+      video: false,
+      imageDevice: 'metal',
+      pdfImagePageBudget: null,
+    });
+    const original = await client.getSemanticLibraryStatus();
+    const media = { images: true, audio: false, video: false };
+    vi.spyOn(client, 'getSemanticLibraryStatus').mockResolvedValue({
+      ...original,
+      gemmaMedia: media,
+    });
+    vi.spyOn(client, 'getSemanticLibraryCapabilities').mockResolvedValue({
+      authority: 'desktopManaged',
+      operations: ['viewStatus', 'updateGemmaMedia'],
+    });
+    const update = vi.spyOn(client, 'updateGemmaMedia').mockResolvedValue({
+      ...original,
+      revision: original.revision + 1,
+      gemmaMedia: { images: false, audio: true, video: false },
+    });
+    mountComponent(client);
+    await waitForLoaded();
+    const controls = root.querySelectorAll<HTMLInputElement>('.fm-semantic-library-media input');
+    expect(controls).toHaveLength(3);
+    controls[0]?.click();
+    controls[1]?.click();
+    m.redraw.sync();
+    button('Save media choices').click();
+    m.redraw.sync();
+    expect(update).not.toHaveBeenCalled();
+    expect(root.textContent).toContain('Removing indexed media');
+    button('Confirm removal and save').click();
+    await vi.waitFor(() =>
+      expect(update).toHaveBeenCalledWith({
+        policyRevision: original.revision,
+        images: false,
+        audio: true,
+        video: false,
+        confirmRemoval: true,
+      }),
+    );
+  });
+
+  it('distinguishes observed sources from searchable documents while indexing', async () => {
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    await client.confirmSemanticEnrolment({
+      confirmationId: preview.confirmationId,
+      policyRevision: preview.policyRevision,
+      workspaceId: workspace.id,
+      location,
+    });
+    const status = await client.getSemanticLibraryStatus();
+    const component = await client.getSemanticComponentStatus();
+    if (status.roots[0] === undefined) {
+      throw new Error('Missing included root in mock');
+    }
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...component,
+      activeModel: {
+        profile: 'embeddingGemma2',
+        identity: { modelId: 'gemma', revision: 'test' },
+      },
+    });
+    vi.spyOn(client, 'getGemmaLibrarySetup').mockResolvedValue({
+      dimensions: 512,
+      images: true,
+      audio: true,
+      video: true,
+      imageDevice: 'metal',
+      pdfImagePageBudget: null,
+      lastWorkerDevice: 'metal',
+    });
+    let indexedSources = 0;
+    let unverifiedLegacySources = 0;
+    const rootId = status.roots[0].id;
+    vi.spyOn(client, 'listKnowledgeRoots').mockImplementation(async () => [
+      {
+        rootId,
+        label: 'mock',
+        location,
+        recursive: true,
+        available: true,
+        indexedGeneration: 0,
+        indexedSources,
+        confirmedCompletedSources: indexedSources,
+        unverifiedLegacySources,
+      },
+    ]);
+    await client.subscribe(() => undefined);
+    mountComponent(client);
+    await waitForLoaded();
+    expect(root.textContent).toContain('0 confirmed indexed documents');
+    const details = root.querySelector<HTMLDetailsElement>('.fm-semantic-library-root details');
+    expect(details?.textContent).not.toContain('Reconciliation generation');
+    expect(details?.textContent).not.toContain('Indexing compute policy');
+    expect(details?.textContent).toContain('Last worker launch: Metal');
+    indexedSources = 1;
+    client.emit({
+      eventId: 1,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: `root:${rootId}`,
+        stage: 'reconciling',
+        completed: 4,
+        total: 0,
+        errors: 0,
+      },
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('1 confirmed indexed document'));
+    expect(root.textContent).toContain('4 entries scanned (not all are indexed)');
+    unverifiedLegacySources = 2;
+    client.emit({
+      eventId: 2,
+      timestamp: new Date().toISOString(),
+      payload: {
+        type: 'semantic.ingestionProgress',
+        jobId: `root:${rootId}`,
+        stage: 'reconciling',
+        completed: 5,
+        total: 0,
+        errors: 0,
+      },
+    });
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain('2 earlier sources not yet verified'),
+    );
+  });
+
   it('shows active-folder consent and the safe policy projection', async () => {
     mountComponent(client);
     await waitForLoaded();
@@ -64,7 +222,7 @@ describe('SemanticLibraryManagement', () => {
     expect(root.textContent).toContain('Every 30 minutes');
     expect(root.textContent).toContain('normalized excerpts');
     expect(root.textContent).toContain(location.uri);
-    expect(root.textContent).toContain('open it in a pane');
+    expect(root.textContent).toContain('open that subfolder in a pane');
     expect(
       root.querySelector<HTMLDetailsElement>('details.fm-semantic-library-details')?.open,
     ).toBe(false);
@@ -90,6 +248,8 @@ describe('SemanticLibraryManagement', () => {
       workspaceId: workspace.id,
       location,
       recursive: true,
+      pdfImagesEnabled: false,
+      pdfImagePageBudget: null,
     });
 
     button('Cancel').click();
@@ -113,6 +273,90 @@ describe('SemanticLibraryManagement', () => {
     expect(confirm.mock.calls[0]?.[0]).not.toHaveProperty('estimatedFiles');
   });
 
+  it('requires explicit CPU PDF-image consent and explains the four-page budget', async () => {
+    const component = await client.getSemanticComponentStatus();
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...component,
+      activeModel: {
+        profile: 'embeddingGemma2',
+        identity: { modelId: 'gemma', revision: 'test' },
+      },
+    });
+    vi.spyOn(client, 'getGemmaLibrarySetup').mockResolvedValue({
+      dimensions: 512,
+      images: true,
+      audio: false,
+      video: false,
+      imageDevice: 'cpu',
+      pdfImagePageBudget: 4,
+    });
+    const preview = vi.spyOn(client, 'previewSemanticEnrolment');
+    mountComponent(client);
+    await waitForLoaded();
+
+    button('Review indexing').click();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLInputElement>('.fm-semantic-library-pdf-images input'),
+      ).not.toBeNull(),
+    );
+    const checkbox = root.querySelector<HTMLInputElement>('.fm-semantic-library-pdf-images input');
+    expect(checkbox?.checked).toBe(false);
+    expect(root.textContent).not.toContain('Slow on CPU');
+
+    checkbox?.click();
+    await vi.waitFor(() =>
+      expect(preview).toHaveBeenLastCalledWith({
+        workspaceId: workspace.id,
+        location,
+        recursive: true,
+        pdfImagesEnabled: true,
+        pdfImagePageBudget: 4,
+      }),
+    );
+    await vi.waitFor(() => expect(root.textContent).toContain('first 4 page images'));
+    expect(root.textContent).toContain('about 8 minutes for an 8-page scan');
+    expect(root.textContent).toContain('PDF text is unaffected');
+    button('Include and index folder').click();
+    await vi.waitFor(() => expect(root.textContent).toContain('first 4 pages per PDF'));
+  });
+
+  it('defaults PDF-image consent on for a Metal target without a CPU warning', async () => {
+    const component = await client.getSemanticComponentStatus();
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...component,
+      activeModel: {
+        profile: 'embeddingGemma2',
+        identity: { modelId: 'gemma', revision: 'test' },
+      },
+    });
+    vi.spyOn(client, 'getGemmaLibrarySetup').mockResolvedValue({
+      dimensions: 512,
+      images: true,
+      audio: false,
+      video: false,
+      imageDevice: 'metal',
+      pdfImagePageBudget: null,
+    });
+    const preview = vi.spyOn(client, 'previewSemanticEnrolment');
+    mountComponent(client);
+    await waitForLoaded();
+
+    button('Review indexing').click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-library-plan')).not.toBeNull());
+    expect(
+      root.querySelector<HTMLInputElement>('.fm-semantic-library-pdf-images input')?.checked,
+    ).toBe(true);
+    expect(root.textContent).not.toContain('Slow on CPU');
+    expect(preview).toHaveBeenLastCalledWith({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+      pdfImagesEnabled: true,
+      pdfImagePageBudget: null,
+    });
+  });
+
   it('lists every destructive category before exclusion confirmation', async () => {
     const preview = await client.previewSemanticEnrolment({
       workspaceId: workspace.id,
@@ -129,7 +373,7 @@ describe('SemanticLibraryManagement', () => {
     mountComponent(client);
     await waitForLoaded();
 
-    button('Remove').click();
+    button('Remove from indexing…').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Saved conversation evidence pins'));
     for (const label of [
       'Occurrences',
@@ -145,12 +389,59 @@ describe('SemanticLibraryManagement', () => {
     expect(button('Exclude and delete data').disabled).toBe(false);
     button('Cancel').click();
     expect(confirm).not.toHaveBeenCalled();
-    button('Remove').click();
+    button('Remove from indexing…').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Saved conversation evidence pins'));
     button('Exclude and delete data').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Excluded'));
     expect(root.textContent).toContain('Cleanup complete');
     expect(confirm.mock.calls[0]?.[0]).not.toHaveProperty('categories');
+  });
+
+  it('offers removal on the open included folder without searching the included list', async () => {
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    await client.confirmSemanticEnrolment({
+      confirmationId: preview.confirmationId,
+      policyRevision: preview.policyRevision,
+      workspaceId: workspace.id,
+      location,
+    });
+    const plan = vi.spyOn(client, 'planSemanticExclusion');
+    mountComponent(client);
+    await waitForLoaded();
+
+    const selectedFolder = root.querySelector('.fm-semantic-library-folder');
+    expect(selectedFolder?.textContent).toContain('Included here');
+    const remove = selectedFolder?.querySelector<HTMLButtonElement>('button');
+    expect(remove?.textContent).toBe('Remove from indexing…');
+    remove?.click();
+    await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
+    expect(plan.mock.calls[0]?.[0]).toMatchObject({ workspaceId: workspace.id, location });
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain('Your original files are not deleted'),
+    );
+  });
+
+  it('hides PDF-image consent and skips Gemma setup for an E5 library', async () => {
+    const component = await client.getSemanticComponentStatus();
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...component,
+      activeModel: {
+        profile: 'compactMultilingual',
+        identity: { modelId: 'e5', revision: 'test' },
+      },
+    });
+    const setup = vi.spyOn(client, 'getGemmaLibrarySetup');
+    mountComponent(client);
+    await waitForLoaded();
+
+    button('Review indexing').click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-library-plan')).not.toBeNull());
+    expect(root.querySelector('.fm-semantic-library-pdf-images')).toBeNull();
+    expect(setup).not.toHaveBeenCalled();
   });
 
   it('removes a listed folder without navigating to it, while retaining the source files', async () => {
@@ -173,7 +464,7 @@ describe('SemanticLibraryManagement', () => {
     m.redraw.sync();
     await waitForLoaded();
 
-    button('Remove').click();
+    button('Remove from indexing…').click();
     await vi.waitFor(() => expect(plan).toHaveBeenCalled());
     expect(plan.mock.calls[0]?.[0]).toMatchObject({ workspaceId: workspace.id, location });
     await vi.waitFor(() =>
@@ -217,7 +508,10 @@ describe('SemanticLibraryManagement', () => {
           workspaceReferences: [workspace.id],
           eligibilityOverrides: [],
           attachedVocabularyIds: ['vocabulary-1'],
-          eligibilityReasonCounts: [{ reason: 'hidden', count: 3 }],
+          eligibilityReasonCounts: [
+            { reason: 'hidden', count: 3 },
+            { reason: 'oversized', count: 1 },
+          ],
           ocrRequiredFiles: [
             {
               providerId: 'file',
@@ -238,6 +532,16 @@ describe('SemanticLibraryManagement', () => {
     await waitForLoaded();
 
     expect(root.textContent).toContain('Source unavailable');
+    expect(root.querySelector('.fm-semantic-library-skipped')?.textContent).toContain(
+      '1 file exceeds the 64 MiB indexing limit and is not searchable',
+    );
+    setLocale('nl');
+    m.redraw.sync();
+    expect(root.querySelector('.fm-semantic-library-skipped')?.textContent).toContain(
+      '1 bestand overschrijdt de indexeringslimiet van 64 MiB',
+    );
+    setLocale('en');
+    m.redraw.sync();
     expect(root.textContent).toContain('removable volume is offline');
     const details = root.querySelector<HTMLDetailsElement>('.fm-semantic-library-root details');
     expect(details?.open).toBe(false);
@@ -456,6 +760,14 @@ describe('SemanticFolderEnrolmentPrompt', () => {
       estimate: {
         ...preview.estimate,
         completeness: 'unavailable',
+        estimatedFiles: null,
+        estimatedSourceBytes: null,
+        estimatedExtractedBytes: null,
+        estimatedVectorBytes: null,
+        estimatedAdditionalLocalBytes: null,
+        missingModelDownloadBytes: null,
+        skippedReasonCounts: [],
+        exceededBudgets: [],
         unavailableReason:
           'A provider-neutral recursive estimate is not available for this source.',
       },
@@ -475,9 +787,15 @@ describe('SemanticFolderEnrolmentPrompt', () => {
           onCancel,
         }),
     });
-    await vi.waitFor(() => expect(root.textContent).toContain('Size could not be estimated'));
+    await vi.waitFor(() => expect(root.textContent).toContain('OK, index folder'));
+    expect(root.textContent).toContain(location.uri);
+    expect(root.textContent).toContain('subfolders');
     expect(root.textContent).toContain('stores extracted text and embeddings locally');
-    expect(root.querySelector('details')?.open).toBe(false);
+    expect(root.textContent).not.toContain('Estimate unavailable');
+    expect(root.textContent).not.toContain('additional disk space');
+    expect(root.textContent).not.toContain('No unsupported or skipped content');
+    expect(root.textContent).not.toContain('provider-neutral');
+    expect(root.querySelector('details')).toBeNull();
     expect(root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).toHaveLength(0);
 
     button('OK, index folder').click();
@@ -485,5 +803,77 @@ describe('SemanticFolderEnrolmentPrompt', () => {
     expect(onEnrolled).not.toHaveBeenCalled();
     button('Cancel').click();
     expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('retains a real budget alert without displaying an unavailable estimate', async () => {
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    vi.spyOn(client, 'previewSemanticEnrolment').mockResolvedValue({
+      ...preview,
+      estimate: {
+        ...preview.estimate,
+        completeness: 'unavailable',
+        skippedReasonCounts: [],
+        exceededBudgets: ['sourceBytes'],
+      },
+    });
+    m.mount(root, {
+      view: () =>
+        m(SemanticFolderEnrolmentPrompt, {
+          client,
+          workspaceId: workspace.id,
+          location,
+          onEnrolled: vi.fn(),
+          onCancel: vi.fn(),
+        }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('Estimated source bytes'));
+    expect(root.querySelector('.fm-semantic-library-plan [role="alert"]')).not.toBeNull();
+    expect(root.textContent).not.toContain('Estimated files');
+    expect(root.textContent).not.toContain('Unsupported MIME type');
+  });
+
+  it('shows only measured values and positive skip counts in a partial preview', async () => {
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    vi.spyOn(client, 'previewSemanticEnrolment').mockResolvedValue({
+      ...preview,
+      estimate: {
+        ...preview.estimate,
+        completeness: 'partial',
+        estimatedFiles: 3,
+        estimatedSourceBytes: null,
+        estimatedExtractedBytes: null,
+        estimatedVectorBytes: null,
+        estimatedAdditionalLocalBytes: null,
+        missingModelDownloadBytes: null,
+        skippedReasonCounts: [
+          { reason: 'unsupportedMime', count: 2 },
+          { reason: 'hidden', count: 0 },
+        ],
+      },
+    });
+    m.mount(root, {
+      view: () =>
+        m(SemanticFolderEnrolmentPrompt, {
+          client,
+          workspaceId: workspace.id,
+          location,
+          onEnrolled: vi.fn(),
+          onCancel: vi.fn(),
+        }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('Partial estimate'));
+    expect(root.textContent).toContain('Estimated files3');
+    expect(root.textContent).toContain('Unsupported MIME type: 2');
+    expect(root.textContent).not.toContain('Hidden');
+    expect(root.textContent).not.toContain('Estimated source bytes');
+    expect(root.textContent).not.toContain('Unavailable');
   });
 });

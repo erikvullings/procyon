@@ -161,6 +161,8 @@ struct IpcSemanticEvidence {
     provenance: serde_json::Value,
     indexed_content_hash: String,
     generation: u64,
+    #[serde(default)]
+    pdf_image_skipped_pages: Option<u32>,
     unavailable: bool,
     stale: bool,
     generated: bool,
@@ -349,6 +351,7 @@ fn knowledge_evidence_to_chunk(
             source_id: evidence.source_id,
             provenance: serde_json::to_string(&evidence.provenance)?,
             generation: evidence.generation,
+            pdf_image_skipped_pages: evidence.pdf_image_skipped_pages,
             record_kind: evidence.chunk_kind,
             excerpt: evidence.excerpt,
             content: evidence.content,
@@ -425,6 +428,7 @@ fn semantic_results_to_candidates(
                 source_id: item.source_id,
                 provenance: serde_json::to_string(&item.provenance)?,
                 generation: item.generation,
+                pdf_image_skipped_pages: item.pdf_image_skipped_pages,
                 record_kind: item.chunk_kind,
                 excerpt: item.excerpt.clone(),
                 content: item.excerpt,
@@ -484,6 +488,10 @@ fn fallback_evidence(result: &SemanticSearchResult) -> IpcSemanticEvidence {
             .get("semantic.generation")
             .and_then(|value| value.parse().ok())
             .unwrap_or_default(),
+        pdf_image_skipped_pages: result
+            .metadata
+            .get("semantic.pdfImageSkippedPages")
+            .and_then(|value| value.parse().ok()),
         unavailable: false,
         stale: false,
         generated: false,
@@ -600,6 +608,8 @@ pub struct AuthorizedRagRequest {
     pub display: RagSourceDisplay,
     /// Explicit retrieval strategy requested for this turn.
     pub retrieval_strategy: RagRetrievalStrategy,
+    /// Current Gemma media consent used to withhold stale worker evidence.
+    pub media: Option<fm_semantic_library::GemmaMediaSelection>,
 }
 
 /// One evidence item shown before generation and mapped locally after it.
@@ -983,6 +993,7 @@ impl RagCoordinator {
                     user_prompt,
                     images: Vec::new(),
                     maximum_tokens: MAX_PLANNER_TOKENS,
+                    context_window: None,
                     temperature: 0.0,
                 },
                 cancellation,
@@ -1062,6 +1073,7 @@ impl RagCoordinator {
                     user_prompt,
                     images: Vec::new(),
                     maximum_tokens: MAX_ANSWER_TOKENS,
+                    context_window: None,
                     temperature: 0.2,
                 },
                 cancellation,
@@ -1108,9 +1120,24 @@ fn preview_from_context(
     request: AuthorizedRagRequest,
     profile_id: Uuid,
     profile: &crate::llm_profiles::LlmProfile,
-    context: RagContext,
+    mut context: RagContext,
     plan: RagQueryPlan,
 ) -> Result<RagPreview, RagError> {
+    if let Some(media) = request.media {
+        context.chunks.retain(|chunk| {
+            let mime = chunk.evidence.media_type.as_str();
+            !(mime.starts_with("image/") && !media.images
+                || mime.starts_with("audio/") && !media.audio
+                || mime.starts_with("video/") && !media.video)
+                && (chunk.evidence.record_kind != "pdf_image" || media.images)
+        });
+        context.token_count = context
+            .chunks
+            .iter()
+            .map(|chunk| chunk.evidence.token_count)
+            .sum();
+        context.insufficient = context.chunks.is_empty();
+    }
     let evidence = context
         .chunks
         .iter()
@@ -1455,6 +1482,7 @@ mod tests {
                 source_id: "source-a".into(),
                 provenance: r#"{"kind":"textLines","start_line":3,"end_line":5}"#.into(),
                 generation: 2,
+                pdf_image_skipped_pages: None,
                 record_kind: if generated { "summary" } else { "chunk" }.into(),
                 excerpt: content.into(),
                 content: content.into(),
@@ -1641,6 +1669,7 @@ mod tests {
                 )]),
             },
             retrieval_strategy: RagRetrievalStrategy::SingleQuery,
+            media: None,
         };
         let preview = coordinator
             .preview(
@@ -1746,6 +1775,7 @@ mod tests {
                     coverage: RagCoverage::default(),
                     display: RagSourceDisplay::default(),
                     retrieval_strategy: RagRetrievalStrategy::MultiQuery,
+                    media: None,
                 },
                 profile.id,
                 &profiles,
@@ -1778,6 +1808,7 @@ mod tests {
                 document_id: DocumentId::new("document-a"),
                 metadata: BTreeMap::from([("source_id".to_owned(), "source-a".to_owned())]),
                 media_type: "text/plain".to_owned(),
+                pdf_images_consented: false,
                 content: b"The best introduction to SU-fields is this practical article.".to_vec(),
             })
             .await

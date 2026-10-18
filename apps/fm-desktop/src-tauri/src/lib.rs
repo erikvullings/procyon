@@ -7,6 +7,8 @@
 mod commands;
 mod credentials;
 mod event_stream;
+#[cfg(any(target_os = "linux", all(test, unix)))]
+mod linux_clipboard;
 mod native_menu;
 mod platform;
 mod plugin_spa;
@@ -439,6 +441,8 @@ pub fn run() {
                 .map_label(|label| {
                     if label.starts_with("plugin-spa-") {
                         "plugin-spa"
+                    } else if label.starts_with(commands::VIEWER_WINDOW_PREFIX) {
+                        "viewer"
                     } else {
                         commands::canonical_workspace_window_label(label)
                     }
@@ -556,6 +560,7 @@ pub fn run() {
             commands::complete_semantic_component_model_migration,
             commands::get_semantic_library_capabilities,
             commands::get_semantic_library_status,
+            commands::update_gemma_media,
             commands::initialize_semantic_gemma_library,
             commands::get_semantic_gemma_library_setup,
             commands::list_semantic_vocabularies,
@@ -577,7 +582,10 @@ pub fn run() {
             commands::get_volumes,
             commands::get_home_directory,
             commands::start_native_drag,
+            commands::write_os_clipboard_files,
+            commands::read_os_clipboard_files,
             commands::show_platform_context_menu,
+            commands::perform_native_edit_command,
             commands::list_open_with_applications,
             commands::open_with_application,
             commands::open_with_any_application,
@@ -610,6 +618,9 @@ pub fn run() {
             commands::read_structured_json_window,
             commands::search_structured_rows,
             commands::close_structured_view,
+            commands::open_sqlite_view,
+            commands::query_sqlite_view,
+            commands::close_sqlite_view,
             commands::load_editable_file,
             commands::save_editable_file,
             commands::search_in_file,
@@ -624,6 +635,7 @@ pub fn run() {
             commands::list_workspaces,
             commands::start_workspace,
             commands::open_workspace_window,
+            commands::open_viewer_window,
             commands::resync_workspace,
             commands::create_workspace,
             commands::get_workspace,
@@ -646,6 +658,7 @@ pub fn run() {
             commands::enable_plugin,
             commands::disable_plugin,
             commands::get_plugin_logs,
+            commands::render_plugin_preview,
             commands::get_plugin_icon_theme_asset,
             plugin_spa::open_plugin_panel,
             plugin_spa::update_plugin_panel_bounds,
@@ -678,6 +691,7 @@ pub fn run() {
             commands::activate_llm_profile,
             commands::discover_llm_profile_models,
             commands::discover_llm_profile_draft_models,
+            commands::discover_llm_profile_draft_model_limits,
             commands::test_llm_profile,
             commands::preview_document_summary,
             commands::generate_document_summary,
@@ -929,6 +943,7 @@ mod tests {
                 commands::complete_semantic_component_model_migration,
                 commands::get_semantic_library_capabilities,
                 commands::get_semantic_library_status,
+                commands::update_gemma_media,
                 commands::initialize_semantic_gemma_library,
                 commands::get_semantic_gemma_library_setup,
                 commands::list_semantic_vocabularies,
@@ -950,6 +965,8 @@ mod tests {
                 commands::get_volumes,
                 commands::get_home_directory,
                 commands::start_native_drag,
+                commands::write_os_clipboard_files,
+                commands::read_os_clipboard_files,
                 commands::native_drag_locations,
                 commands::get_file_icon,
                 commands::get_thumbnail,
@@ -979,6 +996,9 @@ mod tests {
                 commands::read_structured_json_window,
                 commands::search_structured_rows,
                 commands::close_structured_view,
+                commands::open_sqlite_view,
+                commands::query_sqlite_view,
+                commands::close_sqlite_view,
                 commands::load_editable_file,
                 commands::save_editable_file,
                 commands::search_in_file,
@@ -1014,6 +1034,7 @@ mod tests {
                 commands::enable_plugin,
                 commands::disable_plugin,
                 commands::get_plugin_logs,
+            commands::render_plugin_preview,
                 commands::get_plugin_icon_theme_asset,
                 commands::start_search,
                 commands::cancel_search,
@@ -1041,6 +1062,7 @@ mod tests {
                 commands::activate_llm_profile,
                 commands::discover_llm_profile_models,
                 commands::discover_llm_profile_draft_models,
+                commands::discover_llm_profile_draft_model_limits,
                 commands::test_llm_profile,
                 commands::preview_document_summary,
                 commands::generate_document_summary,
@@ -1746,7 +1768,8 @@ mod tests {
             .expect("profile presets command must succeed")
             .deserialize::<Vec<fm_transport_dto::LlmProfilePresetDto>>()
             .expect("presets response must deserialize");
-        assert_eq!(presets.len(), 7);
+        assert_eq!(presets.len(), 8);
+        assert_eq!(presets[5].preset, fm_transport_dto::LlmPresetDto::MlxServe);
 
         let created = invoke!(
             "create_llm_profile",
@@ -1869,7 +1892,20 @@ mod tests {
             .expect("semantic profiles command must succeed")
             .deserialize::<Vec<fm_transport_dto::SemanticModelProfileDto>>()
             .expect("profiles response must deserialize");
-        assert_eq!(profiles.len(), 3);
+        assert_eq!(
+            profiles.len(),
+            if cfg!(feature = "semantic-gemma") {
+                4
+            } else {
+                3
+            }
+        );
+        assert_eq!(
+            profiles.iter().any(|profile| {
+                profile.profile == fm_transport_dto::SemanticProfileDto::EmbeddingGemma2
+            }),
+            cfg!(feature = "semantic-gemma")
+        );
 
         let offer = invoke!(
             "create_semantic_component_installation_offer",

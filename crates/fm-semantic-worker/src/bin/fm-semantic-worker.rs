@@ -6,6 +6,60 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), fm_semantic_worker::ServerError> {
+    #[cfg(feature = "experimental-large-pdf")]
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--pdf-text-child")) {
+        let mut args = std::env::args_os().skip(2);
+        let digest = args
+            .next()
+            .and_then(|argument| argument.into_string().ok())
+            .filter(|_| args.next().is_none())
+            .ok_or_else(|| io::Error::other("PDF child requires one source digest"))?;
+        return fm_semantic_worker::pdf_text_child::run(&digest).map_err(Into::into);
+    }
+    #[cfg(feature = "experimental-large-pdf")]
+    if std::env::args_os().nth(1).as_deref()
+        == Some(std::ffi::OsStr::new("--pdf-text-with-visuals-child"))
+    {
+        let mut args = std::env::args_os().skip(2);
+        let digest = args
+            .next()
+            .and_then(|argument| argument.into_string().ok())
+            .filter(|_| args.next().is_none())
+            .ok_or_else(|| io::Error::other("PDF child requires one source digest"))?;
+        return fm_semantic_worker::pdf_text_child::run_with_visual_stage(&digest)
+            .map_err(Into::into);
+    }
+    #[cfg(feature = "experimental-large-pdf")]
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("--pdf-visual-child")) {
+        let mut args = std::env::args_os().skip(2);
+        let page = args
+            .next()
+            .and_then(|argument| {
+                argument
+                    .to_str()
+                    .and_then(|value| value.parse::<u32>().ok())
+            })
+            .ok_or_else(|| io::Error::other("PDF visual child requires a page number"))?;
+        let digest = args
+            .next()
+            .and_then(|argument| argument.into_string().ok())
+            .filter(|_| args.next().is_none())
+            .ok_or_else(|| io::Error::other("PDF visual child requires one source digest"))?;
+        return fm_semantic_worker::pdf_text_child::run_visual_page(&digest, page)
+            .map_err(Into::into);
+    }
+    #[cfg(feature = "experimental-large-pdf")]
+    if std::env::args_os().nth(1).as_deref()
+        == Some(std::ffi::OsStr::new("--pdf-visual-pages-child"))
+    {
+        let mut args = std::env::args_os().skip(2);
+        let digest = args
+            .next()
+            .and_then(|argument| argument.into_string().ok())
+            .filter(|_| args.next().is_none())
+            .ok_or_else(|| io::Error::other("PDF visual child requires one source digest"))?;
+        return fm_semantic_worker::pdf_text_child::run_visual_pages(&digest).map_err(Into::into);
+    }
     let arguments = arguments_from(std::env::args_os().skip(1))?;
     #[cfg(feature = "semantic-runtime")]
     if let Some(semantic_data_directory) = arguments.semantic_data_directory {
@@ -31,6 +85,7 @@ async fn main() -> Result<(), fm_semantic_worker::ServerError> {
             &model,
             arguments.ocrmypdf_executable.as_deref(),
             arguments.idle_timeout,
+            arguments.gemma_backend,
         )
         .await;
     }
@@ -51,6 +106,8 @@ struct Arguments {
     ocrmypdf_executable: Option<PathBuf>,
     #[cfg(feature = "semantic-runtime")]
     development_mode: bool,
+    #[cfg(feature = "semantic-runtime")]
+    gemma_backend: fm_semantic_worker::developer_bundle::GemmaBackendSelection,
 }
 
 fn arguments_from(
@@ -75,6 +132,12 @@ fn arguments_from(
     };
     #[cfg(feature = "gemma-native")]
     let mut gemma_selected = false;
+    #[cfg(feature = "semantic-runtime")]
+    use fm_semantic_worker::developer_bundle::GemmaBackendSelection;
+    #[cfg(feature = "gemma-native")]
+    let mut gemma_backend = GemmaBackendSelection::Automatic;
+    #[cfg(all(feature = "semantic-runtime", not(feature = "gemma-native")))]
+    let gemma_backend = GemmaBackendSelection::Automatic;
     #[cfg(feature = "semantic-runtime")]
     let mut ocrmypdf_executable = None;
     #[cfg(all(feature = "semantic-runtime", feature = "developer-bundle"))]
@@ -199,6 +262,24 @@ fn arguments_from(
                                 )
                             })?,
                     );
+                } else if flag == "--gemma-cpu-images" {
+                    if !cfg!(feature = "developer-bundle")
+                        || gemma_backend != GemmaBackendSelection::Automatic
+                    {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "CPU image override requires a development worker and one flag",
+                        ));
+                    }
+                    gemma_backend = GemmaBackendSelection::DevelopmentCpuBaseline;
+                } else if flag == fm_semantic_worker::gemma_launch::GEMMA_FORCE_CPU_FLAG {
+                    if gemma_backend != GemmaBackendSelection::Automatic {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "at most one Gemma CPU selection flag is allowed",
+                        ));
+                    }
+                    gemma_backend = GemmaBackendSelection::ForcedCpu;
                 } else {
                     let enabled = match flag.as_ref() {
                         "--gemma-images" => &mut gemma_media.images,
@@ -274,6 +355,13 @@ fn arguments_from(
     #[cfg(feature = "semantic-runtime")]
     let managed_model = {
         #[cfg(feature = "gemma-native")]
+        if gemma_backend != GemmaBackendSelection::Automatic && !gemma_selected {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "CPU image override requires a Gemma managed model",
+            ));
+        }
+        #[cfg(feature = "gemma-native")]
         if gemma_selected {
             if semantic_model_pack.is_some()
                 || development_mode
@@ -339,6 +427,8 @@ fn arguments_from(
         semantic_model_pack,
         #[cfg(feature = "semantic-runtime")]
         managed_model,
+        #[cfg(feature = "semantic-runtime")]
+        gemma_backend,
         #[cfg(feature = "semantic-runtime")]
         ocrmypdf_executable,
         #[cfg(feature = "semantic-runtime")]
@@ -463,6 +553,7 @@ mod tests {
     #[cfg(feature = "gemma-native")]
     #[test]
     fn gemma_cli_requires_complete_original_files_and_excludes_pack() {
+        use fm_semantic_worker::developer_bundle::GemmaBackendSelection;
         let base = ["--runtime-dir", "runtime", "--semantic-data-dir", "data"];
         let files = [
             "--gemma-weights",
@@ -481,6 +572,7 @@ mod tests {
             "--gemma-video",
         ];
         let complete = arguments_from(base.into_iter().chain(files).map(Into::into)).unwrap();
+        assert_eq!(complete.gemma_backend, GemmaBackendSelection::Automatic);
         assert!(matches!(
             complete.managed_model,
             Some(fm_semantic_worker::ManagedModel::Gemma {
@@ -493,6 +585,54 @@ mod tests {
                 base.into_iter()
                     .chain(files[..8].iter().copied())
                     .chain(files[10..].iter().copied())
+                    .map(Into::into)
+            )
+            .is_err()
+        );
+        let selected = arguments_from(
+            base.into_iter()
+                .chain(files)
+                .chain(["--gemma-cpu-images"])
+                .map(Into::into),
+        );
+        if cfg!(feature = "developer-bundle") {
+            assert_eq!(
+                selected.unwrap().gemma_backend,
+                GemmaBackendSelection::DevelopmentCpuBaseline
+            );
+        } else {
+            assert!(selected.is_err());
+        }
+        assert!(
+            arguments_from(
+                base.into_iter()
+                    .chain(files)
+                    .chain(["--gemma-cpu-images", "--gemma-cpu-images"])
+                    .map(Into::into)
+            )
+            .is_err()
+        );
+        let forced = arguments_from(
+            base.into_iter()
+                .chain(files)
+                .chain(["--gemma-force-cpu"])
+                .map(Into::into),
+        )
+        .expect("production workers accept the CPU-only switch");
+        assert_eq!(forced.gemma_backend, GemmaBackendSelection::ForcedCpu);
+        assert!(
+            arguments_from(
+                base.into_iter()
+                    .chain(files)
+                    .chain(["--gemma-force-cpu", "--gemma-force-cpu"])
+                    .map(Into::into)
+            )
+            .is_err()
+        );
+        assert!(
+            arguments_from(
+                base.into_iter()
+                    .chain(["--gemma-force-cpu"])
                     .map(Into::into)
             )
             .is_err()
