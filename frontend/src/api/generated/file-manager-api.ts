@@ -73,6 +73,7 @@ import type {
   GetMusicDuplicateScanParams,
   GetPluginIconThemeAssetParams,
   GetSemanticFolderStatusRequestDto,
+  GetSnapshotJobParams,
   GetSpotlightCommentParams,
   GetThumbnailParams,
   HealthDto,
@@ -192,6 +193,7 @@ import type {
   SetPaneActivityRequest,
   SetSpotlightCommentParams,
   SettingsDto,
+  SnapshotJobPageDto,
   SpotlightCommentDto,
   SqliteViewSessionRequestDto,
   StartChecksumRequestDto,
@@ -207,6 +209,8 @@ import type {
   StartOperationRequestDto,
   StartSearchRequestDto,
   StartSearchResponseDto,
+  StartSnapshotJobRequestDto,
+  StartSnapshotJobResponseDto,
   StartWorkspaceParams,
   StreamMediaParams,
   StructuredViewSessionRequestDto,
@@ -9323,6 +9327,149 @@ return fetchMutator<updateSettingsResponse>(getUpdateSettingsUrl(),
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(settingsDto)
+  }
+);}
+
+
+
+export type startSnapshotJobResponse201 = {
+  data: StartSnapshotJobResponseDto
+  status: 201
+}
+
+export type startSnapshotJobResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type startSnapshotJobResponseSuccess = (startSnapshotJobResponse201) & {
+  headers: Headers;
+};
+export type startSnapshotJobResponseError = (startSnapshotJobResponse403) & {
+  headers: Headers;
+};
+
+export type startSnapshotJobResponse = (startSnapshotJobResponseSuccess | startSnapshotJobResponseError)
+
+export const getStartSnapshotJobUrl = () => {
+
+
+
+
+  return `/api/v1/snapshot-jobs`
+}
+
+export const startSnapshotJob = async (startSnapshotJobRequestDto: StartSnapshotJobRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<startSnapshotJobResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<startSnapshotJobResponse>(getStartSnapshotJobUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(startSnapshotJobRequestDto)
+  }
+);}
+
+
+
+export type getSnapshotJobResponse200 = {
+  data: SnapshotJobPageDto
+  status: 200
+}
+
+export type getSnapshotJobResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type getSnapshotJobResponseSuccess = (getSnapshotJobResponse200) & {
+  headers: Headers;
+};
+export type getSnapshotJobResponseError = (getSnapshotJobResponse404) & {
+  headers: Headers;
+};
+
+export type getSnapshotJobResponse = (getSnapshotJobResponseSuccess | getSnapshotJobResponseError)
+
+export const getGetSnapshotJobUrl = (jobId: string,
+    params?: GetSnapshotJobParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/snapshot-jobs/${jobId}?${stringifiedParams}` : `/api/v1/snapshot-jobs/${jobId}`
+}
+
+export const getSnapshotJob = async (jobId: string,
+    params?: GetSnapshotJobParams, options?: Parameters<typeof fetchMutator>[1]): Promise<getSnapshotJobResponse> => {
+
+  return fetchMutator<getSnapshotJobResponse>(getGetSnapshotJobUrl(jobId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type cancelSnapshotJobResponse204 = {
+  data: void
+  status: 204
+}
+
+export type cancelSnapshotJobResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type cancelSnapshotJobResponseSuccess = (cancelSnapshotJobResponse204) & {
+  headers: Headers;
+};
+export type cancelSnapshotJobResponseError = (cancelSnapshotJobResponse404) & {
+  headers: Headers;
+};
+
+export type cancelSnapshotJobResponse = (cancelSnapshotJobResponseSuccess | cancelSnapshotJobResponseError)
+
+export const getCancelSnapshotJobUrl = (jobId: string,) => {
+
+
+
+
+  return `/api/v1/snapshot-jobs/${jobId}/cancel`
+}
+
+export const cancelSnapshotJob = async (jobId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<cancelSnapshotJobResponse> => {
+
+  return fetchMutator<cancelSnapshotJobResponse>(getCancelSnapshotJobUrl(jobId),
+  {
+    ...options,
+    method: 'POST'
+
+
   }
 );}
 

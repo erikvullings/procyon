@@ -7490,6 +7490,134 @@
         }
       }
     },
+    "/api/v1/snapshot-jobs": {
+      "post": {
+        "operationId": "startSnapshotJob",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartSnapshotJobRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartSnapshotJobResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/snapshot-jobs/{jobId}": {
+      "get": {
+        "operationId": "getSnapshotJob",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Zero-based offset into the result set.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, clamped to 1 through 500.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnapshotJobPageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/snapshot-jobs/{jobId}/cancel": {
+      "post": {
+        "operationId": "cancelSnapshotJob",
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/spotlight-comment": {
       "get": {
         "summary": "Returns an entry's Spotlight comment, or `null` if unsupported/unset.",
@@ -21415,6 +21543,268 @@
           }
         }
       },
+      "SnapshotDiffCountsDto": {
+        "type": "object",
+        "description": "Counters of a comparison.",
+        "required": [
+          "added",
+          "removed",
+          "changed",
+          "corrupted",
+          "unchanged"
+        ],
+        "properties": {
+          "added": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entries added since the snapshot.",
+            "minimum": 0
+          },
+          "changed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entries changed since the snapshot.",
+            "minimum": 0
+          },
+          "corrupted": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Files silently corrupted since the snapshot.",
+            "minimum": 0
+          },
+          "removed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entries removed since the snapshot.",
+            "minimum": 0
+          },
+          "unchanged": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entries identical to the snapshot.",
+            "minimum": 0
+          }
+        }
+      },
+      "SnapshotDiffEntryDto": {
+        "type": "object",
+        "description": "One difference between a folder and a snapshot.",
+        "required": [
+          "kind",
+          "path",
+          "isDirectory"
+        ],
+        "properties": {
+          "currentModifiedMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Modification time now, milliseconds since the Unix epoch."
+          },
+          "currentSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Size now.",
+            "minimum": 0
+          },
+          "isDirectory": {
+            "type": "boolean",
+            "description": "Whether the entry is a directory."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SnapshotDiffKindDto",
+            "description": "How the entry differs."
+          },
+          "location": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LocationDto",
+                "description": "Where the entry exists now, absent for removed entries."
+              }
+            ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Path relative to the compared folder, with `/` separators."
+          },
+          "snapshotModifiedMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Modification time recorded in the snapshot, milliseconds since the Unix epoch."
+          },
+          "snapshotSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Size recorded in the snapshot.",
+            "minimum": 0
+          }
+        }
+      },
+      "SnapshotDiffKindDto": {
+        "type": "string",
+        "description": "How an entry differs from the snapshot.",
+        "enum": [
+          "added",
+          "removed",
+          "changed",
+          "corrupted"
+        ]
+      },
+      "SnapshotJobKindDto": {
+        "type": "string",
+        "description": "Kind of a snapshot job.",
+        "enum": [
+          "create",
+          "compare"
+        ]
+      },
+      "SnapshotJobPageDto": {
+        "type": "object",
+        "description": "A bounded page of a snapshot job (`GET /api/v1/snapshot-jobs/{jobId}`).",
+        "required": [
+          "jobId",
+          "kind",
+          "phase",
+          "entriesFound",
+          "filesProcessed",
+          "bytesHashed",
+          "hasChecksums",
+          "root",
+          "counts",
+          "offset",
+          "limit",
+          "total",
+          "entries",
+          "isComplete",
+          "isCancelled",
+          "hasMore"
+        ],
+        "properties": {
+          "bytesHashed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes fed through the hasher.",
+            "minimum": 0
+          },
+          "counts": {
+            "$ref": "#/components/schemas/SnapshotDiffCountsDto",
+            "description": "Differences found so far (compare jobs)."
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SnapshotDiffEntryDto"
+            },
+            "description": "Differences in this page."
+          },
+          "entriesFound": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entries found so far.",
+            "minimum": 0
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the job failed, when it did."
+          },
+          "filesProcessed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Files processed in the current stage (hashed while hashing).",
+            "minimum": 0
+          },
+          "hasChecksums": {
+            "type": "boolean",
+            "description": "Whether the snapshot file contains checksums."
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "Whether another page exists."
+          },
+          "isCancelled": {
+            "type": "boolean",
+            "description": "Whether the job stopped because it was cancelled."
+          },
+          "isComplete": {
+            "type": "boolean",
+            "description": "Whether the job finished (successfully, with an error, or cancelled)."
+          },
+          "jobId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The job this page belongs to."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SnapshotJobKindDto",
+            "description": "Create or compare."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Page size after server-side clamping.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Requested zero-based offset.",
+            "minimum": 0
+          },
+          "phase": {
+            "$ref": "#/components/schemas/SnapshotJobPhaseDto",
+            "description": "Current stage."
+          },
+          "root": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Folder that was recorded (create) or compared (compare)."
+          },
+          "snapshot": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LocationDto",
+                "description": "Where the snapshot was written (create jobs, once finished)."
+              }
+            ]
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total differences found so far.",
+            "minimum": 0
+          }
+        }
+      },
+      "SnapshotJobPhaseDto": {
+        "type": "string",
+        "description": "Stage a snapshot job is in.",
+        "enum": [
+          "loading",
+          "listing",
+          "hashing",
+          "writing",
+          "done"
+        ]
+      },
       "SortDescriptorDto": {
         "type": "object",
         "description": "A single sort descriptor: a column and a direction.",
@@ -22261,6 +22651,91 @@
           "location": {
             "providerId": "search",
             "uri": "search://local/5b1b6b1e-9b1b-4b1b-8b1b-1b1b1b1b1b1b"
+          }
+        }
+      },
+      "StartSnapshotJobRequestDto": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Record a folder tree into a snapshot file.",
+            "required": [
+              "root",
+              "destination",
+              "type"
+            ],
+            "properties": {
+              "destination": {
+                "$ref": "#/components/schemas/LocationDto",
+                "description": "Snapshot file to write; an existing file is never overwritten."
+              },
+              "root": {
+                "$ref": "#/components/schemas/LocationDto",
+                "description": "Folder to record."
+              },
+              "showHidden": {
+                "type": "boolean",
+                "description": "Include hidden entries."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "create"
+                ]
+              },
+              "withChecksums": {
+                "type": "boolean",
+                "description": "Also record a SHA-256 checksum for every file."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Compare a folder tree against a snapshot file.",
+            "required": [
+              "snapshot",
+              "target",
+              "type"
+            ],
+            "properties": {
+              "showHidden": {
+                "type": "boolean",
+                "description": "Include hidden entries."
+              },
+              "snapshot": {
+                "$ref": "#/components/schemas/LocationDto",
+                "description": "Snapshot file to read."
+              },
+              "target": {
+                "$ref": "#/components/schemas/LocationDto",
+                "description": "Folder to compare; may differ from the recorded root (verify a backup copy)."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "compare"
+                ]
+              },
+              "verifyChecksums": {
+                "type": "boolean",
+                "description": "Re-hash files to detect silent corruption when the snapshot has checksums."
+              }
+            }
+          }
+        ],
+        "description": "Which kind of snapshot job to start (`POST /api/v1/snapshot-jobs`)."
+      },
+      "StartSnapshotJobResponseDto": {
+        "type": "object",
+        "description": "Identifies a started snapshot job.",
+        "required": [
+          "jobId"
+        ],
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The started job's identifier, used to page and cancel."
           }
         }
       },

@@ -163,6 +163,7 @@ import type {
   SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
+  SnapshotJobPage,
   SpotlightComment,
   SqliteQueryResult,
   SqliteView,
@@ -181,6 +182,8 @@ import type {
   StartSearchRequest,
   StartSearchResult,
   StartSemanticOcrRemediationRequest,
+  StartSnapshotJobRequest,
+  StartSnapshotJobResult,
   StructuredJsonWindow,
   StructuredRowSearch,
   StructuredRows,
@@ -769,6 +772,21 @@ export interface FileManagerClient {
   ): Promise<MusicDuplicatePage>;
 
   cancelMusicDuplicateScan(scanId: string, signal?: AbortSignal): Promise<void>;
+
+  /** Starts a cancellable folder snapshot create or compare job (task 0268). */
+  startSnapshotJob(
+    request: StartSnapshotJobRequest,
+    signal?: AbortSignal,
+  ): Promise<StartSnapshotJobResult>;
+
+  /** Pages through a snapshot job's differences and reports its progress. */
+  getSnapshotJob(
+    jobId: string,
+    options?: { offset?: number; limit?: number },
+    signal?: AbortSignal,
+  ): Promise<SnapshotJobPage>;
+
+  cancelSnapshotJob(jobId: string, signal?: AbortSignal): Promise<void>;
 
   /** Starts a cancellable broken-link scan (task 0266). */
   startLinkDoctorScan(

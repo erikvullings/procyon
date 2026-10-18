@@ -77,10 +77,13 @@ pub mod semantic_vocabulary;
 mod semantic_vocabulary_mapping;
 mod service;
 mod settings_mapping;
+mod snapshot_format;
+mod snapshots;
 mod sqlite_view;
 mod ssh;
 mod structured_view;
 mod thumbnails;
+mod tree_walk;
 mod webdav;
 pub mod workspace;
 

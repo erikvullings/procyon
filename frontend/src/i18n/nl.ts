@@ -2163,4 +2163,5 @@ export const nl = {
   musicDuplicates: en.musicDuplicates,
   linkDoctor: en.linkDoctor,
   metadataRename: en.metadataRename,
+  snapshots: en.snapshots,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

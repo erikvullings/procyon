@@ -170,6 +170,7 @@ import type {
   SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
+  SnapshotJobPage,
   SpotlightComment,
   SqliteQueryResult,
   SqliteView,
@@ -188,6 +189,8 @@ import type {
   StartSearchRequest,
   StartSearchResult,
   StartSemanticOcrRemediationRequest,
+  StartSnapshotJobRequest,
+  StartSnapshotJobResult,
   StructuredJsonWindow,
   StructuredRowSearch,
   StructuredRows,
@@ -1233,6 +1236,29 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   async cancelMusicDuplicateScan(scanId: string, _signal?: AbortSignal): Promise<void> {
     await invoke('cancel_music_duplicate_scan', { scanId });
+  }
+
+  startSnapshotJob(
+    request: StartSnapshotJobRequest,
+    _signal?: AbortSignal,
+  ): Promise<StartSnapshotJobResult> {
+    return invoke<StartSnapshotJobResult>('start_snapshot_job', { request });
+  }
+
+  getSnapshotJob(
+    jobId: string,
+    options?: { offset?: number; limit?: number },
+    _signal?: AbortSignal,
+  ): Promise<SnapshotJobPage> {
+    return invoke<SnapshotJobPage>('get_snapshot_job', {
+      jobId,
+      offset: options?.offset,
+      limit: options?.limit,
+    });
+  }
+
+  async cancelSnapshotJob(jobId: string, _signal?: AbortSignal): Promise<void> {
+    await invoke('cancel_snapshot_job', { jobId });
   }
 
   startLinkDoctorScan(

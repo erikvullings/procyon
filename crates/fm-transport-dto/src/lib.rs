@@ -37,6 +37,7 @@ pub mod semantic_ocr;
 pub mod semantic_vocabulary;
 pub mod settings;
 pub mod snapshot;
+pub mod snapshots;
 pub mod sqlite;
 pub mod system_location;
 pub mod workspace;
@@ -199,6 +200,11 @@ pub use settings::{
     SavedSearchDto, SettingsDto, SizeFormatDto, ThemeDto,
 };
 pub use snapshot::{DirectorySnapshotDto, LoadingStateDto, VolumeCapacityDto};
+pub use snapshots::{
+    SnapshotDiffCountsDto, SnapshotDiffEntryDto, SnapshotDiffKindDto, SnapshotJobKindDto,
+    SnapshotJobPageDto, SnapshotJobPhaseDto, StartSnapshotJobRequestDto,
+    StartSnapshotJobResponseDto,
+};
 pub use sqlite::{
     OpenSqliteViewRequestDto, OpenSqliteViewResponseDto, QuerySqliteViewRequestDto,
     QuerySqliteViewResponseDto, SqliteCellDto, SqliteColumnDto, SqliteColumnFilterDto,

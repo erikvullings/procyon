@@ -66,3 +66,8 @@ export const FIND_MUSIC_DUPLICATES_ACTION_ID = 'client.findMusicDuplicates';
 
 /** Scans folders for broken symlinks, shortcuts, playlist entries and document links (task 0266). */
 export const FIND_BROKEN_LINKS_ACTION_ID = 'client.findBrokenLinks';
+
+/** Records the selected (or active) folder into a snapshot file (task 0268). */
+export const SAVE_SNAPSHOT_ACTION_ID = 'client.saveSnapshot';
+/** Compares a folder against the selected snapshot file (task 0268). */
+export const COMPARE_SNAPSHOT_ACTION_ID = 'client.compareWithSnapshot';

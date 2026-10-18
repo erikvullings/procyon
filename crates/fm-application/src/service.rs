@@ -255,6 +255,7 @@ pub struct FileManagerService {
     checksums: ChecksumCoordinator,
     music_duplicates: crate::music_duplicates::MusicDuplicateCoordinator,
     link_doctor: crate::link_doctor::LinkDoctorCoordinator,
+    snapshots: crate::snapshots::SnapshotCoordinator,
     disk_usage: DiskUsageCoordinator,
     thumbnails: ThumbnailService,
     semantic: SemanticService,
@@ -715,6 +716,7 @@ impl FileManagerService {
             checksums,
             music_duplicates: crate::music_duplicates::MusicDuplicateCoordinator::default(),
             link_doctor: crate::link_doctor::LinkDoctorCoordinator::default(),
+            snapshots: crate::snapshots::SnapshotCoordinator::default(),
             disk_usage,
             thumbnails: ThumbnailService::new(settings_directory.join("thumbnails")),
             semantic,
@@ -3828,6 +3830,29 @@ impl FileManagerService {
         limit: u16,
     ) -> Result<fm_transport_dto::MusicDuplicatePageDto, ApplicationError> {
         self.music_duplicates.page(scan_id, offset, limit)
+    }
+
+    /// Starts a cancellable snapshot create or compare job (task 0268).
+    pub fn start_snapshot_job(
+        &self,
+        request: fm_transport_dto::StartSnapshotJobRequestDto,
+    ) -> fm_transport_dto::StartSnapshotJobResponseDto {
+        self.snapshots.start(self.providers.clone(), request)
+    }
+
+    /// Cancels a running snapshot job.
+    pub fn cancel_snapshot_job(&self, job_id: Uuid) -> Result<(), ApplicationError> {
+        self.snapshots.cancel(job_id)
+    }
+
+    /// Returns a bounded page of a snapshot job's differences with its progress.
+    pub fn get_snapshot_job_page(
+        &self,
+        job_id: Uuid,
+        offset: u64,
+        limit: u16,
+    ) -> Result<fm_transport_dto::SnapshotJobPageDto, ApplicationError> {
+        self.snapshots.page(job_id, offset, limit)
     }
 
     /// Starts a cancellable broken-link scan (task 0266).

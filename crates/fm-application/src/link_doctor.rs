@@ -6,7 +6,7 @@
 //! roots), and checks cancellation between every entry. Applying a fix is a separate, explicit
 //! operation owned by the operation engine.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -16,7 +16,7 @@ use fm_transport_dto::{
     LinkProblemDto, LinkProblemKindDto, LinkReplacementCandidateDto, StartLinkDoctorScanRequestDto,
     StartLinkDoctorScanResponseDto,
 };
-use fm_vfs::{EntryRef, ListOptions, ProviderCapabilities, ProviderRegistry, VfsError};
+use fm_vfs::{EntryRef, ProviderRegistry, VfsError};
 use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -26,6 +26,7 @@ use crate::link_extract::{
     ExtractedLink, PlaylistKind, html_links, markdown_links, playlist_links, relative_path_target,
     shortcut_target,
 };
+use crate::tree_walk::walk;
 
 const MAX_TEXT_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_PROBLEMS: usize = 20_000;
@@ -57,72 +58,6 @@ impl ScanHandle {
 #[derive(Default)]
 pub(crate) struct LinkDoctorCoordinator {
     scans: Mutex<HashMap<Uuid, Arc<ScanHandle>>>,
-}
-
-/// Lists every entry under `roots`: files, symlinks and directories. Symlinks are leaves.
-async fn walk(
-    providers: &ProviderRegistry,
-    roots: &[Location],
-    show_hidden: bool,
-    cancellation: &CancellationToken,
-    limit: usize,
-) -> (Vec<EntrySummary>, bool) {
-    let mut found = Vec::new();
-    let mut visited: HashSet<String> = HashSet::new();
-    let mut pending: Vec<Location> = roots.to_vec();
-    while let Some(location) = pending.pop() {
-        if cancellation.is_cancelled() {
-            break;
-        }
-        if !visited.insert(location.uri.clone()) {
-            continue;
-        }
-        let Ok(provider) = providers.resolve(&location) else {
-            continue;
-        };
-        let Ok(capabilities) = provider.capabilities_for(&location) else {
-            continue;
-        };
-        if !capabilities.contains(ProviderCapabilities::LIST) {
-            continue;
-        }
-        let mut continuation_token = None;
-        loop {
-            if cancellation.is_cancelled() {
-                break;
-            }
-            let Ok(page) = provider
-                .list(
-                    &location,
-                    ListOptions {
-                        page_size: 500,
-                        continuation_token: continuation_token.take(),
-                    },
-                    cancellation.clone(),
-                )
-                .await
-            else {
-                break;
-            };
-            for entry in page.entries {
-                if !show_hidden && entry.hidden {
-                    continue;
-                }
-                if entry.kind == EntryKind::Directory {
-                    pending.push(entry.location.clone());
-                }
-                found.push(entry);
-                if found.len() >= limit {
-                    return (found, true);
-                }
-            }
-            continuation_token = page.continuation_token;
-            if continuation_token.is_none() {
-                break;
-            }
-        }
-    }
-    (found, false)
 }
 
 /// `Some(true)`: present; `Some(false)`: definitely missing; `None`: could not be determined

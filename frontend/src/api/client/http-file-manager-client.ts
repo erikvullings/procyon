@@ -163,6 +163,7 @@ import type {
   SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
+  SnapshotJobPage,
   SpotlightComment,
   SqliteQueryResult,
   SqliteView,
@@ -181,6 +182,8 @@ import type {
   StartSearchRequest,
   StartSearchResult,
   StartSemanticOcrRemediationRequest,
+  StartSnapshotJobRequest,
+  StartSnapshotJobResult,
   StructuredJsonWindow,
   StructuredRowSearch,
   StructuredRows,
@@ -365,6 +368,9 @@ import {
   reviewSemanticConceptCandidate as requestSemanticVocabularyReview,
   getSettings as requestSettings,
   updateSettings as requestSettingsUpdate,
+  cancelSnapshotJob as requestSnapshotJobCancel,
+  getSnapshotJob as requestSnapshotJobGet,
+  startSnapshotJob as requestSnapshotJobStart,
   getSpotlightComment as requestSpotlightComment,
   setSpotlightComment as requestSpotlightCommentUpdate,
   acceptSshHostKey as requestSshHostKeyAcceptance,
@@ -2107,6 +2113,49 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 204) {
       throw new Error(`Unexpected cancelMusicDuplicateScan response status: ${response.status}`);
+    }
+  }
+
+  async startSnapshotJob(
+    request: StartSnapshotJobRequest,
+    signal?: AbortSignal,
+  ): Promise<StartSnapshotJobResult> {
+    const response = await requestSnapshotJobStart(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 201) {
+      throw new Error(`Unexpected startSnapshotJob response status: ${response.status}`);
+    }
+    return { jobId: response.data.jobId };
+  }
+
+  async getSnapshotJob(
+    jobId: string,
+    options?: { offset?: number; limit?: number },
+    signal?: AbortSignal,
+  ): Promise<SnapshotJobPage> {
+    const response = await requestSnapshotJobGet(
+      jobId,
+      {
+        ...(options?.offset === undefined ? {} : { offset: options.offset }),
+        ...(options?.limit === undefined ? {} : { limit: options.limit }),
+      },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected getSnapshotJob response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async cancelSnapshotJob(jobId: string, signal?: AbortSignal): Promise<void> {
+    const response = await requestSnapshotJobCancel(
+      jobId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204) {
+      throw new Error(`Unexpected cancelSnapshotJob response status: ${response.status}`);
     }
   }
 

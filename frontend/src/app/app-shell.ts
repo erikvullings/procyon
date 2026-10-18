@@ -181,11 +181,13 @@ import {
   queueTitle,
 } from '../features/player/play-selection';
 import {
+  COMPARE_SNAPSHOT_ACTION_ID,
   FIND_BROKEN_LINKS_ACTION_ID,
   FIND_MUSIC_DUPLICATES_ACTION_ID,
   MEDIA_QUEUE_ACTIONS,
   PLAYER_CLIENT_ACTIONS,
   SAVE_PLAYLIST_ACTION_ID,
+  SAVE_SNAPSHOT_ACTION_ID,
 } from '../features/player/player-actions';
 import {
   createPlayerController,
@@ -238,6 +240,22 @@ import {
   type SettingsControllerContext,
 } from '../features/settings/settings-controller';
 import { SettingsEditor, type SettingsSection } from '../features/settings/settings-editor';
+import {
+  SaveSnapshotDialog,
+  type SaveSnapshotRequest,
+} from '../features/snapshots/save-snapshot-dialog';
+import {
+  createSnapshotController,
+  type SnapshotController,
+} from '../features/snapshots/snapshot-controller';
+import {
+  childLocation,
+  defaultSnapshotName,
+  INITIAL_SNAPSHOT_PANEL_STATE,
+  isSnapshotFileName,
+  type SnapshotPanelState,
+} from '../features/snapshots/snapshot-state';
+import { SnapshotView } from '../features/snapshots/snapshot-view';
 import {
   type SortColumn,
   type SortModel,
@@ -579,6 +597,62 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     ];
   }
 
+  /** Opens "Save snapshot…" for the selected folder, or the active folder (task 0268). */
+  function beginSaveSnapshot(invocation: ActionInvocationContext | undefined): void {
+    const paneId = invocation?.paneId ?? workspace?.activePaneId;
+    if (paneId === undefined) return;
+    const directory = directories.get(activeTabKey(paneId));
+    const ids = new Set(
+      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
+    );
+    const selectedFolders = (directory?.entries ?? []).filter(
+      (entry) => ids.has(entry.id) && entry.kind === 'directory',
+    );
+    const folder = selectedFolders.length === 1 ? selectedFolders[0] : undefined;
+    const root =
+      folder?.location ??
+      (directory?.location?.providerId === 'basket' ? undefined : directory?.location);
+    if (root === undefined) {
+      toast({ html: t('snapshots', 'selectFolder') });
+      return;
+    }
+    const name =
+      folder?.name ?? decodeURIComponent(root.uri.replace(/\/+$/u, '').split('/').pop() ?? '');
+    saveSnapshotRequest = {
+      root,
+      directory: parentLocation(root),
+      defaultName: defaultSnapshotName(name),
+    };
+    m.redraw();
+  }
+
+  /** Compares the other pane's folder (or the active one) against the selected snapshot file. */
+  function beginSnapshotComparison(invocation: ActionInvocationContext | undefined): void {
+    const paneId = invocation?.paneId ?? workspace?.activePaneId;
+    if (workspace === undefined || paneId === undefined || snapshotController === undefined) return;
+    const directory = directories.get(activeTabKey(paneId));
+    const ids = new Set(
+      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
+    );
+    const snapshot = (directory?.entries ?? []).find(
+      (entry) => ids.has(entry.id) && entry.kind === 'file' && isSnapshotFileName(entry.name),
+    );
+    if (snapshot === undefined) {
+      toast({ html: t('snapshots', 'selectSnapshot') });
+      return;
+    }
+    const otherPaneId = workspace.paneOrder.find((candidate) => candidate !== paneId);
+    const target =
+      (otherPaneId === undefined
+        ? undefined
+        : directories.get(activeTabKey(otherPaneId))?.location) ?? directory?.location;
+    if (target === undefined || target.providerId === 'basket') {
+      toast({ html: t('snapshots', 'noTarget') });
+      return;
+    }
+    void snapshotController.start({ type: 'compare', snapshot: snapshot.location, target });
+  }
+
   /** Scans the selected folders, or the active folder, for broken links (task 0266). */
   function beginLinkDoctorScan(invocation: ActionInvocationContext | undefined): void {
     const paneId = invocation?.paneId ?? workspace?.activePaneId;
@@ -777,6 +851,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       beginMusicDuplicateScan(invocation);
       return true;
     }
+    if (actionId === SAVE_SNAPSHOT_ACTION_ID) {
+      beginSaveSnapshot(invocation);
+      return true;
+    }
+    if (actionId === COMPARE_SNAPSHOT_ACTION_ID) {
+      beginSnapshotComparison(invocation);
+      return true;
+    }
     if (actionId === FIND_BROKEN_LINKS_ACTION_ID) {
       beginLinkDoctorScan(invocation);
       return true;
@@ -824,6 +906,22 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     const hasQueue = (appState?.player.queue.length ?? 0) > 0;
     return [
       ...mediaQueueActions(),
+      {
+        id: SAVE_SNAPSHOT_ACTION_ID,
+        title: t('snapshots', 'saveAction'),
+        category: 'tools',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' as const },
+      },
+      {
+        id: COMPARE_SNAPSHOT_ACTION_ID,
+        title: t('snapshots', 'compareAction'),
+        category: 'tools',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' as const },
+      },
       {
         id: FIND_BROKEN_LINKS_ACTION_ID,
         title: t('linkDoctor', 'action'),
@@ -1258,6 +1356,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let savePlaylistRequest: SavePlaylistRequest | undefined;
   let musicDuplicatesController: MusicDuplicatesController | undefined;
   let linkDoctorController: LinkDoctorController | undefined;
+  let snapshotController: SnapshotController | undefined;
+  let snapshotState: SnapshotPanelState = INITIAL_SNAPSHOT_PANEL_STATE;
+  let saveSnapshotRequest: SaveSnapshotRequest | undefined;
   let linkDoctorState: LinkDoctorState = INITIAL_LINK_DOCTOR_STATE;
   let musicDuplicatesState: MusicDuplicatesState = INITIAL_MUSIC_DUPLICATES_STATE;
   const emptyPlayerState = createInitialPlayerState();
@@ -4958,6 +5059,24 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           create: () => createActionCommandController(actionCommandControllerContext),
         },
         paneContent: { create: () => createPaneContentBuilder(paneContentBuilderContext) },
+        snapshots: {
+          create: () =>
+            createSnapshotController({
+              getClient: () => attrs.client,
+              getState: () => snapshotState,
+              setState: (state) => {
+                snapshotState = state;
+              },
+              toast: (message) => {
+                toast({ html: message });
+              },
+              redraw: () => m.redraw(),
+              refreshPanes: () => {
+                for (const paneId of workspace?.paneOrder ?? []) refetchAffectedPanes(paneId);
+              },
+            }),
+          dispose: (controller) => controller.dispose(),
+        },
         linkDoctor: {
           create: () =>
             createLinkDoctorController({
@@ -5139,6 +5258,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       playerController = shellControllers.instances.player;
       musicDuplicatesController = shellControllers.instances.musicDuplicates;
       linkDoctorController = shellControllers.instances.linkDoctor;
+      snapshotController = shellControllers.instances.snapshots;
       navigation = shellControllers.instances.navigation;
       disposeShellControllers = shellControllers.dispose;
       keybindingRuntime = attrs.runtime === 'http' ? 'browser' : 'desktop';
@@ -6250,6 +6370,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 onCancel: () => checksumController.cancelDuplicateScan(),
                 onClose: () => checksumController.closeDuplicates(),
               }),
+            snapshotState.jobId !== undefined &&
+              snapshotController !== undefined &&
+              m(SnapshotView, {
+                state: snapshotState,
+                onCancel: () => void snapshotController?.cancel(),
+                onClose: () => snapshotController?.close(),
+              }),
             linkDoctorState.scanId !== undefined &&
               linkDoctorController !== undefined &&
               m(LinkDoctorView, {
@@ -6515,6 +6642,23 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             },
           }),
           ...renderAppDialogs(attrs.client, pendingDelete, appDialogsContext),
+          m(SaveSnapshotDialog, {
+            request: saveSnapshotRequest,
+            onConfirm: (fileName, withChecksums) => {
+              const request = saveSnapshotRequest;
+              saveSnapshotRequest = undefined;
+              if (request === undefined) return;
+              void snapshotController?.start({
+                type: 'create',
+                root: request.root,
+                destination: childLocation(request.directory, fileName),
+                withChecksums,
+              });
+            },
+            onCancel: () => {
+              saveSnapshotRequest = undefined;
+            },
+          }),
           m(SavePlaylistDialog, {
             request: savePlaylistRequest,
             onConfirm: confirmSavePlaylist,

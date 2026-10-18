@@ -2934,6 +2934,44 @@ pub(crate) fn cancel_music_duplicate_scan(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Starts a cancellable snapshot create or compare job through the shared service (task 0268).
+///
+/// Must be `async` so the job task is spawned on the Tokio runtime.
+#[tauri::command]
+pub(crate) async fn start_snapshot_job(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::StartSnapshotJobRequestDto,
+) -> Result<fm_transport_dto::StartSnapshotJobResponseDto, ApplicationErrorDto> {
+    Ok(state.service.start_snapshot_job(request))
+}
+
+/// Returns a bounded page of a snapshot job, identical in shape to
+/// `GET /api/v1/snapshot-jobs/{jobId}`.
+#[tauri::command]
+pub(crate) fn get_snapshot_job(
+    state: State<'_, AppState>,
+    job_id: Uuid,
+    offset: Option<u64>,
+    limit: Option<u16>,
+) -> Result<fm_transport_dto::SnapshotJobPageDto, ApplicationErrorDto> {
+    state
+        .service
+        .get_snapshot_job_page(job_id, offset.unwrap_or(0), limit.unwrap_or(200))
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Cancels a running snapshot job through the shared service.
+#[tauri::command]
+pub(crate) fn cancel_snapshot_job(
+    state: State<'_, AppState>,
+    job_id: Uuid,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .cancel_snapshot_job(job_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Starts a cancellable broken-link scan through the shared service (task 0266).
 ///
 /// Must be `async` so the scan task is spawned on the Tokio runtime.

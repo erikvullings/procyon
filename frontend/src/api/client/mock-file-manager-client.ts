@@ -184,6 +184,7 @@ import type {
   SemanticWorkerPatchResponse,
   SetPaneActivityRequest,
   Settings,
+  SnapshotJobPage,
   SpotlightComment,
   SqliteQueryResult,
   SqliteView,
@@ -202,6 +203,8 @@ import type {
   StartSearchRequest,
   StartSearchResult,
   StartSemanticOcrRemediationRequest,
+  StartSnapshotJobRequest,
+  StartSnapshotJobResult,
   StructuredJsonWindow,
   StructuredRowSearch,
   StructuredRows,
@@ -402,6 +405,9 @@ export type MockClientMethod =
   | 'startMusicDuplicateScan'
   | 'getMusicDuplicateScan'
   | 'cancelMusicDuplicateScan'
+  | 'startSnapshotJob'
+  | 'getSnapshotJob'
+  | 'cancelSnapshotJob'
   | 'startLinkDoctorScan'
   | 'getLinkDoctorScan'
   | 'cancelLinkDoctorScan'
@@ -1452,6 +1458,7 @@ export class MockFileManagerClient implements FileManagerClient {
       algorithms: readonly ChecksumAlgorithm[];
     }
   >();
+  private readonly snapshotJobs = new Map<string, StartSnapshotJobRequest>();
   private readonly linkScans = new Map<
     string,
     { readonly roots: readonly Location[]; cancelled: boolean }
@@ -4385,6 +4392,73 @@ export class MockFileManagerClient implements FileManagerClient {
       const scan = this.musicScans.get(scanId);
       if (scan === undefined) throw new MockClientError('notFound', 'Unknown music scan');
       scan.cancelled = true;
+    });
+  }
+
+  startSnapshotJob(
+    request: StartSnapshotJobRequest,
+    signal?: AbortSignal,
+  ): Promise<StartSnapshotJobResult> {
+    return this.perform('startSnapshotJob', signal, () => {
+      const jobId = `mock-snapshot-${this.seed}-${this.snapshotJobs.size + 1}`;
+      this.snapshotJobs.set(jobId, request);
+      return { jobId };
+    });
+  }
+
+  getSnapshotJob(
+    jobId: string,
+    options?: { offset?: number; limit?: number },
+    signal?: AbortSignal,
+  ): Promise<SnapshotJobPage> {
+    return this.perform('getSnapshotJob', signal, () => {
+      const request = this.snapshotJobs.get(jobId);
+      if (request === undefined) throw new MockClientError('notFound', 'Unknown snapshot job');
+      const create = request.type === 'create';
+      const root = create ? request.root : request.target;
+      const entries = create
+        ? []
+        : [
+            {
+              kind: 'changed' as const,
+              path: 'docs/notes.txt',
+              location: {
+                providerId: root.providerId,
+                uri: `${root.uri.replace(/\/$/, '')}/docs/notes.txt`,
+              },
+              snapshotSize: 10,
+              currentSize: 12,
+              isDirectory: false,
+            },
+          ];
+      const offset = options?.offset ?? 0;
+      const limit = options?.limit ?? 200;
+      return {
+        jobId,
+        kind: create ? ('create' as const) : ('compare' as const),
+        phase: 'done' as const,
+        entriesFound: 3,
+        filesProcessed: 3,
+        bytesHashed: 0,
+        hasChecksums: create ? request.withChecksums : true,
+        ...(create ? { snapshot: request.destination } : {}),
+        root,
+        counts: { added: 0, removed: 0, changed: entries.length, corrupted: 0, unchanged: 2 },
+        offset,
+        limit,
+        total: entries.length,
+        entries: entries.slice(offset, offset + limit),
+        isComplete: true,
+        isCancelled: false,
+        hasMore: false,
+      };
+    });
+  }
+
+  cancelSnapshotJob(jobId: string, signal?: AbortSignal): Promise<void> {
+    return this.perform('cancelSnapshotJob', signal, () => {
+      if (!this.snapshotJobs.has(jobId))
+        throw new MockClientError('notFound', 'Unknown snapshot job');
     });
   }
 
