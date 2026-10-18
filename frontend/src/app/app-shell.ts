@@ -116,6 +116,15 @@ import {
   type GlobalKeydownContext,
 } from '../features/keybindings/global-keydown-handler';
 import { ShortcutsHelpDialog } from '../features/keybindings/shortcuts-help-dialog';
+import {
+  createMusicDuplicatesController,
+  type MusicDuplicatesController,
+} from '../features/music-duplicates/music-duplicates-controller';
+import {
+  INITIAL_MUSIC_DUPLICATES_STATE,
+  type MusicDuplicatesState,
+} from '../features/music-duplicates/music-duplicates-state';
+import { MusicDuplicatesView } from '../features/music-duplicates/music-duplicates-view';
 import { replayEditCommand } from '../features/native-menu/edit-command';
 import {
   dispatchNativeMenuAction,
@@ -163,6 +172,7 @@ import {
   queueTitle,
 } from '../features/player/play-selection';
 import {
+  FIND_MUSIC_DUPLICATES_ACTION_ID,
   MEDIA_QUEUE_ACTIONS,
   PLAYER_CLIENT_ACTIONS,
   SAVE_PLAYLIST_ACTION_ID,
@@ -559,6 +569,30 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     ];
   }
 
+  /** Scans the selected folders, or the active folder, for duplicate and near-duplicate music. */
+  function beginMusicDuplicateScan(invocation: ActionInvocationContext | undefined): void {
+    const paneId = invocation?.paneId ?? workspace?.activePaneId;
+    if (musicDuplicatesController === undefined || paneId === undefined) return;
+    const directory = directories.get(activeTabKey(paneId));
+    const ids = new Set(
+      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
+    );
+    const folders = (directory?.entries ?? [])
+      .filter((entry) => ids.has(entry.id) && entry.kind === 'directory')
+      .map((entry) => entry.location);
+    const roots =
+      folders.length > 0
+        ? folders
+        : directory?.location === undefined || directory.location.providerId === 'basket'
+          ? []
+          : [directory.location];
+    if (roots.length === 0) {
+      toast({ html: t('musicDuplicates', 'noFolder') });
+      return;
+    }
+    void musicDuplicatesController.start(roots);
+  }
+
   /** Opens "Save as playlist…" for the selection, or every entry of the collection basket. */
   function beginSavePlaylist(invocation: ActionInvocationContext | undefined): void {
     const paneId = invocation?.paneId ?? workspace?.activePaneId;
@@ -705,6 +739,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       beginSavePlaylist(invocation);
       return true;
     }
+    if (actionId === FIND_MUSIC_DUPLICATES_ACTION_ID) {
+      beginMusicDuplicateScan(invocation);
+      return true;
+    }
     const queueAction = MEDIA_QUEUE_ACTIONS.find((candidate) => candidate.id === actionId);
     if (queueAction !== undefined) {
       queueSelection(queueAction.mode, queueAction.recursive, invocation);
@@ -748,6 +786,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     const hasQueue = (appState?.player.queue.length ?? 0) > 0;
     return [
       ...mediaQueueActions(),
+      {
+        id: FIND_MUSIC_DUPLICATES_ACTION_ID,
+        title: t('musicDuplicates', 'action'),
+        category: 'tools',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' as const },
+      },
       ...(hasQueue
         ? PLAYER_CLIENT_ACTIONS.map(({ id, title }) => ({
             id,
@@ -1164,6 +1210,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let appState: AppState | undefined;
   let playerController: PlayerController | undefined;
   let savePlaylistRequest: SavePlaylistRequest | undefined;
+  let musicDuplicatesController: MusicDuplicatesController | undefined;
+  let musicDuplicatesState: MusicDuplicatesState = INITIAL_MUSIC_DUPLICATES_STATE;
   const emptyPlayerState = createInitialPlayerState();
   let operations = createOperationsState();
   let pendingConflict: OperationConflict | undefined;
@@ -4862,6 +4910,25 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           create: () => createActionCommandController(actionCommandControllerContext),
         },
         paneContent: { create: () => createPaneContentBuilder(paneContentBuilderContext) },
+        musicDuplicates: {
+          create: () =>
+            createMusicDuplicatesController({
+              getClient: () => attrs.client,
+              getOpsController: () => opsController,
+              getState: () => musicDuplicatesState,
+              setState: (state) => {
+                musicDuplicatesState = state;
+              },
+              toast: (message) => {
+                toast({ html: message });
+              },
+              redraw: () => m.redraw(),
+              refreshPanes: () => {
+                for (const paneId of workspace?.paneOrder ?? []) refetchAffectedPanes(paneId);
+              },
+            }),
+          dispose: (controller) => controller.dispose(),
+        },
         player: {
           create: () =>
             createPlayerController({
@@ -4989,6 +5056,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       actionCommandController = shellControllers.instances.actionCommand;
       paneContentBuilder = shellControllers.instances.paneContent;
       playerController = shellControllers.instances.player;
+      musicDuplicatesController = shellControllers.instances.musicDuplicates;
       navigation = shellControllers.instances.navigation;
       disposeShellControllers = shellControllers.dispose;
       keybindingRuntime = attrs.runtime === 'http' ? 'browser' : 'desktop';
@@ -6099,6 +6167,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 onDeleteSelected: () => checksumController.deleteSelectedDuplicates(),
                 onCancel: () => checksumController.cancelDuplicateScan(),
                 onClose: () => checksumController.closeDuplicates(),
+              }),
+            musicDuplicatesState.scanId !== undefined &&
+              musicDuplicatesController !== undefined &&
+              m(MusicDuplicatesView, {
+                state: musicDuplicatesState,
+                isLastCopy: (uri) => musicDuplicatesController?.isLastCopy(uri) ?? false,
+                onToggle: (uri) => musicDuplicatesController?.toggle(uri),
+                onSelectSuggested: () => musicDuplicatesController?.selectSuggestedRemovals(),
+                onClearSelection: () => musicDuplicatesController?.clearSelection(),
+                onRemoveSelected: () => void musicDuplicatesController?.removeSelected(),
+                onCancel: () => void musicDuplicatesController?.cancel(),
+                onClose: () => musicDuplicatesController?.close(),
               }),
           ]),
           runtimeKind === 'tauri'

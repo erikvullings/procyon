@@ -21,6 +21,7 @@ pub mod health;
 pub mod knowledge;
 pub mod llm_profile;
 pub mod location;
+pub mod music_duplicates;
 pub mod operation;
 pub mod plugin;
 pub mod rag;
@@ -138,6 +139,11 @@ pub use llm_profile::{
     SaveLlmProfileRequestDto,
 };
 pub use location::LocationDto;
+pub use music_duplicates::{
+    MusicDuplicateConfidenceDto, MusicDuplicateFileDto, MusicDuplicateGroupDto,
+    MusicDuplicatePageDto, MusicDuplicateScanPhaseDto, StartMusicDuplicateScanRequestDto,
+    StartMusicDuplicateScanResponseDto,
+};
 pub use operation::{
     ArchiveFormatDto, ConflictResolutionDto, EntryRefDto, LinkKindDto, LinkKindOptionDto,
     LinkOptionsDto, LinkOptionsRequestDto, LinkRequestDto, LinkRequirementDto, LinkTargetStyleDto,

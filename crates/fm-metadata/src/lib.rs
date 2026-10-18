@@ -4,11 +4,16 @@
 //! listings (specification §5.2): permissions, ownership, extended attributes,
 //! checksums, image dimensions and media properties.
 
+mod audio;
 mod cache;
 mod pdf;
 mod thumbnail;
 mod video;
 
+pub use audio::{
+    AudioInfo, AudioReadError, SUPPORTED_AUDIO_EXTENSIONS, is_supported_audio_extension,
+    read_audio_info,
+};
 pub use cache::{ThumbnailCache, ThumbnailCacheError};
 pub use pdf::{SUPPORTED_PDF_EXTENSIONS, generate_pdf_thumbnail, is_supported_pdf_extension};
 pub use thumbnail::{

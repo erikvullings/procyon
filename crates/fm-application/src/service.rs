@@ -253,6 +253,7 @@ pub struct FileManagerService {
     action_invoker: ActionInvoker,
     search_comparison: SearchComparisonCoordinator,
     checksums: ChecksumCoordinator,
+    music_duplicates: crate::music_duplicates::MusicDuplicateCoordinator,
     disk_usage: DiskUsageCoordinator,
     thumbnails: ThumbnailService,
     semantic: SemanticService,
@@ -711,6 +712,7 @@ impl FileManagerService {
             action_invoker,
             search_comparison,
             checksums,
+            music_duplicates: crate::music_duplicates::MusicDuplicateCoordinator::default(),
             disk_usage,
             thumbnails: ThumbnailService::new(settings_directory.join("thumbnails")),
             semantic,
@@ -3793,6 +3795,29 @@ impl FileManagerService {
         limit: u16,
     ) -> Result<DuplicatePageDto, ApplicationError> {
         self.checksums.get_duplicate_page(scan_id, offset, limit)
+    }
+
+    /// Starts a cancellable duplicate and near-duplicate music scan (task 0265).
+    pub fn start_music_duplicate_scan(
+        &self,
+        request: fm_transport_dto::StartMusicDuplicateScanRequestDto,
+    ) -> Result<fm_transport_dto::StartMusicDuplicateScanResponseDto, ApplicationError> {
+        self.music_duplicates.start(self.providers.clone(), request)
+    }
+
+    /// Cancels a running music duplicate scan.
+    pub fn cancel_music_duplicate_scan(&self, scan_id: Uuid) -> Result<(), ApplicationError> {
+        self.music_duplicates.cancel(scan_id)
+    }
+
+    /// Returns a bounded page of a music duplicate scan's groups with its progress.
+    pub fn get_music_duplicate_page(
+        &self,
+        scan_id: Uuid,
+        offset: u64,
+        limit: u16,
+    ) -> Result<fm_transport_dto::MusicDuplicatePageDto, ApplicationError> {
+        self.music_duplicates.page(scan_id, offset, limit)
     }
 
     /// Reports which capabilities are available for the current runtime and

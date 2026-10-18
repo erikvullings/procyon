@@ -94,6 +94,7 @@ import type {
   LoadEditableFileRequest,
   Location,
   MoveSemanticDataRequest,
+  MusicDuplicatePage,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
@@ -188,6 +189,8 @@ import type {
   StartComparisonResult,
   StartDuplicateScanRequest,
   StartDuplicateScanResult,
+  StartMusicDuplicateScanRequest,
+  StartMusicDuplicateScanResult,
   StartOperationRequest,
   StartSearchRequest,
   StartSearchResult,
@@ -388,6 +391,9 @@ export type MockClientMethod =
   | 'startDuplicateScan'
   | 'getDuplicateScan'
   | 'cancelDuplicateScan'
+  | 'startMusicDuplicateScan'
+  | 'getMusicDuplicateScan'
+  | 'cancelMusicDuplicateScan'
   | 'listLlmProfilePresets'
   | 'listLlmProfiles'
   | 'createLlmProfile'
@@ -1433,6 +1439,10 @@ export class MockFileManagerClient implements FileManagerClient {
       entries: readonly ChecksumEntry[];
       algorithms: readonly ChecksumAlgorithm[];
     }
+  >();
+  private readonly musicScans = new Map<
+    string,
+    { readonly roots: readonly Location[]; cancelled: boolean }
   >();
   private duplicateScanSequence = 0;
   private readonly duplicateScans = new Map<
@@ -4264,6 +4274,75 @@ export class MockFileManagerClient implements FileManagerClient {
   cancelDuplicateScan(scanId: string, signal?: AbortSignal): Promise<void> {
     return this.perform('cancelDuplicateScan', signal, () => {
       this.requireDuplicateScan(scanId).cancelled = true;
+    });
+  }
+
+  startMusicDuplicateScan(
+    request: StartMusicDuplicateScanRequest,
+    signal?: AbortSignal,
+  ): Promise<StartMusicDuplicateScanResult> {
+    return this.perform('startMusicDuplicateScan', signal, () => {
+      const scanId = `mock-music-scan-${this.seed}-${this.musicScans.size + 1}`;
+      this.musicScans.set(scanId, { roots: request.roots, cancelled: false });
+      return { scanId };
+    });
+  }
+
+  getMusicDuplicateScan(
+    scanId: string,
+    options?: { offset?: number; limit?: number },
+    signal?: AbortSignal,
+  ): Promise<MusicDuplicatePage> {
+    return this.perform('getMusicDuplicateScan', signal, () => {
+      const scan = this.musicScans.get(scanId);
+      if (scan === undefined) throw new MockClientError('notFound', 'Unknown music scan');
+      const root = scan.roots[0]?.uri.replace(/\/$/, '') ?? 'file:///music';
+      const file = (name: string, lossless: boolean, bitrate: number, size: number) => ({
+        location: { providerId: scan.roots[0]?.providerId ?? 'local', uri: `${root}/${name}` },
+        size,
+        format: lossless ? 'flac' : 'mpeg',
+        lossless,
+        bitrateKbps: bitrate,
+        durationSeconds: 215,
+        artist: 'Example Artist',
+        title: 'Example Song',
+      });
+      const groups = [
+        {
+          confidence: 'likely' as const,
+          files: [
+            file('song.flac', true, 900, 30_000_000),
+            file('song.mp3', false, 192, 5_000_000),
+          ],
+          keepIndex: 0,
+          reclaimableBytes: 5_000_000,
+        },
+      ];
+      const offset = options?.offset ?? 0;
+      const limit = options?.limit ?? 200;
+      return {
+        scanId,
+        roots: scan.roots.map((location) => ({ ...location })),
+        phase: 'done' as const,
+        filesFound: 2,
+        filesProcessed: 2,
+        unreadableTags: 0,
+        offset,
+        limit,
+        total: groups.length,
+        groups: groups.slice(offset, offset + limit),
+        isComplete: true,
+        isCancelled: scan.cancelled,
+        hasMore: false,
+      };
+    });
+  }
+
+  cancelMusicDuplicateScan(scanId: string, signal?: AbortSignal): Promise<void> {
+    return this.perform('cancelMusicDuplicateScan', signal, () => {
+      const scan = this.musicScans.get(scanId);
+      if (scan === undefined) throw new MockClientError('notFound', 'Unknown music scan');
+      scan.cancelled = true;
     });
   }
 

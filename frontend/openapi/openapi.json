@@ -3728,6 +3728,144 @@
         }
       }
     },
+    "/api/v1/music-duplicate-scans": {
+      "post": {
+        "operationId": "startMusicDuplicateScan",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartMusicDuplicateScanRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartMusicDuplicateScanResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/music-duplicate-scans/{scanId}": {
+      "get": {
+        "operationId": "getMusicDuplicateScan",
+        "parameters": [
+          {
+            "name": "scanId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Zero-based offset into the result set.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, clamped to 1 through 500.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicDuplicatePageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/music-duplicate-scans/{scanId}/cancel": {
+      "post": {
+        "operationId": "cancelMusicDuplicateScan",
+        "parameters": [
+          {
+            "name": "scanId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/navigation/open": {
       "post": {
         "summary": "Navigates a pane and returns the destination's first page.",
@@ -13907,6 +14045,222 @@
           }
         }
       },
+      "MusicDuplicateConfidenceDto": {
+        "type": "string",
+        "description": "How sure the finder is that a group's files are the same recording.",
+        "enum": [
+          "exact",
+          "likely"
+        ]
+      },
+      "MusicDuplicateFileDto": {
+        "type": "object",
+        "description": "One audio file inside a duplicate group.",
+        "required": [
+          "location",
+          "size",
+          "lossless"
+        ],
+        "properties": {
+          "album": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Album tag."
+          },
+          "artist": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Track artist tag."
+          },
+          "bitrateKbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Overall bitrate in kilobits per second.",
+            "minimum": 0
+          },
+          "durationSeconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Playing time in seconds."
+          },
+          "format": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Container/codec family, when the file could be parsed."
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Where the file lives."
+          },
+          "lossless": {
+            "type": "boolean",
+            "description": "Whether the codec is lossless."
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Size in bytes.",
+            "minimum": 0
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Track title tag."
+          }
+        }
+      },
+      "MusicDuplicateGroupDto": {
+        "type": "object",
+        "description": "Files believed to be the same recording.",
+        "required": [
+          "confidence",
+          "files",
+          "keepIndex",
+          "reclaimableBytes"
+        ],
+        "properties": {
+          "confidence": {
+            "$ref": "#/components/schemas/MusicDuplicateConfidenceDto",
+            "description": "How sure the finder is."
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MusicDuplicateFileDto"
+            },
+            "description": "Group members; the suggested keeper is `files[keep_index]`."
+          },
+          "keepIndex": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Index of the file to keep: lossless first, then the highest bitrate, then the largest.",
+            "minimum": 0
+          },
+          "reclaimableBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes freed by removing every file except the suggested keeper.",
+            "minimum": 0
+          }
+        }
+      },
+      "MusicDuplicatePageDto": {
+        "type": "object",
+        "description": "A bounded page of a music duplicate scan (`GET /api/v1/music-duplicate-scans/{scanId}`).",
+        "required": [
+          "scanId",
+          "roots",
+          "phase",
+          "filesFound",
+          "filesProcessed",
+          "unreadableTags",
+          "offset",
+          "limit",
+          "total",
+          "groups",
+          "isComplete",
+          "isCancelled",
+          "hasMore"
+        ],
+        "properties": {
+          "filesFound": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Audio files found so far.",
+            "minimum": 0
+          },
+          "filesProcessed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Files handled in the current stage (tags read while tagging).",
+            "minimum": 0
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MusicDuplicateGroupDto"
+            },
+            "description": "Groups in this page."
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "Whether another page exists."
+          },
+          "isCancelled": {
+            "type": "boolean",
+            "description": "Whether the scan stopped because it was cancelled."
+          },
+          "isComplete": {
+            "type": "boolean",
+            "description": "Whether the scan finished."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Page size after server-side clamping.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Requested zero-based offset.",
+            "minimum": 0
+          },
+          "phase": {
+            "$ref": "#/components/schemas/MusicDuplicateScanPhaseDto",
+            "description": "Current stage."
+          },
+          "roots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Roots the scan covers."
+          },
+          "scanId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The scan this page belongs to."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total groups found (grows until the scan completes).",
+            "minimum": 0
+          },
+          "unreadableTags": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Files whose tags could not be read; they still take part in exact matching.",
+            "minimum": 0
+          }
+        }
+      },
+      "MusicDuplicateScanPhaseDto": {
+        "type": "string",
+        "description": "Stage a music duplicate scan is currently in.",
+        "enum": [
+          "listing",
+          "hashing",
+          "tagging",
+          "grouping",
+          "done"
+        ]
+      },
       "NavigateRequest": {
         "type": "object",
         "description": "Requests navigation to a new location (`POST /api/v1/navigation/open`).",
@@ -21039,6 +21393,49 @@
       "StartDuplicateScanResponseDto": {
         "type": "object",
         "description": "Identifies a started duplicate scan.",
+        "required": [
+          "scanId"
+        ],
+        "properties": {
+          "scanId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The started scan's identifier, used to page and cancel."
+          }
+        }
+      },
+      "StartMusicDuplicateScanRequestDto": {
+        "type": "object",
+        "description": "Starts a cancellable music duplicate scan (`POST /api/v1/music-duplicate-scans`).",
+        "required": [
+          "roots"
+        ],
+        "properties": {
+          "roots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Roots to scan recursively."
+          },
+          "showHidden": {
+            "type": "boolean",
+            "description": "Include hidden entries. Defaults to `false`."
+          }
+        },
+        "example": {
+          "roots": [
+            {
+              "providerId": "local",
+              "uri": "file:///Users/erik/Music"
+            }
+          ],
+          "showHidden": false
+        }
+      },
+      "StartMusicDuplicateScanResponseDto": {
+        "type": "object",
+        "description": "Identifies a started music duplicate scan.",
         "required": [
           "scanId"
         ],

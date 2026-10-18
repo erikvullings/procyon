@@ -561,7 +561,7 @@ fn duplicate_payload(group: &DuplicateGroup) -> DuplicateGroupPayload {
 /// followed, which — together with the `visited` set — is what keeps a
 /// symlink loop from causing unbounded recursion, exactly as
 /// `fm_comparison::engine` and `fm_search::engine` do (spec §6, §35).
-async fn collect_candidates(
+pub async fn collect_candidates(
     providers: &ProviderRegistry,
     roots: &[Location],
     show_hidden: bool,

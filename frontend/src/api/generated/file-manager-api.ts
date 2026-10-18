@@ -67,6 +67,7 @@ import type {
   GetFileGitHistoryResponseDto,
   GetFileIconParams,
   GetFinderTagsParams,
+  GetMusicDuplicateScanParams,
   GetPluginIconThemeAssetParams,
   GetSemanticFolderStatusRequestDto,
   GetSpotlightCommentParams,
@@ -99,6 +100,7 @@ import type {
   LoadEditableFileRequestDto,
   LoadEditableFileResponseDto,
   MoveSemanticDataRequestDto,
+  MusicDuplicatePageDto,
   NavigateRequest,
   OneDriveAuthorizationAttemptDto,
   OpenDocxPreviewRequestDto,
@@ -192,6 +194,8 @@ import type {
   StartComparisonResponseDto,
   StartDuplicateScanRequestDto,
   StartDuplicateScanResponseDto,
+  StartMusicDuplicateScanRequestDto,
+  StartMusicDuplicateScanResponseDto,
   StartOperationRequestDto,
   StartSearchRequestDto,
   StartSearchResponseDto,
@@ -4753,6 +4757,154 @@ export const streamMedia = async (params: StreamMediaParams, options?: Parameter
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type startMusicDuplicateScanResponse201 = {
+  data: StartMusicDuplicateScanResponseDto
+  status: 201
+}
+
+export type startMusicDuplicateScanResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type startMusicDuplicateScanResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type startMusicDuplicateScanResponseSuccess = (startMusicDuplicateScanResponse201) & {
+  headers: Headers;
+};
+export type startMusicDuplicateScanResponseError = (startMusicDuplicateScanResponse400 | startMusicDuplicateScanResponse403) & {
+  headers: Headers;
+};
+
+export type startMusicDuplicateScanResponse = (startMusicDuplicateScanResponseSuccess | startMusicDuplicateScanResponseError)
+
+export const getStartMusicDuplicateScanUrl = () => {
+
+
+
+
+  return `/api/v1/music-duplicate-scans`
+}
+
+export const startMusicDuplicateScan = async (startMusicDuplicateScanRequestDto: StartMusicDuplicateScanRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<startMusicDuplicateScanResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<startMusicDuplicateScanResponse>(getStartMusicDuplicateScanUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(startMusicDuplicateScanRequestDto)
+  }
+);}
+
+
+
+export type getMusicDuplicateScanResponse200 = {
+  data: MusicDuplicatePageDto
+  status: 200
+}
+
+export type getMusicDuplicateScanResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type getMusicDuplicateScanResponseSuccess = (getMusicDuplicateScanResponse200) & {
+  headers: Headers;
+};
+export type getMusicDuplicateScanResponseError = (getMusicDuplicateScanResponse404) & {
+  headers: Headers;
+};
+
+export type getMusicDuplicateScanResponse = (getMusicDuplicateScanResponseSuccess | getMusicDuplicateScanResponseError)
+
+export const getGetMusicDuplicateScanUrl = (scanId: string,
+    params?: GetMusicDuplicateScanParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/music-duplicate-scans/${scanId}?${stringifiedParams}` : `/api/v1/music-duplicate-scans/${scanId}`
+}
+
+export const getMusicDuplicateScan = async (scanId: string,
+    params?: GetMusicDuplicateScanParams, options?: Parameters<typeof fetchMutator>[1]): Promise<getMusicDuplicateScanResponse> => {
+
+  return fetchMutator<getMusicDuplicateScanResponse>(getGetMusicDuplicateScanUrl(scanId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type cancelMusicDuplicateScanResponse204 = {
+  data: void
+  status: 204
+}
+
+export type cancelMusicDuplicateScanResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type cancelMusicDuplicateScanResponseSuccess = (cancelMusicDuplicateScanResponse204) & {
+  headers: Headers;
+};
+export type cancelMusicDuplicateScanResponseError = (cancelMusicDuplicateScanResponse404) & {
+  headers: Headers;
+};
+
+export type cancelMusicDuplicateScanResponse = (cancelMusicDuplicateScanResponseSuccess | cancelMusicDuplicateScanResponseError)
+
+export const getCancelMusicDuplicateScanUrl = (scanId: string,) => {
+
+
+
+
+  return `/api/v1/music-duplicate-scans/${scanId}/cancel`
+}
+
+export const cancelMusicDuplicateScan = async (scanId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<cancelMusicDuplicateScanResponse> => {
+
+  return fetchMutator<cancelMusicDuplicateScanResponse>(getCancelMusicDuplicateScanUrl(scanId),
+  {
+    ...options,
+    method: 'POST'
 
 
   }

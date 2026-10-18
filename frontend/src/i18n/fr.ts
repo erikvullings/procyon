@@ -1349,4 +1349,5 @@ export const fr = {
   playlist: en.playlist,
   player: en.player,
   playlistExport: en.playlistExport,
+  musicDuplicates: en.musicDuplicates,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

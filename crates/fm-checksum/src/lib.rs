@@ -32,6 +32,7 @@ pub mod store;
 
 pub use engine::{
     ChecksumEngine, ChecksumEngineError, ChecksumJobOptions, ChecksumTarget, DuplicateScanOptions,
+    collect_candidates,
 };
 pub use store::{
     ChecksumEntryResult, ChecksumPage, ChecksumResultsStore, DuplicatePage, DuplicateResultsStore,

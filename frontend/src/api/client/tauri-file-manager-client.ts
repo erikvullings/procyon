@@ -93,6 +93,7 @@ import type {
   LoadEditableFileRequest,
   Location,
   MoveSemanticDataRequest,
+  MusicDuplicatePage,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
@@ -174,6 +175,8 @@ import type {
   StartComparisonResult,
   StartDuplicateScanRequest,
   StartDuplicateScanResult,
+  StartMusicDuplicateScanRequest,
+  StartMusicDuplicateScanResult,
   StartOperationRequest,
   StartSearchRequest,
   StartSearchResult,
@@ -1193,6 +1196,29 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   async cancelDuplicateScan(scanId: string, _signal?: AbortSignal): Promise<void> {
     await invoke('cancel_duplicate_scan', { scanId });
+  }
+
+  startMusicDuplicateScan(
+    request: StartMusicDuplicateScanRequest,
+    _signal?: AbortSignal,
+  ): Promise<StartMusicDuplicateScanResult> {
+    return invoke<StartMusicDuplicateScanResult>('start_music_duplicate_scan', { request });
+  }
+
+  getMusicDuplicateScan(
+    scanId: string,
+    options?: { offset?: number; limit?: number },
+    _signal?: AbortSignal,
+  ): Promise<MusicDuplicatePage> {
+    return invoke<MusicDuplicatePage>('get_music_duplicate_scan', {
+      scanId,
+      offset: options?.offset,
+      limit: options?.limit,
+    });
+  }
+
+  async cancelMusicDuplicateScan(scanId: string, _signal?: AbortSignal): Promise<void> {
+    await invoke('cancel_music_duplicate_scan', { scanId });
   }
 
   generateSyncPlan(

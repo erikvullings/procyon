@@ -60,3 +60,6 @@ export const MEDIA_QUEUE_ACTION_IDS: ReadonlySet<string> = new Set(
 
 /** "Save as playlist…" for the selection, or for the whole collection basket (task 0264). */
 export const SAVE_PLAYLIST_ACTION_ID = 'client.savePlaylist';
+
+/** Scans the selected folders (or the active one) for duplicate and near-duplicate music (task 0265). */
+export const FIND_MUSIC_DUPLICATES_ACTION_ID = 'client.findMusicDuplicates';

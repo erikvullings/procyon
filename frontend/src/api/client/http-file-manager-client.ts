@@ -85,6 +85,7 @@ import type {
   LoadEditableFileRequest,
   Location,
   MoveSemanticDataRequest,
+  MusicDuplicatePage,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
@@ -167,6 +168,8 @@ import type {
   StartComparisonResult,
   StartDuplicateScanRequest,
   StartDuplicateScanResult,
+  StartMusicDuplicateScanRequest,
+  StartMusicDuplicateScanResult,
   StartOperationRequest,
   StartSearchRequest,
   StartSearchResult,
@@ -275,6 +278,9 @@ import {
   testLlmProfile as requestLlmProfileTest,
   updateLlmProfile as requestLlmProfileUpdate,
   loadEditableFile as requestLoadEditableFile,
+  cancelMusicDuplicateScan as requestMusicDuplicateScanCancel,
+  getMusicDuplicateScan as requestMusicDuplicateScanGet,
+  startMusicDuplicateScan as requestMusicDuplicateScanStart,
   navigatePane as requestNavigation,
   getOneDriveAuthorizationAttempt as requestOneDriveAuthorizationAttempt,
   beginOneDriveAuthorization as requestOneDriveAuthorizationBegin,
@@ -2030,6 +2036,52 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 204)
       throw new Error(`Unexpected cancelDuplicateScan response status: ${response.status}`);
+  }
+
+  async startMusicDuplicateScan(
+    request: StartMusicDuplicateScanRequest,
+    signal?: AbortSignal,
+  ): Promise<StartMusicDuplicateScanResult> {
+    const response = await requestMusicDuplicateScanStart(
+      {
+        roots: [...request.roots],
+        ...(request.showHidden === undefined ? {} : { showHidden: request.showHidden }),
+      },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 201) {
+      throw new Error(`Unexpected startMusicDuplicateScan response status: ${response.status}`);
+    }
+    return { scanId: response.data.scanId };
+  }
+
+  async getMusicDuplicateScan(
+    scanId: string,
+    options?: { offset?: number; limit?: number },
+    signal?: AbortSignal,
+  ): Promise<MusicDuplicatePage> {
+    const response = await requestMusicDuplicateScanGet(
+      scanId,
+      {
+        ...(options?.offset === undefined ? {} : { offset: options.offset }),
+        ...(options?.limit === undefined ? {} : { limit: options.limit }),
+      },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected getMusicDuplicateScan response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async cancelMusicDuplicateScan(scanId: string, signal?: AbortSignal): Promise<void> {
+    const response = await requestMusicDuplicateScanCancel(
+      scanId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204) {
+      throw new Error(`Unexpected cancelMusicDuplicateScan response status: ${response.status}`);
+    }
   }
 
   async generateSyncPlan(

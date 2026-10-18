@@ -86,6 +86,7 @@ import type {
   LoadEditableFileRequest,
   Location,
   MoveSemanticDataRequest,
+  MusicDuplicatePage,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
@@ -167,6 +168,8 @@ import type {
   StartComparisonResult,
   StartDuplicateScanRequest,
   StartDuplicateScanResult,
+  StartMusicDuplicateScanRequest,
+  StartMusicDuplicateScanResult,
   StartOperationRequest,
   StartSearchRequest,
   StartSearchResult,
@@ -735,6 +738,21 @@ export interface FileManagerClient {
   ): Promise<DuplicatePage>;
 
   cancelDuplicateScan(scanId: string, signal?: AbortSignal): Promise<void>;
+
+  /** Starts a cancellable duplicate and near-duplicate music scan (task 0265). */
+  startMusicDuplicateScan(
+    request: StartMusicDuplicateScanRequest,
+    signal?: AbortSignal,
+  ): Promise<StartMusicDuplicateScanResult>;
+
+  /** Pages through a music duplicate scan's groups and reports its progress. */
+  getMusicDuplicateScan(
+    scanId: string,
+    options?: { offset?: number; limit?: number },
+    signal?: AbortSignal,
+  ): Promise<MusicDuplicatePage>;
+
+  cancelMusicDuplicateScan(scanId: string, signal?: AbortSignal): Promise<void>;
 
   listActions(signal?: AbortSignal): Promise<ActionDescriptor[]>;
 

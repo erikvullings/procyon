@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 flate2.workspace = true
 image.workspace = true
+lofty.workspace = true
 lopdf.workspace = true
 mp4.workspace = true
 openh264.workspace = true

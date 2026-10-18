@@ -319,7 +319,7 @@ disk-usage visualization.
   0136; 0140 landed mid-task, after 0136's own standalone dialogs were already built)*
 - [x] 0151 Fix Windows git-status/history: `canonicalize()` vs. `git2` path mismatch *(needs 0135;
   uses `dunce::canonicalize()` to keep filesystem and libgit2 paths comparable on Windows)*
-- [ ] 0265 Duplicate and near-duplicate music finder *(needs 0077)*
+- [x] 0265 Duplicate and near-duplicate music finder *(needs 0077)*
 - [ ] 0266 Broken-link doctor *(needs 0068, 0168)*
 - [ ] 0267 Tag and EXIF fields in multi-rename *(needs 0072, 0149)*
 - [ ] 0273 Full image metadata viewer (EXIF, IPTC, XMP) *(needs 0088)*

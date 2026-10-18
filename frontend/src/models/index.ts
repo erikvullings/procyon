@@ -14,6 +14,7 @@ export * from './ids';
 export * from './knowledge';
 export * from './llm-profile';
 export * from './location';
+export * from './music-duplicates';
 export * from './native-menu';
 export * from './operation';
 export * from './plugin';

@@ -5457,3 +5457,29 @@ button.fm-activity-count {
   + span:not(.lever)::after {
   top: -1px;
 }
+
+.music-duplicates__badge {
+  display: inline-block;
+  padding: 0 0.4rem;
+  border-radius: 3px;
+  background: var(--fm-hover);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.music-duplicates__badge--exact {
+  color: var(--fm-accent);
+}
+
+.music-duplicates__quality {
+  margin-left: 0.75rem;
+  color: var(--fm-text-muted);
+  font-size: 0.85rem;
+}
+
+.music-duplicates__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+}
