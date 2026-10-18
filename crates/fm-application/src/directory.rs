@@ -132,6 +132,7 @@ impl DirectoryService {
         &self,
         request: ListDirectoryRequest,
     ) -> Result<DirectorySnapshot, ApplicationError> {
+        let list_started = std::time::Instant::now();
         let pane_id = PaneId::from(request.pane_id);
         let location: fm_domain::Location = request.location.clone().into();
         let first_page = request.continuation_token.is_none();
@@ -206,6 +207,8 @@ impl DirectoryService {
         };
 
         let provider = self.providers.resolve(&location)?;
+        let enumerate_started = std::time::Instant::now();
+        let from_cache = cached_full_entries.is_some();
         let full_entries = match cached_full_entries {
             Some(cached) => cached,
             None => {
@@ -226,6 +229,7 @@ impl DirectoryService {
                 Arc::new(entries)
             }
         };
+        let enumerate_elapsed = enumerate_started.elapsed();
         let offset = decode_page_offset(request.continuation_token.as_deref())?;
         if offset > full_entries.len() {
             return Err(ApplicationError::InvalidRequest(
@@ -281,6 +285,17 @@ impl DirectoryService {
         state.snapshot = Some(snapshot.clone());
         let watch_cancellation = state.watch_cancellation.clone();
         drop(panes);
+        tracing::debug!(
+            target: "fm_perf",
+            op = "list",
+            first_page,
+            from_cache,
+            total_entries = full_entries.len(),
+            page_entries = snapshot.entries.len(),
+            enumerate_sort_ms = enumerate_elapsed.as_secs_f64() * 1000.0,
+            total_ms = list_started.elapsed().as_secs_f64() * 1000.0,
+            "directory listing served"
+        );
 
         if first_page && provider.change_tracking() != ChangeTracking::Unsupported {
             // Spawned rather than awaited inline: acquiring/registering a
@@ -788,6 +803,7 @@ fn spawn_pane_watch(mut watch: PaneWatch) {
                     Err(broadcast::error::RecvError::Closed) => break,
                 }
             };
+            let relist_started = std::time::Instant::now();
             let mut entries = match list_all(
                 Arc::clone(&watch.provider),
                 &watch.location,
@@ -799,6 +815,7 @@ fn spawn_pane_watch(mut watch: PaneWatch) {
                 Err(VfsError::Cancelled) => break,
                 Err(_) => continue,
             };
+            let relist_elapsed = relist_started.elapsed();
             annotate_git_status(
                 &watch.git_status,
                 &watch.location,
@@ -807,7 +824,16 @@ fn spawn_pane_watch(mut watch: PaneWatch) {
                 watch.show_git_status,
             )
             .await;
+            let publish_started = std::time::Instant::now();
             publish_changes(&watch, change, entries).await;
+            tracing::debug!(
+                target: "fm_perf",
+                op = "watch_refresh",
+                ?change,
+                relist_ms = relist_elapsed.as_secs_f64() * 1000.0,
+                publish_ms = publish_started.elapsed().as_secs_f64() * 1000.0,
+                "watch-driven refresh published"
+            );
         }
         watch.watches.release(&watch.location).await;
     });
@@ -2006,6 +2032,53 @@ mod tests {
             started.elapsed()
         );
         assert_eq!(snapshot.total_known_entries, Some(20_000));
+    }
+
+    /// Prints navigation/refresh timings for several directory sizes (task 0258 baselines).
+    /// Run with: `cargo test -p fm-application --release --lib directory_timing_baseline -- --ignored --nocapture`.
+    #[tokio::test]
+    #[ignore = "timing report, not an assertion"]
+    async fn directory_timing_baseline() {
+        for count in [300_usize, 10_000, 100_000] {
+            let root = tempfile::tempdir().expect("temporary directory");
+            for index in 0..count {
+                std::fs::write(root.path().join(format!("entry-{index:06}")), b"")
+                    .expect("create fixture entry");
+            }
+            let mut providers = ProviderRegistry::new();
+            providers.register(Arc::new(fm_vfs_local::LocalFileSystemProvider));
+            let service = DirectoryService::new(providers);
+            let mut first = request(PaneId::new(), Uuid::new_v4());
+            first.workspace_id = Uuid::new_v4();
+            first.location =
+                LocationDto::from(Location::from_native_path(root.path()).expect("local location"));
+
+            let started = std::time::Instant::now();
+            let mut snapshot = service.list(first.clone()).await.expect("first page");
+            let first_page = started.elapsed();
+
+            let started = std::time::Instant::now();
+            let mut pages = 1_u32;
+            while let Some(token) = snapshot.continuation_token.clone() {
+                let mut next = first.clone();
+                next.request_id = Uuid::new_v4();
+                next.continuation_token = Some(token);
+                snapshot = service.list(next).await.expect("continuation page");
+                pages += 1;
+            }
+            let rest = started.elapsed();
+
+            let mut refresh = first.clone();
+            refresh.request_id = Uuid::new_v4();
+            let started = std::time::Instant::now();
+            service.refresh(refresh).await.expect("refresh");
+            let refresh_elapsed = started.elapsed();
+
+            println!(
+                "[0258 baseline] entries={count:>7} first_page={first_page:>10.2?} \
+                 remaining_pages({pages})={rest:>10.2?} refresh_first_page={refresh_elapsed:>10.2?}"
+            );
+        }
     }
 
     #[tokio::test]

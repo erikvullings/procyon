@@ -12,6 +12,7 @@ import type {
   WorkspaceCommand,
   WorkspaceProjection,
 } from '../../models';
+import { perfEnd, perfEndAfterPaint, perfStart } from '../../utilities/perf';
 import { dispatchWorkspaceCommand } from '../workspace/dispatch-workspace-command';
 
 /** Client surface required by directory navigation. */
@@ -274,9 +275,17 @@ export function createNavigationController(
     request: ListDirectoryRequest,
     signal: AbortSignal,
   ): Promise<DirectorySnapshot> {
+    const started = perfStart();
     return withSerializedLocationAccess(request.location, request.paneId, () =>
       options.client.listDirectory(request, signal),
-    );
+    ).then((snapshot) => {
+      perfEnd('list-ipc', started, {
+        paged: request.continuationToken !== undefined,
+        entries: snapshot.entries.length,
+        total: snapshot.totalKnownEntries,
+      });
+      return snapshot;
+    });
   }
 
   function clearBackgroundRetry(key: string): void {
@@ -514,6 +523,7 @@ export function createNavigationController(
       }
     }
     const request = begin(paneId, tab.id, 'load');
+    const loadStarted = perfStart();
     if (!loadOptions?.background) {
       publish(paneId, tab.id, loadingView(paneId, tab.id, request, tab.location));
     }
@@ -548,6 +558,11 @@ export function createNavigationController(
       }
       if (isCurrent(paneId, tab.id, request) && snapshot.requestId === request.id) {
         publish(paneId, tab.id, viewFromSnapshot(snapshot));
+        perfEndAfterPaint('load-to-paint', loadStarted, {
+          background: loadOptions?.background === true,
+          reusedSnapshot: loadOptions?.firstSnapshot !== undefined,
+          entries: snapshot.entries.length,
+        });
       }
       const key = tabKey(paneId, tab.id);
       backgroundFailureCounts.delete(key);

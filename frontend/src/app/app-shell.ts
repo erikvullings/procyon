@@ -270,6 +270,7 @@ import {
   deleteQuickFilterDraftPatch,
   setQuickFilterDraftPatch,
 } from '../state';
+import { perfEndAfterPaint, perfStart } from '../utilities/perf';
 import type { RuntimeKind } from '../utilities/runtime';
 import { buildControllers } from './controller-registry';
 
@@ -2088,6 +2089,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   function applyDelta(paneId: PaneId, delta: DirectoryDelta): void {
+    const started = perfStart();
+    try {
+      applyDeltaUntimed(paneId, delta);
+    } finally {
+      perfEndAfterPaint('apply-delta-to-paint', started, { type: delta.type });
+    }
+  }
+
+  function applyDeltaUntimed(paneId: PaneId, delta: DirectoryDelta): void {
     const key = activeTabKey(paneId);
     const current = directories.get(key);
     scheduleBasketRefresh();
