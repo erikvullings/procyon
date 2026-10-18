@@ -1344,4 +1344,5 @@ export const pt = {
     deleteSelectedDuplicates: 'Eliminar duplicados selecionados',
     deleteSelectedDuplicateCount: 'Eliminar {count} duplicado(s) selecionado(s)…',
   },
+  playlist: en.playlist,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

@@ -2140,6 +2140,24 @@ export const en = {
     deleteSelectedDuplicates: 'Delete selected duplicates',
     deleteSelectedDuplicateCount: 'Delete {count} selected duplicate(s)…',
   },
+  playlist: {
+    format: 'Format',
+    trackCount: { 1: '1 track', n: '{n} tracks' },
+    missingCount: { 1: '1 missing', n: '{n} missing' },
+    remoteCount: { 1: '1 network stream', n: '{n} network streams' },
+    checking: 'Checking…',
+    missing: 'Missing',
+    remote: 'Network stream — not fetched',
+    truncated: 'Only the first {n} entries are shown.',
+    tooLarge: 'This playlist is too large to display.',
+    malformed: 'This playlist could not be fully read: {message}',
+    empty: 'This playlist has no entries.',
+    columnNumber: '#',
+    columnTitle: 'Title',
+    columnDuration: 'Length',
+    columnPath: 'Path',
+    editAsText: 'Press F4 to edit the raw text.',
+  },
 } as const satisfies CatalogueShape;
 
 /** Canonical translation groups and keys. Values remain locale-specific. */

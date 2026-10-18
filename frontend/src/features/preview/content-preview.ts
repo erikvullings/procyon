@@ -6,6 +6,7 @@ import {
   VIDEO_EXTENSIONS,
 } from '../directory-table/entry-icons';
 import { ARCHIVE_SUFFIXES } from '../navigation/archive-location';
+import { PLAYLIST_EXTENSIONS } from '../playlist/playlist-parser';
 
 /**
  * Which inline preview renderer applies to an entry (task 0071's renderer registry, shared by
@@ -24,6 +25,7 @@ export type PreviewKind =
   | 'docx'
   | 'pptx'
   | 'archiveSummary'
+  | 'playlist'
   | 'metadata'
   | 'unsupported';
 
@@ -72,6 +74,9 @@ export function resolvePreviewKind(entry: EntrySummary): PreviewKind {
   }
   if (extension === 'pptx') {
     return 'pptx';
+  }
+  if (extension !== undefined && PLAYLIST_EXTENSIONS.includes(extension)) {
+    return 'playlist';
   }
   const lowerName = entry.name.toLocaleLowerCase('en-US');
   if (ARCHIVE_SUFFIXES.some((suffix) => lowerName.endsWith(suffix))) {

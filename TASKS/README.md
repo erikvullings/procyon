@@ -280,7 +280,7 @@ Looking at and editing file contents without leaving the app.
 - [x] 0173 PPTX content preview *(needs 0088)*
 - [x] 0174 macOS Quick Look action *(needs 0059, 0088)*
 - [x] 0260 Seekable media streaming for the viewer *(needs 0088, 0150)*
-- [ ] 0261 Playlist files (M3U, M3U8, PLS, XSPF) as a track list *(needs 0088, 0142)*
+- [x] 0261 Playlist files (M3U, M3U8, PLS, XSPF) as a track list *(needs 0088, 0142)*
 - [ ] 0262 Audio queue and persistent mini-player *(needs 0260, 0261)*
 - [ ] 0263 Play a folder or selection as a queue *(needs 0262)*
 - [ ] 0264 Export selection or basket as a playlist *(needs 0165, 0261)*

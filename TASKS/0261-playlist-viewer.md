@@ -1,6 +1,6 @@
 # 0261 Playlist files (M3U, M3U8, PLS, XSPF) as a track list
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: frontend, backend
 Depends on: 0088, 0142
@@ -18,4 +18,5 @@ Playlist files currently open as plain text; nothing parses them. Showing them a
 - Keep parsing in Rust if the backend also needs it for export (0264).
 
 ## Agent Notes
-- Created 2026-10-18 from the media/playlist feature discussion. No work started.
+- Created 2026-10-18 from the media/playlist feature discussion. 
+- 2026-10-18 claude: Parsing kept in TypeScript (frontend/src/features/playlist/playlist-parser.ts: M3U/M3U8 EXTINF, PLS, XSPF via DOMParser, UTF-8/UTF-16 BOM, Latin-1 fallback for .m3u only, 50k-entry cap, never throws; export in 0264 will reuse the same module). playlist-resolver.ts resolves relative/absolute/file:// entries against the playlist's own location (works inside archives/remote providers), checks existence via resolveLinkTarget (8 concurrent, progressive), classifies http(s)/other URL schemes as remote and never fetches them. F3 shows a virtualised track list (playlist-view.ts, content kind 'playlist'); F4 still edits raw text. i18n group 'playlist' (English fallback in other locales). No backend changes.

@@ -1346,4 +1346,5 @@ export const fr = {
     deleteSelectedDuplicates: 'Supprimer les doublons sélectionnés',
     deleteSelectedDuplicateCount: 'Supprimer {count} doublon(s) sélectionné(s)…',
   },
+  playlist: en.playlist,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

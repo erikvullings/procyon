@@ -11,10 +11,23 @@ import type {
 import { IMAGE_EXTENSIONS } from '../directory-table/entry-icons';
 import { editableLanguageForExtension } from '../editor/editor-language';
 import { archiveEntryLocation, archiveRootForEntry } from '../navigation/archive-location';
+import {
+  decodePlaylistBytes,
+  MAX_PLAYLIST_BYTES,
+  type PlaylistFormat,
+  parsePlaylist,
+  playlistFormatForExtension,
+} from '../playlist/playlist-parser';
+import {
+  checkPlaylistRows,
+  initialPlaylistRows,
+  type ResolvedPlaylistTrack,
+} from '../playlist/playlist-resolver';
 import { copyImageDataUri, copyText } from './clipboard';
 import {
   bytesToDataUri,
   imageMimeTypeFor,
+  previewExtension,
   readEntireFileBytes,
   readFullImageDataUri,
   resolvePreviewKind,
@@ -59,6 +72,7 @@ export type FileViewerClient = Pick<
   FileManagerClient,
   | 'readFileRange'
   | 'mediaUrl'
+  | 'resolveLinkTarget'
   | 'renderPluginPreview'
   | 'searchInFile'
   | 'listDirectory'
@@ -304,6 +318,17 @@ export interface FileViewerArchiveSummaryContent {
   readonly compressedSize: number | undefined;
 }
 
+/** A playlist file shown as a track list (task 0261). Rows start as `checking` and settle as the
+ * existence checks complete. */
+export interface FileViewerPlaylistContent {
+  readonly kind: 'playlist';
+  readonly format: PlaylistFormat;
+  readonly tracks: readonly ResolvedPlaylistTrack[];
+  readonly truncated: boolean;
+  /** Set when the file was malformed; `tracks` holds whatever could be recovered. */
+  readonly error: string | undefined;
+}
+
 /** Occurrence-based PDF search state. Matching text fragments on the current page are highlighted
  * by pdf.js's positioned text layer while previous/next navigation moves between individual hits. */
 export interface FileViewerPdfSearchState {
@@ -366,6 +391,7 @@ export type FileViewerState =
         | FileViewerExternalDocxContent
         | FileViewerExternalPptxContent
         | FileViewerArchiveSummaryContent
+        | FileViewerPlaylistContent
         | FileViewerStructuredTableContent
         | FileViewerStructuredJsonContent
         | FileViewerStructuredFallbackContent
@@ -1319,6 +1345,35 @@ export function createFileViewerController(
     }
   }
 
+  async function loadPlaylist(controller: AbortController, format: PlaylistFormat): Promise<void> {
+    const bytes = await readEntireFileBytes(client, entry, controller.signal, MAX_PLAYLIST_BYTES);
+    if (!isCurrent(controller)) return;
+    if (bytes === undefined) {
+      publish({ status: 'error', entry, message: t('playlist', 'tooLarge') });
+      return;
+    }
+    const parsed = parsePlaylist(decodePlaylistBytes(bytes, format), format);
+    const show = (tracks: readonly ResolvedPlaylistTrack[]): void => {
+      if (!isCurrent(controller)) return;
+      publish({
+        status: 'ready',
+        entry,
+        metadataPanelOpen: initialMetadataOpen,
+        content: {
+          kind: 'playlist',
+          format,
+          tracks,
+          truncated: parsed.truncated,
+          error: parsed.error,
+        },
+      });
+    };
+    const rows = initialPlaylistRows(entry.location, parsed.tracks);
+    show(rows);
+    const settled = await checkPlaylistRows(client, rows, controller.signal, show);
+    show(settled);
+  }
+
   async function loadArchiveSummary(controller: AbortController): Promise<void> {
     if (archiveRootForEntry(entry) === undefined) {
       publish({ status: 'unsupported', entry });
@@ -1418,6 +1473,10 @@ export function createFileViewerController(
         await loadPptx(controller);
       } else if (kind === 'archiveSummary') {
         await loadArchiveSummary(controller);
+      } else if (kind === 'playlist') {
+        const format = playlistFormatForExtension(previewExtension(entry));
+        if (format === undefined) publish({ status: 'unsupported', entry });
+        else await loadPlaylist(controller, format);
       } else if (kind === 'text' && previewRoute() !== undefined) {
         await loadPluginPreview(controller, previewRoute() as PreviewPluginRoute);
       } else if (kind === 'text') {

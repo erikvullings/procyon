@@ -71,6 +71,7 @@ function setup(): {
     client: {
       readFileRange: vi.fn(),
       mediaUrl: vi.fn(),
+      resolveLinkTarget: vi.fn(),
       renderPluginPreview: vi.fn(),
       openDocxPreview: vi.fn(),
       readDocxPreviewResource: vi.fn(),
@@ -894,6 +895,43 @@ describe('file viewer controller', () => {
     expect(context.states.at(-1)).toMatchObject({
       content: { kind: 'image', zoom: 1, fitToContainer: true },
     });
+  });
+
+  it('shows a playlist as a track list and flags targets that do not exist', async () => {
+    const context = setup();
+    const text = '#EXTM3U\n#EXTINF:60,Here\nhere.mp3\ngone.mp3\nhttp://x.test/stream';
+    const bytes = Array.from(new TextEncoder().encode(text));
+    vi.mocked(context.client.readFileRange).mockResolvedValue({
+      data: bytes,
+      offset: 0,
+      length: bytes.length,
+      eof: true,
+    });
+    vi.mocked(context.client.resolveLinkTarget).mockImplementation((location) =>
+      location.uri.endsWith('gone.mp3')
+        ? Promise.reject(new Error('missing'))
+        : Promise.resolve(entry({ name: 'here.mp3' })),
+    );
+    createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'mix.m3u8', extension: 'm3u8' }),
+      update: (state) => context.states.push(state),
+    });
+
+    await vi.waitFor(() => {
+      const last = context.states.at(-1);
+      expect(last?.status === 'ready' && last.content.kind === 'playlist').toBe(true);
+      if (last?.status !== 'ready' || last.content.kind !== 'playlist') return;
+      expect(last.content.tracks.map((track) => track.status)).toEqual([
+        'found',
+        'missing',
+        'remote',
+      ]);
+    });
+    const last = context.states.at(-1);
+    if (last?.status === 'ready' && last.content.kind === 'playlist') {
+      expect(last.content.tracks[0]).toMatchObject({ title: 'Here', durationSeconds: 60 });
+    }
   });
 
   it('streams a video through the seekable media URL without reading file bytes', async () => {

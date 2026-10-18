@@ -26,6 +26,7 @@ import {
   formatEntryModifiedAt,
   formatEntrySize,
 } from '../entry-formatting/entry-formatting';
+import { PlaylistView } from '../playlist/playlist-view';
 import { copyText } from './clipboard';
 import { type FileViewerMetadata, mapLinkFor } from './file-metadata';
 import type {
@@ -2036,7 +2037,9 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                                             ? renderDocxBody(state)
                                             : state.content.kind === 'archiveSummary'
                                               ? renderArchiveSummary(state)
-                                              : renderImageBody(attrs, state),
+                                              : state.content.kind === 'playlist'
+                                                ? m(PlaylistView, { content: state.content })
+                                                : renderImageBody(attrs, state),
           state.status === 'ready' && state.metadataPanelOpen === true
             ? m('.fm-file-viewer-info-panel', [
                 renderMetadataPanel(state.metadata),
