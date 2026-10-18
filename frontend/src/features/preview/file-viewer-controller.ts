@@ -439,6 +439,8 @@ export interface FileViewerControllerOptions {
   /** Opens the Alt+Space metadata/info panel immediately once content loads, so Alt+Space works
    * even when no viewer was already open (it opens one, with the panel visible). */
   readonly initialMetadataPanelOpen?: boolean;
+  /** Runs before audio or video is streamed, for example to unlock an encrypted archive (task 0269). */
+  readonly prepareMedia?: (location: Location, signal: AbortSignal) => Promise<void>;
 }
 
 /** Cancellable operations exposed to the presentational `FileViewer` component. */
@@ -958,6 +960,8 @@ export function createFileViewerController(
   }
 
   async function loadAudio(controller: AbortController): Promise<void> {
+    await options.prepareMedia?.(entry.location, controller.signal);
+    if (!isCurrent(controller)) return;
     const src = await client.mediaUrl(entry.location, controller.signal);
     if (!isCurrent(controller)) return;
     publish({
@@ -982,6 +986,8 @@ export function createFileViewerController(
       });
       return;
     }
+    await options.prepareMedia?.(entry.location, controller.signal);
+    if (!isCurrent(controller)) return;
     const src = await client.mediaUrl(entry.location, controller.signal);
     if (!isCurrent(controller)) return;
     publish({

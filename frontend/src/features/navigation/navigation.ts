@@ -139,7 +139,7 @@ function errorMessage(error: unknown): string {
   return 'Unable to load directory';
 }
 
-function applicationErrorCode(error: unknown): string | undefined {
+export function applicationErrorCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null) return undefined;
   const code = (error as { readonly code?: unknown }).code;
   return typeof code === 'string' ? code : undefined;

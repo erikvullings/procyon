@@ -966,6 +966,41 @@ describe('file viewer controller', () => {
     expect(context.client.readFileRange).not.toHaveBeenCalled();
   });
 
+  it('unlocks the media location before asking for the streaming URL', async () => {
+    const context = setup();
+    const order: string[] = [];
+    vi.mocked(context.client.mediaUrl).mockImplementation(() => {
+      order.push('url');
+      return Promise.resolve('/api/v1/media?location=x');
+    });
+    const prepareMedia = vi.fn(() => {
+      order.push('prepare');
+      return Promise.resolve();
+    });
+    createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'song.mp3', extension: 'mp3' }),
+      prepareMedia,
+      update: (state) => context.states.push(state),
+    });
+
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+    expect(order).toEqual(['prepare', 'url']);
+  });
+
+  it('reports an error when the media location cannot be unlocked', async () => {
+    const context = setup();
+    createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'song.mp3', extension: 'mp3' }),
+      prepareMedia: () => Promise.reject(new Error('password required')),
+      update: (state) => context.states.push(state),
+    });
+
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('error'));
+    expect(context.client.mediaUrl).not.toHaveBeenCalled();
+  });
+
   it('keeps MKV videos external', async () => {
     const context = setup();
     createFileViewerController({

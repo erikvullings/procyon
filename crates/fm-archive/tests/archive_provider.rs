@@ -842,3 +842,143 @@ async fn tar_link_entries_are_rejected_instead_of_being_followed() {
 
     assert!(matches!(result, Err(VfsError::UnsafeArchiveEntry)));
 }
+
+async fn range_of(
+    provider: &ArchiveFileSystemProvider,
+    location: &Location,
+    offset: u64,
+    length: Option<u64>,
+) -> Result<Vec<u8>, VfsError> {
+    let mut reader = provider
+        .read_range(
+            &fm_vfs::EntryRef {
+                id: fm_domain::EntryId::new(),
+                location: location.clone(),
+            },
+            offset,
+            length,
+            CancellationToken::new(),
+        )
+        .await?;
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes).await.expect("read range");
+    Ok(bytes)
+}
+
+fn zip_with(path: &std::path::Path, method: zip::CompressionMethod, name: &str, content: &[u8]) {
+    let file = std::fs::File::create(path).expect("create fixture");
+    let mut writer = ZipWriter::new(file);
+    writer
+        .start_file(
+            name,
+            SimpleFileOptions::default().compression_method(method),
+        )
+        .expect("start entry");
+    writer.write_all(content).expect("write entry");
+    writer.finish().expect("finish fixture");
+}
+
+#[tokio::test]
+async fn archive_entries_support_byte_ranges_for_stored_and_compressed_zip_entries() {
+    let root = tempdir().expect("temporary root");
+    let content: Vec<u8> = (0..=255_u8).cycle().take(5_000).collect();
+    let provider = ArchiveFileSystemProvider::new();
+    assert!(
+        provider
+            .capabilities()
+            .contains(ProviderCapabilities::RANDOM_ACCESS)
+    );
+
+    for (file_name, method) in [
+        ("stored.zip", zip::CompressionMethod::Stored),
+        ("deflated.zip", zip::CompressionMethod::Deflated),
+    ] {
+        let archive_path = root.path().join(file_name);
+        zip_with(&archive_path, method, "track.mp3", &content);
+        let location = zip_location(&archive_path)
+            .join("track.mp3")
+            .expect("entry location");
+
+        assert_eq!(
+            range_of(&provider, &location, 1_000, Some(10))
+                .await
+                .expect("middle"),
+            content[1_000..1_010],
+            "{file_name}"
+        );
+        assert_eq!(
+            range_of(&provider, &location, 4_990, None)
+                .await
+                .expect("tail"),
+            content[4_990..],
+            "{file_name}"
+        );
+        assert!(
+            range_of(&provider, &location, 6_000, Some(10))
+                .await
+                .expect("past end")
+                .is_empty(),
+            "{file_name}"
+        );
+        // A repeated range is served from the same seekable copy.
+        assert_eq!(
+            range_of(&provider, &location, 0, Some(3))
+                .await
+                .expect("head"),
+            content[..3],
+            "{file_name}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn ranges_of_tar_entries_and_encrypted_zip_entries_follow_the_normal_rules() {
+    let root = tempdir().expect("temporary root");
+    let provider = ArchiveFileSystemProvider::new();
+
+    let tar_path = root.path().join("sample.tar");
+    std::fs::write(&tar_path, tar_bytes()).expect("tar fixture");
+    let tar_entry = zip_location(&tar_path)
+        .join("docs")
+        .and_then(|docs| docs.join("report.txt"))
+        .expect("tar entry");
+    assert_eq!(
+        range_of(&provider, &tar_entry, 4, Some(6))
+            .await
+            .expect("tar range"),
+        b"report"
+    );
+    assert_eq!(
+        range_of(&provider, &tar_entry, 4, Some(6))
+            .await
+            .expect("cached tar range"),
+        b"report"
+    );
+
+    let encrypted = root.path().join("encrypted.zip");
+    let file = std::fs::File::create(&encrypted).expect("create fixture");
+    let mut writer = ZipWriter::new(file);
+    writer
+        .start_file(
+            "secret.mp3",
+            SimpleFileOptions::default().with_aes_encryption(zip::AesMode::Aes256, "correct"),
+        )
+        .expect("start encrypted entry");
+    writer.write_all(b"classified bytes").expect("write");
+    writer.finish().expect("finish");
+    let archive_root = zip_location(&encrypted);
+    let entry = archive_root.join("secret.mp3").expect("entry");
+    assert!(matches!(
+        range_of(&provider, &entry, 0, Some(4)).await,
+        Err(VfsError::CredentialRequired)
+    ));
+    provider
+        .cache_password(&archive_root, "correct".to_owned())
+        .expect("cache password");
+    assert_eq!(
+        range_of(&provider, &entry, 11, Some(5))
+            .await
+            .expect("decrypted range"),
+        b"bytes"
+    );
+}

@@ -172,6 +172,7 @@ import {
   type TabController,
   type TabControllerContext,
 } from '../features/panes/tab-controller';
+import { createMediaAccess, type PrepareMedia } from '../features/player/media-access';
 import { MiniPlayer } from '../features/player/mini-player';
 import {
   collectMedia,
@@ -574,6 +575,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       })),
     ];
   }
+
+  /** Opens the archive password prompt; resolves `false` when the user cancels. */
+  function requestArchivePassword(location: Location, invalid: boolean): Promise<boolean> {
+    dialogs.getState().pendingArchiveCredential?.resolve(false);
+    dialogs.clearArchiveCredential();
+    return new Promise<boolean>((resolve) => {
+      dialogs.setPendingArchiveCredential({ location, invalid, resolve });
+      m.redraw();
+    });
+  }
+
+  /** Unlocks encrypted archive entries before they are streamed (task 0269). */
+  const prepareMedia: PrepareMedia = (location, signal) =>
+    createMediaAccess({ client: attrsClient, requestArchivePassword })(location, signal);
 
   /** Selection-driven audio actions: Play, Play next, Add to queue and Save as playlist. */
   function mediaQueueActions(): readonly ActionDescriptor[] {
@@ -1862,6 +1877,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         ...(initialSearch ? { initialSearch } : {}),
         ...(initialPage ? { initialPage } : {}),
         initialMetadataPanelOpen: openMetadata === true,
+        prepareMedia,
         update: (state) => {
           const current = viewerByTab.get(key);
           if (current === undefined) return;
@@ -1906,6 +1922,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           ...(initialSearch ? { initialSearch } : {}),
           ...(initialPage ? { initialPage } : {}),
           initialMetadataPanelOpen: openMetadata === true,
+          prepareMedia,
           update: (state) => {
             const existing = viewerByTab.get(key);
             if (existing === undefined) return;
@@ -5133,6 +5150,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           create: () =>
             createPlayerController({
               client: attrs.client,
+              prepareMedia: (location) => prepareMedia(location),
               getState: () => appState?.player ?? emptyPlayerState,
               update: (next: PlayerState) => {
                 if (appState !== undefined) appState = applyAppPatches(appState, playerPatch(next));
@@ -5164,14 +5182,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 unavailableLocations.add(`${location.providerId}:${location.uri}`);
                 m.redraw();
               },
-              requestArchivePassword: (location, invalid) => {
-                dialogs.getState().pendingArchiveCredential?.resolve(false);
-                dialogs.clearArchiveCredential();
-                return new Promise<boolean>((resolve) => {
-                  dialogs.setPendingArchiveCredential({ location, invalid, resolve });
-                  m.redraw();
-                });
-              },
+              requestArchivePassword,
               // Mirrors the same "on and the directory actually reports git status" gate
               // `pane-content-builder.ts` uses to decide whether to render the column - here it
               // decides whether to *ask the backend to compute* git status at all, so a hidden

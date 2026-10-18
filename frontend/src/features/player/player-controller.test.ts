@@ -36,7 +36,7 @@ function item(id: string): QueueItem {
   };
 }
 
-function setup() {
+function setup(prepareMedia?: (location: { uri: string }) => Promise<void>) {
   const audio = new FakeAudio();
   let state = createInitialPlayerState();
   const mediaUrl = vi.fn((location: { uri: string }) => Promise.resolve(`media:${location.uri}`));
@@ -58,6 +58,7 @@ function setup() {
     createAudio: () => audio as unknown as PlayerAudio,
     mediaSession: session,
     random: () => 0,
+    ...(prepareMedia === undefined ? {} : { prepareMedia }),
   });
   return { audio, controller, mediaUrl, handlers, session, state: () => state };
 }
@@ -101,6 +102,18 @@ describe('createPlayerController', () => {
     await flush();
     expect(state().unavailableIds).toEqual(['a']);
     expect(state().currentId).toBe('b');
+  });
+
+  it('skips a track that cannot be unlocked (for example a cancelled archive password)', async () => {
+    const prepare = vi.fn((location: { uri: string }) =>
+      location.uri.endsWith('a.mp3') ? Promise.reject(new Error('locked')) : Promise.resolve(),
+    );
+    const { controller, state, mediaUrl } = setup(prepare);
+    controller.playItems([item('a'), item('b')]);
+    await flush();
+    expect(state().unavailableIds).toEqual(['a']);
+    expect(state().currentId).toBe('b');
+    expect(mediaUrl).toHaveBeenCalledTimes(1);
   });
 
   it('pauses and resumes through the toggle and applies seeks and volume', async () => {

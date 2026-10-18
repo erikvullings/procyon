@@ -335,7 +335,13 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         // `capabilities_for`, which adds mutation only for ZIP.
         // `CHECKSUM` rides along with `READ`: a checksum is just a streamed
         // read of the decompressed entry (task 0077, spec §6).
-        ProviderCapabilities::LIST | ProviderCapabilities::READ | ProviderCapabilities::CHECKSUM
+        // `RANDOM_ACCESS`: stored ZIP entries are read in place and every other entry is extracted
+        // once into the bounded session cache, so a byte range never re-expands the whole entry
+        // (task 0269).
+        ProviderCapabilities::LIST
+            | ProviderCapabilities::READ
+            | ProviderCapabilities::CHECKSUM
+            | ProviderCapabilities::RANDOM_ACCESS
     }
 
     fn capabilities_for(&self, location: &Location) -> Result<ProviderCapabilities, VfsError> {
@@ -572,6 +578,53 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         Ok(Box::pin(Cursor::new(bytes)))
     }
 
+    async fn read_range(
+        &self,
+        entry: &EntryRef,
+        offset: u64,
+        length: Option<u64>,
+        cancellation: CancellationToken,
+    ) -> Result<ProviderReadStream, VfsError> {
+        if cancellation.is_cancelled() {
+            return Err(VfsError::Cancelled);
+        }
+        let parsed = ParsedArchiveLocation::parse(&entry.location)?;
+        if parsed.inner.is_empty() {
+            return Err(VfsError::IsADirectory {
+                location: entry.location.uri.clone(),
+            });
+        }
+        let password = self.password_for(&parsed.archive_path);
+        let limits = self.limits;
+        let extraction_cache = self.extraction_cache.clone();
+        let source = tokio::task::spawn_blocking(move || {
+            locate_range_source(
+                &extraction_cache,
+                &parsed.archive_path,
+                &parsed.inner,
+                limits,
+                password.as_ref().map(|value| value.as_str()),
+            )
+        })
+        .await
+        .map_err(join_error)??;
+        if cancellation.is_cancelled() {
+            return Err(VfsError::Cancelled);
+        }
+        let available = source.length.saturating_sub(offset);
+        let wanted = length.map_or(available, |length| length.min(available));
+        let mut file = tokio::fs::File::open(&source.path)
+            .await
+            .map_err(|error| io_error(error, &source.path))?;
+        tokio::io::AsyncSeekExt::seek(
+            &mut file,
+            std::io::SeekFrom::Start(source.start.saturating_add(offset)),
+        )
+        .await
+        .map_err(|error| io_error(error, &source.path))?;
+        Ok(Box::pin(tokio::io::AsyncReadExt::take(file, wanted)))
+    }
+
     async fn open_write(
         &self,
         destination: &Location,
@@ -773,6 +826,64 @@ impl SessionExtractionCache {
         }
     }
 
+    /// Path and size of a cached entry, refreshing its place in the eviction order.
+    fn lookup(&mut self, key: &CacheKey) -> Option<(PathBuf, u64)> {
+        let entry = self.entries.get_mut(key)?;
+        if !entry.path.is_file() {
+            let removed = self.entries.remove(key)?;
+            self.total_bytes = self.total_bytes.saturating_sub(removed.size);
+            return None;
+        }
+        self.clock = self.clock.saturating_add(1);
+        entry.last_used = self.clock;
+        Some((entry.path.clone(), entry.size))
+    }
+
+    /// A fresh path inside the private cache directory for a file that is about to be written.
+    fn staging_path(&self) -> PathBuf {
+        self.directory.path().join(Uuid::new_v4().to_string())
+    }
+
+    /// Registers an already written staging file, evicting older entries as needed. Returns the
+    /// registered path, or `None` (deleting the file) when it is larger than the whole cache.
+    fn adopt(&mut self, key: CacheKey, path: PathBuf, size: u64) -> Option<PathBuf> {
+        if size > CACHE_MAX_BYTES {
+            let _ = std::fs::remove_file(path);
+            return None;
+        }
+        if let Some(previous) = self.entries.remove(&key) {
+            self.total_bytes = self.total_bytes.saturating_sub(previous.size);
+            let _ = std::fs::remove_file(previous.path);
+        }
+        while self.entries.len() >= CACHE_MAX_ENTRIES
+            || self.total_bytes.saturating_add(size) > CACHE_MAX_BYTES
+        {
+            let Some(oldest_key) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.last_used)
+                .map(|(key, _)| key.clone())
+            else {
+                break;
+            };
+            if let Some(entry) = self.entries.remove(&oldest_key) {
+                self.total_bytes = self.total_bytes.saturating_sub(entry.size);
+                let _ = std::fs::remove_file(entry.path);
+            }
+        }
+        self.clock = self.clock.saturating_add(1);
+        self.total_bytes = self.total_bytes.saturating_add(size);
+        self.entries.insert(
+            key,
+            CachedEntry {
+                path: path.clone(),
+                size,
+                last_used: self.clock,
+            },
+        );
+        Some(path)
+    }
+
     fn insert(&mut self, key: CacheKey, bytes: &[u8]) -> std::io::Result<()> {
         let size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
         if size > CACHE_MAX_BYTES {
@@ -812,6 +923,167 @@ impl SessionExtractionCache {
         );
         Ok(())
     }
+}
+
+/// Where the bytes of an archive entry can be read at arbitrary offsets.
+struct RangeSource {
+    /// File holding the bytes: the archive itself (stored ZIP entries) or a cached extraction.
+    path: PathBuf,
+    /// Offset of the entry's first byte inside `path`.
+    start: u64,
+    /// Number of bytes in the entry.
+    length: u64,
+}
+
+/// Finds or creates a seekable copy of an entry (task 0269).
+///
+/// An unencrypted `Stored` ZIP entry is already contiguous inside the archive, so it is read in
+/// place. Anything else is expanded once into the session cache (bounded by [`CACHE_MAX_BYTES`])
+/// and every later range is served from that file; an entry too large for the cache reports
+/// [`VfsError::ArchiveResourceLimit`] instead of expanding without bound.
+fn locate_range_source(
+    cache: &Mutex<Option<SessionExtractionCache>>,
+    archive_path: &Path,
+    inner: &str,
+    limits: ArchiveLimits,
+    password: Option<&str>,
+) -> Result<RangeSource, VfsError> {
+    let format = detect_format(archive_path)?;
+    if format == ArchiveFormat::Zip
+        && let Some(source) = stored_zip_source(archive_path, inner)?
+    {
+        return Ok(source);
+    }
+    let key = CacheKey::new(archive_path, inner)?;
+    if let Some((path, length)) = cache
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .as_mut()
+        .and_then(|cache| cache.lookup(&key))
+    {
+        return Ok(RangeSource {
+            path,
+            start: 0,
+            length,
+        });
+    }
+    let staging = cache
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .as_ref()
+        .map(SessionExtractionCache::staging_path)
+        .ok_or_else(|| VfsError::Io {
+            message: "the archive extraction cache is unavailable".into(),
+        })?;
+    let length = if format == ArchiveFormat::Zip {
+        extract_zip_entry_to_file(archive_path, inner, limits, password, &staging)?
+    } else {
+        let bytes = read_archive_entry(archive_path, inner, limits, password)?;
+        std::fs::write(&staging, &bytes).map_err(|error| io_error(error, &staging))?;
+        u64::try_from(bytes.len()).unwrap_or(u64::MAX)
+    };
+    let adopted = cache
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .as_mut()
+        .and_then(|cache| cache.adopt(key, staging.clone(), length));
+    match adopted {
+        Some(path) => Ok(RangeSource {
+            path,
+            start: 0,
+            length,
+        }),
+        None => {
+            let _ = std::fs::remove_file(&staging);
+            Err(VfsError::ArchiveResourceLimit {
+                kind: "seekableEntryBytes",
+            })
+        }
+    }
+}
+
+/// The in-place location of an unencrypted `Stored` ZIP entry, if it is one.
+fn stored_zip_source(archive_path: &Path, inner: &str) -> Result<Option<RangeSource>, VfsError> {
+    let file = File::open(archive_path).map_err(|error| io_error(error, archive_path))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(zip_error)?;
+    let index = archive
+        .index_for_name(inner)
+        .ok_or_else(|| VfsError::NotFound {
+            location: inner.to_owned(),
+        })?;
+    let item = archive.by_index_raw(index).map_err(zip_error)?;
+    if item.is_dir() {
+        return Err(VfsError::IsADirectory {
+            location: inner.to_owned(),
+        });
+    }
+    if item.encrypted() || item.compression() != zip::CompressionMethod::Stored {
+        return Ok(None);
+    }
+    let Some(start) = item.data_start() else {
+        return Ok(None);
+    };
+    Ok(Some(RangeSource {
+        path: archive_path.to_path_buf(),
+        start,
+        length: item.size(),
+    }))
+}
+
+/// Expands one ZIP entry straight into `destination` without holding it in memory.
+fn extract_zip_entry_to_file(
+    archive_path: &Path,
+    inner: &str,
+    limits: ArchiveLimits,
+    password: Option<&str>,
+    destination: &Path,
+) -> Result<u64, VfsError> {
+    let file = File::open(archive_path).map_err(|error| io_error(error, archive_path))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(zip_error)?;
+    let mut item = match password {
+        Some(password) => archive.by_name_decrypt(inner, password.as_bytes()),
+        None => archive.by_name(inner),
+    }
+    .map_err(|error| match error {
+        zip::result::ZipError::FileNotFound => VfsError::NotFound {
+            location: inner.to_owned(),
+        },
+        zip::result::ZipError::UnsupportedArchive(message)
+            if message == zip::result::ZipError::PASSWORD_REQUIRED =>
+        {
+            VfsError::CredentialRequired
+        }
+        zip::result::ZipError::InvalidPassword if password.is_none() => {
+            VfsError::CredentialRequired
+        }
+        zip::result::ZipError::InvalidPassword => VfsError::InvalidCredential,
+        other => zip_error(other),
+    })?;
+    if item.is_dir() {
+        return Err(VfsError::IsADirectory {
+            location: inner.to_owned(),
+        });
+    }
+    check_limits(item.size(), item.compressed_size(), limits)?;
+    if item.size() > CACHE_MAX_BYTES {
+        return Err(VfsError::ArchiveResourceLimit {
+            kind: "seekableEntryBytes",
+        });
+    }
+    let mut output = File::create(destination).map_err(|error| io_error(error, destination))?;
+    // Bound the copy by the declared size so a lying header cannot fill the disk.
+    let copied = std::io::copy(&mut item.by_ref().take(CACHE_MAX_BYTES + 1), &mut output).map_err(
+        |error| VfsError::Io {
+            message: error.to_string(),
+        },
+    )?;
+    if copied > CACHE_MAX_BYTES {
+        let _ = std::fs::remove_file(destination);
+        return Err(VfsError::ArchiveResourceLimit {
+            kind: "seekableEntryBytes",
+        });
+    }
+    Ok(copied)
 }
 
 fn read_cached_rar_entry(

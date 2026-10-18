@@ -5,6 +5,7 @@
  * (progress, ended, error) feed back as transitions, so the tree stays authoritative.
  */
 import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { Location } from '../../models/location';
 import {
   advance,
   clearQueue,
@@ -63,6 +64,8 @@ export interface PlayerControllerOptions {
   readonly createAudio?: () => PlayerAudio;
   readonly mediaSession?: MediaSessionLike | undefined;
   readonly random?: RandomSource;
+  /** Runs before a track is streamed, for example to unlock an encrypted archive (task 0269). */
+  readonly prepareMedia?: (location: Location) => Promise<void>;
 }
 
 export interface PlayerController {
@@ -136,8 +139,8 @@ export function createPlayerController(options: PlayerControllerOptions): Player
       audio.load();
       return;
     }
-    client
-      .mediaUrl(item.location)
+    (options.prepareMedia?.(item.location) ?? Promise.resolve())
+      .then(() => client.mediaUrl(item.location))
       .then((url) => {
         if (disposed || token !== loadToken) return;
         audio.src = url;
