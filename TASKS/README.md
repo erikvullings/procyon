@@ -83,7 +83,7 @@ The dual-pane shell: layout, panes, tabs, sorting, selection, and finding things
 - [x] 0156 Slow directory navigation (several seconds per folder change) in alpha 5 *(three bugs:
   O(n^2) directory-listing round trips, per-entry async overhead, and the dominant one — watch
   registration blocking the response — see task notes)*
-- [ ] 0258 Directory refresh amplification (large dirs, post-operation) *(needs 0156)*
+- [x] 0258 Directory refresh amplification (large dirs, post-operation) *(needs 0156; real cause of slow delete was a 19 MB operation-history.json — see task notes)*
 - [ ] 0253 Branch (flat) view *(needs 0019, 0024)*
 - [ ] 0254 Synchronized browsing *(needs 0027, 0026)*
 

@@ -42,6 +42,8 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 const WATCH_DEBOUNCE: Duration = Duration::from_millis(75);
+/// Longest a continuous burst of file-system events may defer the change notification.
+const WATCH_MAX_BURST: Duration = Duration::from_millis(500);
 const WATCH_INPUT_CAPACITY: usize = 64;
 
 /// Provider for the host's local filesystem.
@@ -890,8 +892,20 @@ impl FileSystemProvider for LocalFileSystemProvider {
                         if signal.is_none() {
                             break;
                         }
-                        tokio::time::sleep(WATCH_DEBOUNCE).await;
-                        while input_rx.try_recv().is_ok() {}
+                        // Trailing-edge debounce: keep waiting while events still arrive, up to a
+                        // bound, so a long burst (a large copy into the watched folder) costs one
+                        // relist per window instead of one per quiet gap.
+                        let burst_started = tokio::time::Instant::now();
+                        loop {
+                            tokio::time::sleep(WATCH_DEBOUNCE).await;
+                            let mut more = false;
+                            while input_rx.try_recv().is_ok() {
+                                more = true;
+                            }
+                            if !more || burst_started.elapsed() >= WATCH_MAX_BURST {
+                                break;
+                            }
+                        }
                         let change = if reset_required.swap(false, Ordering::AcqRel) {
                             ProviderChange::ResetRequired
                         } else {

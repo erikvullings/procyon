@@ -359,3 +359,50 @@ async fn an_unreadable_directory_maps_to_permission_denied_where_enforced() {
         Err(error) => panic!("unexpected unreadable-directory result: {error}"),
     }
 }
+
+#[tokio::test]
+async fn refresh_affected_publishes_nothing_when_the_listing_is_unchanged() {
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    std::fs::write(root.path().join("one.txt"), b"x").expect("must create fixture");
+    let location =
+        Location::from_native_path(root.path()).expect("temp path must be representable");
+    let workspace_id = fm_domain::WorkspaceId::new();
+    let pane_id = PaneId::new();
+    let events = EventBus::new(32);
+    let mut providers = ProviderRegistry::new();
+    providers.register(Arc::new(LocalFileSystemProvider));
+    let service = DirectoryService::with_event_bus(providers, events.clone());
+    let mut first_request = request(pane_id, &location);
+    first_request.workspace_id = workspace_id.into();
+    service
+        .list(first_request)
+        .await
+        .expect("first page must load");
+    let mut subscription = events.subscribe(SessionId::new("test"), [workspace_id], None);
+
+    let affected = std::collections::HashSet::from([location.clone()]);
+    service.refresh_affected(&affected).await;
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(300), subscription.recv())
+            .await
+            .is_err(),
+        "an unchanged listing must not publish a delta"
+    );
+
+    std::fs::write(root.path().join("two.txt"), b"y").expect("must create fixture");
+    service.refresh_affected(&affected).await;
+    let event = tokio::time::timeout(std::time::Duration::from_secs(3), subscription.recv())
+        .await
+        .expect("delta timeout")
+        .expect("event bus open");
+    match event {
+        SubscriptionEvent::Event(event) => match event.payload {
+            BackendEventPayload::DirectoryDelta {
+                delta: DirectoryDeltaPayload::EntriesAdded { entries, .. },
+                ..
+            } => assert_eq!(entries.len(), 1),
+            payload => panic!("expected an added delta, got {payload:?}"),
+        },
+        event => panic!("unexpected subscription item: {event:?}"),
+    }
+}

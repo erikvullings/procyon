@@ -421,9 +421,10 @@ impl DirectoryService {
 
     /// Re-lists every open pane whose directory was affected by an operation.
     ///
-    /// Operation engines do not depend on provider watch support, so this emits
-    /// a reset delta explicitly after each terminal operation as well as the
-    /// normal provider-originated deltas.
+    /// Operation engines do not depend on provider watch support, so this publishes the
+    /// difference explicitly after each terminal operation as well as the normal
+    /// provider-originated deltas. Nothing is published when a watch event already delivered
+    /// the same change.
     pub async fn refresh_affected(&self, locations: &HashSet<fm_domain::Location>) {
         let refreshes = {
             let panes = self.panes.lock().await;
@@ -472,7 +473,7 @@ impl DirectoryService {
                 refresh.show_git_status,
             )
             .await;
-            publish_changes(&refresh, ProviderChange::ResetRequired, entries).await;
+            publish_changes(&refresh, ProviderChange::Changed, entries).await;
         }
     }
 
@@ -932,6 +933,13 @@ async fn publish_changes(
     let Some(previous_full_entries) = state.full_entries.clone() else {
         return;
     };
+    // Several triggers (a watch event, the post-operation refresh) often observe the same
+    // change; the first one publishes it and the rest find nothing to say. Publishing nothing
+    // also keeps the revision sequence gap-free, so the frontend does not reload on a skipped
+    // revision. `ResetRequired` is an explicit resynchronisation request and always publishes.
+    if change != ProviderChange::ResetRequired && *previous_full_entries == entries {
+        return;
+    }
     state.revision += 1;
     let revision = state.revision;
     let (total_known_size, total_known_file_count) = aggregate_totals(&entries);

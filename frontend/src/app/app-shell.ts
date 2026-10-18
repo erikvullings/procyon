@@ -2010,9 +2010,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     await workspaceController.switchWorkspace(workspaceId);
   }
 
+  const settledRefreshTimers = new Map<PaneId, ReturnType<typeof setTimeout>>();
+
   function refetchAffectedPanes(
     paneId?: PaneId,
-    options?: { readonly background?: boolean },
+    options?: { readonly background?: boolean; readonly settleMs?: number },
   ): void {
     refreshDirectoryTree();
     scheduleBasketRefresh();
@@ -2023,13 +2025,36 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         workspace.panesById[candidate]?.tabsById[workspace.panesById[candidate]?.activeTabId ?? ''];
       if (basketTabIds.has(workspace.panesById[candidate]?.activeTabId ?? '')) continue;
       if (activeTab?.location.uri.startsWith('search://')) continue;
+      if (paneId !== undefined && candidate !== paneId) continue;
       // Background refreshes are used for opportunistic reloads (e.g. deltas/watch events),
       // while some callers (operation completion) request a foreground reload to guarantee
       // authoritative source/destination listings after mutating actions.
-      if (paneId === undefined || candidate === paneId) {
-        void navigation.load(candidate, background ? { background: true } : undefined);
+      if (options?.settleMs !== undefined) {
+        scheduleSettledRefresh(candidate, options.settleMs, background);
+        continue;
       }
+      void navigation.load(candidate, background ? { background: true } : undefined);
     }
+  }
+
+  /**
+   * Safety-net reload for a pane after a mutating operation. The backend already re-lists the
+   * affected panes itself and pushes the result as a directory delta, so reloading immediately
+   * made every operation cost two or three full relists of the same folder. This waits `settleMs`
+   * and only reloads when no delta or reload reached the pane in the meantime.
+   */
+  function scheduleSettledRefresh(paneId: PaneId, settleMs: number, background: boolean): void {
+    const startingRevision = directories.get(activeTabKey(paneId))?.revision;
+    const pending = settledRefreshTimers.get(paneId);
+    if (pending !== undefined) clearTimeout(pending);
+    settledRefreshTimers.set(
+      paneId,
+      setTimeout(() => {
+        settledRefreshTimers.delete(paneId);
+        if (directories.get(activeTabKey(paneId))?.revision !== startingRevision) return;
+        void navigation.load(paneId, background ? { background: true } : undefined);
+      }, settleMs),
+    );
   }
 
   function removeOperationSourcesFromSearchResults(operation: Operation): void {

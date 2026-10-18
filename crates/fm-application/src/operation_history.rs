@@ -29,6 +29,7 @@ const OPERATION_HISTORY_MAX_AGE_DAYS: i64 = 30;
 /// 5.7M-item cache directory once accumulated 38k errors (15 MB), which made every history save
 /// serialize and fsync a 19 MB file on the scheduler's critical path.
 const OPERATION_HISTORY_MAX_ENTRY_ERRORS: usize = 200;
+const OMITTED_ERRORS_SUFFIX: &str = " further errors are omitted from the saved history";
 
 /// Crash-safe operation snapshots stored beside settings.
 pub(crate) struct OperationHistory {
@@ -158,8 +159,21 @@ fn cap_entry_errors(operation: &mut Operation) {
     operation
         .errors
         .truncate(OPERATION_HISTORY_MAX_ENTRY_ERRORS);
-    summary.message = format!("{omitted} further errors are omitted from the saved history");
+    summary.message = format!("{omitted}{OMITTED_ERRORS_SUFFIX}");
     operation.errors.push(summary);
+}
+
+/// Total entry failures, including those folded into a [`cap_entry_errors`] summary entry.
+fn entry_error_count(operation: &Operation) -> usize {
+    let omitted = operation
+        .errors
+        .last()
+        .and_then(|error| error.message.strip_suffix(OMITTED_ERRORS_SUFFIX))
+        .and_then(|count| count.parse::<usize>().ok());
+    match omitted {
+        Some(omitted) => operation.errors.len() - 1 + omitted,
+        None => operation.errors.len(),
+    }
 }
 
 /// Atomically replaces the history file (temporary file, `fsync`, rename).
@@ -464,8 +478,11 @@ impl OperationSnapshotObserver for ApplicationOperationObserver {
     }
 }
 
-pub(crate) fn operation_dto(operation: Operation, queue_position: Option<u64>) -> OperationDto {
+pub(crate) fn operation_dto(mut operation: Operation, queue_position: Option<u64>) -> OperationDto {
+    // Summarize first: capping replaces the excess errors with one summary entry, and a running
+    // operation that fails on millions of entries must not ship them all to the client.
     let result_summary = operation_result_summary(&operation);
+    cap_entry_errors(&mut operation);
     let undo = operation_undo_dto(&operation);
     OperationDto {
         id: operation.id.into(),
@@ -591,7 +608,7 @@ fn operation_result_summary(operation: &Operation) -> Option<String> {
         )),
         fm_operations::OperationState::CompletedWithWarnings => Some(format!(
             "Completed with {} warnings.",
-            operation.errors.len()
+            entry_error_count(operation)
         )),
         fm_operations::OperationState::Cancelled => Some(format!(
             "Cancelled after {} items.",
@@ -669,6 +686,7 @@ mod tests {
             record.errors.last().map(|error| error.message.as_str()),
             Some("800 further errors are omitted from the saved history")
         );
+        assert_eq!(entry_error_count(&record), 1_000);
     }
 
     #[test]

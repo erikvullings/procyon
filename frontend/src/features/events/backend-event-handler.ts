@@ -35,6 +35,9 @@ import {
 
 const FAST_OPERATION_DISMISS_THRESHOLD_MS = 500;
 const AUTO_DISMISS_DELAY_MS = 5_000;
+/** The backend pushes a directory delta for affected panes right after an operation; a fallback
+ * reload only runs when none arrived within this window. */
+const OPERATION_REFRESH_SETTLE_MS = 400;
 
 function shouldRefreshOnTerminalOperation(operation: Operation): boolean {
   if (operation.kind === 'search' || operation.kind === 'compare') return false;
@@ -90,7 +93,10 @@ export interface BackendEventContext {
   /** Returns the current revision for the active tab in `paneId`, or `undefined` if unknown. */
   getActiveDirectoryRevision(paneId: PaneId): number | undefined;
   applyDelta(paneId: PaneId, delta: DirectoryDelta): void;
-  refetchAffectedPanes(paneId?: PaneId, options?: { readonly background?: boolean }): void;
+  refetchAffectedPanes(
+    paneId?: PaneId,
+    options?: { readonly background?: boolean; readonly settleMs?: number },
+  ): void;
 
   // Plugins
   getPlugins(): readonly PluginDescriptor[];
@@ -288,7 +294,12 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
             ctx.setOperations(next);
             // Operation completion must force an authoritative refresh so both source and
             // destination panes reflect move/copy/rename/delete outcomes immediately.
-            if (panesNeedRefresh) ctx.refetchAffectedPanes(undefined, { background: false });
+            if (panesNeedRefresh) {
+              ctx.refetchAffectedPanes(undefined, {
+                background: false,
+                settleMs: OPERATION_REFRESH_SETTLE_MS,
+              });
+            }
             ctx.redraw();
           }),
         );
