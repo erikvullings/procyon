@@ -2057,6 +2057,15 @@ mod tests {
             let mut snapshot = service.list(first.clone()).await.expect("first page");
             let first_page = started.elapsed();
 
+            let dto: fm_transport_dto::DirectorySnapshotDto = snapshot.clone().into();
+            let started = std::time::Instant::now();
+            let json = serde_json::to_vec(&dto).expect("serialize snapshot");
+            println!(
+                "[0258 baseline] entries={count:>7} page one json={} bytes, serialize={:.2?}",
+                json.len(),
+                started.elapsed()
+            );
+
             let started = std::time::Instant::now();
             let mut pages = 1_u32;
             while let Some(token) = snapshot.continuation_token.clone() {

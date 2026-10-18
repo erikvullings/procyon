@@ -1693,11 +1693,19 @@ pub(crate) async fn list_directory(
     state: State<'_, AppState>,
     request: ListDirectoryRequest,
 ) -> Result<DirectorySnapshotDto, ApplicationErrorDto> {
-    state
+    let started = std::time::Instant::now();
+    let result = state
         .service
         .list_directory(request)
         .await
-        .map_err(|error| error.into_dto(Uuid::new_v4()))
+        .map_err(|error| error.into_dto(Uuid::new_v4()));
+    tracing::debug!(
+        target: "fm_perf",
+        op = "tauri_list_directory",
+        command_ms = started.elapsed().as_secs_f64() * 1000.0,
+        "command handler finished (before IPC serialization)"
+    );
+    result
 }
 
 /// Refreshes a directory through the same application service as Axum.
