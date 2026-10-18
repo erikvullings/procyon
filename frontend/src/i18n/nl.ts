@@ -3,6 +3,16 @@ import type { LocalisedCatalogue } from './types';
 
 /** Dutch catalogue (task 0098). Keep the key set identical to `en`. */
 export const nl = {
+  walkthroughs: {
+    ...en.walkthroughs,
+    title: 'Rondleidingen',
+    close: 'Rondleidingen sluiten',
+    chooseGuide: 'Kies een gids',
+    englishContent: 'De gidsen zijn voorlopig alleen in het Engels beschikbaar.',
+    invitation: 'Nieuw bij Procyon? Bekijk een korte rondleiding.',
+    watch: 'Bekijk rondleiding',
+    dismiss: 'Uitnodiging sluiten',
+  },
   basket: {
     ...en.basket,
     title: 'Verzamelmand',

@@ -24,6 +24,7 @@ import {
   OPEN_DIAGNOSTICS_MENU_ID,
   OPEN_SETTINGS_MENU_ID,
   OPEN_SHORTCUTS_MENU_ID,
+  OPEN_WALKTHROUGHS_MENU_ID,
   SYNC_WORKSPACE_MENU_ID,
   WINDOW_OPEN_WORKSPACE_MENU_ID_PREFIX,
 } from './native-menu-dispatch';
@@ -44,6 +45,7 @@ interface ContextMocks {
   readonly openSettingsDialog: ReturnType<typeof vi.fn<() => void>>;
   readonly openDiagnostics: ReturnType<typeof vi.fn<() => void>>;
   readonly openShortcutsHelp: ReturnType<typeof vi.fn<() => void>>;
+  readonly openWalkthroughs: ReturnType<typeof vi.fn<() => void>>;
   readonly activateTabByKey: ReturnType<typeof vi.fn<(tabKey: string) => void>>;
   readonly openNewTab: ReturnType<typeof vi.fn<(paneId: PaneId) => void>>;
   readonly closeActiveTab: ReturnType<typeof vi.fn<(paneId: PaneId) => void>>;
@@ -74,6 +76,7 @@ function contextMocks(
   const openSettingsDialog = vi.fn<() => void>();
   const openDiagnostics = vi.fn<() => void>();
   const openShortcutsHelp = vi.fn<() => void>();
+  const openWalkthroughs = vi.fn<() => void>();
   const activateTabByKey = vi.fn<(tabKey: string) => void>();
   const openNewTab = vi.fn<(paneId: PaneId) => void>();
   const closeActiveTab = vi.fn<(paneId: PaneId) => void>();
@@ -95,6 +98,7 @@ function contextMocks(
     openSettingsDialog,
     openDiagnostics,
     openShortcutsHelp,
+    openWalkthroughs,
     activateTabByKey,
     openNewTab,
     closeActiveTab,
@@ -114,6 +118,7 @@ function contextMocks(
       openSettingsDialog,
       openDiagnostics,
       openShortcutsHelp,
+      openWalkthroughs,
       activateTabByKey,
       openNewTab,
       closeActiveTab,
@@ -133,6 +138,11 @@ function contextMocks(
 }
 
 describe('dispatchNativeMenuAction', () => {
+  it('opens bundled walkthroughs from Help', () => {
+    const mocks = contextMocks();
+    dispatchNativeMenuAction(mocks.context, OPEN_WALKTHROUGHS_MENU_ID);
+    expect(mocks.openWalkthroughs).toHaveBeenCalledOnce();
+  });
   it('opens keyboard shortcut help through the frontend path', () => {
     const mocks = contextMocks();
     dispatchNativeMenuAction(mocks.context, OPEN_SHORTCUTS_MENU_ID);

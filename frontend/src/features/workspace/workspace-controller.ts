@@ -63,6 +63,7 @@ export interface WorkspaceControllerContext {
   releaseWorkspaceTabState(outgoing: WorkspaceProjection): void;
   loadPanesActiveFirst(ws: WorkspaceProjection): void;
   syncWorkspaceViewSettings?(): void;
+  onInitialWorkspaceReady?(freshInstall: boolean): void;
 }
 
 export interface WorkspaceController {
@@ -249,6 +250,7 @@ export function createWorkspaceController(
       const { loaded, summaries } = await openOrCreateDefaultWorkspace(request.signal);
       activateWorkspace(loaded);
       context.setWorkspaceSummaries(summaries);
+      context.onInitialWorkspaceReady?.(capabilities.freshInstall);
     } catch (error: unknown) {
       if (request.signal.aborted) return;
       context.setWorkspaceError(

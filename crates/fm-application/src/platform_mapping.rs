@@ -282,6 +282,7 @@ pub(crate) fn runtime_capabilities_dto_with_semantic(
     RuntimeCapabilitiesDto {
         runtime,
         platform: detect_platform(),
+        fresh_install: false,
         native_menus: capabilities.contains(PlatformCapabilities::NATIVE_MENUS),
         platform_context_menu: runtime == RuntimeKindDto::Tauri
             && capabilities.contains(PlatformCapabilities::PLATFORM_CONTEXT_MENU),

@@ -55,6 +55,10 @@ running server, but restarting that server interrupts its file operations.
 
 ## Quick start
 
+New to Procyon? Start with the [task-based walkthroughs](docs/walkthroughs/README.md)
+for a two-pane copy, finding files, remote connections, workspaces, and
+optional semantic features. They are also available in the app's Help panel.
+
 The default development runtime uses built-in mock data, so it does not need a Rust server.
 
 ```bash
