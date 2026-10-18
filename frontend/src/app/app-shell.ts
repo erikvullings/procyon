@@ -155,7 +155,13 @@ import {
   type TabControllerContext,
 } from '../features/panes/tab-controller';
 import { MiniPlayer } from '../features/player/mini-player';
-import { PLAYER_CLIENT_ACTIONS } from '../features/player/player-actions';
+import {
+  collectMedia,
+  MAX_QUEUED_TRACKS,
+  type QueueMode,
+  queueItemsFromEntries,
+} from '../features/player/play-selection';
+import { MEDIA_QUEUE_ACTIONS, PLAYER_CLIENT_ACTIONS } from '../features/player/player-actions';
 import {
   createPlayerController,
   type PlayerController,
@@ -237,6 +243,7 @@ import {
 } from '../keybindings/dispatcher';
 import type {
   ActionDescriptor,
+  ActionInvocationContext,
   AppUpdateInfo,
   BackendEvent,
   Connection,
@@ -517,9 +524,74 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   /** Dispatches frontend-only `client.*` actions that need shell state (the audio player). */
-  function invokeClientAction(actionId: string): boolean {
+  function mediaQueueActions(): readonly ActionDescriptor[] {
+    return MEDIA_QUEUE_ACTIONS.map(({ id, title }) => ({
+      id,
+      title: t('player', title),
+      category: 'tools',
+      defaultShortcuts: [],
+      contextRequirements: { requiresSelection: true },
+      source: { kind: 'core' as const },
+    }));
+  }
+
+  /** Queues the selection (or cursor entry) of a pane: Play, Play next, Add to queue (task 0263). */
+  function queueSelection(
+    mode: QueueMode,
+    recursive: boolean,
+    invocation: ActionInvocationContext | undefined,
+  ): void {
+    const player = playerController;
+    const paneId = invocation?.paneId ?? workspace?.activePaneId;
+    if (player === undefined || workspace === undefined || paneId === undefined) return;
+    const directory = directories.get(activeTabKey(paneId));
+    const ids = new Set(
+      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
+    );
+    const cursorId =
+      invocation?.cursorEntryId ?? selections.get(activeTabKey(paneId))?.cursorEntryId;
+    const chosen = (directory?.entries ?? []).filter((entry) =>
+      ids.size > 0 ? ids.has(entry.id) : entry.id === cursorId,
+    );
+    const pane = workspace.panesById[paneId];
+    const tab = pane?.tabsById[pane.activeTabId];
+    void collectMedia(chosen, {
+      client: attrsClient,
+      workspaceId: workspace.id,
+      view: {
+        ...(tab?.view.sort === undefined ? {} : { sort: tab.view.sort }),
+        ...(tab === undefined
+          ? {}
+          : { showHidden: tab.view.showHidden, foldersFirst: tab.view.foldersFirst }),
+      },
+      recursive,
+    })
+      .then(({ entries, truncated }) => {
+        if (entries.length === 0) {
+          toast({ html: t('player', 'noPlayableTracks') });
+          return;
+        }
+        const items = queueItemsFromEntries(entries);
+        if (mode === 'play') player.playItems(items);
+        else if (mode === 'next') player.enqueueNext(items);
+        else player.enqueue(items);
+        if (mode !== 'play') toast({ html: t('player', 'queued', items.length) });
+        if (truncated) toast({ html: t('player', 'truncatedQueue', { n: MAX_QUEUED_TRACKS }) });
+        m.redraw();
+      })
+      .catch((error: unknown) => {
+        toast({ html: error instanceof Error ? error.message : String(error) });
+      });
+  }
+
+  function invokeClientAction(actionId: string, invocation?: ActionInvocationContext): boolean {
     const player = playerController;
     if (player === undefined) return false;
+    const queueAction = MEDIA_QUEUE_ACTIONS.find((candidate) => candidate.id === actionId);
+    if (queueAction !== undefined) {
+      queueSelection(queueAction.mode, queueAction.recursive, invocation);
+      return true;
+    }
     if (actionId === 'client.playerTogglePlay') player.togglePlay();
     else if (actionId === 'client.playerNext') player.next();
     else if (actionId === 'client.playerPrevious') player.previous();
@@ -557,6 +629,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   function clientOnlyActions(): readonly ActionDescriptor[] {
     const hasQueue = (appState?.player.queue.length ?? 0) > 0;
     return [
+      ...mediaQueueActions(),
       ...(hasQueue
         ? PLAYER_CLIENT_ACTIONS.map(({ id, title }) => ({
             id,
@@ -4158,7 +4231,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getCurrentSettings: () => currentSettings,
     getClient: () => attrsClient,
     openPluginPane,
-    getRegisteredActions: () => registeredActions,
+    getRegisteredActions: () => [...registeredActions, ...mediaQueueActions()],
     getPlugins: () => plugins,
     getWorkspace: () => workspace,
     getNavigation: () => navigation,
@@ -6010,7 +6083,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               contextMenu === undefined
                 ? []
                 : menuActionsForContext(
-                    localisedRegisteredActions(),
+                    [...localisedRegisteredActions(), ...mediaQueueActions()],
                     actionCommandController.commandAvailabilityContext(
                       contextMenu.entries,
                       contextMenu.paneId,

@@ -262,6 +262,29 @@ describe('action-command-controller uninstallApplication wiring', () => {
     expect(getClient).not.toHaveBeenCalled();
   });
 
+  it('routes client.* actions the shell handles (audio queue) without the backend invoke', () => {
+    const invokeClientAction = vi.fn().mockReturnValue(true);
+    const getClient = vi.fn();
+    const play = {
+      id: 'client.play',
+      title: 'Play',
+      category: 'tools',
+      defaultShortcuts: [],
+      contextRequirements: { requiresSelection: true },
+      source: { kind: 'core' as const },
+    };
+    const context = fakeContext({ invokeClientAction, getClient });
+
+    createActionCommandController(context).invokePaletteAction(play, undefined, {
+      selectedEntryIds: ['a' as EntryId],
+    });
+
+    expect(invokeClientAction).toHaveBeenCalledWith('client.play', {
+      selectedEntryIds: ['a'],
+    });
+    expect(getClient).not.toHaveBeenCalled();
+  });
+
   it('opens the Multi-Rename Tool from the palette instead of the generic backend invoke', () => {
     const openMultiRenameForActivePane = vi.fn();
     const getClient = vi.fn();

@@ -468,3 +468,48 @@ describe('command availability', () => {
     });
   });
 });
+
+describe('media queue actions (task 0263)', () => {
+  const play = action('client.play', { requiresSelection: true });
+  const song = { ...archiveEntry('song.mp3') };
+
+  it('is available for media files and folders but not for other files', () => {
+    expect(evaluateActionAvailability(play, context({ selectedEntries: [song] })).available).toBe(
+      true,
+    );
+    expect(
+      evaluateActionAvailability(play, context({ selectedEntries: [entry('directory')] }))
+        .available,
+    ).toBe(true);
+    expect(
+      evaluateActionAvailability(play, context({ selectedEntries: [archiveEntry('notes.txt')] }))
+        .available,
+    ).toBe(false);
+  });
+
+  it('appears in the context menu of a selection, right after the open actions', () => {
+    const actions = menuActionsForContext(
+      [
+        action('core.open'),
+        action('client.addToQueue'),
+        action('client.play'),
+        action('core.copy'),
+      ],
+      context({ selectedEntries: [song] }),
+    );
+    expect(actions.map((candidate) => candidate.action.id)).toEqual([
+      'core.open',
+      'client.play',
+      'client.addToQueue',
+      'core.copy',
+    ]);
+  });
+
+  it('keeps the recursive variants out of the context menu', () => {
+    const actions = menuActionsForContext(
+      [action('client.playRecursive')],
+      context({ selectedEntries: [song] }),
+    );
+    expect(actions).toEqual([]);
+  });
+});
