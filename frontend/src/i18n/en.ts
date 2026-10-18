@@ -353,6 +353,8 @@ export const en = {
       'Checks after startup. Procyon always asks before downloading, installing, and restarting.',
     checkForUpdates: 'Check now',
     checkingForUpdates: 'Checking…',
+    currentAppVersion: 'Installed version: {version}',
+    latestAppVersion: 'Version available online: {version}',
     appIsUpToDate: 'Procyon is up to date.',
     updateAvailable: 'Procyon {version} is available.',
     updateAvailableDescription: 'Update Procyon {current} to {version}?',

@@ -1081,7 +1081,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       return;
     }
     try {
-      availableAppUpdate = await client.checkForAppUpdate();
+      availableAppUpdate = (await client.checkForAppUpdate()).update;
       m.redraw();
     } catch (error) {
       console.warn('Automatic application update check failed.', error);

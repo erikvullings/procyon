@@ -1160,7 +1160,11 @@ export class HttpFileManagerClient implements FileManagerClient {
     return settingsFromDto(response.data);
   }
 
-  checkForAppUpdate(_signal?: AbortSignal): Promise<undefined> {
+  getAppVersion(_signal?: AbortSignal): Promise<undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  checkForAppUpdate(_signal?: AbortSignal): Promise<never> {
     return Promise.reject(new Error('Application updates are available only in the desktop app.'));
   }
 

@@ -337,6 +337,8 @@ export const nl = {
       'Controleert na het opstarten. Procyon vraagt altijd toestemming voor downloaden, installeren en opnieuw starten.',
     checkForUpdates: 'Nu controleren',
     checkingForUpdates: 'Controleren…',
+    currentAppVersion: 'Geïnstalleerde versie: {version}',
+    latestAppVersion: 'Online beschikbare versie: {version}',
     appIsUpToDate: 'Procyon is up-to-date.',
     updateAvailable: 'Procyon {version} is beschikbaar.',
     updateAvailableDescription: 'Procyon {current} bijwerken naar {version}?',

@@ -4,12 +4,16 @@ const invoke = vi.fn();
 const onDragDropEvent = vi.fn();
 const openUrl = vi.fn();
 const check = vi.fn();
+const getVersion = vi.fn();
 const relaunch = vi.fn();
 
 class MockChannel<T> {
   constructor(public onmessage: (message: T) => void) {}
 }
 
+vi.mock('@tauri-apps/api/app', () => ({
+  getVersion: () => getVersion(),
+}));
 vi.mock('@tauri-apps/api/core', () => ({
   Channel: MockChannel,
   invoke: (...args: unknown[]) => invoke(...args),
@@ -75,6 +79,7 @@ afterEach(() => {
   onDragDropEvent.mockReset();
   openUrl.mockReset();
   check.mockReset();
+  getVersion.mockReset();
   relaunch.mockReset();
 });
 
@@ -173,9 +178,13 @@ describe('TauriFileManagerClient', () => {
 
     await expect(client.checkForAppUpdate()).resolves.toEqual({
       currentVersion: '0.1.5',
-      version: '0.1.6',
-      date: '2026-08-01T12:00:00Z',
-      body: 'Update notes',
+      latestVersion: '0.1.6',
+      update: {
+        currentVersion: '0.1.5',
+        version: '0.1.6',
+        date: '2026-08-01T12:00:00Z',
+        body: 'Update notes',
+      },
     });
     await client.installAppUpdate(progress);
 
@@ -188,6 +197,20 @@ describe('TauriFileManagerClient', () => {
       { event: 'finished' },
     ]);
     expect(relaunch).toHaveBeenCalledOnce();
+  });
+
+  it('reports the installed and online versions when no update is offered', async () => {
+    check.mockResolvedValue(null);
+    getVersion.mockResolvedValue('0.6.0');
+    invoke.mockResolvedValue('0.6.0');
+    const client = new TauriFileManagerClient();
+
+    await expect(client.getAppVersion()).resolves.toBe('0.6.0');
+    await expect(client.checkForAppUpdate()).resolves.toEqual({
+      currentVersion: '0.6.0',
+      latestVersion: '0.6.0',
+    });
+    expect(invoke).toHaveBeenCalledWith('get_app_update_channel_version');
   });
 
   it('propagates Ask cancellation to the desktop host', async () => {

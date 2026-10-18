@@ -335,6 +335,8 @@ export const pt = {
       'Verifica após o arranque. O Procyon pede sempre confirmação antes de transferir, instalar e reiniciar.',
     checkForUpdates: 'Verificar agora',
     checkingForUpdates: 'A verificar…',
+    currentAppVersion: 'Versão instalada: {version}',
+    latestAppVersion: 'Versão disponível online: {version}',
     appIsUpToDate: 'O Procyon está atualizado.',
     updateAvailable: 'O Procyon {version} está disponível.',
     updateAvailableDescription: 'Atualizar o Procyon {current} para {version}?',

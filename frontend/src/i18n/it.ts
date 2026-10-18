@@ -333,6 +333,8 @@ export const it = {
       'Controlla dopo l’avvio. Procyon chiede sempre conferma prima di scaricare, installare e riavviare.',
     checkForUpdates: 'Controlla ora',
     checkingForUpdates: 'Controllo…',
+    currentAppVersion: 'Versione installata: {version}',
+    latestAppVersion: 'Versione disponibile online: {version}',
     appIsUpToDate: 'Procyon è aggiornato.',
     updateAvailable: 'È disponibile Procyon {version}.',
     updateAvailableDescription: 'Aggiornare Procyon {current} a {version}?',
