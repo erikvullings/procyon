@@ -508,7 +508,7 @@ jobs:
         run: |
           if [[ "$APPROVE_EXPERIMENTAL_GEMMA" == "true" ]]; then
             SOURCE_REVISION="$(jq -r '.sourceRevision' docs/evaluations/semantic-gemma-experimental-v1.json)"
-            RELEASE_NOTES="$(cat docs/evaluations/embeddinggemma-experimental-release-2026-10-15.md)"
+            RELEASE_NOTES="$(cat docs/evaluations/embeddinggemma-experimental-release-2026-10-16.md)"
           else
             SOURCE_REVISION="$(jq -r '.sourceRevision' docs/evaluations/semantic-component-release-v1.json)"
             RELEASE_NOTES="Qualified optional semantic components for Procyon."
