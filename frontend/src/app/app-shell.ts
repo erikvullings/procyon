@@ -200,6 +200,8 @@ import {
 import { tauriTerminalClient } from '../features/terminal/terminal-client';
 import { TerminalDrawer } from '../features/terminal/terminal-drawer';
 import { focusOpenedTerminal, isTerminalVisible } from '../features/terminal/terminal-state';
+import { WalkthroughPanel } from '../features/walkthroughs/walkthrough-panel';
+import type { WalkthroughId } from '../features/walkthroughs/walkthroughs';
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
 import {
   createPaneContentBuilder,
@@ -464,6 +466,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let connections: readonly Connection[] = [];
   let connectionsManagerOpen = false;
   let shortcutsHelpOpen = false;
+  let walkthroughsOpen = false;
+  let walkthroughInvitationVisible = false;
+  let selectedWalkthrough: WalkthroughId = 'basics';
   let semanticAssistantAvailable = false;
   let knowledgeSearchAvailable = false;
   let knowledgeSearchChecked = false;
@@ -674,6 +679,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     },
     openShortcutsHelp: () => {
       shortcutsHelpOpen = true;
+      m.redraw();
+    },
+    openWalkthroughs: () => {
+      walkthroughsOpen = true;
       m.redraw();
     },
     activateTabByKey: (key) => {
@@ -1082,7 +1091,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       return;
     }
     try {
-      availableAppUpdate = await client.checkForAppUpdate();
+      availableAppUpdate = (await client.checkForAppUpdate()).update;
       m.redraw();
     } catch (error) {
       console.warn('Automatic application update check failed.', error);
@@ -3506,6 +3515,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   const workspaceControllerContext: WorkspaceControllerContext = {
     getWorkspace: () => workspace,
+    onInitialWorkspaceReady: (freshInstall) => {
+      if (!freshInstall) return;
+      try {
+        const key = 'procyon.walkthroughInvitationShown';
+        if (localStorage.getItem(key) !== null) return;
+        localStorage.setItem(key, '1');
+        walkthroughInvitationVisible = true;
+      } catch (error: unknown) {
+        console.warn('Could not persist the walkthrough invitation; it will not be shown.', error);
+      }
+    },
     setWorkspace: (ws) => {
       workspace = ws;
     },
@@ -5418,6 +5438,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               ),
             ),
             m(
+              'button.fm-help-trigger',
+              {
+                type: 'button',
+                'aria-label': t('walkthroughs', 'title'),
+                onclick: () => {
+                  walkthroughsOpen = true;
+                },
+              },
+              t('menu', 'help'),
+            ),
+            m(
               'details.fm-settings-disclosure',
               {
                 oncreate: ({ dom }) => {
@@ -5538,6 +5569,62 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               ],
             ),
           ]),
+          walkthroughsOpen
+            ? m(WalkthroughPanel, {
+                selected: selectedWalkthrough,
+                onSelect: (id) => {
+                  selectedWalkthrough = id;
+                },
+                onClose: () => {
+                  walkthroughsOpen = false;
+                  document.querySelector<HTMLButtonElement>('.fm-help-trigger')?.focus();
+                },
+              })
+            : undefined,
+          walkthroughInvitationVisible
+            ? m(
+                'aside.fm-walkthrough-invitation',
+                { 'aria-label': t('walkthroughs', 'invitation') },
+                [
+                  m('span.fm-walkthrough-invitation-copy', t('walkthroughs', 'invitation')),
+                  m(
+                    'button.fm-walkthrough-invitation-action',
+                    {
+                      type: 'button',
+                      onclick: () => {
+                        walkthroughInvitationVisible = false;
+                        selectedWalkthrough = 'basics';
+                        walkthroughsOpen = true;
+                      },
+                    },
+                    t('walkthroughs', 'watch'),
+                  ),
+                  m(
+                    'button.fm-walkthrough-invitation-dismiss',
+                    {
+                      type: 'button',
+                      'aria-label': t('walkthroughs', 'dismiss'),
+                      onclick: () => {
+                        walkthroughInvitationVisible = false;
+                      },
+                    },
+                    m(
+                      'svg',
+                      {
+                        viewBox: '0 0 16 16',
+                        width: 16,
+                        height: 16,
+                        fill: 'none',
+                        stroke: 'currentColor',
+                        'stroke-width': 2,
+                        'aria-hidden': 'true',
+                      },
+                      m('path', { d: 'M4 4l8 8M12 4l-8 8' }),
+                    ),
+                  ),
+                ],
+              )
+            : undefined,
           m('main.fm-workspace', [
             (() => {
               if (!treeSidebarOpen || treeRootLocation === undefined) return undefined;

@@ -317,7 +317,11 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   const chocolatey = workflow('publish-chocolatey.yml');
 
   assert.match(releaseText, /build:tauri --target universal-apple-darwin/);
-  assert.match(releaseText, /build:tauri --target aarch64-apple-darwin --features semantic-gemma/);
+  assert.match(
+    releaseText,
+    /build:tauri --target universal-apple-darwin --features semantic-gemma/,
+  );
+  assert.doesNotMatch(releaseText, /aarch64-apple-darwin --features semantic-gemma/);
   const macBuild = release.jobs.macos.steps.find(
     (step) => step.name === 'Build signed macOS bundles',
   );
@@ -397,34 +401,6 @@ test('updater manifest embeds signed versioned artifacts for every supported tar
   );
   assert.equal(manifest.platforms['windows-x86_64'].signature, 'windows-signature');
 
-  const experimental = generateUpdaterManifest({
-    assetsDirectory: assets,
-    repository: 'erikvullings/procyon',
-    tag: 'v0.5.0-1',
-    version: '0.5.0-1',
-    experimentalGemma: true,
-  });
-  assert.deepEqual(Object.keys(experimental.platforms).sort(), [
-    'darwin-aarch64',
-    'linux-x86_64',
-    'windows-x86_64',
-  ]);
-  assert.equal(experimental.platforms['darwin-aarch64'].signature, 'mac-signature');
-  assert.equal(experimental.platforms['darwin-x86_64'], undefined);
-  const qualified = generateUpdaterManifest({
-    assetsDirectory: assets,
-    repository: 'erikvullings/procyon',
-    tag: 'v0.5.0-2',
-    version: '0.5.0-2',
-    gemmaArm64Only: true,
-  });
-  assert.deepEqual(Object.keys(qualified.platforms).sort(), [
-    'darwin-aarch64',
-    'linux-x86_64',
-    'windows-x86_64',
-  ]);
-  assert.equal(qualified.platforms['darwin-x86_64'], undefined);
-
   const output = join(assets, 'latest.json');
   execFileSync(
     'node',
@@ -435,39 +411,18 @@ test('updater manifest embeds signed versioned artifacts for every supported tar
       '--repository',
       'erikvullings/procyon',
       '--tag',
-      'v0.5.0-1',
+      'v0.2.0',
       '--version',
-      '0.5.0-1',
+      '0.2.0',
       '--output',
       output,
-      '--experimental-gemma',
     ],
     { cwd: repoRoot },
   );
-  assert.deepEqual(JSON.parse(readFileSync(output)), experimental);
-  const qualifiedOutput = join(assets, 'qualified-latest.json');
-  execFileSync(
-    'node',
-    [
-      'scripts/generate-updater-manifest.mjs',
-      '--assets',
-      assets,
-      '--repository',
-      'erikvullings/procyon',
-      '--tag',
-      'v0.5.0-2',
-      '--version',
-      '0.5.0-2',
-      '--output',
-      qualifiedOutput,
-      '--gemma-arm64-only',
-    ],
-    { cwd: repoRoot },
-  );
-  assert.deepEqual(JSON.parse(readFileSync(qualifiedOutput)), qualified);
+  assert.deepEqual(JSON.parse(readFileSync(output)), manifest);
 });
 
-test('experimental updater and package managers never replace stable Intel channels', () => {
+test('Gemma releases share the single updater channel and skip package managers', () => {
   const release = workflow('release-desktop.yml');
   for (const job of [
     release.jobs.release,
@@ -478,7 +433,7 @@ test('experimental updater and package managers never replace stable Intel chann
     const guard = job.steps.find((step) =>
       /Require exact experimental Gemma/.test(step.name ?? ''),
     );
-    assert.match(guard.run, /check-desktop-gemma-release\.mjs --macos-arm64-only/u);
+    assert.match(guard.run, /check-desktop-gemma-release\.mjs --release-source-revision/u);
   }
   const macBuild = release.jobs.macos.steps.find(
     (step) => step.name === 'Build signed macOS bundles',
@@ -486,67 +441,56 @@ test('experimental updater and package managers never replace stable Intel chann
   const macVerify = release.jobs.macos.steps.find((step) =>
     /Verify signature, notarization/.test(step.name ?? ''),
   );
-  assert.match(macBuild.run, /--target aarch64-apple-darwin --features semantic-gemma/u);
+  assert.match(macBuild.run, /--target universal-apple-darwin --features semantic-gemma/u);
   assert.match(macBuild.run, /--target universal-apple-darwin\s*$/mu);
-  assert.match(macVerify.run, /test "\$ARCHITECTURES" == "arm64"/u);
-  assert.match(macVerify.run, /basename "\$DMG_PATH".*aarch64/u);
+  assert.match(macVerify.run, /grep -qw arm64 <<< "\$ARCHITECTURES"/u);
   assert.match(macVerify.run, /grep -qw x86_64 <<< "\$ARCHITECTURES"/u);
-  assert.match(
-    release.jobs.macos.env.MACOS_TARGET,
-    /aarch64-apple-darwin.*universal-apple-darwin/u,
-  );
+  assert.doesNotMatch(macVerify.run, /test "\$ARCHITECTURES" == "arm64"/u);
+  assert.equal(release.jobs.macos.env.MACOS_TARGET, 'universal-apple-darwin');
   const description = release.jobs.release.steps.find(
     (step) => step.uses === 'softprops/action-gh-release@v3',
   ).with;
   assert.match(description.prerelease, /SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL/u);
-  assert.match(description.body, /Apple Silicon \(arm64\)/u);
+  assert.match(description.body, /Intel Macs run Procyon without semantic search/u);
+  assert.doesNotMatch(description.body, /Apple Silicon \(arm64\) only/u);
   const updater = release.jobs['updater-manifest'];
-  const publish = updater.steps.find((step) => step.name === 'Publish selected update endpoint');
-  assert.match(publish.run, /updater-gemma-experimental/u);
-  assert.match(publish.run, /updater-latest/u);
-  assert.match(
+  const publish = updater.steps.find((step) => step.name === 'Publish update endpoint');
+  assert.match(publish.run, /UPDATE_TAG=updater-latest\n/u);
+  assert.doesNotMatch(publish.run, /UPDATE_TAG=updater-gemma/u);
+  for (const legacy of [
+    'updater-gemma-experimental',
+    'updater-gemma',
+    'updater-gemma-risk-accepted',
+  ]) {
+    assert.match(publish.run, new RegExp(`\\b${legacy}\\b`, 'u'));
+  }
+  assert.match(publish.run, /gh release view "\$legacy"/u);
+  assert.doesNotMatch(
     updater.steps.find((step) => step.name === 'Generate signed update metadata').run,
-    /--experimental-gemma/u,
+    /--experimental-gemma|--gemma-arm64-only/u,
   );
-  assert.match(
-    updater.steps.find((step) => step.name === 'Generate signed update metadata').run,
-    /--gemma-arm64-only/u,
-  );
-  assert.match(publish.run, /updater-gemma[^-]/u);
   assert.match(release.jobs.homebrew.if, /SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true'/u);
   assert.match(release.jobs.chocolatey.if, /SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true'/u);
   const stable = JSON.parse(read('apps', 'fm-desktop', 'src-tauri', 'tauri.conf.json'));
   assert.match(stable.plugins.updater.endpoints[0], /updater-latest\/latest\.json$/u);
-  const generated = JSON.parse(
-    execFileSync('node', ['scripts/build-tauri.mjs', '--print-config'], {
-      cwd: repoRoot,
-      env: { ...process.env, GEMMA_DESKTOP_EXPERIMENTAL: 'true' },
-      encoding: 'utf8',
-    }),
-  );
-  assert.deepEqual(generated.plugins.updater.endpoints, [
-    'https://github.com/erikvullings/procyon/releases/download/updater-gemma-experimental/latest.json',
-  ]);
-  const qualified = JSON.parse(
-    execFileSync('node', ['scripts/build-tauri.mjs', '--print-config'], {
-      cwd: repoRoot,
-      env: { ...process.env, GEMMA_DESKTOP_NON_EXPERIMENTAL: 'true' },
-      encoding: 'utf8',
-    }),
-  );
-  assert.deepEqual(qualified.plugins.updater.endpoints, [
-    'https://github.com/erikvullings/procyon/releases/download/updater-gemma/latest.json',
-  ]);
-  const riskAccepted = JSON.parse(
-    execFileSync('node', ['scripts/build-tauri.mjs', '--print-config'], {
-      cwd: repoRoot,
-      env: { ...process.env, GEMMA_DESKTOP_RISK_ACCEPTED: 'true' },
-      encoding: 'utf8',
-    }),
-  );
-  assert.deepEqual(riskAccepted.plugins.updater.endpoints, [
-    'https://github.com/erikvullings/procyon/releases/download/updater-gemma-risk-accepted/latest.json',
-  ]);
+  for (const mode of [
+    'GEMMA_DESKTOP_EXPERIMENTAL',
+    'GEMMA_DESKTOP_NON_EXPERIMENTAL',
+    'GEMMA_DESKTOP_RISK_ACCEPTED',
+  ]) {
+    const generated = JSON.parse(
+      execFileSync('node', ['scripts/build-tauri.mjs', '--print-config'], {
+        cwd: repoRoot,
+        env: { ...process.env, [mode]: 'true' },
+        encoding: 'utf8',
+      }),
+    );
+    assert.equal(
+      generated.plugins,
+      undefined,
+      `${mode} must keep the single updater-latest channel`,
+    );
+  }
   assert.throws(
     () =>
       execFileSync('node', ['scripts/build-tauri.mjs', '--print-config'], {

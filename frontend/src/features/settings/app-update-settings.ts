@@ -19,6 +19,8 @@ function message(error: unknown): string {
 
 /** Desktop update preference and explicit signed-update controls. */
 export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () => {
+  let currentVersion: string | undefined;
+  let latestVersion: string | undefined;
   let phase: UpdatePhase = 'idle';
   let update: AppUpdateInfo | undefined;
   let error: string | undefined;
@@ -28,10 +30,14 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
   async function check(client: FileManagerClient): Promise<void> {
     phase = 'checking';
     update = undefined;
+    latestVersion = undefined;
     error = undefined;
     m.redraw();
     try {
-      update = await client.checkForAppUpdate();
+      const result = await client.checkForAppUpdate();
+      currentVersion = result.currentVersion;
+      latestVersion = result.latestVersion;
+      update = result.update;
       phase = update === undefined ? 'current' : 'available';
     } catch (cause) {
       phase = 'error';
@@ -60,6 +66,16 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
   }
 
   return {
+    oninit: ({ attrs }) => {
+      if (!attrs.client.supportsAppUpdates) return;
+      attrs.client
+        .getAppVersion()
+        .then((version) => {
+          currentVersion ??= version;
+          m.redraw();
+        })
+        .catch(() => undefined);
+    },
     view: ({ attrs }) =>
       m('.fm-app-update-settings', [
         m(Switch, {
@@ -72,6 +88,18 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
         m('p.fm-settings-help', t('settings', 'automaticUpdateChecksHint')),
         attrs.client.supportsAppUpdates
           ? [
+              currentVersion === undefined
+                ? undefined
+                : m(
+                    'p.fm-update-current-version',
+                    t('settings', 'currentAppVersion', { version: currentVersion }),
+                  ),
+              latestVersion === undefined
+                ? undefined
+                : m(
+                    'p.fm-update-latest-version',
+                    t('settings', 'latestAppVersion', { version: latestVersion }),
+                  ),
               m(
                 'button.fm-update-check',
                 {

@@ -17,6 +17,7 @@ import {
 } from './app-shell';
 
 const DISMISSED_OPERATIONS_STORAGE_KEY = 'fm.dismissedOperationIds';
+const WALKTHROUGH_INVITATION_STORAGE_KEY = 'procyon.walkthroughInvitationShown';
 
 describe('knowledgeEvidencePage', () => {
   it('maps PDF and presentation provenance to one-based preview pages', () => {
@@ -237,6 +238,7 @@ async function openOperationCentre(container: HTMLElement = root): Promise<void>
 beforeEach(() => {
   vi.stubGlobal('EventSource', TestEventSource);
   globalThis.localStorage?.removeItem(DISMISSED_OPERATIONS_STORAGE_KEY);
+  globalThis.localStorage?.removeItem(WALKTHROUGH_INVITATION_STORAGE_KEY);
   for (let index = localStorage.length - 1; index >= 0; index -= 1) {
     const key = localStorage.key(index);
     if (key?.startsWith('procyon.basket.')) localStorage.removeItem(key);
@@ -253,10 +255,93 @@ afterEach(() => {
     toast.remove();
   });
   globalThis.localStorage?.removeItem(DISMISSED_OPERATIONS_STORAGE_KEY);
+  globalThis.localStorage?.removeItem(WALKTHROUGH_INVITATION_STORAGE_KEY);
   document.documentElement.removeAttribute('data-theme');
 });
 
 describe('AppShell', () => {
+  for (const runtime of ['mock', 'http', 'tauri'] as const) {
+    it(`offers a non-modal, silent walkthrough once a fresh ${runtime} workspace opens`, async () => {
+      const client = new MockFileManagerClient();
+      const capabilities = await client.getRuntimeCapabilities();
+      vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
+        ...capabilities,
+        freshInstall: true,
+      });
+      m.mount(root, { view: () => m(AppShell, { runtime, client }) });
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-walkthrough-invitation')).not.toBeNull(),
+      );
+      expect(root.querySelector('.fm-walkthrough-panel')).toBeNull();
+      expect(root.querySelector('.fm-workspace')).not.toBeNull();
+      expect(localStorage.getItem(WALKTHROUGH_INVITATION_STORAGE_KEY)).toBe('1');
+      root.querySelector<HTMLButtonElement>('.fm-walkthrough-invitation button')?.click();
+      m.redraw.sync();
+      expect(root.querySelector('video[controls]:not([autoplay])')).not.toBeNull();
+      m.mount(root, null);
+      m.mount(root, { view: () => m(AppShell, { runtime, client }) });
+      await vi.waitFor(() => expect(root.querySelector('.fm-workspace')).not.toBeNull());
+      expect(root.querySelector('.fm-walkthrough-invitation')).toBeNull();
+    });
+  }
+
+  it('keeps the invitation dismissed when a fresh-install window is reopened', async () => {
+    const client = new MockFileManagerClient();
+    const capabilities = await client.getRuntimeCapabilities();
+    vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
+      ...capabilities,
+      freshInstall: true,
+    });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.querySelector('.fm-walkthrough-invitation')).not.toBeNull());
+    expect(
+      root.querySelector('.fm-walkthrough-invitation-dismiss svg[aria-hidden="true"]'),
+    ).not.toBeNull();
+    root.querySelector<HTMLButtonElement>('.fm-walkthrough-invitation button[aria-label]')?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-walkthrough-invitation')).toBeNull();
+    m.mount(root, null);
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.querySelector('.fm-workspace')).not.toBeNull());
+    expect(root.querySelector('.fm-walkthrough-invitation')).toBeNull();
+  });
+
+  it('does not consume the invitation when the initial workspace fails to open', async () => {
+    const client = new MockFileManagerClient();
+    const capabilities = await client.getRuntimeCapabilities();
+    vi.spyOn(client, 'getRuntimeCapabilities').mockResolvedValue({
+      ...capabilities,
+      freshInstall: true,
+    });
+    vi.spyOn(client, 'startWorkspace').mockRejectedValue(new Error('Workspace unavailable'));
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Workspace unavailable'));
+    expect(root.querySelector('.fm-walkthrough-invitation')).toBeNull();
+    expect(localStorage.getItem(WALKTHROUGH_INVITATION_STORAGE_KEY)).toBeNull();
+  });
+
+  it('never invites an existing installation even without a local marker', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.querySelector('.fm-workspace')).not.toBeNull());
+    expect(root.querySelector('.fm-walkthrough-invitation')).toBeNull();
+    expect(localStorage.getItem(WALKTHROUGH_INVITATION_STORAGE_KEY)).toBeNull();
+  });
+
+  it('opens the bundled guide catalog in both mock and HTTP hosts', () => {
+    for (const runtime of ['mock', 'http'] as const) {
+      m.mount(root, {
+        view: () => m(AppShell, { runtime, client: new MockFileManagerClient() }),
+      });
+      m.redraw.sync();
+      root.querySelector<HTMLButtonElement>('.fm-help-trigger')?.click();
+      m.redraw.sync();
+      expect(root.querySelectorAll('.fm-walkthrough-nav button')).toHaveLength(7);
+      expect(root.querySelector('video[controls][preload="none"]')).not.toBeNull();
+      m.mount(root, null);
+    }
+  });
+
   it('places the macOS brand and commands in one overlay toolbar without changing other hosts', async () => {
     const client = new MockFileManagerClient();
     const capabilities = await client.getRuntimeCapabilities();
@@ -3705,6 +3790,7 @@ describe('AppShell', () => {
       extendedAttributes: false,
       finderAliases: false,
       osFileClipboard: false,
+      freshInstall: false,
       finderTags: false,
       nativeDragOut: false,
       nativeFileIcons: false,
@@ -6484,6 +6570,7 @@ describe('AppShell', () => {
       extendedAttributes: false,
       finderAliases: false,
       osFileClipboard: false,
+      freshInstall: false,
       finderTags: false,
       nativeDragOut: false,
       nativeFileIcons: false,
@@ -6612,6 +6699,7 @@ describe('AppShell', () => {
       extendedAttributes: false,
       finderAliases: false,
       osFileClipboard: false,
+      freshInstall: false,
       finderTags: false,
       nativeDragOut: false,
       nativeFileIcons: false,
@@ -7516,6 +7604,7 @@ describe('tabs per pane (task 0069)', () => {
       extendedAttributes: false,
       finderAliases: false,
       osFileClipboard: false,
+      freshInstall: false,
       finderTags: false,
       nativeDragOut: false,
       nativeFileIcons: false,

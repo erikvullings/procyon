@@ -3,6 +3,16 @@ import type { LocalisedCatalogue } from './types';
 
 /** Dutch catalogue (task 0098). Keep the key set identical to `en`. */
 export const nl = {
+  walkthroughs: {
+    ...en.walkthroughs,
+    title: 'Rondleidingen',
+    close: 'Rondleidingen sluiten',
+    chooseGuide: 'Kies een gids',
+    englishContent: 'De gidsen zijn voorlopig alleen in het Engels beschikbaar.',
+    invitation: 'Nieuw bij Procyon? Bekijk een korte rondleiding.',
+    watch: 'Bekijk rondleiding',
+    dismiss: 'Uitnodiging sluiten',
+  },
   basket: {
     ...en.basket,
     title: 'Verzamelmand',
@@ -337,6 +347,8 @@ export const nl = {
       'Controleert na het opstarten. Procyon vraagt altijd toestemming voor downloaden, installeren en opnieuw starten.',
     checkForUpdates: 'Nu controleren',
     checkingForUpdates: 'Controleren…',
+    currentAppVersion: 'Geïnstalleerde versie: {version}',
+    latestAppVersion: 'Online beschikbare versie: {version}',
     appIsUpToDate: 'Procyon is up-to-date.',
     updateAvailable: 'Procyon {version} is beschikbaar.',
     updateAvailableDescription: 'Procyon {current} bijwerken naar {version}?',

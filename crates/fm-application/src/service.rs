@@ -222,6 +222,7 @@ fn supports_summary_visual_evidence(uri: &str) -> bool {
 /// benefit since every host uses the same JSON-file-backed repository.
 pub struct FileManagerService {
     runtime: RuntimeKindDto,
+    fresh_install: bool,
     platform: Arc<dyn PlatformAdapter>,
     workspaces: WorkspaceService<JsonFileWorkspaceRepository>,
     connections: ConnectionFacade,
@@ -397,7 +398,15 @@ impl FileManagerService {
         credential_store: Arc<dyn CredentialStore>,
         search_accelerator: Arc<dyn SearchAcceleration>,
     ) -> Self {
+        let workspace_directory = workspace_directory.into();
         let settings_directory = settings_directory.into();
+        let fresh_install =
+            [&workspace_directory, &settings_directory]
+                .into_iter()
+                .all(|directory| match std::fs::read_dir(directory) {
+                    Ok(mut entries) => entries.next().is_none(),
+                    Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+                });
         let rag_conversation_path = settings_directory.join("rag-conversations.json");
         let semantic_vocabulary_path = settings_directory.join("semantic-vocabularies.json");
         let credential_store: Arc<dyn CredentialStore> =
@@ -662,6 +671,7 @@ impl FileManagerService {
         );
         Self {
             runtime,
+            fresh_install,
             platform,
             workspaces: WorkspaceService::new(JsonFileWorkspaceRepository::new(
                 workspace_directory,
@@ -3780,19 +3790,23 @@ impl FileManagerService {
     /// platform, so the frontend can respond to capabilities rather than
     /// detecting operating systems itself (spec §21).
     pub fn runtime_capabilities(&self) -> RuntimeCapabilitiesDto {
-        runtime_capabilities_dto(self.runtime, self.platform.capabilities())
+        let mut capabilities = runtime_capabilities_dto(self.runtime, self.platform.capabilities());
+        capabilities.fresh_install = self.fresh_install;
+        capabilities
     }
 
     /// Reports runtime capabilities including the active semantic component
     /// authority and executable-download policy.
     pub async fn runtime_capabilities_with_semantic_components(&self) -> RuntimeCapabilitiesDto {
         let semantic = self.semantic_component_capabilities_dto().await;
-        runtime_capabilities_dto_with_semantic(
+        let mut capabilities = runtime_capabilities_dto_with_semantic(
             self.runtime,
             self.platform.capabilities(),
             semantic.authority,
             semantic.runtime_executable_download,
-        )
+        );
+        capabilities.fresh_install = self.fresh_install;
+        capabilities
     }
 
     /// Returns the active platform adapter's PNG icon for one sample entry.
@@ -4851,6 +4865,35 @@ mod tests {
             service.runtime_capabilities().runtime,
             RuntimeKindDto::Tauri
         );
+    }
+
+    #[tokio::test]
+    async fn walkthrough_invitation_is_only_eligible_before_a_fresh_install_has_data() {
+        let dir = tempfile::tempdir().expect("temp directory");
+        let workspaces = dir.path().join("workspaces");
+        let settings = dir.path().join("settings");
+        let fresh = FileManagerService::new(RuntimeKindDto::Tauri, &workspaces, &settings);
+        assert!(fresh.runtime_capabilities().fresh_install);
+        fresh
+            .start_workspace(None)
+            .await
+            .expect("initial workspace");
+        drop(fresh);
+
+        let existing = FileManagerService::new(RuntimeKindDto::Tauri, &workspaces, &settings);
+        assert!(!existing.runtime_capabilities().fresh_install);
+
+        let other = tempfile::tempdir().expect("another installation");
+        let settings = other.path().join("settings");
+        std::fs::create_dir_all(&settings).expect("settings directory");
+        std::fs::write(settings.join(fm_settings::SETTINGS_FILE_NAME), "{}")
+            .expect("persisted settings");
+        let upgraded = FileManagerService::new(
+            RuntimeKindDto::BrowserServer,
+            other.path().join("workspaces"),
+            settings,
+        );
+        assert!(!upgraded.runtime_capabilities().fresh_install);
     }
 
     #[tokio::test]

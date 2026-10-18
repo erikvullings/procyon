@@ -1,4 +1,4 @@
-# 0258 Directory refresh amplification (large dirs, post-operation)
+# 0259 Directory refresh amplification (large dirs, post-operation)
 
 Status: open
 Priority: high

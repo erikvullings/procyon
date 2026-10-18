@@ -4,7 +4,7 @@ import type {
   ActionResult,
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
-  AppUpdateInfo,
+  AppUpdateCheck,
   AppUpdateProgress,
   ArchiveCredentialRequest,
   ArchiveSummaryRequest,
@@ -400,8 +400,11 @@ export interface FileManagerClient {
 
   updateSettings(settings: Settings, signal?: AbortSignal): Promise<Settings>;
 
+  /** Version of the running desktop app, or `undefined` outside the desktop host. */
+  getAppVersion(signal?: AbortSignal): Promise<string | undefined>;
+
   /** Checks the host's configured signed update endpoint. */
-  checkForAppUpdate(signal?: AbortSignal): Promise<AppUpdateInfo | undefined>;
+  checkForAppUpdate(signal?: AbortSignal): Promise<AppUpdateCheck>;
 
   /** Downloads, verifies, installs, and restarts into the most recently checked update. */
   installAppUpdate(

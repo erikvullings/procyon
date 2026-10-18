@@ -2042,7 +2042,7 @@ mod tests {
         assert_eq!(snapshot.total_known_entries, Some(20_000));
     }
 
-    /// Prints navigation/refresh timings for several directory sizes (task 0258 baselines).
+    /// Prints navigation/refresh timings for several directory sizes (task 0259 baselines).
     /// Run with: `cargo test -p fm-application --release --lib directory_timing_baseline -- --ignored --nocapture`.
     #[tokio::test]
     #[ignore = "timing report, not an assertion"]
@@ -2069,7 +2069,7 @@ mod tests {
             let started = std::time::Instant::now();
             let json = serde_json::to_vec(&dto).expect("serialize snapshot");
             println!(
-                "[0258 baseline] entries={count:>7} page one json={} bytes, serialize={:.2?}",
+                "[0259 baseline] entries={count:>7} page one json={} bytes, serialize={:.2?}",
                 json.len(),
                 started.elapsed()
             );
@@ -2092,7 +2092,7 @@ mod tests {
             let refresh_elapsed = started.elapsed();
 
             println!(
-                "[0258 baseline] entries={count:>7} first_page={first_page:>10.2?} \
+                "[0259 baseline] entries={count:>7} first_page={first_page:>10.2?} \
                  remaining_pages({pages})={rest:>10.2?} refresh_first_page={refresh_elapsed:>10.2?}"
             );
         }

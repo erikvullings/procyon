@@ -1,4 +1,4 @@
-# 0257 Permissions and ownership (chmod/chown) editor
+# 0258 Permissions and ownership (chmod/chown) editor
 
 Status: open
 Priority: medium

@@ -1,4 +1,4 @@
-# 0255 Compare by content and file diff
+# 0256 Compare by content and file diff
 
 Status: open
 Priority: medium

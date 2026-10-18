@@ -2,6 +2,15 @@ import type { CatalogueShape } from './types';
 
 /** English catalogue: the initial and fallback locale (task 0098). */
 export const en = {
+  walkthroughs: {
+    title: 'Walkthroughs',
+    close: 'Close walkthroughs',
+    chooseGuide: 'Choose a guide',
+    englishContent: 'Guides and captions are currently available in English.',
+    invitation: 'New to Procyon? See a short walkthrough.',
+    watch: 'View walkthrough',
+    dismiss: 'Dismiss walkthrough invitation',
+  },
   basket: {
     title: 'Collection basket',
     add: 'Add selection to basket',
@@ -353,6 +362,8 @@ export const en = {
       'Checks after startup. Procyon always asks before downloading, installing, and restarting.',
     checkForUpdates: 'Check now',
     checkingForUpdates: 'Checking…',
+    currentAppVersion: 'Installed version: {version}',
+    latestAppVersion: 'Version available online: {version}',
     appIsUpToDate: 'Procyon is up to date.',
     updateAvailable: 'Procyon {version} is available.',
     updateAvailableDescription: 'Update Procyon {current} to {version}?',

@@ -99,7 +99,6 @@ export function checkQualifiedGemmaDesktopRelease(
   manifest,
   semanticEnabled,
   qualifiedEnabled,
-  macosArchitecture = 'universal',
   releaseSourceRevision,
   repositoryRoot = process.cwd(),
 ) {
@@ -109,9 +108,6 @@ export function checkQualifiedGemmaDesktopRelease(
   validateApproval(manifest);
   if (Object.keys(manifest.targets ?? {}).length !== targets.length) {
     throw new Error('qualified Gemma requires an approved four-target component release');
-  }
-  if (macosArchitecture !== 'arm64') {
-    throw new Error('qualified Gemma desktop requires an arm64-only macOS build');
   }
   if (!/^[0-9a-f]{40}$/u.test(releaseSourceRevision ?? '')) {
     throw new Error('desktop release source must be a 40-character commit');
@@ -223,7 +219,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       manifest,
       process.env.SEMANTIC_RELEASE_QUALIFIED,
       process.env.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED,
-      process.argv.includes('--macos-arm64-only') ? 'arm64' : 'universal',
       releaseSourceRevision,
     );
     console.log(

@@ -3,6 +3,16 @@ import type { LocalisedCatalogue } from './types';
 
 /** Portuguese (European) catalogue (task 0098). Keep the key set identical to `en`. */
 export const pt = {
+  walkthroughs: {
+    ...en.walkthroughs,
+    title: 'Guias',
+    close: 'Fechar guias',
+    chooseGuide: 'Escolher guia',
+    englishContent: 'Os guias estão atualmente disponíveis apenas em inglês.',
+    invitation: 'É a primeira vez no Procyon? Veja o guia rápido.',
+    watch: 'Ver guia',
+    dismiss: 'Fechar convite',
+  },
   basket: {
     ...en.basket,
     title: 'Cesto de ficheiros',
@@ -335,6 +345,8 @@ export const pt = {
       'Verifica após o arranque. O Procyon pede sempre confirmação antes de transferir, instalar e reiniciar.',
     checkForUpdates: 'Verificar agora',
     checkingForUpdates: 'A verificar…',
+    currentAppVersion: 'Versão instalada: {version}',
+    latestAppVersion: 'Versão disponível online: {version}',
     appIsUpToDate: 'O Procyon está atualizado.',
     updateAvailable: 'O Procyon {version} está disponível.',
     updateAvailableDescription: 'Atualizar o Procyon {current} para {version}?',

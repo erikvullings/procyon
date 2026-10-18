@@ -198,58 +198,25 @@ test('approval is bound to candidate bytes, source, run, tag, and signed catalog
   );
 });
 
-test('desktop promotion requires the independent approval gates and arm64-only macOS', (context) => {
+test('desktop promotion requires the independent approval gates and exact source', (context) => {
   const { approval, sourceRevision, repositoryRoot } = fixture(context);
   assert.throws(
     () =>
-      checkQualifiedGemmaDesktopRelease(
-        approval,
-        'false',
-        'true',
-        'arm64',
-        sourceRevision,
-        repositoryRoot,
-      ),
+      checkQualifiedGemmaDesktopRelease(approval, 'false', 'true', sourceRevision, repositoryRoot),
     /both independent release approvals/u,
   );
   assert.throws(
     () =>
-      checkQualifiedGemmaDesktopRelease(
-        approval,
-        'true',
-        'false',
-        'arm64',
-        sourceRevision,
-        repositoryRoot,
-      ),
+      checkQualifiedGemmaDesktopRelease(approval, 'true', 'false', sourceRevision, repositoryRoot),
     /both independent release approvals/u,
   );
   assert.throws(
-    () => checkQualifiedGemmaDesktopRelease(approval, 'true', 'true', 'arm64'),
+    () => checkQualifiedGemmaDesktopRelease(approval, 'true', 'true'),
     /desktop release source/u,
   );
   assert.deepEqual(
-    checkQualifiedGemmaDesktopRelease(
-      approval,
-      'true',
-      'true',
-      'arm64',
-      sourceRevision,
-      repositoryRoot,
-    ),
+    checkQualifiedGemmaDesktopRelease(approval, 'true', 'true', sourceRevision, repositoryRoot),
     approval,
-  );
-  assert.throws(
-    () =>
-      checkQualifiedGemmaDesktopRelease(
-        approval,
-        'true',
-        'true',
-        'universal',
-        sourceRevision,
-        repositoryRoot,
-      ),
-    /arm64-only/u,
   );
   const blocked = {
     ...approval,
@@ -263,14 +230,7 @@ test('desktop promotion requires the independent approval gates and arm64-only m
   };
   assert.throws(
     () =>
-      checkQualifiedGemmaDesktopRelease(
-        blocked,
-        'true',
-        'true',
-        'arm64',
-        sourceRevision,
-        repositoryRoot,
-      ),
+      checkQualifiedGemmaDesktopRelease(blocked, 'true', 'true', sourceRevision, repositoryRoot),
     /five-gate approval/u,
   );
 });
@@ -292,7 +252,6 @@ test('qualified desktop source must descend from the signed candidate without wo
       exactCandidateApproval,
       'true',
       'true',
-      'arm64',
       releaseRevision,
       repositoryRoot,
     ),
@@ -314,7 +273,6 @@ test('qualified desktop source must descend from the signed candidate without wo
         exactCandidateApproval,
         'true',
         'true',
-        'arm64',
         changedWorkerRevision,
         repositoryRoot,
       ),
