@@ -617,9 +617,12 @@ impl Scheduler {
             self.finish_cancelled(&job, executor.as_ref()).await?;
             return Ok(());
         }
+        let run_started = std::time::Instant::now();
         self.transition_job(&job, OperationState::Planning)?;
+        let transition_ms = run_started.elapsed().as_secs_f64() * 1000.0;
         let snapshot = job.snapshot();
         let plan = executor.plan(&snapshot, &job.cancellation).await?;
+        let planned_ms = run_started.elapsed().as_secs_f64() * 1000.0;
         if job.is_cancelled() {
             self.finish_cancelled(&job, executor.as_ref()).await?;
             return Ok(());
@@ -814,10 +817,22 @@ impl Scheduler {
             self.finish_cancelled(&job, executor.as_ref()).await?;
             return Ok(());
         }
+        let executed_ms = run_started.elapsed().as_secs_f64() * 1000.0;
         let snapshot = job.snapshot();
         executor.finish(&snapshot, &job.cancellation).await?;
+        let finished_ms = run_started.elapsed().as_secs_f64() * 1000.0;
         let snapshot = job.snapshot();
         let undo = executor.undo_evidence(&snapshot, &job.cancellation).await?;
+        tracing::debug!(
+            target: "fm_perf",
+            op = "run_job",
+            transition_ms,
+            planned_ms,
+            executed_ms,
+            finished_ms,
+            undo_evidence_done_ms = run_started.elapsed().as_secs_f64() * 1000.0,
+            "scheduler job phases (cumulative ms since permit)"
+        );
         let mut state = job.lock();
         state.operation.undo = undo;
         let terminal = if state.operation.errors.is_empty() {
