@@ -78,7 +78,7 @@ async fn bundled_preview_plugins_are_enabled_by_default_and_render_a_local_file(
     std::fs::write(&file, "BEGIN:VCARD\nFN:Ada <Lovelace>\nEND:VCARD\n").expect("fixture");
     let location = serde_json::json!({
         "providerId": "local",
-        "uri": format!("file://{}", file.display()),
+        "uri": common::file_uri(&file),
     });
     let preview = |plugin: &str| {
         client
