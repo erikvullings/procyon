@@ -25,6 +25,10 @@ use crate::DirectoryService;
 pub(crate) const OPERATION_HISTORY_FILE_NAME: &str = "operation-history.json";
 const OPERATION_HISTORY_MAX_ENTRIES: usize = 100;
 const OPERATION_HISTORY_MAX_AGE_DAYS: i64 = 30;
+/// Entry-scoped failures kept per operation in the persisted history. A cancelled delete of a
+/// 5.7M-item cache directory once accumulated 38k errors (15 MB), which made every history save
+/// serialize and fsync a 19 MB file on the scheduler's critical path.
+const OPERATION_HISTORY_MAX_ENTRY_ERRORS: usize = 200;
 
 /// Crash-safe operation snapshots stored beside settings.
 pub(crate) struct OperationHistory {
@@ -77,12 +81,25 @@ impl HistoryWriter {
                         state.dirty = false;
                         state.writing = true;
                     }
-                    let bytes = {
-                        let operations = operations.lock().unwrap_or_else(|e| e.into_inner());
-                        serde_json::to_vec_pretty(&*operations)
-                    };
-                    if let Ok(bytes) = bytes {
+                    // Snapshot under the lock, serialize outside it: `observe` needs the same lock on
+                    // the scheduler's thread, and serializing every retained undo plan took ~300 ms
+                    // in debug builds, stalling each job's first state transition.
+                    let started = std::time::Instant::now();
+                    let snapshot = operations.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                    let snapshot_ms = started.elapsed().as_secs_f64() * 1000.0;
+                    if let Ok(bytes) = serde_json::to_vec_pretty(&snapshot) {
+                        let serialized_ms = started.elapsed().as_secs_f64() * 1000.0;
                         write_history_file(&path, &bytes);
+                        tracing::debug!(
+                            target: "fm_perf",
+                            op = "history_save",
+                            operations = snapshot.len(),
+                            bytes = bytes.len(),
+                            snapshot_ms,
+                            serialized_ms,
+                            total_ms = started.elapsed().as_secs_f64() * 1000.0,
+                            "operation history saved"
+                        );
                     }
                     let mut state = worker.state.lock().unwrap_or_else(|e| e.into_inner());
                     state.writing = false;
@@ -128,6 +145,21 @@ impl Drop for HistoryWriter {
             let _ = thread.join();
         }
     }
+}
+
+/// Bounds the persisted per-entry failures of one operation, replacing the excess with a single
+/// summary entry so the error count stays visible.
+fn cap_entry_errors(operation: &mut Operation) {
+    if operation.errors.len() <= OPERATION_HISTORY_MAX_ENTRY_ERRORS {
+        return;
+    }
+    let omitted = operation.errors.len() - OPERATION_HISTORY_MAX_ENTRY_ERRORS;
+    let mut summary = operation.errors[OPERATION_HISTORY_MAX_ENTRY_ERRORS].clone();
+    operation
+        .errors
+        .truncate(OPERATION_HISTORY_MAX_ENTRY_ERRORS);
+    summary.message = format!("{omitted} further errors are omitted from the saved history");
+    operation.errors.push(summary);
 }
 
 /// Atomically replaces the history file (temporary file, `fsync`, rename).
@@ -178,6 +210,7 @@ impl OperationHistory {
             .unwrap_or_default();
         let now = chrono::Utc::now();
         for operation in &mut operations {
+            cap_entry_errors(operation);
             if !operation.state.is_terminal() {
                 operation.state = fm_operations::OperationState::Interrupted;
                 operation.completed_at = Some(now);
@@ -349,8 +382,11 @@ impl OperationSnapshotObserver for OperationHistory {
                 .find(|previous| previous.id == operation.id)
             {
                 *previous = operation.clone();
+                cap_entry_errors(previous);
             } else {
-                operations.push(operation.clone());
+                let mut stored = operation.clone();
+                cap_entry_errors(&mut stored);
+                operations.push(stored);
             }
             if let Some(original_id) = operation.undo_of
                 && operation.state.is_terminal()
@@ -599,6 +635,39 @@ mod tests {
             reloaded.list().len(),
             1,
             "in-flight operation is restored as interrupted"
+        );
+    }
+
+    #[test]
+    fn persisted_entry_errors_are_bounded_with_a_summary_entry() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let history = OperationHistory::load(directory.path());
+        let mut operation = planning_operation();
+        let entry = fm_vfs::EntryRef {
+            id: fm_domain::EntryId::new(),
+            location: fm_domain::Location::from_native_path(directory.path())
+                .expect("local location"),
+        };
+        operation.errors = (0..1_000)
+            .map(|index| fm_operations::OperationEntryError {
+                entry: entry.clone(),
+                message: format!("failure {index}"),
+            })
+            .collect();
+        operation
+            .transition(OperationState::Cancelling)
+            .expect("planning operation can be cancelled");
+        operation
+            .transition(OperationState::Cancelled)
+            .expect("cancelling operation is cancelled");
+
+        history.observe(&operation);
+
+        let record = history.record(operation.id).expect("terminal record");
+        assert_eq!(record.errors.len(), OPERATION_HISTORY_MAX_ENTRY_ERRORS + 1);
+        assert_eq!(
+            record.errors.last().map(|error| error.message.as_str()),
+            Some("800 further errors are omitted from the saved history")
         );
     }
 
