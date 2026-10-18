@@ -1,6 +1,6 @@
 # 0226 Sandboxed JavaScript and SPA plugins
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: cross-cutting
 Depends on: 0053, 0054, 0057
@@ -225,3 +225,15 @@ second plugin system.
   remains unchanged. Focused component and shell tests cover placement, second
   right-click, visibility, and tab switching; native menu hit-testing still needs
   macOS/Windows/Linux smoke verification. This task remains open.
+- 2026-10-18: Closed at the user's direction. The user confirmed that the macOS clipboard read and
+  write grants are in place (SVGO declares both; other panels stay unavailable on macOS) and that
+  the Windows desktop path is verified working. The remaining gates were resolved as follows
+  rather than by new code: immediate WebView-crash cleanup is not implementable because Tauri
+  2.11.5 exposes no child-WebView crash callback, so the authenticated heartbeat probe (bounded
+  40 s visible / 240 s hidden) with host-driven teardown is the accepted design; orphan
+  `.fm-edit-*.tmp` files after a whole-app crash, loss of unflushed optimizer preferences, and the
+  uncooperative-external-writer race were accepted for 0.4.0 (see earlier notes). **Not verified
+  by this agent:** Linux desktop smoke results (CI-only), the manual macOS child-shortcut / cursor
+  path check on the production installer, and native crash injection. They are recorded in
+  `docs/plugin-api/spa-threat-model.md` as accepted residual risk, not as passed checks. Reopen if
+  any of them regress.
