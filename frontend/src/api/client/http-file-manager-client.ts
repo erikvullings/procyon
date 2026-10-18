@@ -83,11 +83,13 @@ import type {
   LlmProfilePreset,
   LlmProfileTestResult,
   LoadEditableFileRequest,
+  Location,
   MoveSemanticDataRequest,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
   OpenPptxPreviewRequest,
+  OpenSqliteViewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
@@ -99,11 +101,13 @@ import type {
   PluginIconTheme,
   PluginId,
   PluginLogEntry,
+  PluginPreviewResult,
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
   PreviewRagRequest,
   PreviewSemanticEnrolmentRequest,
+  QuerySqliteViewRequest,
   RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
@@ -154,6 +158,9 @@ import type {
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
+  SqliteQueryResult,
+  SqliteView,
+  SqliteViewSessionRequest,
   StartChecksumRequest,
   StartChecksumResult,
   StartComparisonRequest,
@@ -209,6 +216,7 @@ import {
   verifyChecksumFile as requestChecksumFileVerify,
   getChecksums as requestChecksumGet,
   startChecksums as requestChecksumStart,
+  closeSqliteView as requestCloseSqliteView,
   cancelComparison as requestComparisonCancel,
   getComparison as requestComparisonGet,
   startComparison as requestComparisonStart,
@@ -270,6 +278,7 @@ import {
   getOneDriveAuthorizationAttempt as requestOneDriveAuthorizationAttempt,
   beginOneDriveAuthorization as requestOneDriveAuthorizationBegin,
   cancelOneDriveAuthorization as requestOneDriveAuthorizationCancel,
+  openSqliteView as requestOpenSqliteView,
   openStructuredView as requestOpenStructuredView,
   cancelOperation as requestOperationCancel,
   pauseOperation as requestOperationPause,
@@ -282,10 +291,12 @@ import {
   enablePlugin as requestPluginEnable,
   getPluginIconThemeAsset as requestPluginIconThemeAsset,
   getPluginLogs as requestPluginLogs,
+  renderPluginPreview as requestPluginPreview,
   listPlugins as requestPlugins,
   closePptxPreview as requestPptxPreviewClose,
   openPptxPreview as requestPptxPreviewOpen,
   readPptxPreviewPdf as requestPptxPreviewPdf,
+  querySqliteView as requestQuerySqliteView,
   resolveRagCitation as requestRagCitationResolution,
   deleteRagConversation as requestRagConversationDeletion,
   listSavedRagConversations as requestRagConversationList,
@@ -1498,6 +1509,38 @@ export class HttpFileManagerClient implements FileManagerClient {
       throw new Error(`Unexpected closeStructuredView response status: ${response.status}`);
   }
 
+  async openSqliteView(request: OpenSqliteViewRequest, signal?: AbortSignal): Promise<SqliteView> {
+    const response = await requestOpenSqliteView(
+      request,
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected openSqliteView response status: ${response.status}`);
+    return response.data;
+  }
+
+  async querySqliteView(
+    request: QuerySqliteViewRequest,
+    signal?: AbortSignal,
+  ): Promise<SqliteQueryResult> {
+    const response = await requestQuerySqliteView(
+      request,
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected querySqliteView response status: ${response.status}`);
+    return response.data;
+  }
+
+  async closeSqliteView(request: SqliteViewSessionRequest, signal?: AbortSignal): Promise<void> {
+    const response = await requestCloseSqliteView(
+      request,
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 204)
+      throw new Error(`Unexpected closeSqliteView response status: ${response.status}`);
+  }
+
   async loadEditableFile(
     request: LoadEditableFileRequest,
     signal?: AbortSignal,
@@ -2076,6 +2119,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       ...(plugin.columns === undefined ? {} : { columns: plugin.columns }),
       ...(plugin.iconTheme == null ? {} : { iconTheme: pluginIconThemeFromDto(plugin.iconTheme) }),
       ...(plugin.spaPanel == null ? {} : { spaPanel: plugin.spaPanel }),
+      ...(plugin.preview == null ? {} : { preview: plugin.preview }),
       permissions: {
         selectedEntryMetadata: plugin.permissions.selectedEntryMetadata,
         selectedEntryContentRead: plugin.permissions.selectedEntryContentRead,
@@ -2113,6 +2157,21 @@ export class HttpFileManagerClient implements FileManagerClient {
     if (response.status !== 200)
       throw new Error(`Unexpected getPluginLogs response status: ${response.status}`);
     return response.data.map((entry) => ({ message: entry.message }));
+  }
+
+  async renderPluginPreview(
+    pluginId: PluginId,
+    location: Location,
+    signal?: AbortSignal,
+  ): Promise<PluginPreviewResult> {
+    const response = await requestPluginPreview(
+      pluginId,
+      { location },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected renderPluginPreview response status: ${response.status}`);
+    return response.data;
   }
 
   async getPluginIconThemeAsset(

@@ -132,6 +132,10 @@ sanitization.
   as local by Procyon; its external writers and filesystem lock semantics are not guaranteed
   by this policy.
 
-The earlier focused security review covered the previously enabled paths, before macOS panel
-activation. Do not change task 0226 to `done` until the release gates are resolved and
-smoke-tested on all target desktop platforms, including a fresh review of the macOS path.
+## Status (2026-10-18)
+
+Task 0226 was closed at the owner's direction. The owner confirmed the macOS clipboard grants and
+that the Windows desktop path works. Crash cleanup stays bounded by design (Tauri exposes no
+child-WebView crash event), and the 0.4.0 acceptances above stand. **Unverified, accepted residual
+risk:** Linux desktop smoke results, the manual macOS child-shortcut and production cursor-path
+check, and native crash injection. A regression in any of these should reopen the task.

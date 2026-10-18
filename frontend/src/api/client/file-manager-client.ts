@@ -90,6 +90,7 @@ import type {
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
   OpenPptxPreviewRequest,
+  OpenSqliteViewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
@@ -100,11 +101,13 @@ import type {
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  PluginPreviewResult,
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
   PreviewRagRequest,
   PreviewSemanticEnrolmentRequest,
+  QuerySqliteViewRequest,
   RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
@@ -155,6 +158,9 @@ import type {
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
+  SqliteQueryResult,
+  SqliteView,
+  SqliteViewSessionRequest,
   StartChecksumRequest,
   StartChecksumResult,
   StartComparisonRequest,
@@ -415,6 +421,10 @@ export interface FileManagerClient {
    * Desktop-only, like {@link quit}: the browser/HTTP host has no window concept. */
   openWorkspaceWindow?(sourceWorkspaceId?: WorkspaceId): Promise<void>;
 
+  /** Opens the F3 viewer for one file in its own OS window; `payload` is the URL-safe viewer
+   * request token. Desktop-only: the browser host opens a popup of the same page instead. */
+  openViewerWindow?(payload: string, title: string): Promise<void>;
+
   /** Writes an ephemeral (per-window) workspace's current tabs/panes/layout back into
    * `targetWorkspaceId`, or - if omitted - the named workspace it was forked from, creating one
    * if it was seeded from the hardcoded default and has no source yet (ephemeral per-window
@@ -547,6 +557,14 @@ export interface FileManagerClient {
     signal?: AbortSignal,
   ): Promise<StructuredRowSearch>;
   closeStructuredView(request: StructuredViewSessionRequest, signal?: AbortSignal): Promise<void>;
+  /** Opens a read-only SQLite database session (task 0251): schema plus later paged queries. */
+  openSqliteView(request: OpenSqliteViewRequest, signal?: AbortSignal): Promise<SqliteView>;
+  /** Reads one page of a table/view (with search, filters, sort) or of a read-only SQL result. */
+  querySqliteView(
+    request: QuerySqliteViewRequest,
+    signal?: AbortSignal,
+  ): Promise<SqliteQueryResult>;
+  closeSqliteView(request: SqliteViewSessionRequest, signal?: AbortSignal): Promise<void>;
   loadEditableFile(request: LoadEditableFileRequest, signal?: AbortSignal): Promise<EditableFile>;
   saveEditableFile(
     request: SaveEditableFileRequest,
@@ -737,6 +755,15 @@ export interface FileManagerClient {
   setPluginEnabled(pluginId: PluginId, enabled: boolean, signal?: AbortSignal): Promise<void>;
 
   getPluginLogs(pluginId: PluginId, signal?: AbortSignal): Promise<PluginLogEntry[]>;
+  /**
+   * Renders `location` with an enabled plugin's sandboxed preview contribution (task 0142).
+   * The result is untrusted: `html` bodies must be sanitized before display.
+   */
+  renderPluginPreview(
+    pluginId: PluginId,
+    location: Location,
+    signal?: AbortSignal,
+  ): Promise<PluginPreviewResult>;
 
   /**
    * Fetches raw SVG markup for one icon-theme asset (task 0095); `assetPath` is a theme's

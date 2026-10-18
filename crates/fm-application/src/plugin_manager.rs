@@ -14,14 +14,15 @@ use fm_events::{
     BackendEventPayload, EventAudience, EventBus, NotificationLevelPayload, NotificationPayload,
     PluginPayload,
 };
+use fm_plugin_api::PreviewOutputKind;
 use fm_plugin_api::{
     ActionContribution, IconThemeManifest, PluginManifest, PluginPermissions, SelectedEntryContext,
 };
-use fm_plugin_runtime::{PluginDiscovery, PluginRuntime};
+use fm_plugin_runtime::{PluginCancellation, PluginDiscovery, PluginRuntime, PreviewInput};
 use fm_settings::Settings;
 use fm_transport_dto::{
     ActionResultDto, PluginDescriptorDto, PluginLogEntryDto, PluginPermissionsDto,
-    PluginSpaPanelDto,
+    PluginPreviewDto, PluginPreviewKindDto, PluginPreviewResultDto, PluginSpaPanelDto,
 };
 use uuid::Uuid;
 
@@ -410,6 +411,14 @@ impl PluginManager {
                     columns,
                     permissions,
                     icon_theme,
+                    preview: plugin
+                        .manifest
+                        .as_ref()
+                        .filter(|_| is_enabled)
+                        .and_then(|manifest| manifest.contributions.preview.as_ref())
+                        .map(|preview| PluginPreviewDto {
+                            extensions: preview.extensions.clone(),
+                        }),
                     spa_panel: plugin.manifest.as_ref().and_then(|manifest| {
                         manifest
                             .contributions
@@ -423,6 +432,72 @@ impl PluginManager {
                 }
             })
             .collect()
+    }
+
+    /// Whether `plugin_id` is an enabled plugin that claims `extension`. Checked before any file
+    /// I/O so requests for unknown, disabled or non-claiming plugins never touch a provider.
+    pub(crate) fn check_preview_claim(
+        &self,
+        plugin_id: &str,
+        extension: &str,
+    ) -> Result<(), ApplicationError> {
+        let (manifest, _) = self
+            .enabled_plugin_manifests()
+            .into_iter()
+            .find(|(manifest, _)| manifest.id == plugin_id)
+            .ok_or(ApplicationError::NotFound)?;
+        let claims = manifest
+            .contributions
+            .preview
+            .as_ref()
+            .is_some_and(|preview| preview.extensions.iter().any(|ext| ext == extension));
+        claims.then_some(()).ok_or_else(|| {
+            ApplicationError::InvalidRequest(format!(
+                "plugin {plugin_id} does not preview .{extension} files"
+            ))
+        })
+    }
+
+    /// Renders `content` (a bounded file prefix) with an enabled plugin's `preview` function
+    /// (task 0142). The plugin must be enabled and claim `extension`; failures are isolated by
+    /// the runtime exactly like action and column failures.
+    pub(crate) fn render_plugin_preview(
+        &self,
+        plugin_id: &str,
+        name: &str,
+        extension: &str,
+        content: &[u8],
+        truncated: bool,
+    ) -> Result<PluginPreviewResultDto, ApplicationError> {
+        let (manifest, directory) = self
+            .enabled_plugin_manifests()
+            .into_iter()
+            .find(|(manifest, _)| manifest.id == plugin_id)
+            .ok_or(ApplicationError::NotFound)?;
+        let output = self
+            .plugin_runtime
+            .render_preview(
+                &manifest,
+                &directory,
+                &PreviewInput {
+                    name,
+                    extension,
+                    content,
+                    truncated,
+                },
+                &PluginCancellation::default(),
+            )
+            .map_err(|error| {
+                ApplicationError::InvalidRequest(format!("plugin preview failed: {error}"))
+            })?;
+        Ok(PluginPreviewResultDto {
+            kind: match output.kind {
+                PreviewOutputKind::Text => PluginPreviewKindDto::Text,
+                PreviewOutputKind::Html => PluginPreviewKindDto::Html,
+            },
+            body: output.body,
+            truncated,
+        })
     }
 
     /// Reads one asset referenced by an enabled plugin's icon theme,
@@ -635,6 +710,82 @@ mod tests {
             plugins_dir.clone(),
             PluginManager::new(plugins, plugin_runtime, settings, settings_store, events),
         )
+    }
+
+    fn write_preview_plugin(plugins_dir: &std::path::Path, lua: &str) {
+        let plugin = plugins_dir.join("preview-plugin");
+        std::fs::create_dir_all(&plugin).expect("plugin directory");
+        std::fs::write(
+            plugin.join("plugin.toml"),
+            "id='test.preview'\nname='Preview'\nversion='1'\napi_version='1'\ndescription='Preview plugin'\nentrypoint='plugin.lua'\n[permissions]\nselected_entry_content_read=true\n[contributions.preview]\nextensions=['demo']",
+        )
+        .expect("manifest");
+        std::fs::write(plugin.join("plugin.lua"), lua).expect("script");
+    }
+
+    #[test]
+    fn preview_is_listed_and_rendered_only_for_an_enabled_plugin() {
+        let (plugins_dir, manager) = manager(&tempfile::tempdir().expect("temp dir"));
+        write_preview_plugin(
+            &plugins_dir,
+            "return { preview = function(f) return { kind = 'text', body = f.name .. '|' .. f.content } end }",
+        );
+        let listed = |manager: &PluginManager| {
+            manager
+                .list_plugins()
+                .into_iter()
+                .find(|plugin| plugin.id == "test.preview")
+                .and_then(|plugin| plugin.preview)
+        };
+
+        assert!(
+            listed(&manager).is_none(),
+            "disabled plugins advertise nothing"
+        );
+        assert!(matches!(
+            manager.render_plugin_preview("test.preview", "a.demo", "demo", b"x", false),
+            Err(ApplicationError::NotFound)
+        ));
+
+        manager
+            .set_plugin_enabled("test.preview".to_owned(), true)
+            .expect("enable");
+        assert_eq!(listed(&manager).expect("preview").extensions, ["demo"]);
+        let result = manager
+            .render_plugin_preview("test.preview", "a.demo", "demo", b"hi", true)
+            .expect("render");
+        assert_eq!(result.body, "a.demo|hi");
+        assert_eq!(result.kind, PluginPreviewKindDto::Text);
+        assert!(result.truncated);
+    }
+
+    #[test]
+    fn preview_failure_is_a_typed_error_not_a_crash() {
+        let (plugins_dir, manager) = manager(&tempfile::tempdir().expect("temp dir"));
+        write_preview_plugin(
+            &plugins_dir,
+            "return { preview = function() error('boom') end }",
+        );
+        manager
+            .set_plugin_enabled("test.preview".to_owned(), true)
+            .expect("enable");
+        assert!(matches!(
+            manager.render_plugin_preview("test.preview", "a.demo", "demo", b"x", false),
+            Err(ApplicationError::InvalidRequest(message)) if message.contains("boom")
+        ));
+        assert!(matches!(
+            manager.render_plugin_preview("test.preview", "a.other", "other", b"x", false),
+            Err(ApplicationError::InvalidRequest(_))
+        ));
+        assert!(manager.check_preview_claim("test.preview", "demo").is_ok());
+        assert!(matches!(
+            manager.check_preview_claim("test.preview", "other"),
+            Err(ApplicationError::InvalidRequest(_))
+        ));
+        assert!(matches!(
+            manager.check_preview_claim("missing", "demo"),
+            Err(ApplicationError::NotFound)
+        ));
     }
 
     #[test]

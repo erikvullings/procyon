@@ -1,12 +1,35 @@
-# EmbeddingGemma 2 non-experimental qualification checklist
+# EmbeddingGemma 2 five-gate qualification checklist
 
-This checklist covers the five open items that keep the opt-in EmbeddingGemma 2 package
-**experimental** (see
-[the experimental release notes](../evaluations/embeddinggemma-experimental-release-2026-10-15.md)
+This checklist records the five installed-app items required for the
+**five-gate-qualified** EmbeddingGemma 2 release path (see
+[the experimental release notes](../evaluations/embeddinggemma-experimental-release-2026-10-16.md)
 and [task 0248](../../TASKS/0248-gemma-non-experimental-qualification-tooling.md)). Run it on the
-installed desktop build that is a candidate for promotion. Every item needs a recorded result in
-the [results table](#results) before anyone may remove the experimental label. A single `Fail` or
-`Blocked` keeps Gemma experimental.
+installed desktop build that is a candidate for qualification. Every item must pass before
+claiming five-gate qualification. A separate, user-directed risk-accepted release decision is
+documented in
+[the v0.6.0 release-risk statement](../evaluations/embeddinggemma-risk-accepted-release-2026-10-18.md);
+it does not alter this checklist or turn any failed or missing result into a pass.
+
+The five-gate-qualified release path is gated separately from the risk-accepted route. After all
+five items pass on a new signed candidate, the release owner records the exact candidate lock,
+source revision, model revision, qualification run and tag, the five `Pass` results, approver, and
+UTC approval time in `docs/evaluations/semantic-gemma-qualified-v1.json`. Start from the candidate
+lock's top-level fields and four `targets` entries, set the approval record's `decision` to `go`,
+and add `nonExperimentalGemma` with `approval`, the candidate's original `candidateDecision`,
+`modelRevision`, `candidateManifestSha256` (SHA-256 of the unmodified candidate lock bytes),
+`approvedBy`, ISO-8601 UTC `approvedAt`, and the five `gates` entries below. The record must use the
+`release-owner-approved-five-gate-qualification` approval value and match the candidate lock's
+SHA-256 and four catalog/signature pairs. The release owner must then independently enable
+`SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED`; desktop packaging additionally requires
+`SEMANTIC_RELEASE_QUALIFIED`. The checker rejects missing or failed gate results, the existing
+experimental candidate, changed candidate bytes, and mismatched signed catalogs. This record is
+not created by qualification or by this tooling change.
+
+The five recorded results map to the checklist items as follows: `resourceCeilings` covers item 1,
+`cpuFallback` item 2, `crossHostNavigation` item 3, `upgradeRollback` item 4, and `mediaSearch`
+item 5. Each result must be exactly `Pass`; a `Blocked`, `Fail`, missing result, or additional
+unreviewed gate prevents promotion. Keep private queries, paths, filenames, and local evidence out
+of the committed approval record.
 
 ## Privacy rules for every step
 
@@ -117,6 +140,9 @@ PDF spools during large, scanned-PDF indexing, on both Metal and CPU.
 4. Wait about 30 seconds, then press `Ctrl+C`. The script writes `samples.csv` and
    `summary.json`. If the sampler exits with a process-list or `lsof` error, discard that
    incomplete run and repeat it; a missing tool is not a zero-memory or zero-temp result.
+   If `summary.json` reports `skippedSamples` greater than zero, one or more process trees
+   exited during descriptor inspection. Those intervals were discarded, not measured as zero;
+   repeat the run if any occurred during indexing, since a peak may have been missed.
 5. Repeat steps 2–4 with CPU forced (see above) into `~/procyon-measure/cpu`. First remove the
    folder from the library and recreate it, or use a second copy of the folder, so the PDF is
    indexed again.
@@ -219,29 +245,38 @@ Goal: a Gemma library created by v0.5.0-2 survives an upgrade. Rolling back to v
 switching to E5, does not corrupt either library.
 
 1. Install v0.5.0-2 and create a small Gemma library (about 20 files, including one PDF with page
-   images). Record three queries and their top-3 results. Back up the configuration directory
-   (snapshot A).
+   images). Record three queries and their top-3 results as the pre-upgrade baseline. Back up the
+   configuration directory (snapshot A).
 2. Quit Procyon, install the candidate build over v0.5.0-2, and start it.
-3. Confirm the Gemma library is still active, with the same root status and file counts.
-4. Confirm the three queries return the same top-3 files without a full reindex. Expect at most
-   the components to be refreshed.
+3. Confirm the Gemma library remains active with the same roots and consent. The candidate changes
+   the worker's converter/chunker/preprocessing pipeline, so it must explicitly discard and rebuild
+   the Gemma-derived index from enrolled source files. Observe the reindex status through completion;
+   do not expect the old Gemma index or its pre-upgrade top-3 results to survive unchanged. The E5
+   index must remain intact.
+4. After Gemma reindexing completes, repeat the three queries and record their top-3 results and
+   citations against the pre-upgrade baseline. Confirm results resolve to eligible enrolled files.
+   Record all ranking/content differences for release-owner review; do not mark exact top-3 parity as
+   passed or treat this required pipeline reindex as a same-pipeline, no-reindex upgrade.
 5. Add one new file and confirm it is indexed. Back up the configuration directory again
    (snapshot B).
 6. Switch to E5 with **Settings > Semantic > Change embedding model**. Run one E5 query, then switch
    back to Gemma.
-   - Both libraries must keep their own index; the E5 library is never converted.
-   - The Gemma queries must still match step 4.
+   - Both libraries must keep their own index; the E5 library is never converted or rebuilt.
+   - Gemma must remain searchable without a second full reindex; record any result change caused by
+     the new file separately from the post-upgrade baseline in step 4.
 7. Roll back: quit Procyon, reinstall v0.5.0-2 over the candidate, and start it.
-   - Expected: the library opens, or shows an explicit "requires a newer version" or
-     rebuild-required state.
+   - Expected: the library opens, or shows an explicit, recoverable rebuild-required state. The old
+     worker may need to rebuild the Gemma index for its pipeline; record any reindex status.
    - It must never be a crash, silent data loss, or an index that returns wrong files.
 8. If step 7 fails, restore snapshot A and confirm that v0.5.0-2 works again.
 
 Pass criteria:
 
-- Steps 3–6 pass.
-- Step 7 produces either a working library or an explicit, recoverable state.
-- Restoring a snapshot always recovers.
+- Steps 3–6 complete, including the required one-time Gemma pipeline reindex; results and differences
+  are recorded for release-owner review, not silently called top-3 parity.
+- Step 7 produces either a working library or an explicit, recoverable state, including any
+  required rollback reindex.
+- Restoring snapshot A recovers the original Gemma index, E5 index, and consent state.
 - No step modifies the E5 index.
 
 ## 5. On-device Gemma media search
@@ -313,3 +348,8 @@ Pass criteria (all required):
 | 5 | On-device Gemma media search | | Image top-5 /3: · Audio top-5 /3: · Video top-5 /3: · Correct media/source: /9 · Excluded source absent: · Coverage/provenance accurate: | | | |
 
 Promotion decision (release owner): ______________________  Date: __________
+
+Qualification status: item 1 is recorded **Fail** (the proposed Metal memory ceiling is 7.5 GiB,
+above the 4 GiB pass limit). CPU resource gate 1b and items 2–5 are not qualified, and no five-gate
+approval record is checked in. The user separately directed a risk-accepted v0.6.0 release; this
+does not qualify the release or change any recorded result.

@@ -2,7 +2,7 @@
 
 Plugins declare a versioned `plugin.toml`. API version `1` supports action contributions
 (which also supply context-menu and command-palette entries), custom columns, metadata
-extraction, icon themes, and isolated SPA panels. Runtime language and contribution type are
+extraction, icon themes, F3 preview renderers, and isolated SPA panels. Runtime language and contribution type are
 independent: existing manifests default to Lua; `runtime = "javascript"` explicitly selects
 the embedded sandboxed JavaScript executor for actions/columns. The SPA's JavaScript runs in
 an isolated WebView, not in the action executor.
@@ -187,6 +187,50 @@ the host owns rendering and maps the `sample.fileAge` sample to its compact age
 formatter and raw modification-timestamp sort key. This uses no per-row filesystem
 calls. A failed or timed-out column declaration is omitted from the plugin listing,
 so its table cells remain empty and the directory table continues working.
+
+## Preview contribution
+
+A Lua plugin can render files in the F3 viewer for extensions that no built-in renderer handles
+(task 0142). It needs `selected_entry_content_read` and an `entrypoint`:
+
+```toml
+[permissions]
+selected_entry_content_read = true
+
+[contributions.preview]
+extensions = ["torrent"]   # lowercase, no dots, non-empty, unique
+```
+
+```lua
+local function preview(file)
+  -- file.name, file.extension, file.truncated, file.content (binary-safe string)
+  return { kind = "html", body = "<h2>" .. file.name .. "</h2>" }  -- or kind = "text"
+end
+return { preview = preview }
+```
+
+- `content` is at most the first 512 KiB of the file; `truncated` says whether more follows.
+  The plugin gets **no** host table, filesystem, clipboard or network access: a preview is a pure
+  function of those bytes. It runs in a fresh VM with a larger but still enforced budget (1 s,
+  32 MiB, 20M instructions, 512 KiB output).
+- `kind = "text"` is shown verbatim. `kind = "html"` is sanitized by the frontend with the same
+  DOMPurify configuration as Markdown and EPUB previews, and additionally loses every element that
+  loads a remote resource (`img`, `video`, `link`, ...). Scripts, styles, forms and event handlers
+  never survive. **Escape untrusted file content yourself**; sanitization is a second layer.
+- Built-in renderers always win. A plugin only fills extensions that are not images, audio, video,
+  PDF, archives, documents, structured data (CSV/TSV/JSON/Excel) or syntax-highlighted text.
+- A failing preview falls back to the built-in text/hex view of the file and never takes down the
+  viewer. Preview failures are logged but, because previews run on arbitrary untrusted files, they
+  never auto-disable the plugin. Keep output small: escaped text can grow 5x, so cap what you show.
+- Links and anything that fetches a resource (`href`, `src`, `background`, form controls) are
+  stripped from HTML previews.
+- Browser and desktop hosts behave identically (`POST /api/v1/plugins/{pluginId}/preview` /
+  `render_plugin_preview`).
+
+Bundled, enabled by default (and removable in Settings like any plugin): `procyon.preview-torrent`
+(`.torrent`), `procyon.preview-eml` (`.eml`; HTML parts are reduced to text) and
+`procyon.preview-vcard-ical` (`.vcf`, `.ics`). Existing installs get them once on upgrade; a user
+who later disables one keeps it disabled.
 
 ## Icon theme contribution
 

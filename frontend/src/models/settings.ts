@@ -61,4 +61,6 @@ export interface Settings {
   readonly savedSearches: readonly SavedSearch[];
   readonly iconTheme: string;
   readonly checkForUpdatesAutomatically: boolean;
+  /** Opens F3 in its own window instead of a tab in the active pane. */
+  readonly viewerInSeparateWindow: boolean;
 }

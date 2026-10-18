@@ -160,6 +160,8 @@ import {
   type FileViewerController,
   type FileViewerState,
 } from '../features/preview/file-viewer-controller';
+import { previewPluginRoutes } from '../features/preview/plugin-preview';
+import { openViewerWindow } from '../features/preview/viewer-window';
 import { filterEntries } from '../features/quick-filter/quick-filter';
 import {
   createFindFilesController,
@@ -1361,6 +1363,51 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         .catch(unavailable);
       return;
     }
+    // "Open viewer in a separate window": the Lister opens in its own window. Opens that rely on
+    // in-pane state (knowledge sources, the Alt+Space panel preset) stay in a pane tab, and so does
+    // the fallback when no window could be opened (e.g. a blocked browser popup).
+    if (
+      currentSettings?.viewerInSeparateWindow === true &&
+      knowledgeSourceId === undefined &&
+      openMetadata !== true
+    ) {
+      void openViewerWindow(client, {
+        entry,
+        ...(workspace ? { workspaceId: workspace.id } : {}),
+        ...(initialSearch ? { initialSearch } : {}),
+        ...(initialPage ? { initialPage } : {}),
+      }).then((opened) => {
+        if (!opened)
+          openViewerInPane(client, paneId, entry, initialSearch, openMetadata, initialPage);
+      });
+      return;
+    }
+    openViewerInPane(
+      client,
+      paneId,
+      entry,
+      initialSearch,
+      openMetadata,
+      initialPage,
+      knowledgeSourceId,
+    );
+  }
+
+  /** Opens `entry` in the in-pane viewer tab (replacing a viewer already open elsewhere). */
+  function openViewerInPane(
+    client: FileManagerClient,
+    paneId: PaneId,
+    entry: EntrySummary,
+    initialSearch?: {
+      readonly query: string;
+      readonly regex: boolean;
+      readonly caseSensitive: boolean;
+      readonly wholeWord: boolean;
+    },
+    openMetadata?: boolean,
+    initialPage?: number,
+    knowledgeSourceId?: string,
+  ): void {
     const existingViewer = [...viewerByTab.entries()][0];
     if (existingViewer !== undefined) {
       const [key, viewer] = existingViewer;
@@ -1379,6 +1426,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         client,
         entry,
         ...(workspace ? { workspaceId: workspace.id } : {}),
+        previewPlugins: previewPluginRoutes(plugins),
         ...(initialSearch ? { initialSearch } : {}),
         ...(initialPage ? { initialPage } : {}),
         initialMetadataPanelOpen: openMetadata === true,
@@ -1422,6 +1470,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           client,
           entry,
           workspaceId: currentWorkspace.id,
+          previewPlugins: previewPluginRoutes(plugins),
           ...(initialSearch ? { initialSearch } : {}),
           ...(initialPage ? { initialPage } : {}),
           initialMetadataPanelOpen: openMetadata === true,

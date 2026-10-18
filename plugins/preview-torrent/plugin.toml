@@ -1,0 +1,12 @@
+id = "procyon.preview-torrent"
+name = "Torrent preview"
+version = "0.1.0"
+api_version = "1"
+description = "Shows the name, size, trackers and file list of a .torrent file in the F3 viewer."
+entrypoint = "plugin.lua"
+
+[permissions]
+selected_entry_content_read = true
+
+[contributions.preview]
+extensions = ["torrent"]

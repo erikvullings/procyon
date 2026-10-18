@@ -477,6 +477,22 @@ describe('TauriFileManagerClient', () => {
     });
   });
 
+  describe('plugin previews', () => {
+    it('invokes the preview command with the plugin id and wrapped location', async () => {
+      const location = { providerId: 'local', uri: 'file:///tmp/a.torrent' };
+      const result = { kind: 'text', body: 'x', truncated: true };
+      vi.mocked(invoke).mockResolvedValueOnce(result);
+
+      await expect(
+        new TauriFileManagerClient().renderPluginPreview('example.preview', location),
+      ).resolves.toEqual(result);
+      expect(invoke).toHaveBeenCalledWith('render_plugin_preview', {
+        pluginId: 'example.preview',
+        request: { location },
+      });
+    });
+  });
+
   describe('OneDrive authorization', () => {
     it('begins through IPC and opens Microsoft in the system browser', async () => {
       const response = {

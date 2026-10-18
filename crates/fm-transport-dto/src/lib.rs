@@ -34,6 +34,7 @@ pub mod semantic_ocr;
 pub mod semantic_vocabulary;
 pub mod settings;
 pub mod snapshot;
+pub mod sqlite;
 pub mod system_location;
 pub mod workspace;
 pub mod workspace_command;
@@ -147,7 +148,8 @@ pub use operation::{
 };
 pub use plugin::{
     PluginColumnDto, PluginDescriptorDto, PluginIconDefinitionDto, PluginIconThemeDto,
-    PluginLogEntryDto, PluginPermissionsDto, PluginSpaPanelDto,
+    PluginLogEntryDto, PluginPermissionsDto, PluginPreviewDto, PluginPreviewKindDto,
+    PluginPreviewResultDto, PluginSpaPanelDto, RenderPluginPreviewRequestDto,
 };
 pub use rag::{
     DeleteRagConversationRequestDto, GenerateRagAnswerRequestDto, GenerateRagAnswerResponseDto,
@@ -181,6 +183,12 @@ pub use settings::{
     SavedSearchDto, SettingsDto, SizeFormatDto, ThemeDto,
 };
 pub use snapshot::{DirectorySnapshotDto, LoadingStateDto, VolumeCapacityDto};
+pub use sqlite::{
+    OpenSqliteViewRequestDto, OpenSqliteViewResponseDto, QuerySqliteViewRequestDto,
+    QuerySqliteViewResponseDto, SqliteCellDto, SqliteColumnDto, SqliteColumnFilterDto,
+    SqliteFilterOperatorDto, SqliteObjectDto, SqliteObjectKindDto, SqliteQuerySourceDto,
+    SqliteSortDto, SqliteValueTypeDto, SqliteViewSessionRequestDto,
+};
 pub use system_location::{SystemLocationDto, SystemLocationKindDto, VolumeDto};
 pub use workspace::{
     ColumnConfigurationDto, CreateWorkspaceRequestDto, DirectoryViewConfigurationDto,

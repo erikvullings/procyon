@@ -175,6 +175,9 @@ fn api_router() -> OpenApiRouter<AppState> {
         ))
         .routes(utoipa_axum::routes!(routes::files::search_structured_rows))
         .routes(utoipa_axum::routes!(routes::files::close_structured_view))
+        .routes(utoipa_axum::routes!(routes::files::open_sqlite_view))
+        .routes(utoipa_axum::routes!(routes::files::query_sqlite_view))
+        .routes(utoipa_axum::routes!(routes::files::close_sqlite_view))
         .routes(utoipa_axum::routes!(routes::files::load_editable_file))
         .routes(utoipa_axum::routes!(routes::files::save_editable_file))
         .routes(utoipa_axum::routes!(routes::files::search_in_file))
@@ -242,6 +245,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::plugin::enable_plugin))
         .routes(utoipa_axum::routes!(routes::plugin::disable_plugin))
         .routes(utoipa_axum::routes!(routes::plugin::get_plugin_logs))
+        .routes(utoipa_axum::routes!(routes::plugin::render_plugin_preview))
         .routes(utoipa_axum::routes!(
             routes::plugin::get_plugin_icon_theme_asset
         ))

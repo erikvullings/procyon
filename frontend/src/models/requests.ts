@@ -13,9 +13,13 @@ import type { OpenDocxPreviewRequestDto } from '../api/generated/models/openDocx
 import type { OpenDocxPreviewResponseDto } from '../api/generated/models/openDocxPreviewResponseDto';
 import type { OpenPptxPreviewRequestDto } from '../api/generated/models/openPptxPreviewRequestDto';
 import type { OpenPptxPreviewResponseDto } from '../api/generated/models/openPptxPreviewResponseDto';
+import type { OpenSqliteViewRequestDto } from '../api/generated/models/openSqliteViewRequestDto';
+import type { OpenSqliteViewResponseDto } from '../api/generated/models/openSqliteViewResponseDto';
 import type { OpenStructuredViewRequestDto } from '../api/generated/models/openStructuredViewRequestDto';
 import type { OpenStructuredViewResponseDto } from '../api/generated/models/openStructuredViewResponseDto';
 import type { PptxPreviewSessionRequestDto } from '../api/generated/models/pptxPreviewSessionRequestDto';
+import type { QuerySqliteViewRequestDto } from '../api/generated/models/querySqliteViewRequestDto';
+import type { QuerySqliteViewResponseDto } from '../api/generated/models/querySqliteViewResponseDto';
 import type { ReadDocxPreviewResourceRequestDto } from '../api/generated/models/readDocxPreviewResourceRequestDto';
 import type { ReadDocxPreviewResourceResponseDto } from '../api/generated/models/readDocxPreviewResourceResponseDto';
 import type { ReadFileRangeResponseDto } from '../api/generated/models/readFileRangeResponseDto';
@@ -33,6 +37,12 @@ import type { SearchStructuredRowsResponseDto } from '../api/generated/models/se
 import type { SemanticSearchCoverageDto } from '../api/generated/models/semanticSearchCoverageDto';
 import type { SemanticSearchResultDto } from '../api/generated/models/semanticSearchResultDto';
 import type { SortDescriptorDto } from '../api/generated/models/sortDescriptorDto';
+import type { SqliteCellDto } from '../api/generated/models/sqliteCellDto';
+import type { SqliteColumnFilterDto } from '../api/generated/models/sqliteColumnFilterDto';
+import type { SqliteFilterOperatorDto } from '../api/generated/models/sqliteFilterOperatorDto';
+import type { SqliteObjectDto } from '../api/generated/models/sqliteObjectDto';
+import type { SqliteQuerySourceDto } from '../api/generated/models/sqliteQuerySourceDto';
+import type { SqliteViewSessionRequestDto } from '../api/generated/models/sqliteViewSessionRequestDto';
 import type { StructuredRowDto } from '../api/generated/models/structuredRowDto';
 import type { StructuredViewSessionRequestDto } from '../api/generated/models/structuredViewSessionRequestDto';
 import type { StructuredViewStatusDto } from '../api/generated/models/structuredViewStatusDto';
@@ -252,6 +262,18 @@ export type SearchInFileMatch = SearchInFileMatchDto;
 
 /** The result of a {@link SearchInFileRequest}. */
 export type SearchInFileResult = SearchInFileResponseDto;
+
+/** Read-only SQLite database viewer contracts (task 0251). */
+export type OpenSqliteViewRequest = OpenSqliteViewRequestDto;
+export type SqliteView = OpenSqliteViewResponseDto;
+export type SqliteViewSessionRequest = SqliteViewSessionRequestDto;
+export type QuerySqliteViewRequest = QuerySqliteViewRequestDto;
+export type SqliteQueryResult = QuerySqliteViewResponseDto;
+export type SqliteCell = SqliteCellDto;
+export type SqliteColumnFilter = SqliteColumnFilterDto;
+export type SqliteFilterOperator = SqliteFilterOperatorDto;
+export type SqliteObject = SqliteObjectDto;
+export type SqliteQuerySource = SqliteQuerySourceDto;
 
 /** Provider-neutral read-only structured-data viewer session contracts (task 0100). */
 export type OpenStructuredViewRequest = OpenStructuredViewRequestDto;

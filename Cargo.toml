@@ -17,7 +17,7 @@ members = ["crates/*", "apps/*", "apps/fm-desktop/src-tauri"]
 edition = "2024"
 license = "MIT"
 rust-version = "1.97"
-version = "0.5.0-2"
+version = "0.6.0"
 
 # Line-tables-only debug info is enough for backtraces/line-level debugging
 # and is much cheaper to generate and link than full debug info, which
@@ -143,7 +143,7 @@ reqwest = {version = "0.13.4", default-features = false, features = [
   "stream",
 ]}
 rustix = {version = "1.1.4", features = ["process"]}
-rusqlite = {version = "0.37.0", features = ["bundled"]}
+rusqlite = {version = "0.37.0", features = ["bundled", "hooks", "limits"]}
 russh = "0.62"
 russh-sftp = "2.4"
 rusty-s3 = "0.10.2"

@@ -98,6 +98,7 @@ import type {
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
   OpenPptxPreviewRequest,
+  OpenSqliteViewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
@@ -108,11 +109,13 @@ import type {
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  PluginPreviewResult,
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
   PreviewRagRequest,
   PreviewSemanticEnrolmentRequest,
+  QuerySqliteViewRequest,
   RagAnswer,
   RagPreview,
   ReadDocxPreviewResourceRequest,
@@ -176,6 +179,9 @@ import type {
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
+  SqliteQueryResult,
+  SqliteView,
+  SqliteViewSessionRequest,
   StartChecksumRequest,
   StartChecksumResult,
   StartComparisonRequest,
@@ -233,6 +239,7 @@ import {
   resolveMockKnowledgeScope,
   resolveMockKnowledgeSource,
 } from './mock-knowledge-search';
+import { MockSqliteDatabase } from './mock-sqlite-database';
 
 interface FixtureEntry {
   name: string;
@@ -365,6 +372,7 @@ export type MockClientMethod =
   | 'listPlugins'
   | 'setPluginEnabled'
   | 'getPluginLogs'
+  | 'renderPluginPreview'
   | 'getPluginIconThemeAsset'
   | 'startSearch'
   | 'cancelSearch'
@@ -1390,6 +1398,7 @@ export class MockFileManagerClient implements FileManagerClient {
     savedSearches: [],
     iconTheme: 'generic',
     checkForUpdatesAutomatically: true,
+    viewerInSeparateWindow: false,
   };
   private operationSequence = 0;
   private tabSequence = 0;
@@ -1433,6 +1442,7 @@ export class MockFileManagerClient implements FileManagerClient {
   private readonly fileContents = new Map<string, Uint8Array>();
   private readonly docxSessions = new Map<string, Map<string, DocxPreviewResource>>();
   private readonly pptxSessions = new Map<string, Uint8Array>();
+  private readonly sqliteSessions = new Map<string, MockSqliteDatabase>();
   private readonly structuredSessions = new Map<
     string,
     {
@@ -3248,6 +3258,48 @@ export class MockFileManagerClient implements FileManagerClient {
     });
   }
 
+  openSqliteView(request: OpenSqliteViewRequest, signal?: AbortSignal): Promise<SqliteView> {
+    return this.perform('readFileRange', signal, () => {
+      const sessionId = crypto.randomUUID();
+      const database = new MockSqliteDatabase();
+      this.sqliteSessions.set(sessionId, database);
+      return {
+        sessionId,
+        sourceBytes: this.fileContentFor(request.location.uri).length,
+        sqliteVersion: 'mock',
+        objects: [...database.objects],
+      };
+    });
+  }
+
+  querySqliteView(
+    request: QuerySqliteViewRequest,
+    signal?: AbortSignal,
+  ): Promise<SqliteQueryResult> {
+    return this.perform('readFileRange', signal, () => {
+      const database = this.sqliteSessions.get(request.sessionId);
+      if (database === undefined) {
+        throw new MockClientError('notFound', 'SQLite viewer session not found');
+      }
+      try {
+        return database.query(request.source, request.offset ?? 0, request.limit);
+      } catch (error) {
+        throw new MockClientError(
+          'invalidRequest',
+          error instanceof Error ? error.message : 'query failed',
+        );
+      }
+    });
+  }
+
+  closeSqliteView(request: SqliteViewSessionRequest, signal?: AbortSignal): Promise<void> {
+    return this.perform('readFileRange', signal, () => {
+      if (!this.sqliteSessions.delete(request.sessionId)) {
+        throw new MockClientError('notFound', 'SQLite viewer session not found');
+      }
+    });
+  }
+
   loadEditableFile(request: LoadEditableFileRequest, signal?: AbortSignal): Promise<EditableFile> {
     return this.perform('readFileRange', signal, () => {
       const bytes = this.fileContentFor(request.location.uri);
@@ -3735,6 +3787,24 @@ export class MockFileManagerClient implements FileManagerClient {
       this.pluginState = this.pluginState.map((plugin) =>
         plugin.id === pluginId ? { ...plugin, enabled } : plugin,
       );
+    });
+  }
+
+  renderPluginPreview(
+    pluginId: PluginId,
+    location: Location,
+    signal?: AbortSignal,
+  ): Promise<PluginPreviewResult> {
+    return this.perform('renderPluginPreview', signal, () => {
+      const plugin = this.pluginState.find((candidate) => candidate.id === pluginId);
+      if (plugin?.enabled !== true || plugin.preview === undefined) {
+        throw new MockClientError('pluginNotFound', `No enabled mock preview plugin ${pluginId}`);
+      }
+      return {
+        kind: 'text' as const,
+        body: `${pluginId} previewed ${location.uri}`,
+        truncated: false,
+      };
     });
   }
 

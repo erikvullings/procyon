@@ -2424,6 +2424,133 @@
         }
       }
     },
+    "/api/v1/files/sqlite/close": {
+      "post": {
+        "summary": "Closes a SQLite viewer session.",
+        "operationId": "closeSqliteView",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SqliteViewSessionRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/sqlite/open": {
+      "post": {
+        "summary": "Opens a read-only SQLite database viewer session.",
+        "operationId": "openSqliteView",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenSqliteViewRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenSqliteViewResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/sqlite/query": {
+      "post": {
+        "summary": "Reads one bounded page of a SQLite table, view or read-only SQL result.",
+        "operationId": "querySqliteView",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuerySqliteViewRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuerySqliteViewResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/files/structured/close": {
       "post": {
         "operationId": "closeStructuredView",
@@ -4152,6 +4279,64 @@
                   "items": {
                     "$ref": "#/components/schemas/PluginLogEntryDto"
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/{pluginId}/preview": {
+      "post": {
+        "summary": "Renders one file with an enabled plugin's sandboxed preview contribution (task 0142).",
+        "operationId": "renderPluginPreview",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderPluginPreviewRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginPreviewResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
                 }
               }
             }
@@ -14022,6 +14207,60 @@
           }
         }
       },
+      "OpenSqliteViewRequestDto": {
+        "type": "object",
+        "description": "Opens a read-only SQLite viewer session on a database file.",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Provider-neutral database location."
+          }
+        }
+      },
+      "OpenSqliteViewResponseDto": {
+        "type": "object",
+        "description": "An opened viewer session and the database schema.",
+        "required": [
+          "sessionId",
+          "sourceBytes",
+          "sqliteVersion",
+          "objects"
+        ],
+        "properties": {
+          "objects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SqliteObjectDto"
+            },
+            "description": "Tables and views, sorted by name; internal `sqlite_*` tables are omitted."
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Session handle for later queries."
+          },
+          "sourceBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Database file size in bytes.",
+            "minimum": 0
+          },
+          "sqliteVersion": {
+            "type": "string",
+            "description": "SQLite library version used to read the file."
+          },
+          "warning": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A user-facing caveat, e.g. a WAL file whose recent writes are not shown."
+          }
+        }
+      },
       "OpenStructuredViewRequestDto": {
         "type": "object",
         "description": "Opens a provider-neutral, read-only structured-data viewer session.",
@@ -14825,6 +15064,17 @@
             "$ref": "#/components/schemas/PluginPermissionsDto",
             "description": "Capabilities the manifest requests; ungranted capabilities are denied (spec §19)."
           },
+          "preview": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PluginPreviewDto",
+                "description": "F3 preview renderer metadata, present only for enabled, valid plugins."
+              }
+            ]
+          },
           "spaPanel": {
             "oneOf": [
               {
@@ -15035,6 +15285,53 @@
           }
         }
       },
+      "PluginPreviewDto": {
+        "type": "object",
+        "description": "A sandboxed F3 preview renderer a plugin contributes (task 0142).",
+        "required": [
+          "extensions"
+        ],
+        "properties": {
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Lowercase extensions (no dot) the plugin renders; built-in renderers always win."
+          }
+        }
+      },
+      "PluginPreviewKindDto": {
+        "type": "string",
+        "description": "How a plugin preview body must be displayed.",
+        "enum": [
+          "text",
+          "html"
+        ]
+      },
+      "PluginPreviewResultDto": {
+        "type": "object",
+        "description": "A plugin-rendered preview.",
+        "required": [
+          "kind",
+          "body",
+          "truncated"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "The rendered preview; never trusted, always sanitized by the host UI."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PluginPreviewKindDto",
+            "description": "How to display `body`."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether the plugin only saw a prefix of the file."
+          }
+        }
+      },
       "PluginSpaPanelDto": {
         "type": "object",
         "description": "A packaged SPA panel that is available only in the isolated desktop host.",
@@ -15202,6 +15499,98 @@
           }
         },
         "additionalProperties": false
+      },
+      "QuerySqliteViewRequestDto": {
+        "type": "object",
+        "description": "Reads one bounded page from a viewer session.",
+        "required": [
+          "sessionId",
+          "source",
+          "limit"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Maximum rows in the page (capped by the server).",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Zero-based index of the first row of the page.",
+            "minimum": 0
+          },
+          "sessionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Session handle."
+          },
+          "source": {
+            "$ref": "#/components/schemas/SqliteQuerySourceDto",
+            "description": "What to read."
+          }
+        }
+      },
+      "QuerySqliteViewResponseDto": {
+        "type": "object",
+        "description": "One bounded result page.",
+        "required": [
+          "columns",
+          "rows",
+          "offset",
+          "hasMore",
+          "truncated",
+          "elapsedMs"
+        ],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Result column names."
+          },
+          "elapsedMs": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Wall-clock query time in milliseconds.",
+            "minimum": 0
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "Whether more rows exist after this page."
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Zero-based index of the first returned row.",
+            "minimum": 0
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/SqliteCellDto"
+              }
+            },
+            "description": "Rows of this page."
+          },
+          "totalRows": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Total matching rows for a browse query, when counting finished in time.",
+            "minimum": 0
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether the page was cut short by the response size budget."
+          }
+        }
       },
       "QuickFilterPatchDto": {
         "oneOf": [
@@ -16025,6 +16414,19 @@
           "algorithm": {
             "$ref": "#/components/schemas/ChecksumAlgorithmDto",
             "description": "Which of the job's algorithms to write. A checksum file carries one\nalgorithm, matching `sha256sum`/`md5sum`."
+          }
+        }
+      },
+      "RenderPluginPreviewRequestDto": {
+        "type": "object",
+        "description": "Request to render one file with a plugin's preview contribution.",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The file to preview; its extension must be one the plugin claims."
           }
         }
       },
@@ -19765,7 +20167,8 @@
           "multiRenamePresets",
           "savedSearches",
           "iconTheme",
-          "checkForUpdatesAutomatically"
+          "checkForUpdatesAutomatically",
+          "viewerInSeparateWindow"
         ],
         "properties": {
           "checkForUpdatesAutomatically": {
@@ -19930,6 +20333,10 @@
           "theme": {
             "$ref": "#/components/schemas/ThemeDto",
             "description": "Application theme."
+          },
+          "viewerInSeparateWindow": {
+            "type": "boolean",
+            "description": "Whether F3 opens the viewer in its own window instead of a tab in the active pane."
           }
         }
       },
@@ -20083,6 +20490,252 @@
               "null"
             ],
             "description": "The comment text, or `None` if unset."
+          }
+        }
+      },
+      "SqliteCellDto": {
+        "type": "object",
+        "description": "One cell of a result row.",
+        "required": [
+          "valueType"
+        ],
+        "properties": {
+          "byteLength": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Full size in bytes of a truncated text or blob value.",
+            "minimum": 0
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display text; absent for `null`."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether `text` omits part of the stored value."
+          },
+          "valueType": {
+            "$ref": "#/components/schemas/SqliteValueTypeDto",
+            "description": "Storage class."
+          }
+        }
+      },
+      "SqliteColumnDto": {
+        "type": "object",
+        "description": "One column of a table or view.",
+        "required": [
+          "name",
+          "declaredType",
+          "notNull",
+          "primaryKey"
+        ],
+        "properties": {
+          "declaredType": {
+            "type": "string",
+            "description": "Declared type text, empty when the column is untyped."
+          },
+          "name": {
+            "type": "string",
+            "description": "Column name."
+          },
+          "notNull": {
+            "type": "boolean",
+            "description": "Whether the column is declared `NOT NULL`."
+          },
+          "primaryKey": {
+            "type": "boolean",
+            "description": "Whether the column is part of the primary key."
+          }
+        }
+      },
+      "SqliteColumnFilterDto": {
+        "type": "object",
+        "description": "One per-column filter; all filters of a request are combined with `AND`.",
+        "required": [
+          "column",
+          "operator"
+        ],
+        "properties": {
+          "column": {
+            "type": "string",
+            "description": "Column to filter on; must exist in the browsed object."
+          },
+          "operator": {
+            "$ref": "#/components/schemas/SqliteFilterOperatorDto",
+            "description": "Comparison to apply."
+          },
+          "value": {
+            "type": "string",
+            "description": "Comparison operand; ignored for `isNull` and `isNotNull`."
+          }
+        }
+      },
+      "SqliteFilterOperatorDto": {
+        "type": "string",
+        "description": "Comparison applied by a per-column filter.",
+        "enum": [
+          "contains",
+          "equals",
+          "notEquals",
+          "greater",
+          "less",
+          "isNull",
+          "isNotNull"
+        ]
+      },
+      "SqliteObjectDto": {
+        "type": "object",
+        "description": "One table or view in the database schema.",
+        "required": [
+          "name",
+          "kind",
+          "columns"
+        ],
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SqliteColumnDto"
+            },
+            "description": "Columns in declaration order."
+          },
+          "createSql": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The original `CREATE` statement, when SQLite stores one."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SqliteObjectKindDto",
+            "description": "Table or view."
+          },
+          "name": {
+            "type": "string",
+            "description": "Object name."
+          }
+        }
+      },
+      "SqliteObjectKindDto": {
+        "type": "string",
+        "description": "Whether a schema object is a table or a view.",
+        "enum": [
+          "table",
+          "view"
+        ]
+      },
+      "SqliteQuerySourceDto": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Browse a table or view.",
+            "required": [
+              "object",
+              "type"
+            ],
+            "properties": {
+              "filters": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SqliteColumnFilterDto"
+                },
+                "description": "Per-column filters."
+              },
+              "object": {
+                "type": "string",
+                "description": "Table or view name."
+              },
+              "search": {
+                "type": "string",
+                "description": "Free-text search across every column (case-insensitive substring)."
+              },
+              "sort": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SqliteSortDto",
+                    "description": "Optional sort."
+                  }
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "browse"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Run one read-only SQL statement.",
+            "required": [
+              "sql",
+              "type"
+            ],
+            "properties": {
+              "sql": {
+                "type": "string",
+                "description": "A single `SELECT`, `WITH`, `EXPLAIN` or read-only `PRAGMA` statement."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "sql"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "What a query reads: a stored table/view with filters, or a user SQL statement."
+      },
+      "SqliteSortDto": {
+        "type": "object",
+        "description": "Sort order for a browsed table.",
+        "required": [
+          "column"
+        ],
+        "properties": {
+          "column": {
+            "type": "string",
+            "description": "Column to sort by; must exist in the browsed object."
+          },
+          "descending": {
+            "type": "boolean",
+            "description": "Sort descending instead of ascending."
+          }
+        }
+      },
+      "SqliteValueTypeDto": {
+        "type": "string",
+        "description": "SQLite storage class of a cell.",
+        "enum": [
+          "null",
+          "integer",
+          "real",
+          "text",
+          "blob"
+        ]
+      },
+      "SqliteViewSessionRequestDto": {
+        "type": "object",
+        "description": "Request addressing an existing viewer session.",
+        "required": [
+          "sessionId"
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Session handle from [`OpenSqliteViewResponseDto`]."
           }
         }
       },

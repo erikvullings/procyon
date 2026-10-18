@@ -47,6 +47,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     savedSearches: [],
     iconTheme: 'generic',
     checkForUpdatesAutomatically: true,
+    viewerInSeparateWindow: false,
     ...overrides,
   };
 }

@@ -1,0 +1,12 @@
+id = "procyon.preview-eml"
+name = "Email (.eml) preview"
+version = "0.1.0"
+api_version = "1"
+description = "Shows the headers, text body and attachment list of an .eml message in the F3 viewer."
+entrypoint = "plugin.lua"
+
+[permissions]
+selected_entry_content_read = true
+
+[contributions.preview]
+extensions = ["eml"]

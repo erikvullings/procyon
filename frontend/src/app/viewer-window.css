@@ -1,0 +1,14 @@
+.fm-viewer-window {
+  display: flex;
+  height: 100vh;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--fm-background);
+  color: var(--fm-text);
+}
+
+.fm-viewer-window > .fm-file-viewer,
+.fm-viewer-window > .fm-file-viewer-loading {
+  min-height: 0;
+  flex: 1 1 auto;
+}

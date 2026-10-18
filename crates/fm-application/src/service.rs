@@ -138,6 +138,7 @@ use crate::semantic_ocr::{
     UnavailableOcrExecutableProbe,
 };
 use crate::settings_mapping::{settings_from_dto, settings_to_dto};
+use crate::sqlite_view::SqliteViewService;
 use crate::structured_view::StructuredViewService;
 use crate::thumbnails::ThumbnailService;
 use crate::workspace::{JsonFileWorkspaceRepository, WorkspaceService, WorkspaceSummary};
@@ -147,6 +148,24 @@ const MAX_SUMMARY_SOURCE_IMAGE_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_SUMMARY_TOTAL_IMAGE_BYTES: usize = 12 * 1024 * 1024;
 const MAX_SUMMARY_DECODED_PIXELS: u64 = 40_000_000;
 const MAX_SUMMARY_IMAGE_DIMENSION: u32 = 1_024;
+
+/// The percent-decoded last path segment of a location URI, without query or fragment.
+fn file_name_from_uri(uri: &str) -> String {
+    let path = uri.split(['?', '#']).next().unwrap_or(uri);
+    let segment = path.rsplit('/').next().unwrap_or_default();
+    percent_encoding::percent_decode_str(segment)
+        .decode_utf8_lossy()
+        .into_owned()
+}
+
+/// Lowercase extension of `name`; a leading-dot name such as `.torrent` has none (matching the
+/// frontend's routing).
+fn file_extension(name: &str) -> String {
+    match name.rfind('.') {
+        Some(index) if index > 0 => name[index + 1..].to_ascii_lowercase(),
+        _ => String::new(),
+    }
+}
 
 fn prepare_summary_image(data: &[u8], media_type: &str) -> Option<Vec<u8>> {
     if data.len() > MAX_SUMMARY_SOURCE_IMAGE_BYTES as usize {
@@ -222,6 +241,7 @@ pub struct FileManagerService {
     rag_ephemeral: Mutex<HashMap<Uuid, SavedRagConversation>>,
     pptx_preview: PptxPreviewService,
     structured_view: StructuredViewService,
+    sqlite_view: SqliteViewService,
     providers: ProviderRegistry,
     archive_provider: Arc<ArchiveFileSystemProvider>,
     events: EventBus,
@@ -665,6 +685,7 @@ impl FileManagerService {
             rag_ephemeral: Mutex::new(HashMap::new()),
             pptx_preview: PptxPreviewService::new(providers.clone()),
             structured_view: StructuredViewService::new(providers.clone()),
+            sqlite_view: SqliteViewService::new(providers.clone()),
             providers,
             archive_provider,
             events: events.clone(),
@@ -3056,6 +3077,36 @@ impl FileManagerService {
         self.plugin_manager.plugin_logs(plugin_id)
     }
 
+    /// Renders one file with an enabled plugin's preview contribution (task 0142). Reads at most
+    /// [`fm_plugin_runtime::PREVIEW_MAX_INPUT_BYTES`] from the start of the file; the plugin
+    /// itself gets no filesystem authority.
+    pub async fn render_plugin_preview(
+        &self,
+        plugin_id: &str,
+        request: fm_transport_dto::RenderPluginPreviewRequestDto,
+    ) -> Result<fm_transport_dto::PluginPreviewResultDto, ApplicationError> {
+        let name = file_name_from_uri(&request.location.uri);
+        let extension = file_extension(&name);
+        self.plugin_manager
+            .check_preview_claim(plugin_id, &extension)?;
+        let chunk = content_streaming::read_file_range(
+            &self.providers,
+            ReadFileRangeRequestDto {
+                location: request.location,
+                offset: 0,
+                length: fm_plugin_runtime::PREVIEW_MAX_INPUT_BYTES as u64,
+            },
+        )
+        .await?;
+        self.plugin_manager.render_plugin_preview(
+            plugin_id,
+            &name,
+            &extension,
+            &chunk.data,
+            !chunk.eof,
+        )
+    }
+
     /// Persists a plugin enablement decision after confirming its manifest is valid.
     pub fn set_plugin_enabled(
         &self,
@@ -3347,6 +3398,30 @@ impl FileManagerService {
         request: fm_transport_dto::StructuredViewSessionRequestDto,
     ) -> Result<(), ApplicationError> {
         self.structured_view.close(request).await
+    }
+
+    /// Opens a read-only SQLite database viewer session (task 0251).
+    pub async fn open_sqlite_view(
+        &self,
+        request: fm_transport_dto::OpenSqliteViewRequestDto,
+    ) -> Result<fm_transport_dto::OpenSqliteViewResponseDto, ApplicationError> {
+        self.sqlite_view.open(request).await
+    }
+
+    /// Reads one bounded page of a table, view or read-only SQL result.
+    pub async fn query_sqlite_view(
+        &self,
+        request: fm_transport_dto::QuerySqliteViewRequestDto,
+    ) -> Result<fm_transport_dto::QuerySqliteViewResponseDto, ApplicationError> {
+        self.sqlite_view.query(request).await
+    }
+
+    /// Closes a SQLite viewer session and deletes any temporary copy.
+    pub async fn close_sqlite_view(
+        &self,
+        request: fm_transport_dto::SqliteViewSessionRequestDto,
+    ) -> Result<(), ApplicationError> {
+        self.sqlite_view.close(request).await
     }
 
     /// Loads a complete text file only when it fits the bounded editor budget.
@@ -4211,6 +4286,18 @@ impl From<WorkspaceSummary> for WorkspaceSummaryDto {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    #[test]
+    fn preview_file_names_are_percent_decoded_and_dotfiles_have_no_extension() {
+        assert_eq!(
+            file_name_from_uri("file:///a/My%20Movie.TORRENT?x=1#y"),
+            "My Movie.TORRENT"
+        );
+        assert_eq!(file_extension("My Movie.TORRENT"), "torrent");
+        assert_eq!(file_extension(".torrent"), "");
+        assert_eq!(file_extension("README"), "");
+    }
+
     use std::io::Write;
     use std::path::Path;
 

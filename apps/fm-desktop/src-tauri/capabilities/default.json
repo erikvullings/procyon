@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capabilities for the trusted main and per-workspace WebViews. Child plugin WebViews share their parent window but must not inherit its native plugin commands.",
+  "description": "Capabilities for the trusted main, per-workspace and viewer WebViews. Child plugin WebViews share their parent window but must not inherit its native plugin commands.",
   "webviews": [
     "main",
-    "workspace-*"
+    "workspace-*",
+    "viewer-*"
   ],
   "permissions": [
     "core:default",

@@ -259,6 +259,12 @@ describe('MockFileManagerClient API', () => {
     await expect(client.getFileIcon('mock:///notes.txt')).resolves.toBeUndefined();
   });
 
+  it('renders a plugin preview only for an enabled plugin that contributes one', async () => {
+    const client = new MockFileManagerClient();
+    const location = { providerId: 'file', uri: 'mock:///a.demo' };
+    await expect(client.renderPluginPreview('missing.plugin', location)).rejects.toThrow();
+  });
+
   it('provides deterministic capabilities, workspace, metadata, actions, and plugins', async () => {
     const client = new MockFileManagerClient();
 

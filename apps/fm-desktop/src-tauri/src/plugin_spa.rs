@@ -104,6 +104,9 @@ fn panel_csp(origin: &str) -> String {
 pub(crate) fn trusted_invoke_label(label: &str) -> bool {
     label == "main"
         || label
+            .strip_prefix(crate::commands::VIEWER_WINDOW_PREFIX)
+            .is_some_and(|id| Uuid::parse_str(id).is_ok())
+        || label
             .strip_prefix("workspace-")
             .and_then(|rest| rest.split_once('_').map_or(Some(rest), |(id, _)| Some(id)))
             .is_some_and(|id| Uuid::parse_str(id).is_ok())
@@ -2026,6 +2029,9 @@ mod tests {
             "workspace-{}_nonce",
             Uuid::new_v4()
         )));
+        assert!(trusted_invoke_label(&format!("viewer-{}", Uuid::new_v4())));
+        assert!(!trusted_invoke_label("viewer-"));
+        assert!(!trusted_invoke_label("viewer-not-a-uuid"));
         assert!(!trusted_invoke_label("plugin-spa-123"));
         assert!(!trusted_invoke_label("main-impersonator"));
         assert!(!trusted_invoke_label("workspace-"));
@@ -2038,7 +2044,7 @@ mod tests {
                 .expect("valid desktop capability");
         assert_eq!(
             capability["webviews"],
-            serde_json::json!(["main", "workspace-*"])
+            serde_json::json!(["main", "workspace-*", "viewer-*"])
         );
         assert!(
             capability.get("windows").is_none(),

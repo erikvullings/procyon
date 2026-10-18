@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   defaultRuntimeDirectory,
   formatBytes,
   isInsideDirectory,
+  lsofTempUsage,
   openTempBytesFromLsof,
   parseArguments,
   parsePsTable,
@@ -11,6 +17,7 @@ import {
   processRssBreakdown,
   processTree,
   run,
+  SampleProcessesExitedError,
   samplesToCsv,
   summarizeSamples,
 } from './measure-semantic-worker-resources.mjs';
@@ -161,6 +168,115 @@ test('lsof output counts open regular temp files once, ignoring other descriptor
     count: 2,
   });
   assert.deepEqual(openTempBytesFromLsof('', ['/tmp'], 'linux'), { bytes: 0, count: 0 });
+});
+
+test('lsof skips an all-exited process tree, but fails closed for other command failures', () => {
+  const exited = () => {
+    const error = new Error('lsof exited with status 1');
+    error.exitStatus = 1;
+    throw error;
+  };
+  const pids = [600, 601];
+  assert.throws(
+    () => lsofTempUsage(pids, ['/tmp'], 'darwin', exited, () => []),
+    SampleProcessesExitedError,
+  );
+  assert.throws(
+    () => lsofTempUsage(pids, ['/tmp'], 'darwin', exited, () => [{ pid: 601 }]),
+    /lsof exited with status 1/,
+  );
+  assert.throws(
+    () =>
+      lsofTempUsage(pids, ['/tmp'], 'darwin', exited, () => {
+        throw new Error('ps exited with status 1');
+      }),
+    /ps exited with status 1/,
+  );
+  assert.throws(
+    () =>
+      lsofTempUsage(
+        pids,
+        ['/tmp'],
+        'darwin',
+        () => {
+          throw new Error('lsof could not run: ENOENT');
+        },
+        () => [],
+      ),
+    /lsof could not run: ENOENT/,
+  );
+  assert.throws(
+    () =>
+      lsofTempUsage(
+        pids,
+        ['/tmp'],
+        'darwin',
+        () => {
+          const error = new Error('lsof exited with status 2');
+          error.exitStatus = 2;
+          throw error;
+        },
+        () => [],
+      ),
+    /lsof exited with status 2/,
+  );
+  assert.deepEqual(
+    lsofTempUsage(
+      pids,
+      ['/tmp'],
+      'darwin',
+      () => 'p600\nf3\ntREG\ns512\ni12\nn/tmp/.tmpSpool\n',
+      () => {
+        throw new Error('recheck should not run after successful lsof');
+      },
+    ),
+    { bytes: 512, count: 1 },
+  );
+});
+
+test('an exited tree is discarded and recorded instead of aborting or sampling zero temp bytes', {
+  skip: process.platform !== 'darwin',
+}, () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'procyon-sampler-race-'));
+  try {
+    const bin = path.join(directory, 'bin');
+    fs.mkdirSync(bin);
+    const marker = path.join(directory, 'ps-seen');
+    const ps = path.join(bin, 'ps');
+    fs.writeFileSync(
+      ps,
+      '#!/bin/sh\nif [ -e "$SAMPLER_PS_MARKER" ]; then exit 0; fi\ntouch "$SAMPLER_PS_MARKER"\nprintf "600 1 512 sample-worker\\n"\n',
+      { mode: 0o755 },
+    );
+    fs.writeFileSync(path.join(bin, 'lsof'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    const output = path.join(directory, 'out');
+    const result = spawnSync(
+      process.execPath,
+      [
+        fileURLToPath(new URL('./measure-semantic-worker-resources.mjs', import.meta.url)),
+        '--pid',
+        '600',
+        '--interval',
+        '5',
+        '--duration',
+        '1',
+        '--out',
+        output,
+      ],
+      {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, SAMPLER_PS_MARKER: marker },
+      },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /Discarding incomplete sample: all sampled processes exited/);
+    const summary = JSON.parse(fs.readFileSync(path.join(output, 'summary.json'), 'utf8'));
+    assert.equal(summary.skippedSamples, 1);
+    assert.ok(summary.sampleCount > 0);
+    assert.equal(summary.samplesWithWorker, 0);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('summary reports peaks and the largest free-disk drop', () => {

@@ -81,4 +81,16 @@ export interface PluginDescriptor {
     actionId: string;
     extensions: readonly string[];
   };
+  /** Sandboxed F3 preview renderer (task 0142); present only for enabled, valid plugins. */
+  preview?: {
+    extensions: readonly string[];
+  };
+}
+
+/** A plugin-rendered preview. `html` bodies are untrusted and must be sanitized before display. */
+export interface PluginPreviewResult {
+  kind: 'text' | 'html';
+  body: string;
+  /** Whether the plugin only saw a prefix of the file. */
+  truncated: boolean;
 }

@@ -441,6 +441,8 @@ pub fn run() {
                 .map_label(|label| {
                     if label.starts_with("plugin-spa-") {
                         "plugin-spa"
+                    } else if label.starts_with(commands::VIEWER_WINDOW_PREFIX) {
+                        "viewer"
                     } else {
                         commands::canonical_workspace_window_label(label)
                     }
@@ -616,6 +618,9 @@ pub fn run() {
             commands::read_structured_json_window,
             commands::search_structured_rows,
             commands::close_structured_view,
+            commands::open_sqlite_view,
+            commands::query_sqlite_view,
+            commands::close_sqlite_view,
             commands::load_editable_file,
             commands::save_editable_file,
             commands::search_in_file,
@@ -630,6 +635,7 @@ pub fn run() {
             commands::list_workspaces,
             commands::start_workspace,
             commands::open_workspace_window,
+            commands::open_viewer_window,
             commands::resync_workspace,
             commands::create_workspace,
             commands::get_workspace,
@@ -652,6 +658,7 @@ pub fn run() {
             commands::enable_plugin,
             commands::disable_plugin,
             commands::get_plugin_logs,
+            commands::render_plugin_preview,
             commands::get_plugin_icon_theme_asset,
             plugin_spa::open_plugin_panel,
             plugin_spa::update_plugin_panel_bounds,
@@ -989,6 +996,9 @@ mod tests {
                 commands::read_structured_json_window,
                 commands::search_structured_rows,
                 commands::close_structured_view,
+                commands::open_sqlite_view,
+                commands::query_sqlite_view,
+                commands::close_sqlite_view,
                 commands::load_editable_file,
                 commands::save_editable_file,
                 commands::search_in_file,
@@ -1024,6 +1034,7 @@ mod tests {
                 commands::enable_plugin,
                 commands::disable_plugin,
                 commands::get_plugin_logs,
+            commands::render_plugin_preview,
                 commands::get_plugin_icon_theme_asset,
                 commands::start_search,
                 commands::cancel_search,

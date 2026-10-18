@@ -119,7 +119,14 @@ function profileName(profile: SemanticProfile): string {
     case 'multilingualQuality':
       return t('semanticComponents', 'multilingualQualityName');
     case 'embeddingGemma2':
-      return t('semanticComponents', 'gemmaName');
+      return t(
+        'semanticComponents',
+        import.meta.env.VITE_GEMMA_RISK_ACCEPTED === 'true'
+          ? 'gemmaRiskAcceptedName'
+          : import.meta.env.VITE_GEMMA_QUALIFIED === 'true'
+            ? 'gemmaQualifiedName'
+            : 'gemmaName',
+      );
   }
 }
 
@@ -132,7 +139,12 @@ function profileDescription(profile: SemanticProfile): string {
     case 'multilingualQuality':
       return t('semanticComponents', 'multilingualQualityDescription');
     case 'embeddingGemma2':
-      return t('semanticComponents', 'gemmaDescription');
+      return t(
+        'semanticComponents',
+        import.meta.env.VITE_GEMMA_RISK_ACCEPTED === 'true'
+          ? 'gemmaRiskAcceptedDescription'
+          : 'gemmaDescription',
+      );
   }
 }
 
