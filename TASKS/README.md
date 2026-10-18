@@ -87,6 +87,7 @@ The dual-pane shell: layout, panes, tabs, sorting, selection, and finding things
 - [x] 0259 Directory refresh amplification (large dirs, post-operation) *(needs 0156; real cause of slow delete was a 19 MB operation-history.json — see task notes)*
 - [ ] 0254 Branch (flat) view *(needs 0019, 0024)*
 - [ ] 0255 Synchronized browsing *(needs 0027, 0026)*
+- [ ] 0270 Per-folder view memory *(needs 0029, 0134)*
 
 ## Semantic search, RAG & knowledge
 
@@ -234,6 +235,8 @@ engine, conflict handling, clipboard, drag-and-drop, comparison and checksums th
 - [ ] 0256 Compare by content and file diff *(needs 0075, 0099)*
 - [ ] 0257 Split and combine files *(needs 0035, 0077)*
 - [ ] 0258 Permissions and ownership (chmod/chown) editor *(needs 0140, 0035, 0058)*
+- [ ] 0268 Folder snapshots and diffs *(needs 0077, 0075)*
+- [ ] 0272 Disk-space guard before transfers *(needs 0096, 0035)*
 
 ## Actions, shortcuts & command palette
 
@@ -276,6 +279,13 @@ Looking at and editing file contents without leaving the app.
 - [x] 0252 Open the F3 viewer in a separate window *(needs 0088; setting `viewerInSeparateWindow`)*
 - [x] 0173 PPTX content preview *(needs 0088)*
 - [x] 0174 macOS Quick Look action *(needs 0059, 0088)*
+- [ ] 0260 Seekable media streaming for the viewer *(needs 0088, 0150)*
+- [ ] 0261 Playlist files (M3U, M3U8, PLS, XSPF) as a track list *(needs 0088, 0142)*
+- [ ] 0262 Audio queue and persistent mini-player *(needs 0260, 0261)*
+- [ ] 0263 Play a folder or selection as a queue *(needs 0262)*
+- [ ] 0264 Export selection or basket as a playlist *(needs 0165, 0261)*
+- [ ] 0269 Archive-aware playback and preview *(needs 0076, 0260)*
+- [ ] 0271 Editor actions on a path or URL under the cursor *(needs 0099)*
 
 ## Metadata, icons & views
 
@@ -303,6 +313,9 @@ disk-usage visualization.
   0136; 0140 landed mid-task, after 0136's own standalone dialogs were already built)*
 - [x] 0151 Fix Windows git-status/history: `canonicalize()` vs. `git2` path mismatch *(needs 0135;
   uses `dunce::canonicalize()` to keep filesystem and libgit2 paths comparable on Windows)*
+- [ ] 0265 Duplicate and near-duplicate music finder *(needs 0077)*
+- [ ] 0266 Broken-link doctor *(needs 0068, 0168)*
+- [ ] 0267 Tag and EXIF fields in multi-rename *(needs 0072, 0149)*
 
 ## Plugins & extensibility
 
