@@ -4,6 +4,7 @@ import {
   canApplyRenamePlan,
   EMPTY_MULTI_RENAME_RULES,
   type MultiRenameRules,
+  metadataTokensIn,
   proposeRenames,
   type RenameTarget,
   validateSearchPattern,
@@ -307,5 +308,74 @@ describe('canApplyRenamePlan', () => {
       new Set(),
     );
     expect(canApplyRenamePlan(proposals)).toBe(false);
+  });
+});
+
+describe('metadata tokens (task 0267)', () => {
+  const tokenRules = rules({ nameMask: '{artist} - {title}', extensionMask: '[E]' });
+
+  it('lists the distinct tokens used by both masks', () => {
+    expect(
+      metadataTokensIn(
+        rules({ nameMask: '{artist} - {title} {artist}', extensionMask: '{exif:camera}' }),
+      ),
+    ).toEqual(['artist', 'title', 'exif:camera']);
+    expect(metadataTokensIn(rules())).toEqual([]);
+  });
+
+  it('fills tokens from the entry metadata and keeps the extension', () => {
+    const [proposal] = proposeRenames(
+      [{ id: '1', name: 'track01.mp3', metadata: { artist: 'Ada', title: 'Engine' } }],
+      tokenRules,
+      new Set(),
+    );
+    expect(proposal?.newName).toBe('Ada - Engine.mp3');
+    expect(proposal?.missingMetadata).toBeUndefined();
+  });
+
+  it('flags files that lack a field and blocks applying the plan', () => {
+    const proposals = proposeRenames(
+      [
+        { id: '1', name: 'a.mp3', metadata: { artist: 'Ada', title: 'Engine' } },
+        { id: '2', name: 'b.mp3', metadata: { artist: 'Grace' } },
+      ],
+      tokenRules,
+      new Set(),
+    );
+    expect(proposals[1]?.missingMetadata).toEqual(['title']);
+    expect(canApplyRenamePlan(proposals)).toBe(false);
+  });
+
+  it('treats not-yet-read metadata as pending rather than missing', () => {
+    const [proposal] = proposeRenames(
+      [{ id: '1', name: 'a.mp3', metadata: undefined }],
+      tokenRules,
+      new Set(),
+    );
+    expect(proposal?.metadataPending).toBe(true);
+    expect(
+      canApplyRenamePlan(proposeRenames([{ id: '1', name: 'a.mp3' }], tokenRules, new Set())),
+    ).toBe(false);
+  });
+
+  it('does not re-expand mask tokens that appear inside a metadata value', () => {
+    const [proposal] = proposeRenames(
+      [{ id: '1', name: 'a.mp3', metadata: { artist: '[N]', title: 'x' } }],
+      tokenRules,
+      new Set(),
+    );
+    expect(proposal?.newName).toBe('[N] - x.mp3');
+  });
+
+  it('still detects collisions between metadata-derived names', () => {
+    const proposals = proposeRenames(
+      [
+        { id: '1', name: 'a.mp3', metadata: { artist: 'Ada', title: 'Same' } },
+        { id: '2', name: 'b.mp3', metadata: { artist: 'Ada', title: 'Same' } },
+      ],
+      tokenRules,
+      new Set(),
+    );
+    expect(proposals.map((proposal) => proposal.collision)).toEqual(['plan', 'plan']);
   });
 });

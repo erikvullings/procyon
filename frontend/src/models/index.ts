@@ -15,6 +15,7 @@ export * from './knowledge';
 export * from './link-doctor';
 export * from './llm-profile';
 export * from './location';
+export * from './metadata-tokens';
 export * from './music-duplicates';
 export * from './native-menu';
 export * from './operation';

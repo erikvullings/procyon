@@ -321,7 +321,7 @@ disk-usage visualization.
   uses `dunce::canonicalize()` to keep filesystem and libgit2 paths comparable on Windows)*
 - [x] 0265 Duplicate and near-duplicate music finder *(needs 0077)*
 - [ ] 0266 Broken-link doctor *(needs 0068, 0168)*
-- [ ] 0267 Tag and EXIF fields in multi-rename *(needs 0072, 0149)*
+- [x] 0267 Tag and EXIF fields in multi-rename *(needs 0072, 0149)*
 - [ ] 0273 Full image metadata viewer (EXIF, IPTC, XMP) *(needs 0088)*
 - [ ] 0274 Edit image metadata (EXIF, IPTC, XMP) *(needs 0273, 0035)*
 - [ ] 0275 Map component with a replaceable tile source *(needs 0030)*

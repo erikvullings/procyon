@@ -2880,6 +2880,19 @@ pub(crate) fn cancel_duplicate_scan(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Resolves audio-tag and EXIF tokens for multi-rename patterns (task 0267).
+#[tauri::command]
+pub(crate) async fn resolve_metadata_tokens(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ResolveMetadataTokensRequestDto,
+) -> Result<fm_transport_dto::ResolveMetadataTokensResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .resolve_metadata_tokens(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Starts a cancellable music duplicate scan through the shared service (task 0265).
 ///
 /// Must be `async` so the scan task is spawned on the Tokio runtime.

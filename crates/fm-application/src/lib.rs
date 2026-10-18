@@ -42,6 +42,7 @@ mod link_operation;
 mod llm_profile_mapping;
 pub mod llm_profiles;
 pub mod media_stream;
+mod metadata_tokens;
 mod music_duplicates;
 mod onedrive;
 mod operation_history;

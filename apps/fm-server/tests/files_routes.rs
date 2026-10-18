@@ -512,3 +512,28 @@ async fn structured_view_routes_share_one_provider_neutral_session_contract() {
         .expect("close request");
     assert_eq!(closed.status(), reqwest::StatusCode::NO_CONTENT);
 }
+
+#[tokio::test]
+async fn resolves_metadata_tokens_for_files() {
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    let target = root.path().join("notes.txt");
+    std::fs::write(&target, b"hello").expect("must create fixture");
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(format!("{}/api/v1/files/metadata-tokens", server.base_url))
+        .json(&json!({
+            "locations": [location_json(&target)],
+            "tokens": ["artist", "nonsense"],
+        }))
+        .send()
+        .await
+        .expect("request must succeed");
+
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let body: Value = response.json().await.expect("body must be JSON");
+    assert_eq!(body["unknownTokens"], json!(["nonsense"]));
+    assert_eq!(body["entries"].as_array().map(Vec::len), Some(1));
+    assert_eq!(body["entries"][0]["values"], json!({}));
+}

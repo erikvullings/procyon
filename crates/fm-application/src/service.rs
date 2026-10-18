@@ -3799,6 +3799,14 @@ impl FileManagerService {
         self.checksums.get_duplicate_page(scan_id, offset, limit)
     }
 
+    /// Resolves metadata rename tokens (audio tags, EXIF) for files (task 0267).
+    pub async fn resolve_metadata_tokens(
+        &self,
+        request: fm_transport_dto::ResolveMetadataTokensRequestDto,
+    ) -> Result<fm_transport_dto::ResolveMetadataTokensResponseDto, ApplicationError> {
+        crate::metadata_tokens::resolve_metadata_tokens(&self.providers, request).await
+    }
+
     /// Starts a cancellable duplicate and near-duplicate music scan (task 0265).
     pub fn start_music_duplicate_scan(
         &self,

@@ -146,6 +146,8 @@ import type {
   RenderPluginPreviewRequestDto,
   ResolveKnowledgeSourceRequestDto,
   ResolveLinkTargetRequestDto,
+  ResolveMetadataTokensRequestDto,
+  ResolveMetadataTokensResponseDto,
   ResolveOperationConflictRequestDto,
   ResolveRagCitationRequestDto,
   ResolvedRagCitationDto,
@@ -2843,6 +2845,68 @@ return fetchMutator<getFileGitHistoryResponse>(getGetFileGitHistoryUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(getFileGitHistoryRequestDto)
+  }
+);}
+
+
+
+export type resolveMetadataTokensResponse200 = {
+  data: ResolveMetadataTokensResponseDto
+  status: 200
+}
+
+export type resolveMetadataTokensResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type resolveMetadataTokensResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type resolveMetadataTokensResponseSuccess = (resolveMetadataTokensResponse200) & {
+  headers: Headers;
+};
+export type resolveMetadataTokensResponseError = (resolveMetadataTokensResponse400 | resolveMetadataTokensResponse403) & {
+  headers: Headers;
+};
+
+export type resolveMetadataTokensResponse = (resolveMetadataTokensResponseSuccess | resolveMetadataTokensResponseError)
+
+export const getResolveMetadataTokensUrl = () => {
+
+
+
+
+  return `/api/v1/files/metadata-tokens`
+}
+
+/**
+ * @summary Resolves audio-tag and EXIF tokens for multi-rename patterns (task 0267).
+ */
+export const resolveMetadataTokens = async (resolveMetadataTokensRequestDto: ResolveMetadataTokensRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<resolveMetadataTokensResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<resolveMetadataTokensResponse>(getResolveMetadataTokensUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(resolveMetadataTokensRequestDto)
   }
 );}
 

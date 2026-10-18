@@ -123,6 +123,8 @@ import type {
   ResolveConflictRequest,
   ResolvedRagCitation,
   ResolveKnowledgeSourceRequest,
+  ResolveMetadataTokensRequest,
+  ResolveMetadataTokensResult,
   ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
   ReviewConceptCandidateRequest,
@@ -537,6 +539,15 @@ export interface FileManagerClient {
    * bounded byte ranges, so large and remote files never load into memory whole.
    */
   mediaUrl(location: Location, signal?: AbortSignal): Promise<string>;
+
+  /**
+   * Resolves audio-tag and EXIF tokens for multi-rename patterns (task 0267). The backend
+   * resolves and sanitises the values so both hosts produce identical names.
+   */
+  resolveMetadataTokens(
+    request: ResolveMetadataTokensRequest,
+    signal?: AbortSignal,
+  ): Promise<ResolveMetadataTokensResult>;
   openDocxPreview(request: OpenDocxPreviewRequest, signal?: AbortSignal): Promise<DocxPreview>;
   readDocxPreviewResource(
     request: ReadDocxPreviewResourceRequest,

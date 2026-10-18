@@ -17,10 +17,17 @@ export const EMPTY_MULTI_RENAME_RULES: MultiRenameRules = {
   caseTransform: 'unchanged',
 };
 
-/** A minimal view of a selected entry, sufficient to compute a rename proposal. */
+/**
+ * A minimal view of a selected entry, sufficient to compute a rename proposal.
+ *
+ * `metadata` holds the backend-resolved, already sanitised values of the metadata tokens (task
+ * 0267) by token name. It is `undefined` while those values are still being read, and an entry
+ * without a value for a token has no such key.
+ */
 export interface RenameTarget {
   readonly id: string;
   readonly name: string;
+  readonly metadata?: Readonly<Record<string, string>> | undefined;
 }
 
 /** Why a proposed name collides with another one. */
@@ -34,6 +41,10 @@ export interface RenameProposal {
   readonly changed: boolean;
   readonly invalidNameReason?: string;
   readonly collision?: RenameCollisionKind;
+  /** Metadata tokens this entry has no value for (task 0267). */
+  readonly missingMetadata?: readonly string[];
+  /** The entry's metadata is still being read, so the proposal is provisional. */
+  readonly metadataPending?: boolean;
 }
 
 /** Validates a search pattern before it is used, so a bad regex never throws mid-preview. */
@@ -100,17 +111,54 @@ interface MaskContext {
   readonly index: number;
   readonly sequence: SequenceRule;
   readonly now: Date;
+  readonly metadata: Readonly<Record<string, string>> | undefined;
+  readonly missing: Set<string>;
+  readonly usesMetadata: { value: boolean };
+}
+
+/** `{artist}`, `{exif:date-taken:yyyy-MM-dd}` - resolved by the backend (task 0267). */
+const METADATA_TOKEN_SOURCE = String.raw`\{([^{}]+)\}`;
+
+/** The distinct metadata token names (without braces) used by the masks of `rules`. */
+export function metadataTokensIn(
+  rules: Pick<MultiRenameRules, 'nameMask' | 'extensionMask'>,
+): string[] {
+  const tokens = new Set<string>();
+  for (const mask of [rules.nameMask, rules.extensionMask]) {
+    for (const match of mask.matchAll(new RegExp(METADATA_TOKEN_SOURCE, 'gu'))) {
+      const token = match[1]?.trim();
+      if (token !== undefined && token.length > 0) tokens.add(token);
+    }
+  }
+  return [...tokens];
 }
 
 // Total Commander-style mask tokens: [N]/[N#-#] the (search & replace'd) stem, [E]/[E#-#] the
 // extension, [C] the counter, [YMD] today's date, [hms] the current time. Both mask fields accept
 // every token, so e.g. a counter can be used in either the name or the extension mask.
-const MASK_TOKEN = /\[N(?:(\d+)-(\d+))?\]|\[E(?:(\d+)-(\d+))?\]|\[C\]|\[YMD\]|\[hms\]/gu;
+const MASK_TOKEN = new RegExp(
+  String.raw`\[N(?:(\d+)-(\d+))?\]|\[E(?:(\d+)-(\d+))?\]|\[C\]|\[YMD\]|\[hms\]|${METADATA_TOKEN_SOURCE}`,
+  'gu',
+);
 
 function applyMask(mask: string, ctx: MaskContext): string {
   return mask.replace(
     MASK_TOKEN,
-    (match, nStart?: string, nEnd?: string, eStart?: string, eEnd?: string) => {
+    (
+      match,
+      nStart?: string,
+      nEnd?: string,
+      eStart?: string,
+      eEnd?: string,
+      metadataToken?: string,
+    ) => {
+      if (metadataToken !== undefined) {
+        const token = metadataToken.trim();
+        ctx.usesMetadata.value = true;
+        const value = ctx.metadata?.[token];
+        if (value === undefined) ctx.missing.add(token);
+        return value ?? '';
+      }
       if (match.startsWith('[N')) {
         return nStart !== undefined && nEnd !== undefined
           ? sliceRange(ctx.stem, Number(nStart), Number(nEnd))
@@ -150,6 +198,45 @@ function applyCaseTransform(
   }
 }
 
+interface DetailedName {
+  readonly name: string;
+  /** Metadata tokens used by the masks that this entry has no value for. */
+  readonly missing: readonly string[];
+  /** The masks use metadata tokens but the entry's values have not been read yet. */
+  readonly pending: boolean;
+}
+
+function proposeNameDetailed(
+  entry: RenameTarget,
+  index: number,
+  rules: MultiRenameRules,
+  now: Date,
+): DetailedName {
+  const { stem, extension } = splitExtension(entry.name);
+  const missing = new Set<string>();
+  const usesMetadata = { value: false };
+  const ctx: MaskContext = {
+    stem: applySearchReplace(stem, rules),
+    extension,
+    index,
+    sequence: rules.sequence,
+    now,
+    metadata: entry.metadata,
+    missing,
+    usesMetadata,
+  };
+  const { namePart, extensionPart } = applyCaseTransform(
+    applyMask(rules.nameMask, ctx),
+    applyMask(rules.extensionMask, ctx),
+    rules.caseTransform,
+  );
+  return {
+    name: extensionPart.length > 0 ? `${namePart}.${extensionPart}` : namePart,
+    missing: [...missing],
+    pending: usesMetadata.value && entry.metadata === undefined,
+  };
+}
+
 /** Composes every rule into a single proposed name for one entry. */
 export function proposeName(
   entry: RenameTarget,
@@ -157,20 +244,7 @@ export function proposeName(
   rules: MultiRenameRules,
   now: Date = new Date(),
 ): string {
-  const { stem, extension } = splitExtension(entry.name);
-  const ctx: MaskContext = {
-    stem: applySearchReplace(stem, rules),
-    extension,
-    index,
-    sequence: rules.sequence,
-    now,
-  };
-  const { namePart, extensionPart } = applyCaseTransform(
-    applyMask(rules.nameMask, ctx),
-    applyMask(rules.extensionMask, ctx),
-    rules.caseTransform,
-  );
-  return extensionPart.length > 0 ? `${namePart}.${extensionPart}` : namePart;
+  return proposeNameDetailed(entry, index, rules, now).name;
 }
 
 function foldForCollision(name: string): string {
@@ -190,7 +264,8 @@ export function proposeRenames(
   now: Date = new Date(),
 ): RenameProposal[] {
   const foldedExisting = new Set(Array.from(existingSiblingNames, foldForCollision));
-  const newNames = entries.map((entry, index) => proposeName(entry, index, rules, now));
+  const details = entries.map((entry, index) => proposeNameDetailed(entry, index, rules, now));
+  const newNames = details.map((detail) => detail.name);
   const foldedCounts = new Map<string, number>();
   for (const name of newNames) {
     const folded = foldForCollision(name);
@@ -208,6 +283,8 @@ export function proposeRenames(
         : foldedExisting.has(folded)
           ? 'existing'
           : undefined;
+    const detail = details[index];
+    const missingMetadata = detail?.missing ?? [];
     return {
       id: entry.id,
       oldName: entry.name,
@@ -215,6 +292,8 @@ export function proposeRenames(
       changed,
       ...(invalidNameReason === undefined ? {} : { invalidNameReason }),
       ...(collision === undefined ? {} : { collision }),
+      ...(missingMetadata.length === 0 ? {} : { missingMetadata }),
+      ...(detail?.pending === true ? { metadataPending: true } : {}),
     };
   });
 }
@@ -223,6 +302,15 @@ export function proposeRenames(
 export function canApplyRenamePlan(proposals: readonly RenameProposal[]): boolean {
   const changed = proposals.filter((proposal) => proposal.changed);
   if (changed.length === 0) return false;
+  // A proposal that depends on unread or absent metadata is never applied, even when unchanged
+  // rows around it are fine: the whole plan waits until every name is final.
+  if (
+    proposals.some(
+      (proposal) => proposal.metadataPending === true || proposal.missingMetadata !== undefined,
+    )
+  ) {
+    return false;
+  }
   return changed.every(
     (proposal) => proposal.invalidNameReason === undefined && proposal.collision === undefined,
   );

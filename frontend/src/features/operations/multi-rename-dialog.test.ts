@@ -475,4 +475,47 @@ describe('MultiRenameDialog', () => {
     expect(rows[0]?.textContent).toContain('alp-1.txt');
     expect(rows[1]?.textContent).toContain('bet-2.txt');
   });
+
+  it('reads metadata for tokens in the mask, previews resolved names and flags missing fields', async () => {
+    const resolveMetadata = vi.fn().mockResolvedValue({
+      values: new Map([
+        ['1', { artist: 'Ada', title: 'Engine' }],
+        ['2', { artist: 'Grace' }],
+      ]),
+      unknownTokens: [],
+    });
+    vi.useFakeTimers();
+    try {
+      m.mount(root, {
+        view: () =>
+          m(MultiRenameDialog, {
+            open: true,
+            entries,
+            existingSiblingNames: new Set<string>(),
+            resolveMetadata,
+            presets: [],
+            onPresetsChange: vi.fn(),
+            onApply: vi.fn(),
+            onCancel: vi.fn(),
+          }),
+      });
+      m.redraw.sync();
+      const mask = findInput('multi-rename-name-mask');
+      mask.value = '{artist} - {title}';
+      mask.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      m.redraw.sync();
+      expect(document.body.textContent).toContain('Reading metadata');
+      expect(findButton('Rename').hasAttribute('disabled')).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(300);
+      m.redraw.sync();
+
+      expect(resolveMetadata).toHaveBeenCalledWith(['1', '2'], ['artist', 'title']);
+      expect(previewNames()[0]).toContain('Ada - Engine.txt');
+      expect(document.body.textContent).toContain('Missing metadata: title');
+      expect(findButton('Rename').hasAttribute('disabled')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

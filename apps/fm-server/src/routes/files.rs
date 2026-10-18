@@ -15,7 +15,8 @@ use fm_transport_dto::{
     ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
     ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
-    ReadStructuredRowsResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
+    ReadStructuredRowsResponseDto, ResolveMetadataTokensRequestDto,
+    ResolveMetadataTokensResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
     ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
     SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto, SqliteViewSessionRequestDto,
     StructuredViewSessionRequestDto, StructuredViewStatusDto, UpdateStructuredViewRequestDto,
@@ -74,6 +75,35 @@ pub(crate) async fn read_file_range(
     state
         .service
         .read_file_range(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Resolves audio-tag and EXIF tokens for multi-rename patterns (task 0267).
+#[utoipa::path(
+    post,
+    path = "/api/v1/files/metadata-tokens",
+    operation_id = "resolveMetadataTokens",
+    request_body = ResolveMetadataTokensRequestDto,
+    responses(
+        (status = 200, description = "Resolved token values per file", body = ResolveMetadataTokensResponseDto),
+        (status = 400, description = "The request was invalid", body = ApplicationErrorDto),
+        (status = 403, description = "A file is outside the accessible roots", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn resolve_metadata_tokens(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ResolveMetadataTokensRequestDto>,
+) -> Result<Json<ResolveMetadataTokensResponseDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    for location in &request.locations {
+        crate::error::require_within_roots(location, &state.accessible_roots, request_id)?;
+    }
+    state
+        .service
+        .resolve_metadata_tokens(request)
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, request_id))

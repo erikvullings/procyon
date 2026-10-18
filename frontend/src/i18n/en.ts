@@ -2274,6 +2274,14 @@ export const en = {
       'The old link was moved to the Trash and the new link can be undone from the operation history.',
     textFixHint: 'Edit the file to fix this link; the editor keeps its own undo history.',
   },
+  metadataRename: {
+    tokensHelp:
+      'Metadata tokens: {artist} {album} {albumartist} {title} {track} {disc} {year} {genre} {exif:date-taken:yyyy-MM-dd} {exif:camera} {exif:width} {exif:height} {exif:dimensions}',
+    missingFields: 'Missing metadata: {fields}',
+    reading: 'Reading metadata…',
+    readFailed: 'Could not read metadata: {message}',
+    unknownTokens: 'Unknown tokens: {tokens}',
+  },
 } as const satisfies CatalogueShape;
 
 /** Canonical translation groups and keys. Values remain locale-specific. */

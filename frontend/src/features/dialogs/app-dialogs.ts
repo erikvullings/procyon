@@ -305,6 +305,24 @@ export function renderAppDialogs(
       open: ds.multiRenameOpen,
       entries: ds.multiRenameEntries,
       existingSiblingNames: ds.multiRenameExistingNames,
+      resolveMetadata: async (entryIds, tokens) => {
+        const wanted = new Set(entryIds);
+        const entries = ds.multiRenameEntries.filter((entry) => wanted.has(entry.id));
+        const values = new Map<string, Readonly<Record<string, string>>>();
+        let unknownTokens: readonly string[] = [];
+        for (let start = 0; start < entries.length; start += 500) {
+          const batch = entries.slice(start, start + 500);
+          const result = await client.resolveMetadataTokens({
+            locations: batch.map((entry) => entry.location),
+            tokens,
+          });
+          unknownTokens = result.unknownTokens;
+          batch.forEach((entry, index) => {
+            values.set(entry.id, result.entries[index]?.values ?? {});
+          });
+        }
+        return { values, unknownTokens };
+      },
       presets: ctx.getSettings()?.multiRenamePresets ?? [],
       onPresetsChange: (presets) =>
         ctx.updateSettings((settings) => ({ ...settings, multiRenamePresets: presets })),

@@ -123,6 +123,8 @@ import type {
   ResolveConflictRequest,
   ResolvedRagCitation,
   ResolveKnowledgeSourceRequest,
+  ResolveMetadataTokensRequest,
+  ResolveMetadataTokensResult,
   ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
   ReviewConceptCandidateRequest,
@@ -287,6 +289,7 @@ import {
   testLlmProfile as requestLlmProfileTest,
   updateLlmProfile as requestLlmProfileUpdate,
   loadEditableFile as requestLoadEditableFile,
+  resolveMetadataTokens as requestMetadataTokens,
   cancelMusicDuplicateScan as requestMusicDuplicateScanCancel,
   getMusicDuplicateScan as requestMusicDuplicateScanGet,
   startMusicDuplicateScan as requestMusicDuplicateScanStart,
@@ -1366,6 +1369,20 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200) {
       throw new Error(`Unexpected readFileRange response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async resolveMetadataTokens(
+    request: ResolveMetadataTokensRequest,
+    signal?: AbortSignal,
+  ): Promise<ResolveMetadataTokensResult> {
+    const response = await requestMetadataTokens(
+      { locations: [...request.locations], tokens: [...request.tokens] },
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected resolveMetadataTokens response status: ${response.status}`);
     }
     return response.data;
   }

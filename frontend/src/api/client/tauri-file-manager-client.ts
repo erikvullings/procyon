@@ -130,6 +130,8 @@ import type {
   ResolveConflictRequest,
   ResolvedRagCitation,
   ResolveKnowledgeSourceRequest,
+  ResolveMetadataTokensRequest,
+  ResolveMetadataTokensResult,
   ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
   ReviewConceptCandidateRequest,
@@ -890,6 +892,13 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   readFileRange(request: ReadFileRangeRequest, _signal?: AbortSignal): Promise<FileRangeChunk> {
     return invoke<FileRangeChunk>('read_file_range', { request });
+  }
+
+  resolveMetadataTokens(
+    request: ResolveMetadataTokensRequest,
+    _signal?: AbortSignal,
+  ): Promise<ResolveMetadataTokensResult> {
+    return invoke<ResolveMetadataTokensResult>('resolve_metadata_tokens', { request });
   }
 
   mediaUrl(location: Location, _signal?: AbortSignal): Promise<string> {

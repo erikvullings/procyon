@@ -2161,6 +2161,54 @@
         }
       }
     },
+    "/api/v1/files/metadata-tokens": {
+      "post": {
+        "summary": "Resolves audio-tag and EXIF tokens for multi-rename patterns (task 0267).",
+        "operationId": "resolveMetadataTokens",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveMetadataTokensRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Resolved token values per file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveMetadataTokensResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request was invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A file is outside the accessible roots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/files/pptx/close": {
       "post": {
         "summary": "Cancels and releases a PPTX preview session.",
@@ -14336,6 +14384,30 @@
           }
         }
       },
+      "MetadataTokenValuesDto": {
+        "type": "object",
+        "description": "Token values for one file.",
+        "required": [
+          "location",
+          "values"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The file the values belong to."
+          },
+          "values": {
+            "type": "object",
+            "description": "Resolved values by requested token. A token the file has no value for is absent.\nValues are already sanitised for use in a file name.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "MoveSemanticDataRequestDto": {
         "type": "object",
         "description": "Moves the semantic-data root through pause-copy-verify-switch.",
@@ -17289,6 +17361,67 @@
           "location": {
             "$ref": "#/components/schemas/LocationDto",
             "description": "The link (or any other entry, which resolves to itself)."
+          }
+        }
+      },
+      "ResolveMetadataTokensRequestDto": {
+        "type": "object",
+        "description": "Resolves metadata tokens for files (`POST /api/v1/files/metadata-tokens`).",
+        "required": [
+          "locations",
+          "tokens"
+        ],
+        "properties": {
+          "locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Files to read, at most 500 per request."
+          },
+          "tokens": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Token names without braces, for example `artist` or `exif:date-taken:yyyy-MM-dd`."
+          }
+        },
+        "example": {
+          "locations": [
+            {
+              "providerId": "local",
+              "uri": "file:///Users/erik/Music/a.mp3"
+            }
+          ],
+          "tokens": [
+            "artist",
+            "title",
+            "exif:date-taken:yyyy-MM-dd"
+          ]
+        }
+      },
+      "ResolveMetadataTokensResponseDto": {
+        "type": "object",
+        "description": "Resolved tokens for the requested files.",
+        "required": [
+          "entries",
+          "unknownTokens"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetadataTokenValuesDto"
+            },
+            "description": "One entry per requested location, in request order."
+          },
+          "unknownTokens": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Requested tokens that are not supported."
           }
         }
       },

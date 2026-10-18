@@ -80,8 +80,27 @@ fn format_name(file_type: FileType) -> String {
 ///
 /// Returns [`AudioReadError::Unreadable`] when the file cannot be opened or parsed.
 pub fn read_audio_info(path: &Path) -> Result<AudioInfo, AudioReadError> {
-    let tagged = Probe::open(path)
-        .map_err(|error| AudioReadError::Unreadable(error.to_string()))?
+    let probe = Probe::open(path).map_err(|error| AudioReadError::Unreadable(error.to_string()))?;
+    info_from_probe(probe)
+}
+
+/// Reads tags and properties from audio bytes held in memory, for providers that cannot hand
+/// out a seekable file. The container type is detected from the content.
+///
+/// # Errors
+///
+/// Returns [`AudioReadError::Unreadable`] when the bytes are not recognised audio.
+pub fn read_audio_info_from_bytes(bytes: &[u8]) -> Result<AudioInfo, AudioReadError> {
+    let probe = Probe::new(std::io::Cursor::new(bytes))
+        .guess_file_type()
+        .map_err(|error| AudioReadError::Unreadable(error.to_string()))?;
+    info_from_probe(probe)
+}
+
+fn info_from_probe<R: std::io::Read + std::io::Seek>(
+    probe: Probe<R>,
+) -> Result<AudioInfo, AudioReadError> {
+    let tagged = probe
         .options(ParseOptions::new().read_cover_art(false))
         .read()
         .map_err(|error| AudioReadError::Unreadable(error.to_string()))?;
@@ -180,6 +199,13 @@ mod tests {
         assert_eq!(info.title.as_deref(), Some("Analytical Engine"));
         assert_eq!(info.album.as_deref(), Some("Notes"));
         assert_eq!(info.track_number, Some(7));
+    }
+
+    #[test]
+    fn reads_audio_from_memory_without_a_file() {
+        let info = read_audio_info_from_bytes(&wav_bytes()).expect("wav bytes must parse");
+        assert_eq!(info.format, "wav");
+        assert!(read_audio_info_from_bytes(b"nope").is_err());
     }
 
     #[test]

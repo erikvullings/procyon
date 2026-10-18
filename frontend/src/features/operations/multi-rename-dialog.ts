@@ -8,6 +8,7 @@ import {
   canApplyRenamePlan,
   EMPTY_MULTI_RENAME_RULES,
   type MultiRenameRules,
+  metadataTokensIn,
   proposeRenames,
   type RenameProposal,
   type RenameTarget,
@@ -15,12 +16,26 @@ import {
   validateSearchPattern,
 } from './multi-rename-rules';
 
+/** Backend-resolved metadata token values per entry id (task 0267). */
+export interface MetadataResolution {
+  readonly values: ReadonlyMap<string, Readonly<Record<string, string>>>;
+  readonly unknownTokens: readonly string[];
+}
+
 export interface MultiRenameDialogAttrs {
   readonly open: boolean;
   /** The current selection, in the order rules such as the sequence counter are applied. */
   readonly entries: readonly RenameTarget[];
   /** Every other name in the same directory, excluding the entries being renamed. */
   readonly existingSiblingNames: ReadonlySet<string>;
+  /**
+   * Resolves audio-tag and EXIF tokens for the entries; absent where the host cannot read file
+   * metadata, in which case metadata tokens are reported as missing.
+   */
+  readonly resolveMetadata?: (
+    entryIds: readonly string[],
+    tokens: readonly string[],
+  ) => Promise<MetadataResolution>;
   readonly presets: readonly MultiRenamePreset[];
   readonly onPresetsChange: (presets: readonly MultiRenamePreset[]) => Promise<void>;
   readonly onApply: (renamed: readonly { id: string; newName: string }[]) => void;
@@ -37,6 +52,10 @@ function blurActive(): void {
 }
 
 function collisionLabel(proposal: RenameProposal): string | undefined {
+  if (proposal.metadataPending === true) return t('metadataRename', 'reading');
+  if (proposal.missingMetadata !== undefined) {
+    return t('metadataRename', 'missingFields', { fields: proposal.missingMetadata.join(', ') });
+  }
   if (proposal.invalidNameReason !== undefined) return proposal.invalidNameReason;
   if (proposal.collision === 'plan') return t('multiRename', 'collidesPlan');
   if (proposal.collision === 'existing') return t('multiRename', 'collidesExisting');
@@ -50,11 +69,60 @@ export const MultiRenameDialog: FactoryComponent<MultiRenameDialogAttrs> = () =>
   let presetError: string | undefined;
   let selectedPresetName = '';
   let presetMutationPending = false;
+  /** What the loaded metadata was resolved for; a change triggers a debounced re-read. */
+  let metadataKey = '';
+  let metadataTimer: ReturnType<typeof setTimeout> | undefined;
+  let metadata: ReadonlyMap<string, Readonly<Record<string, string>>> | undefined;
+  let unknownTokens: readonly string[] = [];
+  let metadataError: string | undefined;
 
   function reset(): void {
     rules = EMPTY_MULTI_RENAME_RULES;
     presetError = undefined;
     selectedPresetName = '';
+    metadataKey = '';
+    metadata = undefined;
+    unknownTokens = [];
+    metadataError = undefined;
+    if (metadataTimer !== undefined) clearTimeout(metadataTimer);
+  }
+
+  /** Re-reads metadata when the tokens in the masks or the selection changed. */
+  function syncMetadata(attrs: MultiRenameDialogAttrs): readonly string[] {
+    const tokens = metadataTokensIn(rules);
+    const key = `${tokens.join('\u0000')}|${attrs.entries.map((entry) => entry.id).join(',')}`;
+    if (key === metadataKey) return tokens;
+    metadataKey = key;
+    metadata = undefined;
+    unknownTokens = [];
+    metadataError = undefined;
+    if (metadataTimer !== undefined) clearTimeout(metadataTimer);
+    if (tokens.length === 0) return tokens;
+    if (attrs.resolveMetadata === undefined) {
+      metadata = new Map();
+      return tokens;
+    }
+    const resolve = attrs.resolveMetadata;
+    metadataTimer = setTimeout(() => {
+      void resolve(
+        attrs.entries.map((entry) => entry.id),
+        tokens,
+      )
+        .then((resolution) => {
+          if (metadataKey !== key) return;
+          metadata = resolution.values;
+          unknownTokens = resolution.unknownTokens;
+        })
+        .catch((error: unknown) => {
+          if (metadataKey !== key) return;
+          metadata = new Map();
+          metadataError = t('metadataRename', 'readFailed', {
+            message: error instanceof Error ? error.message : String(error),
+          });
+        })
+        .finally(() => m.redraw());
+    }, 250);
+    return tokens;
   }
 
   function savePreset(attrs: MultiRenameDialogAttrs): void {
@@ -153,9 +221,17 @@ export const MultiRenameDialog: FactoryComponent<MultiRenameDialogAttrs> = () =>
       wasOpen = attrs.open;
 
       const searchError = validateSearchPattern(rules.search, rules.useRegex);
+      const tokens = syncMetadata(attrs);
+      const entries =
+        tokens.length === 0
+          ? attrs.entries
+          : attrs.entries.map((entry) => ({
+              ...entry,
+              metadata: metadata === undefined ? undefined : (metadata.get(entry.id) ?? {}),
+            }));
       const plan =
         searchError === undefined
-          ? proposeRenames(attrs.entries, rules, attrs.existingSiblingNames)
+          ? proposeRenames(entries, rules, attrs.existingSiblingNames)
           : attrs.entries.map((entry) => ({
               id: entry.id,
               oldName: entry.name,
@@ -219,7 +295,7 @@ export const MultiRenameDialog: FactoryComponent<MultiRenameDialogAttrs> = () =>
                   m(TextInput, {
                     id: 'multi-rename-name-mask',
                     label: t('multiRename', 'nameMask'),
-                    helperText: t('multiRename', 'nameMaskHelp'),
+                    helperText: `${t('multiRename', 'nameMaskHelp')} ${t('metadataRename', 'tokensHelp')}`,
                     className: 'col s8',
                     value: rules.nameMask,
                     oninput: (nameMask) => {
@@ -316,6 +392,13 @@ export const MultiRenameDialog: FactoryComponent<MultiRenameDialogAttrs> = () =>
               ),
               searchError === undefined ? undefined : m('.fm-field-error', searchError),
             ),
+            metadataError === undefined ? undefined : m('.fm-field-error', metadataError),
+            unknownTokens.length === 0
+              ? undefined
+              : m(
+                  '.fm-field-error',
+                  t('metadataRename', 'unknownTokens', { tokens: unknownTokens.join(', ') }),
+                ),
 
             m(
               '.row',

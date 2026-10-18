@@ -132,6 +132,8 @@ import type {
   ResolveConflictRequest,
   ResolvedRagCitation,
   ResolveKnowledgeSourceRequest,
+  ResolveMetadataTokensRequest,
+  ResolveMetadataTokensResult,
   ResolveRagCitationRequest,
   ResumeSemanticCleanupRequest,
   ReviewConceptCandidateRequest,
@@ -352,6 +354,7 @@ export type MockClientMethod =
   | 'setSpotlightComment'
   | 'cacheArchivePassword'
   | 'readFileRange'
+  | 'resolveMetadataTokens'
   | 'openDocxPreview'
   | 'readDocxPreviewResource'
   | 'closeDocxPreview'
@@ -3054,6 +3057,32 @@ export class MockFileManagerClient implements FileManagerClient {
 
   setPaneActivity(_request: SetPaneActivityRequest, signal?: AbortSignal): Promise<void> {
     return this.perform('setPaneActivity', signal, () => undefined);
+  }
+
+  resolveMetadataTokens(
+    request: ResolveMetadataTokensRequest,
+    signal?: AbortSignal,
+  ): Promise<ResolveMetadataTokensResult> {
+    return this.perform('resolveMetadataTokens', signal, () => {
+      const known = new Set(['artist', 'album', 'title', 'track', 'year']);
+      const unknownTokens = request.tokens.filter(
+        (token) => !known.has(token) && !token.startsWith('exif:'),
+      );
+      return {
+        entries: request.locations.map((location, index) => ({
+          location,
+          values: Object.fromEntries(
+            request.tokens
+              .filter((token) => known.has(token))
+              .map((token) => [
+                token,
+                token === 'track' ? String(index + 1).padStart(2, '0') : `Mock ${token}`,
+              ]),
+          ),
+        })),
+        unknownTokens,
+      };
+    });
   }
 
   mediaUrl(location: Location, signal?: AbortSignal): Promise<string> {

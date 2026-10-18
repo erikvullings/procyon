@@ -22,6 +22,7 @@ pub mod knowledge;
 pub mod link_doctor;
 pub mod llm_profile;
 pub mod location;
+pub mod metadata_tokens;
 pub mod music_duplicates;
 pub mod operation;
 pub mod plugin;
@@ -145,6 +146,9 @@ pub use llm_profile::{
     SaveLlmProfileRequestDto,
 };
 pub use location::LocationDto;
+pub use metadata_tokens::{
+    MetadataTokenValuesDto, ResolveMetadataTokensRequestDto, ResolveMetadataTokensResponseDto,
+};
 pub use music_duplicates::{
     MusicDuplicateConfidenceDto, MusicDuplicateFileDto, MusicDuplicateGroupDto,
     MusicDuplicatePageDto, MusicDuplicateScanPhaseDto, StartMusicDuplicateScanRequestDto,
