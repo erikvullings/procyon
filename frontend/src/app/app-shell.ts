@@ -160,13 +160,27 @@ import {
   MAX_QUEUED_TRACKS,
   type QueueMode,
   queueItemsFromEntries,
+  queueTitle,
 } from '../features/player/play-selection';
-import { MEDIA_QUEUE_ACTIONS, PLAYER_CLIENT_ACTIONS } from '../features/player/player-actions';
+import {
+  MEDIA_QUEUE_ACTIONS,
+  PLAYER_CLIENT_ACTIONS,
+  SAVE_PLAYLIST_ACTION_ID,
+} from '../features/player/player-actions';
 import {
   createPlayerController,
   type PlayerController,
 } from '../features/player/player-controller';
 import { createInitialPlayerState, type PlayerState } from '../features/player/player-state';
+import {
+  type PlaylistExportFormat,
+  type PlaylistPathStyle,
+  writePlaylist,
+} from '../features/playlist/playlist-writer';
+import {
+  SavePlaylistDialog,
+  type SavePlaylistRequest,
+} from '../features/playlist/save-playlist-dialog';
 import type { PluginPaneState } from '../features/plugins/plugin-panel-host';
 import {
   createFileViewerController,
@@ -523,16 +537,115 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     ];
   }
 
-  /** Dispatches frontend-only `client.*` actions that need shell state (the audio player). */
+  /** Selection-driven audio actions: Play, Play next, Add to queue and Save as playlist. */
   function mediaQueueActions(): readonly ActionDescriptor[] {
-    return MEDIA_QUEUE_ACTIONS.map(({ id, title }) => ({
+    const descriptor = (
+      id: string,
+      title: string,
+      contextRequirements: ActionDescriptor['contextRequirements'],
+    ): ActionDescriptor => ({
       id,
-      title: t('player', title),
+      title,
       category: 'tools',
       defaultShortcuts: [],
-      contextRequirements: { requiresSelection: true },
-      source: { kind: 'core' as const },
-    }));
+      contextRequirements,
+      source: { kind: 'core' },
+    });
+    return [
+      ...MEDIA_QUEUE_ACTIONS.map(({ id, title }) =>
+        descriptor(id, t('player', title), { requiresSelection: true }),
+      ),
+      descriptor(SAVE_PLAYLIST_ACTION_ID, t('playlistExport', 'action'), {}),
+    ];
+  }
+
+  /** Opens "Save as playlist…" for the selection, or every entry of the collection basket. */
+  function beginSavePlaylist(invocation: ActionInvocationContext | undefined): void {
+    const paneId = invocation?.paneId ?? workspace?.activePaneId;
+    if (workspace === undefined || paneId === undefined) return;
+    const directory = directories.get(activeTabKey(paneId));
+    const selection = selections.get(activeTabKey(paneId));
+    const ids = new Set(invocation?.selectedEntryIds ?? selection?.selectedEntryIds ?? []);
+    const inBasket = directory?.location?.providerId === 'basket';
+    const chosen = (directory?.entries ?? []).filter((entry) =>
+      ids.size > 0 ? ids.has(entry.id) : inBasket,
+    );
+    const writable = (
+      view: PaneDirectoryView | undefined,
+    ): view is PaneDirectoryView & {
+      readonly location: Location;
+    } =>
+      view?.location !== undefined &&
+      view.location.providerId !== 'basket' &&
+      view.writable !== false;
+    const otherPaneId = workspace.paneOrder.find((candidate) => candidate !== paneId);
+    const target = writable(directory)
+      ? directory
+      : otherPaneId === undefined
+        ? undefined
+        : directories.get(activeTabKey(otherPaneId));
+    if (!writable(target)) {
+      toast({ html: t('playlistExport', 'noDestination') });
+      return;
+    }
+    const pane = workspace.panesById[paneId];
+    const tab = pane?.tabsById[pane.activeTabId];
+    void collectMedia(chosen, {
+      client: attrsClient,
+      workspaceId: workspace.id,
+      view: {
+        ...(tab?.view.sort === undefined ? {} : { sort: tab.view.sort }),
+        ...(tab === undefined
+          ? {}
+          : { showHidden: tab.view.showHidden, foldersFirst: tab.view.foldersFirst }),
+      },
+      recursive: false,
+    })
+      .then(({ entries }) => {
+        if (entries.length === 0) {
+          toast({ html: t('playlistExport', 'nothingToSave') });
+          return;
+        }
+        savePlaylistRequest = {
+          tracks: entries.map((entry) => ({
+            location: entry.location,
+            title: queueTitle(entry),
+            durationSeconds: undefined,
+          })),
+          directory: target.location,
+        };
+        m.redraw();
+      })
+      .catch((error: unknown) => {
+        toast({ html: error instanceof Error ? error.message : String(error) });
+      });
+  }
+
+  function confirmSavePlaylist(
+    fileName: string,
+    format: PlaylistExportFormat,
+    pathStyle: PlaylistPathStyle,
+  ): void {
+    const request = savePlaylistRequest;
+    savePlaylistRequest = undefined;
+    if (request === undefined) return;
+    const written = writePlaylist(format, request.tracks, request.directory, pathStyle);
+    void opsController
+      .createTextFile(request.directory, fileName, written.content)
+      .then(() => {
+        toast({ html: t('playlistExport', 'saved', { name: fileName }) });
+        if (written.fellBackToAbsolute) toast({ html: t('playlistExport', 'fellBackToAbsolute') });
+        for (const paneId of workspace?.paneOrder ?? []) refetchAffectedPanes(paneId);
+        m.redraw();
+      })
+      .catch((error: unknown) => {
+        toast({
+          html: t('playlistExport', 'failed', {
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        });
+      });
+    m.redraw();
   }
 
   /** Queues the selection (or cursor entry) of a pane: Play, Play next, Add to queue (task 0263). */
@@ -584,9 +697,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       });
   }
 
+  /** Dispatches frontend-only `client.*` actions that need shell state (the audio player). */
   function invokeClientAction(actionId: string, invocation?: ActionInvocationContext): boolean {
     const player = playerController;
     if (player === undefined) return false;
+    if (actionId === SAVE_PLAYLIST_ACTION_ID) {
+      beginSavePlaylist(invocation);
+      return true;
+    }
     const queueAction = MEDIA_QUEUE_ACTIONS.find((candidate) => candidate.id === actionId);
     if (queueAction !== undefined) {
       queueSelection(queueAction.mode, queueAction.recursive, invocation);
@@ -1045,6 +1163,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let unsubscribeResynchronise: (() => void) | undefined;
   let appState: AppState | undefined;
   let playerController: PlayerController | undefined;
+  let savePlaylistRequest: SavePlaylistRequest | undefined;
   const emptyPlayerState = createInitialPlayerState();
   let operations = createOperationsState();
   let pendingConflict: OperationConflict | undefined;
@@ -6223,6 +6342,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             },
           }),
           ...renderAppDialogs(attrs.client, pendingDelete, appDialogsContext),
+          m(SavePlaylistDialog, {
+            request: savePlaylistRequest,
+            onConfirm: confirmSavePlaylist,
+            onCancel: () => {
+              savePlaylistRequest = undefined;
+            },
+          }),
           appState !== undefined && playerController !== undefined
             ? m(MiniPlayer, { state: appState.player, controller: playerController })
             : undefined,

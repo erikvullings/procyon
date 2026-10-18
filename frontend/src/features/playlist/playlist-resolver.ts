@@ -24,10 +24,18 @@ export interface ResolvedPlaylistTrack extends PlaylistTrack {
 const URL_SCHEME = /^([a-zA-Z][a-zA-Z0-9+.-]*):\/\//;
 const WINDOWS_DRIVE = /^[a-zA-Z]:[\\/]/;
 
-/** True for entries that point across the network rather than at a VFS entry. */
-export function isRemoteTarget(target: string): boolean {
-  const scheme = URL_SCHEME.exec(target)?.[1]?.toLowerCase();
-  return scheme !== undefined && scheme !== 'file';
+function schemeOf(text: string): string | undefined {
+  return URL_SCHEME.exec(text)?.[1]?.toLowerCase();
+}
+
+/**
+ * True for entries that point across the network rather than at a VFS entry. A full URI in the
+ * playlist's own scheme (for example `sftp://host/...` inside an SFTP playlist) is a VFS entry.
+ */
+export function isRemoteTarget(target: string, playlist?: Location): boolean {
+  const scheme = schemeOf(target);
+  if (scheme === undefined || scheme === 'file') return false;
+  return scheme === 'http' || scheme === 'https' || scheme !== schemeOf(playlist?.uri ?? '');
 }
 
 function encodePath(path: string): string {
@@ -44,6 +52,9 @@ function encodePath(path: string): string {
 export function resolveTargetLocation(playlist: Location, target: string): Location | undefined {
   const playlistIsLocal = playlist.uri.startsWith('file://');
   try {
+    if (schemeOf(target) !== undefined && schemeOf(target) === schemeOf(playlist.uri)) {
+      return { providerId: playlist.providerId, uri: new URL(target).href };
+    }
     if (/^file:\/\//i.test(target)) {
       return {
         providerId: playlistIsLocal ? playlist.providerId : 'local',
@@ -74,7 +85,7 @@ export function initialPlaylistRows(
   tracks: readonly PlaylistTrack[],
 ): ResolvedPlaylistTrack[] {
   return tracks.map((track) => {
-    if (isRemoteTarget(track.target)) {
+    if (isRemoteTarget(track.target, playlist)) {
       return { ...track, status: 'remote', location: undefined };
     }
     const location = resolveTargetLocation(playlist, track.target);

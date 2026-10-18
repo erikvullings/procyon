@@ -149,6 +149,14 @@ function parsePls(text: string): RawParse {
   };
 }
 
+function safeDecode(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
 function parseXspf(text: string): RawParse {
   const document = new DOMParser().parseFromString(text, 'application/xml');
   if (document.getElementsByTagName('parsererror').length > 0) {
@@ -162,8 +170,13 @@ function parseXspf(text: string): RawParse {
       }
       return undefined;
     };
-    const location = child('location');
-    if (location === undefined) continue;
+    const rawLocation = child('location');
+    if (rawLocation === undefined) continue;
+    // XSPF locations are URIs. Full URLs stay as written; relative ones are percent-decoded so
+    // every format reaches the resolver as a plain path or a full URL.
+    const location = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(rawLocation)
+      ? rawLocation
+      : safeDecode(rawLocation);
     const milliseconds = Number.parseFloat(child('duration') ?? '');
     tracks.push({
       title: child('title'),

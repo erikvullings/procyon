@@ -30,6 +30,12 @@ export interface StartOperationRequestDto {
      * single-entry rename, which keeps using `destination` instead.
      */
   destinations?: LocationDto[];
+  /**
+     * UTF-8 text written into the new file by a `createFile` operation (task 0264); an empty
+     * file is created when absent. Existing files are never overwritten.
+     * @nullable
+     */
+  initialContent?: string | null;
   link?: null | LinkRequestDto;
   /**
      * New child name for `createDirectory`.

@@ -169,6 +169,11 @@ impl OperationPlanner {
                     provider,
                     parent,
                     name,
+                    content: request
+                        .initial_content
+                        .clone()
+                        .unwrap_or_default()
+                        .into_bytes(),
                 })
             }
             OperationKindDto::CreateLink => {
@@ -530,6 +535,7 @@ impl OperationPlanner {
                 archive_format: None,
                 archive_compression_level: None,
                 create_intermediate_directories: false,
+                initial_content: None,
                 symlink_policy: SymlinkPolicyDto::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
@@ -657,6 +663,8 @@ struct CreateFileExecutor {
     provider: Arc<dyn FileSystemProvider>,
     parent: Location,
     name: String,
+    /// Bytes written into the new file (empty for a plain "new file", task 0264 otherwise).
+    content: Vec<u8>,
 }
 
 struct RenameExecutor {
@@ -3208,13 +3216,19 @@ impl OperationExecutor for CreateFileExecutor {
             .parent
             .join(&self.name)
             .map_err(|error| ExecutionError::Failed(error.to_string()))?;
-        // Creating an empty file is just opening a writer and shutting it down without
-        // writing any bytes, so this reuses the same streaming primitive `copy_file` uses
-        // rather than requiring a dedicated provider capability/method.
+        // Creating a file is opening a writer (which refuses to overwrite an existing entry),
+        // optionally writing the initial bytes, and shutting it down - the same streaming
+        // primitive `copy_file` uses, so no dedicated provider capability/method is needed.
         let mut writer = self
             .provider
             .open_write(&destination, WriteOptions::default(), cancellation.clone())
             .await?;
+        if !self.content.is_empty() {
+            writer
+                .write_all(&self.content)
+                .await
+                .map_err(copy_stream_error)?;
+        }
         writer.shutdown().await.map_err(copy_stream_error)?;
         drop(writer);
         Ok(ExecutionOutcome::Completed)
@@ -3323,6 +3337,7 @@ mod tests {
             archive_format: None,
             archive_compression_level: None,
             create_intermediate_directories: false,
+            initial_content: None,
             override_read_only: false,
             link: None,
             permanent_delete_confirmed: false,

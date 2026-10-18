@@ -37,6 +37,10 @@ pub struct StartOperationRequestDto {
     /// Whether a multi-component create-directory name may create missing parents.
     #[serde(default)]
     pub create_intermediate_directories: bool,
+    /// UTF-8 text written into the new file by a `createFile` operation (task 0264); an empty
+    /// file is created when absent. Existing files are never overwritten.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_content: Option<String>,
     /// Policy for symbolic links encountered during recursive copying.
     #[serde(default)]
     pub symlink_policy: SymlinkPolicyDto,

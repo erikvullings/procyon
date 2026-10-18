@@ -48,6 +48,7 @@ async fn duplicates_files_and_directory_trees_with_collision_safe_names() {
                 archive_format: None,
                 archive_compression_level: None,
                 create_intermediate_directories: false,
+                initial_content: None,
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,

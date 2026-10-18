@@ -57,3 +57,6 @@ export const MEDIA_QUEUE_ACTIONS: readonly MediaQueueAction[] = [
 export const MEDIA_QUEUE_ACTION_IDS: ReadonlySet<string> = new Set(
   MEDIA_QUEUE_ACTIONS.map((action) => action.id),
 );
+
+/** "Save as playlist…" for the selection, or for the whole collection basket (task 0264). */
+export const SAVE_PLAYLIST_ACTION_ID = 'client.savePlaylist';

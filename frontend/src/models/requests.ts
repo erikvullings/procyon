@@ -147,6 +147,8 @@ export interface StartOperationRequest {
   archiveFormat?: 'zip' | 'sevenZip';
   archiveCompressionLevel?: number | undefined;
   createIntermediateDirectories?: boolean;
+  /** UTF-8 text written into the file by a `createFile` operation (task 0264). */
+  initialContent?: string;
   symlinkPolicy?: 'copyLink' | 'copyTarget';
   permanentDeleteConfirmed?: boolean;
   overrideReadOnly?: boolean;

@@ -3,7 +3,11 @@ import type { ActionDescriptor, EntrySummary, PluginDescriptor } from '../../mod
 import { archiveRootForEntry } from '../navigation/archive-location';
 import { isParentEntry } from '../panes/parent-entry';
 import { hasPlayableSelection } from '../player/play-selection';
-import { MEDIA_QUEUE_ACTION_IDS, MEDIA_QUEUE_ACTIONS } from '../player/player-actions';
+import {
+  MEDIA_QUEUE_ACTION_IDS,
+  MEDIA_QUEUE_ACTIONS,
+  SAVE_PLAYLIST_ACTION_ID,
+} from '../player/player-actions';
 
 /** Context the frontend uses to advise which registered commands can run. */
 export interface CommandAvailabilityContext {
@@ -60,6 +64,7 @@ const SELECTION_ACTION_IDS = new Set([
   'core.uninstallApplication',
   'core.documentSummary',
   ...MEDIA_QUEUE_ACTIONS.filter((action) => action.inContextMenu).map((action) => action.id),
+  SAVE_PLAYLIST_ACTION_ID,
 ]);
 
 /**
@@ -75,7 +80,7 @@ const CONTEXT_MENU_SELECTION_GROUPS: readonly (readonly string[])[] = [
     'core.quickLook',
     'core.revealInSystemFileManager',
   ],
-  ['client.play', 'client.playNext', 'client.addToQueue'],
+  ['client.play', 'client.playNext', 'client.addToQueue', SAVE_PLAYLIST_ACTION_ID],
   ['core.copyName', 'core.copyPath', 'core.copyRelativePath'],
   [
     'core.rename',
@@ -201,7 +206,11 @@ export function evaluateActionAvailability(
   if (action.id === 'core.documentSummary' && soleSelectedEntry?.kind !== 'file') {
     return unavailable(action, t('availability', 'selectFiles'));
   }
-  if (MEDIA_QUEUE_ACTION_IDS.has(action.id) && !hasPlayableSelection(context.selectedEntries)) {
+  if (
+    (MEDIA_QUEUE_ACTION_IDS.has(action.id) ||
+      (action.id === SAVE_PLAYLIST_ACTION_ID && context.selectedEntries.length > 0)) &&
+    !hasPlayableSelection(context.selectedEntries)
+  ) {
     return unavailable(action, t('availability', 'selectFiles'));
   }
   if (action.id === 'core.findDuplicates' && context.hasActiveLocation === false) {

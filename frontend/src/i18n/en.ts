@@ -2199,6 +2199,24 @@ export const en = {
     queued: { 1: '1 track added to the queue.', n: '{n} tracks added to the queue.' },
     playlistNetworkSkipped: 'Network streams were not queued.',
   },
+  playlistExport: {
+    action: 'Save as playlist…',
+    title: 'Save as playlist',
+    nameLabel: 'Playlist name',
+    formatLabel: 'Format',
+    pathStyleLabel: 'Paths',
+    relative: 'Relative to the playlist',
+    absolute: 'Absolute',
+    trackCount: { 1: '1 track will be saved.', n: '{n} tracks will be saved.' },
+    destination: 'Saved in: {path}',
+    save: 'Save',
+    fellBackToAbsolute:
+      'Some tracks are on a different location than the playlist, so absolute paths were written.',
+    saved: 'Playlist {name} saved.',
+    noDestination: 'Open a writable folder (or the other pane) to save the playlist in.',
+    nothingToSave: 'There are no audio or video files to save.',
+    failed: 'Could not save the playlist: {message}',
+  },
 } as const satisfies CatalogueShape;
 
 /** Canonical translation groups and keys. Values remain locale-specific. */

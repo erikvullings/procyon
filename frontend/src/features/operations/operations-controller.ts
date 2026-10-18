@@ -38,6 +38,13 @@ export interface OperationsController {
   ): Promise<Operation>;
   /** Creates an empty file at `location` (Shift+F4). */
   createFile(location: Location, name: string, signal?: AbortSignal): Promise<Operation>;
+  /** Creates a file holding `content`; like {@link createFile} it never overwrites (task 0264). */
+  createTextFile(
+    location: Location,
+    name: string,
+    content: string,
+    signal?: AbortSignal,
+  ): Promise<Operation>;
   /** Creates a link named `name` in `destination` that points at `target` (task 0168). */
   createLink(
     target: Location,
@@ -260,6 +267,20 @@ export function createOperationsController(rawClient: FileManagerClient): Operat
           destination: location,
           conflictPolicy: 'ask',
           name,
+        },
+        signal,
+      );
+    },
+
+    createTextFile(location, name, content, signal) {
+      return client.startOperation(
+        {
+          type: 'createFile',
+          sources: [],
+          destination: location,
+          conflictPolicy: 'ask',
+          name,
+          initialContent: content,
         },
         signal,
       );

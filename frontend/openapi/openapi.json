@@ -21104,6 +21104,13 @@
             },
             "description": "Per-source destinations for a batch `rename` (task 0072 multi-rename), one entry per\n`sources` item in the same order. Empty for every other operation kind and for a\nsingle-entry rename, which keeps using `destination` instead."
           },
+          "initialContent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "UTF-8 text written into the new file by a `createFile` operation (task 0264); an empty\nfile is created when absent. Existing files are never overwritten."
+          },
           "link": {
             "oneOf": [
               {
