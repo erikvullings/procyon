@@ -962,7 +962,10 @@ describe('createBackendEventHandler', () => {
         raf.mockRestore();
       }
 
-      expect(ctx.refetchAffectedPanes).toHaveBeenCalledWith(undefined, { background: false });
+      expect(ctx.refetchAffectedPanes).toHaveBeenCalledWith(undefined, {
+        background: false,
+        settleMs: expect.any(Number),
+      });
     });
 
     it('removes successfully trashed sources from open search result snapshots', () => {

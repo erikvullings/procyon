@@ -182,6 +182,7 @@ pub fn run() {
     #[cfg(feature = "native-spa-smoke")]
     native_spa_smoke::stage("process-started");
     init_tracing();
+    let run_started = std::time::Instant::now();
     let panel_registry = Arc::new(plugin_spa::PanelRegistry::default());
     plugin_spa::register_schemes(tauri::Builder::default(), Arc::clone(&panel_registry))
         .manage(panel_registry)
@@ -206,7 +207,17 @@ pub fn run() {
                 native_spa_smoke::start_once(webview.app_handle().clone());
             }
         })
-        .setup(|app| {
+        .setup(move |app| {
+            let stamp = |phase: &str| {
+                tracing::debug!(
+                    target: "fm_perf",
+                    op = "startup",
+                    phase,
+                    since_run_ms = run_started.elapsed().as_secs_f64() * 1000.0,
+                    "startup phase reached"
+                );
+            };
+            stamp("setup-started");
             #[cfg(feature = "native-spa-smoke")]
             native_spa_smoke::stage("setup-started");
             // Built here rather than eagerly via `.manage()` because bundled plugin discovery
@@ -242,6 +253,7 @@ pub fn run() {
                 credentials::build_credential_store(),
                 platform::build_search_accelerator(),
             );
+            stamp("service-constructed");
             let mut semantic_managed_components = false;
             let mut semantic_reindex_pending_marker = None;
             #[cfg(debug_assertions)]
@@ -324,6 +336,7 @@ pub fn run() {
                     .set_plugin_enabled("procyon.svgo".to_owned(), true)
                     .map_err(|error| std::io::Error::other(error.to_string()))?;
             }
+            stamp("semantic-and-plugin-config-done");
             let service = Arc::new(service);
             let semantic_ocr_shutdown = CancellationToken::new();
             app.manage(AppState {
@@ -346,6 +359,7 @@ pub fn run() {
                     }
                 }
             });
+            stamp("before-ocr-recovery");
             if let Err(error) = service.recover_semantic_ocr_remediation_jobs() {
                 tracing::error!(%error, "OCR remediation recovery failed");
             }
@@ -362,11 +376,13 @@ pub fn run() {
                 Arc::clone(&service)
                     .run_semantic_ocr_remediation_jobs(semantic_ocr_shutdown),
             );
+            stamp("before-semantic-library-status");
             if let Err(error) = tauri::async_runtime::block_on(service.semantic_library_status(
                 &fm_application::semantic_library::SemanticAccessContext::Host,
             )) {
                 tracing::warn!(%error, "semantic library startup reconciliation failed");
             }
+            stamp("after-semantic-library-status");
             if semantic_managed_components {
                 if let Some(marker) =
                     semantic_reindex_pending_marker.filter(|marker| marker.is_file())
@@ -402,7 +418,9 @@ pub fn run() {
             // workspaces spec follow-up, phase 2). `block_on` is safe here: `setup()` runs once,
             // synchronously, before the event loop starts - there is no running async task for
             // this to deadlock against, unlike building a window from inside a Tauri command.
+            stamp("before-open-windows");
             tauri::async_runtime::block_on(commands::open_startup_windows(app.handle()))?;
+            stamp("windows-created");
             #[cfg(feature = "native-spa-smoke")]
             native_spa_smoke::stage("trusted-window-created");
 

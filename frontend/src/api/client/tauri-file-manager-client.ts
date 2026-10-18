@@ -203,6 +203,7 @@ import { syncPlanItemToDto } from '../../models/comparison';
 import { entryMetadataFromDto, entrySummaryFromDto } from '../../models/entry';
 import { directorySnapshotFromDto } from '../../models/snapshot';
 import { workspaceProjectionFromDto } from '../../models/workspace';
+import { perfEnd, perfStart } from '../../utilities/perf';
 import { TauriEventStream } from '../events/tauri-event-stream';
 import type { DirectorySnapshotDto } from '../generated/models/directorySnapshotDto';
 import type { EntryMetadataDto } from '../generated/models/entryMetadataDto';
@@ -848,9 +849,13 @@ export class TauriFileManagerClient implements FileManagerClient {
     request: ListDirectoryRequest,
     _signal?: AbortSignal,
   ): Promise<DirectorySnapshot> {
-    return directorySnapshotFromDto(
-      await invoke<DirectorySnapshotDto>('list_directory', { request }),
-    );
+    const started = perfStart();
+    const dto = await invoke<DirectorySnapshotDto>('list_directory', { request });
+    const invoked = perfStart();
+    perfEnd('invoke-list_directory', started, { entries: dto.entries.length });
+    const snapshot = directorySnapshotFromDto(dto);
+    perfEnd('map-snapshot', invoked, { entries: dto.entries.length });
+    return snapshot;
   }
 
   async listDirectoryChildren(

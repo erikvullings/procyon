@@ -10,7 +10,8 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread::JoinHandle;
 
 use fm_domain::OperationId;
 use fm_operations::{Operation, OperationSnapshotObserver, OperationState, UndoPlan};
@@ -24,11 +25,178 @@ use crate::DirectoryService;
 pub(crate) const OPERATION_HISTORY_FILE_NAME: &str = "operation-history.json";
 const OPERATION_HISTORY_MAX_ENTRIES: usize = 100;
 const OPERATION_HISTORY_MAX_AGE_DAYS: i64 = 30;
+/// Entry-scoped failures kept per operation in the persisted history. A cancelled delete of a
+/// 5.7M-item cache directory once accumulated 38k errors (15 MB), which made every history save
+/// serialize and fsync a 19 MB file on the scheduler's critical path.
+const OPERATION_HISTORY_MAX_ENTRY_ERRORS: usize = 200;
+const OMITTED_ERRORS_SUFFIX: &str = " further errors are omitted from the saved history";
 
 /// Crash-safe operation snapshots stored beside settings.
 pub(crate) struct OperationHistory {
-    path: PathBuf,
-    operations: Mutex<Vec<Operation>>,
+    operations: Arc<Mutex<Vec<Operation>>>,
+    writer: HistoryWriter,
+}
+
+/// Write-behind persistence for [`OperationHistory`].
+///
+/// Every scheduler state transition used to serialize and `fsync` the whole history on the
+/// scheduler's own thread; on macOS that `fsync` costs roughly 300 ms, so a single-file delete
+/// (queued, planning, running, completed) took over a second to reach the UI. Transitions now only
+/// mark the history dirty; a dedicated thread coalesces bursts into one durable write of the
+/// latest snapshot. Dropping the history drains the pending write.
+struct HistoryWriter {
+    shared: Arc<WriterShared>,
+    thread: Mutex<Option<JoinHandle<()>>>,
+}
+
+#[derive(Default)]
+struct WriterState {
+    dirty: bool,
+    writing: bool,
+    closed: bool,
+}
+
+#[derive(Default)]
+struct WriterShared {
+    state: Mutex<WriterState>,
+    wake: Condvar,
+    idle: Condvar,
+}
+
+impl HistoryWriter {
+    fn spawn(path: PathBuf, operations: Arc<Mutex<Vec<Operation>>>) -> Self {
+        let shared = Arc::new(WriterShared::default());
+        let worker = Arc::clone(&shared);
+        let thread = std::thread::Builder::new()
+            .name("operation-history-writer".into())
+            .spawn(move || {
+                loop {
+                    {
+                        let mut state = worker.state.lock().unwrap_or_else(|e| e.into_inner());
+                        while !state.dirty && !state.closed {
+                            state = worker.wake.wait(state).unwrap_or_else(|e| e.into_inner());
+                        }
+                        if !state.dirty {
+                            return;
+                        }
+                        state.dirty = false;
+                        state.writing = true;
+                    }
+                    // Snapshot under the lock, serialize outside it: `observe` needs the same lock on
+                    // the scheduler's thread, and serializing every retained undo plan took ~300 ms
+                    // in debug builds, stalling each job's first state transition.
+                    let started = std::time::Instant::now();
+                    let snapshot = operations.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                    let snapshot_ms = started.elapsed().as_secs_f64() * 1000.0;
+                    if let Ok(bytes) = serde_json::to_vec_pretty(&snapshot) {
+                        let serialized_ms = started.elapsed().as_secs_f64() * 1000.0;
+                        write_history_file(&path, &bytes);
+                        tracing::debug!(
+                            target: "fm_perf",
+                            op = "history_save",
+                            operations = snapshot.len(),
+                            bytes = bytes.len(),
+                            snapshot_ms,
+                            serialized_ms,
+                            total_ms = started.elapsed().as_secs_f64() * 1000.0,
+                            "operation history saved"
+                        );
+                    }
+                    let mut state = worker.state.lock().unwrap_or_else(|e| e.into_inner());
+                    state.writing = false;
+                    worker.idle.notify_all();
+                }
+            })
+            .ok();
+        Self {
+            shared,
+            thread: Mutex::new(thread),
+        }
+    }
+
+    /// Marks the history dirty; returns immediately.
+    fn request_save(&self) {
+        let mut state = self.shared.state.lock().unwrap_or_else(|e| e.into_inner());
+        state.dirty = true;
+        self.shared.wake.notify_one();
+    }
+
+    /// Blocks until every requested save has reached disk.
+    #[cfg(test)]
+    fn flush(&self) {
+        let mut state = self.shared.state.lock().unwrap_or_else(|e| e.into_inner());
+        while state.dirty || state.writing {
+            state = self
+                .shared
+                .idle
+                .wait(state)
+                .unwrap_or_else(|e| e.into_inner());
+        }
+    }
+}
+
+impl Drop for HistoryWriter {
+    fn drop(&mut self) {
+        {
+            let mut state = self.shared.state.lock().unwrap_or_else(|e| e.into_inner());
+            state.closed = true;
+            self.shared.wake.notify_one();
+        }
+        if let Some(thread) = self.thread.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// Bounds the persisted per-entry failures of one operation, replacing the excess with a single
+/// summary entry so the error count stays visible.
+fn cap_entry_errors(operation: &mut Operation) {
+    if operation.errors.len() <= OPERATION_HISTORY_MAX_ENTRY_ERRORS {
+        return;
+    }
+    let omitted = operation.errors.len() - OPERATION_HISTORY_MAX_ENTRY_ERRORS;
+    let mut summary = operation.errors[OPERATION_HISTORY_MAX_ENTRY_ERRORS].clone();
+    operation
+        .errors
+        .truncate(OPERATION_HISTORY_MAX_ENTRY_ERRORS);
+    summary.message = format!("{omitted}{OMITTED_ERRORS_SUFFIX}");
+    operation.errors.push(summary);
+}
+
+/// Total entry failures, including those folded into a [`cap_entry_errors`] summary entry.
+fn entry_error_count(operation: &Operation) -> usize {
+    let omitted = operation
+        .errors
+        .last()
+        .and_then(|error| error.message.strip_suffix(OMITTED_ERRORS_SUFFIX))
+        .and_then(|count| count.parse::<usize>().ok());
+    match omitted {
+        Some(omitted) => operation.errors.len() - 1 + omitted,
+        None => operation.errors.len(),
+    }
+}
+
+/// Atomically replaces the history file (temporary file, `fsync`, rename).
+fn write_history_file(path: &Path, bytes: &[u8]) {
+    let Some(directory) = path.parent() else {
+        return;
+    };
+    if fs::create_dir_all(directory).is_err() {
+        return;
+    }
+    let temporary = directory.join(format!(
+        ".{OPERATION_HISTORY_FILE_NAME}.{}.tmp",
+        std::process::id()
+    ));
+    if fs::File::create(&temporary)
+        .and_then(|mut file| {
+            file.write_all(bytes)?;
+            file.sync_all()
+        })
+        .is_ok()
+    {
+        let _ = fs::rename(temporary, path);
+    }
 }
 
 /// Bridges the scheduler's [`OperationSnapshotObserver`] callback to both history persistence
@@ -56,6 +224,7 @@ impl OperationHistory {
             .unwrap_or_default();
         let now = chrono::Utc::now();
         for operation in &mut operations {
+            cap_entry_errors(operation);
             if !operation.state.is_terminal() {
                 operation.state = fm_operations::OperationState::Interrupted;
                 operation.completed_at = Some(now);
@@ -87,9 +256,10 @@ impl OperationHistory {
                 operation.undo.pending_operation = None;
             }
         }
+        let operations = Arc::new(Mutex::new(operations));
         let history = Self {
-            path,
-            operations: Mutex::new(operations),
+            operations: Arc::clone(&operations),
+            writer: HistoryWriter::spawn(path, operations),
         };
         history.prune_and_save();
         history
@@ -209,28 +379,8 @@ impl OperationHistory {
                 .map(|(_, operation)| operation.clone())
                 .collect();
         }
-        let Ok(bytes) = serde_json::to_vec_pretty(&*operations) else {
-            return;
-        };
-        let Some(directory) = self.path.parent() else {
-            return;
-        };
-        if fs::create_dir_all(directory).is_err() {
-            return;
-        }
-        let temporary = directory.join(format!(
-            ".{OPERATION_HISTORY_FILE_NAME}.{}.tmp",
-            std::process::id()
-        ));
-        if fs::File::create(&temporary)
-            .and_then(|mut file| {
-                file.write_all(&bytes)?;
-                file.sync_all()
-            })
-            .is_ok()
-        {
-            let _ = fs::rename(temporary, &self.path);
-        }
+        drop(operations);
+        self.writer.request_save();
     }
 }
 
@@ -246,8 +396,11 @@ impl OperationSnapshotObserver for OperationHistory {
                 .find(|previous| previous.id == operation.id)
             {
                 *previous = operation.clone();
+                cap_entry_errors(previous);
             } else {
-                operations.push(operation.clone());
+                let mut stored = operation.clone();
+                cap_entry_errors(&mut stored);
+                operations.push(stored);
             }
             if let Some(original_id) = operation.undo_of
                 && operation.state.is_terminal()
@@ -280,6 +433,19 @@ impl OperationSnapshotObserver for ApplicationOperationObserver {
         if !operation.state.is_terminal() {
             return;
         }
+        let millis = |from: chrono::DateTime<chrono::Utc>,
+                      to: Option<chrono::DateTime<chrono::Utc>>| {
+            to.map(|to| (to - from).num_milliseconds())
+        };
+        tracing::debug!(
+            target: "fm_perf",
+            op = "operation_terminal",
+            kind = ?operation.kind,
+            state = ?operation.state,
+            queue_to_start_ms = ?millis(operation.created_at, operation.started_at),
+            created_to_completed_ms = ?millis(operation.created_at, operation.completed_at),
+            "operation reached a terminal state"
+        );
         let mut affected = HashSet::new();
         for source in &operation.sources {
             affected.insert(source.location.clone());
@@ -299,14 +465,24 @@ impl OperationSnapshotObserver for ApplicationOperationObserver {
         let directories = self.directories.clone();
         if let Ok(runtime) = tokio::runtime::Handle::try_current() {
             runtime.spawn(async move {
+                let started = std::time::Instant::now();
                 directories.refresh_affected(&affected).await;
+                tracing::debug!(
+                    target: "fm_perf",
+                    op = "refresh_affected",
+                    ms = started.elapsed().as_secs_f64() * 1000.0,
+                    "post-operation pane refresh published"
+                );
             });
         }
     }
 }
 
-pub(crate) fn operation_dto(operation: Operation, queue_position: Option<u64>) -> OperationDto {
+pub(crate) fn operation_dto(mut operation: Operation, queue_position: Option<u64>) -> OperationDto {
+    // Summarize first: capping replaces the excess errors with one summary entry, and a running
+    // operation that fails on millions of entries must not ship them all to the client.
     let result_summary = operation_result_summary(&operation);
+    cap_entry_errors(&mut operation);
     let undo = operation_undo_dto(&operation);
     OperationDto {
         id: operation.id.into(),
@@ -432,7 +608,7 @@ fn operation_result_summary(operation: &Operation) -> Option<String> {
         )),
         fm_operations::OperationState::CompletedWithWarnings => Some(format!(
             "Completed with {} warnings.",
-            operation.errors.len()
+            entry_error_count(operation)
         )),
         fm_operations::OperationState::Cancelled => Some(format!(
             "Cancelled after {} items.",
@@ -444,5 +620,107 @@ fn operation_result_summary(operation: &Operation) -> Option<String> {
             operation.progress.completed_items
         )),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fm_operations::{ConflictPolicy, OperationKind};
+
+    use super::*;
+
+    fn planning_operation() -> Operation {
+        let mut operation =
+            Operation::new(OperationKind::Delete, vec![], None, ConflictPolicy::Ask);
+        operation
+            .transition(OperationState::Planning)
+            .expect("queued operation starts planning");
+        operation
+    }
+
+    #[test]
+    fn observed_transitions_are_persisted_by_the_write_behind_thread() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let history = OperationHistory::load(directory.path());
+        let operation = planning_operation();
+
+        history.observe(&operation);
+        history.writer.flush();
+
+        let reloaded = OperationHistory::load(directory.path());
+        assert_eq!(
+            reloaded.list().len(),
+            1,
+            "in-flight operation is restored as interrupted"
+        );
+    }
+
+    #[test]
+    fn persisted_entry_errors_are_bounded_with_a_summary_entry() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let history = OperationHistory::load(directory.path());
+        let mut operation = planning_operation();
+        let entry = fm_vfs::EntryRef {
+            id: fm_domain::EntryId::new(),
+            location: fm_domain::Location::from_native_path(directory.path())
+                .expect("local location"),
+        };
+        operation.errors = (0..1_000)
+            .map(|index| fm_operations::OperationEntryError {
+                entry: entry.clone(),
+                message: format!("failure {index}"),
+            })
+            .collect();
+        operation
+            .transition(OperationState::Cancelling)
+            .expect("planning operation can be cancelled");
+        operation
+            .transition(OperationState::Cancelled)
+            .expect("cancelling operation is cancelled");
+
+        history.observe(&operation);
+
+        let record = history.record(operation.id).expect("terminal record");
+        assert_eq!(record.errors.len(), OPERATION_HISTORY_MAX_ENTRY_ERRORS + 1);
+        assert_eq!(
+            record.errors.last().map(|error| error.message.as_str()),
+            Some("800 further errors are omitted from the saved history")
+        );
+        assert_eq!(entry_error_count(&record), 1_000);
+    }
+
+    #[test]
+    fn dropping_the_history_drains_the_pending_write() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let operation = planning_operation();
+        {
+            let history = OperationHistory::load(directory.path());
+            history.observe(&operation);
+        }
+
+        let reloaded = OperationHistory::load(directory.path());
+        assert_eq!(reloaded.list().len(), 1);
+    }
+
+    #[test]
+    fn a_burst_of_transitions_keeps_only_the_latest_snapshot() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let history = OperationHistory::load(directory.path());
+        let mut operation = planning_operation();
+        history.observe(&operation);
+        operation
+            .transition(OperationState::Running)
+            .expect("planning operation starts running");
+        history.observe(&operation);
+        operation
+            .transition(OperationState::Completed)
+            .expect("running operation completes");
+        history.observe(&operation);
+        history.writer.flush();
+
+        let reloaded = OperationHistory::load(directory.path());
+        let listed = reloaded.list();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].state, OperationStateDto::Completed);
     }
 }
