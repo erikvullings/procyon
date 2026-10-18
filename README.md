@@ -22,7 +22,7 @@ collection basket gathers files across folders and providers.
 | **Handle large collections** | Virtualized lists tested with one million entries, grid view, thumbnails, folder grouping, sorting, Git status, and disk-usage treemaps |
 | **Move data safely** | Cancellable and resumable copy, move, rename, duplicate, trash, archive, and synchronization jobs with explicit conflict handling |
 | **Work across providers** | Local files, SFTP, FTP/FTPS, WebDAV, S3-compatible storage, OneDrive, archives, and mounted network volumes |
-| **Inspect files in place** | Fast text, image, video, PDF, archive, CSV, JSON, Excel, DOCX, and PPTX previews plus an integrated text editor |
+| **Inspect files in place** | Fast text with syntax highlighting for 40+ languages, hex dumps of binary files, image, video, PDF, archive, CSV/TSV, JSON, Excel, DOCX, and PPTX previews plus an integrated text editor |
 | **Search by meaning and ask** | Optional local-only semantic search, enabled with consent per folder and powered by multilingual E5 by default. Knowledge search finds relevant passages; Ask produces retrieval-augmented answers with page-level citations. EmbeddingGemma 2 is an opt-in alternative for image, audio, and video indexing; the v0.6.0 release is risk-accepted, not five-gate qualified, and CPU-only PDF page-image indexing is capped and slow. |
 | **Adapt the workflow** | Configurable shortcuts, light and dark themes, native platform actions, and resource-limited Lua and JavaScript plugins |
 

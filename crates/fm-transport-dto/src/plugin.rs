@@ -25,6 +25,44 @@ pub struct PluginSpaPanelDto {
     pub extensions: Vec<String>,
 }
 
+/// A sandboxed F3 preview renderer a plugin contributes (task 0142).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginPreviewDto {
+    /// Lowercase extensions (no dot) the plugin renders; built-in renderers always win.
+    pub extensions: Vec<String>,
+}
+
+/// Request to render one file with a plugin's preview contribution.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RenderPluginPreviewRequestDto {
+    /// The file to preview; its extension must be one the plugin claims.
+    pub location: crate::LocationDto,
+}
+
+/// How a plugin preview body must be displayed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum PluginPreviewKindDto {
+    /// Plain preformatted text.
+    Text,
+    /// HTML the frontend must sanitize before display.
+    Html,
+}
+
+/// A plugin-rendered preview.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginPreviewResultDto {
+    /// How to display `body`.
+    pub kind: PluginPreviewKindDto,
+    /// The rendered preview; never trusted, always sanitized by the host UI.
+    pub body: String,
+    /// Whether the plugin only saw a prefix of the file.
+    pub truncated: bool,
+}
+
 /// A discovered plugin, including disabled plugins with safe diagnostics.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -49,6 +87,8 @@ pub struct PluginDescriptorDto {
     pub icon_theme: Option<PluginIconThemeDto>,
     /// Interactive panel metadata; browser hosts report the action as unavailable.
     pub spa_panel: Option<PluginSpaPanelDto>,
+    /// F3 preview renderer metadata, present only for enabled, valid plugins.
+    pub preview: Option<PluginPreviewDto>,
 }
 
 /// One icon asset a theme can reference, resolved by `GET

@@ -4169,6 +4169,64 @@
         }
       }
     },
+    "/api/v1/plugins/{pluginId}/preview": {
+      "post": {
+        "summary": "Renders one file with an enabled plugin's sandboxed preview contribution (task 0142).",
+        "operationId": "renderPluginPreview",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderPluginPreviewRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginPreviewResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/runtime": {
       "get": {
         "summary": "Reports the capabilities available for the current runtime and platform.",
@@ -14825,6 +14883,17 @@
             "$ref": "#/components/schemas/PluginPermissionsDto",
             "description": "Capabilities the manifest requests; ungranted capabilities are denied (spec §19)."
           },
+          "preview": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PluginPreviewDto",
+                "description": "F3 preview renderer metadata, present only for enabled, valid plugins."
+              }
+            ]
+          },
           "spaPanel": {
             "oneOf": [
               {
@@ -15032,6 +15101,53 @@
           "settingsStorage": {
             "type": "boolean",
             "description": "Allows non-secret settings storage under the plugin's identifier."
+          }
+        }
+      },
+      "PluginPreviewDto": {
+        "type": "object",
+        "description": "A sandboxed F3 preview renderer a plugin contributes (task 0142).",
+        "required": [
+          "extensions"
+        ],
+        "properties": {
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Lowercase extensions (no dot) the plugin renders; built-in renderers always win."
+          }
+        }
+      },
+      "PluginPreviewKindDto": {
+        "type": "string",
+        "description": "How a plugin preview body must be displayed.",
+        "enum": [
+          "text",
+          "html"
+        ]
+      },
+      "PluginPreviewResultDto": {
+        "type": "object",
+        "description": "A plugin-rendered preview.",
+        "required": [
+          "kind",
+          "body",
+          "truncated"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "The rendered preview; never trusted, always sanitized by the host UI."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PluginPreviewKindDto",
+            "description": "How to display `body`."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether the plugin only saw a prefix of the file."
           }
         }
       },
@@ -16025,6 +16141,19 @@
           "algorithm": {
             "$ref": "#/components/schemas/ChecksumAlgorithmDto",
             "description": "Which of the job's algorithms to write. A checksum file carries one\nalgorithm, matching `sha256sum`/`md5sum`."
+          }
+        }
+      },
+      "RenderPluginPreviewRequestDto": {
+        "type": "object",
+        "description": "Request to render one file with a plugin's preview contribution.",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The file to preview; its extension must be one the plugin claims."
           }
         }
       },

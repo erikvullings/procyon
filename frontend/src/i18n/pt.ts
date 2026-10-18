@@ -529,6 +529,7 @@ export const pt = {
     showInfo: 'Mostrar informação (Alt+Espaço)',
     loadingMetadata: 'A carregar metadados…',
     previewUnavailableGeneric: 'Pré-visualização indisponível para este ficheiro.',
+    pluginPreviewTruncated: 'Só é apresentado o início do ficheiro.',
     quickLook: 'Ver com Quick Look',
     openExternally: 'Abrir externamente',
     searchPlaceholder: 'Pesquisar neste ficheiro…',

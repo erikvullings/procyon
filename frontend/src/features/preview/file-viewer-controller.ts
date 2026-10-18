@@ -41,12 +41,18 @@ import {
   textMetadataFor,
 } from './file-metadata';
 import { loadPdfDocument, type PDFDocumentProxy } from './pdf-preview';
+import {
+  type PreviewPluginRoute,
+  previewPluginFor,
+  sanitizePluginPreviewHtml,
+} from './plugin-preview';
 
 /** Client surface required to drive a Lister-style large-file viewer. `listDirectory` is only
  * used for comic (.cbz/.cbr) page listing. */
 export type FileViewerClient = Pick<
   FileManagerClient,
   | 'readFileRange'
+  | 'renderPluginPreview'
   | 'searchInFile'
   | 'listDirectory'
   | 'archiveSummary'
@@ -271,6 +277,16 @@ export interface FileViewerHexContent {
   readonly loadingMore: boolean;
 }
 
+/** A sandboxed plugin preview (task 0142). `body` is plain text, or - for `html` - already
+ * sanitized and safe to render as markup. */
+export interface FileViewerPluginPreviewContent {
+  readonly kind: 'pluginPreview';
+  readonly pluginId: string;
+  readonly format: 'text' | 'html';
+  readonly body: string;
+  readonly truncated: boolean;
+}
+
 /** Content-derived archive details plus provider-neutral recursive totals. */
 export interface FileViewerArchiveSummaryContent {
   readonly kind: 'archiveSummary';
@@ -331,6 +347,7 @@ export type FileViewerState =
       readonly content:
         | FileViewerTextContent
         | FileViewerHexContent
+        | FileViewerPluginPreviewContent
         | FileViewerImageContent
         | FileViewerAudioContent
         | FileViewerVideoContent
@@ -374,6 +391,8 @@ export interface FileViewerControllerOptions {
    * controller mints its own throwaway pane id for this one-off request instead (see `loadComic`). */
   readonly workspaceId?: string;
   readonly update: (state: FileViewerState) => void;
+  /** Enabled plugin preview renderers (task 0142); built-in renderers always take precedence. */
+  readonly previewPlugins?: readonly PreviewPluginRoute[];
   /** Pre-populated search query to run as soon as text content is ready (task 0089). */
   readonly initialSearch?: {
     readonly query: string;
@@ -1207,6 +1226,41 @@ export function createFileViewerController(
     });
   }
 
+  function previewRoute(): PreviewPluginRoute | undefined {
+    return previewPluginFor(entry, options.previewPlugins ?? []);
+  }
+
+  async function loadPluginPreview(
+    controller: AbortController,
+    route: PreviewPluginRoute,
+  ): Promise<void> {
+    try {
+      const result = await client.renderPluginPreview(
+        route.pluginId,
+        entry.location,
+        controller.signal,
+      );
+      if (!isCurrent(controller)) return;
+      publish({
+        status: 'ready',
+        entry,
+        content: {
+          kind: 'pluginPreview',
+          pluginId: route.pluginId,
+          format: result.kind,
+          body: result.kind === 'html' ? sanitizePluginPreviewHtml(result.body) : result.body,
+          truncated: result.truncated,
+        },
+        metadataPanelOpen: initialMetadataOpen,
+      });
+    } catch {
+      if (!isCurrent(controller)) return;
+      // A failing plugin must never hide the file: fall back to the built-in text/hex view.
+      await loadInitialText(controller);
+      if (search?.query.trim()) await runSearch();
+    }
+  }
+
   async function load(): Promise<void> {
     const controller = beginRequest();
     publish({ status: 'loading', entry });
@@ -1233,6 +1287,8 @@ export function createFileViewerController(
         await loadPptx(controller);
       } else if (kind === 'archiveSummary') {
         await loadArchiveSummary(controller);
+      } else if (kind === 'text' && previewRoute() !== undefined) {
+        await loadPluginPreview(controller, previewRoute() as PreviewPluginRoute);
       } else if (kind === 'text') {
         await loadInitialText(controller);
         // Run initial search if pre-populated from content search results.

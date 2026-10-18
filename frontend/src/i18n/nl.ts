@@ -535,6 +535,7 @@ export const nl = {
     showInfo: 'Info tonen (Alt+Spatie)',
     loadingMetadata: 'Metadata laden…',
     previewUnavailableGeneric: 'Voorbeeld niet beschikbaar voor dit bestand.',
+    pluginPreviewTruncated: 'Alleen het begin van het bestand wordt getoond.',
     quickLook: 'Bekijken met Quick Look',
     openExternally: 'Extern openen',
     searchPlaceholder: 'In dit bestand zoeken…',

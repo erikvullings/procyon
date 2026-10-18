@@ -79,7 +79,9 @@ impl PluginManifest {
                 self.api_version.clone(),
             ));
         }
-        let runs_code = self.contributions.actions || self.contributions.columns;
+        let runs_code = self.contributions.actions
+            || self.contributions.columns
+            || self.contributions.preview.is_some();
         match &self.entrypoint {
             Some(entrypoint) if !is_safe_plugin_path(entrypoint) => {
                 return Err(ManifestError::InvalidField("entrypoint"));
@@ -136,6 +138,30 @@ impl PluginManifest {
             }) {
                 return Err(ManifestError::InvalidField(
                     "contributions.spa_panel.extensions",
+                ));
+            }
+        }
+        if let Some(preview) = &self.contributions.preview {
+            if self.runtime != PluginRuntimeKind::Lua {
+                return Err(ManifestError::InvalidField("contributions.preview"));
+            }
+            self.permissions
+                .require(Permission::SelectedEntryContentRead)
+                .map_err(|_| {
+                    ManifestError::InvalidField("permissions.selected_entry_content_read")
+                })?;
+            let mut seen = std::collections::BTreeSet::new();
+            if preview.extensions.is_empty()
+                || preview.extensions.iter().any(|extension| {
+                    extension.is_empty()
+                        || !extension
+                            .bytes()
+                            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+                        || !seen.insert(extension)
+                })
+            {
+                return Err(ManifestError::InvalidField(
+                    "contributions.preview.extensions",
                 ));
             }
         }
@@ -255,6 +281,37 @@ pub struct PluginContributions {
     pub icon_theme: bool,
     /// An isolated child-WebView SPA with package-owned assets, independent of the code runtime.
     pub spa_panel: Option<SpaPanelContribution>,
+    /// A sandboxed F3 preview renderer for file extensions no built-in renderer claims
+    /// (task 0142). Requires the Lua runtime and `selected_entry_content_read`.
+    pub preview: Option<PreviewContribution>,
+}
+
+/// How the host renders a plugin preview's `body`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PreviewOutputKind {
+    /// Preformatted plain text, rendered as text.
+    Text,
+    /// HTML the frontend sanitizes (no script, no remote resources) before display.
+    Html,
+}
+
+/// What a plugin's `preview` function returns for one file (task 0142).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreviewOutput {
+    /// How to interpret [`Self::body`].
+    pub kind: PreviewOutputKind,
+    /// The rendered preview, bounded by the runtime's output budget.
+    pub body: String,
+}
+
+/// Which file extensions a plugin's `preview` entrypoint function renders.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreviewContribution {
+    /// Lowercase extensions without dots; must be non-empty and unique.
+    pub extensions: Vec<String>,
 }
 
 /// Panel entrypoint and optional file-extension activation matches.
@@ -547,6 +604,59 @@ actions = true
         .expect("Lua action and panel");
         assert_eq!(manifest.runtime, PluginRuntimeKind::Lua);
         assert!(manifest.contributions.spa_panel.is_some());
+    }
+
+    const PREVIEW_HEAD: &str = "id='example.preview'\nname='Preview'\nversion='1'\napi_version='1'\ndescription='Preview'\nentrypoint='plugin.lua'\n";
+
+    #[test]
+    fn parses_a_lua_preview_contribution() {
+        let manifest = PluginManifest::parse(&format!(
+            "{PREVIEW_HEAD}[permissions]\nselected_entry_content_read=true\n[contributions.preview]\nextensions=['torrent','magnet']"
+        ))
+        .expect("preview manifest");
+        let preview = manifest.contributions.preview.expect("preview");
+        assert_eq!(preview.extensions, ["torrent", "magnet"]);
+    }
+
+    #[test]
+    fn preview_requires_an_entrypoint_and_content_read_grant() {
+        let no_entrypoint = "id='example.preview'\nname='Preview'\nversion='1'\napi_version='1'\ndescription='Preview'\n[permissions]\nselected_entry_content_read=true\n[contributions.preview]\nextensions=['torrent']";
+        assert!(matches!(
+            PluginManifest::parse(no_entrypoint),
+            Err(ManifestError::InvalidField("entrypoint"))
+        ));
+        assert!(matches!(
+            PluginManifest::parse(&format!(
+                "{PREVIEW_HEAD}[contributions.preview]\nextensions=['torrent']"
+            )),
+            Err(ManifestError::InvalidField(
+                "permissions.selected_entry_content_read"
+            ))
+        ));
+    }
+
+    #[test]
+    fn preview_rejects_javascript_and_malformed_extension_lists() {
+        let grant = "[permissions]\nselected_entry_content_read=true\n";
+        assert!(matches!(
+            PluginManifest::parse(&format!(
+                "{PREVIEW_HEAD}runtime='javascript'\n{grant}[contributions.preview]\nextensions=['torrent']"
+            )),
+            Err(ManifestError::InvalidField("contributions.preview"))
+        ));
+        for extensions in ["[]", "['']", "['TORRENT']", "['a.b']", "['eml','eml']"] {
+            assert!(
+                matches!(
+                    PluginManifest::parse(&format!(
+                        "{PREVIEW_HEAD}{grant}[contributions.preview]\nextensions={extensions}"
+                    )),
+                    Err(ManifestError::InvalidField(
+                        "contributions.preview.extensions"
+                    ))
+                ),
+                "{extensions}"
+            );
+        }
     }
 
     #[test]

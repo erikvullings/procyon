@@ -83,6 +83,7 @@ import type {
   LlmProfilePreset,
   LlmProfileTestResult,
   LoadEditableFileRequest,
+  Location,
   MoveSemanticDataRequest,
   NavigateRequest,
   OneDriveAuthorizationAttempt,
@@ -99,6 +100,7 @@ import type {
   PluginIconTheme,
   PluginId,
   PluginLogEntry,
+  PluginPreviewResult,
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
@@ -282,6 +284,7 @@ import {
   enablePlugin as requestPluginEnable,
   getPluginIconThemeAsset as requestPluginIconThemeAsset,
   getPluginLogs as requestPluginLogs,
+  renderPluginPreview as requestPluginPreview,
   listPlugins as requestPlugins,
   closePptxPreview as requestPptxPreviewClose,
   openPptxPreview as requestPptxPreviewOpen,
@@ -2076,6 +2079,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       ...(plugin.columns === undefined ? {} : { columns: plugin.columns }),
       ...(plugin.iconTheme == null ? {} : { iconTheme: pluginIconThemeFromDto(plugin.iconTheme) }),
       ...(plugin.spaPanel == null ? {} : { spaPanel: plugin.spaPanel }),
+      ...(plugin.preview == null ? {} : { preview: plugin.preview }),
       permissions: {
         selectedEntryMetadata: plugin.permissions.selectedEntryMetadata,
         selectedEntryContentRead: plugin.permissions.selectedEntryContentRead,
@@ -2113,6 +2117,21 @@ export class HttpFileManagerClient implements FileManagerClient {
     if (response.status !== 200)
       throw new Error(`Unexpected getPluginLogs response status: ${response.status}`);
     return response.data.map((entry) => ({ message: entry.message }));
+  }
+
+  async renderPluginPreview(
+    pluginId: PluginId,
+    location: Location,
+    signal?: AbortSignal,
+  ): Promise<PluginPreviewResult> {
+    const response = await requestPluginPreview(
+      pluginId,
+      { location },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected renderPluginPreview response status: ${response.status}`);
+    return response.data;
   }
 
   async getPluginIconThemeAsset(

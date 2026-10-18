@@ -6,7 +6,10 @@ use axum::{
     http::{StatusCode, header},
     response::IntoResponse,
 };
-use fm_transport_dto::{ApplicationErrorDto, PluginDescriptorDto, PluginLogEntryDto};
+use fm_transport_dto::{
+    ApplicationErrorDto, PluginDescriptorDto, PluginLogEntryDto, PluginPreviewResultDto,
+    RenderPluginPreviewRequestDto,
+};
 use serde::Deserialize;
 use tower_http::request_id::RequestId;
 
@@ -30,6 +33,22 @@ pub(crate) async fn get_plugin_logs(
     state
         .service
         .plugin_logs(&plugin_id)
+        .map(Json)
+        .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))
+}
+
+/// Renders one file with an enabled plugin's sandboxed preview contribution (task 0142).
+#[utoipa::path(post, path = "/api/v1/plugins/{pluginId}/preview", operation_id = "renderPluginPreview", params(("pluginId" = String, Path)), request_body = RenderPluginPreviewRequestDto, responses((status = 200, body = PluginPreviewResultDto), (status = 404, body = ApplicationErrorDto), (status = 400, body = ApplicationErrorDto)))]
+pub(crate) async fn render_plugin_preview(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Path(plugin_id): Path<String>,
+    Json(request): Json<RenderPluginPreviewRequestDto>,
+) -> Result<Json<PluginPreviewResultDto>, ApiError> {
+    state
+        .service
+        .render_plugin_preview(&plugin_id, request)
+        .await
         .map(Json)
         .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))
 }

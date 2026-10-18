@@ -80,7 +80,8 @@ export function resolvePreviewKind(entry: EntrySummary): PreviewKind {
   return 'text';
 }
 
-function previewExtension(entry: EntrySummary): string | undefined {
+/** Lowercase extension of `entry` (a leading-dot name such as `.eml` has none). */
+export function previewExtension(entry: EntrySummary): string | undefined {
   const dot = entry.name.lastIndexOf('.');
   return (entry.extension ?? (dot > 0 ? entry.name.slice(dot + 1) : undefined))?.toLowerCase();
 }

@@ -531,6 +531,7 @@ export const fr = {
     showInfo: 'Afficher les informations (Alt+Espace)',
     loadingMetadata: 'Chargement des métadonnées…',
     previewUnavailableGeneric: 'Aperçu non disponible pour ce fichier.',
+    pluginPreviewTruncated: 'Seul le début du fichier est affiché.',
     quickLook: 'Afficher avec Quick Look',
     openExternally: 'Ouvrir en externe',
     searchPlaceholder: 'Rechercher dans ce fichier…',

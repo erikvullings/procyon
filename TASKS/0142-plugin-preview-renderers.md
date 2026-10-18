@@ -1,6 +1,6 @@
 # 0142 Plugin-contributed preview renderers
 
-Status: open
+Status: done
 Priority: low
 Owner: unassigned
 Agent: unassigned
@@ -58,3 +58,28 @@ the core app. This task is what actually lets a plugin (task 0053's plugin syste
   `preview-torrent`, `preview-eml`, `preview-vcard-ical`. Contribution point itself (manifest
   `contributions.preview`, render hook, bounded read permission; Lua vs JS undecided, lean Lua since
   0226 is open) is NOT started.
+- 2026-10-18: Implemented end to end. API: `contributions.preview` (`PreviewContribution`, Lua only,
+  needs `selected_entry_content_read`) in `fm-plugin-api`; `PluginRuntime::render_preview` in
+  `fm-plugin-runtime` (fresh VM, no host table, 1 s / 32 MiB / 20M-instruction / 512 KiB budgets,
+  same failure counting and auto-disable). Host: `PluginManager::render_plugin_preview` +
+  `FileManagerService::render_plugin_preview` (reads <=512 KiB via the VFS), `POST
+  /api/v1/plugins/{pluginId}/preview`, Tauri `render_plugin_preview`, `PluginDescriptorDto.preview`.
+  The render call is synchronous but bounded (<= 1 s), like action invocation.
+  Frontend: `PluginPreviewResult`, `renderPluginPreview` on all three clients, `plugin-preview.ts`
+  (routing with built-in precedence + sanitizer: Markdown/EPUB DOMPurify options plus no
+  `img/video/link/...`), `pluginPreview`/`pluginPreviewFailed` viewer content. Bundled plugins
+  `plugins/preview-{torrent,eml,vcard-ical}`, tested through the real runtime in
+  `crates/fm-plugin-runtime/tests/bundled_previews.rs` (escaping, truncation, invalid UTF-8,
+  nesting bombs, budget). **Enabled by default** via settings schema v9: new installs get
+  `DEFAULT_ENABLED_PLUGINS`, upgrades seed them once, and a v9 user's disable is respected.
+  Decisions: no syntax plugin (CodeMirror already highlights; 25 languages added to
+  `editor-language.ts`); CSV/TSV/Excel/JSON already built in (0100/0172); hex is a builtin
+  (`hex-preview.ts`); SQLite is 0251 (builtin recommended). Not done: the dev mock runtime has no
+  preview fixture plugin; the F3 "Alt+Space" metadata panel shows nothing for plugin previews;
+  executable/font previews were deferred.
+- 2026-10-18 (code review): fixed sanitizer gaps (form controls, `background`/`src`/`href` stripped),
+  plugin failure now falls back to text/hex instead of a dead-end, preview errors are logged but no
+  longer count toward auto-disable (untrusted input), claim check happens before file I/O, URI file
+  names are percent-decoded, EML/ICS plugins cap output and handle RFC 2047 word joining / nested
+  VALARM, torrent plugin validates numbers. The Lua call still runs synchronously on the async
+  worker (bounded to 1 s) - revisit with `spawn_blocking` if `PluginManager` becomes `Arc`-shared.

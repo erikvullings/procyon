@@ -2519,6 +2519,21 @@ pub(crate) fn get_plugin_logs(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Renders one file with an enabled plugin's sandboxed preview contribution (task 0142),
+/// mirroring the HTTP `POST /api/v1/plugins/{pluginId}/preview` route.
+#[tauri::command]
+pub(crate) async fn render_plugin_preview(
+    state: State<'_, AppState>,
+    plugin_id: String,
+    request: fm_transport_dto::RenderPluginPreviewRequestDto,
+) -> Result<fm_transport_dto::PluginPreviewResultDto, ApplicationErrorDto> {
+    state
+        .service
+        .render_plugin_preview(&plugin_id, request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Serves one SVG asset from an enabled plugin's icon theme (task 0095), mirroring the HTTP
 /// `GET /api/v1/plugins/{pluginId}/icon-theme/asset` route.
 #[tauri::command]

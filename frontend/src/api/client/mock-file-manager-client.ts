@@ -108,6 +108,7 @@ import type {
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  PluginPreviewResult,
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
@@ -365,6 +366,7 @@ export type MockClientMethod =
   | 'listPlugins'
   | 'setPluginEnabled'
   | 'getPluginLogs'
+  | 'renderPluginPreview'
   | 'getPluginIconThemeAsset'
   | 'startSearch'
   | 'cancelSearch'
@@ -3735,6 +3737,24 @@ export class MockFileManagerClient implements FileManagerClient {
       this.pluginState = this.pluginState.map((plugin) =>
         plugin.id === pluginId ? { ...plugin, enabled } : plugin,
       );
+    });
+  }
+
+  renderPluginPreview(
+    pluginId: PluginId,
+    location: Location,
+    signal?: AbortSignal,
+  ): Promise<PluginPreviewResult> {
+    return this.perform('renderPluginPreview', signal, () => {
+      const plugin = this.pluginState.find((candidate) => candidate.id === pluginId);
+      if (plugin?.enabled !== true || plugin.preview === undefined) {
+        throw new MockClientError('pluginNotFound', `No enabled mock preview plugin ${pluginId}`);
+      }
+      return {
+        kind: 'text' as const,
+        body: `${pluginId} previewed ${location.uri}`,
+        truncated: false,
+      };
     });
   }
 

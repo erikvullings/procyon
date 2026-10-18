@@ -528,6 +528,7 @@ export const es = {
     showInfo: 'Mostrar información (Alt+Espacio)',
     loadingMetadata: 'Cargando metadatos…',
     previewUnavailableGeneric: 'Vista previa no disponible para este archivo.',
+    pluginPreviewTruncated: 'Solo se muestra el inicio del archivo.',
     quickLook: 'Ver con Quick Look',
     openExternally: 'Abrir externamente',
     searchPlaceholder: 'Buscar en este archivo…',

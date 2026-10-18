@@ -106,6 +106,7 @@ import type {
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  PluginPreviewResult,
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
@@ -1209,6 +1210,17 @@ export class TauriFileManagerClient implements FileManagerClient {
     _signal?: AbortSignal,
   ): Promise<void> {
     await invoke(enabled ? 'enable_plugin' : 'disable_plugin', { pluginId });
+  }
+
+  renderPluginPreview(
+    pluginId: PluginId,
+    location: Location,
+    _signal?: AbortSignal,
+  ): Promise<PluginPreviewResult> {
+    return invoke<PluginPreviewResult>('render_plugin_preview', {
+      pluginId,
+      request: { location },
+    });
   }
 
   getPluginLogs(pluginId: PluginId, _signal?: AbortSignal): Promise<PluginLogEntry[]> {

@@ -1,0 +1,12 @@
+id = "procyon.preview-vcard-ical"
+name = "Contacts and calendar preview"
+version = "0.1.0"
+api_version = "1"
+description = "Shows the contacts of a .vcf file and the events and tasks of an .ics file in the F3 viewer."
+entrypoint = "plugin.lua"
+
+[permissions]
+selected_entry_content_read = true
+
+[contributions.preview]
+extensions = ["vcf", "ics"]

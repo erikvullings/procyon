@@ -257,7 +257,7 @@ Looking at and editing file contents without leaving the app.
 - [x] 0100 Read-only streaming structured-data viewer
 - [x] 0140 File/folder Properties dialog *(split out of 0129)*
 - [x] 0141 Archive summary preview *(split out of 0071)*
-- [ ] 0142 Plugin-contributed preview renderers *(split out of 0071)*
+- [x] 0142 Plugin-contributed preview renderers *(split out of 0071; bundled torrent/eml/vcard-ical previews on by default)*
 - [x] 0149 Saved Multi-Rename presets *(needs 0072; quick win layered on the existing rule engine)*
 - [x] 0150 Video playback in the F3 Lister viewer *(needs 0088; native `<video>`, mirrors the
   existing `<audio>` path — see the task for the large-file caveat)*

@@ -525,6 +525,42 @@ describe('FileViewer', () => {
     expect(onLoadTextPage).toHaveBeenCalledWith(2);
   });
 
+  it('renders plugin preview html as markup and text as preformatted text', () => {
+    mount(
+      baseAttrs({
+        status: 'ready',
+        entry: entry(),
+        content: {
+          kind: 'pluginPreview',
+          pluginId: 'example.preview',
+          format: 'html',
+          body: '<h2>Title</h2>',
+          truncated: true,
+        },
+      }),
+    );
+    expect(root.querySelector('.fm-file-viewer-plugin-preview-html h2')?.textContent).toBe('Title');
+    expect(root.querySelector('.fm-file-viewer-plugin-preview-note')).not.toBeNull();
+
+    mount(
+      baseAttrs({
+        status: 'ready',
+        entry: entry(),
+        content: {
+          kind: 'pluginPreview',
+          pluginId: 'example.preview',
+          format: 'text',
+          body: '<b>not markup</b>',
+          truncated: false,
+        },
+      }),
+    );
+    expect(root.querySelector('pre.fm-file-viewer-plugin-preview-text')?.textContent).toBe(
+      '<b>not markup</b>',
+    );
+    expect(root.querySelector('.fm-file-viewer-plugin-preview-note')).toBeNull();
+  });
+
   it('forwards search input, option toggles, and match navigation', () => {
     const onSearchQueryChange = vi.fn();
     const onSearchOptionChange = vi.fn();

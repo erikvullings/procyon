@@ -534,6 +534,7 @@ export const de = {
     showInfo: 'Info anzeigen (Alt+Leertaste)',
     loadingMetadata: 'Metadaten werden geladen…',
     previewUnavailableGeneric: 'Für diese Datei ist keine Vorschau verfügbar.',
+    pluginPreviewTruncated: 'Es wird nur der Anfang der Datei angezeigt.',
     quickLook: 'Mit Quick Look ansehen',
     openExternally: 'Extern öffnen',
     searchPlaceholder: 'In dieser Datei suchen…',

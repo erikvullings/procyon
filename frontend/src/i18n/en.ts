@@ -546,6 +546,7 @@ export const en = {
     showInfo: 'Show info (Alt+Space)',
     loadingMetadata: 'Loading metadata…',
     previewUnavailableGeneric: 'Preview not available for this file.',
+    pluginPreviewTruncated: 'Showing only the start of the file.',
     quickLook: 'View with Quick Look',
     openExternally: 'Open externally',
     searchPlaceholder: 'Search this file…',

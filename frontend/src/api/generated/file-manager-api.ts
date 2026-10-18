@@ -115,6 +115,7 @@ import type {
   PlanSemanticModelMigrationRequestDto,
   PluginDescriptorDto,
   PluginLogEntryDto,
+  PluginPreviewResultDto,
   PptxPreviewSessionRequestDto,
   PreviewDocumentSummaryRequestDto,
   PreviewRagRequestDto,
@@ -132,6 +133,7 @@ import type {
   RemoveApplicationDockIconRequestDto,
   RemoveApplicationDockIconResponseDto,
   RenderChecksumFileRequestDto,
+  RenderPluginPreviewRequestDto,
   ResolveKnowledgeSourceRequestDto,
   ResolveLinkTargetRequestDto,
   ResolveOperationConflictRequestDto,
@@ -5234,6 +5236,69 @@ export const getPluginLogs = async (pluginId: string, options?: Parameters<typeo
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type renderPluginPreviewResponse200 = {
+  data: PluginPreviewResultDto
+  status: 200
+}
+
+export type renderPluginPreviewResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type renderPluginPreviewResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type renderPluginPreviewResponseSuccess = (renderPluginPreviewResponse200) & {
+  headers: Headers;
+};
+export type renderPluginPreviewResponseError = (renderPluginPreviewResponse400 | renderPluginPreviewResponse404) & {
+  headers: Headers;
+};
+
+export type renderPluginPreviewResponse = (renderPluginPreviewResponseSuccess | renderPluginPreviewResponseError)
+
+export const getRenderPluginPreviewUrl = (pluginId: string,) => {
+
+
+
+
+  return `/api/v1/plugins/${pluginId}/preview`
+}
+
+/**
+ * @summary Renders one file with an enabled plugin's sandboxed preview contribution (task 0142).
+ */
+export const renderPluginPreview = async (pluginId: string,
+    renderPluginPreviewRequestDto: RenderPluginPreviewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<renderPluginPreviewResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<renderPluginPreviewResponse>(getRenderPluginPreviewUrl(pluginId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(renderPluginPreviewRequestDto)
   }
 );}
 

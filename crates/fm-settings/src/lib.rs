@@ -25,7 +25,17 @@ use serde_json::Value;
 use thiserror::Error;
 
 /// Current on-disk settings schema.
-pub const CURRENT_SCHEMA_VERSION: u32 = 8;
+pub const CURRENT_SCHEMA_VERSION: u32 = 9;
+/// First schema version whose installs enable [`DEFAULT_ENABLED_PLUGINS`] automatically.
+const DEFAULT_PLUGINS_SCHEMA_VERSION: u64 = 9;
+/// Bundled plugins that are on until the user turns them off (task 0142's preview renderers).
+/// They only fill extensions no built-in renderer handles and read nothing but the file being
+/// previewed, so enabling them by default adds no ambient authority.
+pub const DEFAULT_ENABLED_PLUGINS: [&str; 3] = [
+    "procyon.preview-eml",
+    "procyon.preview-torrent",
+    "procyon.preview-vcard-ical",
+];
 /// Stable settings filename within the platform configuration directory.
 pub const SETTINGS_FILE_NAME: &str = "settings.json";
 const SETTINGS_LOCK_FILE_NAME: &str = ".settings.lock";
@@ -278,7 +288,7 @@ impl Default for Settings {
             ],
             column_widths: BTreeMap::new(),
             keybindings: BTreeMap::new(),
-            enabled_plugins: Vec::new(),
+            enabled_plugins: DEFAULT_ENABLED_PLUGINS.map(str::to_owned).to_vec(),
             plugin_settings: BTreeMap::new(),
             terminal_command: None,
             editor_command: None,
@@ -678,6 +688,11 @@ fn migrate(bytes: &[u8]) -> Result<Settings, serde_json::Error> {
         .unwrap_or(1);
     if (1..u64::from(CURRENT_SCHEMA_VERSION)).contains(&version) {
         value["schemaVersion"] = Value::from(CURRENT_SCHEMA_VERSION);
+        if version < DEFAULT_PLUGINS_SCHEMA_VERSION {
+            for plugin in DEFAULT_ENABLED_PLUGINS {
+                enable_plugin(&mut value, plugin);
+            }
+        }
     } else if version != u64::from(CURRENT_SCHEMA_VERSION) {
         return Err(<serde_json::Error as serde::de::Error>::custom(
             "unsupported settings schema version",
@@ -685,21 +700,26 @@ fn migrate(bytes: &[u8]) -> Result<Settings, serde_json::Error> {
     }
     if value.get("iconTheme").and_then(Value::as_str) == Some(LEGACY_CATPPUCCIN_ICON_THEME) {
         value["iconTheme"] = Value::from(CATPPUCCIN_ICON_THEME_PLUGIN);
-        if !value.get("enabledPlugins").is_some_and(Value::is_array) {
-            value["enabledPlugins"] = Value::Array(Vec::new());
-        }
-        let enabled = value
-            .get_mut("enabledPlugins")
-            .and_then(Value::as_array_mut)
-            .expect("enabledPlugins was initialized as an array");
-        if !enabled
-            .iter()
-            .any(|plugin| plugin.as_str() == Some(CATPPUCCIN_ICON_THEME_PLUGIN))
-        {
-            enabled.push(Value::from(CATPPUCCIN_ICON_THEME_PLUGIN));
-        }
+        enable_plugin(&mut value, CATPPUCCIN_ICON_THEME_PLUGIN);
     }
     serde_json::from_value(value)
+}
+
+/// Adds `plugin_id` to the document's `enabledPlugins` unless it is already there.
+fn enable_plugin(value: &mut Value, plugin_id: &str) {
+    if !value.get("enabledPlugins").is_some_and(Value::is_array) {
+        value["enabledPlugins"] = Value::Array(Vec::new());
+    }
+    let enabled = value
+        .get_mut("enabledPlugins")
+        .and_then(Value::as_array_mut)
+        .expect("enabledPlugins was initialized as an array");
+    if !enabled
+        .iter()
+        .any(|plugin| plugin.as_str() == Some(plugin_id))
+    {
+        enabled.push(Value::from(plugin_id));
+    }
 }
 
 fn unix_timestamp() -> u64 {
@@ -817,6 +837,39 @@ mod tests {
                 language
             );
         }
+    }
+
+    #[test]
+    fn new_installs_enable_the_default_preview_plugins() {
+        assert_eq!(
+            Settings::default().enabled_plugins,
+            DEFAULT_ENABLED_PLUGINS.map(str::to_owned)
+        );
+    }
+
+    #[test]
+    fn upgrading_from_before_default_plugins_enables_them_once() {
+        let settings =
+            migrate(br#"{"schemaVersion": 8, "enabledPlugins": ["archive"]}"#).expect("migrate v8");
+        assert_eq!(settings.schema_version, CURRENT_SCHEMA_VERSION);
+        for plugin in DEFAULT_ENABLED_PLUGINS {
+            assert!(
+                settings.enabled_plugins.iter().any(|id| id == plugin),
+                "{plugin}"
+            );
+        }
+        assert!(settings.enabled_plugins.iter().any(|id| id == "archive"));
+
+        let legacy = migrate(br#"{"enabledPlugins": []}"#).expect("migrate unversioned");
+        assert_eq!(legacy.enabled_plugins.len(), DEFAULT_ENABLED_PLUGINS.len());
+    }
+
+    #[test]
+    fn a_current_schema_user_who_disabled_a_default_plugin_keeps_it_disabled() {
+        let settings =
+            migrate(br#"{"schemaVersion": 9, "enabledPlugins": ["procyon.preview-eml"]}"#)
+                .expect("migrate current");
+        assert_eq!(settings.enabled_plugins, ["procyon.preview-eml"]);
     }
 
     #[test]

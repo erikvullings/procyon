@@ -64,6 +64,7 @@ const requestListPlugins = vi.fn();
 const requestEnablePlugin = vi.fn();
 const requestDisablePlugin = vi.fn();
 const requestGetPluginLogs = vi.fn();
+const requestRenderPluginPreview = vi.fn();
 const requestReadFileRange = vi.fn();
 const requestOpenDocxPreview = vi.fn();
 const requestReadDocxPreviewResource = vi.fn();
@@ -162,6 +163,7 @@ vi.mock('../generated/file-manager-api', () => ({
   enablePlugin: (...args: unknown[]) => requestEnablePlugin(...args),
   disablePlugin: (...args: unknown[]) => requestDisablePlugin(...args),
   getPluginLogs: (...args: unknown[]) => requestGetPluginLogs(...args),
+  renderPluginPreview: (...args: unknown[]) => requestRenderPluginPreview(...args),
   readFileRange: (...args: unknown[]) => requestReadFileRange(...args),
   openDocxPreview: (...args: unknown[]) => requestOpenDocxPreview(...args),
   readDocxPreviewResource: (...args: unknown[]) => requestReadDocxPreviewResource(...args),
@@ -282,6 +284,7 @@ afterEach(() => {
   requestEnablePlugin.mockReset();
   requestDisablePlugin.mockReset();
   requestGetPluginLogs.mockReset();
+  requestRenderPluginPreview.mockReset();
   requestReadFileRange.mockReset();
   requestSearchInFile.mockReset();
   requestOpenStructuredView.mockReset();
@@ -1866,6 +1869,31 @@ describe('HttpFileManagerClient', () => {
         { message: 'plugin execution timed out' },
       ]);
       expect(requestGetPluginLogs).toHaveBeenCalledWith('example.copy-markdown', undefined);
+    });
+
+    it('renders a plugin preview through the generated endpoint and rejects other statuses', async () => {
+      const location = { providerId: 'local', uri: 'file:///tmp/a.torrent' };
+      const result = { kind: 'html', body: '<p>x</p>', truncated: false };
+      requestRenderPluginPreview.mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        data: result,
+      });
+      const client = new HttpFileManagerClient();
+
+      await expect(client.renderPluginPreview('example.preview', location)).resolves.toEqual(
+        result,
+      );
+      expect(requestRenderPluginPreview).toHaveBeenCalledWith(
+        'example.preview',
+        { location },
+        undefined,
+      );
+
+      requestRenderPluginPreview.mockResolvedValue({ status: 404, headers: new Headers() });
+      await expect(client.renderPluginPreview('example.preview', location)).rejects.toThrow(
+        'Unexpected renderPluginPreview response status: 404',
+      );
     });
   });
 });

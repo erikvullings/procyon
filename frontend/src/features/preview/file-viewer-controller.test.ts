@@ -71,6 +71,7 @@ function setup(): {
   return {
     client: {
       readFileRange: vi.fn(),
+      renderPluginPreview: vi.fn(),
       openDocxPreview: vi.fn(),
       readDocxPreviewResource: vi.fn(),
       closeDocxPreview: vi.fn().mockResolvedValue(undefined),
@@ -586,6 +587,90 @@ describe('file viewer controller', () => {
         atStart: false,
         atEnd: true,
       },
+    });
+  });
+
+  describe('plugin previews', () => {
+    const route = { pluginId: 'example.preview', extensions: ['torrent'] };
+    const torrent = () => entry({ name: 'a.torrent', extension: 'torrent' });
+
+    it('renders an unclaimed extension through the plugin and sanitizes html', async () => {
+      const context = setup();
+      vi.mocked(context.client.renderPluginPreview).mockResolvedValue({
+        kind: 'html',
+        body: '<p onclick="x()">hi</p><script>alert(1)</script>',
+        truncated: true,
+      });
+      createFileViewerController({
+        client: context.client,
+        entry: torrent(),
+        previewPlugins: [route],
+        update: (state) => context.states.push(state),
+      });
+
+      await vi.waitFor(() =>
+        expect(context.states.at(-1)).toMatchObject({
+          status: 'ready',
+          content: {
+            kind: 'pluginPreview',
+            pluginId: 'example.preview',
+            format: 'html',
+            body: '<p>hi</p>',
+            truncated: true,
+          },
+        }),
+      );
+      expect(context.client.renderPluginPreview).toHaveBeenCalledWith(
+        'example.preview',
+        torrent().location,
+        expect.anything(),
+      );
+      expect(context.client.readFileRange).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the raw text view when the plugin fails', async () => {
+      const context = setup();
+      vi.mocked(context.client.renderPluginPreview).mockRejectedValue(new Error('boom'));
+      vi.mocked(context.client.readFileRange).mockResolvedValue({
+        data: [66, 69, 71, 73, 78],
+        offset: 0,
+        length: 5,
+        eof: true,
+      });
+      createFileViewerController({
+        client: context.client,
+        entry: torrent(),
+        previewPlugins: [route],
+        update: (state) => context.states.push(state),
+      });
+
+      await vi.waitFor(() =>
+        expect(context.states.at(-1)).toMatchObject({
+          status: 'ready',
+          content: { kind: 'text', text: 'BEGIN' },
+        }),
+      );
+    });
+
+    it('lets built-in renderers win for an extension a plugin also claims', async () => {
+      const context = setup();
+      vi.mocked(context.client.readFileRange).mockResolvedValue({
+        data: [104, 105],
+        offset: 0,
+        length: 2,
+        eof: true,
+      });
+      createFileViewerController({
+        client: context.client,
+        entry: entry({ name: 'main.rs', extension: 'rs' }),
+        previewPlugins: [{ pluginId: 'example.preview', extensions: ['rs'] }],
+        update: (state) => context.states.push(state),
+      });
+
+      await vi.waitFor(() =>
+        expect(context.states.at(-1)).toMatchObject({ content: { kind: 'text' } }),
+      );
+      expect(context.client.renderPluginPreview).not.toHaveBeenCalled();
     });
   });
 

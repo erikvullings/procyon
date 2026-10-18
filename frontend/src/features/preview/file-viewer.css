@@ -655,6 +655,41 @@
   -webkit-user-select: text;
 }
 
+.fm-file-viewer-plugin-preview-note {
+  padding: 0.25rem 1rem;
+  color: var(--fm-text-muted, var(--fm-text));
+  font-size: calc(var(--fm-font-size) * 0.9);
+}
+
+.fm-file-viewer-plugin-preview-html,
+.fm-file-viewer-plugin-preview-text {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  color: var(--fm-text);
+  font-family: var(--fm-font-family);
+  font-size: var(--fm-font-size);
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.fm-file-viewer-plugin-preview-text {
+  font-family: var(--fm-font-mono);
+  white-space: pre-wrap;
+}
+
+.fm-file-viewer-plugin-preview-html table {
+  border-collapse: collapse;
+}
+
+.fm-file-viewer-plugin-preview-html th,
+.fm-file-viewer-plugin-preview-html td {
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--fm-border, currentColor);
+  text-align: left;
+  vertical-align: top;
+}
+
 .fm-file-viewer-markdown::selection,
 .fm-file-viewer-markdown *::selection {
   background: var(--fm-selection);

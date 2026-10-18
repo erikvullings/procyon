@@ -526,6 +526,7 @@ export const pl = {
     showInfo: 'Pokaż informacje (Alt+Spacja)',
     loadingMetadata: 'Wczytywanie metadanych…',
     previewUnavailableGeneric: 'Podgląd niedostępny dla tego pliku.',
+    pluginPreviewTruncated: 'Wyświetlany jest tylko początek pliku.',
     quickLook: 'Wyświetl za pomocą Quick Look',
     openExternally: 'Otwórz zewnętrznie',
     searchPlaceholder: 'Szukaj w tym pliku…',

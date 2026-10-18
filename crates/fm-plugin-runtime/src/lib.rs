@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use fm_plugin_api::{
     ActionContribution, ColumnContribution, IconThemeManifest, Permission, PluginManifest,
-    PluginRuntimeKind, SelectedEntryContext,
+    PluginRuntimeKind, PreviewOutput, SelectedEntryContext,
 };
 use mlua::{Error as LuaError, HookTriggers, Lua, LuaOptions, LuaSerdeExt, StdLib, Table, VmState};
 use serde::de::DeserializeOwned;
@@ -26,6 +26,13 @@ const DEFAULT_FAILURE_LIMIT: u8 = 3;
 const MAX_LOG_ENTRIES: usize = 100;
 const MAX_OUTPUT_BYTES: usize = 256 * 1024;
 const MAX_SOURCE_BYTES: usize = 1024 * 1024;
+/// Previews parse file content, so they get a larger (still bounded) budget than actions/columns.
+const PREVIEW_TIMEOUT: Duration = Duration::from_secs(1);
+const PREVIEW_MEMORY_LIMIT_BYTES: usize = 32 * 1024 * 1024;
+const PREVIEW_INSTRUCTION_LIMIT: usize = 20_000_000;
+const PREVIEW_MAX_OUTPUT_BYTES: usize = 512 * 1024;
+/// Largest file prefix the host hands to a preview function.
+pub const PREVIEW_MAX_INPUT_BYTES: usize = 512 * 1024;
 
 mod javascript;
 
@@ -58,6 +65,19 @@ pub struct PluginLogEntry {
 pub struct PluginActionOutcome {
     /// Text the plugin asked the host to write to the clipboard, if any.
     pub clipboard_text: Option<String>,
+}
+
+/// The file a plugin preview renders: a bounded prefix of its content plus trusted metadata.
+#[derive(Debug, Clone, Copy)]
+pub struct PreviewInput<'a> {
+    /// File name including extension.
+    pub name: &'a str,
+    /// Lowercase extension without a dot, if any.
+    pub extension: &'a str,
+    /// At most [`PREVIEW_MAX_INPUT_BYTES`] bytes from the start of the file.
+    pub content: &'a [u8],
+    /// Whether the file continues past `content`.
+    pub truncated: bool,
 }
 
 /// The reason a plugin call was isolated from the host application.
@@ -250,6 +270,40 @@ impl PluginRuntime {
         }
     }
 
+    /// Renders `input` with the plugin's `preview` function (task 0142).
+    ///
+    /// The function receives `{ name, extension, truncated, content }` (`content` is a
+    /// binary-safe Lua string) and returns `{ kind = "text" | "html", body = "..." }`. Like every
+    /// other contribution call it runs in a fresh budgeted VM. Failures are logged and returned
+    /// but, unlike actions and columns, never auto-disable the plugin: previews run on arbitrary
+    /// untrusted files, so a bad file says nothing about the plugin's health.
+    pub fn render_preview(
+        &self,
+        manifest: &PluginManifest,
+        directory: &Path,
+        input: &PreviewInput<'_>,
+        cancellation: &PluginCancellation,
+    ) -> Result<PreviewOutput, PluginRuntimeError> {
+        self.ensure_enabled(&manifest.id)?;
+        let claims_extension = manifest
+            .contributions
+            .preview
+            .as_ref()
+            .is_some_and(|preview| preview.extensions.iter().any(|ext| ext == input.extension));
+        if !claims_extension {
+            return Err(PluginRuntimeError::Execution {
+                plugin_id: manifest.id.clone(),
+                message: "plugin does not contribute a preview for this extension".to_owned(),
+            });
+        }
+        // The input file is untrusted, so a malformed file must not disable the plugin for every
+        // later file: errors are logged for diagnostics but do not count toward auto-disable.
+        match self.execute_preview(manifest, directory, input, cancellation) {
+            Ok(output) => Ok(output),
+            Err(message) => Err(self.log_failure(&manifest.id, message)),
+        }
+    }
+
     /// Returns bounded retained diagnostics for a plugin.
     #[must_use]
     pub fn logs(&self, plugin_id: &str) -> Vec<PluginLogEntry> {
@@ -349,20 +403,86 @@ impl PluginRuntime {
         })
     }
 
+    fn execute_preview(
+        &self,
+        manifest: &PluginManifest,
+        directory: &Path,
+        input: &PreviewInput<'_>,
+        cancellation: &PluginCancellation,
+    ) -> Result<PreviewOutput, String> {
+        manifest
+            .permissions
+            .require(Permission::SelectedEntryContentRead)
+            .map_err(|error| error.to_string())?;
+        let source = read_plugin_source(manifest, directory)?;
+        let lua = self.sandboxed_lua_with_limits(
+            cancellation,
+            PREVIEW_TIMEOUT,
+            PREVIEW_MEMORY_LIMIT_BYTES,
+            PREVIEW_INSTRUCTION_LIMIT,
+        )?;
+        // No host services: a preview is a pure function of the file it is handed.
+        let module: Table = lua
+            .load(&source)
+            .eval()
+            .map_err(|error| error.to_string())?;
+        let function = module
+            .get::<mlua::Function>("preview")
+            .map_err(|error| format!("malformed plugin result: {error}"))?;
+        let content = &input.content[..input.content.len().min(PREVIEW_MAX_INPUT_BYTES)];
+        let file = lua.create_table().map_err(|error| error.to_string())?;
+        let to_err = |error: LuaError| error.to_string();
+        file.set("name", input.name).map_err(to_err)?;
+        file.set("extension", input.extension).map_err(to_err)?;
+        file.set(
+            "truncated",
+            input.truncated || input.content.len() > content.len(),
+        )
+        .map_err(to_err)?;
+        file.set(
+            "content",
+            lua.create_string(content)
+                .map_err(|error| error.to_string())?,
+        )
+        .map_err(to_err)?;
+        let value: mlua::Value = function.call(file).map_err(|error| error.to_string())?;
+        let output: PreviewOutput = lua
+            .from_value(value)
+            .map_err(|error| format!("malformed plugin result: {error}"))?;
+        if output.body.len() > PREVIEW_MAX_OUTPUT_BYTES {
+            return Err("plugin output budget exceeded".to_owned());
+        }
+        Ok(output)
+    }
+
     /// Creates a fresh VM containing only table, string, math and UTF-8
     /// helpers, with the shared memory limit, timeout and instruction-budget
     /// hook applied. Host services are installed separately by each caller.
     fn new_sandboxed_lua(&self, cancellation: &PluginCancellation) -> Result<Lua, String> {
+        self.sandboxed_lua_with_limits(
+            cancellation,
+            self.timeout,
+            self.memory_limit_bytes,
+            self.instruction_limit,
+        )
+    }
+
+    fn sandboxed_lua_with_limits(
+        &self,
+        cancellation: &PluginCancellation,
+        timeout: Duration,
+        memory_limit_bytes: usize,
+        instruction_limit: usize,
+    ) -> Result<Lua, String> {
         let lua = Lua::new_with(
             StdLib::TABLE | StdLib::STRING | StdLib::MATH | StdLib::UTF8,
             LuaOptions::default(),
         )
         .map_err(|error| error.to_string())?;
-        lua.set_memory_limit(self.memory_limit_bytes.max(1))
+        lua.set_memory_limit(memory_limit_bytes.max(1))
             .map_err(|error| error.to_string())?;
-        let deadline = Instant::now() + self.timeout;
+        let deadline = Instant::now() + timeout;
         let instructions = AtomicUsize::new(0);
-        let instruction_limit = self.instruction_limit;
         let cancellation = cancellation.clone();
         lua.set_hook(
             HookTriggers::new().every_nth_instruction(100),
@@ -403,6 +523,24 @@ impl PluginRuntime {
             .unwrap_or_else(|error| error.into_inner())
             .failures
             .remove(plugin_id);
+    }
+
+    /// Retains a bounded diagnostic without counting toward the auto-disable limit.
+    fn log_failure(&self, plugin_id: &str, message: String) -> PluginRuntimeError {
+        tracing::warn!(plugin_id, error = %message, "plugin preview failed");
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        let entries = state.logs.entry(plugin_id.to_owned()).or_default();
+        entries.push_back(PluginLogEntry {
+            plugin_id: plugin_id.to_owned(),
+            message: message.clone(),
+        });
+        if entries.len() > MAX_LOG_ENTRIES {
+            entries.pop_front();
+        }
+        PluginRuntimeError::Execution {
+            plugin_id: plugin_id.to_owned(),
+            message,
+        }
     }
 
     fn record_failure(&self, plugin_id: &str, message: String) -> PluginRuntimeError {
@@ -973,6 +1111,132 @@ mod tests {
         let temporary = tempfile::tempdir().expect("temporary directory");
         fs::write(temporary.path().join("plugin.lua"), source).expect("script");
         temporary
+    }
+
+    fn preview_manifest(extensions: &str) -> PluginManifest {
+        PluginManifest::parse(&format!(
+            "id='example.preview'\nname='Preview'\nversion='1'\napi_version='1'\ndescription='Preview'\nentrypoint='plugin.lua'\n[permissions]\nselected_entry_content_read=true\n[contributions.preview]\nextensions={extensions}"
+        ))
+        .expect("valid preview manifest")
+    }
+
+    fn input<'a>(extension: &'a str, content: &'a [u8]) -> PreviewInput<'a> {
+        PreviewInput {
+            name: "file.demo",
+            extension,
+            content,
+            truncated: false,
+        }
+    }
+
+    fn render(
+        runtime: &PluginRuntime,
+        script: &tempfile::TempDir,
+        input: &PreviewInput<'_>,
+    ) -> Result<PreviewOutput, PluginRuntimeError> {
+        runtime.render_preview(
+            &preview_manifest("['demo']"),
+            script.path(),
+            input,
+            &PluginCancellation::default(),
+        )
+    }
+
+    #[test]
+    fn preview_receives_binary_safe_content_and_returns_text() {
+        let script = write_script(
+            "return { preview = function(file) \
+                 return { kind = 'text', body = file.name .. ':' .. #file.content .. ':' .. file.content:byte(2) } \
+             end }",
+        );
+        let output = render(
+            &PluginRuntime::default(),
+            &script,
+            &input("demo", &[1, 0, 255]),
+        )
+        .expect("preview");
+        assert_eq!(output.kind, fm_plugin_api::PreviewOutputKind::Text);
+        assert_eq!(output.body, "file.demo:3:0");
+    }
+
+    #[test]
+    fn preview_flags_truncated_input_and_caps_it() {
+        let script = write_script(
+            "return { preview = function(file) \
+                 return { kind = 'html', body = tostring(file.truncated) .. #file.content } \
+             end }",
+        );
+        let content = vec![b'a'; PREVIEW_MAX_INPUT_BYTES + 10];
+        let output =
+            render(&PluginRuntime::default(), &script, &input("demo", &content)).expect("preview");
+        assert_eq!(output.body, format!("true{PREVIEW_MAX_INPUT_BYTES}"));
+    }
+
+    #[test]
+    fn preview_has_no_host_services_or_ambient_authority() {
+        let script = write_script(
+            "return { preview = function(file) \
+                 return { kind = 'text', body = tostring(host) .. tostring(io) .. tostring(os) } \
+             end }",
+        );
+        let output =
+            render(&PluginRuntime::default(), &script, &input("demo", b"x")).expect("preview");
+        assert_eq!(output.body, "nilnilnil");
+    }
+
+    #[test]
+    fn preview_refuses_extensions_the_plugin_did_not_claim() {
+        let script =
+            write_script("return { preview = function() return { kind='text', body='' } end }");
+        let error = PluginRuntime::default()
+            .render_preview(
+                &preview_manifest("['demo']"),
+                script.path(),
+                &input("other", b"x"),
+                &PluginCancellation::default(),
+            )
+            .expect_err("unclaimed extension");
+        assert!(error.to_string().contains("does not contribute"));
+    }
+
+    #[test]
+    fn preview_failures_are_isolated_logged_and_never_auto_disable_the_plugin() {
+        let script = write_script("return { preview = function() error('boom') end }");
+        let runtime = PluginRuntime::default();
+        for _ in 0..=DEFAULT_FAILURE_LIMIT {
+            let error = render(&runtime, &script, &input("demo", b"x")).expect_err("failure");
+            assert!(matches!(error, PluginRuntimeError::Execution { .. }));
+        }
+        assert!(runtime.disabled_reason("example.preview").is_none());
+        assert!(runtime.logs("example.preview")[0].message.contains("boom"));
+    }
+
+    #[test]
+    fn preview_rejects_malformed_results_and_oversized_output() {
+        for source in [
+            "return { preview = function() return 'text' end }",
+            "return { preview = function() return { kind = 'script', body = 'x' } end }",
+            "return { preview = function() return { kind = 'text', body = 'x', extra = 1 } end }",
+            "return { preview = function() return { kind = 'text', body = string.rep('a', 600000) } end }",
+        ] {
+            let script = write_script(source);
+            assert!(
+                render(&PluginRuntime::default(), &script, &input("demo", b"x")).is_err(),
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn preview_enforces_the_instruction_budget() {
+        let script = write_script("return { preview = function() while true do end end }");
+        let error = render(&PluginRuntime::default(), &script, &input("demo", b"x"))
+            .expect_err("runaway preview");
+        let message = error.to_string();
+        assert!(
+            message.contains("budget") || message.contains("timed out"),
+            "{message}"
+        );
     }
 
     #[test]

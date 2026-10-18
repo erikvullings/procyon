@@ -160,6 +160,7 @@ import {
   type FileViewerController,
   type FileViewerState,
 } from '../features/preview/file-viewer-controller';
+import { previewPluginRoutes } from '../features/preview/plugin-preview';
 import { filterEntries } from '../features/quick-filter/quick-filter';
 import {
   createFindFilesController,
@@ -1379,6 +1380,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         client,
         entry,
         ...(workspace ? { workspaceId: workspace.id } : {}),
+        previewPlugins: previewPluginRoutes(plugins),
         ...(initialSearch ? { initialSearch } : {}),
         ...(initialPage ? { initialPage } : {}),
         initialMetadataPanelOpen: openMetadata === true,
@@ -1422,6 +1424,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           client,
           entry,
           workspaceId: currentWorkspace.id,
+          previewPlugins: previewPluginRoutes(plugins),
           ...(initialSearch ? { initialSearch } : {}),
           ...(initialPage ? { initialPage } : {}),
           initialMetadataPanelOpen: openMetadata === true,

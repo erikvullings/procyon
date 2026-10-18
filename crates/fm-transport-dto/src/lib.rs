@@ -147,7 +147,8 @@ pub use operation::{
 };
 pub use plugin::{
     PluginColumnDto, PluginDescriptorDto, PluginIconDefinitionDto, PluginIconThemeDto,
-    PluginLogEntryDto, PluginPermissionsDto, PluginSpaPanelDto,
+    PluginLogEntryDto, PluginPermissionsDto, PluginPreviewDto, PluginPreviewKindDto,
+    PluginPreviewResultDto, PluginSpaPanelDto, RenderPluginPreviewRequestDto,
 };
 pub use rag::{
     DeleteRagConversationRequestDto, GenerateRagAnswerRequestDto, GenerateRagAnswerResponseDto,

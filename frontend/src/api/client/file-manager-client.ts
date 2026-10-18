@@ -100,6 +100,7 @@ import type {
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  PluginPreviewResult,
   PptxPreview,
   PptxPreviewSessionRequest,
   PreviewDocumentSummaryRequest,
@@ -737,6 +738,15 @@ export interface FileManagerClient {
   setPluginEnabled(pluginId: PluginId, enabled: boolean, signal?: AbortSignal): Promise<void>;
 
   getPluginLogs(pluginId: PluginId, signal?: AbortSignal): Promise<PluginLogEntry[]>;
+  /**
+   * Renders `location` with an enabled plugin's sandboxed preview contribution (task 0142).
+   * The result is untrusted: `html` bodies must be sanitized before display.
+   */
+  renderPluginPreview(
+    pluginId: PluginId,
+    location: Location,
+    signal?: AbortSignal,
+  ): Promise<PluginPreviewResult>;
 
   /**
    * Fetches raw SVG markup for one icon-theme asset (task 0095); `assetPath` is a theme's
