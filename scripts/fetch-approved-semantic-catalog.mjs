@@ -8,6 +8,16 @@ import { semanticCatalogSourceRevision } from './create-semantic-component-relea
 const defaultManifestPath = fileURLToPath(
   new URL('../docs/evaluations/semantic-component-release-v1.json', import.meta.url),
 );
+const supportedTargets = ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'];
+const qualifiedGemmaGates = [
+  'resourceCeilings',
+  'cpuFallback',
+  'crossHostNavigation',
+  'upgradeRollback',
+  'mediaSearch',
+];
+const previousExperimentalGemmaSource = '4553da275e76638678c7fc0a6ddcea732a19165b';
+const preIntegrationGemmaSource = 'd3f921fe08e4994a905727a71af102979f4fbe23';
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -24,6 +34,9 @@ export function semanticComponentReleasePlan(manifest, target) {
   if (manifest?.schemaVersion !== 1 || manifest?.decision !== 'go') {
     throw new Error('an approved semantic component release is required');
   }
+  if (manifest.experimentalGemma && manifest.nonExperimentalGemma) {
+    throw new Error('experimental and non-experimental Gemma approval modes cannot be combined');
+  }
   if (manifest.experimentalGemma) {
     if (
       manifest.experimentalGemma.approval !== 'explicit-opt-in-experimental' ||
@@ -37,6 +50,34 @@ export function semanticComponentReleasePlan(manifest, target) {
       throw new Error(
         'a new, explicitly approved four-target experimental Gemma release is required',
       );
+    }
+  }
+  if (manifest.nonExperimentalGemma) {
+    const approval = manifest.nonExperimentalGemma;
+    if (
+      approval.approval !== 'release-owner-approved-five-gate-qualification' ||
+      !['go', 'noGo'].includes(approval.candidateDecision) ||
+      [previousExperimentalGemmaSource, preIntegrationGemmaSource].includes(
+        manifest.sourceRevision,
+      ) ||
+      manifest.releaseTag === 'semantic-v0.5.0-gemma-experimental-r3' ||
+      !/^[0-9a-f]{40}$/u.test(manifest.sourceRevision ?? '') ||
+      !/^[0-9a-f]{40}$/u.test(approval.modelRevision ?? '') ||
+      !/^[0-9a-f]{64}$/u.test(approval.candidateManifestSha256 ?? '') ||
+      typeof approval.approvedBy !== 'string' ||
+      approval.approvedBy.trim().length === 0 ||
+      typeof approval.approvedAt !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(approval.approvedAt) ||
+      !Number.isFinite(Date.parse(approval.approvedAt)) ||
+      Object.keys(approval.gates ?? {})
+        .sort()
+        .join(',') !== [...qualifiedGemmaGates].sort().join(',') ||
+      qualifiedGemmaGates.some((gate) => approval.gates[gate]?.result !== 'Pass') ||
+      Object.keys(manifest.targets ?? {})
+        .sort()
+        .join(',') !== [...supportedTargets].sort().join(',')
+    ) {
+      throw new Error('a new, release-owner-approved five-gate Gemma release is required');
     }
   }
   const repository = requireString(manifest.repository, 'repository');
@@ -55,11 +96,14 @@ export function semanticComponentReleasePlan(manifest, target) {
     catalogRevision: requireString(targetEvidence.catalogRevision, 'catalogRevision'),
     catalogSha256: requireString(targetEvidence.catalogSha256, 'catalogSha256'),
     signatureSha256: requireString(targetEvidence.signatureSha256, 'signatureSha256'),
-    ...(manifest.experimentalGemma
+    ...(manifest.experimentalGemma || manifest.nonExperimentalGemma
       ? {
-          experimentalGemmaRevision: requireString(
-            manifest.experimentalGemma.modelRevision,
-            'experimental Gemma model revision',
+          gemmaModelRevision: requireString(
+            manifest.experimentalGemma?.modelRevision ??
+              manifest.nonExperimentalGemma?.modelRevision,
+            manifest.experimentalGemma
+              ? 'experimental Gemma model revision'
+              : 'qualified Gemma model revision',
           ),
         }
       : {}),
@@ -77,15 +121,12 @@ export function verifySemanticCatalogBytes(plan, catalogBytes, signatureBytes) {
     throw new Error(`semantic component ${plan.target} signature SHA-256 does not match approval`);
   }
   const envelope = JSON.parse(catalogBytes.toString('utf8'));
-  if (plan.experimentalGemmaRevision) {
+  if (plan.gemmaModelRevision) {
     const models = envelope.catalog?.models?.filter(
       (model) => model.metadata?.identity?.model === 'google-embeddinggemma-2',
     );
-    if (
-      models?.length !== 1 ||
-      models[0].metadata.identity.revision !== plan.experimentalGemmaRevision
-    ) {
-      throw new Error('semantic component experimental Gemma model identity differs from approval');
+    if (models?.length !== 1 || models[0].metadata.identity.revision !== plan.gemmaModelRevision) {
+      throw new Error('semantic component Gemma model identity differs from approval');
     }
   }
   if (envelope.catalog?.revision !== plan.catalogRevision) {

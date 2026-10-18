@@ -8,6 +8,27 @@ installed desktop build that is a candidate for promotion. Every item needs a re
 the [results table](#results) before anyone may remove the experimental label. A single `Fail` or
 `Blocked` keeps Gemma experimental.
 
+The release workflow is deliberately gated separately from the experimental package. After all
+five items pass on a new signed candidate, the release owner records the exact candidate lock,
+source revision, model revision, qualification run and tag, the five `Pass` results, approver, and
+UTC approval time in `docs/evaluations/semantic-gemma-qualified-v1.json`. Start from the candidate
+lock's top-level fields and four `targets` entries, set the approval record's `decision` to `go`,
+and add `nonExperimentalGemma` with `approval`, the candidate's original `candidateDecision`,
+`modelRevision`, `candidateManifestSha256` (SHA-256 of the unmodified candidate lock bytes),
+`approvedBy`, ISO-8601 UTC `approvedAt`, and the five `gates` entries below. The record must use the
+`release-owner-approved-five-gate-qualification` approval value and match the candidate lock's
+SHA-256 and four catalog/signature pairs. The release owner must then independently enable
+`SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED`; desktop packaging additionally requires
+`SEMANTIC_RELEASE_QUALIFIED`. The checker rejects missing or failed gate results, the existing
+experimental candidate, changed candidate bytes, and mismatched signed catalogs. This record is
+not created by qualification or by this tooling change.
+
+The five recorded results map to the checklist items as follows: `resourceCeilings` covers item 1,
+`cpuFallback` item 2, `crossHostNavigation` item 3, `upgradeRollback` item 4, and `mediaSearch`
+item 5. Each result must be exactly `Pass`; a `Blocked`, `Fail`, missing result, or additional
+unreviewed gate prevents promotion. Keep private queries, paths, filenames, and local evidence out
+of the committed approval record.
+
 ## Privacy rules for every step
 
 - Run everything on your own machine against your own library. None of the tooling uploads,
@@ -317,3 +338,8 @@ Pass criteria (all required):
 | 5 | On-device Gemma media search | | Image top-5 /3: · Audio top-5 /3: · Video top-5 /3: · Correct media/source: /9 · Excluded source absent: · Coverage/provenance accurate: | | | |
 
 Promotion decision (release owner): ______________________  Date: __________
+
+Current blocker: item 1 is recorded **Fail** (the proposed Metal memory ceiling is 7.5 GiB, above
+the 4 GiB pass limit). The remaining rows are not qualified, no five-gate approval record is
+checked in, and the non-experimental release variable must remain off. This tooling change does not
+change the existing experimental approval or make a promotion decision.
