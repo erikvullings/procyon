@@ -131,6 +131,28 @@ export function processTree(rows, rootPids) {
   return [...selected.values()];
 }
 
+/** Groups memory by the worker, its PDF children, and other descendant helpers. */
+export function processRssBreakdown(tree, rootPids) {
+  const roots = new Set(rootPids);
+  const breakdown = {
+    worker: { count: 0, rssBytes: 0 },
+    pdfChild: { count: 0, rssBytes: 0 },
+    otherHelper: { count: 0, rssBytes: 0 },
+  };
+  for (const row of tree) {
+    const role = /--pdf-(?:text|text-with-visuals|visual|visual-pages)-child(?:\s|$)/.test(
+      row.command,
+    )
+      ? 'pdfChild'
+      : roots.has(row.pid)
+        ? 'worker'
+        : 'otherHelper';
+    breakdown[role].count += 1;
+    breakdown[role].rssBytes += row.rssBytes;
+  }
+  return breakdown;
+}
+
 export function normalizeForComparison(filePath, platform) {
   if (platform === 'win32') {
     return path.win32
@@ -206,6 +228,7 @@ export function summarizeSamples(samples) {
     endedAt: samples.at(-1)?.timestamp ?? null,
     peakTreeRssBytes: 0,
     peakTreeRssAt: null,
+    peakTreeProcessRss: null,
     peakSingleProcessRssBytes: 0,
     peakProcessCount: 0,
     peakOpenTempBytes: 0,
@@ -220,6 +243,7 @@ export function summarizeSamples(samples) {
     if (sample.treeRssBytes > summary.peakTreeRssBytes) {
       summary.peakTreeRssBytes = sample.treeRssBytes;
       summary.peakTreeRssAt = sample.timestamp;
+      summary.peakTreeProcessRss = sample.processRssBreakdown ?? null;
     }
     summary.peakSingleProcessRssBytes = Math.max(
       summary.peakSingleProcessRssBytes,
@@ -278,9 +302,18 @@ export function formatBytes(bytes) {
   return `${bytes < 0 ? '-' : ''}${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
-function run(command, args) {
+export function run(command, args) {
   const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  return result.error ? '' : result.stdout;
+  if (result.error)
+    throw new Error(`${command} could not run: ${result.error.code ?? result.error}`);
+  if (result.status !== 0) {
+    const error = new Error(
+      `${command} exited with ${result.signal ? `signal ${result.signal}` : `status ${result.status}`}`,
+    );
+    error.exitStatus = result.status;
+    throw error;
+  }
+  return result.stdout;
 }
 
 function listProcesses() {
@@ -309,6 +342,27 @@ function readRootPids(options, rows) {
   } catch {
     return [];
   }
+}
+
+export class SampleProcessesExitedError extends Error {}
+
+export function lsofTempUsage(
+  pids,
+  tempDirs,
+  platform,
+  runCommand = run,
+  listProcessRows = listProcesses,
+) {
+  let output;
+  try {
+    output = runCommand('lsof', ['-n', '-P', '-F', 'ftsin', '-p', pids.join(',')]);
+  } catch (error) {
+    if (error.exitStatus === 1 && !listProcessRows().some((row) => pids.includes(row.pid))) {
+      throw new SampleProcessesExitedError('all sampled processes exited before lsof completed');
+    }
+    throw error;
+  }
+  return openTempBytesFromLsof(output, tempDirs, platform);
 }
 
 function openTempUsage(pids, tempDirs) {
@@ -355,11 +409,7 @@ function openTempUsage(pids, tempDirs) {
     }
     return { bytes, count };
   }
-  return openTempBytesFromLsof(
-    run('lsof', ['-n', '-P', '-F', 'ftsin', '-p', pids.join(',')]),
-    tempDirs,
-    process.platform,
-  );
+  return lsofTempUsage(pids, tempDirs, process.platform);
 }
 
 function freeDiskBytes(directory) {
@@ -373,7 +423,8 @@ function freeDiskBytes(directory) {
 
 function takeSample(options, tempDirs) {
   const rows = listProcesses();
-  const tree = processTree(rows, readRootPids(options, rows));
+  const rootPids = readRootPids(options, rows);
+  const tree = processTree(rows, rootPids);
   const temp = openTempUsage(
     tree.map((row) => row.pid),
     tempDirs,
@@ -382,6 +433,7 @@ function takeSample(options, tempDirs) {
     timestamp: new Date().toISOString(),
     processCount: tree.length,
     treeRssBytes: tree.reduce((sum, row) => sum + row.rssBytes, 0),
+    processRssBreakdown: processRssBreakdown(tree, rootPids),
     largestProcessRssBytes: tree.reduce((max, row) => Math.max(max, row.rssBytes), 0),
     openTempBytes: temp.bytes,
     openTempFiles: temp.count,
@@ -425,6 +477,7 @@ async function main() {
     );
   fs.mkdirSync(out, { recursive: true });
   const samples = [];
+  let skippedSamples = 0;
   const started = Date.now();
   let stopping = false;
   process.on('SIGINT', () => {
@@ -434,16 +487,27 @@ async function main() {
     `Sampling every ${options.interval} ms (runtime ${options.runtimeDir}, temp ${tempDirs.join(', ')}). Press Ctrl+C to stop.`,
   );
   while (!stopping) {
-    const sample = takeSample(options, realTempDirs);
-    samples.push(sample);
-    console.log(
-      `${sample.timestamp} processes=${sample.processCount} rss=${formatBytes(sample.treeRssBytes)} temp=${formatBytes(sample.openTempBytes)} free=${formatBytes(sample.freeDiskBytes)}`,
-    );
+    let sample;
+    try {
+      sample = takeSample(options, realTempDirs);
+    } catch (error) {
+      if (!(error instanceof SampleProcessesExitedError)) throw error;
+      skippedSamples += 1;
+      console.warn(`Discarding incomplete sample: ${error.message}`);
+    }
+    if (sample) {
+      samples.push(sample);
+      console.log(
+        `${sample.timestamp} processes=${sample.processCount} rss=${formatBytes(sample.treeRssBytes)} temp=${formatBytes(sample.openTempBytes)} free=${formatBytes(sample.freeDiskBytes)}`,
+      );
+    }
     if (options.duration !== undefined && Date.now() - started >= options.duration * 1000) break;
     await new Promise((resolve) => setTimeout(resolve, options.interval));
   }
+  if (samples.length === 0) throw new Error('no complete resource samples were captured');
   const summary = {
     ...summarizeSamples(samples),
+    skippedSamples,
     platform: `${process.platform}-${process.arch}`,
     intervalMs: options.interval,
     runtimeDirectory: options.runtimeDir,
