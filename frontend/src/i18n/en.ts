@@ -650,7 +650,7 @@ export const en = {
     gitHistoryMeta: '{author} · {date} · {shortId}',
     loadingMore: 'Loading more…',
     failedToRenderPage: 'Failed to render this page.',
-    videoExternalOnly: 'Large or unsupported video — external playback only.',
+    videoExternalOnly: 'Unsupported video — external playback only.',
     openVideoExternally: 'Open in default player',
     unableToLoad: 'Unable to load file',
     comicUnavailable: 'Comic preview is unavailable for this entry.',

@@ -523,6 +523,12 @@ export interface FileManagerClient {
 
   /** Reads one bounded byte range from a file, for the in-app large file viewer (task 0088). */
   readFileRange(request: ReadFileRangeRequest, signal?: AbortSignal): Promise<FileRangeChunk>;
+  /**
+   * Returns a URL an `<audio>`/`<video>` element can load with seeking (task 0260): HTTP `Range`
+   * requests against the Axum host, the `procyon-media` scheme on desktop. The backend streams
+   * bounded byte ranges, so large and remote files never load into memory whole.
+   */
+  mediaUrl(location: Location, signal?: AbortSignal): Promise<string>;
   openDocxPreview(request: OpenDocxPreviewRequest, signal?: AbortSignal): Promise<DocxPreview>;
   readDocxPreviewResource(
     request: ReadDocxPreviewResourceRequest,

@@ -203,6 +203,7 @@ import { comparisonPageFromDto, syncPlanFromDto } from '../../models/requests';
 import { directorySnapshotFromDto } from '../../models/snapshot';
 import { workspaceProjectionFromDto } from '../../models/workspace';
 import { SseEventStream } from '../events/sse-event-stream';
+import { resolveBaseUrl } from '../fetch-mutator';
 import {
   invokeAction as requestActionInvocation,
   listActions as requestActions,
@@ -374,6 +375,7 @@ import type { InvokeActionRequestDtoParameters } from '../generated/models/invok
 import type { PluginIconThemeDto } from '../generated/models/pluginIconThemeDto';
 import { getSessionToken } from '../session-token';
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
+import { buildMediaUrl } from './media-url';
 import { trustedOneDriveAuthorizationUrl } from './onedrive-authorization-url';
 import { operationFromDto } from './operation-mapping';
 import { settingsFromDto, settingsToDto } from './settings-mapping';
@@ -1351,6 +1353,10 @@ export class HttpFileManagerClient implements FileManagerClient {
       throw new Error(`Unexpected readFileRange response status: ${response.status}`);
     }
     return response.data;
+  }
+
+  mediaUrl(location: FileLocation, _signal?: AbortSignal): Promise<string> {
+    return Promise.resolve(buildMediaUrl(resolveBaseUrl(), location, getSessionToken()));
   }
 
   async openDocxPreview(

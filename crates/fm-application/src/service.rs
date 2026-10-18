@@ -3306,6 +3306,15 @@ impl FileManagerService {
         content_streaming::read_file_range(&self.providers, request).await
     }
 
+    /// Opens a seekable byte range of a file for streaming to `<audio>`/`<video>` elements
+    /// (task 0260). Hosts translate the result into `206`/`200`/`416` responses.
+    pub async fn open_media_range(
+        &self,
+        request: crate::media_stream::MediaRangeRequest,
+    ) -> Result<crate::media_stream::MediaOutcome, ApplicationError> {
+        crate::media_stream::open_media_range(&self.providers, request).await
+    }
+
     /// Opens a bounded, provider-neutral semantic DOCX preview session.
     pub async fn open_docx_preview(
         &self,
@@ -5016,6 +5025,84 @@ mod tests {
                 .expect("write XLSX entry");
         }
         archive.finish().expect("finish XLSX fixture");
+    }
+
+    async fn media_bytes(
+        service: &FileManagerService,
+        path: &std::path::Path,
+        range: Option<&str>,
+        cap: Option<u64>,
+    ) -> (Option<crate::media_stream::ByteSpan>, u64, Vec<u8>) {
+        use tokio::io::AsyncReadExt;
+        let outcome = service
+            .open_media_range(crate::media_stream::MediaRangeRequest {
+                location: location_dto_for(path).into(),
+                range_header: range.map(str::to_owned),
+                max_response_bytes: cap,
+            })
+            .await
+            .expect("media request must open");
+        let crate::media_stream::MediaOutcome::Content(mut content) = outcome else {
+            panic!("expected content");
+        };
+        let mut bytes = Vec::new();
+        content
+            .reader
+            .read_to_end(&mut bytes)
+            .await
+            .expect("stream must read");
+        assert_eq!(bytes.len() as u64, content.content_length);
+        (content.span, content.total_size, bytes)
+    }
+
+    #[tokio::test]
+    async fn media_range_streams_whole_file_open_ended_suffix_and_capped_spans() {
+        let (dir, service) = service();
+        let target = dir.path().join("song.mp3");
+        std::fs::write(&target, b"0123456789").expect("write fixture file");
+
+        let (span, total, bytes) = media_bytes(&service, &target, None, None).await;
+        assert_eq!(
+            (span, total, bytes.as_slice()),
+            (None, 10, &b"0123456789"[..])
+        );
+
+        let (span, _, bytes) = media_bytes(&service, &target, Some("bytes=4-6"), None).await;
+        assert_eq!(span.map(|s| (s.start, s.end)), Some((4, 6)));
+        assert_eq!(bytes, b"456");
+
+        let (_, _, bytes) = media_bytes(&service, &target, Some("bytes=7-"), None).await;
+        assert_eq!(bytes, b"789");
+
+        let (_, _, bytes) = media_bytes(&service, &target, Some("bytes=-2"), None).await;
+        assert_eq!(bytes, b"89");
+
+        let (span, _, bytes) = media_bytes(&service, &target, Some("bytes=2-"), Some(3)).await;
+        assert_eq!(span.map(|s| (s.start, s.end)), Some((2, 4)));
+        assert_eq!(bytes, b"234");
+
+        let (span, _, bytes) = media_bytes(&service, &target, None, Some(4)).await;
+        assert_eq!(span.map(|s| (s.start, s.end)), Some((0, 3)));
+        assert_eq!(bytes, b"0123");
+    }
+
+    #[tokio::test]
+    async fn media_range_past_the_end_is_unsatisfiable() {
+        let (dir, service) = service();
+        let target = dir.path().join("song.mp3");
+        std::fs::write(&target, b"0123456789").expect("write fixture file");
+        let outcome = service
+            .open_media_range(crate::media_stream::MediaRangeRequest {
+                location: location_dto_for(&target).into(),
+                range_header: Some("bytes=10-".to_owned()),
+                max_response_bytes: None,
+            })
+            .await
+            .expect("request resolves");
+        assert!(matches!(
+            outcome,
+            crate::media_stream::MediaOutcome::Unsatisfiable { total_size: 10 }
+        ));
     }
 
     #[tokio::test]

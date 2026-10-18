@@ -639,7 +639,7 @@ export const de = {
     gitHistoryMeta: '{author} · {date} · {shortId}',
     loadingMore: 'Weitere werden geladen…',
     failedToRenderPage: 'Diese Seite konnte nicht dargestellt werden.',
-    videoExternalOnly: 'Große oder nicht unterstützte Videodatei — nur externe Wiedergabe.',
+    videoExternalOnly: 'Nicht unterstützte Videodatei — nur externe Wiedergabe.',
     openVideoExternally: 'Im Standardplayer öffnen',
     unableToLoad: 'Datei kann nicht geladen werden',
     comicUnavailable: 'Für diesen Eintrag ist keine Comic-Vorschau verfügbar.',

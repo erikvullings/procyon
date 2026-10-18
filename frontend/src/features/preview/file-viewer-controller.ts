@@ -15,11 +15,8 @@ import { copyImageDataUri, copyText } from './clipboard';
 import {
   bytesToDataUri,
   imageMimeTypeFor,
-  PREVIEW_SIZE_LIMIT_BYTES,
   readEntireFileBytes,
-  readFullAudioDataUri,
   readFullImageDataUri,
-  readFullVideoDataUri,
   resolvePreviewKind,
 } from './content-preview';
 import { prepareDocxPreviewHtml, searchDocxHtml } from './docx-preview';
@@ -61,6 +58,7 @@ import {
 export type FileViewerClient = Pick<
   FileManagerClient,
   | 'readFileRange'
+  | 'mediaUrl'
   | 'renderPluginPreview'
   | 'searchInFile'
   | 'listDirectory'
@@ -87,10 +85,6 @@ export type FileViewerClient = Pick<
 /** Bytes fetched per text window load (initial load and each "load more" append). */
 export const TEXT_WINDOW_BYTES = 64 * 1024;
 const PPTX_PDF_RANGE_BYTES = 1024 * 1024;
-
-/** Inline video uses the existing preview limit because base64 data URIs expand bytes by roughly
- * one third and must be held in memory alongside the source buffer. Larger videos stay external. */
-export const VIDEO_INLINE_SIZE_LIMIT_BYTES = PREVIEW_SIZE_LIMIT_BYTES;
 
 /** Bytes of context fetched before a search match when jumping to it. */
 const JUMP_CONTEXT_BEFORE_BYTES = TEXT_WINDOW_BYTES / 2;
@@ -188,16 +182,17 @@ export interface FileViewerImageContent {
  * reports its own duration/position, so no metadata needs fetching separately. */
 export interface FileViewerAudioContent {
   readonly kind: 'audio';
-  readonly dataUri: string;
+  /** Seekable streaming URL from {@link FileManagerClient.mediaUrl} (task 0260). */
+  readonly src: string;
 }
 
-/** A small, browser-playable video loaded through the same whole-file data URI path as audio. */
+/** A browser-playable video streamed with byte-range seeking (task 0260). */
 export interface FileViewerVideoContent {
   readonly kind: 'video';
-  readonly dataUri: string;
+  readonly src: string;
 }
 
-/** A video that is unsafe or unreliable to load into an in-memory browser data URI. */
+/** A video container the webview cannot play (for example MKV); opens externally. */
 export interface FileViewerExternalVideoContent {
   readonly kind: 'videoExternal';
 }
@@ -937,23 +932,18 @@ export function createFileViewerController(
   }
 
   async function loadAudio(controller: AbortController): Promise<void> {
-    const dataUri = await readFullAudioDataUri(client, entry, controller.signal);
+    const src = await client.mediaUrl(entry.location, controller.signal);
     if (!isCurrent(controller)) return;
     publish({
       status: 'ready',
       entry,
       metadataPanelOpen: initialMetadataOpen,
-      content: { kind: 'audio', dataUri },
+      content: { kind: 'audio', src },
     });
   }
 
   async function loadVideo(controller: AbortController): Promise<void> {
-    const extension = entry.extension?.toLowerCase();
-    if (
-      entry.size === undefined ||
-      entry.size > VIDEO_INLINE_SIZE_LIMIT_BYTES ||
-      extension === 'mkv'
-    ) {
+    if (entry.extension?.toLowerCase() === 'mkv') {
       // Match the other loaders' asynchronous first boundary so the shell can register this
       // controller before its ready state is published.
       await Promise.resolve();
@@ -966,27 +956,13 @@ export function createFileViewerController(
       });
       return;
     }
-    const dataUri = await readFullVideoDataUri(
-      client,
-      entry,
-      controller.signal,
-      VIDEO_INLINE_SIZE_LIMIT_BYTES,
-    );
+    const src = await client.mediaUrl(entry.location, controller.signal);
     if (!isCurrent(controller)) return;
-    if (dataUri === undefined) {
-      publish({
-        status: 'ready',
-        entry,
-        metadataPanelOpen: initialMetadataOpen,
-        content: { kind: 'videoExternal' },
-      });
-      return;
-    }
     publish({
       status: 'ready',
       entry,
       metadataPanelOpen: initialMetadataOpen,
-      content: { kind: 'video', dataUri },
+      content: { kind: 'video', src },
     });
   }
 

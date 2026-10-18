@@ -640,7 +640,7 @@ export const nl = {
     gitHistoryMeta: '{author} · {date} · {shortId}',
     loadingMore: 'Meer laden…',
     failedToRenderPage: 'Deze pagina kon niet worden weergegeven.',
-    videoExternalOnly: 'Grote of niet-ondersteunde video — alleen extern afspelen.',
+    videoExternalOnly: 'Niet-ondersteunde video — alleen extern afspelen.',
     openVideoExternally: 'Openen in standaardspeler',
     unableToLoad: 'Kan bestand niet laden',
     comicUnavailable: 'Stripvoorbeeld is niet beschikbaar voor dit item.',

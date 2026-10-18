@@ -1,5 +1,5 @@
 import { getVersion } from '@tauri-apps/api/app';
-import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { relaunch } from '@tauri-apps/plugin-process';
@@ -882,6 +882,16 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   readFileRange(request: ReadFileRangeRequest, _signal?: AbortSignal): Promise<FileRangeChunk> {
     return invoke<FileRangeChunk>('read_file_range', { request });
+  }
+
+  mediaUrl(location: Location, _signal?: AbortSignal): Promise<string> {
+    // Served by the desktop host's `procyon-media` URI scheme (task 0260).
+    return Promise.resolve(
+      convertFileSrc(
+        JSON.stringify({ providerId: location.providerId, uri: location.uri }),
+        'procyon-media',
+      ),
+    );
   }
 
   openDocxPreview(request: OpenDocxPreviewRequest, _signal?: AbortSignal): Promise<DocxPreview> {

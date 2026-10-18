@@ -8,7 +8,6 @@ import {
   IMAGE_RANGE_CHUNK_BYTES,
   imageMimeTypeFor,
   PREVIEW_SIZE_LIMIT_BYTES,
-  readFullAudioDataUri,
   readFullImageDataUri,
   resolvePreviewKind,
   videoMimeTypeFor,
@@ -181,20 +180,5 @@ describe('readFullImageDataUri', () => {
       new AbortController().signal,
     );
     expect(uri).toBe(`data:image/png;base64,${btoa('Hello')}`);
-  });
-});
-
-describe('readFullAudioDataUri', () => {
-  it('concatenates multiple chunks and encodes with the audio MIME type', async () => {
-    const readFileRange = vi
-      .fn()
-      .mockResolvedValueOnce({ data: [72, 101], eof: false, length: 2, offset: 0 })
-      .mockResolvedValueOnce({ data: [108, 108, 111], eof: true, length: 3, offset: 2 });
-    const uri = await readFullAudioDataUri(
-      { readFileRange },
-      entry({ name: 'song.mp3', extension: 'mp3' }),
-      new AbortController().signal,
-    );
-    expect(uri).toBe(`data:audio/mpeg;base64,${btoa('Hello')}`);
   });
 });

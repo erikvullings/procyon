@@ -73,7 +73,8 @@ export function setBaseUrlOverride(url: string | undefined): void {
   baseUrlOverride = url;
 }
 
-function resolveBaseUrl(): string {
+/** The API base URL requests are resolved against (empty for same-origin). */
+export function resolveBaseUrl(): string {
   if (baseUrlOverride !== undefined) {
     return baseUrlOverride;
   }
