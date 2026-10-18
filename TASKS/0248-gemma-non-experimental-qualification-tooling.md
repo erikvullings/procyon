@@ -1,6 +1,6 @@
 # 0248 Gemma non-experimental qualification tooling
 
-Status: in_progress
+Status: complete
 Priority: high
 Subsystem: semantic
 Depends on: 0244
@@ -88,6 +88,19 @@ checklist results or imply qualification.
   contract, signed four-target catalog/artifact checks, source-lineage checks,
   release-workflow gates, and explicit Settings disclosure. The existing
   five-gate checker remains strict. Focused release tests (48), Settings tests
-  (42), frontend typecheck, and repository lint passed. The task stays
-  in-progress until a new post-merge signed candidate is bound to the actual
-  release-owner approval manifest; no existing candidate is reused.
+  (42), frontend typecheck, and repository lint passed. At that stage, the task
+  remained in progress pending a new post-merge signed candidate bound to the
+  actual release-owner approval manifest; no existing candidate was reused.
+- 2026-10-18 Copilot: Completed the risk-accepted approval against the fresh
+  signed candidate from workflow run
+  [39121047186](https://github.com/erikvullings/procyon/actions/runs/39121047186),
+  built from source `c8f130c68fb40a157daedcfb2c6ba34fe7773a7b` for
+  `semantic-v0.6.0`. The retained candidate artifact is
+  `semantic-component-candidate-c8f130c68fb40a157daedcfb2c6ba34fe7773a7b`;
+  its candidate-lock SHA-256 is recorded in the approval manifest. The
+  candidate's decision remains `noGo`; the separate approval records
+  `not-five-gate-qualified` and the owner's accepted limitations. All four
+  target catalog signatures and exact catalog payload sets were verified
+  before recording the manifest in
+  `docs/evaluations/semantic-gemma-risk-accepted-v1.json`. No qualification
+  gate was changed or marked Pass.
