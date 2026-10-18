@@ -19,6 +19,7 @@ pub mod files;
 pub mod finder_tags;
 pub mod health;
 pub mod knowledge;
+pub mod link_doctor;
 pub mod llm_profile;
 pub mod location;
 pub mod music_duplicates;
@@ -130,6 +131,11 @@ pub use knowledge::{
     KnowledgeSearchTraceDto, KnowledgeSourceLocationDto, KnowledgeTracedQueryDto,
     ListKnowledgeRootsRequestDto, ParseKnowledgeQueryRequestDto, PlanKnowledgeSearchRequestDto,
     ResolveKnowledgeSourceRequestDto,
+};
+pub use link_doctor::{
+    FindLinkReplacementsRequestDto, FindLinkReplacementsResponseDto, LinkDoctorPageDto,
+    LinkProblemDto, LinkProblemKindDto, LinkReplacementCandidateDto, StartLinkDoctorScanRequestDto,
+    StartLinkDoctorScanResponseDto,
 };
 pub use llm_profile::{
     ActivateLlmProfileRequestDto, DeleteLlmProfileRequestDto, LlmAdvancedSettingsDto,

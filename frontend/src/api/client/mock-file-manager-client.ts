@@ -60,6 +60,8 @@ import type {
   ExecuteKnowledgeSearchRequest,
   FileRangeChunk,
   FinderTags,
+  FindLinkReplacementsRequest,
+  FindLinkReplacementsResult,
   FrontendDiagnostic,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
@@ -82,6 +84,7 @@ import type {
   KnowledgeSearchPlan,
   KnowledgeSearchResult,
   KnowledgeSourceLocation,
+  LinkDoctorPage,
   LinkOptions,
   LinkOptionsRequest,
   ListDirectoryRequest,
@@ -189,6 +192,8 @@ import type {
   StartComparisonResult,
   StartDuplicateScanRequest,
   StartDuplicateScanResult,
+  StartLinkDoctorScanRequest,
+  StartLinkDoctorScanResult,
   StartMusicDuplicateScanRequest,
   StartMusicDuplicateScanResult,
   StartOperationRequest,
@@ -394,6 +399,10 @@ export type MockClientMethod =
   | 'startMusicDuplicateScan'
   | 'getMusicDuplicateScan'
   | 'cancelMusicDuplicateScan'
+  | 'startLinkDoctorScan'
+  | 'getLinkDoctorScan'
+  | 'cancelLinkDoctorScan'
+  | 'findLinkReplacements'
   | 'listLlmProfilePresets'
   | 'listLlmProfiles'
   | 'createLlmProfile'
@@ -1439,6 +1448,10 @@ export class MockFileManagerClient implements FileManagerClient {
       entries: readonly ChecksumEntry[];
       algorithms: readonly ChecksumAlgorithm[];
     }
+  >();
+  private readonly linkScans = new Map<
+    string,
+    { readonly roots: readonly Location[]; cancelled: boolean }
   >();
   private readonly musicScans = new Map<
     string,
@@ -4343,6 +4356,88 @@ export class MockFileManagerClient implements FileManagerClient {
       const scan = this.musicScans.get(scanId);
       if (scan === undefined) throw new MockClientError('notFound', 'Unknown music scan');
       scan.cancelled = true;
+    });
+  }
+
+  startLinkDoctorScan(
+    request: StartLinkDoctorScanRequest,
+    signal?: AbortSignal,
+  ): Promise<StartLinkDoctorScanResult> {
+    return this.perform('startLinkDoctorScan', signal, () => {
+      const scanId = `mock-link-scan-${this.seed}-${this.linkScans.size + 1}`;
+      this.linkScans.set(scanId, { roots: request.roots, cancelled: false });
+      return { scanId };
+    });
+  }
+
+  getLinkDoctorScan(
+    scanId: string,
+    options?: { offset?: number; limit?: number },
+    signal?: AbortSignal,
+  ): Promise<LinkDoctorPage> {
+    return this.perform('getLinkDoctorScan', signal, () => {
+      const scan = this.linkScans.get(scanId);
+      if (scan === undefined) throw new MockClientError('notFound', 'Unknown link scan');
+      const root = scan.roots[0]?.uri.replace(/\/$/, '') ?? 'file:///docs';
+      const providerId = scan.roots[0]?.providerId ?? 'local';
+      const problems = [
+        {
+          kind: 'missingDocumentLink' as const,
+          source: { providerId, uri: `${root}/readme.md` },
+          target: 'docs/missing.md',
+          resolved: { providerId, uri: `${root}/docs/missing.md` },
+          line: 3,
+        },
+      ];
+      const offset = options?.offset ?? 0;
+      const limit = options?.limit ?? 200;
+      return {
+        scanId,
+        roots: scan.roots.map((location) => ({ ...location })),
+        entriesScanned: 12,
+        linksChecked: 7,
+        offset,
+        limit,
+        total: problems.length,
+        problems: problems.slice(offset, offset + limit),
+        isComplete: true,
+        isCancelled: scan.cancelled,
+        hasMore: false,
+      };
+    });
+  }
+
+  cancelLinkDoctorScan(scanId: string, signal?: AbortSignal): Promise<void> {
+    return this.perform('cancelLinkDoctorScan', signal, () => {
+      const scan = this.linkScans.get(scanId);
+      if (scan === undefined) throw new MockClientError('notFound', 'Unknown link scan');
+      scan.cancelled = true;
+    });
+  }
+
+  findLinkReplacements(
+    request: FindLinkReplacementsRequest,
+    signal?: AbortSignal,
+  ): Promise<FindLinkReplacementsResult> {
+    return this.perform('findLinkReplacements', signal, () => {
+      const root = request.roots[0];
+      return {
+        candidates:
+          root === undefined
+            ? []
+            : [
+                {
+                  location: {
+                    providerId: root.providerId,
+                    uri: `${root.uri.replace(/\/$/, '')}/moved/${request.targetName}`,
+                  },
+                  size: request.expectedSize ?? 100,
+                  sameSize: true,
+                  exactName: true,
+                },
+              ],
+        truncated: false,
+      };
     });
   }
 

@@ -53,6 +53,8 @@ import type {
   ExecuteKnowledgeSearchRequest,
   FileRangeChunk,
   FinderTags,
+  FindLinkReplacementsRequest,
+  FindLinkReplacementsResult,
   FrontendDiagnostic,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
@@ -74,6 +76,7 @@ import type {
   KnowledgeSearchPlan,
   KnowledgeSearchResult,
   KnowledgeSourceLocation,
+  LinkDoctorPage,
   LinkOptions,
   LinkOptionsRequest,
   ListDirectoryRequest,
@@ -168,6 +171,8 @@ import type {
   StartComparisonResult,
   StartDuplicateScanRequest,
   StartDuplicateScanResult,
+  StartLinkDoctorScanRequest,
+  StartLinkDoctorScanResult,
   StartMusicDuplicateScanRequest,
   StartMusicDuplicateScanResult,
   StartOperationRequest,
@@ -753,6 +758,27 @@ export interface FileManagerClient {
   ): Promise<MusicDuplicatePage>;
 
   cancelMusicDuplicateScan(scanId: string, signal?: AbortSignal): Promise<void>;
+
+  /** Starts a cancellable broken-link scan (task 0266). */
+  startLinkDoctorScan(
+    request: StartLinkDoctorScanRequest,
+    signal?: AbortSignal,
+  ): Promise<StartLinkDoctorScanResult>;
+
+  /** Pages through a broken-link scan's problems and reports its progress. */
+  getLinkDoctorScan(
+    scanId: string,
+    options?: { offset?: number; limit?: number },
+    signal?: AbortSignal,
+  ): Promise<LinkDoctorPage>;
+
+  cancelLinkDoctorScan(scanId: string, signal?: AbortSignal): Promise<void>;
+
+  /** Searches for files that could replace a missing link target. */
+  findLinkReplacements(
+    request: FindLinkReplacementsRequest,
+    signal?: AbortSignal,
+  ): Promise<FindLinkReplacementsResult>;
 
   listActions(signal?: AbortSignal): Promise<ActionDescriptor[]>;
 

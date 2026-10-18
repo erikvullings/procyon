@@ -3060,6 +3060,191 @@
         }
       }
     },
+    "/api/v1/link-doctor-replacements": {
+      "post": {
+        "operationId": "findLinkReplacements",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindLinkReplacementsRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindLinkReplacementsResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/link-doctor-scans": {
+      "post": {
+        "operationId": "startLinkDoctorScan",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartLinkDoctorScanRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartLinkDoctorScanResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/link-doctor-scans/{scanId}": {
+      "get": {
+        "operationId": "getLinkDoctorScan",
+        "parameters": [
+          {
+            "name": "scanId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Zero-based offset into the result set.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, clamped to 1 through 500.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkDoctorPageDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/link-doctor-scans/{scanId}/cancel": {
+      "post": {
+        "operationId": "cancelLinkDoctorScan",
+        "parameters": [
+          {
+            "name": "scanId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/link-options": {
       "post": {
         "summary": "Lists the link kinds that can point at a target from a destination directory (task 0168).",
@@ -10948,6 +11133,61 @@
           }
         }
       },
+      "FindLinkReplacementsRequestDto": {
+        "type": "object",
+        "description": "Searches for files that could replace a missing link target\n(`POST /api/v1/link-doctor-replacements`).",
+        "required": [
+          "roots",
+          "targetName"
+        ],
+        "properties": {
+          "expectedSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Size of the missing target when known, to rank same-sized files first.",
+            "minimum": 0
+          },
+          "roots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Roots to search."
+          },
+          "showHidden": {
+            "type": "boolean",
+            "description": "Include hidden entries. Defaults to `false`."
+          },
+          "targetName": {
+            "type": "string",
+            "description": "File name of the missing target."
+          }
+        }
+      },
+      "FindLinkReplacementsResponseDto": {
+        "type": "object",
+        "description": "Replacement candidates, best first.",
+        "required": [
+          "candidates",
+          "truncated"
+        ],
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkReplacementCandidateDto"
+            },
+            "description": "Candidates ordered by confidence."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether the search stopped early because of its entry budget."
+          }
+        }
+      },
       "FinderTagColorDto": {
         "type": "string",
         "description": "One of Finder's seven label colors, or no color. Mirrors\n`fm_platform::FinderTagColor` one-to-one; kept as a separate wire type\n(specification §3 rule 5: DTOs are never reused as internal domain\nmodels).",
@@ -13154,6 +13394,86 @@
           "pl"
         ]
       },
+      "LinkDoctorPageDto": {
+        "type": "object",
+        "description": "A bounded page of a broken-link scan (`GET /api/v1/link-doctor-scans/{scanId}`).",
+        "required": [
+          "scanId",
+          "roots",
+          "entriesScanned",
+          "linksChecked",
+          "offset",
+          "limit",
+          "total",
+          "problems",
+          "isComplete",
+          "isCancelled",
+          "hasMore"
+        ],
+        "properties": {
+          "entriesScanned": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Files and links inspected so far.",
+            "minimum": 0
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "Whether another page exists."
+          },
+          "isCancelled": {
+            "type": "boolean",
+            "description": "Whether the scan stopped because it was cancelled."
+          },
+          "isComplete": {
+            "type": "boolean",
+            "description": "Whether the scan finished."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Page size after server-side clamping.",
+            "minimum": 0
+          },
+          "linksChecked": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Individual links whose targets were checked.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Requested zero-based offset.",
+            "minimum": 0
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkProblemDto"
+            },
+            "description": "Problems in this page."
+          },
+          "roots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Roots the scan covers."
+          },
+          "scanId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The scan this page belongs to."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total problems found so far.",
+            "minimum": 0
+          }
+        }
+      },
       "LinkKindDto": {
         "type": "string",
         "description": "Filesystem link or shell shortcut requested by `createLink`.\n\nThe three kinds are deliberately distinct: a symbolic link stores target text, an NTFS\njunction is a directory mount point with an absolute target, and a `.lnk` shortcut is an\nordinary file that only the Windows shell interprets.",
@@ -13225,6 +13545,89 @@
           "target": {
             "$ref": "#/components/schemas/LocationDto",
             "description": "Entry the link will point at."
+          }
+        }
+      },
+      "LinkProblemDto": {
+        "type": "object",
+        "description": "One broken link.",
+        "required": [
+          "kind",
+          "source",
+          "target"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/LinkProblemKindDto",
+            "description": "What kind of link is broken."
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "One-based line of the link inside a text file.",
+            "minimum": 0
+          },
+          "resolved": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LocationDto",
+                "description": "Where the target would be, when it could be resolved to a location."
+              }
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The file or symlink that contains the link."
+          },
+          "target": {
+            "type": "string",
+            "description": "The target exactly as recorded in the link."
+          }
+        }
+      },
+      "LinkProblemKindDto": {
+        "type": "string",
+        "description": "Where a broken link was found.",
+        "enum": [
+          "brokenSymlink",
+          "brokenShortcut",
+          "missingPlaylistEntry",
+          "missingDocumentLink"
+        ]
+      },
+      "LinkReplacementCandidateDto": {
+        "type": "object",
+        "description": "A file that might replace a missing target.",
+        "required": [
+          "location",
+          "size",
+          "sameSize",
+          "exactName"
+        ],
+        "properties": {
+          "exactName": {
+            "type": "boolean",
+            "description": "Whether the name matches case-sensitively (otherwise only ignoring case)."
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Where the candidate lives."
+          },
+          "sameSize": {
+            "type": "boolean",
+            "description": "Whether the size equals the expected size."
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Size in bytes.",
+            "minimum": 0
           }
         }
       },
@@ -21393,6 +21796,49 @@
       "StartDuplicateScanResponseDto": {
         "type": "object",
         "description": "Identifies a started duplicate scan.",
+        "required": [
+          "scanId"
+        ],
+        "properties": {
+          "scanId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The started scan's identifier, used to page and cancel."
+          }
+        }
+      },
+      "StartLinkDoctorScanRequestDto": {
+        "type": "object",
+        "description": "Starts a cancellable broken-link scan (`POST /api/v1/link-doctor-scans`).",
+        "required": [
+          "roots"
+        ],
+        "properties": {
+          "roots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Roots to scan recursively. Symbolic links are inspected but never followed."
+          },
+          "showHidden": {
+            "type": "boolean",
+            "description": "Include hidden entries. Defaults to `false`."
+          }
+        },
+        "example": {
+          "roots": [
+            {
+              "providerId": "local",
+              "uri": "file:///Users/erik/Notes"
+            }
+          ],
+          "showHidden": false
+        }
+      },
+      "StartLinkDoctorScanResponseDto": {
+        "type": "object",
+        "description": "Identifies a started broken-link scan.",
         "required": [
           "scanId"
         ],

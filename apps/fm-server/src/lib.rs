@@ -231,6 +231,18 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::music_duplicates::cancel_music_duplicate_scan
         ))
+        .routes(utoipa_axum::routes!(
+            routes::link_doctor::start_link_doctor_scan
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::link_doctor::get_link_doctor_scan
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::link_doctor::cancel_link_doctor_scan
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::link_doctor::find_link_replacements
+        ))
         .routes(utoipa_axum::routes!(routes::checksum::get_duplicate_scan))
         .routes(utoipa_axum::routes!(
             routes::checksum::cancel_duplicate_scan

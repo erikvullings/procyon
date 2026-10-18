@@ -36,6 +36,8 @@ mod knowledge_mapping;
 pub mod knowledge_release;
 pub mod knowledge_search;
 mod knowledge_service;
+mod link_doctor;
+mod link_extract;
 mod link_operation;
 mod llm_profile_mapping;
 pub mod llm_profiles;

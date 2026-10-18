@@ -2921,6 +2921,60 @@ pub(crate) fn cancel_music_duplicate_scan(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Starts a cancellable broken-link scan through the shared service (task 0266).
+///
+/// Must be `async` so the scan task is spawned on the Tokio runtime.
+#[tauri::command]
+pub(crate) async fn start_link_doctor_scan(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::StartLinkDoctorScanRequestDto,
+) -> Result<fm_transport_dto::StartLinkDoctorScanResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .start_link_doctor_scan(request)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Returns a bounded page of a broken-link scan, identical in shape to
+/// `GET /api/v1/link-doctor-scans/{scanId}`.
+#[tauri::command]
+pub(crate) fn get_link_doctor_scan(
+    state: State<'_, AppState>,
+    scan_id: Uuid,
+    offset: Option<u64>,
+    limit: Option<u16>,
+) -> Result<fm_transport_dto::LinkDoctorPageDto, ApplicationErrorDto> {
+    state
+        .service
+        .get_link_doctor_page(scan_id, offset.unwrap_or(0), limit.unwrap_or(200))
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Cancels a running broken-link scan through the shared service.
+#[tauri::command]
+pub(crate) fn cancel_link_doctor_scan(
+    state: State<'_, AppState>,
+    scan_id: Uuid,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .cancel_link_doctor_scan(scan_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Searches for files that could replace a missing link target.
+#[tauri::command]
+pub(crate) async fn find_link_replacements(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::FindLinkReplacementsRequestDto,
+) -> Result<fm_transport_dto::FindLinkReplacementsResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .find_link_replacements(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Returns safe generation-provider defaults, equivalent to the HTTP API.
 #[tauri::command]
 pub(crate) fn list_llm_profile_presets(state: State<'_, AppState>) -> Vec<LlmProfilePresetDto> {

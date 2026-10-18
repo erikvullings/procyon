@@ -53,6 +53,8 @@ import type {
   EntrySummaryDto,
   ExecuteKnowledgeSearchRequestDto,
   ExportSemanticVocabularyResponseDto,
+  FindLinkReplacementsRequestDto,
+  FindLinkReplacementsResponseDto,
   FinderTagsDto,
   GenerateDocumentSummaryRequestDto,
   GenerateKnowledgeAnswerRequestDto,
@@ -67,6 +69,7 @@ import type {
   GetFileGitHistoryResponseDto,
   GetFileIconParams,
   GetFinderTagsParams,
+  GetLinkDoctorScanParams,
   GetMusicDuplicateScanParams,
   GetPluginIconThemeAssetParams,
   GetSemanticFolderStatusRequestDto,
@@ -85,6 +88,7 @@ import type {
   KnowledgeSearchPlanDto,
   KnowledgeSearchResultDto,
   KnowledgeSourceLocationDto,
+  LinkDoctorPageDto,
   LinkOptionsDto,
   LinkOptionsRequestDto,
   ListDirectoryChildrenRequest,
@@ -194,6 +198,8 @@ import type {
   StartComparisonResponseDto,
   StartDuplicateScanRequestDto,
   StartDuplicateScanResponseDto,
+  StartLinkDoctorScanRequestDto,
+  StartLinkDoctorScanResponseDto,
   StartMusicDuplicateScanRequestDto,
   StartMusicDuplicateScanResponseDto,
   StartOperationRequestDto,
@@ -3983,6 +3989,213 @@ export const getFileIcon = async (params: GetFileIconParams, options?: Parameter
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type findLinkReplacementsResponse200 = {
+  data: FindLinkReplacementsResponseDto
+  status: 200
+}
+
+export type findLinkReplacementsResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type findLinkReplacementsResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type findLinkReplacementsResponseSuccess = (findLinkReplacementsResponse200) & {
+  headers: Headers;
+};
+export type findLinkReplacementsResponseError = (findLinkReplacementsResponse400 | findLinkReplacementsResponse403) & {
+  headers: Headers;
+};
+
+export type findLinkReplacementsResponse = (findLinkReplacementsResponseSuccess | findLinkReplacementsResponseError)
+
+export const getFindLinkReplacementsUrl = () => {
+
+
+
+
+  return `/api/v1/link-doctor-replacements`
+}
+
+export const findLinkReplacements = async (findLinkReplacementsRequestDto: FindLinkReplacementsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<findLinkReplacementsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<findLinkReplacementsResponse>(getFindLinkReplacementsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(findLinkReplacementsRequestDto)
+  }
+);}
+
+
+
+export type startLinkDoctorScanResponse201 = {
+  data: StartLinkDoctorScanResponseDto
+  status: 201
+}
+
+export type startLinkDoctorScanResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type startLinkDoctorScanResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type startLinkDoctorScanResponseSuccess = (startLinkDoctorScanResponse201) & {
+  headers: Headers;
+};
+export type startLinkDoctorScanResponseError = (startLinkDoctorScanResponse400 | startLinkDoctorScanResponse403) & {
+  headers: Headers;
+};
+
+export type startLinkDoctorScanResponse = (startLinkDoctorScanResponseSuccess | startLinkDoctorScanResponseError)
+
+export const getStartLinkDoctorScanUrl = () => {
+
+
+
+
+  return `/api/v1/link-doctor-scans`
+}
+
+export const startLinkDoctorScan = async (startLinkDoctorScanRequestDto: StartLinkDoctorScanRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<startLinkDoctorScanResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<startLinkDoctorScanResponse>(getStartLinkDoctorScanUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(startLinkDoctorScanRequestDto)
+  }
+);}
+
+
+
+export type getLinkDoctorScanResponse200 = {
+  data: LinkDoctorPageDto
+  status: 200
+}
+
+export type getLinkDoctorScanResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type getLinkDoctorScanResponseSuccess = (getLinkDoctorScanResponse200) & {
+  headers: Headers;
+};
+export type getLinkDoctorScanResponseError = (getLinkDoctorScanResponse404) & {
+  headers: Headers;
+};
+
+export type getLinkDoctorScanResponse = (getLinkDoctorScanResponseSuccess | getLinkDoctorScanResponseError)
+
+export const getGetLinkDoctorScanUrl = (scanId: string,
+    params?: GetLinkDoctorScanParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/link-doctor-scans/${scanId}?${stringifiedParams}` : `/api/v1/link-doctor-scans/${scanId}`
+}
+
+export const getLinkDoctorScan = async (scanId: string,
+    params?: GetLinkDoctorScanParams, options?: Parameters<typeof fetchMutator>[1]): Promise<getLinkDoctorScanResponse> => {
+
+  return fetchMutator<getLinkDoctorScanResponse>(getGetLinkDoctorScanUrl(scanId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type cancelLinkDoctorScanResponse204 = {
+  data: void
+  status: 204
+}
+
+export type cancelLinkDoctorScanResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type cancelLinkDoctorScanResponseSuccess = (cancelLinkDoctorScanResponse204) & {
+  headers: Headers;
+};
+export type cancelLinkDoctorScanResponseError = (cancelLinkDoctorScanResponse404) & {
+  headers: Headers;
+};
+
+export type cancelLinkDoctorScanResponse = (cancelLinkDoctorScanResponseSuccess | cancelLinkDoctorScanResponseError)
+
+export const getCancelLinkDoctorScanUrl = (scanId: string,) => {
+
+
+
+
+  return `/api/v1/link-doctor-scans/${scanId}/cancel`
+}
+
+export const cancelLinkDoctorScan = async (scanId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<cancelLinkDoctorScanResponse> => {
+
+  return fetchMutator<cancelLinkDoctorScanResponse>(getCancelLinkDoctorScanUrl(scanId),
+  {
+    ...options,
+    method: 'POST'
 
 
   }

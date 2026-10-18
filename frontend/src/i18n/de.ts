@@ -1356,4 +1356,5 @@ export const de = {
   player: en.player,
   playlistExport: en.playlistExport,
   musicDuplicates: en.musicDuplicates,
+  linkDoctor: en.linkDoctor,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

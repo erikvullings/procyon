@@ -117,6 +117,15 @@ import {
 } from '../features/keybindings/global-keydown-handler';
 import { ShortcutsHelpDialog } from '../features/keybindings/shortcuts-help-dialog';
 import {
+  createLinkDoctorController,
+  type LinkDoctorController,
+} from '../features/link-doctor/link-doctor-controller';
+import {
+  INITIAL_LINK_DOCTOR_STATE,
+  type LinkDoctorState,
+} from '../features/link-doctor/link-doctor-state';
+import { LinkDoctorView } from '../features/link-doctor/link-doctor-view';
+import {
   createMusicDuplicatesController,
   type MusicDuplicatesController,
 } from '../features/music-duplicates/music-duplicates-controller';
@@ -172,6 +181,7 @@ import {
   queueTitle,
 } from '../features/player/play-selection';
 import {
+  FIND_BROKEN_LINKS_ACTION_ID,
   FIND_MUSIC_DUPLICATES_ACTION_ID,
   MEDIA_QUEUE_ACTIONS,
   PLAYER_CLIENT_ACTIONS,
@@ -569,6 +579,30 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     ];
   }
 
+  /** Scans the selected folders, or the active folder, for broken links (task 0266). */
+  function beginLinkDoctorScan(invocation: ActionInvocationContext | undefined): void {
+    const paneId = invocation?.paneId ?? workspace?.activePaneId;
+    if (linkDoctorController === undefined || paneId === undefined) return;
+    const directory = directories.get(activeTabKey(paneId));
+    const ids = new Set(
+      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
+    );
+    const folders = (directory?.entries ?? [])
+      .filter((entry) => ids.has(entry.id) && entry.kind === 'directory')
+      .map((entry) => entry.location);
+    const roots =
+      folders.length > 0
+        ? folders
+        : directory?.location === undefined || directory.location.providerId === 'basket'
+          ? []
+          : [directory.location];
+    if (roots.length === 0) {
+      toast({ html: t('linkDoctor', 'noFolder') });
+      return;
+    }
+    void linkDoctorController.start(roots);
+  }
+
   /** Scans the selected folders, or the active folder, for duplicate and near-duplicate music. */
   function beginMusicDuplicateScan(invocation: ActionInvocationContext | undefined): void {
     const paneId = invocation?.paneId ?? workspace?.activePaneId;
@@ -743,6 +777,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       beginMusicDuplicateScan(invocation);
       return true;
     }
+    if (actionId === FIND_BROKEN_LINKS_ACTION_ID) {
+      beginLinkDoctorScan(invocation);
+      return true;
+    }
     const queueAction = MEDIA_QUEUE_ACTIONS.find((candidate) => candidate.id === actionId);
     if (queueAction !== undefined) {
       queueSelection(queueAction.mode, queueAction.recursive, invocation);
@@ -786,6 +824,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     const hasQueue = (appState?.player.queue.length ?? 0) > 0;
     return [
       ...mediaQueueActions(),
+      {
+        id: FIND_BROKEN_LINKS_ACTION_ID,
+        title: t('linkDoctor', 'action'),
+        category: 'tools',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' as const },
+      },
       {
         id: FIND_MUSIC_DUPLICATES_ACTION_ID,
         title: t('musicDuplicates', 'action'),
@@ -1211,6 +1257,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let playerController: PlayerController | undefined;
   let savePlaylistRequest: SavePlaylistRequest | undefined;
   let musicDuplicatesController: MusicDuplicatesController | undefined;
+  let linkDoctorController: LinkDoctorController | undefined;
+  let linkDoctorState: LinkDoctorState = INITIAL_LINK_DOCTOR_STATE;
   let musicDuplicatesState: MusicDuplicatesState = INITIAL_MUSIC_DUPLICATES_STATE;
   const emptyPlayerState = createInitialPlayerState();
   let operations = createOperationsState();
@@ -4910,6 +4958,39 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           create: () => createActionCommandController(actionCommandControllerContext),
         },
         paneContent: { create: () => createPaneContentBuilder(paneContentBuilderContext) },
+        linkDoctor: {
+          create: () =>
+            createLinkDoctorController({
+              getClient: () => attrs.client,
+              getOpsController: () => opsController,
+              getState: () => linkDoctorState,
+              setState: (state) => {
+                linkDoctorState = state;
+              },
+              toast: (message) => {
+                toast({ html: message });
+              },
+              redraw: () => m.redraw(),
+              openInEditor: (location) => {
+                const paneId = workspace?.activePaneId;
+                if (paneId === undefined) return;
+                const name = decodeURIComponent(location.uri.split('/').pop() ?? location.uri);
+                openEditor(attrs.client, paneId, {
+                  id: crypto.randomUUID(),
+                  location,
+                  name,
+                  kind: 'file',
+                  hidden: false,
+                  readOnly: false,
+                  metadataRevision: 0,
+                });
+              },
+              refreshPanes: () => {
+                for (const paneId of workspace?.paneOrder ?? []) refetchAffectedPanes(paneId);
+              },
+            }),
+          dispose: (controller) => controller.dispose(),
+        },
         musicDuplicates: {
           create: () =>
             createMusicDuplicatesController({
@@ -5057,6 +5138,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       paneContentBuilder = shellControllers.instances.paneContent;
       playerController = shellControllers.instances.player;
       musicDuplicatesController = shellControllers.instances.musicDuplicates;
+      linkDoctorController = shellControllers.instances.linkDoctor;
       navigation = shellControllers.instances.navigation;
       disposeShellControllers = shellControllers.dispose;
       keybindingRuntime = attrs.runtime === 'http' ? 'browser' : 'desktop';
@@ -6167,6 +6249,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 onDeleteSelected: () => checksumController.deleteSelectedDuplicates(),
                 onCancel: () => checksumController.cancelDuplicateScan(),
                 onClose: () => checksumController.closeDuplicates(),
+              }),
+            linkDoctorState.scanId !== undefined &&
+              linkDoctorController !== undefined &&
+              m(LinkDoctorView, {
+                state: linkDoctorState,
+                onFindReplacement: (problem) => void linkDoctorController?.findReplacement(problem),
+                onRepoint: (problem, candidate) =>
+                  void linkDoctorController?.repointSymlink(problem, candidate),
+                onOpenSource: (problem) => linkDoctorController?.openSource(problem),
+                onCancel: () => void linkDoctorController?.cancel(),
+                onClose: () => linkDoctorController?.close(),
               }),
             musicDuplicatesState.scanId !== undefined &&
               musicDuplicatesController !== undefined &&

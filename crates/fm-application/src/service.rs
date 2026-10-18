@@ -254,6 +254,7 @@ pub struct FileManagerService {
     search_comparison: SearchComparisonCoordinator,
     checksums: ChecksumCoordinator,
     music_duplicates: crate::music_duplicates::MusicDuplicateCoordinator,
+    link_doctor: crate::link_doctor::LinkDoctorCoordinator,
     disk_usage: DiskUsageCoordinator,
     thumbnails: ThumbnailService,
     semantic: SemanticService,
@@ -713,6 +714,7 @@ impl FileManagerService {
             search_comparison,
             checksums,
             music_duplicates: crate::music_duplicates::MusicDuplicateCoordinator::default(),
+            link_doctor: crate::link_doctor::LinkDoctorCoordinator::default(),
             disk_usage,
             thumbnails: ThumbnailService::new(settings_directory.join("thumbnails")),
             semantic,
@@ -3818,6 +3820,37 @@ impl FileManagerService {
         limit: u16,
     ) -> Result<fm_transport_dto::MusicDuplicatePageDto, ApplicationError> {
         self.music_duplicates.page(scan_id, offset, limit)
+    }
+
+    /// Starts a cancellable broken-link scan (task 0266).
+    pub fn start_link_doctor_scan(
+        &self,
+        request: fm_transport_dto::StartLinkDoctorScanRequestDto,
+    ) -> Result<fm_transport_dto::StartLinkDoctorScanResponseDto, ApplicationError> {
+        self.link_doctor.start(self.providers.clone(), request)
+    }
+
+    /// Cancels a running broken-link scan.
+    pub fn cancel_link_doctor_scan(&self, scan_id: Uuid) -> Result<(), ApplicationError> {
+        self.link_doctor.cancel(scan_id)
+    }
+
+    /// Returns a bounded page of a broken-link scan's problems with its progress.
+    pub fn get_link_doctor_page(
+        &self,
+        scan_id: Uuid,
+        offset: u64,
+        limit: u16,
+    ) -> Result<fm_transport_dto::LinkDoctorPageDto, ApplicationError> {
+        self.link_doctor.page(scan_id, offset, limit)
+    }
+
+    /// Searches for files that could replace a missing link target.
+    pub async fn find_link_replacements(
+        &self,
+        request: fm_transport_dto::FindLinkReplacementsRequestDto,
+    ) -> Result<fm_transport_dto::FindLinkReplacementsResponseDto, ApplicationError> {
+        crate::link_doctor::find_replacements(&self.providers, request).await
     }
 
     /// Reports which capabilities are available for the current runtime and

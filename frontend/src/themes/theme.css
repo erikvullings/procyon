@@ -5483,3 +5483,22 @@ button.fm-activity-count {
   gap: 0.5rem;
   padding: 0.25rem 0.75rem;
 }
+
+.link-doctor__target,
+.link-doctor__candidates {
+  margin: 0.25rem 0.75rem;
+}
+
+.link-doctor__candidates {
+  padding-left: 1rem;
+}
+
+.link-doctor__hint {
+  color: var(--fm-text-muted);
+  font-size: 0.85rem;
+}
+
+.link-doctor__path {
+  font-family: var(--fm-font-mono, monospace);
+  font-size: 0.85rem;
+}

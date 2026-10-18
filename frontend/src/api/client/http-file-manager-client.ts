@@ -52,6 +52,8 @@ import type {
   Location as FileLocation,
   FileRangeChunk,
   FinderTags,
+  FindLinkReplacementsRequest,
+  FindLinkReplacementsResult,
   FrontendDiagnostic,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
@@ -73,6 +75,7 @@ import type {
   KnowledgeSearchPlan,
   KnowledgeSearchResult,
   KnowledgeSourceLocation,
+  LinkDoctorPage,
   LinkOptions,
   LinkOptionsRequest,
   ListDirectoryRequest,
@@ -168,6 +171,8 @@ import type {
   StartComparisonResult,
   StartDuplicateScanRequest,
   StartDuplicateScanResult,
+  StartLinkDoctorScanRequest,
+  StartLinkDoctorScanResult,
   StartMusicDuplicateScanRequest,
   StartMusicDuplicateScanResult,
   StartOperationRequest,
@@ -264,7 +269,11 @@ import {
   executeKnowledgeSearch as requestKnowledgeSearchExecution,
   planKnowledgeSearch as requestKnowledgeSearchPlan,
   resolveKnowledgeSource as requestKnowledgeSourceResolution,
+  cancelLinkDoctorScan as requestLinkDoctorScanCancel,
+  getLinkDoctorScan as requestLinkDoctorScanGet,
+  startLinkDoctorScan as requestLinkDoctorScanStart,
   getLinkOptions as requestLinkOptions,
+  findLinkReplacements as requestLinkReplacementsFind,
   activateLlmProfile as requestLlmProfileActivation,
   cloneLlmProfile as requestLlmProfileClone,
   createLlmProfile as requestLlmProfileCreation,
@@ -2082,6 +2091,66 @@ export class HttpFileManagerClient implements FileManagerClient {
     if (response.status !== 204) {
       throw new Error(`Unexpected cancelMusicDuplicateScan response status: ${response.status}`);
     }
+  }
+
+  async startLinkDoctorScan(
+    request: StartLinkDoctorScanRequest,
+    signal?: AbortSignal,
+  ): Promise<StartLinkDoctorScanResult> {
+    const response = await requestLinkDoctorScanStart(
+      {
+        roots: [...request.roots],
+        ...(request.showHidden === undefined ? {} : { showHidden: request.showHidden }),
+      },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 201) {
+      throw new Error(`Unexpected startLinkDoctorScan response status: ${response.status}`);
+    }
+    return { scanId: response.data.scanId };
+  }
+
+  async getLinkDoctorScan(
+    scanId: string,
+    options?: { offset?: number; limit?: number },
+    signal?: AbortSignal,
+  ): Promise<LinkDoctorPage> {
+    const response = await requestLinkDoctorScanGet(
+      scanId,
+      {
+        ...(options?.offset === undefined ? {} : { offset: options.offset }),
+        ...(options?.limit === undefined ? {} : { limit: options.limit }),
+      },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected getLinkDoctorScan response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async cancelLinkDoctorScan(scanId: string, signal?: AbortSignal): Promise<void> {
+    const response = await requestLinkDoctorScanCancel(
+      scanId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204) {
+      throw new Error(`Unexpected cancelLinkDoctorScan response status: ${response.status}`);
+    }
+  }
+
+  async findLinkReplacements(
+    request: FindLinkReplacementsRequest,
+    signal?: AbortSignal,
+  ): Promise<FindLinkReplacementsResult> {
+    const response = await requestLinkReplacementsFind(
+      { ...request, roots: [...request.roots] },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected findLinkReplacements response status: ${response.status}`);
+    }
+    return response.data;
   }
 
   async generateSyncPlan(

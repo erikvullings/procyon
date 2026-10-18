@@ -12,6 +12,7 @@ export * from './finder-tags';
 export * from './frontend-diagnostic';
 export * from './ids';
 export * from './knowledge';
+export * from './link-doctor';
 export * from './llm-profile';
 export * from './location';
 export * from './music-duplicates';

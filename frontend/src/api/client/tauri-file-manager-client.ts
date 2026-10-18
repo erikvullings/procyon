@@ -60,6 +60,8 @@ import type {
   ExecuteKnowledgeSearchRequest,
   FileRangeChunk,
   FinderTags,
+  FindLinkReplacementsRequest,
+  FindLinkReplacementsResult,
   FrontendDiagnostic,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
@@ -81,6 +83,7 @@ import type {
   KnowledgeSearchPlan,
   KnowledgeSearchResult,
   KnowledgeSourceLocation,
+  LinkDoctorPage,
   LinkOptions,
   LinkOptionsRequest,
   ListDirectoryRequest,
@@ -175,6 +178,8 @@ import type {
   StartComparisonResult,
   StartDuplicateScanRequest,
   StartDuplicateScanResult,
+  StartLinkDoctorScanRequest,
+  StartLinkDoctorScanResult,
   StartMusicDuplicateScanRequest,
   StartMusicDuplicateScanResult,
   StartOperationRequest,
@@ -1219,6 +1224,36 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   async cancelMusicDuplicateScan(scanId: string, _signal?: AbortSignal): Promise<void> {
     await invoke('cancel_music_duplicate_scan', { scanId });
+  }
+
+  startLinkDoctorScan(
+    request: StartLinkDoctorScanRequest,
+    _signal?: AbortSignal,
+  ): Promise<StartLinkDoctorScanResult> {
+    return invoke<StartLinkDoctorScanResult>('start_link_doctor_scan', { request });
+  }
+
+  getLinkDoctorScan(
+    scanId: string,
+    options?: { offset?: number; limit?: number },
+    _signal?: AbortSignal,
+  ): Promise<LinkDoctorPage> {
+    return invoke<LinkDoctorPage>('get_link_doctor_scan', {
+      scanId,
+      offset: options?.offset,
+      limit: options?.limit,
+    });
+  }
+
+  async cancelLinkDoctorScan(scanId: string, _signal?: AbortSignal): Promise<void> {
+    await invoke('cancel_link_doctor_scan', { scanId });
+  }
+
+  findLinkReplacements(
+    request: FindLinkReplacementsRequest,
+    _signal?: AbortSignal,
+  ): Promise<FindLinkReplacementsResult> {
+    return invoke<FindLinkReplacementsResult>('find_link_replacements', { request });
   }
 
   generateSyncPlan(
