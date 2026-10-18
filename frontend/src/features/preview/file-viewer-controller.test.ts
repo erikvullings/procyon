@@ -89,6 +89,9 @@ function setup(): {
       readStructuredJsonWindow: vi.fn(),
       searchStructuredRows: vi.fn(),
       closeStructuredView: vi.fn().mockResolvedValue(undefined),
+      openSqliteView: vi.fn(),
+      querySqliteView: vi.fn(),
+      closeSqliteView: vi.fn().mockResolvedValue(undefined),
     },
     states: [],
   };
@@ -587,6 +590,208 @@ describe('file viewer controller', () => {
         atStart: false,
         atEnd: true,
       },
+    });
+  });
+
+  describe('sqlite databases', () => {
+    const database = () => entry({ name: 'shop.sqlite', extension: 'sqlite' });
+    const opened = {
+      sessionId: 'session-1',
+      sourceBytes: 4096,
+      sqliteVersion: '3.50.0',
+      objects: [
+        { name: 'orders', kind: 'table' as const, columns: [] },
+        { name: 'users', kind: 'table' as const, columns: [] },
+      ],
+    };
+    const page = (names: readonly string[], totalRows?: number) => ({
+      columns: ['name'],
+      rows: names.map((name) => [{ valueType: 'text' as const, text: name, truncated: false }]),
+      offset: 0,
+      hasMore: false,
+      truncated: false,
+      elapsedMs: 1,
+      ...(totalRows === undefined ? {} : { totalRows }),
+    });
+
+    function sqliteContent(state: FileViewerState | undefined) {
+      return state?.status === 'ready' && state.content.kind === 'sqlite'
+        ? state.content
+        : undefined;
+    }
+
+    it('opens the first table and loads its first page', async () => {
+      const context = setup();
+      vi.mocked(context.client.openSqliteView).mockResolvedValue(opened);
+      vi.mocked(context.client.querySqliteView).mockResolvedValue(page(['Ada'], 1));
+      createFileViewerController({
+        client: context.client,
+        entry: database(),
+        update: (state) => context.states.push(state),
+      });
+
+      await vi.waitFor(() =>
+        expect(sqliteContent(context.states.at(-1))?.data.result?.rows).toHaveLength(1),
+      );
+      const content = sqliteContent(context.states.at(-1));
+      expect(content?.selected).toBe('orders');
+      expect(content?.data.totalRows).toBe(1);
+      expect(context.client.querySqliteView).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'session-1',
+          offset: 0,
+          source: expect.objectContaining({ type: 'browse', object: 'orders', search: '' }),
+        }),
+        expect.anything(),
+      );
+      expect(context.client.readFileRange).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the hex/text view when the file is not a database', async () => {
+      const context = setup();
+      vi.mocked(context.client.openSqliteView).mockRejectedValue(
+        new Error('not a SQLite database'),
+      );
+      vi.mocked(context.client.readFileRange).mockResolvedValue({
+        data: [104, 105],
+        offset: 0,
+        length: 2,
+        eof: true,
+      });
+      createFileViewerController({
+        client: context.client,
+        entry: database(),
+        update: (state) => context.states.push(state),
+      });
+      await vi.waitFor(() =>
+        expect(context.states.at(-1)).toMatchObject({
+          status: 'ready',
+          content: { kind: 'text', text: 'hi' },
+        }),
+      );
+    });
+
+    it('shows other open failures instead of silently falling back to raw bytes', async () => {
+      const context = setup();
+      vi.mocked(context.client.openSqliteView).mockRejectedValue(
+        new Error('too many open database views; close one first'),
+      );
+      createFileViewerController({
+        client: context.client,
+        entry: database(),
+        update: (state) => context.states.push(state),
+      });
+      await vi.waitFor(() =>
+        expect(context.states.at(-1)).toMatchObject({
+          status: 'error',
+          message: expect.stringContaining('too many open database views'),
+        }),
+      );
+      expect(context.client.readFileRange).not.toHaveBeenCalled();
+    });
+
+    it('debounces search typing into a single query and resets paging', async () => {
+      vi.useFakeTimers();
+      try {
+        const context = setup();
+        vi.mocked(context.client.openSqliteView).mockResolvedValue(opened);
+        vi.mocked(context.client.querySqliteView).mockResolvedValue(page(['Ada'], 1));
+        const controller = createFileViewerController({
+          client: context.client,
+          entry: database(),
+          update: (state) => context.states.push(state),
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        vi.mocked(context.client.querySqliteView).mockClear();
+
+        controller.updateSqliteBrowse({ search: 'a' });
+        controller.updateSqliteBrowse({ search: 'ad' });
+        controller.updateSqliteBrowse({ search: 'ada' });
+        expect(sqliteContent(context.states.at(-1))?.search).toBe('ada');
+        expect(context.client.querySqliteView).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(300);
+        expect(context.client.querySqliteView).toHaveBeenCalledTimes(1);
+        expect(context.client.querySqliteView).toHaveBeenCalledWith(
+          expect.objectContaining({
+            offset: 0,
+            source: expect.objectContaining({ search: 'ada' }),
+          }),
+          expect.anything(),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps the first page total while paging and ignores stale responses', async () => {
+      const context = setup();
+      vi.mocked(context.client.openSqliteView).mockResolvedValue(opened);
+      vi.mocked(context.client.querySqliteView).mockResolvedValueOnce(page(['A'], 250));
+      const controller = createFileViewerController({
+        client: context.client,
+        entry: database(),
+        update: (state) => context.states.push(state),
+      });
+      await vi.waitFor(() =>
+        expect(sqliteContent(context.states.at(-1))?.data.totalRows).toBe(250),
+      );
+
+      vi.mocked(context.client.querySqliteView).mockResolvedValueOnce({
+        ...page(['B']),
+        offset: 100,
+      });
+      controller.loadSqlitePage('data', 100);
+      await vi.waitFor(() =>
+        expect(sqliteContent(context.states.at(-1))?.data.result?.offset).toBe(100),
+      );
+      expect(sqliteContent(context.states.at(-1))?.data.totalRows).toBe(250);
+
+      let releaseSlow: (value: ReturnType<typeof page>) => void = () => undefined;
+      vi.mocked(context.client.querySqliteView)
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              releaseSlow = resolve;
+            }),
+        )
+        .mockResolvedValueOnce(page(['fast'], 1));
+      controller.updateSqliteBrowse({ sort: { column: 'name', descending: false } });
+      controller.updateSqliteBrowse({ sort: { column: 'name', descending: true } });
+      await vi.waitFor(() =>
+        expect(sqliteContent(context.states.at(-1))?.data.result?.rows[0]?.[0]?.text).toBe('fast'),
+      );
+      releaseSlow(page(['stale'], 9));
+      await Promise.resolve();
+      expect(sqliteContent(context.states.at(-1))?.data.result?.rows[0]?.[0]?.text).toBe('fast');
+    });
+
+    it('shows SQL errors in the console and closes the session on dispose', async () => {
+      const context = setup();
+      vi.mocked(context.client.openSqliteView).mockResolvedValue(opened);
+      vi.mocked(context.client.querySqliteView).mockResolvedValueOnce(page(['A'], 1));
+      const controller = createFileViewerController({
+        client: context.client,
+        entry: database(),
+        update: (state) => context.states.push(state),
+      });
+      await vi.waitFor(() =>
+        expect(sqliteContent(context.states.at(-1))?.data.result).toBeDefined(),
+      );
+
+      vi.mocked(context.client.querySqliteView).mockRejectedValueOnce(
+        new Error('only read-only statements are allowed'),
+      );
+      controller.setSqliteTab('sql');
+      controller.setSqliteSql('DELETE FROM orders');
+      controller.runSqliteSql();
+      await vi.waitFor(() =>
+        expect(sqliteContent(context.states.at(-1))?.sqlRun.error).toContain('read-only'),
+      );
+      expect(sqliteContent(context.states.at(-1))?.data.result).toBeDefined();
+
+      controller.dispose();
+      expect(context.client.closeSqliteView).toHaveBeenCalledWith({ sessionId: 'session-1' });
     });
   });
 

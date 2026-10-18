@@ -138,6 +138,7 @@ use crate::semantic_ocr::{
     UnavailableOcrExecutableProbe,
 };
 use crate::settings_mapping::{settings_from_dto, settings_to_dto};
+use crate::sqlite_view::SqliteViewService;
 use crate::structured_view::StructuredViewService;
 use crate::thumbnails::ThumbnailService;
 use crate::workspace::{JsonFileWorkspaceRepository, WorkspaceService, WorkspaceSummary};
@@ -240,6 +241,7 @@ pub struct FileManagerService {
     rag_ephemeral: Mutex<HashMap<Uuid, SavedRagConversation>>,
     pptx_preview: PptxPreviewService,
     structured_view: StructuredViewService,
+    sqlite_view: SqliteViewService,
     providers: ProviderRegistry,
     archive_provider: Arc<ArchiveFileSystemProvider>,
     events: EventBus,
@@ -683,6 +685,7 @@ impl FileManagerService {
             rag_ephemeral: Mutex::new(HashMap::new()),
             pptx_preview: PptxPreviewService::new(providers.clone()),
             structured_view: StructuredViewService::new(providers.clone()),
+            sqlite_view: SqliteViewService::new(providers.clone()),
             providers,
             archive_provider,
             events: events.clone(),
@@ -3395,6 +3398,30 @@ impl FileManagerService {
         request: fm_transport_dto::StructuredViewSessionRequestDto,
     ) -> Result<(), ApplicationError> {
         self.structured_view.close(request).await
+    }
+
+    /// Opens a read-only SQLite database viewer session (task 0251).
+    pub async fn open_sqlite_view(
+        &self,
+        request: fm_transport_dto::OpenSqliteViewRequestDto,
+    ) -> Result<fm_transport_dto::OpenSqliteViewResponseDto, ApplicationError> {
+        self.sqlite_view.open(request).await
+    }
+
+    /// Reads one bounded page of a table, view or read-only SQL result.
+    pub async fn query_sqlite_view(
+        &self,
+        request: fm_transport_dto::QuerySqliteViewRequestDto,
+    ) -> Result<fm_transport_dto::QuerySqliteViewResponseDto, ApplicationError> {
+        self.sqlite_view.query(request).await
+    }
+
+    /// Closes a SQLite viewer session and deletes any temporary copy.
+    pub async fn close_sqlite_view(
+        &self,
+        request: fm_transport_dto::SqliteViewSessionRequestDto,
+    ) -> Result<(), ApplicationError> {
+        self.sqlite_view.close(request).await
     }
 
     /// Loads a complete text file only when it fits the bounded editor budget.

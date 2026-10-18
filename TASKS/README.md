@@ -265,7 +265,8 @@ Looking at and editing file contents without leaving the app.
 - [x] 0159 Structured viewer Tauri UX regressions *(needs 0100)*
 - [x] 0171 DOCX preview in the F3 viewer *(needs 0088)*
 - [x] 0172 Bounded spreadsheet preview *(needs 0100)*
-- [ ] 0251 SQLite database preview *(needs 0100, 0142; builtin recommended - rusqlite already bundled)*
+- [x] 0251 SQLite database preview *(needs 0100, 0142; builtin with search, filters and read-only SQL)*
+- [x] 0252 Open the F3 viewer in a separate window *(needs 0088; setting `viewerInSeparateWindow`)*
 - [x] 0173 PPTX content preview *(needs 0088)*
 - [x] 0174 macOS Quick Look action *(needs 0059, 0088)*
 

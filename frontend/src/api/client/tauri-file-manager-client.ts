@@ -96,6 +96,7 @@ import type {
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
   OpenPptxPreviewRequest,
+  OpenSqliteViewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
@@ -112,6 +113,7 @@ import type {
   PreviewDocumentSummaryRequest,
   PreviewRagRequest,
   PreviewSemanticEnrolmentRequest,
+  QuerySqliteViewRequest,
   RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
@@ -162,6 +164,9 @@ import type {
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
+  SqliteQueryResult,
+  SqliteView,
+  SqliteViewSessionRequest,
   StartChecksumRequest,
   StartChecksumResult,
   StartComparisonRequest,
@@ -603,6 +608,10 @@ export class TauriFileManagerClient implements FileManagerClient {
     await invoke<void>('open_workspace_window', { sourceWorkspaceId });
   }
 
+  async openViewerWindow(payload: string, title: string): Promise<void> {
+    await invoke<void>('open_viewer_window', { payload, title });
+  }
+
   async resyncWorkspace(
     ephemeralWorkspaceId: WorkspaceId,
     targetWorkspaceId?: WorkspaceId,
@@ -930,6 +939,21 @@ export class TauriFileManagerClient implements FileManagerClient {
     _signal?: AbortSignal,
   ): Promise<void> {
     await invoke<void>('close_structured_view', { request });
+  }
+
+  openSqliteView(request: OpenSqliteViewRequest, _signal?: AbortSignal): Promise<SqliteView> {
+    return invoke<SqliteView>('open_sqlite_view', { request });
+  }
+
+  querySqliteView(
+    request: QuerySqliteViewRequest,
+    _signal?: AbortSignal,
+  ): Promise<SqliteQueryResult> {
+    return invoke<SqliteQueryResult>('query_sqlite_view', { request });
+  }
+
+  async closeSqliteView(request: SqliteViewSessionRequest, _signal?: AbortSignal): Promise<void> {
+    await invoke<void>('close_sqlite_view', { request });
   }
 
   loadEditableFile(request: LoadEditableFileRequest, _signal?: AbortSignal): Promise<EditableFile> {

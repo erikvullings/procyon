@@ -262,6 +262,8 @@ pub struct Settings {
     pub icon_theme: String,
     /// Whether the desktop host checks for signed application updates after startup.
     pub check_for_updates_automatically: bool,
+    /// Whether F3 opens the viewer in its own window instead of a tab in the active pane.
+    pub viewer_in_separate_window: bool,
 }
 
 impl Default for Settings {
@@ -299,6 +301,7 @@ impl Default for Settings {
             saved_searches: Vec::new(),
             icon_theme: GENERIC_ICON_THEME.to_owned(),
             check_for_updates_automatically: true,
+            viewer_in_separate_window: false,
         }
     }
 }

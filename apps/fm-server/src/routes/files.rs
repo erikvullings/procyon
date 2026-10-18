@@ -9,13 +9,15 @@ use fm_transport_dto::{
     DocxPreviewSessionRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
     LoadEditableFileRequestDto, LoadEditableFileResponseDto, OpenDocxPreviewRequestDto,
     OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto,
-    OpenStructuredViewRequestDto, OpenStructuredViewResponseDto, PptxPreviewSessionRequestDto,
-    ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
-    ReadFileRangeResponseDto, ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
+    OpenSqliteViewRequestDto, OpenSqliteViewResponseDto, OpenStructuredViewRequestDto,
+    OpenStructuredViewResponseDto, PptxPreviewSessionRequestDto, QuerySqliteViewRequestDto,
+    QuerySqliteViewResponseDto, ReadDocxPreviewResourceRequestDto,
+    ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
+    ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
     ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
-    SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
+    SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto, SqliteViewSessionRequestDto,
     StructuredViewSessionRequestDto, StructuredViewStatusDto, UpdateStructuredViewRequestDto,
 };
 use tower_http::request_id::RequestId;
@@ -299,6 +301,61 @@ pub(crate) async fn close_structured_view(
     state
         .service
         .close_structured_view(request)
+        .await
+        .map(|()| StatusCode::NO_CONTENT)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Opens a read-only SQLite database viewer session.
+#[utoipa::path(post, path = "/api/v1/files/sqlite/open", operation_id = "openSqliteView",
+    request_body = OpenSqliteViewRequestDto,
+    responses((status = 200, body = OpenSqliteViewResponseDto), (status = 400, body = ApplicationErrorDto), (status = 404, body = ApplicationErrorDto)))]
+pub(crate) async fn open_sqlite_view(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<OpenSqliteViewRequestDto>,
+) -> Result<Json<OpenSqliteViewResponseDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    crate::error::require_within_roots(&request.location, &state.accessible_roots, request_id)?;
+    state
+        .service
+        .open_sqlite_view(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Reads one bounded page of a SQLite table, view or read-only SQL result.
+#[utoipa::path(post, path = "/api/v1/files/sqlite/query", operation_id = "querySqliteView",
+    request_body = QuerySqliteViewRequestDto,
+    responses((status = 200, body = QuerySqliteViewResponseDto), (status = 400, body = ApplicationErrorDto), (status = 404, body = ApplicationErrorDto)))]
+pub(crate) async fn query_sqlite_view(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<QuerySqliteViewRequestDto>,
+) -> Result<Json<QuerySqliteViewResponseDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    state
+        .service
+        .query_sqlite_view(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Closes a SQLite viewer session.
+#[utoipa::path(post, path = "/api/v1/files/sqlite/close", operation_id = "closeSqliteView",
+    request_body = SqliteViewSessionRequestDto,
+    responses((status = 204), (status = 404, body = ApplicationErrorDto)))]
+pub(crate) async fn close_sqlite_view(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<SqliteViewSessionRequestDto>,
+) -> Result<StatusCode, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    state
+        .service
+        .close_sqlite_view(request)
         .await
         .map(|()| StatusCode::NO_CONTENT)
         .map_err(|error| ApiError::new(error, request_id))

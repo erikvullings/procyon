@@ -126,6 +126,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
             .collect(),
         icon_theme: settings.icon_theme,
         check_for_updates_automatically: settings.check_for_updates_automatically,
+        viewer_in_separate_window: settings.viewer_in_separate_window,
     }
 }
 
@@ -238,6 +239,7 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
             .collect(),
         icon_theme: settings.icon_theme,
         check_for_updates_automatically: settings.check_for_updates_automatically,
+        viewer_in_separate_window: settings.viewer_in_separate_window,
     }
 }
 

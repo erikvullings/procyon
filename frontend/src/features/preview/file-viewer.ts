@@ -47,6 +47,7 @@ import {
   renderPdfPageToCanvas,
   renderPdfSearchHighlights,
 } from './pdf-preview';
+import { SqliteBrowser, type SqliteBrowserActions } from './sqlite-view';
 import './file-viewer.css';
 
 /** Copies `value` to the clipboard and reports success/failure via toast - the same feedback
@@ -79,6 +80,7 @@ export interface FileViewerAttrs {
   readonly onLoadJsonWindow: (offset: number) => void;
   readonly onSearchStructuredRows: (query: string, cursor?: number) => void;
   readonly onSortStructuredRows: (column: number) => void;
+  readonly sqlite: SqliteBrowserActions;
   readonly onSearchQueryChange: (query: string) => void;
   readonly onSearchOptionChange: (
     patch: Partial<Pick<FileViewerSearchState, 'regex' | 'caseSensitive' | 'wholeWord'>>,
@@ -2010,29 +2012,31 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                         ? m(StructuredTable, { attrs, state })
                         : state.content.kind === 'structuredJson'
                           ? renderStructuredJson(attrs, state)
-                          : state.content.kind === 'structuredFallback'
-                            ? renderExternalFallback(attrs, state.content.message)
-                            : state.content.kind === 'docxExternal' ||
-                                state.content.kind === 'pptxExternal'
+                          : state.content.kind === 'sqlite'
+                            ? m(SqliteBrowser, { content: state.content, actions: attrs.sqlite })
+                            : state.content.kind === 'structuredFallback'
                               ? renderExternalFallback(attrs, state.content.message)
-                              : state.content.kind === 'audio'
-                                ? renderAudioBody(state)
-                                : state.content.kind === 'video' ||
-                                    state.content.kind === 'videoExternal'
-                                  ? renderVideoBody(attrs, state)
-                                  : state.content.kind === 'pdf'
-                                    ? renderPdfBody(state)
-                                    : state.content.kind === 'comic'
-                                      ? renderComicBody(state)
-                                      : state.content.kind === 'epub'
-                                        ? renderEpubBody(attrs, state, (url) => {
-                                            pendingExternalLink = url;
-                                          })
-                                        : state.content.kind === 'docx'
-                                          ? renderDocxBody(state)
-                                          : state.content.kind === 'archiveSummary'
-                                            ? renderArchiveSummary(state)
-                                            : renderImageBody(attrs, state),
+                              : state.content.kind === 'docxExternal' ||
+                                  state.content.kind === 'pptxExternal'
+                                ? renderExternalFallback(attrs, state.content.message)
+                                : state.content.kind === 'audio'
+                                  ? renderAudioBody(state)
+                                  : state.content.kind === 'video' ||
+                                      state.content.kind === 'videoExternal'
+                                    ? renderVideoBody(attrs, state)
+                                    : state.content.kind === 'pdf'
+                                      ? renderPdfBody(state)
+                                      : state.content.kind === 'comic'
+                                        ? renderComicBody(state)
+                                        : state.content.kind === 'epub'
+                                          ? renderEpubBody(attrs, state, (url) => {
+                                              pendingExternalLink = url;
+                                            })
+                                          : state.content.kind === 'docx'
+                                            ? renderDocxBody(state)
+                                            : state.content.kind === 'archiveSummary'
+                                              ? renderArchiveSummary(state)
+                                              : renderImageBody(attrs, state),
           state.status === 'ready' && state.metadataPanelOpen === true
             ? m('.fm-file-viewer-info-panel', [
                 renderMetadataPanel(state.metadata),

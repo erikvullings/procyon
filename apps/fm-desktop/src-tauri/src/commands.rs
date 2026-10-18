@@ -1939,6 +1939,42 @@ pub(crate) async fn close_structured_view(
 }
 
 #[tauri::command]
+pub(crate) async fn open_sqlite_view(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::OpenSqliteViewRequestDto,
+) -> Result<fm_transport_dto::OpenSqliteViewResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .open_sqlite_view(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn query_sqlite_view(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::QuerySqliteViewRequestDto,
+) -> Result<fm_transport_dto::QuerySqliteViewResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .query_sqlite_view(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
+pub(crate) async fn close_sqlite_view(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::SqliteViewSessionRequestDto,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .close_sqlite_view(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+#[tauri::command]
 pub(crate) async fn load_editable_file(
     state: State<'_, AppState>,
     request: fm_transport_dto::LoadEditableFileRequestDto,
@@ -2217,6 +2253,54 @@ pub(crate) async fn open_workspace_window(
         .await
         .map_err(|error| error.to_string())?;
     build_workspace_window(&app, forked.id).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+/// Label prefix of F3 viewer windows (`viewer-<uuid>`).
+pub(crate) const VIEWER_WINDOW_PREFIX: &str = "viewer-";
+/// Largest accepted viewer request payload, far above any real entry summary.
+const VIEWER_PAYLOAD_MAX_BYTES: usize = 8 * 1024;
+const VIEWER_TITLE_MAX_CHARS: usize = 200;
+
+/// A viewer request is a base64url-encoded entry description built by the frontend. Only that
+/// alphabet is allowed so the payload can be placed in the app URL's query without any escaping
+/// or URL-injection concerns.
+fn validate_viewer_payload(payload: &str) -> Result<(), String> {
+    if payload.is_empty() || payload.len() > VIEWER_PAYLOAD_MAX_BYTES {
+        return Err("invalid viewer request size".to_owned());
+    }
+    if !payload
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return Err("invalid viewer request encoding".to_owned());
+    }
+    Ok(())
+}
+
+/// Opens the Lister-style viewer for one file in its own OS window (the "open viewer in a
+/// separate window" setting). The window loads the same frontend bundle with a `?viewer=` query,
+/// which makes it mount only the viewer instead of the full app shell, and shares the host's
+/// single `FileManagerService` like every other window.
+#[tauri::command]
+pub(crate) async fn open_viewer_window(
+    app: AppHandle,
+    payload: String,
+    title: String,
+) -> Result<(), String> {
+    validate_viewer_payload(&payload)?;
+    let title: String = title.chars().take(VIEWER_TITLE_MAX_CHARS).collect();
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        format!("{VIEWER_WINDOW_PREFIX}{}", Uuid::new_v4()),
+        tauri::WebviewUrl::App(format!("index.html?viewer={payload}").into()),
+    )
+    .title(title)
+    .inner_size(1000.0, 720.0)
+    .min_inner_size(480.0, 320.0)
+    .zoom_hotkeys_enabled(true)
+    .build()
+    .map_err(|error| error.to_string())?;
     Ok(())
 }
 
@@ -3611,6 +3695,18 @@ mod tests {
             canonical_workspace_window_label(&first),
             format!("workspace-{id}"),
         );
+    }
+
+    #[test]
+    fn viewer_payload_accepts_only_bounded_base64url() {
+        assert!(validate_viewer_payload("eyJhIjoxfQ").is_ok());
+        assert!(validate_viewer_payload("a-b_c").is_ok());
+        assert!(validate_viewer_payload("").is_err());
+        assert!(validate_viewer_payload("a b").is_err());
+        assert!(validate_viewer_payload("a&b=c").is_err());
+        assert!(validate_viewer_payload("a/../b").is_err());
+        assert!(validate_viewer_payload("%2e").is_err());
+        assert!(validate_viewer_payload(&"a".repeat(VIEWER_PAYLOAD_MAX_BYTES + 1)).is_err());
     }
 
     #[test]

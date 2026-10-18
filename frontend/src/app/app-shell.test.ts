@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFileManagerClient } from '../api/client/create-client';
 import { MockFileManagerClient } from '../api/client/mock-file-manager-client';
 import { ApiError } from '../api/fetch-mutator';
+import { decodeViewerRequest } from '../features/preview/viewer-window';
 import type { DirectorySnapshot, EntrySummary, Location, Operation } from '../models';
 import { encodeDiskUsageTree } from '../models';
 import {
@@ -3013,6 +3014,52 @@ describe('AppShell', () => {
     expect(invokeAction).not.toHaveBeenCalled();
   });
 
+  describe('viewer in a separate window setting', () => {
+    async function openWithF3(client: MockFileManagerClient): Promise<void> {
+      m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+      await vi.waitFor(() => expect(root.textContent).toContain('.env'));
+      const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+      const file = [...(activePane?.querySelectorAll<HTMLElement>('.fm-directory-row') ?? [])].find(
+        (row) => row.textContent?.includes('.env'),
+      );
+      file?.click();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F3', bubbles: true }));
+    }
+
+    it('opens F3 in its own window instead of a pane tab when enabled', async () => {
+      const client = new MockFileManagerClient();
+      const openViewerWindow = vi.fn().mockResolvedValue(undefined);
+      Object.assign(client, { openViewerWindow });
+      vi.spyOn(client, 'getSettings').mockResolvedValue({
+        ...(await client.getSettings()),
+        viewerInSeparateWindow: true,
+      });
+      const dispatchWorkspaceCommand = vi.spyOn(client, 'dispatchWorkspaceCommand');
+      await openWithF3(client);
+
+      await vi.waitFor(() => expect(openViewerWindow).toHaveBeenCalledTimes(1));
+      const [token, title] = openViewerWindow.mock.calls[0] ?? [];
+      expect(title).toBe('.env');
+      expect(decodeViewerRequest(`?viewer=${token}`)?.entry.name).toBe('.env');
+      expect(root.querySelector('.fm-file-viewer')).toBeNull();
+      expect(dispatchWorkspaceCommand).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'addTransientTab' }),
+        undefined,
+      );
+    });
+
+    it('falls back to the in-pane viewer when the window cannot be opened', async () => {
+      const client = new MockFileManagerClient();
+      Object.assign(client, { openViewerWindow: vi.fn().mockRejectedValue(new Error('blocked')) });
+      vi.spyOn(client, 'getSettings').mockResolvedValue({
+        ...(await client.getSettings()),
+        viewerInSeparateWindow: true,
+      });
+      await openWithF3(client);
+      await vi.waitFor(() => expect(root.querySelector('.fm-file-viewer')).not.toBeNull());
+    });
+  });
+
   it('offers F3 summaries only when semantic components and a generation profile are ready', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     await client.createLlmProfile({
@@ -5699,6 +5746,7 @@ describe('AppShell', () => {
       savedSearches: [],
       iconTheme: 'mock.archive',
       checkForUpdatesAutomatically: true,
+      viewerInSeparateWindow: false,
     });
     const iconTheme = {
       iconDefinitions: { file: { iconPath: 'icons/file.svg' } },

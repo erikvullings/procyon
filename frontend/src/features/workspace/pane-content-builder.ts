@@ -54,6 +54,7 @@ import type { PaneRenameRequest } from '../panes/pane';
 import { isParentEntry, withParentEntry } from '../panes/parent-entry';
 import { PluginPanelHost, type PluginPaneState } from '../plugins/plugin-panel-host';
 import { FileViewer } from '../preview/file-viewer';
+import { fileViewerAttrs } from '../preview/file-viewer-attrs';
 import type { FileViewerController, FileViewerState } from '../preview/file-viewer-controller';
 import { hiddenSelectedEntryCount } from '../quick-filter/quick-filter';
 import { saveSearch } from '../search/saved-searches';
@@ -1037,80 +1038,41 @@ export function createPaneContentBuilder(
                           action.id === 'core.quickLook' &&
                           action.contextRequirements.featureAvailable !== false,
                       );
-                  return m(FileViewer, {
-                    state: viewer.state,
-                    onLoadMore: () => void viewer.controller.loadMore(),
-                    onLoadPrevious: () => void viewer.controller.loadPrevious(),
-                    onLoadTextPage: (pageIndex) => void viewer.controller.loadTextPage(pageIndex),
-                    onLoadStructuredRows: (startRow) =>
-                      void viewer.controller.loadStructuredRows(startRow),
-                    onStructuredOptionsChange: (delimiter, headerMode) =>
-                      void viewer.controller.setStructuredOptions(delimiter, headerMode),
-                    onSelectStructuredSheet: (sheetName) =>
-                      void viewer.controller.selectStructuredSheet(sheetName),
-                    onToggleStructuredRowNumbers: () =>
-                      viewer.controller.toggleStructuredRowNumbers(),
-                    onLoadJsonWindow: (offset) => void viewer.controller.loadJsonWindow(offset),
-                    onSearchStructuredRows: (query, cursor) =>
-                      void viewer.controller.searchStructuredRows(query, cursor),
-                    onSortStructuredRows: (column) =>
-                      void viewer.controller.sortStructuredRows(column),
-                    onSearchQueryChange: (query) => viewer.controller.setSearchOptions({ query }),
-                    onSearchOptionChange: (patch) => viewer.controller.setSearchOptions(patch),
-                    onRunSearch: () => void viewer.controller.runSearch(),
-                    onNextMatch: () => void viewer.controller.goToNextMatch(),
-                    onPreviousMatch: () => void viewer.controller.goToPreviousMatch(),
-                    onZoomIn: () => viewer.controller.zoomIn(),
-                    onZoomOut: () => viewer.controller.zoomOut(),
-                    onZoomChange: (zoom) => viewer.controller.setZoom(zoom),
-                    onResetZoom: () => viewer.controller.resetZoom(),
-                    onCopy: () => viewer.controller.copyContent(),
-                    onToggleMetadata: () => viewer.controller.toggleMetadataPanel(),
-                    onNextPage: () => viewer.controller.nextPage(),
-                    onPreviousPage: () => viewer.controller.previousPage(),
-                    onPdfSearchQueryChange: (query) => viewer.controller.setPdfSearchQuery(query),
-                    onNextPdfMatch: () => viewer.controller.goToNextPdfMatch(),
-                    onPreviousPdfMatch: () => viewer.controller.goToPreviousPdfMatch(),
-                    onEpubSearchQueryChange: (query) => viewer.controller.setEpubSearchQuery(query),
-                    onNextEpubMatch: () => viewer.controller.goToNextEpubMatch(),
-                    onPreviousEpubMatch: () => viewer.controller.goToPreviousEpubMatch(),
-                    onSelectEpubSection: (sectionIndex, fragment) =>
-                      viewer.controller.goToEpubSection(sectionIndex, fragment),
-                    onFollowEpubLink: (href) => viewer.controller.followEpubLink(href),
-                    onSelectPdfPage: (pageNumber) => viewer.controller.goToPdfPage(pageNumber),
-                    onNavigateTextOffset: (offset, length) =>
-                      viewer.controller.goToTextOffset(offset, length),
-                    onOpenExternalLink: (url) => void client.openExternalUrl(url),
-                    ...(videoPosterDataUri === undefined ? {} : { videoPosterDataUri }),
-                    quickLookAvailable,
-                    onQuickLook: () =>
-                      context.invokeActionById(
-                        'core.quickLook',
-                        { uri: viewer.state.entry.location.uri },
-                        {
-                          paneId,
-                          selectedEntryIds: [viewer.state.entry.id],
-                          cursorEntryId: viewer.state.entry.id,
-                        },
-                      ),
-                    onOpenExternally: () =>
-                      context.invokeActionById(
-                        'core.open',
-                        { uri: viewer.state.entry.location.uri },
-                        {
-                          paneId,
-                          selectedEntryIds: [viewer.state.entry.id],
-                          cursorEntryId: viewer.state.entry.id,
-                        },
-                      ),
-                    ...(context.isDocumentSummaryAvailable?.() === true
-                      ? {
-                          onDocumentSummary: () =>
-                            context.openDocumentSummary?.(paneId, viewer.state.entry),
-                        }
-                      : {}),
-                    onClose: () => context.closeViewer(paneId),
-                  });
+                  return m(
+                    FileViewer,
+                    fileViewerAttrs(viewer.state, viewer.controller, {
+                      openExternalUrl: (url) => void client.openExternalUrl(url),
+                      ...(videoPosterDataUri === undefined ? {} : { videoPosterDataUri }),
+                      quickLookAvailable,
+                      onQuickLook: () =>
+                        context.invokeActionById(
+                          'core.quickLook',
+                          { uri: viewer.state.entry.location.uri },
+                          {
+                            paneId,
+                            selectedEntryIds: [viewer.state.entry.id],
+                            cursorEntryId: viewer.state.entry.id,
+                          },
+                        ),
+                      onOpenExternally: () =>
+                        context.invokeActionById(
+                          'core.open',
+                          { uri: viewer.state.entry.location.uri },
+                          {
+                            paneId,
+                            selectedEntryIds: [viewer.state.entry.id],
+                            cursorEntryId: viewer.state.entry.id,
+                          },
+                        ),
+                      ...(context.isDocumentSummaryAvailable?.() === true
+                        ? {
+                            onDocumentSummary: () =>
+                              context.openDocumentSummary?.(paneId, viewer.state.entry),
+                          }
+                        : {}),
+                      onClose: () => context.closeViewer(paneId),
+                    }),
+                  );
                 })(),
               }
             : {}),

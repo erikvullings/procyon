@@ -72,6 +72,7 @@ pub mod semantic_vocabulary;
 mod semantic_vocabulary_mapping;
 mod service;
 mod settings_mapping;
+mod sqlite_view;
 mod ssh;
 mod structured_view;
 mod thumbnails;

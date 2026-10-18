@@ -89,6 +89,7 @@ import type {
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
   OpenPptxPreviewRequest,
+  OpenSqliteViewRequest,
   OpenStructuredViewRequest,
   Operation,
   OperationId,
@@ -106,6 +107,7 @@ import type {
   PreviewDocumentSummaryRequest,
   PreviewRagRequest,
   PreviewSemanticEnrolmentRequest,
+  QuerySqliteViewRequest,
   RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
@@ -156,6 +158,9 @@ import type {
   SetPaneActivityRequest,
   Settings,
   SpotlightComment,
+  SqliteQueryResult,
+  SqliteView,
+  SqliteViewSessionRequest,
   StartChecksumRequest,
   StartChecksumResult,
   StartComparisonRequest,
@@ -211,6 +216,7 @@ import {
   verifyChecksumFile as requestChecksumFileVerify,
   getChecksums as requestChecksumGet,
   startChecksums as requestChecksumStart,
+  closeSqliteView as requestCloseSqliteView,
   cancelComparison as requestComparisonCancel,
   getComparison as requestComparisonGet,
   startComparison as requestComparisonStart,
@@ -272,6 +278,7 @@ import {
   getOneDriveAuthorizationAttempt as requestOneDriveAuthorizationAttempt,
   beginOneDriveAuthorization as requestOneDriveAuthorizationBegin,
   cancelOneDriveAuthorization as requestOneDriveAuthorizationCancel,
+  openSqliteView as requestOpenSqliteView,
   openStructuredView as requestOpenStructuredView,
   cancelOperation as requestOperationCancel,
   pauseOperation as requestOperationPause,
@@ -289,6 +296,7 @@ import {
   closePptxPreview as requestPptxPreviewClose,
   openPptxPreview as requestPptxPreviewOpen,
   readPptxPreviewPdf as requestPptxPreviewPdf,
+  querySqliteView as requestQuerySqliteView,
   resolveRagCitation as requestRagCitationResolution,
   deleteRagConversation as requestRagConversationDeletion,
   listSavedRagConversations as requestRagConversationList,
@@ -1499,6 +1507,38 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 204)
       throw new Error(`Unexpected closeStructuredView response status: ${response.status}`);
+  }
+
+  async openSqliteView(request: OpenSqliteViewRequest, signal?: AbortSignal): Promise<SqliteView> {
+    const response = await requestOpenSqliteView(
+      request,
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected openSqliteView response status: ${response.status}`);
+    return response.data;
+  }
+
+  async querySqliteView(
+    request: QuerySqliteViewRequest,
+    signal?: AbortSignal,
+  ): Promise<SqliteQueryResult> {
+    const response = await requestQuerySqliteView(
+      request,
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200)
+      throw new Error(`Unexpected querySqliteView response status: ${response.status}`);
+    return response.data;
+  }
+
+  async closeSqliteView(request: SqliteViewSessionRequest, signal?: AbortSignal): Promise<void> {
+    const response = await requestCloseSqliteView(
+      request,
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 204)
+      throw new Error(`Unexpected closeSqliteView response status: ${response.status}`);
   }
 
   async loadEditableFile(

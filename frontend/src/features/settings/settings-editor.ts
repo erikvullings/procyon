@@ -393,6 +393,15 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         onchange: (checked: boolean) =>
                           update(current, { confirmFileOperations: checked }),
                       }),
+                      m(Switch, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'viewerInSeparateWindow'),
+                        checked: activeDraft.viewerInSeparateWindow,
+                        left: t('settings', 'off'),
+                        right: t('settings', 'on'),
+                        onchange: (checked: boolean) =>
+                          update(current, { viewerInSeparateWindow: checked }),
+                      }),
                     ]),
 
                     m(
