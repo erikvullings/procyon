@@ -36,3 +36,21 @@ export function perfEndAfterPaint(
     perfEnd(name, start, detail);
   }
 }
+
+/** Records a point-in-time `fm:<name>` mark (ms since page navigation start). */
+export function perfMark(name: string, detail?: Record<string, unknown>): void {
+  try {
+    performance.mark(`${PREFIX}${name}`, { detail });
+  } catch {
+    // Timing is best-effort.
+  }
+}
+
+const firstMarks = new Set<string>();
+
+/** Like {@link perfMark}, but only the first call per name records. */
+export function perfMarkOnce(name: string, detail?: Record<string, unknown>): void {
+  if (firstMarks.has(name)) return;
+  firstMarks.add(name);
+  perfMark(name, detail);
+}

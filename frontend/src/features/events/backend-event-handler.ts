@@ -17,6 +17,7 @@ import type {
   WorkspaceSummary,
 } from '../../models';
 import { decodeDiskUsageTree } from '../../models';
+import { perfMark } from '../../utilities/perf';
 import {
   type ChecksumState,
   type DuplicateState,
@@ -252,6 +253,7 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
               const previousState = previous.byId[id]?.state;
               if (previousState === current.state) continue;
               ctx.clearDismissedOperation(id);
+              perfMark('op-state', { kind: current.kind, state: current.state });
               if (current.kind === 'copy') {
                 ctx.clearOperationSourceSelections(current);
               }

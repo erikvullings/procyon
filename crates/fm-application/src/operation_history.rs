@@ -280,6 +280,19 @@ impl OperationSnapshotObserver for ApplicationOperationObserver {
         if !operation.state.is_terminal() {
             return;
         }
+        let millis = |from: chrono::DateTime<chrono::Utc>,
+                      to: Option<chrono::DateTime<chrono::Utc>>| {
+            to.map(|to| (to - from).num_milliseconds())
+        };
+        tracing::debug!(
+            target: "fm_perf",
+            op = "operation_terminal",
+            kind = ?operation.kind,
+            state = ?operation.state,
+            queue_to_start_ms = ?millis(operation.created_at, operation.started_at),
+            created_to_completed_ms = ?millis(operation.created_at, operation.completed_at),
+            "operation reached a terminal state"
+        );
         let mut affected = HashSet::new();
         for source in &operation.sources {
             affected.insert(source.location.clone());
@@ -299,7 +312,14 @@ impl OperationSnapshotObserver for ApplicationOperationObserver {
         let directories = self.directories.clone();
         if let Ok(runtime) = tokio::runtime::Handle::try_current() {
             runtime.spawn(async move {
+                let started = std::time::Instant::now();
                 directories.refresh_affected(&affected).await;
+                tracing::debug!(
+                    target: "fm_perf",
+                    op = "refresh_affected",
+                    ms = started.elapsed().as_secs_f64() * 1000.0,
+                    "post-operation pane refresh published"
+                );
             });
         }
     }

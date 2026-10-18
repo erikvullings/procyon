@@ -1,5 +1,6 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import type { LinkRequest, Location, Operation } from '../../models';
+import { perfMark } from '../../utilities/perf';
 
 export interface OperationsController {
   copy(
@@ -175,7 +176,15 @@ export function withActiveSourceGuard(
   };
 }
 
-export function createOperationsController(client: FileManagerClient): OperationsController {
+export function createOperationsController(rawClient: FileManagerClient): OperationsController {
+  const client: Pick<FileManagerClient, 'startOperation'> = {
+    async startOperation(request, signal) {
+      perfMark('op-start-request', { type: request.type });
+      const operation = await rawClient.startOperation(request, signal);
+      perfMark('op-start-returned', { type: request.type, state: operation.state });
+      return operation;
+    },
+  };
   return {
     copy(sources, destination, signal) {
       return client.startOperation(

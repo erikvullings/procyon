@@ -12,7 +12,7 @@ import type {
   WorkspaceCommand,
   WorkspaceProjection,
 } from '../../models';
-import { perfEnd, perfEndAfterPaint, perfStart } from '../../utilities/perf';
+import { perfEnd, perfEndAfterPaint, perfMarkOnce, perfStart } from '../../utilities/perf';
 import { dispatchWorkspaceCommand } from '../workspace/dispatch-workspace-command';
 
 /** Client surface required by directory navigation. */
@@ -558,6 +558,7 @@ export function createNavigationController(
       }
       if (isCurrent(paneId, tab.id, request) && snapshot.requestId === request.id) {
         publish(paneId, tab.id, viewFromSnapshot(snapshot));
+        perfMarkOnce('first-listing-published', { entries: snapshot.entries.length });
         perfEndAfterPaint('load-to-paint', loadStarted, {
           background: loadOptions?.background === true,
           reusedSnapshot: loadOptions?.firstSnapshot !== undefined,
