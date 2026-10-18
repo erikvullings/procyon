@@ -157,6 +157,45 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
       'non-experimental Gemma publication must require independent five-gate approval and verify exact signed assets',
     );
   }
+  const riskAcceptedCheck = publishSteps.findIndex((step) =>
+    String(step.run ?? '').includes('gemma-risk-acceptance.mjs'),
+  );
+  const riskAcceptedSignatureCheck = publishSteps.findIndex(
+    (step) =>
+      String(step.run ?? '').includes('semantic_production_catalog') &&
+      String(step.if ?? '').includes('approve_risk_accepted_gemma == true'),
+  );
+  const riskAcceptedCandidateDownload = publishSteps.findIndex(
+    (step) =>
+      step.uses === 'actions/download-artifact@v8' &&
+      String(step.name ?? '').includes('risk-accepted') &&
+      String(step.if ?? '').includes('approve_risk_accepted_gemma == true'),
+  );
+  const riskAcceptedRunCheck = publishSteps.findIndex(
+    (step) =>
+      step.name === 'Verify risk-accepted candidate run completed on its exact source' &&
+      String(step.if ?? '').includes('approve_risk_accepted_gemma == true'),
+  );
+  if (
+    workflow.on.workflow_dispatch.inputs.approve_risk_accepted_gemma?.default !== false ||
+    !publishGate.includes("vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'") ||
+    !publishGate.includes('inputs.approve_risk_accepted_gemma != true') ||
+    !publishGate.includes("github.ref == 'refs/heads/main'") ||
+    riskAcceptedCheck < 0 ||
+    riskAcceptedCandidateDownload < 0 ||
+    riskAcceptedRunCheck < riskAcceptedCandidateDownload ||
+    riskAcceptedCheck <= riskAcceptedRunCheck ||
+    !publishCommands.includes('run.head_sha !== candidate.sourceRevision') ||
+    riskAcceptedSignatureCheck <= riskAcceptedCheck ||
+    publishIndex <= riskAcceptedSignatureCheck ||
+    !String(publishSteps[riskAcceptedCheck].if ?? '').includes(
+      'approve_risk_accepted_gemma == true',
+    )
+  ) {
+    failures.push(
+      'risk-accepted Gemma publication must require separate owner approval, exact signed assets, and must not reuse qualification approval',
+    );
+  }
   if (
     !publishSteps.some(
       (step) =>

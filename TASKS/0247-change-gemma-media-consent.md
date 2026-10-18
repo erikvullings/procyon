@@ -10,7 +10,8 @@ Depends on: 0239
 An existing EmbeddingGemma 2 library currently fixes both its output dimension
 and its image/audio/video selections at creation. Users need to add or revoke
 media consent without losing the library's existing text index. E5 remains the
-default, and Gemma remains experimental and opt-in.
+default; Gemma remains opt-in. The v0.6.0 release is risk-accepted and is not
+five-gate qualified.
 
 ## Acceptance Criteria
 
@@ -29,3 +30,10 @@ default, and Gemma remains experimental and opt-in.
   regenerate the OpenAPI/Orval artifacts.
 - Cover incremental addition, confirmed removal, restart/idempotency, and the
   user-facing controls with focused tests.
+
+## Agent Notes
+
+- 2026-10-18 Copilot: This implementation remains complete. The release owner
+  accepts the v0.6.0 release risks separately; the opt-in model choice and
+  immutable per-library media consent do not imply that the five-gate release
+  qualification passed.

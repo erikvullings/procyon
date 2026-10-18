@@ -1,14 +1,16 @@
-# EmbeddingGemma 2 non-experimental qualification checklist
+# EmbeddingGemma 2 five-gate qualification checklist
 
-This checklist covers the five open items that keep the opt-in EmbeddingGemma 2 package
-**experimental** (see
+This checklist records the five installed-app items required for the
+**five-gate-qualified** EmbeddingGemma 2 release path (see
 [the experimental release notes](../evaluations/embeddinggemma-experimental-release-2026-10-16.md)
 and [task 0248](../../TASKS/0248-gemma-non-experimental-qualification-tooling.md)). Run it on the
-installed desktop build that is a candidate for promotion. Every item needs a recorded result in
-the [results table](#results) before anyone may remove the experimental label. A single `Fail` or
-`Blocked` keeps Gemma experimental.
+installed desktop build that is a candidate for qualification. Every item must pass before
+claiming five-gate qualification. A separate, user-directed risk-accepted release decision is
+documented in
+[the v0.6.0 release-risk statement](../evaluations/embeddinggemma-risk-accepted-release-2026-10-18.md);
+it does not alter this checklist or turn any failed or missing result into a pass.
 
-The release workflow is deliberately gated separately from the experimental package. After all
+The five-gate-qualified release path is gated separately from the risk-accepted route. After all
 five items pass on a new signed candidate, the release owner records the exact candidate lock,
 source revision, model revision, qualification run and tag, the five `Pass` results, approver, and
 UTC approval time in `docs/evaluations/semantic-gemma-qualified-v1.json`. Start from the candidate
@@ -347,7 +349,7 @@ Pass criteria (all required):
 
 Promotion decision (release owner): ______________________  Date: __________
 
-Current blocker: item 1 is recorded **Fail** (the proposed Metal memory ceiling is 7.5 GiB, above
-the 4 GiB pass limit). The remaining rows are not qualified, no five-gate approval record is
-checked in, and the non-experimental release variable must remain off. This tooling change does not
-change the existing experimental approval or make a promotion decision.
+Qualification status: item 1 is recorded **Fail** (the proposed Metal memory ceiling is 7.5 GiB,
+above the 4 GiB pass limit). CPU resource gate 1b and items 2–5 are not qualified, and no five-gate
+approval record is checked in. The user separately directed a risk-accepted v0.6.0 release; this
+does not qualify the release or change any recorded result.

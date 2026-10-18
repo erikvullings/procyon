@@ -1,6 +1,6 @@
 # 0239 Optional EmbeddingGemma 2 semantic package
 
-Status: in_progress
+Status: done
 Priority: medium
 Subsystem: backend, frontend, semantic, release
 Depends on: 0195, 0196
@@ -36,9 +36,11 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   must remain unaffected when Gemma is not installed.
 - Pin the exact model revision and all required tokenizer/processor/runtime
   bytes; package and verify them through the existing signed catalog and
-  offline worker lifecycle. Qualify CPU inference on every supported target.
-  Offer GPU acceleration only on targets with verified runtime, output parity,
-  resource limits, and CPU fallback; do not use FP16, which the model card
+  offline worker lifecycle. Preserve implemented CPU fallback and offer GPU
+  acceleration only on targets with the corresponding runtime. For v0.6.0,
+  exhaustive per-target CPU, GPU-parity, and resource qualification is
+  explicitly waived; disclose that limitation rather than claiming the
+  unverified targets are qualified. Do not use FP16, which the model card
   warns can yield invalid or degraded embeddings.
 - At library initialization, select one supported output dimension
   (128/256/512/768) and separate opt-in checkboxes for images, audio, and
@@ -73,9 +75,11 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   code workloads; evaluate image retrieval and near-duplicate negatives
   separately, and audio/video retrieval if enabled. Report ranking quality,
   query latency, indexing throughput, peak RAM, disk/index size, and migration
-  impact by dimension and supported CPU/GPU target. Do not promote an
-  optional package until its signed artifacts, installed lifecycle,
-  offline behavior, and release gates are qualified on supported platforms.
+  impact by dimension and supported CPU/GPU target. Do not describe unmeasured
+  behavior as qualified. For v0.6.0, the release owner explicitly chose the
+  documented risk-accepted route instead of requiring all manual gates; that
+  decision does not convert missing results into passes or claim quality
+  superiority over E5.
 - Maintain HTTP/Tauri/mock client parity, accessible consent/settings and
   results, and regression coverage for model switches, prompt roles,
   dimensions, modality choices, stale evidence, failures, and scope isolation.
@@ -696,3 +700,12 @@ and [developer guide](https://developers.googleblog.com/embeddinggemma-2-the-dev
   No deliberate install-error or VoiceOver session
   or Windows/Linux native UI review was performed. See the release decision
   document for the exact observations and remaining gates; keep `noGo`.
+- 2026-10-18 Copilot: User-directed v0.6.0 release decision accepts the
+  outstanding resource, CPU/Windows GPU, cross-host, upgrade/rollback, and
+  local media-qualification risks in order to let users choose Gemma or E5.
+  The package remains optional and E5 remains the default. This changes the
+  release decision, not the evidence: the five-gate checklist is not passed
+  and no quality superiority is claimed. The user-facing risk statement is in
+  `docs/evaluations/embeddinggemma-risk-accepted-release-2026-10-18.md`.
+  Task closed under this explicitly revised release scope; do not infer
+  qualification of unsupported platforms or workloads.

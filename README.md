@@ -23,7 +23,7 @@ collection basket gathers files across folders and providers.
 | **Move data safely** | Cancellable and resumable copy, move, rename, duplicate, trash, archive, and synchronization jobs with explicit conflict handling |
 | **Work across providers** | Local files, SFTP, FTP/FTPS, WebDAV, S3-compatible storage, OneDrive, archives, and mounted network volumes |
 | **Inspect files in place** | Fast text, image, video, PDF, archive, CSV, JSON, Excel, DOCX, and PPTX previews plus an integrated text editor |
-| **Search by meaning and ask** | Optional local-only semantic search, enabled with consent per folder and powered by multilingual E5 by default. Knowledge search finds relevant passages; Ask produces retrieval-augmented answers with page-level citations. EmbeddingGemma 2 is an experimental, opt-in alternative for image, audio, and video indexing; CPU-only PDF page-image indexing is capped and slow. |
+| **Search by meaning and ask** | Optional local-only semantic search, enabled with consent per folder and powered by multilingual E5 by default. Knowledge search finds relevant passages; Ask produces retrieval-augmented answers with page-level citations. EmbeddingGemma 2 is an opt-in alternative for image, audio, and video indexing; the v0.6.0 release is risk-accepted, not five-gate qualified, and CPU-only PDF page-image indexing is capped and slow. |
 | **Adapt the workflow** | Configurable shortcuts, light and dark themes, native platform actions, and resource-limited Lua and JavaScript plugins |
 
 Procyon never implements file mutations in the frontend. Every operation goes through the same
@@ -161,8 +161,11 @@ On macOS arm64, `pnpm dev:tauri:semantic:gemma:metal` instead compiles the
 experimental image-only Metal path; the worker selects Metal automatically
 when a device is available and falls back to CPU for unavailable devices or
 mixed image/audio/video libraries. Audio and video are CPU-only.
-EmbeddingGemma 2 ships in v0.5.0-3 as an experimental, opt-in macOS arm64 package.
-On CPU-only machines, PDF page-image indexing is capped and slow; PDF text remains indexed.
+EmbeddingGemma 2 ships in v0.6.0 as an opt-in, risk-accepted package. It has
+not passed the repository's five-gate installed-app qualification; see the
+[release risk and limitations](docs/evaluations/embeddinggemma-risk-accepted-release-2026-10-18.md).
+E5 remains the default. On CPU-only machines, PDF page-image indexing is capped
+and slow; PDF text remains indexed.
 
 In the desktop, open **Settings → Semantic components**, choose **EmbeddingGemma
 2 (optional)**, select 128/256/512/768 dimensions and the desired image, audio,
@@ -172,21 +175,21 @@ The signed offer loads automatically; individual artifact files are available un
 activates the separately initialized Gemma library. Open the folder
 you want to compare in a pane; in **Settings → Semantic library**, review its
 inclusion and choose **Include and index folder**. Once indexing progresses,
-search or Ask within the indexed folder. The selected dimensions and media
-permissions cannot be changed for that Gemma library. Existing E5 data is not
-deleted; no migration or representative quality result is implied by this
-development bundle. The v0.5.0-3 experimental Gemma package is opt-in and
-Apple Silicon (arm64) only; it uses a separate signed updater channel and does
-not replace the regular E5 build. Standard release builds remain Gemma-disabled
-unless the release owner explicitly approves a **new**, four-target signed
-Gemma candidate and sets both independent semantic approval gates plus
-`SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL=true`. The desktop release then compiles
-`semantic-gemma` and fetches that candidate's reviewed, signed target catalog;
-the historical CPU-only candidate is blocked. E5 stays the default, and
-Gemma's measured quality does not establish an improvement over E5. Before a
-new release is approved, verify image acceleration and CPU fallback on
-supported hardware and rerun the integrated mixed-media ingestion/search
-checks. Included
+search or Ask within the indexed folder. The selected embedding dimension is
+locked for that Gemma library; image, audio, and video consent can be changed
+later in Settings, with explicit confirmation before removing indexed data.
+Existing E5 data is not deleted; no migration or representative quality result
+is implied by this development bundle. In v0.6.0, Gemma is opt-in in macOS
+Apple Silicon (arm64), Linux x86-64, and Windows x86-64 desktop packages;
+Intel Macs remain E5-only. Gemma uses a separate signed updater channel and
+does not replace the regular E5 build. Windows GPU behavior and CPU
+performance have not been qualified; report issues with platform and hardware
+details.
+Standard release builds remain Gemma-disabled unless the release owner records
+the required risk acceptance and approves a **new**, signed Gemma candidate.
+The desktop release compiles `semantic-gemma` and fetches that candidate's
+reviewed, signed target catalog. E5 stays the default, and Gemma search quality
+is not established. Included
 folders can be removed directly from **Settings → Semantic library**, even when
 their sources are unavailable; confirm the displayed cleanup inventory to
 remove their local index data without deleting original files. Moving, deleting,
@@ -354,12 +357,16 @@ macOS releases are signed and notarized. Windows releases are currently unsigned
 Microsoft Defender SmartScreen warning. Desktop builds verify signed update artifacts before
 installation. Automatic checks can be disabled in Settings; checks never download, install, or
 restart without user confirmation, and a manual **Check now** action remains available.
-The v0.5.0-3 opt-in experimental Gemma macOS package is **Apple Silicon (arm64)
-only**; it cannot run on Intel Macs. Its signed updater uses a separate experimental
-channel. The regular non-Gemma universal macOS build and Homebrew cask remain available to
-Intel users; the experimental package is downloaded directly from its GitHub Release and
-does not replace the stable cask or Chocolatey package. E5 remains the default, and Gemma
-search quality is not established.
+The v0.6.0 opt-in Gemma macOS package is **Apple Silicon (arm64) only**; it
+cannot run on Intel Macs. Gemma is also available in the Linux x86-64 and
+Windows x86-64 installers. Its signed updater uses a separate Gemma channel.
+The regular non-Gemma universal macOS build and Homebrew cask remain available
+to Intel users; the Gemma package is downloaded directly from its GitHub
+Release and does not replace the stable cask or Chocolatey package. E5 remains
+the default. This risk-accepted release is not five-gate qualified; CPU
+resource ceilings, CPU fallback, Windows GPU behavior, cross-host citation
+parity, and upgrade/rollback remain unverified. Use E5 if Gemma does not meet
+your needs and report reproducible issues.
 
 ## Desktop releases
 
@@ -384,9 +391,11 @@ an eight-page deterministic synthetic scan when paired with `qualify_installed_g
 retained signed candidate. It runs on all four worker targets, reports per-page throughput and
 measured worker peaks, and cannot publish a release; its candidate-bound report explicitly remains
 **no-go** without host/VFS, resource-ceiling, fallback, and quality evidence.
-The experimental Gemma publication check separately requires reviewed four-target installed
-PDF evidence from a successful exact-source qualification run; merely adding signed PDFium
-payloads or a worker-only synthetic report cannot satisfy that gate.
+The five-gate-qualified Gemma publication check separately requires reviewed four-target
+installed PDF evidence from a successful exact-source qualification run; merely adding signed
+PDFium payloads or a worker-only synthetic report cannot satisfy that gate. The distinct
+risk-accepted path records the release owner's acceptance of the outstanding risks and does not
+represent missing qualification evidence as passing.
 The read-only PDF qualification also runs a separate one-page enrolled-host smoke through
 the installed worker, replaces that synthetic file with a two-page scan, and checks that
 the edited source's two page citations replace the old generation before checking deletion.

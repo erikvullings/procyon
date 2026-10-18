@@ -146,21 +146,23 @@ semantic components are not installed.
 - [ ] 0225 Semantic production qualification follow-up *(needs 0198; Windows/Linux native manual
   accessibility, semantic-to-semantic upgrade/rollback, and full stable-release evidence)*
 - [x] 0227 Multiformat summary visual evidence *(needs 0180, 0184, 0185, 0192)*
-- [ ] 0239 Optional EmbeddingGemma 2 semantic package *(needs 0195, 0196;
-  separately installed alongside default E5, with measured qualification)*
+- [x] 0239 Optional EmbeddingGemma 2 semantic package *(needs 0195, 0196;
+  v0.6.0 is opt-in and risk-accepted; five-gate qualification remains unclaimed)*
 - [x] 0241 Restore Include folder in semantic search *(consent copy simplified; native manual preflight remains open)*
 - [x] 0242 Curated SKOS starter vocabularies *(needs 0187; opt-in, independent of release gates)*
 - [x] 0243 Generation profile UX and model limits *(needs 0184; independent follow-up)*
-- [ ] 0244 Bounded large-PDF text and Gemma page vision *(needs 0177, 0179, 0180, 0182, 0183,
-  0192, 0194, 0195, 0227; release prerequisite of 0239)*
+- [x] 0244 Bounded large-PDF text and Gemma page vision *(cancelled — remaining installed
+  qualification waived for v0.6.0 risk-accepted release; no resource Pass claimed)*
 - [ ] 0245 PDF footnote reading order and separation *(needs 0180, 0192; tracked follow-up,
   not an experimental release gate)*
-- [ ] 0246 Shift Gemma qualification failures left *(needs 0244; before another candidate round)*
-- [ ] 0247 Change Gemma library media consent *(needs 0239)*
-- [ ] 0248 Gemma non-experimental qualification tooling *(needs 0244; tooling done, manual
-  results and promotion decision open)*
-- [ ] 0250 Read-only fm-server attachment to the desktop semantic library *(needs 0248; automated
-  coverage done, manual cross-host citation qualification open)*
+- [x] 0246 Shift Gemma qualification failures left *(cancelled — release owner waived the
+  additional qualification rehearsal for v0.6.0; existing gates remain unqualified)*
+- [x] 0247 Change Gemma library media consent *(needs 0239; manual release qualification is
+  tracked separately and was waived for risk-accepted v0.6.0)*
+- [ ] 0248 Gemma non-experimental qualification tooling *(needs 0244; risk-acceptance tooling is
+  implemented; exact candidate-bound owner record remains pending; qualification results unchanged)*
+- [x] 0250 Read-only fm-server attachment to the desktop semantic library *(needs 0248; feature
+  implementation complete; manual citation qualification waived for risk-accepted v0.6.0)*
 
 ## Structured knowledge search
 

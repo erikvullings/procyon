@@ -1,6 +1,6 @@
 # 0244 Bounded large-PDF text and Gemma page vision
 
-Status: in_progress
+Status: cancelled
 Priority: high
 Subsystem: backend, semantic, frontend, release
 Depends on: 0177, 0179, 0180, 0182, 0183, 0192, 0194, 0195, 0227
@@ -11,6 +11,12 @@ Experimental Gemma release now requires searchable text from consented PDFs arou
 (354 pages), plus image embeddings for both extractable embedded images and scanned/image-only
 pages when useful text is absent. This is a prerequisite of 0239's release decision, not permission
 to publish the existing signed candidate. E5 remains the default text model.
+
+2026-10-18 user decision: ship v0.6.0 through an explicitly risk-accepted,
+not-five-gate-qualified route. The user waived additional manual release
+qualification, including the resource ceilings described below. This cancels
+the qualification work remaining in this task; it does not assert that those
+measurements passed or that the implementation meets an unmeasured ceiling.
 
 Today the host reads at most 64 MiB; IPC caps a complete stream at 64 MiB; worker conversion also
 caps source input at 64 MiB. Raising just the host constant cannot ingest these files. PDF
@@ -1071,3 +1077,7 @@ optional Docling ML/PDFium pack is qualified on those targets.
   model revision, E5-only negative-control evaluation, and all four installed report hashes. The
   protected semantic and desktop release workflows still require their independent approval
   gates. No semantic package, desktop release, or tag is published by this approval record alone.
+- 2026-10-18 Copilot: Cancelled remaining installed-app qualification work at the user's explicit
+  direction to ship v0.6.0 via documented risk acceptance instead. Existing measured failures and
+  missing resource ceilings remain unchanged; this status does not claim the original
+  qualification criteria passed.

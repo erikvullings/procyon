@@ -1,6 +1,6 @@
 # 0246 Shift Gemma qualification failures left
 
-Status: open
+Status: cancelled
 Priority: high
 Subsystem: ci
 Depends on: 0244
@@ -63,3 +63,8 @@ release attempt fails again, implement this BEFORE starting another candidate ro
 
 - 2026-10-14: Created from retro; evidence gathered from `gh run list` failures and branch commit
   history (`f771a25f`, `1e620684`, `190f3ac3`, `ce22745a`).
+- 2026-10-18 Copilot: Cancelled by the release owner's explicit decision to ship v0.6.0 through a
+  documented risk-accepted route without requiring the additional installed qualification
+  rehearsal. This task's CI rehearsal and multi-target qualification work were not completed; no
+  result is represented as passing. See
+  `docs/evaluations/embeddinggemma-risk-accepted-release-2026-10-18.md`.
