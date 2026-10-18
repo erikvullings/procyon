@@ -62,23 +62,6 @@ function desktopConfig() {
           }
         : {}),
     },
-    ...(experimentalGemma || qualifiedGemma || riskAcceptedGemma
-      ? {
-          plugins: {
-            updater: {
-              endpoints: [
-                `https://github.com/erikvullings/procyon/releases/download/${
-                  experimentalGemma
-                    ? 'updater-gemma-experimental'
-                    : riskAcceptedGemma
-                      ? 'updater-gemma-risk-accepted'
-                      : 'updater-gemma'
-                }/latest.json`,
-              ],
-            },
-          },
-        }
-      : {}),
   };
 }
 

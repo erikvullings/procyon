@@ -6,6 +6,15 @@ export interface AppUpdateInfo {
   readonly body?: string;
 }
 
+/** Result of an explicit update check against the build's configured endpoint. */
+export interface AppUpdateCheck {
+  readonly currentVersion: string;
+  /** Version offered online by the configured update endpoint. */
+  readonly latestVersion: string;
+  /** Present only when the offered version is newer and installable. */
+  readonly update?: AppUpdateInfo;
+}
+
 /** Download progress emitted while a signed update is installed. */
 export type AppUpdateProgress =
   | { readonly event: 'started'; readonly contentLength?: number }

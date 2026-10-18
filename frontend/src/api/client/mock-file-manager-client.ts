@@ -2625,7 +2625,11 @@ export class MockFileManagerClient implements FileManagerClient {
     });
   }
 
-  checkForAppUpdate(_signal?: AbortSignal): Promise<undefined> {
+  getAppVersion(_signal?: AbortSignal): Promise<undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  checkForAppUpdate(_signal?: AbortSignal): Promise<never> {
     return Promise.reject(new Error('Application updates are unavailable in the mock host.'));
   }
 

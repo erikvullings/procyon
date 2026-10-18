@@ -1,3 +1,4 @@
+import { getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -10,7 +11,7 @@ import type {
   ActionResult,
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
-  AppUpdateInfo,
+  AppUpdateCheck,
   AppUpdateProgress,
   ArchiveCredentialRequest,
   ArchiveSummaryRequest,
@@ -701,7 +702,12 @@ export class TauriFileManagerClient implements FileManagerClient {
     );
   }
 
-  async checkForAppUpdate(signal?: AbortSignal): Promise<AppUpdateInfo | undefined> {
+  async getAppVersion(signal?: AbortSignal): Promise<string> {
+    signal?.throwIfAborted();
+    return getVersion();
+  }
+
+  async checkForAppUpdate(signal?: AbortSignal): Promise<AppUpdateCheck> {
     signal?.throwIfAborted();
     await this.pendingAppUpdate?.close();
     this.pendingAppUpdate = undefined;
@@ -713,12 +719,23 @@ export class TauriFileManagerClient implements FileManagerClient {
       throw error;
     }
     this.pendingAppUpdate = update;
-    if (update === null) return undefined;
+    if (update === null) {
+      const [currentVersion, latestVersion] = await Promise.all([
+        getVersion(),
+        invoke<string>('get_app_update_channel_version'),
+      ]);
+      signal?.throwIfAborted();
+      return { currentVersion, latestVersion };
+    }
     return {
       currentVersion: update.currentVersion,
-      version: update.version,
-      ...(update.date === undefined ? {} : { date: update.date }),
-      ...(update.body === undefined ? {} : { body: update.body }),
+      latestVersion: update.version,
+      update: {
+        currentVersion: update.currentVersion,
+        version: update.version,
+        ...(update.date === undefined ? {} : { date: update.date }),
+        ...(update.body === undefined ? {} : { body: update.body }),
+      },
     };
   }
 

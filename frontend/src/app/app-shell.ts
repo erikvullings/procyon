@@ -1090,7 +1090,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       return;
     }
     try {
-      availableAppUpdate = await client.checkForAppUpdate();
+      availableAppUpdate = (await client.checkForAppUpdate()).update;
       m.redraw();
     } catch (error) {
       console.warn('Automatic application update check failed.', error);
@@ -5549,9 +5549,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 'aside.fm-walkthrough-invitation',
                 { 'aria-label': t('walkthroughs', 'invitation') },
                 [
-                  m('span', t('walkthroughs', 'invitation')),
+                  m('span.fm-walkthrough-invitation-copy', t('walkthroughs', 'invitation')),
                   m(
-                    'button',
+                    'button.fm-walkthrough-invitation-action',
                     {
                       type: 'button',
                       onclick: () => {
@@ -5563,7 +5563,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     t('walkthroughs', 'watch'),
                   ),
                   m(
-                    'button',
+                    'button.fm-walkthrough-invitation-dismiss',
                     {
                       type: 'button',
                       'aria-label': t('walkthroughs', 'dismiss'),
@@ -5571,7 +5571,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                         walkthroughInvitationVisible = false;
                       },
                     },
-                    '×',
+                    m(
+                      'svg',
+                      {
+                        viewBox: '0 0 16 16',
+                        width: 16,
+                        height: 16,
+                        fill: 'none',
+                        stroke: 'currentColor',
+                        'stroke-width': 2,
+                        'aria-hidden': 'true',
+                      },
+                      m('path', { d: 'M4 4l8 8M12 4l-8 8' }),
+                    ),
                   ),
                 ],
               )

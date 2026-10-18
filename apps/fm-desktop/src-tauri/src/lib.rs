@@ -4,6 +4,7 @@
 //! entry point `main.rs` calls, and is also what the mock-runtime smoke test
 //! below builds, so both exercise the exact same `Builder`.
 
+mod app_update;
 mod commands;
 mod credentials;
 mod event_stream;
@@ -537,6 +538,7 @@ pub fn run() {
             commands::subscribe_events,
             commands::unsubscribe_events,
             commands::get_runtime_capabilities,
+            app_update::get_app_update_channel_version,
             commands::get_semantic_component_capabilities,
             commands::get_semantic_ocr_status,
             commands::set_semantic_ocr_consent,
@@ -920,6 +922,7 @@ mod tests {
                 commands::subscribe_events,
                 commands::unsubscribe_events,
                 commands::get_runtime_capabilities,
+                app_update::get_app_update_channel_version,
                 commands::get_semantic_component_capabilities,
                 commands::get_semantic_ocr_status,
                 commands::set_semantic_ocr_consent,

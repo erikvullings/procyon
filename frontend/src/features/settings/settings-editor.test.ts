@@ -170,10 +170,11 @@ describe('SettingsEditor', () => {
   it('checks for and installs an available signed desktop update on demand', async () => {
     const client = new MockFileManagerClient();
     Object.defineProperty(client, 'supportsAppUpdates', { value: true });
+    vi.spyOn(client as FileManagerClient, 'getAppVersion').mockResolvedValue('0.1.5');
     const check = vi.spyOn(client as FileManagerClient, 'checkForAppUpdate').mockResolvedValue({
       currentVersion: '0.1.5',
-      version: '0.1.6',
-      body: 'Update notes',
+      latestVersion: '0.1.6',
+      update: { currentVersion: '0.1.5', version: '0.1.6', body: 'Update notes' },
     });
     const install = vi.spyOn(client, 'installAppUpdate').mockResolvedValue(undefined);
     mountEditor({ client });
@@ -186,6 +187,23 @@ describe('SettingsEditor', () => {
 
     root.querySelector<HTMLButtonElement>('.fm-update-install')?.click();
     await vi.waitFor(() => expect(install).toHaveBeenCalledOnce());
+  });
+
+  it('shows the installed and online versions when the app is current', async () => {
+    const client = new MockFileManagerClient();
+    Object.defineProperty(client, 'supportsAppUpdates', { value: true });
+    vi.spyOn(client as FileManagerClient, 'getAppVersion').mockResolvedValue('0.6.0');
+    vi.spyOn(client as FileManagerClient, 'checkForAppUpdate').mockResolvedValue({
+      currentVersion: '0.6.0',
+      latestVersion: '0.6.0',
+    });
+    mountEditor({ client });
+    openSection('Updates');
+
+    await vi.waitFor(() => expect(root.textContent).toContain('Installed version: 0.6.0'));
+    root.querySelector<HTMLButtonElement>('.fm-update-check')?.click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Procyon is up to date.'));
+    expect(root.textContent).toContain('Version available online: 0.6.0');
   });
 
   it('shows only semantic activation until components are installed', async () => {
