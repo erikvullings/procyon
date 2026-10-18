@@ -631,7 +631,7 @@ export const pl = {
     gitHistoryMeta: '{author} · {date} · {shortId}',
     loadingMore: 'Wczytywanie kolejnych…',
     failedToRenderPage: 'Nie można wyrenderować tej strony.',
-    videoExternalOnly: 'Duży lub nieobsługiwany plik wideo — tylko odtwarzanie zewnętrzne.',
+    videoExternalOnly: 'Nieobsługiwany plik wideo — tylko odtwarzanie zewnętrzne.',
     openVideoExternally: 'Otwórz w domyślnym odtwarzaczu',
     unableToLoad: 'Nie można wczytać pliku',
     comicUnavailable: 'Podgląd komiksu jest niedostępny dla tego wpisu.',

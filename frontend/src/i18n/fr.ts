@@ -636,7 +636,7 @@ export const fr = {
     gitHistoryMeta: '{author} · {date} · {shortId}',
     loadingMore: 'Chargement supplémentaire…',
     failedToRenderPage: "Impossible d'afficher cette page.",
-    videoExternalOnly: 'Vidéo volumineuse ou non prise en charge — lecture externe uniquement.',
+    videoExternalOnly: 'Vidéo non prise en charge — lecture externe uniquement.',
     openVideoExternally: 'Ouvrir dans le lecteur par défaut',
     unableToLoad: 'Impossible de charger le fichier',
     comicUnavailable: "L'aperçu de bande dessinée n'est pas disponible pour cet élément.",

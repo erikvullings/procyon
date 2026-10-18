@@ -634,7 +634,7 @@ export const pt = {
     gitHistoryMeta: '{author} · {date} · {shortId}',
     loadingMore: 'A carregar mais…',
     failedToRenderPage: 'Não foi possível apresentar esta página.',
-    videoExternalOnly: 'Vídeo grande ou não suportado — apenas reprodução externa.',
+    videoExternalOnly: 'Vídeo não suportado — apenas reprodução externa.',
     openVideoExternally: 'Abrir no leitor predefinido',
     unableToLoad: 'Não é possível carregar o ficheiro',
     comicUnavailable:

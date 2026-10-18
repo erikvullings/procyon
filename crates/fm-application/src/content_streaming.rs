@@ -24,7 +24,10 @@ const MAX_SEARCH_MATCHES: usize = 5_000;
 
 /// Discards `remaining` bytes from `reader`, for providers without random-access reads.
 /// Stops early at EOF (a request offset past the end of the file yields an empty range).
-async fn skip_bytes(reader: &mut ProviderReadStream, mut remaining: u64) -> std::io::Result<()> {
+pub(crate) async fn skip_bytes(
+    reader: &mut ProviderReadStream,
+    mut remaining: u64,
+) -> std::io::Result<()> {
     let mut buffer = [0_u8; 64 * 1024];
     while remaining > 0 {
         let chunk = remaining.min(buffer.len() as u64) as usize;

@@ -196,6 +196,7 @@ import type {
   StartSearchRequestDto,
   StartSearchResponseDto,
   StartWorkspaceParams,
+  StreamMediaParams,
   StructuredViewSessionRequestDto,
   StructuredViewStatusDto,
   SyncPlanDto,
@@ -4682,6 +4683,76 @@ export const testLlmProfile = async (profileId: string, options?: Parameters<typ
   {
     ...options,
     method: 'POST'
+
+
+  }
+);}
+
+
+
+export type streamMediaResponse200 = {
+  data: Blob
+  status: 200
+}
+
+export type streamMediaResponse206 = {
+  data: Blob
+  status: 206
+}
+
+export type streamMediaResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type streamMediaResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type streamMediaResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type streamMediaResponse416 = {
+  data: void
+  status: 416
+}
+
+export type streamMediaResponseSuccess = (streamMediaResponse200 | streamMediaResponse206) & {
+  headers: Headers;
+};
+export type streamMediaResponseError = (streamMediaResponse400 | streamMediaResponse403 | streamMediaResponse404 | streamMediaResponse416) & {
+  headers: Headers;
+};
+
+export type streamMediaResponse = (streamMediaResponseSuccess | streamMediaResponseError)
+
+export const getStreamMediaUrl = (params: StreamMediaParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/media?${stringifiedParams}` : `/api/v1/media`
+}
+
+/**
+ * @summary Streams a file, honouring HTTP `Range` requests.
+ */
+export const streamMedia = async (params: StreamMediaParams, options?: Parameters<typeof fetchMutator>[1]): Promise<streamMediaResponse> => {
+
+  return fetchMutator<streamMediaResponse>(getStreamMediaUrl(params),
+  {
+    ...options,
+    method: 'GET'
 
 
   }

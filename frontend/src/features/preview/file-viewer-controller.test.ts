@@ -6,7 +6,6 @@ import {
   type FileViewerClient,
   type FileViewerState,
   TEXT_WINDOW_BYTES,
-  VIDEO_INLINE_SIZE_LIMIT_BYTES,
 } from './file-viewer-controller';
 import { loadPdfDocument } from './pdf-preview';
 
@@ -71,6 +70,7 @@ function setup(): {
   return {
     client: {
       readFileRange: vi.fn(),
+      mediaUrl: vi.fn(),
       renderPluginPreview: vi.fn(),
       openDocxPreview: vi.fn(),
       readDocxPreviewResource: vi.fn(),
@@ -896,44 +896,39 @@ describe('file viewer controller', () => {
     });
   });
 
-  it('loads a video below the inline limit as a MIME-specific data URI', async () => {
+  it('streams a video through the seekable media URL without reading file bytes', async () => {
     const context = setup();
-    vi.mocked(context.client.readFileRange).mockResolvedValue({
-      data: [1, 2, 3],
-      offset: 0,
-      length: 3,
-      eof: true,
-    });
+    vi.mocked(context.client.mediaUrl).mockResolvedValue('/api/v1/media?location=clip');
     createFileViewerController({
       client: context.client,
-      entry: entry({ name: 'clip.mp4', extension: 'mp4', size: 3 }),
+      entry: entry({ name: 'clip.mp4', extension: 'mp4', size: 8 * 1024 ** 3 }),
       update: (state) => context.states.push(state),
     });
 
     await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
     expect(context.states.at(-1)).toMatchObject({
-      content: { kind: 'video', dataUri: 'data:video/mp4;base64,AQID' },
+      content: { kind: 'video', src: '/api/v1/media?location=clip' },
     });
+    expect(context.client.readFileRange).not.toHaveBeenCalled();
   });
 
-  it('keeps a video above the inline limit external without reading file bytes', async () => {
+  it('streams audio through the seekable media URL', async () => {
     const context = setup();
+    vi.mocked(context.client.mediaUrl).mockResolvedValue('/api/v1/media?location=song');
     createFileViewerController({
       client: context.client,
-      entry: entry({
-        name: 'movie.webm',
-        extension: 'webm',
-        size: VIDEO_INLINE_SIZE_LIMIT_BYTES + 1,
-      }),
+      entry: entry({ name: 'song.flac', extension: 'flac' }),
       update: (state) => context.states.push(state),
     });
 
     await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
-    expect(context.states.at(-1)).toMatchObject({ content: { kind: 'videoExternal' } });
+    expect(context.states.at(-1)).toMatchObject({
+      content: { kind: 'audio', src: '/api/v1/media?location=song' },
+    });
     expect(context.client.readFileRange).not.toHaveBeenCalled();
   });
 
-  it('keeps MKV videos external regardless of size', async () => {
+  it('keeps MKV videos external', async () => {
     const context = setup();
     createFileViewerController({
       client: context.client,
@@ -943,48 +938,7 @@ describe('file viewer controller', () => {
 
     await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
     expect(context.states.at(-1)).toMatchObject({ content: { kind: 'videoExternal' } });
-    expect(context.client.readFileRange).not.toHaveBeenCalled();
-  });
-
-  it('switches to external playback when stale metadata understates the video size', async () => {
-    const context = setup();
-    const fullChunk = new Array<number>(1024 * 1024).fill(1);
-    vi.mocked(context.client.readFileRange)
-      .mockResolvedValueOnce({
-        data: fullChunk,
-        offset: 0,
-        length: fullChunk.length,
-        eof: false,
-      })
-      .mockResolvedValueOnce({
-        data: fullChunk,
-        offset: fullChunk.length,
-        length: fullChunk.length,
-        eof: false,
-      })
-      .mockResolvedValueOnce({
-        data: [1],
-        offset: VIDEO_INLINE_SIZE_LIMIT_BYTES,
-        length: 1,
-        eof: false,
-      });
-    createFileViewerController({
-      client: context.client,
-      entry: entry({ name: 'growing.mp4', extension: 'mp4', size: 3 }),
-      update: (state) => context.states.push(state),
-    });
-
-    await vi.waitFor(() =>
-      expect(context.states.at(-1)).toMatchObject({ content: { kind: 'videoExternal' } }),
-    );
-    expect(context.client.readFileRange).toHaveBeenLastCalledWith(
-      {
-        location: entry().location,
-        offset: VIDEO_INLINE_SIZE_LIMIT_BYTES,
-        length: 1,
-      },
-      expect.any(AbortSignal),
-    );
+    expect(context.client.mediaUrl).not.toHaveBeenCalled();
   });
 
   it('replaces the bounded window via loadMore, without re-fetching from the start', async () => {

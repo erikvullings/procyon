@@ -1496,7 +1496,7 @@ function renderAudioBody(state: Extract<FileViewerState, { status: 'ready' }>): 
     m('audio', {
       controls: true,
       autoplay: false,
-      src: content.dataUri,
+      src: content.src,
       'aria-label': state.entry.name,
     }),
   );
@@ -1560,7 +1560,7 @@ function renderVideoBody(
     m('video', {
       controls: true,
       autoplay: false,
-      src: content.dataUri,
+      src: content.src,
       ...(attrs.videoPosterDataUri === undefined ? {} : { poster: attrs.videoPosterDataUri }),
       'aria-label': state.entry.name,
     }),

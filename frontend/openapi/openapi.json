@@ -3655,6 +3655,79 @@
         }
       }
     },
+    "/api/v1/media": {
+      "get": {
+        "summary": "Streams a file, honouring HTTP `Range` requests.",
+        "operationId": "streamMedia",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "description": "JSON-encoded `LocationDto` of the file to stream.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "description": "Session token, accepted by the auth middleware for requests that cannot set headers.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The whole file",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "206": {
+            "description": "The requested byte range",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "400": {
+            "description": "The request was invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The file is unreadable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The file does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "The range is outside the file"
+          }
+        }
+      }
+    },
     "/api/v1/navigation/open": {
       "post": {
         "summary": "Navigates a pane and returns the destination's first page.",

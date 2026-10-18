@@ -39,6 +39,7 @@ mod knowledge_service;
 mod link_operation;
 mod llm_profile_mapping;
 pub mod llm_profiles;
+pub mod media_stream;
 mod onedrive;
 mod operation_history;
 mod operation_planner;

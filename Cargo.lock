@@ -3071,6 +3071,7 @@ dependencies = [
  "fm-transport-dto",
  "fs2",
  "image",
+ "percent-encoding",
  "portable-pty",
  "raw-window-handle",
  "reqwest",

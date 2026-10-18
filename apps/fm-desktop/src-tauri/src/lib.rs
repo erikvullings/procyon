@@ -10,6 +10,7 @@ mod credentials;
 mod event_stream;
 #[cfg(any(target_os = "linux", all(test, unix)))]
 mod linux_clipboard;
+mod media_protocol;
 mod native_menu;
 mod platform;
 mod plugin_spa;
@@ -184,7 +185,10 @@ pub fn run() {
     init_tracing();
     let run_started = std::time::Instant::now();
     let panel_registry = Arc::new(plugin_spa::PanelRegistry::default());
-    plugin_spa::register_schemes(tauri::Builder::default(), Arc::clone(&panel_registry))
+    media_protocol::register(plugin_spa::register_schemes(
+        tauri::Builder::default(),
+        Arc::clone(&panel_registry),
+    ))
         .manage(panel_registry)
         .on_page_load(|webview, payload| {
             #[cfg(feature = "native-spa-smoke")]

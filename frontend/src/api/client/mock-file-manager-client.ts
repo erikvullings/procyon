@@ -3033,6 +3033,18 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('setPaneActivity', signal, () => undefined);
   }
 
+  mediaUrl(location: Location, signal?: AbortSignal): Promise<string> {
+    return this.perform('readFileRange', signal, () => {
+      const bytes = this.fileContentFor(location.uri);
+      if (typeof URL.createObjectURL === 'function') {
+        return URL.createObjectURL(new Blob([bytes as BlobPart]));
+      }
+      let binary = '';
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      return `data:application/octet-stream;base64,${btoa(binary)}`;
+    });
+  }
+
   readFileRange(request: ReadFileRangeRequest, signal?: AbortSignal): Promise<FileRangeChunk> {
     return this.perform('readFileRange', signal, () => {
       if (request.length <= 0) {

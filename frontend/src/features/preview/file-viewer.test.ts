@@ -1289,7 +1289,7 @@ describe('FileViewer', () => {
       baseAttrs({
         status: 'ready',
         entry: entry({ name: 'song.mp3', extension: 'mp3' }),
-        content: { kind: 'audio', dataUri: 'data:audio/mpeg;base64,AA==' },
+        content: { kind: 'audio', src: '/api/v1/media?location=a' },
       }),
     );
     expect(root.querySelector('.fm-file-viewer-copy')).toBeNull();
@@ -1301,7 +1301,7 @@ describe('FileViewer', () => {
         {
           status: 'ready',
           entry: entry({ name: 'clip.mp4', extension: 'mp4', size: 3 }),
-          content: { kind: 'video', dataUri: 'data:video/mp4;base64,AQID' },
+          content: { kind: 'video', src: '/api/v1/media?location=v' },
         },
         { videoPosterDataUri: 'data:image/jpeg;base64,BAUG' },
       ),
@@ -1309,7 +1309,7 @@ describe('FileViewer', () => {
 
     const video = root.querySelector<HTMLVideoElement>('.fm-file-viewer-body-video video');
     expect(video?.controls).toBe(true);
-    expect(video?.getAttribute('src')).toBe('data:video/mp4;base64,AQID');
+    expect(video?.getAttribute('src')).toBe('/api/v1/media?location=v');
     expect(video?.getAttribute('poster')).toBe('data:image/jpeg;base64,BAUG');
   });
 
@@ -1326,9 +1326,7 @@ describe('FileViewer', () => {
       ),
     );
 
-    expect(root.querySelector('.fm-file-viewer-body')?.textContent).toContain(
-      'Large or unsupported video',
-    );
+    expect(root.querySelector('.fm-file-viewer-body')?.textContent).toContain('Unsupported video');
     root.querySelector<HTMLButtonElement>('.fm-file-viewer-open-externally')?.click();
     expect(onOpenExternally).toHaveBeenCalledTimes(1);
   });

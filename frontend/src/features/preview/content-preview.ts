@@ -223,26 +223,3 @@ export async function readFullImageDataUri(
   const bytes = await readEntireFileBytes(client, entry, signal);
   return bytesToDataUri(bytes, imageMimeTypeFor(entry));
 }
-
-/** Reads an entire audio file and encodes it as a `data:` URI (see {@link readEntireFileBytes}),
- * for the Lister viewer's native `<audio>` playback. */
-export async function readFullAudioDataUri(
-  client: ImageRangeClient,
-  entry: EntrySummary,
-  signal: AbortSignal,
-): Promise<string> {
-  const bytes = await readEntireFileBytes(client, entry, signal);
-  return bytesToDataUri(bytes, audioMimeTypeFor(entry));
-}
-
-/** Reads an entire size-gated video file and encodes it as a `data:` URI. Callers must enforce
- * their video size limit before using this helper; unlike images/audio, videos are not unbounded. */
-export async function readFullVideoDataUri(
-  client: ImageRangeClient,
-  entry: EntrySummary,
-  signal: AbortSignal,
-  maximumBytes: number,
-): Promise<string | undefined> {
-  const bytes = await readEntireFileBytes(client, entry, signal, maximumBytes);
-  return bytes === undefined ? undefined : bytesToDataUri(bytes, videoMimeTypeFor(entry));
-}

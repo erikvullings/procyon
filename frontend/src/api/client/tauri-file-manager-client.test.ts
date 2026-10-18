@@ -17,6 +17,8 @@ vi.mock('@tauri-apps/api/app', () => ({
 vi.mock('@tauri-apps/api/core', () => ({
   Channel: MockChannel,
   invoke: (...args: unknown[]) => invoke(...args),
+  convertFileSrc: (path: string, protocol: string) =>
+    `${protocol}://localhost/${encodeURIComponent(path)}`,
 }));
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({ onDragDropEvent }),
@@ -146,6 +148,19 @@ describe('TauriFileManagerClient', () => {
       ['set_plugin_panel_theme', { label: 'plugin-spa-1', theme: 'light' }],
       ['close_plugin_panel', { label: 'plugin-spa-1' }],
     ]);
+  });
+
+  it('serves media through the procyon-media scheme with the location encoded in the path', async () => {
+    const url = await new TauriFileManagerClient().mediaUrl({
+      providerId: 'local',
+      uri: 'file:///a b.mp3',
+    });
+
+    expect(url.startsWith('procyon-media://localhost/')).toBe(true);
+    expect(JSON.parse(decodeURIComponent(url.slice('procyon-media://localhost/'.length)))).toEqual({
+      providerId: 'local',
+      uri: 'file:///a b.mp3',
+    });
   });
 
   it('opens external URLs with the host opener', async () => {

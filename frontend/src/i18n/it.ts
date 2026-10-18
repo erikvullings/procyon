@@ -633,7 +633,7 @@ export const it = {
     gitHistoryMeta: '{author} · {date} · {shortId}',
     loadingMore: 'Caricamento altro…',
     failedToRenderPage: 'Impossibile visualizzare questa pagina.',
-    videoExternalOnly: 'Video di grandi dimensioni o non supportato — solo riproduzione esterna.',
+    videoExternalOnly: 'Video non supportato — solo riproduzione esterna.',
     openVideoExternally: 'Apri nel lettore predefinito',
     unableToLoad: 'Impossibile caricare il file',
     comicUnavailable: "L'anteprima del fumetto non è disponibile per questa voce.",

@@ -457,6 +457,7 @@ export * from './startOperationRequestDto.ts';
 export * from './startSearchRequestDto.ts';
 export * from './startSearchResponseDto.ts';
 export * from './startWorkspaceParams.ts';
+export * from './streamMediaParams.ts';
 export * from './structuredCellDto.ts';
 export * from './structuredCellValueTypeDto.ts';
 export * from './structuredHeaderModeDto.ts';

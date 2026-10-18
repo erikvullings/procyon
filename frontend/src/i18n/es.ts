@@ -634,7 +634,7 @@ export const es = {
     gitHistoryMeta: '{author} · {date} · {shortId}',
     loadingMore: 'Cargando más…',
     failedToRenderPage: 'No se pudo representar esta página.',
-    videoExternalOnly: 'Vídeo grande o no compatible — solo reproducción externa.',
+    videoExternalOnly: 'Vídeo no compatible — solo reproducción externa.',
     openVideoExternally: 'Abrir en el reproductor predeterminado',
     unableToLoad: 'No se puede cargar el archivo',
     comicUnavailable: 'La vista previa de cómic no está disponible para esta entrada.',
