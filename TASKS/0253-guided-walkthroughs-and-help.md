@@ -1,6 +1,6 @@
-# 0241 Guided walkthroughs and in-app help
+# 0253 Guided walkthroughs and in-app help
 
-Status: in progress
+Status: done
 Priority: medium
 Subsystem: frontend
 Depends on: 0025, 0030, 0068, 0070, 0079, 0104, 0238
@@ -16,11 +16,13 @@ user on 2026-10-09; it is not an interactive filesystem exercise.
   connecting over SSH/SFTP, remote transfer, semantic search, the collection basket,
   and organizing with workspaces. Link the SSH/SFTP setup guide from remote transfer.
 - The basics guide and a short, captioned, replayable recording of real Procyon on macOS
-  demonstrate two panes: the public Procyon repository on the left, `~/Downloads/test` on
-  the right, with Downloads and Documents also visible as tab headers but without exposing
-  their contents. Show F3 viewing `README.md`, F4 opening it for editing without modifying
-  it, compressing it to a ZIP, and copying that ZIP to the right pane. Record in a staged,
-  sanitized environment; playback must never create, change, or remove viewer files.
+  demonstrate two panes: a staged folder containing the public Procyon `README.md` on
+  the left, `~/Downloads/test` on the right, with Downloads and Documents also visible
+  as tab headers but without exposing their contents. The staged folder is not the full
+  repository checkout. Show F3 viewing `README.md`, F4 opening it for editing without
+  modifying it, compressing it to a ZIP, and copying that ZIP to the right pane. Record
+  in a staged, sanitized environment; playback must never create, change, or remove
+  viewer files.
 - Bundle the compressed clip for offline use and load it only when opened. Provide captions,
   playback controls, a poster or readable fallback, and reduced-motion-safe behavior.
   Label the clip as a macOS example; written steps must be platform-neutral.
@@ -96,3 +98,14 @@ user on 2026-10-09; it is not an interactive filesystem exercise.
   startup, dismissal, and mock/HTTP/Tauri shell behavior. The clip still
   depicts a staged public README rather than a full repository checkout;
   do not represent it as showing the entire checkout.
+- 2026-10-18: Renumbered this task from 0241 to 0253 after main independently
+  introduced `0241-semantic-search-include-folder-regression.md`. The
+  recording's source-folder wording is pending an explicit decision: the
+  current sanitized clip shows a staged public README, not the full checkout.
+- 2026-10-18: The user approved the staged public README as the safe recording
+  example instead of requesting a full repository recapture. Updated the
+  criterion to match `docs/walkthroughs/basics.md` and the bundled footage in
+  `frontend/src/features/walkthroughs/media/`; neither claims a full checkout.
+  The guides, Help panel, and first-install invitation were already committed
+  in `d2079fc3` and `27a41576`. The remaining discrepancy was task bookkeeping:
+  renumbered this file to 0253 and corrected its `TASKS/README.md` index entry.
