@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "decision": "go",
+  "repository": "erikvullings/procyon",
+  "releaseTag": "semantic-v0.6.0",
+  "qualificationRunId": 39121047186,
+  "sourceRevision": "c8f130c68fb40a157daedcfb2c6ba34fe7773a7b",
+  "releaseCandidateFingerprint": "sha256:544f7b713dde108aa7c5c55f72a7e01f721c044a6250e8ef1d729457c0834685",
+  "targets": {
+    "linux-aarch64": {
+      "catalogRevision": "procyon-linux-aarch64-0.6.0-a8e2086788f0fefd069a3df1ebd073b1",
+      "catalogSha256": "ed79388ce3219f98f563de28b04750d0aeac8dbf4ca15c42f5936cc1c48c8e60",
+      "signatureSha256": "b8c239929ef6ff0b5c0bcc7ddf1a386b8f1c82b73d1e3013e2bdd24239458371"
+    },
+    "linux-x86_64": {
+      "catalogRevision": "procyon-linux-x86_64-0.6.0-85022fc47fb808885052de276516ca78",
+      "catalogSha256": "6f9628f01f09a3bce2f14c4d949dd078d5b3cf271deedfe6682c65034f56c9fb",
+      "signatureSha256": "9f555cbf8493e55bd011dc92afd3b90a9b6190482ba3ffe340d8cd576376f8c8"
+    },
+    "macos-aarch64": {
+      "catalogRevision": "procyon-macos-aarch64-0.6.0-bdb41f4fd808861b1f4d1664f9de94a1",
+      "catalogSha256": "c853fd5ae7fe1284ee2bbceae757aaa046271728145911860944905a00861b8b",
+      "signatureSha256": "5445a2735d724337ffb002a804203071e45483c4a61f258f429b54a6312fee46"
+    },
+    "windows-x86_64": {
+      "catalogRevision": "procyon-windows-x86_64-0.6.0-183270c802a3a694b93afab4b3e2c4a5",
+      "catalogSha256": "f0130504379296f4a9bcb51b129439792cc2c6ee98fa83bddb91566279b55690",
+      "signatureSha256": "2e87eb8a90a199f636dc695d90a153c6f57853a00bff2874cafee52086507707"
+    }
+  },
+  "riskAcceptedGemma": {
+    "approval": "release-owner-risk-accepted-unqualified",
+    "candidateDecision": "noGo",
+    "qualificationStatus": "not-five-gate-qualified",
+    "modelRevision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+    "candidateManifestSha256": "3d8de4409d96bb32653c802f8f20de4c64ed9d7f56543358934f9783604f3403",
+    "approvedBy": "erikvullings",
+    "approvedAt": "2026-10-18T11:58:36Z",
+    "acceptedLimitations": [
+      "five-gate-qualification-not-performed",
+      "metal-resource-gates-1a-and-1c-fail",
+      "remaining-resource-cpu-fallback-cross-host-upgrade-rollback-and-private-media-gates-unqualified",
+      "cpu-performance-not-qualified",
+      "windows-gpu-not-qualified"
+    ]
+  }
+}
