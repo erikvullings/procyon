@@ -1361,4 +1361,5 @@ export const de = {
   linkDoctor: en.linkDoctor,
   metadataRename: en.metadataRename,
   snapshots: en.snapshots,
+  editorLinks: en.editorLinks,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

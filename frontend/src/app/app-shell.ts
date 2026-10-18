@@ -102,6 +102,8 @@ import {
   type FileEditorController,
   type FileEditorState,
 } from '../features/editor/file-editor-controller';
+import type { EditorLinkHandlers } from '../features/editor/link-actions';
+import { isSafeExternalUrl, resolveDetectedLink } from '../features/editor/link-actions';
 import {
   DEFAULT_ENTRY_FORMAT_SETTINGS,
   type EntryFormatSettings,
@@ -186,7 +188,9 @@ import {
   FIND_BROKEN_LINKS_ACTION_ID,
   FIND_MUSIC_DUPLICATES_ACTION_ID,
   MEDIA_QUEUE_ACTIONS,
+  OPEN_LINK_AT_CURSOR_ACTION_ID,
   PLAYER_CLIENT_ACTIONS,
+  REVEAL_LINK_AT_CURSOR_ACTION_ID,
   SAVE_PLAYLIST_ACTION_ID,
   SAVE_SNAPSHOT_ACTION_ID,
 } from '../features/player/player-actions';
@@ -866,6 +870,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       beginMusicDuplicateScan(invocation);
       return true;
     }
+    if (
+      actionId === OPEN_LINK_AT_CURSOR_ACTION_ID ||
+      actionId === REVEAL_LINK_AT_CURSOR_ACTION_ID
+    ) {
+      actOnLinkAtCursor(actionId === OPEN_LINK_AT_CURSOR_ACTION_ID ? 'open' : 'reveal');
+      return true;
+    }
     if (actionId === SAVE_SNAPSHOT_ACTION_ID) {
       beginSaveSnapshot(invocation);
       return true;
@@ -919,7 +930,28 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    * `client.*` branches for the dispatch side. */
   function clientOnlyActions(): readonly ActionDescriptor[] {
     const hasQueue = (appState?.player.queue.length ?? 0) > 0;
+    const editorOpen = workspace !== undefined && editorByPane.has(workspace.activePaneId);
     return [
+      ...(editorOpen
+        ? [
+            {
+              id: OPEN_LINK_AT_CURSOR_ACTION_ID,
+              title: t('editorLinks', 'openAtCursor'),
+              category: 'tools',
+              defaultShortcuts: [],
+              contextRequirements: {},
+              source: { kind: 'core' as const },
+            },
+            {
+              id: REVEAL_LINK_AT_CURSOR_ACTION_ID,
+              title: t('editorLinks', 'revealAtCursor'),
+              category: 'tools',
+              defaultShortcuts: [],
+              contextRequirements: {},
+              source: { kind: 'core' as const },
+            },
+          ]
+        : []),
       ...mediaQueueActions(),
       {
         id: SAVE_SNAPSHOT_ACTION_ID,
@@ -1953,13 +1985,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     tabController.performCloseTab(paneId, resolvedTabId);
   }
 
-  function openEditor(client: FileManagerClient, paneId: PaneId, entry: EntrySummary): void {
+  function openEditor(
+    client: FileManagerClient,
+    paneId: PaneId,
+    entry: EntrySummary,
+    initialLine?: number,
+  ): void {
     pluginByPane.delete(paneId);
     closeViewer(paneId);
     editorByPane.get(paneId)?.controller.dispose();
     const controller = createFileEditorController({
       client,
       entry,
+      ...(initialLine === undefined ? {} : { initialLine }),
       update: (state) => {
         const existing = editorByPane.get(paneId);
         if (existing === undefined) return;
@@ -1975,6 +2013,84 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     });
     editorByPane.set(paneId, { controller, state: { status: 'loading', entry } });
     m.redraw();
+  }
+
+  /** True while the pane's editor holds unsaved changes that opening another file would drop. */
+  function editorIsDirty(paneId: PaneId): boolean {
+    const state = editorByPane.get(paneId)?.state;
+    return state?.status === 'ready' && state.dirty;
+  }
+
+  /** Actions for paths and URLs in the text of the file edited in `paneId` (task 0271). */
+  function editorLinkHandlers(paneId: PaneId, base: Location): EditorLinkHandlers {
+    /** Browsing goes to the other pane when there is one, so the editor stays untouched. */
+    const browsePane = (): PaneId | undefined => {
+      const other = workspace?.paneOrder.find((candidate) => candidate !== paneId);
+      if (other !== undefined) return other;
+      if (editorIsDirty(paneId)) {
+        toast({ html: t('editorLinks', 'saveFirst') });
+        return undefined;
+      }
+      const viewer = [...viewerByTab.values()].find((candidate) => candidate.paneId === paneId);
+      if (viewer !== undefined) closeViewer(viewer.paneId, viewer.tabId);
+      closeEditor(paneId);
+      return paneId;
+    };
+    return {
+      base,
+      resolve: (link) => resolveDetectedLink(link, base, attrsClient),
+      openUrl: (url) => {
+        if (isSafeExternalUrl(url)) void attrsClient.openExternalUrl(url);
+      },
+      openInPane: (link) => {
+        const target = browsePane();
+        if (target === undefined) return;
+        if (link.entry.kind === 'directory') void navigation.navigate(target, link.location);
+        else void navigation.navigate(target, parentLocation(link.location), link.entry.name);
+      },
+      reveal: (link) => {
+        void attrsClient
+          .invokeAction({
+            actionId: 'core.revealInSystemFileManager',
+            parameters: { uri: link.location.uri },
+            context: { paneId, selectedEntryIds: [link.entry.id] },
+          })
+          .catch((error: unknown) => {
+            toast({ html: error instanceof Error ? error.message : String(error) });
+          });
+      },
+      editAt: (link) => {
+        if (editorIsDirty(paneId)) {
+          toast({ html: t('editorLinks', 'saveFirst') });
+          return;
+        }
+        openEditor(attrsClient, paneId, link.entry, link.line);
+      },
+    };
+  }
+
+  /** Runs the default action for the path or URL under the caret of the active pane's editor. */
+  function actOnLinkAtCursor(mode: 'open' | 'reveal'): void {
+    const paneId = workspace?.activePaneId;
+    const editor = paneId === undefined ? undefined : editorByPane.get(paneId);
+    const link = editor?.controller.linkAtCursor();
+    if (paneId === undefined || editor === undefined || link === undefined) {
+      toast({ html: t('editorLinks', 'nothingAtCursor') });
+      return;
+    }
+    const base = editor.state.entry.location;
+    const handlers = editorLinkHandlers(paneId, base);
+    void handlers.resolve(link).then((resolved) => {
+      if (resolved === undefined) {
+        toast({ html: t('editorLinks', link.kind === 'url' ? 'unsafeUrl' : 'notFound') });
+      } else if (resolved.kind === 'url') {
+        if (mode === 'open') handlers.openUrl(resolved.url);
+      } else if (mode === 'reveal') {
+        handlers.reveal(resolved);
+      } else {
+        handlers.openInPane(resolved);
+      }
+    });
   }
 
   function closeEditor(paneId: PaneId): void {
@@ -4650,6 +4766,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getCursorLoadTokens: () => cursorLoadTokens,
     getViewerByTab: () => viewerByTab,
     getEditorByPane: () => editorByPane,
+    getEditorLinkHandlers: editorLinkHandlers,
     getPluginByPane: () => pluginByPane,
     getDiskUsageByTab: () => diskUsageByTab,
     getKnowledgeSearchByTab: () => knowledgeSearchByTab,

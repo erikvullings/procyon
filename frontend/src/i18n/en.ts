@@ -2317,6 +2317,21 @@ export const en = {
     noTarget: 'Open the folder to verify in a pane.',
     extension: 'procyon-snapshot',
   },
+  editorLinks: {
+    openUrl: 'Open URL',
+    openInPane: 'Open in pane',
+    reveal: 'Reveal in file manager',
+    editFile: 'Edit file',
+    editFileAtLine: 'Edit file at line {line}',
+    notFound: 'This path does not exist.',
+    resolving: 'Checking path…',
+    unsafeUrl: 'Only http and https links can be opened.',
+    openAtCursor: 'Open path or URL under the cursor',
+    revealAtCursor: 'Reveal path under the cursor',
+    nothingAtCursor: 'No path or URL under the cursor.',
+    saveFirst: 'Save or discard your changes before editing another file here.',
+    menuLabel: 'Path or URL actions',
+  },
 } as const satisfies CatalogueShape;
 
 /** Canonical translation groups and keys. Values remain locale-specific. */

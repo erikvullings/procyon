@@ -98,3 +98,58 @@ describe('file editor controller', () => {
     controller.dispose();
   });
 });
+
+describe('editor links (task 0271)', () => {
+  const entry = {
+    id: 'e',
+    name: 'log.txt',
+    extension: 'txt',
+    kind: 'file',
+    hidden: false,
+    readOnly: false,
+    metadataRevision: 1,
+    location: { providerId: 'local', uri: 'file:///log.txt' },
+  } as const;
+
+  function create(initialLine?: number) {
+    const states: FileEditorState[] = [];
+    const controller = createFileEditorController({
+      client: {
+        loadEditableFile: vi.fn().mockResolvedValue({
+          content: 'first\nsee /tmp/a.txt:3 here\nthird',
+          revision: 'r1',
+        }),
+        saveEditableFile: vi.fn(),
+      },
+      entry,
+      ...(initialLine === undefined ? {} : { initialLine }),
+      update: (state) => states.push(state),
+    });
+    return { controller, states };
+  }
+
+  it('selects the requested line when the file opens', async () => {
+    const { states } = create(2);
+    await vi.waitFor(() => expect(states.at(-1)?.status).toBe('ready'));
+    const ready = states.at(-1);
+    expect(ready?.status === 'ready' && ready.initialSelection).toEqual({ from: 6, to: 27 });
+  });
+
+  it('has no initial selection without a line or for a line past the end', async () => {
+    for (const line of [undefined, 99]) {
+      const { states } = create(line);
+      await vi.waitFor(() => expect(states.at(-1)?.status).toBe('ready'));
+      const ready = states.at(-1);
+      expect(ready?.status === 'ready' && ready.initialSelection).toBeFalsy();
+    }
+  });
+
+  it('reports the path under the caret', async () => {
+    const { controller, states } = create();
+    await vi.waitFor(() => expect(states.at(-1)?.status).toBe('ready'));
+    controller.setCursor(12);
+    expect(controller.linkAtCursor()).toMatchObject({ kind: 'path', path: '/tmp/a.txt', line: 3 });
+    controller.setCursor(1);
+    expect(controller.linkAtCursor()).toBeUndefined();
+  });
+});

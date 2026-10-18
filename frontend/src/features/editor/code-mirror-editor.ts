@@ -12,6 +12,7 @@ import {
 } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import m, { type FactoryComponent } from 'mithril';
+import { type DetectedLink, detectLinkInLine } from './link-detection';
 
 const fmHighlightStyle = HighlightStyle.define([
   { tag: [tags.keyword, tags.operatorKeyword, tags.bool, tags.null], color: 'var(--fm-accent)' },
@@ -46,6 +47,14 @@ export interface CodeMirrorEditorAttrs {
   /** Called for Mod-F when `enableBuiltInSearch` is `false`, so the caller can redirect the
    * shortcut to its own whole-file-aware search UI instead of leaving it a dead keystroke. */
   readonly onFindShortcut?: () => void;
+  /** Called for a right-click on a path or URL, which suppresses the browser's own menu (task 0271). */
+  readonly onLinkContextMenu?: (hit: {
+    readonly link: DetectedLink;
+    readonly x: number;
+    readonly y: number;
+  }) => void;
+  /** Reports the caret position whenever the selection moves (task 0271). */
+  readonly onCursorChange?: (offset: number) => void;
 }
 
 /**
@@ -150,6 +159,23 @@ export const CodeMirrorEditor: FactoryComponent<CodeMirrorEditorAttrs> = () => {
     ...(attrs.language === undefined ? [] : [attrs.language]),
     ...(attrs.extensions ?? []),
     EditorView.domEventHandlers({
+      contextmenu: (event, editor) => {
+        if (attrs.onLinkContextMenu === undefined) return false;
+        let position: number | null;
+        try {
+          position = editor.posAtCoords({ x: event.clientX, y: event.clientY });
+        } catch {
+          // Layout measurement is unavailable (for example in test environments).
+          return false;
+        }
+        if (position === null) return false;
+        const line = editor.state.doc.lineAt(position);
+        const hit = detectLinkInLine(line.text, position - line.from);
+        if (hit === undefined) return false;
+        event.preventDefault();
+        attrs.onLinkContextMenu({ link: hit, x: event.clientX, y: event.clientY });
+        return true;
+      },
       keydown: (event) => {
         const isMod = event.metaKey || event.ctrlKey;
         if (isMod && event.key.toLowerCase() === 'f' && attrs.enableBuiltInSearch === false) {
@@ -172,6 +198,9 @@ export const CodeMirrorEditor: FactoryComponent<CodeMirrorEditorAttrs> = () => {
       },
     }),
     EditorView.updateListener.of((update) => {
+      if (update.selectionSet || update.docChanged) {
+        attrs.onCursorChange?.(update.state.selection.main.head);
+      }
       if (!update.docChanged) return;
       currentContent = update.state.doc.toString();
       attrs.onChange?.(currentContent);

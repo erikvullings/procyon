@@ -18,8 +18,9 @@ import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { GitLogEntry } from '../../models';
 import { calculateVisibleWindow } from '../directory-table/windowing';
-import { CodeMirrorEditor } from '../editor/code-mirror-editor';
 import { editableLanguageForExtension, languageExtension } from '../editor/editor-language';
+import type { EditorLinkHandlers } from '../editor/link-actions';
+import { LinkAwareEditor } from '../editor/link-aware-editor';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
 import {
   DEFAULT_ENTRY_FORMAT_SETTINGS,
@@ -115,6 +116,8 @@ export interface FileViewerAttrs {
   readonly onDocumentSummary?: () => void;
   /** Sends playable playlist rows to the audio queue (task 0262); absent when no player exists. */
   readonly onPlayTracks?: PlaylistViewAttrs['onPlay'];
+  /** Actions for paths and URLs in the viewed text (task 0271). */
+  readonly links?: EditorLinkHandlers;
   readonly onClose: () => void;
 }
 
@@ -546,9 +549,10 @@ function renderTextBody(
           highlightOffset: content.highlightOffset,
           highlightLength: content.highlightLength,
         })
-      : m(CodeMirrorEditor, {
+      : m(LinkAwareEditor, {
           content: content.text,
           readOnly: true,
+          ...(attrs.links === undefined ? {} : { links: attrs.links }),
           language: languageExtension(editableLanguage),
           // The viewer only ever holds a lazily-loaded window of a large file in memory (see
           // `TEXT_WINDOW_BYTES`), so CodeMirror's own find panel - which only searches that

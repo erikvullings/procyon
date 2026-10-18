@@ -71,3 +71,7 @@ export const FIND_BROKEN_LINKS_ACTION_ID = 'client.findBrokenLinks';
 export const SAVE_SNAPSHOT_ACTION_ID = 'client.saveSnapshot';
 /** Compares a folder against the selected snapshot file (task 0268). */
 export const COMPARE_SNAPSHOT_ACTION_ID = 'client.compareWithSnapshot';
+
+/** Acts on the path or URL under the caret of the active pane's editor (task 0271). */
+export const OPEN_LINK_AT_CURSOR_ACTION_ID = 'client.openLinkAtCursor';
+export const REVEAL_LINK_AT_CURSOR_ACTION_ID = 'client.revealLinkAtCursor';

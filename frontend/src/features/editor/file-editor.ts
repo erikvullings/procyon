@@ -5,9 +5,10 @@ import { closeIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { PaneId } from '../../models';
-import { CodeMirrorEditor } from './code-mirror-editor';
 import { jsonParseLinter, languageExtension } from './editor-language';
 import type { FileEditorController, FileEditorState } from './file-editor-controller';
+import type { EditorLinkHandlers } from './link-actions';
+import { LinkAwareEditor } from './link-aware-editor';
 import './file-editor.css';
 
 export interface FileEditorAttrs {
@@ -15,6 +16,8 @@ export interface FileEditorAttrs {
   readonly controller: FileEditorController;
   readonly paneId?: PaneId;
   readonly onClose: () => void;
+  /** Actions for paths and URLs in the text (task 0271); absent where none are available. */
+  readonly links?: EditorLinkHandlers;
 }
 
 interface UnsavedChangesDialogAttrs {
@@ -209,12 +212,17 @@ export const FileEditor: Component<FileEditorAttrs> = {
           '.fm-file-editor-content',
           state.language === 'markdown' && state.previewVisible
             ? m('.fm-file-editor-preview', { innerHTML: state.previewHtml ?? '' })
-            : m(CodeMirrorEditor, {
+            : m(LinkAwareEditor, {
                 content: state.content,
                 language: languageExtension(state.language),
                 extensions: state.language === 'json' ? [linter(jsonParseLinter())] : [],
                 onChange: (content) => controller.setContent(content),
                 onSave: () => void controller.save(),
+                onCursorChange: (offset) => controller.setCursor(offset),
+                ...(state.initialSelection === undefined
+                  ? {}
+                  : { selection: state.initialSelection }),
+                ...(attrs.links === undefined ? {} : { links: attrs.links }),
               }),
         ),
         m(UnsavedChangesDialog, {

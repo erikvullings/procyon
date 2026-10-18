@@ -2,6 +2,8 @@ import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type { EntrySummary } from '../../models';
 import { type EditableLanguage, editableLanguageForExtension } from './editor-language';
+import { lineRange } from './link-actions';
+import { type DetectedLink, detectLinkAt } from './link-detection';
 import { safeMarkdownHtml } from './markdown-preview';
 
 export type FileEditorState =
@@ -20,6 +22,8 @@ export type FileEditorState =
       readonly previewVisible: boolean;
       readonly conflict: boolean;
       readonly closePending: boolean;
+      /** Range selected when the file opened at a line (task 0271). */
+      readonly initialSelection?: { readonly from: number; readonly to: number };
       readonly error?: string;
     };
 
@@ -31,6 +35,10 @@ export interface FileEditorController {
   togglePreview(): void;
   requestClose(): boolean;
   cancelClose(): void;
+  /** Records the caret position, so actions can act on the path or URL under it (task 0271). */
+  setCursor(offset: number): void;
+  /** The path or URL under the caret, if any. */
+  linkAtCursor(): DetectedLink | undefined;
   dispose(): void;
 }
 
@@ -44,6 +52,8 @@ function loadErrorMessage(error: unknown): string {
 export function createFileEditorController(options: {
   client: Pick<FileManagerClient, 'loadEditableFile' | 'saveEditableFile'>;
   entry: EntrySummary;
+  /** One-based line to select when the file first loads (task 0271). */
+  initialLine?: number;
   update: (state: FileEditorState) => void;
 }): FileEditorController {
   const language = editableLanguageForExtension(options.entry.extension, options.entry.name);
@@ -51,6 +61,7 @@ export function createFileEditorController(options: {
   let disposed = false;
   let request: AbortController | undefined;
   let previewTimer: ReturnType<typeof setTimeout> | undefined;
+  let cursorOffset = 0;
   const publish = (next: FileEditorState) => {
     state = next;
     if (!disposed) options.update(next);
@@ -62,6 +73,11 @@ export function createFileEditorController(options: {
       if (state.status === 'ready')
         publish({ ...state, previewHtml: safeMarkdownHtml(state.content) });
     }, 150);
+  };
+  const selectionPatch = (content: string) => {
+    const initialSelection =
+      options.initialLine === undefined ? undefined : lineRange(content, options.initialLine);
+    return initialSelection === undefined ? {} : { initialSelection };
   };
   const reload = async () => {
     request?.abort();
@@ -85,6 +101,7 @@ export function createFileEditorController(options: {
         ...(language === 'markdown' ? { previewHtml: safeMarkdownHtml(loaded.content) } : {}),
         conflict: false,
         closePending: false,
+        ...selectionPatch(loaded.content),
       });
     } catch (error: unknown) {
       publish({
@@ -169,6 +186,11 @@ export function createFileEditorController(options: {
     togglePreview,
     requestClose,
     cancelClose,
+    setCursor: (offset) => {
+      cursorOffset = offset;
+    },
+    linkAtCursor: () =>
+      state.status === 'ready' ? detectLinkAt(state.content, cursorOffset) : undefined,
     dispose: () => {
       disposed = true;
       request?.abort();

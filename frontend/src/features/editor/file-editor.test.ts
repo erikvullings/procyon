@@ -26,6 +26,8 @@ function controller(): FileEditorController {
     togglePreview: vi.fn(),
     requestClose: vi.fn().mockReturnValue(true),
     cancelClose: vi.fn(),
+    setCursor: vi.fn(),
+    linkAtCursor: vi.fn(),
     dispose: vi.fn(),
   };
 }

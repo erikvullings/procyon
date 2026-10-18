@@ -40,6 +40,7 @@ import { DiskUsageView, type DiskUsageViewState } from '../disk-usage/disk-usage
 import { operationForDrop, resolveDropTarget, validateDropTarget } from '../drag-drop/drag-drop';
 import { FileEditor } from '../editor/file-editor';
 import type { FileEditorController, FileEditorState } from '../editor/file-editor-controller';
+import type { EditorLinkHandlers } from '../editor/link-actions';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
 import { isRestorableFavouriteLocation, reorderFavourites } from '../favourites/favourites';
 import { archiveRootForEntry } from '../navigation/archive-location';
@@ -226,6 +227,8 @@ export interface PaneContentContext {
   openKnowledgeSource(paneId: PaneId, evidence: KnowledgeEvidence): Promise<void>;
   isKnowledgeSourceOpen(evidence: KnowledgeEvidence): boolean;
   closeEditor(paneId: PaneId): void;
+  /** Actions for paths and URLs in the file edited in `paneId` (task 0271). */
+  getEditorLinkHandlers(paneId: PaneId, base: Location): EditorLinkHandlers;
   updateLocationSettings(
     client: FileManagerClient,
     update: (settings: Settings) => Settings,
@@ -987,6 +990,7 @@ export function createPaneContentBuilder(
                     controller: editor.controller,
                     paneId,
                     onClose: () => context.closeEditor(paneId),
+                    links: context.getEditorLinkHandlers(paneId, editor.state.entry.location),
                   });
             })(),
           }
@@ -1084,6 +1088,7 @@ export function createPaneContentBuilder(
                       ...(context.playQueueItems === undefined
                         ? {}
                         : { onPlayTracks: context.playQueueItems }),
+                      links: context.getEditorLinkHandlers(paneId, viewer.state.entry.location),
                       onClose: () => context.closeViewer(paneId),
                     }),
                   );
