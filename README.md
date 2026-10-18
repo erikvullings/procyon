@@ -179,10 +179,10 @@ search or Ask within the indexed folder. The selected embedding dimension is
 locked for that Gemma library; image, audio, and video consent can be changed
 later in Settings, with explicit confirmation before removing indexed data.
 Existing E5 data is not deleted; no migration or representative quality result
-is implied by this development bundle. In v0.6.0, Gemma is opt-in in macOS
-Apple Silicon (arm64), Linux x86-64, and Windows x86-64 desktop packages;
-Intel Macs remain E5-only. Gemma uses a separate signed updater channel and
-does not replace the regular E5 build. Windows GPU behavior and CPU
+is implied by this development bundle. Gemma is opt-in in the macOS, Linux
+x86-64, and Windows x86-64 desktop packages. After v0.6.0 the Gemma macOS
+package is universal; Intel Macs run it without semantic search, as with the
+E5 build. Gemma does not replace the regular E5 build. Windows GPU behavior and CPU
 performance have not been qualified; report issues with platform and hardware
 details.
 Standard release builds remain Gemma-disabled unless the release owner records
@@ -357,11 +357,11 @@ macOS releases are signed and notarized. Windows releases are currently unsigned
 Microsoft Defender SmartScreen warning. Desktop builds verify signed update artifacts before
 installation. Automatic checks can be disabled in Settings; checks never download, install, or
 restart without user confirmation, and a manual **Check now** action remains available.
-The v0.6.0 opt-in Gemma macOS package is **Apple Silicon (arm64) only**; it
-cannot run on Intel Macs. Gemma is also available in the Linux x86-64 and
-Windows x86-64 installers. Its signed updater uses a separate Gemma channel.
-The regular non-Gemma universal macOS build and Homebrew cask remain available
-to Intel users; the Gemma package is downloaded directly from its GitHub
+The v0.6.0 opt-in Gemma macOS package is Apple Silicon (arm64) only. Later
+Gemma macOS packages are universal: Intel Macs run Procyon and receive updates,
+but semantic search is unavailable on them. Gemma is also available in the
+Linux x86-64 and Windows x86-64 installers. All builds use the single
+`updater-latest` channel. The Gemma package is downloaded directly from its GitHub
 Release and does not replace the stable cask or Chocolatey package. E5 remains
 the default. This risk-accepted release is not five-gate qualified; CPU
 resource ceilings, CPU fallback, Windows GPU behavior, cross-host citation

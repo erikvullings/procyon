@@ -66,7 +66,7 @@ jobs:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
           RELEASE_SOURCE_REVISION: ${{ steps.validate-release-tag.outputs.commit }}
-        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+        run: node scripts/check-desktop-gemma-release.mjs --release-source-revision "$RELEASE_SOURCE_REVISION"
       - name: Require exact five-gate Gemma approval before publishing
         if: vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'
         working-directory: release-source
@@ -74,7 +74,7 @@ jobs:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
           RELEASE_SOURCE_REVISION: ${{ steps.validate-release-tag.outputs.commit }}
-        run: node scripts/check-qualified-gemma-release.mjs --desktop --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+        run: node scripts/check-qualified-gemma-release.mjs --desktop --release-source-revision "$RELEASE_SOURCE_REVISION"
       - name: Require explicit risk acceptance for unqualified Gemma
         if: vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'
         working-directory: release-source
@@ -91,7 +91,7 @@ jobs:
           make_latest: ${{ (vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' || vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true') && 'false' || '' }}
           name: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && format('Procyon {0} - Experimental Gemma', env.RELEASE_TAG) || vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' && format('Procyon {0} - Gemma', env.RELEASE_TAG) || vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true' && format('Procyon {0} - Gemma (risk accepted)', env.RELEASE_TAG) || env.RELEASE_TAG }}
           body: >-
-            ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && 'EXPERIMENTAL OPT-IN: multilingual E5 remains the default. No model-quality claim is made; the candidate and evaluation remain no-go for model quality, with E5 used only as a negative control. Resource ceilings and anonymous PDF spool peak are unqualified. CPU fallback, cross-host navigation, and upgrade/rollback are unqualified. CPU PDF page-image indexing is slow (up to about 106 seconds per indexed page); the four-page CPU budget takes about eight minutes. PDF text indexing is unaffected. The Gemma macOS package requires Apple Silicon (arm64) and does not run on Intel Macs.' || vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' && 'EmbeddingGemma 2 passed the release-owner five-gate qualification and remains opt-in. Existing E5 libraries are unchanged. The Gemma macOS package requires Apple Silicon (arm64); no Intel package is supplied.' || vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true' && 'RISK-ACCEPTED, NOT FIVE-GATE QUALIFIED: EmbeddingGemma 2 is opt-in; multilingual E5 remains the default. The release owner explicitly accepted known gaps: resource gates 1a/1c failed; CPU performance, Windows GPU, and remaining qualification gates are unqualified. Users may choose E5 instead and should file issues for platform problems. Existing E5 libraries are unchanged. Gemma macOS support is Apple Silicon (arm64) only; Intel Macs are unsupported.' || '' }}
+            ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && 'EXPERIMENTAL OPT-IN: multilingual E5 remains the default. No model-quality claim is made; the candidate and evaluation remain no-go for model quality, with E5 used only as a negative control. Resource ceilings and anonymous PDF spool peak are unqualified. CPU fallback, cross-host navigation, and upgrade/rollback are unqualified. CPU PDF page-image indexing is slow (up to about 106 seconds per indexed page); the four-page CPU budget takes about eight minutes. PDF text indexing is unaffected. Intel Macs run Procyon without semantic search.' || vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' && 'EmbeddingGemma 2 passed the release-owner five-gate qualification and remains opt-in. Existing E5 libraries are unchanged. Intel Macs run Procyon without semantic search.' || vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true' && 'RISK-ACCEPTED, NOT FIVE-GATE QUALIFIED: EmbeddingGemma 2 is opt-in; multilingual E5 remains the default. The release owner explicitly accepted known gaps: resource gates 1a/1c failed; CPU performance, Windows GPU, and remaining qualification gates are unqualified. Users may choose E5 instead and should file issues for platform problems. Existing E5 libraries are unchanged. Intel Macs run Procyon without semantic search.' || '' }}
 
   macos:
     name: Signed and notarized macOS bundles
@@ -101,7 +101,7 @@ jobs:
     timeout-minutes: 120
     environment: desktop-release
     env:
-      MACOS_TARGET: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && 'aarch64-apple-darwin' || vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' && 'aarch64-apple-darwin' || vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true' && 'aarch64-apple-darwin' || 'universal-apple-darwin' }}
+      MACOS_TARGET: universal-apple-darwin
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
@@ -122,7 +122,7 @@ jobs:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
           RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
-        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+        run: node scripts/check-desktop-gemma-release.mjs --release-source-revision "$RELEASE_SOURCE_REVISION"
       - name: Require exact five-gate Gemma desktop approval
         if: vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'
         shell: bash
@@ -130,7 +130,7 @@ jobs:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
           RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
-        run: node scripts/check-qualified-gemma-release.mjs --desktop --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+        run: node scripts/check-qualified-gemma-release.mjs --desktop --release-source-revision "$RELEASE_SOURCE_REVISION"
       - name: Require explicit risk acceptance for unqualified Gemma
         if: vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'
         shell: bash
@@ -179,16 +179,8 @@ jobs:
           apps/fm-desktop/src-tauri/resources/semantic/catalog.sig
           "$RUNNER_TEMP/semantic-catalog.pub"
       - name: Install macOS Rust targets
-        env:
-          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
-          GEMMA_DESKTOP_NON_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
-          GEMMA_DESKTOP_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
         run: |
-          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_NON_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_RISK_ACCEPTED" == "true" ]]; then
-            rustup target add aarch64-apple-darwin
-          else
-            rustup target add aarch64-apple-darwin x86_64-apple-darwin
-          fi
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - name: Install lld
         run: brew install lld
       - name: Require tag to match the Cargo-owned desktop version
@@ -257,7 +249,7 @@ jobs:
           VITE_GEMMA_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
         run: |
           if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_NON_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_RISK_ACCEPTED" == "true" ]]; then
-            pnpm run build:tauri --target aarch64-apple-darwin --features semantic-gemma
+            pnpm run build:tauri --target universal-apple-darwin --features semantic-gemma
           else
             pnpm run build:tauri --target universal-apple-darwin
           fi
@@ -280,10 +272,6 @@ jobs:
             --no-s3-acceleration
           xcrun stapler staple "$DMG_PATH"
       - name: Verify signature, notarization, stapling, and macOS architecture
-        env:
-          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
-          GEMMA_DESKTOP_NON_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
-          GEMMA_DESKTOP_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
         run: |
           APP_PATH="$(
             find "target/$MACOS_TARGET/release/bundle/macos" \
@@ -320,13 +308,8 @@ jobs:
           spctl --assess --type open --context context:primary-signature --verbose=4 "$DMG_PATH"
           hdiutil verify "$DMG_PATH"
           ARCHITECTURES="$(lipo -archs "$APP_PATH/Contents/MacOS/Procyon")"
-          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_NON_EXPERIMENTAL" == "true" || "$GEMMA_DESKTOP_RISK_ACCEPTED" == "true" ]]; then
-            test "$ARCHITECTURES" == "arm64"
-            [[ "$(basename "$DMG_PATH")" == *aarch64*.dmg ]]
-          else
-            grep -qw arm64 <<< "$ARCHITECTURES"
-            grep -qw x86_64 <<< "$ARCHITECTURES"
-          fi
+          grep -qw arm64 <<< "$ARCHITECTURES"
+          grep -qw x86_64 <<< "$ARCHITECTURES"
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
@@ -373,7 +356,7 @@ jobs:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
           RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
-        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+        run: node scripts/check-desktop-gemma-release.mjs --release-source-revision "$RELEASE_SOURCE_REVISION"
       - name: Require exact five-gate Gemma desktop approval
         if: vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'
         shell: bash
@@ -381,7 +364,7 @@ jobs:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
           RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
-        run: node scripts/check-qualified-gemma-release.mjs --desktop --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+        run: node scripts/check-qualified-gemma-release.mjs --desktop --release-source-revision "$RELEASE_SOURCE_REVISION"
       - name: Require explicit risk acceptance for unqualified Gemma
         if: vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'
         shell: bash
@@ -491,7 +474,7 @@ jobs:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED }}
           RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
-        run: node scripts/check-desktop-gemma-release.mjs --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+        run: node scripts/check-desktop-gemma-release.mjs --release-source-revision "$RELEASE_SOURCE_REVISION"
       - name: Require exact five-gate Gemma desktop approval
         if: vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true'
         shell: bash
@@ -499,7 +482,7 @@ jobs:
           SEMANTIC_RELEASE_QUALIFIED: ${{ vars.SEMANTIC_RELEASE_QUALIFIED }}
           SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
           RELEASE_SOURCE_REVISION: ${{ needs.release.outputs.release_commit }}
-        run: node scripts/check-qualified-gemma-release.mjs --desktop --macos-arm64-only --release-source-revision "$RELEASE_SOURCE_REVISION"
+        run: node scripts/check-qualified-gemma-release.mjs --desktop --release-source-revision "$RELEASE_SOURCE_REVISION"
       - name: Require explicit risk acceptance for unqualified Gemma
         if: vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'
         shell: bash
@@ -608,26 +591,13 @@ jobs:
             --pattern "*-setup.exe.sig" \
             --dir updater-assets
       - name: Generate signed update metadata
-        env:
-          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
-          GEMMA_DESKTOP_NON_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
-          GEMMA_DESKTOP_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
         run: |
-          EXTRA_ARGS=()
-          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" ]]; then
-            EXTRA_ARGS=(--experimental-gemma --gemma-arm64-only)
-          elif [[ "$GEMMA_DESKTOP_NON_EXPERIMENTAL" == "true" ]]; then
-            EXTRA_ARGS=(--gemma-arm64-only)
-          elif [[ "$GEMMA_DESKTOP_RISK_ACCEPTED" == "true" ]]; then
-            EXTRA_ARGS=(--gemma-arm64-only)
-          fi
           node scripts/generate-updater-manifest.mjs \
             --assets updater-assets \
             --repository "$GITHUB_REPOSITORY" \
             --tag "$RELEASE_TAG" \
             --version "${RELEASE_TAG#v}" \
-            --output latest.json \
-            "${EXTRA_ARGS[@]}"
+            --output latest.json
       - name: Publish update endpoint
         env:
           GH_TOKEN: ${{ github.token }}

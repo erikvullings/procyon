@@ -122,21 +122,17 @@ test('unapproved or incomplete component releases fail closed', () => {
   );
 });
 
-test('experimental desktop requires opt-in and an approved architecture and model revision', () => {
+test('experimental desktop requires opt-in and an approved model revision', () => {
   const approval = JSON.parse(
     readFileSync(
       new URL('../docs/evaluations/semantic-gemma-experimental-v1.json', import.meta.url),
     ),
   );
   assert.throws(
-    () => checkDesktopGemmaRelease(approval, 'false', 'true', 'arm64'),
+    () => checkDesktopGemmaRelease(approval, 'false', 'true'),
     /both independent release approvals/u,
   );
-  assert.deepEqual(checkDesktopGemmaRelease(approval, 'true', 'true', 'arm64'), approval);
-  assert.throws(
-    () => checkDesktopGemmaRelease(approval, 'true', 'true'),
-    /universal macOS desktop/u,
-  );
+  assert.deepEqual(checkDesktopGemmaRelease(approval, 'true', 'true'), approval);
   const targets = Object.fromEntries(
     ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'].map((target) => [
       target,
@@ -155,15 +151,8 @@ test('experimental desktop requires opt-in and an approved architecture and mode
   };
   assert.throws(() => checkDesktopGemmaRelease(proposed, 'false', 'true'), /both independent/u);
   assert.throws(() => checkDesktopGemmaRelease(proposed, 'true', 'false'), /both independent/u);
-  assert.throws(
-    () => checkDesktopGemmaRelease(proposed, 'true', 'true'),
-    /universal macOS desktop requires an approved macos-x86_64 worker\/catalog/u,
-  );
-  assert.doesNotThrow(() => checkDesktopGemmaRelease(proposed, 'true', 'true', 'arm64'));
-  assert.throws(
-    () => checkDesktopGemmaRelease(proposed, 'true', 'true', 'x86_64'),
-    /universal macOS desktop requires an approved macos-x86_64 worker\/catalog/u,
-  );
+  // A universal Mac app is allowed: its Intel slice disables production semantic search.
+  assert.doesNotThrow(() => checkDesktopGemmaRelease(proposed, 'true', 'true'));
   assert.throws(
     () =>
       checkDesktopGemmaRelease(

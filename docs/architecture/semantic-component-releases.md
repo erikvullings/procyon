@@ -48,10 +48,11 @@ against the signed candidate source before packaging. Until the release owner re
 passes and explicitly enables the new variable, the non-experimental path cannot publish or embed
 Gemma.
 
-Both Gemma desktop modes produce an arm64-only macOS app because no Intel worker/catalog is
-approved. The qualified GitHub release is not marked as a prerelease, but is explicitly excluded
+Both Gemma desktop modes produce a universal macOS app, like the default build. No Intel
+worker/catalog is approved, so the Intel slice runs without semantic search, exactly as in the E5
+build. The qualified GitHub release is not marked as a prerelease, but is explicitly excluded
 from GitHub's default latest release. Like every build, it uses the single `updater-latest`
-endpoint; it omits the Intel updater entry, and does not publish cross-platform package-manager
+endpoint, includes both macOS updater entries, and does not publish cross-platform package-manager
 metadata. Only that build uses the non-experimental Gemma label in Settings; the default and experimental builds retain the
 experimental label.
 

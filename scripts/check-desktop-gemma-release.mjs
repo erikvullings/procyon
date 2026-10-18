@@ -55,7 +55,6 @@ export function checkDesktopGemmaRelease(
   manifest,
   semanticEnabled,
   experimentalEnabled,
-  macosArchitecture = 'universal',
   releaseSourceRevision,
 ) {
   if (semanticEnabled !== 'true' || experimentalEnabled !== 'true') {
@@ -69,12 +68,6 @@ export function checkDesktopGemmaRelease(
   }
   for (const target of ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64']) {
     semanticComponentReleasePlan(manifest, target);
-  }
-  // A universal or Intel app cannot use the signed arm64-only Mac worker.
-  if (macosArchitecture !== 'arm64') {
-    throw new Error(
-      'experimental universal macOS desktop requires an approved macos-x86_64 worker/catalog; arm64 alone cannot run on Intel',
-    );
   }
   return manifest;
 }
@@ -94,7 +87,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     manifest,
     process.env.SEMANTIC_RELEASE_QUALIFIED,
     process.env.SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED,
-    process.argv.includes('--macos-arm64-only') ? 'arm64' : 'universal',
     releaseSourceRevision,
   );
   console.log(
