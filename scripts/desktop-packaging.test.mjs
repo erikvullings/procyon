@@ -467,7 +467,7 @@ test('updater manifest embeds signed versioned artifacts for every supported tar
   assert.deepEqual(JSON.parse(readFileSync(qualifiedOutput)), qualified);
 });
 
-test('experimental updater and package managers never replace stable Intel channels', () => {
+test('Gemma releases share the single updater channel and skip package managers', () => {
   const release = workflow('release-desktop.yml');
   for (const job of [
     release.jobs.release,
@@ -501,9 +501,17 @@ test('experimental updater and package managers never replace stable Intel chann
   assert.match(description.prerelease, /SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL/u);
   assert.match(description.body, /Apple Silicon \(arm64\)/u);
   const updater = release.jobs['updater-manifest'];
-  const publish = updater.steps.find((step) => step.name === 'Publish selected update endpoint');
-  assert.match(publish.run, /updater-gemma-experimental/u);
-  assert.match(publish.run, /updater-latest/u);
+  const publish = updater.steps.find((step) => step.name === 'Publish update endpoint');
+  assert.match(publish.run, /UPDATE_TAG=updater-latest\n/u);
+  assert.doesNotMatch(publish.run, /UPDATE_TAG=updater-gemma/u);
+  for (const legacy of [
+    'updater-gemma-experimental',
+    'updater-gemma',
+    'updater-gemma-risk-accepted',
+  ]) {
+    assert.match(publish.run, new RegExp(`\\b${legacy}\\b`, 'u'));
+  }
+  assert.match(publish.run, /gh release view "\$legacy"/u);
   assert.match(
     updater.steps.find((step) => step.name === 'Generate signed update metadata').run,
     /--experimental-gemma/u,
@@ -512,41 +520,28 @@ test('experimental updater and package managers never replace stable Intel chann
     updater.steps.find((step) => step.name === 'Generate signed update metadata').run,
     /--gemma-arm64-only/u,
   );
-  assert.match(publish.run, /updater-gemma[^-]/u);
   assert.match(release.jobs.homebrew.if, /SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true'/u);
   assert.match(release.jobs.chocolatey.if, /SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true'/u);
   const stable = JSON.parse(read('apps', 'fm-desktop', 'src-tauri', 'tauri.conf.json'));
   assert.match(stable.plugins.updater.endpoints[0], /updater-latest\/latest\.json$/u);
-  const generated = JSON.parse(
-    execFileSync('node', ['scripts/build-tauri.mjs', '--print-config'], {
-      cwd: repoRoot,
-      env: { ...process.env, GEMMA_DESKTOP_EXPERIMENTAL: 'true' },
-      encoding: 'utf8',
-    }),
-  );
-  assert.deepEqual(generated.plugins.updater.endpoints, [
-    'https://github.com/erikvullings/procyon/releases/download/updater-gemma-experimental/latest.json',
-  ]);
-  const qualified = JSON.parse(
-    execFileSync('node', ['scripts/build-tauri.mjs', '--print-config'], {
-      cwd: repoRoot,
-      env: { ...process.env, GEMMA_DESKTOP_NON_EXPERIMENTAL: 'true' },
-      encoding: 'utf8',
-    }),
-  );
-  assert.deepEqual(qualified.plugins.updater.endpoints, [
-    'https://github.com/erikvullings/procyon/releases/download/updater-gemma/latest.json',
-  ]);
-  const riskAccepted = JSON.parse(
-    execFileSync('node', ['scripts/build-tauri.mjs', '--print-config'], {
-      cwd: repoRoot,
-      env: { ...process.env, GEMMA_DESKTOP_RISK_ACCEPTED: 'true' },
-      encoding: 'utf8',
-    }),
-  );
-  assert.deepEqual(riskAccepted.plugins.updater.endpoints, [
-    'https://github.com/erikvullings/procyon/releases/download/updater-gemma-risk-accepted/latest.json',
-  ]);
+  for (const mode of [
+    'GEMMA_DESKTOP_EXPERIMENTAL',
+    'GEMMA_DESKTOP_NON_EXPERIMENTAL',
+    'GEMMA_DESKTOP_RISK_ACCEPTED',
+  ]) {
+    const generated = JSON.parse(
+      execFileSync('node', ['scripts/build-tauri.mjs', '--print-config'], {
+        cwd: repoRoot,
+        env: { ...process.env, [mode]: 'true' },
+        encoding: 'utf8',
+      }),
+    );
+    assert.equal(
+      generated.plugins,
+      undefined,
+      `${mode} must keep the single updater-latest channel`,
+    );
+  }
   assert.throws(
     () =>
       execFileSync('node', ['scripts/build-tauri.mjs', '--print-config'], {

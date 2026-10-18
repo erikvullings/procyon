@@ -379,7 +379,10 @@ configuration includes `APPLE_CERTIFICATE`, `APPLE_API_KEY_P8`, `HOMEBREW_TAP_TO
 `CHOCOLATEY_API_KEY`. Updater bundles are independently signed on every platform with
 `TAURI_SIGNING_PRIVATE_KEY` and its optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; the public key
 is compiled into the desktop app. The release workflow publishes versioned signed artifacts and
-atomically replaces the `latest.json` asset on the managed `updater-latest` prerelease.
+atomically replaces the `latest.json` asset on the managed `updater-latest` prerelease. This is
+the only update channel: every build, including Gemma release modes, polls it. Builds up to v0.6.0
+polled retired `updater-gemma*` channels, so the workflow also refreshes any of those that still exist
+until existing installs have moved to an `updater-latest` build.
 
 Optional semantic workers, native runtimes, models, and signed catalogs use the independent
 `.github/workflows/release-semantic-components.yml` flow and immutable `semantic-v*` releases.

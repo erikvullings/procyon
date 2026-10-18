@@ -628,21 +628,12 @@ jobs:
             --version "${RELEASE_TAG#v}" \
             --output latest.json \
             "${EXTRA_ARGS[@]}"
-      - name: Publish selected update endpoint
+      - name: Publish update endpoint
         env:
           GH_TOKEN: ${{ github.token }}
-          GEMMA_DESKTOP_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL }}
-          GEMMA_DESKTOP_NON_EXPERIMENTAL: ${{ vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED }}
-          GEMMA_DESKTOP_RISK_ACCEPTED: ${{ vars.SEMANTIC_GEMMA_RISK_ACCEPTED }}
         run: |
+          # Every build polls the single updater-latest channel.
           UPDATE_TAG=updater-latest
-          if [[ "$GEMMA_DESKTOP_EXPERIMENTAL" == "true" ]]; then
-            UPDATE_TAG=updater-gemma-experimental
-          elif [[ "$GEMMA_DESKTOP_NON_EXPERIMENTAL" == "true" ]]; then
-            UPDATE_TAG=updater-gemma
-          elif [[ "$GEMMA_DESKTOP_RISK_ACCEPTED" == "true" ]]; then
-            UPDATE_TAG=updater-gemma-risk-accepted
-          fi
           if ! gh release view "$UPDATE_TAG" >/dev/null 2>&1; then
             gh release create "$UPDATE_TAG" \
               --prerelease \
@@ -650,6 +641,13 @@ jobs:
               --notes "Managed endpoint for signed desktop update metadata."
           fi
           gh release upload "$UPDATE_TAG" latest.json --clobber
+          # Builds up to v0.6.0 poll retired Gemma channels; keep any that still
+          # exist current so those installs migrate to an updater-latest build.
+          for legacy in updater-gemma-experimental updater-gemma updater-gemma-risk-accepted; do
+            if gh release view "$legacy" >/dev/null 2>&1; then
+              gh release upload "$legacy" latest.json --clobber
+            fi
+          done
 
   homebrew:
     name: Publish cross-platform Homebrew cask
