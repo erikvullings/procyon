@@ -9,6 +9,9 @@ export const pl = {
     close: 'Zamknij przewodniki',
     chooseGuide: 'Wybierz przewodnik',
     englishContent: 'Przewodniki są obecnie dostępne tylko po angielsku.',
+    invitation: 'Zaczynasz korzystać z Procyon? Zobacz krótki przewodnik.',
+    watch: 'Otwórz przewodnik',
+    dismiss: 'Zamknij zaproszenie',
   },
   basket: {
     ...en.basket,

@@ -24,6 +24,8 @@ export interface RuntimeCapabilitiesDto {
   finderAliases: boolean;
   /** Whether Finder tags can be read/written (task 0136). */
   finderTags: boolean;
+  /** Whether the service started without any previously persisted installation data. */
+  freshInstall: boolean;
   /** Whether dragging entries out to the OS is supported. */
   nativeDragOut: boolean;
   /** Whether native file icons can be fetched. */

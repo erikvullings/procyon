@@ -1,6 +1,6 @@
 # 0241 Guided walkthroughs and in-app help
 
-Status: blocked
+Status: in progress
 Priority: medium
 Subsystem: frontend
 Depends on: 0025, 0030, 0068, 0070, 0079, 0104, 0238
@@ -70,3 +70,29 @@ user on 2026-10-09; it is not an interactive filesystem exercise.
   two focused tests), TypeScript/Vite build passed, and changed frontend
   files passed Biome. Workspace lint was started but stopped during the
   cold full-workspace Clippy build; no Rust sources changed.
+- 2026-10-09: With macOS Screen Recording permission granted, captured the
+  installed v0.4.2 app in a disposable data directory using window-only
+  capture. The 18-second offline clip stitches real-app F3 viewing, F4
+  editing without saving, ZIP creation, and a verified F5 copy into an
+  initially empty `~/Downloads/test`. The left pane held a staged public
+  `README.md`, not an entire repository checkout. Downloads and Documents
+  remained inactive tab headers in the published frames; the breadcrumbs
+  were masked. Restored the user's original app data and removed only the
+  temporary ZIP from their destination. Bundled captions, poster, and a
+  no-autoplay Help player with written fallback. The frontend build and all
+  153 frontend test files passed (2366 tests);
+  the focused panel tests cover media presence, failure fallback, guide
+  switching and replay, and the app-shell test checks mock/HTTP visibility.
+  **Still blocked:** there is no reliable fresh-install signal shared by all
+  hosts, so the one-time invitation is not implemented. Do not mark this task
+  done or prompt existing users on upgrade solely because a localStorage
+  marker is missing.
+- 2026-10-18: Merged current `origin/main` before finishing the invitation.
+  The service now reports fresh-install eligibility before initialization
+  writes data; existing workspace or settings data prevents an upgrade-time
+  prompt. The shared frontend shows a one-time, dismissible invitation only
+  after the initial workspace loads, with a browser-local shown marker and
+  no automatic playback. Focused tests cover restart persistence, failed
+  startup, dismissal, and mock/HTTP/Tauri shell behavior. The clip still
+  depicts a staged public README rather than a full repository checkout;
+  do not represent it as showing the entire checkout.

@@ -7,6 +7,9 @@ export const en = {
     close: 'Close walkthroughs',
     chooseGuide: 'Choose a guide',
     englishContent: 'Guides and captions are currently available in English.',
+    invitation: 'New to Procyon? See a short walkthrough.',
+    watch: 'View walkthrough',
+    dismiss: 'Dismiss walkthrough invitation',
   },
   basket: {
     title: 'Collection basket',

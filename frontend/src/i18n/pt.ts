@@ -9,6 +9,9 @@ export const pt = {
     close: 'Fechar guias',
     chooseGuide: 'Escolher guia',
     englishContent: 'Os guias estão atualmente disponíveis apenas em inglês.',
+    invitation: 'É a primeira vez no Procyon? Veja o guia rápido.',
+    watch: 'Ver guia',
+    dismiss: 'Fechar convite',
   },
   basket: {
     ...en.basket,

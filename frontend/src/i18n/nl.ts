@@ -9,6 +9,9 @@ export const nl = {
     close: 'Rondleidingen sluiten',
     chooseGuide: 'Kies een gids',
     englishContent: 'De gidsen zijn voorlopig alleen in het Engels beschikbaar.',
+    invitation: 'Nieuw bij Procyon? Bekijk een korte rondleiding.',
+    watch: 'Bekijk rondleiding',
+    dismiss: 'Uitnodiging sluiten',
   },
   basket: {
     ...en.basket,

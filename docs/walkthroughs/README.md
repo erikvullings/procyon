@@ -1,8 +1,12 @@
 # Procyon walkthroughs
 
 Start with [Two panes, one safe copy](basics.md), then choose the task you need. The
-walkthroughs are included in Procyon's Help panel and work offline. A macOS
-demonstration clip is planned; the written steps apply to other platforms.
+walkthroughs are included in Procyon's Help panel and work offline. The basics
+guide includes a captioned macOS demonstration; the written steps apply to
+other platforms.
+New installations offer the basics guide once after the first workspace opens.
+Dismiss the invitation or reopen the guide any time from Help; the video never
+starts automatically.
 Shortcuts can be remapped: press **F1** in Procyon for the current bindings.
 
 | Task | Guide |

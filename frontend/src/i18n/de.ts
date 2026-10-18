@@ -9,6 +9,9 @@ export const de = {
     close: 'Anleitungen schließen',
     chooseGuide: 'Anleitung auswählen',
     englishContent: 'Die Anleitungen sind derzeit nur auf Englisch verfügbar.',
+    invitation: 'Neu bei Procyon? Sehen Sie sich eine kurze Einführung an.',
+    watch: 'Einführung ansehen',
+    dismiss: 'Einladung schließen',
   },
   basket: {
     ...en.basket,

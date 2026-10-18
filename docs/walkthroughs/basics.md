@@ -1,10 +1,10 @@
 # Two panes, one safe copy
 
-The planned macOS clip will show the public Procyon source checkout in the
-**left pane** and `~/Downloads/test` in the **right pane**. Downloads and
-Documents will appear only as tab headers, without exposing their contents.
-The recording will be a demonstration, not an exercise: watching it will
-change no files on your machine.
+The captioned macOS clip in Procyon's Help panel shows a staged copy of the
+public Procyon `README.md` in the **left pane** and `~/Downloads/test` in the
+**right pane**. Downloads and Documents appear only as tab headers; their
+contents are not shown. This edited demonstration is not an exercise: watching
+it changes no files on your machine.
 
 To try the same workflow with your own files:
 
@@ -15,7 +15,7 @@ To try the same workflow with your own files:
    the viewer. Press **F4** to open it in the editor; close without saving if
    you are only exploring.
 3. Select that file and choose **Pack to Archive** from the command palette
-   or command palette. Create a ZIP archive and wait for the operation to finish.
+   or use its shortcut. Create a ZIP archive and wait for the operation to finish.
 4. Select the new ZIP in the left pane. Confirm that the right pane displays
    the intended destination, then press **F5** to copy. Review the operation
    and any conflict prompt before proceeding. The source remains in place.

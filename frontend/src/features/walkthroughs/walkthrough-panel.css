@@ -68,6 +68,22 @@
   padding: 0.8rem 1.2rem 1.5rem;
 }
 
+.fm-walkthrough-media {
+  margin: 0 0 1rem;
+}
+
+.fm-walkthrough-media video {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--fm-background);
+}
+
+.fm-walkthrough-media figcaption,
+.fm-walkthrough-media-fallback {
+  color: var(--fm-text-muted);
+}
+
 .fm-walkthrough-article {
   max-width: 72ch;
   line-height: 1.5;
@@ -91,6 +107,34 @@
 }
 
 .fm-help-trigger:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 2px;
+}
+
+.fm-walkthrough-invitation {
+  position: fixed;
+  z-index: 34;
+  right: 0.8rem;
+  bottom: 3.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: min(28rem, calc(100vw - 1.6rem));
+  padding: 0.6rem 0.8rem;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  border: 1px solid var(--fm-border);
+  box-shadow: var(--fm-shadow);
+}
+
+.fm-walkthrough-invitation button {
+  color: var(--fm-accent);
+  background: transparent;
+  border: 1px solid var(--fm-border);
+  cursor: pointer;
+}
+
+.fm-walkthrough-invitation :focus-visible {
   outline: 2px solid var(--fm-accent);
   outline-offset: 2px;
 }

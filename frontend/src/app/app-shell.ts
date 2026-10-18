@@ -466,6 +466,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let connectionsManagerOpen = false;
   let shortcutsHelpOpen = false;
   let walkthroughsOpen = false;
+  let walkthroughInvitationVisible = false;
   let selectedWalkthrough: WalkthroughId = 'basics';
   let semanticAssistantAvailable = false;
   let knowledgeSearchAvailable = false;
@@ -3477,6 +3478,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   const workspaceControllerContext: WorkspaceControllerContext = {
     getWorkspace: () => workspace,
+    onInitialWorkspaceReady: (freshInstall) => {
+      if (!freshInstall) return;
+      try {
+        const key = 'procyon.walkthroughInvitationShown';
+        if (localStorage.getItem(key) !== null) return;
+        localStorage.setItem(key, '1');
+        walkthroughInvitationVisible = true;
+      } catch (error: unknown) {
+        console.warn('Could not persist the walkthrough invitation; it will not be shown.', error);
+      }
+    },
     setWorkspace: (ws) => {
       workspace = ws;
     },
@@ -5531,6 +5543,38 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   document.querySelector<HTMLButtonElement>('.fm-help-trigger')?.focus();
                 },
               })
+            : undefined,
+          walkthroughInvitationVisible
+            ? m(
+                'aside.fm-walkthrough-invitation',
+                { 'aria-label': t('walkthroughs', 'invitation') },
+                [
+                  m('span', t('walkthroughs', 'invitation')),
+                  m(
+                    'button',
+                    {
+                      type: 'button',
+                      onclick: () => {
+                        walkthroughInvitationVisible = false;
+                        selectedWalkthrough = 'basics';
+                        walkthroughsOpen = true;
+                      },
+                    },
+                    t('walkthroughs', 'watch'),
+                  ),
+                  m(
+                    'button',
+                    {
+                      type: 'button',
+                      'aria-label': t('walkthroughs', 'dismiss'),
+                      onclick: () => {
+                        walkthroughInvitationVisible = false;
+                      },
+                    },
+                    '×',
+                  ),
+                ],
+              )
             : undefined,
           m('main.fm-workspace', [
             (() => {
