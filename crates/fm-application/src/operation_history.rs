@@ -10,7 +10,8 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread::JoinHandle;
 
 use fm_domain::OperationId;
 use fm_operations::{Operation, OperationSnapshotObserver, OperationState, UndoPlan};
@@ -27,8 +28,129 @@ const OPERATION_HISTORY_MAX_AGE_DAYS: i64 = 30;
 
 /// Crash-safe operation snapshots stored beside settings.
 pub(crate) struct OperationHistory {
-    path: PathBuf,
-    operations: Mutex<Vec<Operation>>,
+    operations: Arc<Mutex<Vec<Operation>>>,
+    writer: HistoryWriter,
+}
+
+/// Write-behind persistence for [`OperationHistory`].
+///
+/// Every scheduler state transition used to serialize and `fsync` the whole history on the
+/// scheduler's own thread; on macOS that `fsync` costs roughly 300 ms, so a single-file delete
+/// (queued, planning, running, completed) took over a second to reach the UI. Transitions now only
+/// mark the history dirty; a dedicated thread coalesces bursts into one durable write of the
+/// latest snapshot. Dropping the history drains the pending write.
+struct HistoryWriter {
+    shared: Arc<WriterShared>,
+    thread: Mutex<Option<JoinHandle<()>>>,
+}
+
+#[derive(Default)]
+struct WriterState {
+    dirty: bool,
+    writing: bool,
+    closed: bool,
+}
+
+#[derive(Default)]
+struct WriterShared {
+    state: Mutex<WriterState>,
+    wake: Condvar,
+    idle: Condvar,
+}
+
+impl HistoryWriter {
+    fn spawn(path: PathBuf, operations: Arc<Mutex<Vec<Operation>>>) -> Self {
+        let shared = Arc::new(WriterShared::default());
+        let worker = Arc::clone(&shared);
+        let thread = std::thread::Builder::new()
+            .name("operation-history-writer".into())
+            .spawn(move || {
+                loop {
+                    {
+                        let mut state = worker.state.lock().unwrap_or_else(|e| e.into_inner());
+                        while !state.dirty && !state.closed {
+                            state = worker.wake.wait(state).unwrap_or_else(|e| e.into_inner());
+                        }
+                        if !state.dirty {
+                            return;
+                        }
+                        state.dirty = false;
+                        state.writing = true;
+                    }
+                    let bytes = {
+                        let operations = operations.lock().unwrap_or_else(|e| e.into_inner());
+                        serde_json::to_vec_pretty(&*operations)
+                    };
+                    if let Ok(bytes) = bytes {
+                        write_history_file(&path, &bytes);
+                    }
+                    let mut state = worker.state.lock().unwrap_or_else(|e| e.into_inner());
+                    state.writing = false;
+                    worker.idle.notify_all();
+                }
+            })
+            .ok();
+        Self {
+            shared,
+            thread: Mutex::new(thread),
+        }
+    }
+
+    /// Marks the history dirty; returns immediately.
+    fn request_save(&self) {
+        let mut state = self.shared.state.lock().unwrap_or_else(|e| e.into_inner());
+        state.dirty = true;
+        self.shared.wake.notify_one();
+    }
+
+    /// Blocks until every requested save has reached disk.
+    #[cfg(test)]
+    fn flush(&self) {
+        let mut state = self.shared.state.lock().unwrap_or_else(|e| e.into_inner());
+        while state.dirty || state.writing {
+            state = self
+                .shared
+                .idle
+                .wait(state)
+                .unwrap_or_else(|e| e.into_inner());
+        }
+    }
+}
+
+impl Drop for HistoryWriter {
+    fn drop(&mut self) {
+        {
+            let mut state = self.shared.state.lock().unwrap_or_else(|e| e.into_inner());
+            state.closed = true;
+            self.shared.wake.notify_one();
+        }
+        if let Some(thread) = self.thread.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// Atomically replaces the history file (temporary file, `fsync`, rename).
+fn write_history_file(path: &Path, bytes: &[u8]) {
+    let Some(directory) = path.parent() else {
+        return;
+    };
+    if fs::create_dir_all(directory).is_err() {
+        return;
+    }
+    let temporary = directory.join(format!(
+        ".{OPERATION_HISTORY_FILE_NAME}.{}.tmp",
+        std::process::id()
+    ));
+    if fs::File::create(&temporary)
+        .and_then(|mut file| {
+            file.write_all(bytes)?;
+            file.sync_all()
+        })
+        .is_ok()
+    {
+        let _ = fs::rename(temporary, path);
+    }
 }
 
 /// Bridges the scheduler's [`OperationSnapshotObserver`] callback to both history persistence
@@ -87,9 +209,10 @@ impl OperationHistory {
                 operation.undo.pending_operation = None;
             }
         }
+        let operations = Arc::new(Mutex::new(operations));
         let history = Self {
-            path,
-            operations: Mutex::new(operations),
+            operations: Arc::clone(&operations),
+            writer: HistoryWriter::spawn(path, operations),
         };
         history.prune_and_save();
         history
@@ -209,28 +332,8 @@ impl OperationHistory {
                 .map(|(_, operation)| operation.clone())
                 .collect();
         }
-        let Ok(bytes) = serde_json::to_vec_pretty(&*operations) else {
-            return;
-        };
-        let Some(directory) = self.path.parent() else {
-            return;
-        };
-        if fs::create_dir_all(directory).is_err() {
-            return;
-        }
-        let temporary = directory.join(format!(
-            ".{OPERATION_HISTORY_FILE_NAME}.{}.tmp",
-            std::process::id()
-        ));
-        if fs::File::create(&temporary)
-            .and_then(|mut file| {
-                file.write_all(&bytes)?;
-                file.sync_all()
-            })
-            .is_ok()
-        {
-            let _ = fs::rename(temporary, &self.path);
-        }
+        drop(operations);
+        self.writer.request_save();
     }
 }
 
@@ -464,5 +567,73 @@ fn operation_result_summary(operation: &Operation) -> Option<String> {
             operation.progress.completed_items
         )),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fm_operations::{ConflictPolicy, OperationKind};
+
+    use super::*;
+
+    fn planning_operation() -> Operation {
+        let mut operation =
+            Operation::new(OperationKind::Delete, vec![], None, ConflictPolicy::Ask);
+        operation
+            .transition(OperationState::Planning)
+            .expect("queued operation starts planning");
+        operation
+    }
+
+    #[test]
+    fn observed_transitions_are_persisted_by_the_write_behind_thread() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let history = OperationHistory::load(directory.path());
+        let operation = planning_operation();
+
+        history.observe(&operation);
+        history.writer.flush();
+
+        let reloaded = OperationHistory::load(directory.path());
+        assert_eq!(
+            reloaded.list().len(),
+            1,
+            "in-flight operation is restored as interrupted"
+        );
+    }
+
+    #[test]
+    fn dropping_the_history_drains_the_pending_write() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let operation = planning_operation();
+        {
+            let history = OperationHistory::load(directory.path());
+            history.observe(&operation);
+        }
+
+        let reloaded = OperationHistory::load(directory.path());
+        assert_eq!(reloaded.list().len(), 1);
+    }
+
+    #[test]
+    fn a_burst_of_transitions_keeps_only_the_latest_snapshot() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let history = OperationHistory::load(directory.path());
+        let mut operation = planning_operation();
+        history.observe(&operation);
+        operation
+            .transition(OperationState::Running)
+            .expect("planning operation starts running");
+        history.observe(&operation);
+        operation
+            .transition(OperationState::Completed)
+            .expect("running operation completes");
+        history.observe(&operation);
+        history.writer.flush();
+
+        let reloaded = OperationHistory::load(directory.path());
+        let listed = reloaded.list();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].state, OperationStateDto::Completed);
     }
 }
