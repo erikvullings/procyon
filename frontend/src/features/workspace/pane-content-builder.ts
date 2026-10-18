@@ -52,6 +52,7 @@ import type { ActiveSourceState } from '../operations/operation-state';
 import type { OperationsController } from '../operations/operations-controller';
 import type { PaneRenameRequest } from '../panes/pane';
 import { isParentEntry, withParentEntry } from '../panes/parent-entry';
+import type { PlaylistViewAttrs } from '../playlist/playlist-view';
 import { PluginPanelHost, type PluginPaneState } from '../plugins/plugin-panel-host';
 import { FileViewer } from '../preview/file-viewer';
 import { fileViewerAttrs } from '../preview/file-viewer-attrs';
@@ -215,6 +216,8 @@ export interface PaneContentContext {
   ): void;
   closeViewer(paneId: PaneId): void;
   isDocumentSummaryAvailable?(): boolean;
+  /** Hands playlist rows to the audio queue (task 0262). */
+  playQueueItems?: PlaylistViewAttrs['onPlay'];
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
   /** Opens search-only knowledge search defaulted to the visible result set (task 0206). */
   openKnowledgeSearch?(): void;
@@ -1070,6 +1073,9 @@ export function createPaneContentBuilder(
                               context.openDocumentSummary?.(paneId, viewer.state.entry),
                           }
                         : {}),
+                      ...(context.playQueueItems === undefined
+                        ? {}
+                        : { onPlayTracks: context.playQueueItems }),
                       onClose: () => context.closeViewer(paneId),
                     }),
                   );

@@ -1,4 +1,5 @@
 import type { BasketState } from '../features/basket/basket';
+import type { PlayerState } from '../features/player/player-state';
 import type {
   BackendNotification,
   ClipboardState,
@@ -81,6 +82,11 @@ export function runtimeState(
 /** Replaces the frontend-owned in-application clipboard. */
 export function clipboardPatch(clipboard: ClipboardState): AppPatch {
   return { clipboard: () => clipboard };
+}
+
+/** Replaces the audio queue state (task 0262). */
+export function playerPatch(player: PlayerState): AppPatch {
+  return { player: () => player };
 }
 
 export function basketPatch(workspaceId: string, basket: BasketState): AppPatch {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-
+import { playItems } from '../features/player/player-state';
 import type {
   DirectorySnapshot,
   EntrySummary,
@@ -20,6 +20,7 @@ import {
   notificationPatch,
   operationPatch,
   operationProgressPatch,
+  playerPatch,
   pluginPatch,
   runtimePatch,
   setClosedTabStackPatch,
@@ -259,5 +260,26 @@ describe('state slice reducers', () => {
   it('initialises content matches as empty', () => {
     const state = createInitialAppState('mock');
     expect(state.contentMatches.byEntryUri).toEqual({});
+  });
+});
+
+describe('playerPatch', () => {
+  it('replaces the player slice without touching others', () => {
+    const initial = createInitialAppState('mock');
+    const player = playItems(
+      initial.player,
+      [
+        {
+          id: 'a',
+          title: 'A',
+          location: { providerId: 'local', uri: 'file:///a.mp3' },
+          durationSeconds: undefined,
+        },
+      ],
+      undefined,
+    );
+    const next = applyAppPatches(initial, playerPatch(player));
+    expect(next.player.currentId).toBe('a');
+    expect(next.clipboard).toBe(initial.clipboard);
   });
 });

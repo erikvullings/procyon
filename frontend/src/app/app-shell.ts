@@ -154,6 +154,13 @@ import {
   type TabController,
   type TabControllerContext,
 } from '../features/panes/tab-controller';
+import { MiniPlayer } from '../features/player/mini-player';
+import { PLAYER_CLIENT_ACTIONS } from '../features/player/player-actions';
+import {
+  createPlayerController,
+  type PlayerController,
+} from '../features/player/player-controller';
+import { createInitialPlayerState, type PlayerState } from '../features/player/player-state';
 import type { PluginPaneState } from '../features/plugins/plugin-panel-host';
 import {
   createFileViewerController,
@@ -270,6 +277,7 @@ import {
   connectionPatch,
   createInitialAppState,
   deleteQuickFilterDraftPatch,
+  playerPatch,
   setQuickFilterDraftPatch,
 } from '../state';
 import { perfEndAfterPaint, perfStart } from '../utilities/perf';
@@ -508,6 +516,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     ];
   }
 
+  /** Dispatches frontend-only `client.*` actions that need shell state (the audio player). */
+  function invokeClientAction(actionId: string): boolean {
+    const player = playerController;
+    if (player === undefined) return false;
+    if (actionId === 'client.playerTogglePlay') player.togglePlay();
+    else if (actionId === 'client.playerNext') player.next();
+    else if (actionId === 'client.playerPrevious') player.previous();
+    else return false;
+    m.redraw();
+    return true;
+  }
+
   function localisedRegisteredActions(): readonly ActionDescriptor[] {
     return registeredActions.map((action) => ({
       ...action,
@@ -535,7 +555,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    * synthesized client-side the same way `favouriteActions` is - see `invokePaletteAction`'s
    * `client.*` branches for the dispatch side. */
   function clientOnlyActions(): readonly ActionDescriptor[] {
+    const hasQueue = (appState?.player.queue.length ?? 0) > 0;
     return [
+      ...(hasQueue
+        ? PLAYER_CLIENT_ACTIONS.map(({ id, title }) => ({
+            id,
+            title: t('player', title),
+            category: 'tools',
+            defaultShortcuts: [],
+            contextRequirements: {},
+            source: { kind: 'core' as const },
+          }))
+        : []),
       {
         id: 'client.toggleDirectoryTree',
         title: t('tree', 'toggleSidebar'),
@@ -940,6 +971,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let unsubscribeConnection: (() => void) | undefined;
   let unsubscribeResynchronise: (() => void) | undefined;
   let appState: AppState | undefined;
+  let playerController: PlayerController | undefined;
+  const emptyPlayerState = createInitialPlayerState();
   let operations = createOperationsState();
   let pendingConflict: OperationConflict | undefined;
   let clipboardMessage: string | undefined;
@@ -3994,6 +4027,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     calculateChecksums: () => checksumController.calculateChecksums(['sha256']),
     findDuplicates: () => checksumController.findDuplicates(),
     openDiskUsage,
+    invokeClientAction,
     openSemanticAssistant,
     openKnowledgeSearch,
     openSettingsDialog,
@@ -4143,6 +4177,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     calculateChecksums: () => checksumController.calculateChecksums(['sha256']),
     findDuplicates: () => checksumController.findDuplicates(),
     openDiskUsage,
+    invokeClientAction,
     openPropertiesForActivePane: () => globalKeydownHandlerContext.openPropertiesForActivePane(),
     openMultiRenameForActivePane: () => globalKeydownHandlerContext.openMultiRenameForActivePane(),
     openDocumentSummary: (_paneId, entry) => {
@@ -4271,6 +4306,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       openViewer(attrsClient, paneId, entry, initialSearch, openMetadata, initialPage),
     closeViewer,
     isDocumentSummaryAvailable: () => semanticAssistantAvailable,
+    playQueueItems: (items, startId, mode, skipped) => {
+      const player = playerController;
+      if (player === undefined) return;
+      if (items.length === 0) {
+        toast({ html: t('player', 'noPlayableTracks') });
+        return;
+      }
+      if (mode === 'play') player.playItems(items, startId);
+      else if (mode === 'next') player.enqueueNext(items);
+      else player.enqueue(items);
+      if (mode !== 'play') toast({ html: t('player', 'queued', items.length) });
+      if (skipped.remote > 0) toast({ html: t('player', 'playlistNetworkSkipped') });
+      m.redraw();
+    },
     openDocumentSummary: (_paneId, entry) => {
       if (!semanticAssistantAvailable) return;
       if (workspace === undefined) return;
@@ -4621,6 +4670,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           create: () => createActionCommandController(actionCommandControllerContext),
         },
         paneContent: { create: () => createPaneContentBuilder(paneContentBuilderContext) },
+        player: {
+          create: () =>
+            createPlayerController({
+              client: attrs.client,
+              getState: () => appState?.player ?? emptyPlayerState,
+              update: (next: PlayerState) => {
+                if (appState !== undefined) appState = applyAppPatches(appState, playerPatch(next));
+                m.redraw();
+              },
+            }),
+          dispose: (controller) => controller.dispose(),
+        },
         navigation: {
           create: () =>
             createNavigationController({
@@ -4735,6 +4796,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       checksumController = shellControllers.instances.checksum;
       actionCommandController = shellControllers.instances.actionCommand;
       paneContentBuilder = shellControllers.instances.paneContent;
+      playerController = shellControllers.instances.player;
       navigation = shellControllers.instances.navigation;
       disposeShellControllers = shellControllers.dispose;
       keybindingRuntime = attrs.runtime === 'http' ? 'browser' : 'desktop';
@@ -6088,6 +6150,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             },
           }),
           ...renderAppDialogs(attrs.client, pendingDelete, appDialogsContext),
+          appState !== undefined && playerController !== undefined
+            ? m(MiniPlayer, { state: appState.player, controller: playerController })
+            : undefined,
           m(
             '.fm-function-key-bar',
             m(

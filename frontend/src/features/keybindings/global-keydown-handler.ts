@@ -194,6 +194,9 @@ export interface GlobalKeydownContext {
   findDuplicates(): void;
   /** Opens a disk-usage treemap for the active local directory in a new tab (task 0118). */
   openDiskUsage(): void;
+  /** Runs a frontend-only `client.*` action registered by the shell (for example the audio
+   * player), against the active pane; returns whether the action id was handled. */
+  invokeClientAction?(actionId: string): boolean;
   /** Opens Ask across the indexed semantic library. */
   openSemanticAssistant(): void;
   /** Opens search-only Structured Knowledge Search (task 0206). */
@@ -1391,6 +1394,16 @@ const ACTION_KEYDOWN_ROUTES = [
         return;
       }
       return false;
+    },
+  },
+  {
+    id: 'client.shellAction',
+    tryHandle: (context, event, state) => {
+      const actionId = state.dispatchedAction;
+      if (actionId?.startsWith('client.') !== true) return false;
+      if (context.invokeClientAction?.(actionId) !== true) return false;
+      event.preventDefault();
+      return;
     },
   },
   {

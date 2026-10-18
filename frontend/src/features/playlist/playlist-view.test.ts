@@ -1,5 +1,5 @@
 import m from 'mithril';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { FileViewerPlaylistContent } from '../preview/file-viewer-controller';
 import { PlaylistView } from './playlist-view';
 
@@ -59,5 +59,32 @@ describe('PlaylistView', () => {
     }));
     m.render(root, m(PlaylistView, { content: { ...content, tracks } }));
     expect(root.querySelectorAll('.fm-playlist-row').length).toBeLessThan(100);
+  });
+});
+
+describe('PlaylistView playback', () => {
+  it('queues playable rows and starts from the double-clicked row', () => {
+    const root = document.createElement('div');
+    const onPlay = vi.fn();
+    m.render(root, m(PlaylistView, { content, onPlay }));
+
+    (root.querySelectorAll('.fm-playlist-action')[0] as HTMLButtonElement).click();
+    const [items, startId, mode, skipped] = onPlay.mock.calls[0] ?? [];
+    expect(items).toHaveLength(1);
+    expect(startId).toBeUndefined();
+    expect(mode).toBe('play');
+    expect(skipped).toEqual({ remote: 1, missing: 1 });
+
+    (root.querySelectorAll('.fm-playlist-row')[0] as HTMLElement).dispatchEvent(
+      new MouseEvent('dblclick'),
+    );
+    const [rowItems, rowStart] = onPlay.mock.calls[1] ?? [];
+    expect(rowStart).toBe(rowItems[0].id);
+  });
+
+  it('hides the play buttons when no player is attached', () => {
+    const root = document.createElement('div');
+    m.render(root, m(PlaylistView, { content }));
+    expect(root.querySelector('.fm-playlist-action')).toBeNull();
   });
 });

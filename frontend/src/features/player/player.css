@@ -1,0 +1,116 @@
+.fm-mini-player {
+  grid-row: 6;
+  position: relative;
+  border-top: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text);
+}
+
+.fm-player-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.75rem;
+}
+
+.fm-player-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.fm-player-button:hover:not(:disabled),
+.fm-player-button:focus-visible {
+  background: var(--fm-hover);
+}
+
+.fm-player-button[aria-pressed="true"] {
+  color: var(--fm-accent);
+}
+
+.fm-player-title {
+  flex: 0 1 16rem;
+  min-width: 6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.fm-player-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--fm-text-muted);
+  font-size: 0.85rem;
+}
+
+.fm-player-seek {
+  flex: 1 1 8rem;
+  min-width: 5rem;
+}
+
+.fm-player-volume {
+  flex: 0 0 5.5rem;
+}
+
+.fm-player-note {
+  padding: 0.25rem 0.75rem;
+  color: var(--fm-warning);
+  font-size: 0.85rem;
+}
+
+.fm-player-queue {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  max-height: 40vh;
+  overflow: auto;
+  border-top: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+}
+
+.fm-player-queue-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.75rem;
+}
+
+.fm-player-queue-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.3rem 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.fm-player-queue-current .fm-player-queue-title {
+  color: var(--fm-accent);
+  font-weight: 600;
+}
+
+.fm-player-queue-unavailable .fm-player-queue-title {
+  color: var(--fm-text-muted);
+  text-decoration: line-through;
+  cursor: default;
+}
+
+.fm-player-queue-duration {
+  font-variant-numeric: tabular-nums;
+  color: var(--fm-text-muted);
+  font-size: 0.85rem;
+}

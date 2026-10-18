@@ -101,6 +101,9 @@ export interface ActionCommandControllerContext {
   findDuplicates(): void;
   /** Opens a disk-usage treemap tab for the active local directory. */
   openDiskUsage(): void;
+  /** Runs a frontend-only `client.*` action registered by the shell (for example the audio
+   * player); returns whether the action id was handled. */
+  invokeClientAction?(actionId: string, invocation: ActionInvocationContext): boolean;
   /** Opens the Properties dialog for the active pane's selection (task 0140). */
   openPropertiesForActivePane(): void;
   /** Opens the Multi-Rename Tool for the active pane's selection. */
@@ -473,6 +476,12 @@ export function createActionCommandController(
     }
     if (action.id === 'client.searchKnowledge') {
       context.openKnowledgeSearch();
+      return;
+    }
+    if (
+      action.id.startsWith('client.') &&
+      context.invokeClientAction?.(action.id, contextParam) === true
+    ) {
       return;
     }
     const paneId = contextParam.paneId;

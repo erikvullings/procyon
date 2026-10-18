@@ -1,4 +1,5 @@
 import type { BasketState } from '../features/basket/basket';
+import type { PlayerState } from '../features/player/player-state';
 import type {
   BackendNotification,
   ClipboardState,
@@ -28,6 +29,7 @@ import {
   notificationPatch,
   operationPatch,
   operationProgressPatch,
+  playerPatch,
   pluginPatch,
   runtimePatch,
   setClosedTabStackPatch,
@@ -55,6 +57,7 @@ export interface AppActions {
   setClosedTabStack(paneId: PaneId, tab: TabProjection): void;
   deleteClosedTabStack(paneId: PaneId): void;
   cacheContentMatches(uri: string, matches: readonly ContentMatchSummary[]): void;
+  replacePlayer(player: PlayerState): void;
 }
 
 /** Binds pure slice reducers to the store's single batched update boundary. */
@@ -78,5 +81,6 @@ export function createAppActions(update: AppUpdate): AppActions {
     setClosedTabStack: (paneId, tab) => update(setClosedTabStackPatch(paneId, tab)),
     deleteClosedTabStack: (paneId) => update(deleteClosedTabStackPatch(paneId)),
     cacheContentMatches: (uri, matches) => update(cacheContentMatchesPatch(uri, matches)),
+    replacePlayer: (player) => update(playerPatch(player)),
   };
 }

@@ -2158,4 +2158,5 @@ export const nl = {
     deleteSelectedDuplicateCount: '{count} geselecteerde duplicaten verwijderen…',
   },
   playlist: en.playlist,
+  player: en.player,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

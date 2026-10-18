@@ -1,6 +1,6 @@
 # 0262 Audio queue and persistent mini-player
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: frontend
 Depends on: 0260, 0261
@@ -19,4 +19,5 @@ Playback is one file at a time inside the viewer and stops when the viewer close
 - Gapless playback is a stretch goal; document the webview limits.
 
 ## Agent Notes
-- Created 2026-10-18 from the media/playlist feature discussion. No work started.
+- Created 2026-10-18 from the media/playlist feature discussion. 
+- 2026-10-18 claude: Queue state is AppState.player (state/model.ts, playerPatch) with pure transitions in features/player/player-state.ts (queue, shuffle order, repeat off/all/one, unavailable-track skipping). player-controller.ts drives one <audio> via client.mediaUrl (0260 streaming), applies seek/volume, and registers Media Session metadata/handlers (play, pause, prev, next, seekto) when navigator.mediaSession exists. MiniPlayer (mini-player.ts, new shell grid row above the F-key bar) persists across navigation/tabs: transport, seek, volume/mute, shuffle, repeat, expandable queue (jump/remove), 'N tracks skipped' note. Playlists (0261) play via Play all / Add to queue buttons and row double-click (viewer attr onPlayTracks); missing/network entries are not queued. Shortcuts: frontend client actions client.playerTogglePlay/Next/Previous (palette + user-bindable, no default chords to avoid clashes), dispatched through new generic invokeClientAction in the keydown handler and action-command controller. Not done/untested: gapless playback (HTMLAudioElement cannot guarantee it; documented limit), Media Session behaviour on WKWebView/WebView2/WebKitGTK, audio-only (video tracks are not queued).

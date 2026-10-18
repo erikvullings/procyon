@@ -26,7 +26,7 @@ import {
   formatEntryModifiedAt,
   formatEntrySize,
 } from '../entry-formatting/entry-formatting';
-import { PlaylistView } from '../playlist/playlist-view';
+import { PlaylistView, type PlaylistViewAttrs } from '../playlist/playlist-view';
 import { copyText } from './clipboard';
 import { type FileViewerMetadata, mapLinkFor } from './file-metadata';
 import type {
@@ -113,6 +113,8 @@ export interface FileViewerAttrs {
   readonly onQuickLook: () => void;
   readonly onOpenExternally: () => void;
   readonly onDocumentSummary?: () => void;
+  /** Sends playable playlist rows to the audio queue (task 0262); absent when no player exists. */
+  readonly onPlayTracks?: PlaylistViewAttrs['onPlay'];
   readonly onClose: () => void;
 }
 
@@ -2038,7 +2040,12 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                                             : state.content.kind === 'archiveSummary'
                                               ? renderArchiveSummary(state)
                                               : state.content.kind === 'playlist'
-                                                ? m(PlaylistView, { content: state.content })
+                                                ? m(PlaylistView, {
+                                                    content: state.content,
+                                                    ...(attrs.onPlayTracks === undefined
+                                                      ? {}
+                                                      : { onPlay: attrs.onPlayTracks }),
+                                                  })
                                                 : renderImageBody(attrs, state),
           state.status === 'ready' && state.metadataPanelOpen === true
             ? m('.fm-file-viewer-info-panel', [

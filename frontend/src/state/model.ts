@@ -1,4 +1,5 @@
 import type { BasketState } from '../features/basket/basket';
+import { createInitialPlayerState, type PlayerState } from '../features/player/player-state';
 import type {
   BackendNotification,
   ClipboardState,
@@ -103,6 +104,8 @@ export interface AppState {
   readonly quickFilterDrafts: QuickFilterDraftsState;
   readonly closedTabStacks: ClosedTabStacksState;
   readonly contentMatches: ContentMatchesState;
+  /** Audio queue and transport state (task 0262). */
+  readonly player: PlayerState;
 }
 
 /** Creates the deterministic state used before backend data is received. */
@@ -120,5 +123,6 @@ export function createInitialAppState(kind: RuntimeKind): AppState {
     quickFilterDrafts: { byTabKey: {} },
     closedTabStacks: { byPaneId: {} },
     contentMatches: { byEntryUri: {} },
+    player: createInitialPlayerState(),
   };
 }

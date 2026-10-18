@@ -1669,3 +1669,27 @@ textarea.fm-sqlite-sql.browser-default {
 .fm-playlist-missing .fm-playlist-badge {
   color: var(--fm-error);
 }
+
+.fm-playlist-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fm-playlist-toolbar .fm-playlist-summary {
+  flex: 1;
+}
+
+.fm-playlist-action {
+  padding: 0.2rem 0.7rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 4px;
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  cursor: pointer;
+}
+
+.fm-playlist-action:hover,
+.fm-playlist-action:focus-visible {
+  background: var(--fm-hover);
+}
