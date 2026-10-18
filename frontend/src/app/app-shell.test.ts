@@ -294,6 +294,9 @@ describe('AppShell', () => {
     });
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(root.querySelector('.fm-walkthrough-invitation')).not.toBeNull());
+    expect(
+      root.querySelector('.fm-walkthrough-invitation-dismiss svg[aria-hidden="true"]'),
+    ).not.toBeNull();
     root.querySelector<HTMLButtonElement>('.fm-walkthrough-invitation button[aria-label]')?.click();
     m.redraw.sync();
     expect(root.querySelector('.fm-walkthrough-invitation')).toBeNull();
