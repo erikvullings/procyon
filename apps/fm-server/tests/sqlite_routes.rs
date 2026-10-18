@@ -28,7 +28,7 @@ async fn browses_searches_and_queries_a_local_database_without_modifying_it() {
         )
         .expect("populate");
     let before = std::fs::read(&file).expect("read before");
-    let location = json!({ "providerId": "local", "uri": format!("file://{}", file.display()) });
+    let location = json!({ "providerId": "local", "uri": common::file_uri(&file) });
 
     let opened = post(
         &client,
@@ -112,7 +112,7 @@ async fn rejects_files_that_are_not_sqlite_databases() {
     let directory = tempfile::tempdir().expect("temp directory");
     let file = directory.path().join("notes.db");
     std::fs::write(&file, "plain text, not a database").expect("fixture");
-    let location = json!({ "providerId": "local", "uri": format!("file://{}", file.display()) });
+    let location = json!({ "providerId": "local", "uri": common::file_uri(&file) });
     let response = post(
         &client,
         &server.base_url,
