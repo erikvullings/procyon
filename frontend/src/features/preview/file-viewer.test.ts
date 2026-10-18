@@ -494,6 +494,37 @@ describe('FileViewer', () => {
     expect(onLoadTextPage).toHaveBeenCalledWith(2);
   });
 
+  it('renders a binary window as a hex dump with absolute offsets and pagination', () => {
+    const onLoadTextPage = vi.fn();
+    mount(
+      baseAttrs(
+        {
+          status: 'ready',
+          entry: entry({ size: 3 * 64 * 1024 }),
+          content: {
+            kind: 'hex',
+            windowOffset: 64 * 1024,
+            windowEnd: 64 * 1024 + 3,
+            bytes: new Uint8Array([0x48, 0x69, 0x00]),
+            atStart: false,
+            atEnd: false,
+            loadingMore: false,
+          },
+        },
+        { onLoadTextPage },
+      ),
+    );
+    expect(root.querySelector('.fm-file-viewer-hex')?.textContent).toMatch(
+      /^00010000 {2}48 69 00 .*\|Hi\.\|$/,
+    );
+    root
+      .querySelectorAll<HTMLButtonElement>(
+        '.fm-file-viewer-text-pagination .pagination-controls button',
+      )[2]
+      ?.click();
+    expect(onLoadTextPage).toHaveBeenCalledWith(2);
+  });
+
   it('forwards search input, option toggles, and match navigation', () => {
     const onSearchQueryChange = vi.fn();
     const onSearchOptionChange = vi.fn();

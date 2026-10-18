@@ -39,6 +39,7 @@ import {
   searchExpression,
   TEXT_WINDOW_BYTES,
 } from './file-viewer-controller';
+import { formatHexDump } from './hex-preview';
 import { searchHtml } from './html-search-highlight';
 import { renderMarkdownWithHighlight } from './markdown-search-highlight';
 import {
@@ -566,6 +567,33 @@ function renderTextBody(
           m(PaginationControls, {
             pagination: {
               page: currentPage,
+              pageSize: TEXT_WINDOW_BYTES,
+              total: totalBytes,
+            },
+            onPaginationChange: ({ page }) => attrs.onLoadTextPage(page),
+          }),
+        )
+      : undefined,
+  ]);
+}
+
+function renderHexBody(
+  attrs: FileViewerAttrs,
+  state: Extract<FileViewerState, { status: 'ready' }>,
+): m.Children {
+  const content = state.content;
+  if (content.kind !== 'hex') return undefined;
+  const paginated = !content.atStart || !content.atEnd;
+  const totalBytes = Math.max(state.entry.size ?? content.windowEnd, content.windowEnd);
+  return m('.fm-file-viewer-body.fm-file-viewer-body-hex', {}, [
+    m('pre.fm-file-viewer-hex', formatHexDump(content.bytes, content.windowOffset)),
+    content.loadingMore ? m('.fm-file-viewer-loading-more', t('viewer', 'loadingMore')) : undefined,
+    paginated
+      ? m(
+          '.fm-file-viewer-text-pagination',
+          m(PaginationControls, {
+            pagination: {
+              page: Math.floor(content.windowOffset / TEXT_WINDOW_BYTES),
               pageSize: TEXT_WINDOW_BYTES,
               total: totalBytes,
             },
@@ -1961,33 +1989,35 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                 ? renderExternalFallback(attrs, state.message)
                 : state.content.kind === 'text'
                   ? renderTextBody(attrs, state, () => searchInput?.focus())
-                  : state.content.kind === 'structuredTable'
-                    ? m(StructuredTable, { attrs, state })
-                    : state.content.kind === 'structuredJson'
-                      ? renderStructuredJson(attrs, state)
-                      : state.content.kind === 'structuredFallback'
-                        ? renderExternalFallback(attrs, state.content.message)
-                        : state.content.kind === 'docxExternal' ||
-                            state.content.kind === 'pptxExternal'
+                  : state.content.kind === 'hex'
+                    ? renderHexBody(attrs, state)
+                    : state.content.kind === 'structuredTable'
+                      ? m(StructuredTable, { attrs, state })
+                      : state.content.kind === 'structuredJson'
+                        ? renderStructuredJson(attrs, state)
+                        : state.content.kind === 'structuredFallback'
                           ? renderExternalFallback(attrs, state.content.message)
-                          : state.content.kind === 'audio'
-                            ? renderAudioBody(state)
-                            : state.content.kind === 'video' ||
-                                state.content.kind === 'videoExternal'
-                              ? renderVideoBody(attrs, state)
-                              : state.content.kind === 'pdf'
-                                ? renderPdfBody(state)
-                                : state.content.kind === 'comic'
-                                  ? renderComicBody(state)
-                                  : state.content.kind === 'epub'
-                                    ? renderEpubBody(attrs, state, (url) => {
-                                        pendingExternalLink = url;
-                                      })
-                                    : state.content.kind === 'docx'
-                                      ? renderDocxBody(state)
-                                      : state.content.kind === 'archiveSummary'
-                                        ? renderArchiveSummary(state)
-                                        : renderImageBody(attrs, state),
+                          : state.content.kind === 'docxExternal' ||
+                              state.content.kind === 'pptxExternal'
+                            ? renderExternalFallback(attrs, state.content.message)
+                            : state.content.kind === 'audio'
+                              ? renderAudioBody(state)
+                              : state.content.kind === 'video' ||
+                                  state.content.kind === 'videoExternal'
+                                ? renderVideoBody(attrs, state)
+                                : state.content.kind === 'pdf'
+                                  ? renderPdfBody(state)
+                                  : state.content.kind === 'comic'
+                                    ? renderComicBody(state)
+                                    : state.content.kind === 'epub'
+                                      ? renderEpubBody(attrs, state, (url) => {
+                                          pendingExternalLink = url;
+                                        })
+                                      : state.content.kind === 'docx'
+                                        ? renderDocxBody(state)
+                                        : state.content.kind === 'archiveSummary'
+                                          ? renderArchiveSummary(state)
+                                          : renderImageBody(attrs, state),
           state.status === 'ready' && state.metadataPanelOpen === true
             ? m('.fm-file-viewer-info-panel', [
                 renderMetadataPanel(state.metadata),

@@ -644,6 +644,17 @@
   -webkit-user-select: text;
 }
 
+.fm-file-viewer-hex {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  color: var(--fm-text);
+  font-family: var(--fm-font-mono);
+  font-size: var(--fm-font-size);
+  line-height: 1.4;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .fm-file-viewer-markdown::selection,
 .fm-file-viewer-markdown *::selection {
   background: var(--fm-selection);

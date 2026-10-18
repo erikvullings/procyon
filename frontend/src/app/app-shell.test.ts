@@ -3439,7 +3439,7 @@ describe('AppShell', () => {
     await vi.waitFor(() => expect(listDirectory.mock.calls.length).toBeGreaterThan(callsBefore));
   });
 
-  it('keeps the Lister viewer open with an external fallback when the content is unsupported', async () => {
+  it('shows a hex dump in the Lister viewer when the content is binary', async () => {
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'readFileRange').mockResolvedValue({
       data: [0, 1, 2],
@@ -3458,9 +3458,8 @@ describe('AppShell', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F3', bubbles: true }));
 
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-file-viewer')?.textContent).toContain('Preview not available'),
+      expect(root.querySelector('.fm-file-viewer-hex')?.textContent).toContain('00 01 02'),
     );
-    expect(root.querySelector('.fm-file-viewer-open-externally')).not.toBeNull();
   });
 
   it('opens the OS default application instead of the Lister viewer with Alt+F3', async () => {

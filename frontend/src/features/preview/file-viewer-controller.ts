@@ -260,6 +260,17 @@ export interface FileViewerExternalPptxContent {
   readonly message: string;
 }
 
+/** One window of a binary file, rendered as a hex dump (the fallback when text sniffing fails). */
+export interface FileViewerHexContent {
+  readonly kind: 'hex';
+  readonly windowOffset: number;
+  readonly windowEnd: number;
+  readonly bytes: Uint8Array;
+  readonly atStart: boolean;
+  readonly atEnd: boolean;
+  readonly loadingMore: boolean;
+}
+
 /** Content-derived archive details plus provider-neutral recursive totals. */
 export interface FileViewerArchiveSummaryContent {
   readonly kind: 'archiveSummary';
@@ -319,6 +330,7 @@ export type FileViewerState =
       readonly entry: EntrySummary;
       readonly content:
         | FileViewerTextContent
+        | FileViewerHexContent
         | FileViewerImageContent
         | FileViewerAudioContent
         | FileViewerVideoContent
@@ -602,7 +614,12 @@ export function createFileViewerController(
     );
     if (!isCurrent(controller)) return;
     if (chunk.probablyBinary === true) {
-      publish({ status: 'unsupported', entry });
+      publish({
+        status: 'ready',
+        entry,
+        content: hexWindow(0, chunk),
+        metadataPanelOpen: initialMetadataOpen,
+      });
       return;
     }
     const content: FileViewerTextContent = {
@@ -1318,7 +1335,50 @@ export function createFileViewerController(
     }
   }
 
+  function hexWindow(
+    offset: number,
+    chunk: { readonly data: readonly number[]; readonly length: number; readonly eof: boolean },
+  ): FileViewerHexContent {
+    return {
+      kind: 'hex',
+      windowOffset: offset,
+      windowEnd: offset + chunk.length,
+      bytes: new Uint8Array(chunk.data),
+      atStart: offset === 0,
+      atEnd: chunk.eof,
+      loadingMore: false,
+    };
+  }
+
+  async function loadHexPage(pageIndex: number): Promise<void> {
+    if (current.status !== 'ready' || current.content.kind !== 'hex') return;
+    const ready = current;
+    const content = current.content;
+    const offset = Math.max(0, Math.floor(pageIndex)) * TEXT_WINDOW_BYTES;
+    if (
+      content.loadingMore ||
+      offset === content.windowOffset ||
+      (entry.size !== undefined && offset >= entry.size)
+    )
+      return;
+    publish({ ...ready, content: { ...content, loadingMore: true } });
+    const controller = beginRequest();
+    try {
+      const chunk = await client.readFileRange(
+        { location: entry.location, offset, length: TEXT_WINDOW_BYTES },
+        controller.signal,
+      );
+      if (!isCurrent(controller)) return;
+      publish({ ...ready, content: hexWindow(offset, chunk) });
+    } catch (error: unknown) {
+      if (isCurrent(controller)) publish({ status: 'error', entry, message: errorMessage(error) });
+    }
+  }
+
   async function loadTextPage(pageIndex: number): Promise<void> {
+    if (current.status === 'ready' && current.content.kind === 'hex') {
+      return loadHexPage(pageIndex);
+    }
     const content = textContent();
     if (content === undefined || content.loadingMore) return;
     const offset = Math.max(0, Math.floor(pageIndex)) * TEXT_WINDOW_BYTES;

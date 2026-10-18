@@ -49,4 +49,12 @@ the core app. This task is what actually lets a plugin (task 0053's plugin syste
 
 ## Agent Notes
 
-- (none yet)
+- 2026-10-18: Reviewed Total Commander Lister (WLX) plugins with the user. Decisions: no syntax
+  plugin (CodeMirror 6 already highlights F3 text via `editor/editor-language.ts`; instead added the
+  missing popular languages there); CSV/TSV/Excel/JSON already built in via 0100/0172; hex is a
+  **builtin** (done: `preview/hex-preview.ts`, `hex` viewer content kind, reuses 64 KiB text paging)
+  and replaces the old "unsupported" fallback for binary files; SQLite split to 0251 (builtin
+  recommended). Planned separate, on-by-default preview plugins once the contribution point exists:
+  `preview-torrent`, `preview-eml`, `preview-vcard-ical`. Contribution point itself (manifest
+  `contributions.preview`, render hook, bounded read permission; Lua vs JS undecided, lean Lua since
+  0226 is open) is NOT started.

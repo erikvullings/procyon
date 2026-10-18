@@ -517,7 +517,7 @@ describe('file viewer controller', () => {
     });
   });
 
-  it('publishes unsupported when the first chunk sniffs as binary', async () => {
+  it('shows a hex window when the first chunk sniffs as binary and pages through the file', async () => {
     const context = setup();
     vi.mocked(context.client.readFileRange).mockResolvedValue({
       data: [0, 1, 2],
@@ -532,7 +532,61 @@ describe('file viewer controller', () => {
       update: (state) => context.states.push(state),
     });
 
-    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('unsupported'));
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({
+        status: 'ready',
+        content: {
+          kind: 'hex',
+          windowOffset: 0,
+          windowEnd: 3,
+          bytes: new Uint8Array([0, 1, 2]),
+          atStart: true,
+          atEnd: true,
+        },
+      }),
+    );
+  });
+
+  it('loads the requested hex page and keeps absolute offsets', async () => {
+    const context = setup();
+    vi.mocked(context.client.readFileRange)
+      .mockResolvedValueOnce({
+        data: new Array(TEXT_WINDOW_BYTES).fill(0),
+        offset: 0,
+        length: TEXT_WINDOW_BYTES,
+        eof: false,
+        probablyBinary: true,
+      })
+      .mockResolvedValueOnce({
+        data: [9, 8],
+        offset: TEXT_WINDOW_BYTES,
+        length: 2,
+        eof: true,
+        probablyBinary: true,
+      });
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ size: TEXT_WINDOW_BYTES + 2 }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+
+    await controller.loadTextPage(1);
+
+    expect(context.client.readFileRange).toHaveBeenLastCalledWith(
+      { location: expect.anything(), offset: TEXT_WINDOW_BYTES, length: TEXT_WINDOW_BYTES },
+      expect.anything(),
+    );
+    expect(context.states.at(-1)).toMatchObject({
+      content: {
+        kind: 'hex',
+        windowOffset: TEXT_WINDOW_BYTES,
+        windowEnd: TEXT_WINDOW_BYTES + 2,
+        bytes: new Uint8Array([9, 8]),
+        atStart: false,
+        atEnd: true,
+      },
+    });
   });
 
   it('loads a full image as a data URI regardless of size', async () => {
