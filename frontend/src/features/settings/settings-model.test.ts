@@ -40,6 +40,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     iconTheme: 'generic',
     checkForUpdatesAutomatically: true,
     viewerInSeparateWindow: false,
+    rememberFolderViews: true,
     ...overrides,
   };
 }

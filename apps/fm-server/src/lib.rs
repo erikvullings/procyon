@@ -244,6 +244,9 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::link_doctor::find_link_replacements
         ))
+        .routes(utoipa_axum::routes!(
+            routes::folder_views::forget_folder_view
+        ))
         .routes(utoipa_axum::routes!(routes::snapshots::start_snapshot_job))
         .routes(utoipa_axum::routes!(routes::snapshots::get_snapshot_job))
         .routes(utoipa_axum::routes!(routes::snapshots::cancel_snapshot_job))

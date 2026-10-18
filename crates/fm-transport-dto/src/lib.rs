@@ -219,5 +219,6 @@ pub use workspace::{
     TabStateDto, WorkspaceDto, WorkspaceLayoutDto, WorkspaceSummaryDto,
 };
 pub use workspace_command::{
-    DirectoryViewPatchDto, NavigationModeDto, QuickFilterPatchDto, WorkspaceCommandDto,
+    DirectoryViewPatchDto, ForgetFolderViewRequestDto, NavigationModeDto, QuickFilterPatchDto,
+    WorkspaceCommandDto,
 };

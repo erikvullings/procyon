@@ -12,6 +12,7 @@ pub(crate) mod document_summary;
 pub(crate) mod events;
 pub(crate) mod extended_attributes;
 pub(crate) mod files;
+pub(crate) mod folder_views;
 pub(crate) mod health;
 pub(crate) mod icons;
 pub(crate) mod knowledge;

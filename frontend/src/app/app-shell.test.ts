@@ -5833,6 +5833,7 @@ describe('AppShell', () => {
       iconTheme: 'mock.archive',
       checkForUpdatesAutomatically: true,
       viewerInSeparateWindow: false,
+      rememberFolderViews: true,
     });
     const iconTheme = {
       iconDefinitions: { file: { iconPath: 'icons/file.svg' } },

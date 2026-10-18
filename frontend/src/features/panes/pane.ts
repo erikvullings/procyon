@@ -186,6 +186,10 @@ export interface TableConfigAttrs {
   readonly onViewModeChange?:
     | ((viewMode: 'table' | 'grid', iconSize: GridIconSize) => void)
     | undefined;
+  /** This folder's view was restored from a remembered choice (task 0270). */
+  readonly viewRemembered?: boolean | undefined;
+  /** Drops the remembered view of this folder. */
+  readonly onForgetView?: (() => void) | undefined;
   readonly columnWidths?: readonly ColumnWidthEntry[] | undefined;
   readonly onColumnWidthChange?: ((columnId: string, width: number) => void) | undefined;
 }
@@ -1785,8 +1789,11 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                 t('pane', 'view'),
                 toggleIconButton(
                   {
-                    className: 'fm-pane-view-mode',
-                    'aria-label': t('pane', 'view'),
+                    className: `fm-pane-view-mode${attrs.tableConfig.viewRemembered === true ? ' fm-pane-view-remembered' : ''}`,
+                    'aria-label':
+                      attrs.tableConfig.viewRemembered === true
+                        ? `${t('pane', 'view')} - ${t('pane', 'viewRemembered')}`
+                        : t('pane', 'view'),
                     'aria-haspopup': 'menu',
                     'aria-expanded': String(viewMenuOpen),
                     onclick: () => {
@@ -1834,6 +1841,21 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                       option.label,
                     );
                   }),
+                  attrs.tableConfig.viewRemembered === true &&
+                    attrs.tableConfig.onForgetView !== undefined
+                    ? m(
+                        'button.fm-view-mode-menu-item.fm-view-forget',
+                        {
+                          type: 'button',
+                          role: 'menuitem',
+                          onclick: () => {
+                            viewMenuOpen = false;
+                            attrs.tableConfig.onForgetView?.();
+                          },
+                        },
+                        t('pane', 'forgetView'),
+                      )
+                    : undefined,
                 ),
               ],
             ]),

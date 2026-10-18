@@ -167,6 +167,8 @@ export const pt = {
     list: 'Lista',
     smallIcons: 'Ícones pequenos',
     mediumIcons: 'Ícones médios',
+    viewRemembered: 'Existe uma vista guardada para esta pasta',
+    forgetView: 'Esquecer a vista desta pasta',
     largeIcons: 'Ícones grandes',
     sort: 'Ordenar',
     sortBy: 'Ordenar por',

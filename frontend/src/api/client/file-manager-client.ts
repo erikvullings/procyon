@@ -773,6 +773,12 @@ export interface FileManagerClient {
 
   cancelMusicDuplicateScan(scanId: string, signal?: AbortSignal): Promise<void>;
 
+  /**
+   * Forgets the remembered view (sort, columns, mode) of a folder so it opens with the defaults
+   * again (task 0270). Idempotent.
+   */
+  forgetFolderView(location: Location, signal?: AbortSignal): Promise<void>;
+
   /** Starts a cancellable folder snapshot create or compare job (task 0268). */
   startSnapshotJob(
     request: StartSnapshotJobRequest,

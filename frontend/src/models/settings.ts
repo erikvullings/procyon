@@ -63,4 +63,6 @@ export interface Settings {
   readonly checkForUpdatesAutomatically: boolean;
   /** Opens F3 in its own window instead of a tab in the active pane. */
   readonly viewerInSeparateWindow: boolean;
+  /** Remembers and restores the view (sort, columns, mode) chosen for each folder (task 0270). */
+  readonly rememberFolderViews: boolean;
 }

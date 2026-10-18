@@ -53,6 +53,11 @@ export interface DirectorySnapshotDto {
      * @nullable
      */
   totalKnownSize?: number | null;
+  /**
+     * Whether the folder's view (sort, columns, mode) was restored from the user's remembered
+     * choice for this folder (task 0270).
+     */
+  viewRemembered?: boolean;
   volumeCapacity?: null | VolumeCapacityDto;
   /** Whether the current user may create entries in this directory. */
   writable: boolean;

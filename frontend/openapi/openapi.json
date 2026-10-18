@@ -3036,6 +3036,36 @@
         }
       }
     },
+    "/api/v1/folder-views/forget": {
+      "post": {
+        "operationId": "forgetFolderView",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgetFolderViewRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "The remembered view is gone (or there was none)"
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/health": {
       "get": {
         "summary": "Reports that the backend process is running and able to serve requests.",
@@ -10077,6 +10107,10 @@
             "description": "The combined byte size of every file/symlink entry in the directory, when known in\nadvance.",
             "minimum": 0
           },
+          "viewRemembered": {
+            "type": "boolean",
+            "description": "Whether the folder's view (sort, columns, mode) was restored from the user's remembered\nchoice for this folder (task 0270)."
+          },
           "volumeCapacity": {
             "oneOf": [
               {
@@ -11409,6 +11443,19 @@
               "$ref": "#/components/schemas/FinderTagDto"
             },
             "description": "The entry's tags, in Finder's own display order."
+          }
+        }
+      },
+      "ForgetFolderViewRequestDto": {
+        "type": "object",
+        "description": "Forgets the remembered view of one folder (`POST /api/v1/folder-views/forget`, task 0270).",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The folder whose remembered sort, columns and view mode should be dropped."
           }
         }
       },
@@ -21392,6 +21439,10 @@
             "propertyNames": {
               "type": "string"
             }
+          },
+          "rememberFolderViews": {
+            "type": "boolean",
+            "description": "Whether the view a user picks for a folder is remembered and restored on the next visit\n(task 0270). The remembered views themselves are backend-owned and not part of this DTO."
           },
           "rowHeight": {
             "type": "integer",

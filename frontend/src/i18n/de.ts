@@ -172,6 +172,8 @@ export const de = {
     list: 'Liste',
     smallIcons: 'Kleine Symbole',
     mediumIcons: 'Mittlere Symbole',
+    viewRemembered: 'Für diesen Ordner ist eine Ansicht gespeichert',
+    forgetView: 'Ansicht dieses Ordners vergessen',
     largeIcons: 'Große Symbole',
     sort: 'Sortieren',
     sortBy: 'Sortieren nach',

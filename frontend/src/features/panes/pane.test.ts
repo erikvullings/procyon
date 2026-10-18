@@ -212,6 +212,8 @@ type FlatAttrsInput = Partial<{
   viewMode: 'table' | 'grid';
   iconSize: GridIconSize;
   onViewModeChange: (viewMode: 'table' | 'grid', iconSize: GridIconSize) => void;
+  viewRemembered: boolean;
+  onForgetView: () => void;
   // Directory summary props
   hasMore: boolean;
   totalEntryCount: number;
@@ -312,6 +314,8 @@ function attrs(input: FlatAttrsInput = {}): PaneAttrs {
       viewMode: input.viewMode,
       iconSize: input.iconSize,
       onViewModeChange: input.onViewModeChange,
+      viewRemembered: input.viewRemembered,
+      onForgetView: input.onForgetView,
     },
     directorySummary: {
       hasMore: input.hasMore,
@@ -653,6 +657,31 @@ describe('Pane view-mode menu', () => {
     const items = root.querySelectorAll('.fm-view-mode-menu-item');
     expect(items[0]?.getAttribute('aria-checked')).toBe('false'); // List
     expect(items[3]?.getAttribute('aria-checked')).toBe('true'); // Large icons
+  });
+
+  it('flags a remembered view and offers to forget it (task 0270)', () => {
+    const onForgetView = vi.fn();
+    mount(attrs({ viewRemembered: true, onForgetView }));
+
+    const button = root.querySelector<HTMLButtonElement>('.fm-pane-view-mode');
+    expect(button?.classList.contains('fm-pane-view-remembered')).toBe(true);
+    button?.click();
+    m.redraw.sync();
+    root.querySelector<HTMLButtonElement>('.fm-view-forget')?.click();
+    m.redraw.sync();
+
+    expect(onForgetView).toHaveBeenCalledOnce();
+    expect(root.querySelector('.fm-view-mode-menu')).toBeNull();
+  });
+
+  it('shows no forget entry for a folder without a remembered view', () => {
+    mount(attrs({}));
+    root.querySelector<HTMLButtonElement>('.fm-pane-view-mode')?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-view-forget')).toBeNull();
+    expect(
+      root.querySelector('.fm-pane-view-mode')?.classList.contains('fm-pane-view-remembered'),
+    ).toBe(false);
   });
 
   it('closes the menu when clicking the backdrop without changing the view mode', () => {

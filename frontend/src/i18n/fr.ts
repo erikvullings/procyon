@@ -168,6 +168,8 @@ export const fr = {
     list: 'Liste',
     smallIcons: 'Petites icônes',
     mediumIcons: 'Icônes moyennes',
+    viewRemembered: 'Une vue est mémorisée pour ce dossier',
+    forgetView: 'Oublier la vue de ce dossier',
     largeIcons: 'Grandes icônes',
     sort: 'Trier',
     sortBy: 'Trier par',

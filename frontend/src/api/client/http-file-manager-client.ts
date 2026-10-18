@@ -262,6 +262,7 @@ import {
   getFinderTags as requestFinderTags,
   setFinderTags as requestFinderTagsUpdate,
   calculateFolderSize as requestFolderSizeCalculation,
+  forgetFolderView as requestFolderViewForget,
   recordFrontendDiagnostic as requestFrontendDiagnostic,
   updateGemmaMedia as requestGemmaMediaUpdate,
   getFileGitHistory as requestGitFileHistory,
@@ -2113,6 +2114,16 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 204) {
       throw new Error(`Unexpected cancelMusicDuplicateScan response status: ${response.status}`);
+    }
+  }
+
+  async forgetFolderView(location: FileLocation, signal?: AbortSignal): Promise<void> {
+    const response = await requestFolderViewForget(
+      { location },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204) {
+      throw new Error(`Unexpected forgetFolderView response status: ${response.status}`);
     }
   }
 

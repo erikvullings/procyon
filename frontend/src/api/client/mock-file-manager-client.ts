@@ -405,6 +405,7 @@ export type MockClientMethod =
   | 'startMusicDuplicateScan'
   | 'getMusicDuplicateScan'
   | 'cancelMusicDuplicateScan'
+  | 'forgetFolderView'
   | 'startSnapshotJob'
   | 'getSnapshotJob'
   | 'cancelSnapshotJob'
@@ -1423,6 +1424,7 @@ export class MockFileManagerClient implements FileManagerClient {
     iconTheme: 'generic',
     checkForUpdatesAutomatically: true,
     viewerInSeparateWindow: false,
+    rememberFolderViews: true,
   };
   private operationSequence = 0;
   private tabSequence = 0;
@@ -4393,6 +4395,10 @@ export class MockFileManagerClient implements FileManagerClient {
       if (scan === undefined) throw new MockClientError('notFound', 'Unknown music scan');
       scan.cancelled = true;
     });
+  }
+
+  forgetFolderView(_location: Location, signal?: AbortSignal): Promise<void> {
+    return this.perform('forgetFolderView', signal, () => undefined);
   }
 
   startSnapshotJob(

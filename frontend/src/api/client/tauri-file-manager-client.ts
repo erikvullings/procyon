@@ -1238,6 +1238,10 @@ export class TauriFileManagerClient implements FileManagerClient {
     await invoke('cancel_music_duplicate_scan', { scanId });
   }
 
+  async forgetFolderView(location: Location, _signal?: AbortSignal): Promise<void> {
+    await invoke('forget_folder_view', { request: { location } });
+  }
+
   startSnapshotJob(
     request: StartSnapshotJobRequest,
     _signal?: AbortSignal,

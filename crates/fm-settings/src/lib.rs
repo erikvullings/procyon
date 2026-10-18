@@ -18,7 +18,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use fm_domain::{Location, SavedSearch};
+use fm_domain::{
+    ColumnConfiguration, DirectoryViewMode, IconSize, Location, SavedSearch, SortDescriptor,
+};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -200,6 +202,34 @@ pub struct MultiRenamePreset {
     pub rules: MultiRenameRules,
 }
 
+/// Most folders whose view is remembered; older entries are pruned first (task 0270).
+pub const MAX_FOLDER_VIEWS: usize = 500;
+
+/// The view a user chose for one folder, restored when they return to it (task 0270).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderViewMemory {
+    /// The folder, keyed by provider and URI (remote folders include their connection).
+    pub location: Location,
+    /// Sort descriptors, in priority order.
+    pub sort: Vec<SortDescriptor>,
+    /// Column order and visibility.
+    pub columns: Vec<ColumnConfiguration>,
+    /// Whether hidden entries are shown.
+    pub show_hidden: bool,
+    /// Whether directories are grouped before files.
+    pub folders_first: bool,
+    /// Table or grid.
+    pub view_mode: DirectoryViewMode,
+    /// Grid tile size.
+    pub icon_size: IconSize,
+}
+
+fn same_folder(left: &Location, right: &Location) -> bool {
+    left.provider_id == right.provider_id
+        && left.uri.trim_end_matches('/') == right.uri.trim_end_matches('/')
+}
+
 /// Versioned, application-wide settings. Live workspace content is excluded.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -264,6 +294,56 @@ pub struct Settings {
     pub check_for_updates_automatically: bool,
     /// Whether F3 opens the viewer in its own window instead of a tab in the active pane.
     pub viewer_in_separate_window: bool,
+    /// Whether the view (sort, columns, mode) a user picks for a folder is remembered and
+    /// restored on their next visit (task 0270). Folders never customised are unaffected.
+    pub remember_folder_views: bool,
+    /// Remembered folder views, most recently used first, at most [`MAX_FOLDER_VIEWS`]. Owned
+    /// by the backend: a client replacing the settings document cannot overwrite it.
+    pub folder_views: Vec<FolderViewMemory>,
+}
+
+impl Settings {
+    /// The remembered view for `location`, if any.
+    #[must_use]
+    pub fn folder_view(&self, location: &Location) -> Option<&FolderViewMemory> {
+        self.folder_views
+            .iter()
+            .find(|memory| same_folder(&memory.location, location))
+    }
+
+    /// Records `memory` as the most recently used folder view, pruning the oldest beyond
+    /// [`MAX_FOLDER_VIEWS`].
+    pub fn remember_folder_view(&mut self, memory: FolderViewMemory) {
+        self.folder_views
+            .retain(|existing| !same_folder(&existing.location, &memory.location));
+        self.folder_views.insert(0, memory);
+        self.folder_views.truncate(MAX_FOLDER_VIEWS);
+    }
+
+    /// Forgets the remembered view for `location`; returns whether one existed.
+    pub fn forget_folder_view(&mut self, location: &Location) -> bool {
+        let before = self.folder_views.len();
+        self.folder_views
+            .retain(|existing| !same_folder(&existing.location, location));
+        self.folder_views.len() != before
+    }
+
+    /// Drops duplicate folders and anything beyond the bound (a hand-edited or newer file).
+    fn normalise_folder_views(&mut self) {
+        let mut seen: Vec<Location> = Vec::new();
+        self.folder_views.retain(|memory| {
+            if seen
+                .iter()
+                .any(|known| same_folder(known, &memory.location))
+            {
+                false
+            } else {
+                seen.push(memory.location.clone());
+                true
+            }
+        });
+        self.folder_views.truncate(MAX_FOLDER_VIEWS);
+    }
 }
 
 impl Default for Settings {
@@ -302,6 +382,8 @@ impl Default for Settings {
             icon_theme: GENERIC_ICON_THEME.to_owned(),
             check_for_updates_automatically: true,
             viewer_in_separate_window: false,
+            remember_folder_views: true,
+            folder_views: Vec::new(),
         }
     }
 }
@@ -373,10 +455,13 @@ impl SettingsStore {
         let bytes = fs::read(&path)?;
         reject_newer_settings_schema(&bytes)?;
         match migrate(&bytes) {
-            Ok(settings) => Ok(LoadOutcome {
-                settings,
-                warning: None,
-            }),
+            Ok(mut settings) => {
+                settings.normalise_folder_views();
+                Ok(LoadOutcome {
+                    settings,
+                    warning: None,
+                })
+            }
             Err(_) => {
                 fs::create_dir_all(&self.directory)?;
                 let backup = self
@@ -414,6 +499,10 @@ impl SettingsStore {
                 location.uri = sanitize_persisted_location(&location.uri);
             }
         }
+        for memory in &mut current.folder_views {
+            memory.location.uri = sanitize_persisted_location(&memory.location.uri);
+        }
+        current.normalise_folder_views();
         let bytes = serde_json::to_vec_pretty(&current)?;
         atomic_write(&self.directory, SETTINGS_FILE_NAME, &bytes)?;
         Ok(())
@@ -1271,5 +1360,74 @@ mod tests {
         store.save(&Settings::default()).expect("save settings");
 
         assert_eq!(store.load_document().expect("load"), Some(document));
+    }
+
+    fn memory(uri: &str, mode: DirectoryViewMode) -> FolderViewMemory {
+        FolderViewMemory {
+            location: Location::parse(uri).expect("location"),
+            sort: Vec::new(),
+            columns: Vec::new(),
+            show_hidden: false,
+            folders_first: true,
+            view_mode: mode,
+            icon_size: IconSize::default(),
+        }
+    }
+
+    #[test]
+    fn folder_views_are_most_recent_first_unique_and_bounded() {
+        let mut settings = Settings::default();
+        settings.remember_folder_view(memory("file:///a", DirectoryViewMode::Grid));
+        settings.remember_folder_view(memory("file:///b/", DirectoryViewMode::Table));
+        settings.remember_folder_view(memory("file:///a/", DirectoryViewMode::Table));
+        assert_eq!(settings.folder_views.len(), 2);
+        assert_eq!(settings.folder_views[0].location.uri, "file:///a");
+        assert_eq!(
+            settings
+                .folder_view(&Location::parse("file:///b").expect("location"))
+                .map(|view| view.view_mode),
+            Some(DirectoryViewMode::Table)
+        );
+        for index in 0..MAX_FOLDER_VIEWS + 20 {
+            settings.remember_folder_view(memory(
+                &format!("file:///many/{index}"),
+                DirectoryViewMode::Grid,
+            ));
+        }
+        assert_eq!(settings.folder_views.len(), MAX_FOLDER_VIEWS);
+        // The oldest entries (a, b) were pruned first.
+        assert!(
+            settings
+                .folder_view(&Location::parse("file:///a").expect("location"))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn forgetting_removes_only_that_folder() {
+        let mut settings = Settings::default();
+        settings.remember_folder_view(memory("file:///a", DirectoryViewMode::Grid));
+        settings.remember_folder_view(memory("file:///b", DirectoryViewMode::Grid));
+        assert!(settings.forget_folder_view(&Location::parse("file:///a/").expect("location")));
+        assert!(!settings.forget_folder_view(&Location::parse("file:///a").expect("location")));
+        assert_eq!(settings.folder_views.len(), 1);
+    }
+
+    #[test]
+    fn remembered_views_persist_and_old_files_default_to_remembering() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let store = SettingsStore::new(directory.path().to_path_buf());
+        let mut settings = Settings::default();
+        settings.remember_folder_view(memory("file:///photos", DirectoryViewMode::Grid));
+        store.save(&settings).expect("save");
+        let loaded = store.load().expect("load").settings;
+        assert_eq!(loaded.folder_views, settings.folder_views);
+        assert!(loaded.remember_folder_views);
+
+        let legacy = br#"{"schemaVersion":9,"theme":"dark"}"#;
+        std::fs::write(directory.path().join("settings.json"), legacy).expect("write legacy");
+        let loaded = store.load().expect("load legacy").settings;
+        assert!(loaded.remember_folder_views);
+        assert!(loaded.folder_views.is_empty());
     }
 }

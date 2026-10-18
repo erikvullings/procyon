@@ -196,3 +196,23 @@ fn directory_openapi_uses_the_required_stable_operation_ids() {
         );
     }
 }
+
+#[tokio::test]
+async fn forgetting_a_folder_view_is_idempotent() {
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    let location = fm_domain::Location::from_native_path(root.path()).expect("location");
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+
+    for _ in 0..2 {
+        let response = client
+            .post(format!("{}/api/v1/folder-views/forget", server.base_url))
+            .json(&serde_json::json!({
+                "location": { "providerId": location.provider_id.as_str(), "uri": location.uri }
+            }))
+            .send()
+            .await
+            .expect("request must succeed");
+        assert_eq!(response.status(), reqwest::StatusCode::NO_CONTENT);
+    }
+}

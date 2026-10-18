@@ -44,6 +44,8 @@ export interface DirectorySnapshot {
   loadingState: LoadingState;
   /** Backing volume's total/available capacity, when known (task 0096). */
   volumeCapacity?: VolumeCapacity;
+  /** The folder's view was restored from the user's remembered choice (task 0270). */
+  viewRemembered?: boolean;
 }
 
 /**
@@ -65,6 +67,7 @@ export function directorySnapshotFromDto(dto: DirectorySnapshotDto): DirectorySn
     ...(dto.totalKnownSize == null ? {} : { totalKnownSize: dto.totalKnownSize }),
     ...(dto.totalKnownFileCount == null ? {} : { totalKnownFileCount: dto.totalKnownFileCount }),
     ...(dto.continuationToken == null ? {} : { continuationToken: dto.continuationToken }),
+    ...(dto.viewRemembered === true ? { viewRemembered: true } : {}),
     ...(dto.volumeCapacity == null
       ? {}
       : {

@@ -753,6 +753,14 @@ export function createPaneContentBuilder(
       },
       viewMode: tab?.view.viewMode ?? 'table',
       iconSize: tab?.view.iconSize ?? 'medium',
+      viewRemembered: directory.viewRemembered === true,
+      onForgetView: () => {
+        if (tab === undefined) return;
+        void client
+          .forgetFolderView(tab.location)
+          .then(() => context.getNavigation().load(paneId, { background: true }))
+          .catch(() => undefined);
+      },
       onViewModeChange: (viewMode, iconSize) => {
         const liveWorkspace = context.getWorkspace();
         if (liveWorkspace === undefined || tab === undefined) return;

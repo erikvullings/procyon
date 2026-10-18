@@ -109,6 +109,7 @@ export * from './finderTagDto.ts';
 export * from './finderTagsDto.ts';
 export * from './findLinkReplacementsRequestDto.ts';
 export * from './findLinkReplacementsResponseDto.ts';
+export * from './forgetFolderViewRequestDto.ts';
 export * from './ftpConnectionConfigurationDto.ts';
 export * from './gemmaMediaSelectionDto.ts';
 export * from './generateDocumentSummaryRequestDto.ts';

@@ -31,6 +31,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
     ),
     terminalCommand: settings.terminalCommand ?? null,
     editorCommand: settings.editorCommand ?? null,
+    rememberFolderViews: settings.rememberFolderViews ?? true,
   };
 }
 

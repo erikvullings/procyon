@@ -702,3 +702,11 @@ mod tests {
         }
     }
 }
+
+/// Forgets the remembered view of one folder (`POST /api/v1/folder-views/forget`, task 0270).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ForgetFolderViewRequestDto {
+    /// The folder whose remembered sort, columns and view mode should be dropped.
+    pub location: LocationDto,
+}

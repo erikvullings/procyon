@@ -4,6 +4,7 @@ import { ApiError } from '../../api/fetch-mutator';
 import type { DirectorySnapshot, EntryId, WorkspaceProjection } from '../../models';
 import {
   createNavigationController,
+  listingOptionsChanged,
   type NavigationClient,
   type PaneDirectoryView,
   parentLocation,
@@ -1185,5 +1186,33 @@ describe('per-tab isolation', () => {
     await loading;
 
     expect(context.views.at(-1)?.state).toEqual({ type: 'loading' });
+  });
+});
+
+describe('listingOptionsChanged (task 0270)', () => {
+  const base = {
+    sort: [{ columnId: 'core.name', direction: 'ascending' as const }],
+    columns: [],
+    showHidden: false,
+    foldersFirst: true,
+    viewMode: 'table' as const,
+    iconSize: 'medium' as const,
+  };
+
+  it('ignores presentation-only differences such as view mode and icon size', () => {
+    expect(listingOptionsChanged(base, { ...base, viewMode: 'grid', iconSize: 'large' })).toBe(
+      false,
+    );
+  });
+
+  it('detects sort, hidden-file and folders-first differences', () => {
+    expect(
+      listingOptionsChanged(base, {
+        ...base,
+        sort: [{ columnId: 'core.modified', direction: 'descending' }],
+      }),
+    ).toBe(true);
+    expect(listingOptionsChanged(base, { ...base, showHidden: true })).toBe(true);
+    expect(listingOptionsChanged(base, { ...base, foldersFirst: false })).toBe(true);
   });
 });

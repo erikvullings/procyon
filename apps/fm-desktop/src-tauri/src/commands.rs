@@ -2934,6 +2934,19 @@ pub(crate) fn cancel_music_duplicate_scan(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Forgets the remembered view of a folder through the shared service (task 0270).
+#[tauri::command]
+pub(crate) fn forget_folder_view(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ForgetFolderViewRequestDto,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .forget_folder_view(request.location)
+        .map(|_| ())
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Starts a cancellable snapshot create or compare job through the shared service (task 0268).
 ///
 /// Must be `async` so the job task is spawned on the Tokio runtime.

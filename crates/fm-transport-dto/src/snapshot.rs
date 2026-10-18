@@ -107,6 +107,10 @@ pub struct DirectorySnapshotDto {
     /// Total/available capacity for the volume backing this location, when known
     /// (task 0096); absent for non-local providers or unsupported platforms.
     pub volume_capacity: Option<VolumeCapacityDto>,
+    /// Whether the folder's view (sort, columns, mode) was restored from the user's remembered
+    /// choice for this folder (task 0270).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub view_remembered: bool,
 }
 
 impl From<DirectorySnapshot> for DirectorySnapshotDto {
@@ -128,6 +132,7 @@ impl From<DirectorySnapshot> for DirectorySnapshotDto {
             // the platform adapter, which the domain layer has no dependency
             // on) - callers attach it afterward, e.g. `FileManagerService`.
             volume_capacity: None,
+            view_remembered: false,
         }
     }
 }
@@ -178,6 +183,7 @@ mod tests {
                 total_bytes: 1_000_000_000_000,
                 available_bytes: 616_040_000_000,
             }),
+            view_remembered: false,
         }
     }
 

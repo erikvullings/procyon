@@ -166,6 +166,8 @@ export const pl = {
     list: 'Lista',
     smallIcons: 'Małe ikony',
     mediumIcons: 'Średnie ikony',
+    viewRemembered: 'Dla tego folderu zapamiętano widok',
+    forgetView: 'Zapomnij widok tego folderu',
     largeIcons: 'Duże ikony',
     sort: 'Sortuj',
     sortBy: 'Sortuj według',

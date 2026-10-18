@@ -228,4 +228,12 @@ pub struct SettingsDto {
     pub check_for_updates_automatically: bool,
     /// Whether F3 opens the viewer in its own window instead of a tab in the active pane.
     pub viewer_in_separate_window: bool,
+    /// Whether the view a user picks for a folder is remembered and restored on the next visit
+    /// (task 0270). The remembered views themselves are backend-owned and not part of this DTO.
+    #[serde(default = "remember_folder_views_default")]
+    pub remember_folder_views: bool,
+}
+
+fn remember_folder_views_default() -> bool {
+    true
 }

@@ -70,6 +70,11 @@ export interface SettingsDto {
   /** Recently visited locations per workspace, newest first. */
   recentLocationsByWorkspace: SettingsDtoRecentLocationsByWorkspace;
   /**
+     * Whether the view a user picks for a folder is remembered and restored on the next visit
+     * (task 0270). The remembered views themselves are backend-owned and not part of this DTO.
+     */
+  rememberFolderViews?: boolean;
+  /**
      * Directory row height in CSS pixels.
      * @minimum 0
      */

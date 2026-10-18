@@ -166,6 +166,8 @@ export const it = {
     list: 'Elenco',
     smallIcons: 'Icone piccole',
     mediumIcons: 'Icone medie',
+    viewRemembered: 'Per questa cartella è salvata una vista',
+    forgetView: 'Dimentica la vista di questa cartella',
     largeIcons: 'Icone grandi',
     sort: 'Ordina',
     sortBy: 'Ordina per',

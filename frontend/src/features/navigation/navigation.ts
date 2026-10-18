@@ -39,6 +39,8 @@ export interface PaneDirectoryView {
   readonly totalKnownFileCount?: number;
   /** Backing volume's total/available capacity, when known (task 0096). */
   readonly volumeCapacity?: VolumeCapacity;
+  /** The folder's view was restored from the user's remembered choice (task 0270). */
+  readonly viewRemembered?: boolean;
 }
 
 /** Integration callbacks kept outside the navigation module. */
@@ -143,6 +145,18 @@ export function applicationErrorCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null) return undefined;
   const code = (error as { readonly code?: unknown }).code;
   return typeof code === 'string' ? code : undefined;
+}
+
+/** Whether a view change alters what the backend returns for a listing (not mere presentation). */
+export function listingOptionsChanged(
+  before: TabProjection['view'],
+  after: TabProjection['view'],
+): boolean {
+  return (
+    JSON.stringify(before.sort) !== JSON.stringify(after.sort) ||
+    before.showHidden !== after.showHidden ||
+    before.foldersFirst !== after.foldersFirst
+  );
 }
 
 function isRetryableNavigationError(error: unknown): boolean {
@@ -457,6 +471,7 @@ export function createNavigationController(
         ? {}
         : { totalKnownFileCount: snapshot.totalKnownFileCount }),
       ...(snapshot.volumeCapacity === undefined ? {} : { volumeCapacity: snapshot.volumeCapacity }),
+      ...(snapshot.viewRemembered === true ? { viewRemembered: true } : {}),
     };
   }
 
@@ -751,6 +766,11 @@ export function createNavigationController(
       if (isCurrent(paneId, tab.id, request) && snapshot.requestId === request.id) {
         publish(paneId, tab.id, viewFromSnapshot(snapshot), preferredCursorName);
         options.onLocationVisited?.(updated.id, updatedTab.location);
+        // The backend restores a folder's remembered view when the tab arrives (task 0270),
+        // but this listing was requested with the previous folder's sort and filters.
+        if (listingOptionsChanged(tab.view, updatedTab.view)) {
+          void load(paneId, { background: true });
+        }
       }
     } catch (error: unknown) {
       if (location !== undefined) {

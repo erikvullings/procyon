@@ -127,6 +127,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
         icon_theme: settings.icon_theme,
         check_for_updates_automatically: settings.check_for_updates_automatically,
         viewer_in_separate_window: settings.viewer_in_separate_window,
+        remember_folder_views: settings.remember_folder_views,
     }
 }
 
@@ -240,6 +241,9 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         icon_theme: settings.icon_theme,
         check_for_updates_automatically: settings.check_for_updates_automatically,
         viewer_in_separate_window: settings.viewer_in_separate_window,
+        remember_folder_views: settings.remember_folder_views,
+        // Backend-owned: `update_settings` keeps the live list.
+        folder_views: Vec::new(),
     }
 }
 

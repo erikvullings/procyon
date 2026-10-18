@@ -3182,6 +3182,9 @@ impl FileManagerService {
             .settings
             .lock()
             .unwrap_or_else(|error| error.into_inner());
+        // Remembered folder views are backend-owned (task 0270): a client replaying an old
+        // settings document must not wipe them.
+        settings.folder_views = current.folder_views.clone();
         for (plugin_id, value) in &current.plugin_settings {
             if self.plugin_manager.owns_panel_settings(plugin_id) {
                 settings
@@ -3289,8 +3292,16 @@ impl FileManagerService {
     /// adapter and location support it.
     async fn enrich_snapshot(&self, snapshot: DirectorySnapshot) -> DirectorySnapshotDto {
         let volume_capacity = volume_capacity(&self.platform, &snapshot.location).await;
+        let view_remembered = {
+            let settings = self
+                .settings
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            settings.remember_folder_views && settings.folder_view(&snapshot.location).is_some()
+        };
         DirectorySnapshotDto {
             volume_capacity,
+            view_remembered,
             ..DirectorySnapshotDto::from(snapshot)
         }
     }
@@ -4121,8 +4132,106 @@ impl FileManagerService {
         &self,
         command: WorkspaceCommandDto,
     ) -> Result<WorkspaceDto, ApplicationError> {
-        let workspace = self.workspaces.apply_command(command.into()).await?;
+        let command = fm_domain::WorkspaceCommand::from(command);
+        let hook = crate::folder_views::hook_for(&command);
+        let expected_workspace = command.workspace_id();
+        let mut workspace = self.workspaces.apply_command(command).await?;
+        match hook {
+            crate::folder_views::ViewMemoryHook::None => {}
+            crate::folder_views::ViewMemoryHook::Remember { pane_id, tab_id } => {
+                self.remember_tab_view(&workspace, pane_id, tab_id);
+            }
+            crate::folder_views::ViewMemoryHook::Restore { pane_id, tab_id } => {
+                if let Some(restored) = self
+                    .restore_remembered_view(&workspace, expected_workspace, pane_id, tab_id)
+                    .await
+                {
+                    workspace = restored;
+                }
+            }
+        }
         Ok(workspace.into())
+    }
+
+    /// Records the tab's current view as the remembered view of its folder (task 0270).
+    ///
+    /// Best effort: a failure to persist the memory never fails the view change itself.
+    fn remember_tab_view(
+        &self,
+        workspace: &fm_domain::Workspace,
+        pane_id: fm_domain::PaneId,
+        tab_id: fm_domain::TabId,
+    ) {
+        let Some((location, view)) = crate::folder_views::tab_view(workspace, pane_id, tab_id)
+        else {
+            return;
+        };
+        let mut settings = self
+            .settings
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if !settings.remember_folder_views {
+            return;
+        }
+        let memory = crate::folder_views::memory_from_view(location, &view);
+        if settings.folder_views.first() == Some(&memory) {
+            return;
+        }
+        settings.remember_folder_view(memory);
+        if let Err(error) = self.settings_store.save(&settings) {
+            tracing::warn!(%error, "could not persist the remembered folder view");
+        }
+    }
+
+    /// Re-applies the remembered view of the folder a tab just navigated to, returning the
+    /// updated workspace when the view actually changed.
+    async fn restore_remembered_view(
+        &self,
+        workspace: &fm_domain::Workspace,
+        workspace_id: fm_domain::WorkspaceId,
+        pane_id: fm_domain::PaneId,
+        tab_id: fm_domain::TabId,
+    ) -> Option<fm_domain::Workspace> {
+        let (location, view) = crate::folder_views::tab_view(workspace, pane_id, tab_id)?;
+        let patch = {
+            let settings = self
+                .settings
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            if !settings.remember_folder_views {
+                return None;
+            }
+            crate::folder_views::patch_to_restore(settings.folder_view(&location)?, &view)?
+        };
+        self.workspaces
+            .apply_command(fm_domain::WorkspaceCommand::UpdateView {
+                workspace_id,
+                pane_id,
+                tab_id,
+                patch,
+                expected_revision: workspace.revision,
+            })
+            .await
+            .ok()
+    }
+
+    /// Forgets the remembered view of a folder; returns whether one existed (task 0270).
+    pub fn forget_folder_view(
+        &self,
+        location: fm_transport_dto::LocationDto,
+    ) -> Result<bool, ApplicationError> {
+        let location = Location::from(location);
+        let mut settings = self
+            .settings
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if !settings.forget_folder_view(&location) {
+            return Ok(false);
+        }
+        self.settings_store
+            .save(&settings)
+            .map_err(|_| ApplicationError::Internal)?;
+        Ok(true)
     }
 
     /// Returns safe defaults for every supported generation provider.

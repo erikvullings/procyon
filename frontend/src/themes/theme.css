@@ -5502,3 +5502,18 @@ button.fm-activity-count {
   font-family: var(--fm-font-mono, monospace);
   font-size: 0.85rem;
 }
+
+.fm-pane-view-remembered {
+  position: relative;
+}
+
+.fm-pane-view-remembered::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fm-accent);
+}

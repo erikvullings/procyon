@@ -132,6 +132,9 @@ export interface WorkspacePaneContent {
   readonly viewMode?: 'table' | 'grid';
   readonly iconSize?: GridIconSize;
   readonly onViewModeChange?: (viewMode: 'table' | 'grid', iconSize: GridIconSize) => void;
+  /** This folder's view was restored from a remembered choice (task 0270). */
+  readonly viewRemembered?: boolean;
+  readonly onForgetView?: () => void;
   readonly columnWidths?: readonly ColumnWidthEntry[] | undefined;
   readonly onColumnWidthChange?: (columnId: string, width: number) => void;
   readonly onFilterQueryChange: (query: string) => void;
@@ -660,6 +663,8 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             viewMode: content.viewMode,
             iconSize: content.iconSize,
             onViewModeChange: content.onViewModeChange,
+            viewRemembered: content.viewRemembered,
+            onForgetView: content.onForgetView,
             columnWidths: content.columnWidths,
             onColumnWidthChange: content.onColumnWidthChange,
           } satisfies TableConfigAttrs,
