@@ -2161,6 +2161,54 @@
         }
       }
     },
+    "/api/v1/files/image-gps": {
+      "post": {
+        "summary": "Reads GPS positions and capture times of many images (task 0276).",
+        "operationId": "readImageGps",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadImageGpsRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "GPS data per image",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadImageGpsResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Too many images",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "An image is outside the accessible roots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/files/image-metadata": {
       "post": {
         "summary": "Reads all EXIF, GPS, IPTC, XMP and ICC tags of an image (task 0273).",
@@ -12217,6 +12265,41 @@
           }
         }
       },
+      "ImageGpsEntryDto": {
+        "type": "object",
+        "description": "GPS result for one image.",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "gps": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GpsPositionDto",
+                "description": "Position when the image is geotagged."
+              }
+            ]
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The image."
+          },
+          "takenAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Capture time as `YYYY-MM-DDTHH:MM:SS` (no time zone) when recorded."
+          },
+          "unreadable": {
+            "type": "boolean",
+            "description": "True when the file could not be read (missing, unreadable)."
+          }
+        }
+      },
       "ImageMetadataDto": {
         "type": "object",
         "description": "All metadata of an image.",
@@ -17763,6 +17846,38 @@
           "length": 5,
           "eof": true,
           "probablyBinary": false
+        }
+      },
+      "ReadImageGpsRequestDto": {
+        "type": "object",
+        "description": "Reads the GPS position of many images cheaply (`POST /api/v1/files/image-gps`).",
+        "required": [
+          "locations"
+        ],
+        "properties": {
+          "locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Images to read, at most 100 per request."
+          }
+        }
+      },
+      "ReadImageGpsResponseDto": {
+        "type": "object",
+        "description": "GPS results in request order.",
+        "required": [
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageGpsEntryDto"
+            },
+            "description": "One entry per requested location."
+          }
         }
       },
       "ReadImageMetadataRequestDto": {

@@ -134,3 +134,36 @@ pub struct ImageMetadataEditDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orientation: Option<u8>,
 }
+
+/// Reads the GPS position of many images cheaply (`POST /api/v1/files/image-gps`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadImageGpsRequestDto {
+    /// Images to read, at most 100 per request.
+    pub locations: Vec<LocationDto>,
+}
+
+/// GPS result for one image.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageGpsEntryDto {
+    /// The image.
+    pub location: LocationDto,
+    /// Position when the image is geotagged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gps: Option<GpsPositionDto>,
+    /// Capture time as `YYYY-MM-DDTHH:MM:SS` (no time zone) when recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub taken_at: Option<String>,
+    /// True when the file could not be read (missing, unreadable).
+    #[serde(default)]
+    pub unreadable: bool,
+}
+
+/// GPS results in request order.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadImageGpsResponseDto {
+    /// One entry per requested location.
+    pub entries: Vec<ImageGpsEntryDto>,
+}

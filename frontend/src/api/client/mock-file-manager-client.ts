@@ -74,6 +74,7 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImageGpsEntry,
   ImageMetadata,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
@@ -359,6 +360,7 @@ export type MockClientMethod =
   | 'setSpotlightComment'
   | 'cacheArchivePassword'
   | 'readFileRange'
+  | 'readImageGps'
   | 'readImageMetadata'
   | 'resolveMetadataTokens'
   | 'openDocxPreview'
@@ -3070,6 +3072,17 @@ export class MockFileManagerClient implements FileManagerClient {
 
   setPaneActivity(_request: SetPaneActivityRequest, signal?: AbortSignal): Promise<void> {
     return this.perform('setPaneActivity', signal, () => undefined);
+  }
+
+  readImageGps(locations: readonly Location[], signal?: AbortSignal): Promise<ImageGpsEntry[]> {
+    // Deterministic fake: every second image is geotagged around Amsterdam.
+    return this.perform('readImageGps', signal, () =>
+      locations.map((location, index) =>
+        index % 2 === 0
+          ? { location, gps: { latitude: 52.37 + index * 0.001, longitude: 4.89 + index * 0.001 } }
+          : { location },
+      ),
+    );
   }
 
   readImageMetadata(_location: Location, signal?: AbortSignal): Promise<ImageMetadata> {

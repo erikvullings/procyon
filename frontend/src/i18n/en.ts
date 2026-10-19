@@ -2422,6 +2422,35 @@ export const en = {
     showPreview: 'Show preview map',
     hidePreview: 'Hide preview map',
   },
+  imageMap: {
+    action: 'Show on map',
+    title: 'Photos on a map',
+    scanning: 'Reading locations: {done} of {total}',
+    summary: '{located} on the map, {unlocated} without location',
+    unreadable: '{n} could not be read',
+    truncated: 'Only the first {n} images are shown.',
+    noImages: 'There are no images to show.',
+    includeSubfolders: 'Include subfolders',
+    cancel: 'Stop',
+    close: 'Close',
+    noLocation: 'Without location',
+    place: 'Place on map',
+    placingHint: 'Click the map to set the location of {name}.',
+    stopPlacing: 'Cancel placing',
+    reveal: 'Show in list',
+    notInFolder: '{name} is not in the folder shown in the active pane.',
+    cannotWrite:
+      '{name} cannot be edited: only JPEG, TIFF and WebP files can store a new location.',
+    confirmTitle: 'Change location',
+    confirmText:
+      'Set the location of {name} to {latitude}, {longitude}? The file is rewritten losslessly and the original is kept as .orig.',
+    confirm: 'Change',
+    placed: 'Location of {name} updated.',
+    placementFailed: 'The location could not be changed.',
+    placementError: 'The location could not be changed: {message}',
+    failed: 'Reading the locations failed: {message}',
+    taken: 'Taken {date}',
+  },
 } as const satisfies CatalogueShape;
 
 /** Canonical translation groups and keys. Values remain locale-specific. */

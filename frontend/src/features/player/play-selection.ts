@@ -25,6 +25,8 @@ export interface PlaySelectionOptions {
   /** The pane tab's view settings (sort, hidden files, folders first). */
   readonly view: Pick<ListDirectoryRequest, 'sort' | 'showHidden' | 'foldersFirst'>;
   readonly recursive: boolean;
+  /** Which files to collect; playable media by default. */
+  readonly accept?: (entry: EntrySummary) => boolean;
   readonly signal?: AbortSignal;
 }
 
@@ -84,7 +86,7 @@ export async function collectMedia(
   async function visit(entry: EntrySummary, depth: number): Promise<void> {
     if (truncated || options.signal?.aborted === true || isParentEntry(entry.id)) return;
     if (entry.kind === 'file') {
-      if (!isPlayableMedia(entry) || seen.has(entry.location.uri)) return;
+      if (!(options.accept ?? isPlayableMedia)(entry) || seen.has(entry.location.uri)) return;
       if (collected.length >= MAX_QUEUED_TRACKS) {
         truncated = true;
         return;

@@ -73,6 +73,7 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImageGpsEntry,
   ImageMetadata,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
@@ -896,6 +897,16 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   readFileRange(request: ReadFileRangeRequest, _signal?: AbortSignal): Promise<FileRangeChunk> {
     return invoke<FileRangeChunk>('read_file_range', { request });
+  }
+
+  async readImageGps(
+    locations: readonly Location[],
+    _signal?: AbortSignal,
+  ): Promise<ImageGpsEntry[]> {
+    const response = await invoke<{ entries: ImageGpsEntry[] }>('read_image_gps', {
+      request: { locations },
+    });
+    return response.entries;
   }
 
   readImageMetadata(location: Location, _signal?: AbortSignal): Promise<ImageMetadata> {

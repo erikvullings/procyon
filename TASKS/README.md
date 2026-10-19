@@ -325,7 +325,7 @@ disk-usage visualization.
 - [x] 0273 Full image metadata viewer (EXIF, IPTC, XMP) *(needs 0088)*
 - [x] 0274 Edit image metadata (EXIF, IPTC, XMP) *(needs 0273, 0035)*
 - [x] 0275 Map component with a replaceable tile source *(needs 0030)*
-- [ ] 0276 Show images on a map (folder or selection) *(needs 0273, 0275, 0134)*
+- [x] 0276 Show images on a map (folder or selection) *(needs 0273, 0275, 0134)*
 
 ## Plugins & extensibility
 

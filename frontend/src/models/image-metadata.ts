@@ -1,3 +1,5 @@
+import type { Location } from './location';
+
 /** One metadata tag of an image (task 0273). */
 export interface ImageTag {
   readonly name: string;
@@ -27,6 +29,15 @@ export interface ImageMetadata {
   readonly gps?: GpsPosition | null;
   /** Field ids this file's format can store and write; empty when it cannot be edited. */
   readonly editableFields?: readonly string[];
+}
+
+/** GPS result of one image from the bulk scan (task 0276). */
+export interface ImageGpsEntry {
+  readonly location: Location;
+  readonly gps?: GpsPosition | null;
+  /** Capture time `YYYY-MM-DDTHH:MM:SS` without a time zone. */
+  readonly takenAt?: string | null;
+  readonly unreadable?: boolean;
 }
 
 export interface CaptureTime {

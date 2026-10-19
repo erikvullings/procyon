@@ -1,5 +1,7 @@
 import { t } from '../../i18n';
 import type { ActionDescriptor, EntrySummary, PluginDescriptor } from '../../models';
+import { isGeoCandidate } from '../image-map/gps-scan';
+import { SHOW_ON_MAP_ACTION_ID } from '../image-map/image-map-actions';
 import {
   EDIT_IMAGE_METADATA_ACTION_ID,
   isMetadataEditable,
@@ -70,6 +72,7 @@ const SELECTION_ACTION_IDS = new Set([
   ...MEDIA_QUEUE_ACTIONS.filter((action) => action.inContextMenu).map((action) => action.id),
   SAVE_PLAYLIST_ACTION_ID,
   EDIT_IMAGE_METADATA_ACTION_ID,
+  SHOW_ON_MAP_ACTION_ID,
 ]);
 
 /**
@@ -97,7 +100,7 @@ const CONTEXT_MENU_SELECTION_GROUPS: readonly (readonly string[])[] = [
     'core.documentSummary',
   ],
   ['core.pack', 'core.moveToArchive', 'core.extract'],
-  [EDIT_IMAGE_METADATA_ACTION_ID],
+  [SHOW_ON_MAP_ACTION_ID, EDIT_IMAGE_METADATA_ACTION_ID],
   ['core.trash', 'core.delete', 'core.uninstallApplication'],
 ];
 
@@ -216,6 +219,13 @@ export function evaluateActionAvailability(
     (MEDIA_QUEUE_ACTION_IDS.has(action.id) ||
       (action.id === SAVE_PLAYLIST_ACTION_ID && context.selectedEntries.length > 0)) &&
     !hasPlayableSelection(context.selectedEntries)
+  ) {
+    return unavailable(action, t('availability', 'selectFiles'));
+  }
+  if (
+    action.id === SHOW_ON_MAP_ACTION_ID &&
+    context.selectedEntries.length > 0 &&
+    !context.selectedEntries.some((entry) => entry.kind === 'directory' || isGeoCandidate(entry))
   ) {
     return unavailable(action, t('availability', 'selectFiles'));
   }

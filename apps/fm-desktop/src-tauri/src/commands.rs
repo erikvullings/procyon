@@ -2906,6 +2906,19 @@ pub(crate) async fn read_image_metadata(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Reads GPS positions and capture times of many images (task 0276).
+#[tauri::command]
+pub(crate) async fn read_image_gps(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ReadImageGpsRequestDto,
+) -> Result<fm_transport_dto::ReadImageGpsResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .read_image_gps(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Starts a cancellable music duplicate scan through the shared service (task 0265).
 ///
 /// Must be `async` so the scan task is spawned on the Tokio runtime.

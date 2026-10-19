@@ -7,7 +7,10 @@ export type FileViewerAttrsExtras = Pick<
   'quickLookAvailable' | 'onQuickLook' | 'onOpenExternally' | 'onClose'
 > &
   Partial<
-    Pick<FileViewerAttrs, 'videoPosterDataUri' | 'onDocumentSummary' | 'onPlayTracks' | 'links'>
+    Pick<
+      FileViewerAttrs,
+      'videoPosterDataUri' | 'onDocumentSummary' | 'onPlayTracks' | 'onOpenOnMap' | 'links'
+    >
   > & {
     readonly openExternalUrl: (url: string) => void;
   };

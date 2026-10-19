@@ -113,6 +113,14 @@ import {
   createBackendEventHandler,
 } from '../features/events/backend-event-handler';
 import { recordRecentLocation } from '../features/favourites/favourites';
+import { isGeoCandidate } from '../features/image-map/gps-scan';
+import { SHOW_ON_MAP_ACTION_ID } from '../features/image-map/image-map-actions';
+import {
+  createImageMapController,
+  type ImageMapController,
+} from '../features/image-map/image-map-controller';
+import { ImageMapPanel } from '../features/image-map/image-map-panel';
+import { type ImageMapState, INITIAL_IMAGE_MAP_STATE } from '../features/image-map/image-map-state';
 import {
   EditImageMetadataDialog,
   type EditImageMetadataRequest,
@@ -346,7 +354,6 @@ import type {
   WorkspaceProjection,
   WorkspaceSummary,
 } from '../models';
-
 import {
   type AppState,
   applyAppPatches,
@@ -360,6 +367,7 @@ import {
   setQuickFilterDraftPatch,
 } from '../state';
 import { perfEndAfterPaint, perfStart } from '../utilities/perf';
+import { resolvedTheme } from '../utilities/resolved-theme';
 import type { RuntimeKind } from '../utilities/runtime';
 import { buildControllers } from './controller-registry';
 
@@ -631,6 +639,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       descriptor(EDIT_IMAGE_METADATA_ACTION_ID, t('imageEdit', 'action'), {
         requiresSelection: true,
       }),
+      descriptor(SHOW_ON_MAP_ACTION_ID, t('imageMap', 'action'), {}),
     ];
   }
 
@@ -800,6 +809,106 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       });
   }
 
+  /** Opens the "Show on map" panel for the selection, or for the whole active folder (task 0276). */
+  function beginShowOnMap(invocation: ActionInvocationContext | undefined): void {
+    const paneId = invocation?.paneId ?? workspace?.activePaneId;
+    if (workspace === undefined || paneId === undefined) return;
+    const directory = directories.get(activeTabKey(paneId));
+    const ids = new Set(
+      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
+    );
+    const chosen = (directory?.entries ?? []).filter(
+      (entry) => ids.has(entry.id) && !isParentEntry(entry.id),
+    );
+    const folderLocation = directory?.location;
+    if (
+      chosen.length === 0 &&
+      (folderLocation === undefined || folderLocation.providerId === 'basket')
+    ) {
+      toast({ html: t('imageMap', 'noImages') });
+      return;
+    }
+    // Without a selection the folder itself is the source, so every page of it is read.
+    const roots: readonly EntrySummary[] =
+      chosen.length > 0
+        ? chosen
+        : [
+            {
+              id: 'image-map-folder',
+              name: '',
+              kind: 'directory',
+              location: folderLocation,
+            } as EntrySummary,
+          ];
+    openImageMap(
+      paneId,
+      roots,
+      chosen.length === 0 || chosen.some((entry) => entry.kind === 'directory'),
+    );
+  }
+
+  /** Starts the map panel for `roots`; `folder` offers the "include subfolders" option. */
+  function openImageMap(paneId: PaneId, roots: readonly EntrySummary[], folder: boolean): void {
+    if (workspace === undefined) return;
+    const pane = workspace.panesById[paneId];
+    const tab = pane?.tabsById[pane.activeTabId];
+    const workspaceId = workspace.id;
+    imageMapPaneId = paneId;
+    imageMapController ??= createImageMapController({
+      getClient: () => attrsClient,
+      getOpsController: () => opsController,
+      getState: () => imageMapState,
+      setState: (state) => {
+        imageMapState = state;
+      },
+      toast: (message) => toast({ html: message }),
+      redraw: () => m.redraw(),
+    });
+    void imageMapController.open({
+      folder,
+      collect: async (recursive, signal) => {
+        const { entries, truncated } = await collectMedia(roots, {
+          client: attrsClient,
+          workspaceId,
+          view: {
+            ...(tab?.view.sort === undefined ? {} : { sort: tab.view.sort }),
+            ...(tab === undefined
+              ? {}
+              : { showHidden: tab.view.showHidden, foldersFirst: tab.view.foldersFirst }),
+          },
+          recursive,
+          accept: isGeoCandidate,
+          signal,
+        });
+        return { entries, truncated };
+      },
+    });
+  }
+
+  /** "Open on map" of the F3 viewer: shows the viewed image on the map (task 0273/0276). */
+  function showEntryOnMap(paneId: PaneId, entry: EntrySummary): void {
+    openImageMap(paneId, [entry], false);
+  }
+
+  /** Selects an entry of the map panel in its pane when that folder is currently listed. */
+  function revealMappedEntry(entry: EntrySummary): void {
+    const paneId = imageMapPaneId;
+    if (paneId === undefined) return;
+    const key = activeTabKey(paneId);
+    const listed = (directories.get(key)?.entries ?? []).find(
+      (candidate) => candidate.location.uri === entry.location.uri,
+    );
+    if (listed === undefined) {
+      toast({ html: t('imageMap', 'notInFolder', { name: entry.name }) });
+      return;
+    }
+    selections.set(
+      key,
+      reduceSelection(emptySelection, { type: 'selectOnly', entryId: listed.id }, [listed.id]),
+    );
+    m.redraw();
+  }
+
   /** Opens "Edit image metadata…" for the editable images of the selection (task 0274). */
   function beginEditImageMetadata(invocation: ActionInvocationContext | undefined): void {
     const paneId = invocation?.paneId ?? workspace?.activePaneId;
@@ -923,6 +1032,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (player === undefined) return false;
     if (actionId === SAVE_PLAYLIST_ACTION_ID) {
       beginSavePlaylist(invocation);
+      return true;
+    }
+    if (actionId === SHOW_ON_MAP_ACTION_ID) {
+      beginShowOnMap(invocation);
       return true;
     }
     if (actionId === EDIT_IMAGE_METADATA_ACTION_ID) {
@@ -1465,6 +1578,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let playerController: PlayerController | undefined;
   let savePlaylistRequest: SavePlaylistRequest | undefined;
   let editImageMetadataRequest: EditImageMetadataRequest | undefined;
+  let imageMapState: ImageMapState = INITIAL_IMAGE_MAP_STATE;
+  let imageMapController: ImageMapController | undefined;
+  /** The pane whose folder feeds the open map panel; used to reveal and highlight entries. */
+  let imageMapPaneId: PaneId | undefined;
   let musicDuplicatesController: MusicDuplicatesController | undefined;
   let linkDoctorController: LinkDoctorController | undefined;
   let snapshotController: SnapshotController | undefined;
@@ -4895,6 +5012,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       openViewer(attrsClient, paneId, entry, initialSearch, openMetadata, initialPage),
     closeViewer,
     isDocumentSummaryAvailable: () => semanticAssistantAvailable,
+    showEntryOnMap,
     playQueueItems: (items, startId, mode, skipped) => {
       const player = playerController;
       if (player === undefined) return;
@@ -6581,6 +6699,31 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 onOpenSource: (problem) => linkDoctorController?.openSource(problem),
                 onCancel: () => void linkDoctorController?.cancel(),
                 onClose: () => linkDoctorController?.close(),
+              }),
+            imageMapState.open &&
+              imageMapController !== undefined &&
+              currentSettings !== undefined &&
+              m(ImageMapPanel, {
+                state: imageMapState,
+                client: attrs.client,
+                settings: currentSettings.map,
+                dark: resolvedTheme() === 'dark',
+                selectedIds: new Set(
+                  (imageMapPaneId === undefined
+                    ? undefined
+                    : selections.get(activeTabKey(imageMapPaneId))
+                  )?.selectedEntryIds ?? [],
+                ),
+                onReveal: revealMappedEntry,
+                onRecursive: (recursive) => void imageMapController?.setRecursive(recursive),
+                onCancel: () => imageMapController?.cancel(),
+                onClose: () => imageMapController?.close(),
+                onBeginPlacing: (entry) => imageMapController?.beginPlacing(entry),
+                onStopPlacing: () => imageMapController?.stopPlacing(),
+                onPropose: (entry, latitude, longitude) =>
+                  imageMapController?.proposePlacement(entry, latitude, longitude),
+                onConfirm: () => void imageMapController?.confirmPlacement(),
+                onCancelPlacement: () => imageMapController?.cancelPlacement(),
               }),
             musicDuplicatesState.scanId !== undefined &&
               musicDuplicatesController !== undefined &&

@@ -1361,4 +1361,5 @@ export const fr = {
   imageMetadata: en.imageMetadata,
   imageEdit: en.imageEdit,
   map: en.map,
+  imageMap: en.imageMap,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

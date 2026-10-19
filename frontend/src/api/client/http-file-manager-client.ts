@@ -65,6 +65,7 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImageGpsEntry,
   ImageMetadata,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
@@ -267,6 +268,7 @@ import {
   recordFrontendDiagnostic as requestFrontendDiagnostic,
   updateGemmaMedia as requestGemmaMediaUpdate,
   getFileGitHistory as requestGitFileHistory,
+  readImageGps as requestImageGps,
   readImageMetadata as requestImageMetadata,
   cancelKnowledgeAnswer as requestKnowledgeAnswerCancellation,
   generateKnowledgeAnswer as requestKnowledgeAnswerGeneration,
@@ -1380,6 +1382,20 @@ export class HttpFileManagerClient implements FileManagerClient {
       throw new Error(`Unexpected readFileRange response status: ${response.status}`);
     }
     return response.data;
+  }
+
+  async readImageGps(
+    locations: readonly FileLocation[],
+    signal?: AbortSignal,
+  ): Promise<ImageGpsEntry[]> {
+    const response = await requestImageGps(
+      { locations: [...locations] },
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected readImageGps response status: ${response.status}`);
+    }
+    return response.data.entries;
   }
 
   async readImageMetadata(location: Location, signal?: AbortSignal): Promise<ImageMetadata> {

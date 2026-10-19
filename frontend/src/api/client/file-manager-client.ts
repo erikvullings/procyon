@@ -66,6 +66,7 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImageGpsEntry,
   ImageMetadata,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
@@ -554,6 +555,11 @@ export interface FileManagerClient {
    * Works for local, archive and remote entries because the backend reads through the VFS.
    */
   readImageMetadata(location: Location, signal?: AbortSignal): Promise<ImageMetadata>;
+  /**
+   * Reads GPS position and capture time of up to 100 images from their leading bytes only
+   * (task 0276); an unreadable image is flagged instead of failing the batch.
+   */
+  readImageGps(locations: readonly Location[], signal?: AbortSignal): Promise<ImageGpsEntry[]>;
 
   /**
    * Resolves audio-tag and EXIF tokens for multi-rename patterns (task 0267). The backend

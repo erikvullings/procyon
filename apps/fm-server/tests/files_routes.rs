@@ -583,3 +583,27 @@ async fn reads_image_metadata_and_flags_unsupported_files() {
     assert_eq!(body["supported"], false);
     assert_eq!(body["groups"], json!([]));
 }
+
+#[tokio::test]
+async fn reads_image_gps_in_bulk_and_flags_unreadable_files() {
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    let plain = root.path().join("plain.png");
+    std::fs::write(&plain, b"\x89PNG\r\n\x1a\n").expect("must create fixture");
+    let missing = root.path().join("missing.jpg");
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+
+    let body: Value = client
+        .post(format!("{}/api/v1/files/image-gps", server.base_url))
+        .json(&json!({"locations": [location_json(&plain), location_json(&missing)]}))
+        .send()
+        .await
+        .expect("request must succeed")
+        .json()
+        .await
+        .expect("body must be JSON");
+    assert_eq!(body["entries"].as_array().map(Vec::len), Some(2));
+    assert_eq!(body["entries"][0]["unreadable"], false);
+    assert!(body["entries"][0].get("gps").is_none());
+    assert_eq!(body["entries"][1]["unreadable"], true);
+}

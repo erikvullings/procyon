@@ -13,7 +13,8 @@ use fm_transport_dto::{
     OpenStructuredViewRequestDto, OpenStructuredViewResponseDto, PptxPreviewSessionRequestDto,
     QuerySqliteViewRequestDto, QuerySqliteViewResponseDto, ReadDocxPreviewResourceRequestDto,
     ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    ReadImageMetadataRequestDto, ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
+    ReadImageGpsRequestDto, ReadImageGpsResponseDto, ReadImageMetadataRequestDto,
+    ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, ResolveMetadataTokensRequestDto,
     ResolveMetadataTokensResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
@@ -131,6 +132,35 @@ pub(crate) async fn read_image_metadata(
     state
         .service
         .read_image_metadata(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Reads GPS positions and capture times of many images (task 0276).
+#[utoipa::path(
+    post,
+    path = "/api/v1/files/image-gps",
+    operation_id = "readImageGps",
+    request_body = ReadImageGpsRequestDto,
+    responses(
+        (status = 200, description = "GPS data per image", body = ReadImageGpsResponseDto),
+        (status = 400, description = "Too many images", body = ApplicationErrorDto),
+        (status = 403, description = "An image is outside the accessible roots", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn read_image_gps(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ReadImageGpsRequestDto>,
+) -> Result<Json<ReadImageGpsResponseDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    for location in &request.locations {
+        crate::error::require_within_roots(location, &state.accessible_roots, request_id)?;
+    }
+    state
+        .service
+        .read_image_gps(request)
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, request_id))

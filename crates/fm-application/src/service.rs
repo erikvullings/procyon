@@ -3837,6 +3837,15 @@ impl FileManagerService {
         self.map_tiles.tile(z, x, y).await
     }
 
+    /// Reads the GPS position and capture time of up to 100 images from their leading bytes
+    /// (task 0276).
+    pub async fn read_image_gps(
+        &self,
+        request: fm_transport_dto::ReadImageGpsRequestDto,
+    ) -> Result<fm_transport_dto::ReadImageGpsResponseDto, ApplicationError> {
+        crate::image_metadata::read_image_gps(&self.providers, request).await
+    }
+
     /// Reads every EXIF/GPS/IPTC/XMP/ICC tag of an image from its leading bytes (task 0273).
     pub async fn read_image_metadata(
         &self,
