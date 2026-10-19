@@ -175,6 +175,12 @@ export const settingsIcon = trustedStrokeIcon(
   'fm-icon-settings',
 );
 
+/** "help-circle" — question mark in a circle, for the help button. */
+export const helpIcon = trustedStrokeIcon(
+  '<path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 17l0 .01" /><path d="M12 13.5a1.5 1.5 0 0 1 1 -1.5a2.6 2.6 0 1 0 -3 -4" />',
+  'fm-icon-help',
+);
+
 /** "heart" — favourites/bookmarks. */
 export const heartIcon = trustedStrokeIcon(
   '<path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" />',

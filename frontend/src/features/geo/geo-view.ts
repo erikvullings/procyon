@@ -121,6 +121,61 @@ function describeFeature(
   return root;
 }
 
+/** Features listed beside the map; the rest stays reachable by clicking on the map. */
+const FEATURE_LIST_LIMIT = 300;
+
+function featureTitle(
+  feature: GeoDocument['collection']['features'][number],
+  index: number,
+): string {
+  const properties = feature.properties ?? {};
+  for (const key of ['name', 'title', 'Name', 'NAME', 'label', 'id']) {
+    const value = properties[key];
+    if (typeof value === 'string' && value.trim() !== '') return value;
+    if (typeof value === 'number') return String(value);
+  }
+  return t('geo', 'featureUnnamed', { n: index + 1 });
+}
+
+function featureList(
+  document: GeoDocument,
+  originalIndexes: readonly number[],
+  selectedIndex: number | undefined,
+  onSelect: (index: number | undefined) => void,
+): m.Children {
+  const features = document.collection.features;
+  if (originalIndexes.length === 0) return undefined;
+  return m('.fm-geo-feature-list', [
+    m('h5', t('geo', 'featureList')),
+    m(
+      'ul',
+      originalIndexes.slice(0, FEATURE_LIST_LIMIT).map((original) => {
+        const feature = features[original];
+        if (feature === undefined) return undefined;
+        const selected = original === selectedIndex;
+        return m('li', { key: original }, [
+          m(
+            'button.fm-geo-feature-item',
+            {
+              type: 'button',
+              class: selected ? 'is-selected' : undefined,
+              'aria-pressed': String(selected),
+              onclick: () => onSelect(selected ? undefined : original),
+            },
+            [
+              m('span.fm-geo-feature-name', featureTitle(feature, original)),
+              m('span.fm-geo-feature-type', feature.geometry?.type ?? t('geo', 'noGeometry')),
+            ],
+          ),
+        ]);
+      }),
+    ),
+    originalIndexes.length > FEATURE_LIST_LIMIT
+      ? m('p.fm-geo-hint', t('geo', 'listTruncated', { n: FEATURE_LIST_LIMIT }))
+      : undefined,
+  ]);
+}
+
 function propertiesTable(document: GeoDocument, index: number | undefined): m.Children {
   if (index === undefined) return m('p.fm-geo-hint', t('geo', 'selectFeature'));
   const feature = document.collection.features[index];
@@ -225,7 +280,8 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = (initial) => {
           }),
         ),
         m('aside.fm-geo-side', [
-          m('p', t('geo', 'summary', { n: document.totalFeatures })),
+          m('p', t('geo', 'summary', document.totalFeatures)),
+          featureList(document, visible.originalIndexes, attrs.selectedIndex, attrs.onSelect),
           layers.length === 0
             ? undefined
             : m('.fm-geo-layers', [

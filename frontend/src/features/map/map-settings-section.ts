@@ -3,6 +3,7 @@ import { NumberInput, Select, Switch, TextInput } from 'mithril-materialized';
 import { t } from '../../i18n';
 import type { MapBasemapKind, MapSettings } from '../../models';
 import { resolvedTheme } from '../../utilities/resolved-theme';
+import { applyPreset, MAP_PRESETS, presetFor } from './map-presets';
 import {
   DEFAULT_MAP_SETTINGS,
   locationFromPathInput,
@@ -40,11 +41,20 @@ export function networkNotice(settings: MapSettings): string {
 export const MapSettingsSection: FactoryComponent<MapSettingsSectionAttrs> = () => {
   // Transient: whether the preview map (which loads the map library and tiles) is open.
   let previewOpen = false;
+  // Bumped when the settings change from outside the text fields (a preset or the reset button),
+  // so the fields, which keep their own text while typing, are rebuilt with the new values.
+  let formRevision = 0;
   return {
     view: ({ attrs: { client, settings, onChange } }) => {
       const change = (patch: Partial<MapSettings>): void => onChange({ ...settings, ...patch });
       const problem = validateMapSettings(settings);
-      return [
+      const replace = (next: MapSettings): void => {
+        formRevision += 1;
+        previewOpen = false;
+        onChange(next);
+      };
+      const preset = presetFor(settings);
+      return m.fragment({ key: formRevision }, [
         m('.row', m('h4.fm-settings-section-heading.col.s12', t('map', 'sectionTitle'))),
         m('.row', [
           m(Switch, {
@@ -54,6 +64,22 @@ export const MapSettingsSection: FactoryComponent<MapSettingsSectionAttrs> = () 
             left: t('settings', 'off'),
             right: t('settings', 'on'),
             onchange: (onlineTiles: boolean) => change({ onlineTiles }),
+          }),
+        ]),
+        m('.row', [
+          m(Select<string>, {
+            className: 'col s12',
+            label: t('map', 'preset'),
+            placeholder: t('map', 'presetCustom'),
+            options: MAP_PRESETS.map((entry) => ({
+              id: entry.id,
+              label: `${entry.name} - ${entry.note}`,
+            })),
+            ...(preset === undefined ? {} : { checkedId: preset.id }),
+            onchange: ([value]) => {
+              const chosen = MAP_PRESETS.find((entry) => entry.id === value);
+              if (chosen !== undefined) replace(applyPreset(settings, chosen));
+            },
           }),
         ]),
         m('.row', [
@@ -125,7 +151,7 @@ export const MapSettingsSection: FactoryComponent<MapSettingsSectionAttrs> = () 
         m('.row', [
           m(
             'button.btn-flat.fm-map-reset',
-            { type: 'button', onclick: () => onChange(DEFAULT_MAP_SETTINGS) },
+            { type: 'button', onclick: () => replace(DEFAULT_MAP_SETTINGS) },
             t('map', 'resetToDefault'),
           ),
           client === undefined
@@ -148,7 +174,7 @@ export const MapSettingsSection: FactoryComponent<MapSettingsSectionAttrs> = () 
               m(MapView, { client, settings, dark: resolvedTheme() === 'dark', markers: [] }),
             )
           : undefined,
-      ];
+      ]);
     },
   };
 };

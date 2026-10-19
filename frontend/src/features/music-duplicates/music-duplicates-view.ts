@@ -145,7 +145,7 @@ export const MusicDuplicatesView: FactoryComponent<MusicDuplicatesViewAttrs> = (
       state.unreadableTags > 0
         ? m(
             'p.duplicate-review__warnings',
-            t('musicDuplicates', 'unreadableTags', { count: state.unreadableTags }),
+            t('musicDuplicates', 'unreadableTags', state.unreadableTags),
           )
         : undefined,
       state.isComplete && state.groups.length === 0 && !state.isCancelled

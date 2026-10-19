@@ -17,6 +17,7 @@ import {
   compareIcon,
   contentSearchIcon,
   cornerLeftUpIcon,
+  helpIcon,
   layoutGridIcon,
   listIcon,
   plusIcon,
@@ -827,7 +828,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       (entry) => ids.has(entry.id) && isConvertibleGeoFile(entry),
     );
     if (files.length === 0) {
-      toast({ html: t('geoConvert', 'files', { n: 0 }) });
+      toast({ html: t('geoConvert', 'noFiles') });
       return;
     }
     minifyGeoRequest = {
@@ -846,7 +847,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         transform,
       )
       .then(() => {
-        toast({ html: t('geoMinify', 'started', { n: request.files.length }) });
+        toast({ html: t('geoMinify', 'started', request.files.length) });
         m.redraw();
       })
       .catch((error: unknown) => {
@@ -870,7 +871,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       (entry) => ids.has(entry.id) && isConvertibleGeoFile(entry),
     );
     if (files.length === 0) {
-      toast({ html: t('geoConvert', 'files', { n: 0 }) });
+      toast({ html: t('geoConvert', 'noFiles') });
       return;
     }
     convertGeoRequest = {
@@ -889,7 +890,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         transform,
       )
       .then(() => {
-        toast({ html: t('geoConvert', 'started', { n: request.files.length }) });
+        toast({ html: t('geoConvert', 'started', request.files.length) });
         m.redraw();
       })
       .catch((error: unknown) => {
@@ -1030,7 +1031,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     void opsController
       .editImageMetadata(request.files, edit)
       .then(() => {
-        toast({ html: t('imageEdit', 'started', { n: request.files.length }) });
+        toast({ html: t('imageEdit', 'started', request.files.length) });
         m.redraw();
       })
       .catch((error: unknown) => {
@@ -6387,16 +6388,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 settingsIcon(),
               ),
             ),
-            m(
-              'button.fm-help-trigger',
-              {
-                type: 'button',
-                'aria-label': t('walkthroughs', 'title'),
-                onclick: () => {
-                  walkthroughsOpen = true;
-                },
-              },
+            tooltip(
               t('menu', 'help'),
+              m(
+                IconButton,
+                {
+                  className: 'fm-settings-button fm-help-trigger',
+                  'aria-label': t('walkthroughs', 'title'),
+                  onclick: () => {
+                    walkthroughsOpen = true;
+                  },
+                },
+                helpIcon(),
+              ),
             ),
             m(
               'details.fm-settings-disclosure',

@@ -166,7 +166,7 @@ export const MinifyGeoDialog: FactoryComponent<MinifyGeoDialogAttrs> = () => {
           attrs.request === undefined
             ? undefined
             : m('.fm-geo-minify', [
-                m('p', t('geoConvert', 'files', { n: attrs.request.files.length })),
+                m('p', t('geoConvert', 'files', attrs.request.files.length)),
                 m('label.fm-create-directory-field', [
                   m('span', t('geoMinify', 'preset')),
                   m(

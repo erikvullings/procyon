@@ -98,14 +98,6 @@
   text-underline-offset: 0.15em;
 }
 
-.fm-help-trigger {
-  padding: 0.2rem 0.45rem;
-  color: var(--fm-text);
-  background: transparent;
-  border: 1px solid var(--fm-border);
-  cursor: pointer;
-}
-
 .fm-help-trigger:focus-visible {
   outline: 2px solid var(--fm-accent);
   outline-offset: 2px;

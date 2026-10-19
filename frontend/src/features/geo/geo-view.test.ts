@@ -67,7 +67,7 @@ describe('GeoView', () => {
     const root = render(attrs());
     expect(captured.attrs?.features).toBe(document_.collection);
     expect(captured.attrs?.dataBounds).toEqual([4, 52, 4, 52]);
-    expect(root.textContent).toContain('5 feature(s)');
+    expect(root.textContent).toContain('5 features');
     expect(root.textContent).toContain('Only 2 of 5 features');
     expect(root.textContent).toContain('legacy crs');
     expect(root.textContent).toContain('3D model');

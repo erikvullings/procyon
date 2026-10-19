@@ -60,6 +60,9 @@ export interface MapViewAttrs {
 
 type Status = 'loading' | 'ready' | 'failed';
 
+/** How long the basemap may take to produce a usable style before the map reports a failure. */
+const LOAD_TIMEOUT_MS = 20_000;
+
 interface DrawnItem {
   readonly marker: MapLibre.Marker;
   readonly element: HTMLElement;
@@ -134,6 +137,8 @@ function basemapKey(settings: MapSettings, dark: boolean): string {
 export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
   let latest: MapViewAttrs = initial.attrs;
   let status: Status = 'loading';
+  /** Last error the map engine reported, shown with the failure message. */
+  let failure: string | undefined;
   let destroyed = false;
   let lib: typeof MapLibre | undefined;
   let map: MapLibre.Map | undefined;
@@ -533,7 +538,27 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
         latest.onMapClick?.({ latitude: event.lngLat.lat, longitude: event.lngLat.lng });
       });
       created.on('style.load', syncFeatures);
-      created.once('load', () => {
+      // 'load' also waits for the first tiles, which may never arrive; the style is enough to draw.
+      const loadTimer = setTimeout(() => {
+        if (status === 'loading' && !destroyed) {
+          failure = failure ?? t('map', 'loadTimeout');
+          status = 'failed';
+          m.redraw();
+        }
+      }, LOAD_TIMEOUT_MS);
+      created.on('error', (event) => {
+        failure = event.error instanceof Error ? event.error.message : String(event.error);
+        console.error('map error', event.error);
+        if (status === 'loading' && !created.isStyleLoaded()) {
+          status = 'failed';
+          m.redraw();
+        }
+      });
+      let started = false;
+      const becomeReady = (): void => {
+        if (started || destroyed) return;
+        started = true;
+        clearTimeout(loadTimer);
         status = 'ready';
         syncFeatures();
         latest.onMapReady?.(created);
@@ -544,9 +569,13 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
           fit();
         }
         m.redraw();
-      });
-    } catch {
+      };
+      created.once('style.load', becomeReady);
+      created.once('load', becomeReady);
+    } catch (error) {
+      console.error('map failed to start', error);
       if (!destroyed) {
+        failure = error instanceof Error ? error.message : String(error);
         status = 'failed';
         m.redraw();
       }
@@ -598,7 +627,13 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
             ? m('.fm-map-status', { role: 'status' }, t('map', 'loading'))
             : undefined,
           status === 'failed'
-            ? m('.fm-map-status.is-error', { role: 'alert' }, t('map', 'loadFailed'))
+            ? m(
+                '.fm-map-status.is-error',
+                { role: 'alert' },
+                failure === undefined
+                  ? t('map', 'loadFailed')
+                  : `${t('map', 'loadFailed')} ${failure}`,
+              )
             : undefined,
           blank && status === 'ready' ? m('.fm-map-notice', t('map', 'blankGrid')) : undefined,
         ],

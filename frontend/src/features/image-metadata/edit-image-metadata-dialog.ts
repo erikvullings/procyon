@@ -149,7 +149,7 @@ export const EditImageMetadataDialog: FactoryComponent<EditImageMetadataDialogAt
         description: m('.fm-image-edit', [
           attrs.request === undefined
             ? undefined
-            : m('p', t('imageEdit', 'files', { n: attrs.request.files.length })),
+            : m('p', t('imageEdit', 'files', attrs.request.files.length)),
           row(
             'dateTaken',
             t('imageEdit', 'dateTaken'),

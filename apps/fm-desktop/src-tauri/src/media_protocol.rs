@@ -27,7 +27,7 @@ const MAX_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
 pub(crate) fn register<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder.register_asynchronous_uri_scheme_protocol(SCHEME, |ctx, request, responder| {
         if !crate::plugin_spa::trusted_invoke_label(ctx.webview_label()) {
-            responder.respond(plain(StatusCode::FORBIDDEN));
+            responder.respond(with_cors(plain(StatusCode::FORBIDDEN)));
             return;
         }
         let service = ctx
@@ -39,7 +39,7 @@ pub(crate) fn register<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder
                 Some(service) => handle(&service, &request).await,
                 None => plain(StatusCode::SERVICE_UNAVAILABLE),
             };
-            responder.respond(response);
+            responder.respond(with_cors(response));
         });
     })
 }
@@ -119,6 +119,21 @@ fn status_for(error: &ApplicationError) -> StatusCode {
         ApplicationError::InvalidRequest(_) => StatusCode::BAD_REQUEST,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     }
+}
+
+/// Lets the web view read the response from script (`fetch`): custom schemes get no CORS headers
+/// from Tauri, and MapLibre loads tiles and PMTiles ranges with `fetch`.
+fn with_cors(mut response: Response<Vec<u8>>) -> Response<Vec<u8>> {
+    let headers = response.headers_mut();
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        header::HeaderValue::from_static("*"),
+    );
+    headers.insert(
+        header::ACCESS_CONTROL_EXPOSE_HEADERS,
+        header::HeaderValue::from_static("Content-Range, Accept-Ranges, Content-Length"),
+    );
+    response
 }
 
 fn plain(status: StatusCode) -> Response<Vec<u8>> {

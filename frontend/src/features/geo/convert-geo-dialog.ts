@@ -96,7 +96,7 @@ export const ConvertGeoDialog: FactoryComponent<ConvertGeoDialogAttrs> = () => {
           attrs.request === undefined
             ? undefined
             : m('.fm-geo-convert', [
-                m('p', t('geoConvert', 'files', { n: attrs.request.files.length })),
+                m('p', t('geoConvert', 'files', attrs.request.files.length)),
                 m('label.fm-create-directory-field', [
                   m('span', t('geoConvert', 'targetLabel')),
                   m(
