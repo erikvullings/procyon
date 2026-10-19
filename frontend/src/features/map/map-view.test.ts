@@ -214,7 +214,11 @@ describe('MapView', () => {
     const map = await loaded();
     expect(api.mapTileUrlTemplate).toHaveBeenCalledTimes(1);
     expect(map.options.style).toMatchObject({
-      sources: { basemap: { tiles: ['/api/v1/map/tiles/{z}/{x}/{y}'] } },
+      sources: {
+        basemap: {
+          tiles: [expect.stringMatching(/^\/api\/v1\/map\/tiles\/\{z\}\/\{x\}\/\{y\}\?v=\w+$/)],
+        },
+      },
     });
     expect(map.options.attributionControl).toMatchObject({
       compact: false,

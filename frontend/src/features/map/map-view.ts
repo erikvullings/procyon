@@ -122,6 +122,18 @@ export function withFeatureIndexes(
   };
 }
 
+/** Short stable hash of the provider template, used to keep the web view's tile cache per provider. */
+function templateVersion(template: string): string {
+  let hash = 5381;
+  for (const char of template) hash = (Math.imul(hash, 33) + (char.codePointAt(0) ?? 0)) >>> 0;
+  return hash.toString(36);
+}
+
+function withVersion(tileTemplate: string, providerTemplate: string): string {
+  const separator = tileTemplate.includes('?') ? '&' : '?';
+  return `${tileTemplate}${separator}v=${templateVersion(providerTemplate)}`;
+}
+
 function basemapKey(settings: MapSettings, dark: boolean): string {
   const blank = settings.basemapKind === 'style' ? false : !settings.onlineTiles;
   return JSON.stringify([settings, blank ? dark : null]);
@@ -157,7 +169,7 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
     const { settings } = attrs;
     const tileTemplate =
       settings.basemapKind === 'raster' && settings.onlineTiles
-        ? await attrs.client.mapTileUrlTemplate()
+        ? withVersion(await attrs.client.mapTileUrlTemplate(), settings.urlTemplate)
         : undefined;
     const pmtilesUrl =
       settings.basemapKind === 'pmtiles' && settings.pmtilesLocation != null
