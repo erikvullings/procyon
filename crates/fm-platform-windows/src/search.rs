@@ -1,6 +1,7 @@
 //! Windows Search-backed implementation of the local indexed-search contract.
 
 use std::io::Read;
+use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread;
@@ -38,6 +39,9 @@ $recordset.Close()
 $connection.Close()
 "#;
 
+/// Process creation flag that stops a console window from appearing for a child of a GUI app.
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// Native Windows Search adapter.
 #[derive(Debug, Default)]
 pub struct WindowsSearchAccelerator;
@@ -62,7 +66,8 @@ fn powershell_command(request: &SearchAccelerationRequest) -> Command {
         .arg("-Root")
         .arg(request.root.as_path())
         .arg("-Name")
-        .arg(&request.name);
+        .arg(&request.name)
+        .creation_flags(CREATE_NO_WINDOW);
     command
 }
 
