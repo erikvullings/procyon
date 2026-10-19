@@ -1052,6 +1052,10 @@ pub enum BackendEventPayload {
         code: String,
         /// User-readable error message.
         message: String,
+        /// Structured, code-specific facts such as the bytes required and available for
+        /// `insufficientSpace` (task 0272).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        details: Option<serde_json::Value>,
     },
     /// Plugin discovery or enablement changed.
     #[serde(rename = "plugin.changed")]
@@ -1808,6 +1812,7 @@ mod tests {
                     operation_id,
                     code: "permissionDenied".to_owned(),
                     message: "Permission denied".to_owned(),
+                    details: None,
                 },
                 Self::PluginChanged {
                     plugin: PluginPayload {

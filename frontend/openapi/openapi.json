@@ -22554,6 +22554,10 @@
             "type": "boolean",
             "description": "The user explicitly confirmed an irreversible permanent delete."
           },
+          "skipSpaceCheck": {
+            "type": "boolean",
+            "description": "The user chose to proceed although the destination volume reported too little free\nspace (task 0272). The decision is recorded in the operation as a warning."
+          },
           "sources": {
             "type": "array",
             "items": {

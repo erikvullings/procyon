@@ -1354,4 +1354,5 @@ export const es = {
   metadataRename: en.metadataRename,
   snapshots: en.snapshots,
   editorLinks: en.editorLinks,
+  spaceGuard: en.spaceGuard,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

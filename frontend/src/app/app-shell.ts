@@ -150,6 +150,11 @@ import {
   parentLocation,
 } from '../features/navigation/navigation';
 import { rootLocationFor } from '../features/navigation/root-location';
+import {
+  requestSkippingSpaceCheck,
+  spaceShortfallOf,
+} from '../features/operations/insufficient-space';
+import { InsufficientSpaceDialog } from '../features/operations/insufficient-space-dialog';
 import { itemProgressSummary, operationKindLabel } from '../features/operations/operation-centre';
 import {
   createOperationsState,
@@ -1410,6 +1415,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let musicDuplicatesState: MusicDuplicatesState = INITIAL_MUSIC_DUPLICATES_STATE;
   const emptyPlayerState = createInitialPlayerState();
   let operations = createOperationsState();
+  /** Failed operations whose low-space dialog was already answered (task 0272). */
+  const answeredSpaceShortfalls = new Set<OperationId>();
   let pendingConflict: OperationConflict | undefined;
   let clipboardMessage: string | undefined;
   let pendingOperationEvents: BackendEvent[] = [];
@@ -6767,6 +6774,30 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             ...(availableAppUpdate === undefined ? {} : { update: availableAppUpdate }),
             onLater: () => {
               availableAppUpdate = undefined;
+            },
+          }),
+          m(InsufficientSpaceDialog, {
+            shortfall: Object.values(operations.byId)
+              .filter((operation): operation is Operation => operation !== undefined)
+              .filter((operation) => !answeredSpaceShortfalls.has(operation.id))
+              .map((operation) =>
+                spaceShortfallOf(operation, operations.failuresById[operation.id]),
+              )
+              .find((shortfall) => shortfall !== undefined),
+            onCancel: (shortfall) => {
+              answeredSpaceShortfalls.add(shortfall.operation.id);
+            },
+            onProceed: (shortfall) => {
+              answeredSpaceShortfalls.add(shortfall.operation.id);
+              void attrs.client
+                .startOperation(requestSkippingSpaceCheck(shortfall.operation))
+                .then(() => {
+                  operations = dismissOperation(operations, shortfall.operation.id);
+                  m.redraw();
+                })
+                .catch((error: unknown) => {
+                  toast({ html: error instanceof Error ? error.message : String(error) });
+                });
             },
           }),
           ...renderAppDialogs(attrs.client, pendingDelete, appDialogsContext),

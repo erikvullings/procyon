@@ -124,6 +124,7 @@ fn copy_request(source: Location, destination_directory: Location) -> StartOpera
         archive_compression_level: None,
         create_intermediate_directories: false,
         initial_content: None,
+        skip_space_check: false,
         symlink_policy: Default::default(),
         permanent_delete_confirmed: false,
         override_read_only: false,

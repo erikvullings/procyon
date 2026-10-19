@@ -2332,6 +2332,16 @@ export const en = {
     saveFirst: 'Save or discard your changes before editing another file here.',
     menuLabel: 'Path or URL actions',
   },
+  spaceGuard: {
+    title: 'Not enough free space',
+    message:
+      '{name} needs {required} but only {available} are free on the destination, a shortfall of {shortfall}.',
+    uncertain:
+      'Estimates can be off for compressed, sparse or cloud-backed destinations. You can proceed anyway; the operation will record that the check was skipped.',
+    proceed: 'Proceed anyway',
+    cancel: 'Cancel',
+    skippedWarning: 'Disk-space check skipped at your request.',
+  },
 } as const satisfies CatalogueShape;
 
 /** Canonical translation groups and keys. Values remain locale-specific. */

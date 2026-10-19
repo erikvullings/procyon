@@ -283,6 +283,21 @@ impl ExecutionError {
             _ => "operationFailed",
         }
     }
+
+    /// Code-specific facts a client needs to react, such as the shortfall of an
+    /// `insufficientSpace` failure (task 0272).
+    fn details(&self) -> Option<serde_json::Value> {
+        match self {
+            Self::Provider(fm_vfs::VfsError::InsufficientSpace {
+                available,
+                required,
+            }) => Some(serde_json::json!({
+                "required": required,
+                "available": available,
+            })),
+            _ => None,
+        }
+    }
 }
 
 impl SchedulerError {
@@ -290,6 +305,13 @@ impl SchedulerError {
         match self {
             Self::Execution(error) => error.code(),
             _ => "operationFailed",
+        }
+    }
+
+    fn details(&self) -> Option<serde_json::Value> {
+        match self {
+            Self::Execution(error) => error.details(),
+            _ => None,
         }
     }
 }
@@ -319,6 +341,25 @@ mod error_code_tests {
         ));
 
         assert_eq!(error.code(), "insufficientSpace");
+    }
+
+    #[test]
+    fn insufficient_space_failures_carry_the_required_and_available_bytes() {
+        let error = SchedulerError::from(ExecutionError::Provider(
+            fm_vfs::VfsError::InsufficientSpace {
+                available: Some(100),
+                required: Some(200),
+            },
+        ));
+
+        assert_eq!(
+            error.details(),
+            Some(serde_json::json!({ "required": 200, "available": 100 }))
+        );
+        assert_eq!(
+            SchedulerError::from(ExecutionError::Failed("x".into())).details(),
+            None
+        );
     }
 }
 
@@ -471,12 +512,17 @@ impl Scheduler {
                     if let Err(cleanup_error) =
                         scheduler.finish_cancelled(&job, executor.as_ref()).await
                     {
-                        scheduler.fail_job(&job, cleanup_error.code(), &cleanup_error.to_string());
+                        scheduler.fail_job(
+                            &job,
+                            cleanup_error.code(),
+                            &cleanup_error.to_string(),
+                            cleanup_error.details(),
+                        );
                     }
                 } else {
                     let snapshot = job.snapshot();
                     let _ = executor.cleanup_partial(&snapshot).await;
-                    scheduler.fail_job(&job, error.code(), &error.to_string());
+                    scheduler.fail_job(&job, error.code(), &error.to_string(), error.details());
                 }
             }
             job.completed.notify_waiters();
@@ -971,7 +1017,7 @@ impl Scheduler {
         );
     }
 
-    fn fail_job(&self, job: &Job, code: &str, message: &str) {
+    fn fail_job(&self, job: &Job, code: &str, message: &str, details: Option<serde_json::Value>) {
         let mut state = job.lock();
         if !state.operation.state.is_terminal() {
             if state.operation.state == OperationState::Cancelling {
@@ -986,6 +1032,7 @@ impl Scheduler {
                 operation_id: state.operation.id,
                 code: code.into(),
                 message: message.into(),
+                details,
             },
         );
         self.observe(&state.operation);

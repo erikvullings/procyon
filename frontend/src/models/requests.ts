@@ -149,6 +149,8 @@ export interface StartOperationRequest {
   createIntermediateDirectories?: boolean;
   /** UTF-8 text written into the file by a `createFile` operation (task 0264). */
   initialContent?: string;
+  /** Proceed although the destination looks too small; recorded as a warning (task 0272). */
+  skipSpaceCheck?: boolean;
   symlinkPolicy?: 'copyLink' | 'copyTarget';
   permanentDeleteConfirmed?: boolean;
   overrideReadOnly?: boolean;

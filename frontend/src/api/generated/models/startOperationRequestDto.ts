@@ -46,6 +46,11 @@ export interface StartOperationRequestDto {
   overrideReadOnly?: boolean;
   /** The user explicitly confirmed an irreversible permanent delete. */
   permanentDeleteConfirmed?: boolean;
+  /**
+     * The user chose to proceed although the destination volume reported too little free
+     * space (task 0272). The decision is recorded in the operation as a warning.
+     */
+  skipSpaceCheck?: boolean;
   /** Provider-neutral source locations. */
   sources: LocationDto[];
   /** Policy for symbolic links encountered during recursive copying. */

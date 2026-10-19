@@ -41,6 +41,10 @@ pub struct StartOperationRequestDto {
     /// file is created when absent. Existing files are never overwritten.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initial_content: Option<String>,
+    /// The user chose to proceed although the destination volume reported too little free
+    /// space (task 0272). The decision is recorded in the operation as a warning.
+    #[serde(default)]
+    pub skip_space_check: bool,
     /// Policy for symbolic links encountered during recursive copying.
     #[serde(default)]
     pub symlink_policy: SymlinkPolicyDto,

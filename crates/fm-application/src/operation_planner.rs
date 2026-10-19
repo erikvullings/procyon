@@ -65,6 +65,9 @@ impl OperationPlanner {
         request: &StartOperationRequestDto,
     ) -> Result<Arc<dyn OperationExecutor>, ApplicationError> {
         let destination = request.destination.clone().map(Into::into);
+        // Shared by every copy executor of this request: where the "space check skipped"
+        // warning waits for the first completed item (task 0272).
+        let space_note: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
         Ok(match kind {
             OperationKindDto::CreateArchive | OperationKindDto::MoveToArchive => {
                 if request.sources.is_empty() {
@@ -304,6 +307,9 @@ impl OperationPlanner {
                         created_destinations: Mutex::new(Vec::new()),
                         replaced_existing: AtomicBool::new(false),
                         transfer,
+                        check_capacity: false,
+                        skip_space_check: request.skip_space_check,
+                        space_note: Arc::clone(&space_note),
                     });
                 }
                 Arc::new(CopyGroupExecutor {
@@ -352,6 +358,9 @@ impl OperationPlanner {
                         created_destinations: Mutex::new(Vec::new()),
                         replaced_existing: AtomicBool::new(false),
                         transfer,
+                        check_capacity: false,
+                        skip_space_check: request.skip_space_check,
+                        space_note: Arc::clone(&space_note),
                     };
                     moves.push(MoveExecutor {
                         source,
@@ -408,6 +417,9 @@ impl OperationPlanner {
                         created_destinations: Mutex::new(Vec::new()),
                         replaced_existing: AtomicBool::new(false),
                         transfer,
+                        check_capacity: true,
+                        skip_space_check: request.skip_space_check,
+                        space_note: Arc::clone(&space_note),
                     });
                 }
                 Arc::new(DuplicateExecutor { copies })
@@ -536,6 +548,7 @@ impl OperationPlanner {
                 archive_compression_level: None,
                 create_intermediate_directories: false,
                 initial_content: None,
+                skip_space_check: false,
                 symlink_policy: SymlinkPolicyDto::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
@@ -707,6 +720,14 @@ struct CopyExecutor {
     /// (task 0108). Decided once, up front, from both sides' capabilities —
     /// execution only obeys it.
     transfer: TransferPlan,
+    /// Whether `plan` runs the disk-space preflight itself. Group executors turn it off and
+    /// check the combined requirement of all their sources instead (task 0272).
+    check_capacity: bool,
+    /// The user chose to proceed although the destination volume looks too small (task 0272).
+    skip_space_check: bool,
+    /// Warning recorded in the operation when `skip_space_check` actually overrode a shortfall;
+    /// attached to the first item that completes.
+    space_note: Arc<Mutex<Option<String>>>,
 }
 
 struct CopyGroupExecutor {
@@ -1617,6 +1638,9 @@ impl OperationExecutor for CopyGroupExecutor {
             plan.total_items = None;
             plan.total_bytes = None;
         }
+        // One preflight over every source together: each might fit alone while the sum does not.
+        let copies: Vec<&CopyExecutor> = self.copies.iter().collect();
+        verify_capacity(&copies, operation, &plan, cancellation).await?;
         Ok(plan)
     }
 
@@ -1735,6 +1759,15 @@ impl OperationExecutor for MoveGroupExecutor {
             plan.total_items = None;
             plan.total_bytes = None;
         }
+        // Same-volume moves are renames and contribute no bytes; only moves that fell back to
+        // copy-then-delete need room on the destination.
+        let copies: Vec<&CopyExecutor> = self
+            .moves
+            .iter()
+            .filter(|executor| *executor.fallback.lock().unwrap_or_else(|e| e.into_inner()))
+            .map(|executor| &executor.copy)
+            .collect();
+        verify_capacity(&copies, operation, &plan, cancellation).await?;
         Ok(plan)
     }
 
@@ -2389,18 +2422,8 @@ impl OperationExecutor for CopyExecutor {
         *self.planned.lock().unwrap_or_else(|e| e.into_inner()) = planned;
         *self.directories.lock().unwrap_or_else(|e| e.into_inner()) = directories;
         let plan = OperationPlan::new(items);
-        if let (Some(required), Some(available)) = (
-            plan.total_bytes,
-            self.destination_provider
-                .available_space(&self.destination_directory, cancellation.clone())
-                .await?,
-        ) && required > available
-        {
-            return Err(fm_vfs::VfsError::InsufficientSpace {
-                available: Some(available),
-                required: Some(required),
-            }
-            .into());
+        if self.check_capacity {
+            verify_capacity(&[self], operation, &plan, cancellation).await?;
         }
         Ok(plan)
     }
@@ -2414,122 +2437,10 @@ impl OperationExecutor for CopyExecutor {
         pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
-        let mut planned = self
-            .planned
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(&item.entry.location.uri)
-            .cloned()
-            .ok_or_else(|| ExecutionError::Failed("copy plan entry is missing".into()))?;
-        let destination_entry = EntryRef {
-            id: EntryId::new(),
-            location: planned.destination.clone(),
-        };
-        let mut reuse_destination_directory = false;
-        if let Ok(destination) = self
-            .destination_provider
-            .inspect(&destination_entry, cancellation.clone())
-            .await
-        {
-            let source = self
-                .source_provider
-                .inspect(&planned.source, cancellation.clone())
-                .await?;
-            if source.kind != destination.kind {
-                return Err(ExecutionError::Failed(
-                    "a file and directory cannot replace one another".into(),
-                ));
-            }
-            match effective_resolution(operation.conflict_policy, resolution) {
-                None => return Err(conflict_error(&source, &destination)),
-                Some(ConflictResolution::Skip) => return Ok(ExecutionOutcome::Skipped),
-                Some(ConflictResolution::Overwrite) => {
-                    self.replaced_existing.store(true, Ordering::Release);
-                    if planned.kind == EntryKind::Directory {
-                        reuse_destination_directory = true;
-                    }
-                    if planned.kind != EntryKind::File && !reuse_destination_directory {
-                        self.destination_provider
-                            .remove(
-                                &destination_entry,
-                                RemoveOptions {
-                                    recursive: planned.kind == EntryKind::Directory,
-                                    use_trash: false,
-                                },
-                                cancellation.clone(),
-                            )
-                            .await?;
-                    }
-                }
-                Some(ConflictResolution::RenameNew) => {
-                    let renamed = self
-                        .next_copy_destination(&planned.destination, cancellation)
-                        .await?;
-                    if planned.is_root && planned.kind == EntryKind::Directory {
-                        self.rebase_planned_destinations(&planned.destination, &renamed);
-                    }
-                    planned.destination = renamed;
-                }
-            }
-        }
-        let result = if reuse_destination_directory {
-            Ok(ExecutionOutcome::Completed)
-        } else if planned.kind == EntryKind::Directory {
-            let parent = planned
-                .destination
-                .parent()
-                .map_err(|error| ExecutionError::Failed(error.to_string()))?
-                .ok_or_else(|| ExecutionError::Failed("copy destination has no parent".into()))?;
-            let name = planned
-                .destination
-                .name()
-                .map_err(|error| ExecutionError::Failed(error.to_string()))?;
-            self.destination_provider
-                .create_directory(&parent, &name, cancellation.clone())
-                .await
-                .map(|_| ExecutionOutcome::Completed)
-                .map_err(ExecutionError::from)
-        } else if planned.kind == EntryKind::Symlink {
-            self.destination_provider
-                .copy_symlink(&item.entry, &planned.destination, cancellation.clone())
-                .await
-                .map(|_| ExecutionOutcome::Completed)
-                .map_err(ExecutionError::from)
-        } else {
-            let source_item = PlanItem::new(planned.source.clone(), item.bytes);
-            self.copy_file(
-                &source_item,
-                &planned.destination,
-                effective_resolution(operation.conflict_policy, resolution),
-                progress,
-                pause,
-                cancellation,
-            )
-            .await
-        };
-        let outcome = match result {
-            Err(error) if self.continue_on_error && !planned.is_root => {
-                Err(ExecutionError::Warning {
-                    entry: item.entry.clone(),
-                    message: error.to_string(),
-                })
-            }
-            other => other,
-        };
-        if matches!(&outcome, Ok(ExecutionOutcome::Completed)) && !reuse_destination_directory {
-            self.created_destinations
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .push(planned.destination.clone());
-        }
-
-        if outcome.is_ok() && planned.is_root {
-            *self
-                .completed_root_destination
-                .lock()
-                .unwrap_or_else(|e| e.into_inner()) = Some(planned.destination);
-        }
-        outcome
+        let outcome = self
+            .execute_item(operation, item, resolution, progress, pause, cancellation)
+            .await?;
+        Ok(self.with_space_note(item, outcome))
     }
 
     async fn expand(
@@ -2702,7 +2613,262 @@ async fn copy_group_undo_evidence(
     })
 }
 
+/// Compares the bytes a plan writes with the free space of the destination volume (task 0272).
+///
+/// Skipped silently when the total or the free space is unknown (providers without capacity
+/// information, unknown sizes). When the gross total exceeds the free space the requirement is
+/// refined before failing: files that will replace an existing file only need the difference
+/// when the conflict policy is `Overwrite`, and need nothing when it is `Skip`. If the user chose
+/// to proceed anyway, the shortfall is recorded as a warning instead of an error.
+async fn verify_capacity(
+    executors: &[&CopyExecutor],
+    operation: &Operation,
+    plan: &OperationPlan,
+    cancellation: &CancellationToken,
+) -> Result<(), ExecutionError> {
+    let (Some(first), Some(gross)) = (executors.first(), plan.total_bytes) else {
+        return Ok(());
+    };
+    let Some(available) = first
+        .destination_provider
+        .available_space(&first.destination_directory, cancellation.clone())
+        .await?
+    else {
+        return Ok(());
+    };
+    if gross <= available {
+        return Ok(());
+    }
+    let required = net_required_bytes(executors, operation, plan, gross, cancellation).await;
+    if required <= available {
+        return Ok(());
+    }
+    if executors.iter().any(|executor| executor.skip_space_check) {
+        *first.space_note.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!(
+            "Disk-space check skipped at your request: {required} bytes were needed but only \
+             {available} bytes were reported free."
+        ));
+        return Ok(());
+    }
+    Err(fm_vfs::VfsError::InsufficientSpace {
+        available: Some(available),
+        required: Some(required),
+    }
+    .into())
+}
+
+/// The bytes the plan really adds to the destination volume: `gross` minus what replaces or
+/// skips existing files, according to the operation's conflict policy.
+async fn net_required_bytes(
+    executors: &[&CopyExecutor],
+    operation: &Operation,
+    plan: &OperationPlan,
+    gross: u64,
+    cancellation: &CancellationToken,
+) -> u64 {
+    let policy = operation.conflict_policy;
+    if !matches!(
+        policy,
+        fm_operations::ConflictPolicy::Overwrite | fm_operations::ConflictPolicy::Skip
+    ) {
+        return gross;
+    }
+    let bytes_by_source: HashMap<&str, u64> = plan
+        .items
+        .iter()
+        .map(|item| (item.entry.location.uri.as_str(), item.bytes))
+        .collect();
+    let mut freed = 0_u64;
+    for executor in executors {
+        let planned: Vec<PlannedCopyEntry> = executor
+            .planned
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .filter(|entry| entry.kind == EntryKind::File)
+            .cloned()
+            .collect();
+        for entry in planned {
+            let probe = EntryRef {
+                id: EntryId::new(),
+                location: entry.destination,
+            };
+            let Ok(existing) = executor
+                .destination_provider
+                .inspect(&probe, cancellation.clone())
+                .await
+            else {
+                continue;
+            };
+            if existing.kind != EntryKind::File {
+                continue;
+            }
+            let incoming = bytes_by_source
+                .get(entry.source.location.uri.as_str())
+                .copied()
+                .unwrap_or(0);
+            freed = freed.saturating_add(match policy {
+                fm_operations::ConflictPolicy::Skip => incoming,
+                _ => existing.size.unwrap_or(0).min(incoming),
+            });
+        }
+    }
+    gross.saturating_sub(freed)
+}
+
 impl CopyExecutor {
+    /// Attaches the pending "space check skipped" warning to the first completed item, so the
+    /// decision is recorded in the operation's history (task 0272).
+    fn with_space_note(&self, item: &PlanItem, outcome: ExecutionOutcome) -> ExecutionOutcome {
+        if !matches!(outcome, ExecutionOutcome::Completed) {
+            return outcome;
+        }
+        let note = self
+            .space_note
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+        match note {
+            Some(message) => {
+                ExecutionOutcome::CompletedWithWarnings(vec![fm_operations::OperationEntryError {
+                    entry: item.entry.clone(),
+                    message,
+                }])
+            }
+            None => outcome,
+        }
+    }
+}
+
+impl CopyExecutor {
+    /// Runs one plan item (the body of [`OperationExecutor::execute`]).
+    async fn execute_item(
+        &self,
+        operation: &Operation,
+        item: &PlanItem,
+        resolution: Option<ConflictResolution>,
+        progress: &dyn OperationProgressReporter,
+        pause: &PauseToken,
+        cancellation: &CancellationToken,
+    ) -> Result<ExecutionOutcome, ExecutionError> {
+        let mut planned = self
+            .planned
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&item.entry.location.uri)
+            .cloned()
+            .ok_or_else(|| ExecutionError::Failed("copy plan entry is missing".into()))?;
+        let destination_entry = EntryRef {
+            id: EntryId::new(),
+            location: planned.destination.clone(),
+        };
+        let mut reuse_destination_directory = false;
+        if let Ok(destination) = self
+            .destination_provider
+            .inspect(&destination_entry, cancellation.clone())
+            .await
+        {
+            let source = self
+                .source_provider
+                .inspect(&planned.source, cancellation.clone())
+                .await?;
+            if source.kind != destination.kind {
+                return Err(ExecutionError::Failed(
+                    "a file and directory cannot replace one another".into(),
+                ));
+            }
+            match effective_resolution(operation.conflict_policy, resolution) {
+                None => return Err(conflict_error(&source, &destination)),
+                Some(ConflictResolution::Skip) => return Ok(ExecutionOutcome::Skipped),
+                Some(ConflictResolution::Overwrite) => {
+                    self.replaced_existing.store(true, Ordering::Release);
+                    if planned.kind == EntryKind::Directory {
+                        reuse_destination_directory = true;
+                    }
+                    if planned.kind != EntryKind::File && !reuse_destination_directory {
+                        self.destination_provider
+                            .remove(
+                                &destination_entry,
+                                RemoveOptions {
+                                    recursive: planned.kind == EntryKind::Directory,
+                                    use_trash: false,
+                                },
+                                cancellation.clone(),
+                            )
+                            .await?;
+                    }
+                }
+                Some(ConflictResolution::RenameNew) => {
+                    let renamed = self
+                        .next_copy_destination(&planned.destination, cancellation)
+                        .await?;
+                    if planned.is_root && planned.kind == EntryKind::Directory {
+                        self.rebase_planned_destinations(&planned.destination, &renamed);
+                    }
+                    planned.destination = renamed;
+                }
+            }
+        }
+        let result = if reuse_destination_directory {
+            Ok(ExecutionOutcome::Completed)
+        } else if planned.kind == EntryKind::Directory {
+            let parent = planned
+                .destination
+                .parent()
+                .map_err(|error| ExecutionError::Failed(error.to_string()))?
+                .ok_or_else(|| ExecutionError::Failed("copy destination has no parent".into()))?;
+            let name = planned
+                .destination
+                .name()
+                .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+            self.destination_provider
+                .create_directory(&parent, &name, cancellation.clone())
+                .await
+                .map(|_| ExecutionOutcome::Completed)
+                .map_err(ExecutionError::from)
+        } else if planned.kind == EntryKind::Symlink {
+            self.destination_provider
+                .copy_symlink(&item.entry, &planned.destination, cancellation.clone())
+                .await
+                .map(|_| ExecutionOutcome::Completed)
+                .map_err(ExecutionError::from)
+        } else {
+            let source_item = PlanItem::new(planned.source.clone(), item.bytes);
+            self.copy_file(
+                &source_item,
+                &planned.destination,
+                effective_resolution(operation.conflict_policy, resolution),
+                progress,
+                pause,
+                cancellation,
+            )
+            .await
+        };
+        let outcome = match result {
+            Err(error) if self.continue_on_error && !planned.is_root => {
+                Err(ExecutionError::Warning {
+                    entry: item.entry.clone(),
+                    message: error.to_string(),
+                })
+            }
+            other => other,
+        };
+        if matches!(&outcome, Ok(ExecutionOutcome::Completed)) && !reuse_destination_directory {
+            self.created_destinations
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .push(planned.destination.clone());
+        }
+
+        if outcome.is_ok() && planned.is_root {
+            *self
+                .completed_root_destination
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(planned.destination);
+        }
+        outcome
+    }
+
     fn rebase_planned_destinations(&self, old_root: &Location, new_root: &Location) {
         let rebase = |location: &Location| {
             location.uri.strip_prefix(&old_root.uri).map(|suffix| {
@@ -3338,6 +3504,7 @@ mod tests {
             archive_compression_level: None,
             create_intermediate_directories: false,
             initial_content: None,
+            skip_space_check: false,
             override_read_only: false,
             link: None,
             permanent_delete_confirmed: false,
@@ -3633,6 +3800,40 @@ mod tests {
             ProviderCapabilities::WRITE
         }
 
+        async fn inspect(
+            &self,
+            entry: &EntryRef,
+            _cancellation: CancellationToken,
+        ) -> Result<fm_domain::EntrySummary, fm_vfs::VfsError> {
+            let path = entry.location.to_native_path().expect("native path");
+            let metadata =
+                tokio::fs::metadata(&path)
+                    .await
+                    .map_err(|error| fm_vfs::VfsError::NotFound {
+                        location: error.to_string(),
+                    })?;
+            Ok(fm_domain::EntrySummary {
+                id: entry.id,
+                location: entry.location.clone(),
+                name: entry.location.name().unwrap_or_default(),
+                kind: if metadata.is_dir() {
+                    EntryKind::Directory
+                } else {
+                    EntryKind::File
+                },
+                size: Some(metadata.len()),
+                modified_at: None,
+                created_at: None,
+                hidden: false,
+                read_only: false,
+                extension: None,
+                mime_type: None,
+                icon_key: None,
+                metadata_revision: 0,
+                git_status: None,
+            })
+        }
+
         async fn list(
             &self,
             _location: &Location,
@@ -3761,6 +3962,9 @@ mod tests {
             Arc::new(fm_vfs_local::LocalFileSystemProvider::new());
 
         let executor = Arc::new(CopyExecutor {
+            check_capacity: true,
+            skip_space_check: false,
+            space_note: Arc::new(Mutex::new(None)),
             source_provider,
             destination_provider: Arc::clone(&destination_provider),
             destination_directory: destination_directory.clone(),
@@ -3867,6 +4071,9 @@ mod tests {
                 available_bytes: Some(1),
             });
         let executor = CopyExecutor {
+            check_capacity: true,
+            skip_space_check: false,
+            space_note: Arc::new(Mutex::new(None)),
             source_provider: Arc::new(fm_vfs_local::LocalFileSystemProvider::new()),
             destination_provider,
             destination_directory: destination_directory.clone(),
@@ -3906,6 +4113,151 @@ mod tests {
                 required: Some(required),
             }) if required > 1
         ));
+    }
+
+    fn capacity_executor(
+        source: &std::path::Path,
+        destination_directory: &std::path::Path,
+        available_bytes: Option<u64>,
+        check_capacity: bool,
+    ) -> CopyExecutor {
+        let mut executor = copy_only_executor(
+            Arc::new(fm_vfs_local::LocalFileSystemProvider::new()),
+            Arc::new(GatedDestinationProvider {
+                partial_ready: Mutex::new(None),
+                discard_called: AtomicBool::new(false),
+                available_bytes,
+            }),
+            Location::from_native_path(source).expect("source location"),
+            Location::from_native_path(destination_directory).expect("destination location"),
+            false,
+        );
+        executor.check_capacity = check_capacity;
+        executor
+    }
+
+    fn copy_operation(
+        destination: &std::path::Path,
+        policy: fm_operations::ConflictPolicy,
+    ) -> Operation {
+        Operation::new(
+            fm_operations::OperationKind::Copy,
+            Vec::new(),
+            Some(Location::from_native_path(destination).expect("destination")),
+            policy,
+        )
+    }
+
+    #[tokio::test]
+    async fn skipping_the_space_check_records_a_warning_on_the_first_completed_item() {
+        let root = tempfile::tempdir().expect("temp root");
+        let source = root.path().join("source.bin");
+        std::fs::write(&source, b"0123456789").expect("write source");
+        let destination = root.path().join("destination");
+        std::fs::create_dir(&destination).expect("create destination dir");
+        let mut executor = capacity_executor(&source, &destination, Some(1), true);
+        executor.skip_space_check = true;
+        let operation = copy_operation(&destination, fm_operations::ConflictPolicy::Ask);
+
+        let plan = executor
+            .plan(&operation, &CancellationToken::new())
+            .await
+            .expect("an explicit override lets the plan through");
+
+        let item = plan.items.first().expect("a planned item");
+        let outcome = executor.with_space_note(item, ExecutionOutcome::Completed);
+        let ExecutionOutcome::CompletedWithWarnings(warnings) = outcome else {
+            panic!("the override must be recorded as a warning");
+        };
+        assert!(warnings[0].message.contains("Disk-space check skipped"));
+        assert!(matches!(
+            executor.with_space_note(item, ExecutionOutcome::Completed),
+            ExecutionOutcome::Completed
+        ));
+    }
+
+    #[tokio::test]
+    async fn sources_that_fit_alone_are_rejected_when_their_sum_does_not() {
+        let root = tempfile::tempdir().expect("temp root");
+        let destination = root.path().join("destination");
+        std::fs::create_dir(&destination).expect("create destination dir");
+        let mut copies = Vec::new();
+        for name in ["a.bin", "b.bin"] {
+            let source = root.path().join(name);
+            std::fs::write(&source, b"0123456789").expect("write source");
+            copies.push(capacity_executor(&source, &destination, Some(15), false));
+        }
+        let group = CopyGroupExecutor {
+            copies,
+            stale_sources: Mutex::new(HashMap::new()),
+        };
+        let operation = copy_operation(&destination, fm_operations::ConflictPolicy::Ask);
+
+        let error = group
+            .plan(&operation, &CancellationToken::new())
+            .await
+            .expect_err("20 bytes cannot fit in 15");
+
+        assert!(matches!(
+            error,
+            ExecutionError::Provider(fm_vfs::VfsError::InsufficientSpace {
+                available: Some(15),
+                required: Some(20),
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn overwriting_files_only_needs_the_growth_and_skipping_needs_nothing() {
+        let root = tempfile::tempdir().expect("temp root");
+        let source = root.path().join("source.bin");
+        std::fs::write(&source, b"0123456789AB").expect("write source");
+        let destination = root.path().join("destination");
+        std::fs::create_dir(&destination).expect("create destination dir");
+        std::fs::write(destination.join("source.bin"), b"0123456789").expect("existing file");
+
+        let outcome = |policy| {
+            let executor = capacity_executor(&source, &destination, Some(5), true);
+            let operation = copy_operation(&destination, policy);
+            async move {
+                executor
+                    .plan(&operation, &CancellationToken::new())
+                    .await
+                    .map(|_| ())
+            }
+        };
+
+        // 12 bytes replace 10: only 2 more are needed, which fits in 5.
+        outcome(fm_operations::ConflictPolicy::Overwrite)
+            .await
+            .expect("overwrite only grows by two bytes");
+        // Skipped files write nothing.
+        outcome(fm_operations::ConflictPolicy::Skip)
+            .await
+            .expect("skipped files need no space");
+        // Asking later may still end up writing all 12 bytes, so the check stays conservative.
+        assert!(matches!(
+            outcome(fm_operations::ConflictPolicy::Ask).await,
+            Err(ExecutionError::Provider(
+                fm_vfs::VfsError::InsufficientSpace { .. }
+            ))
+        ));
+    }
+
+    #[tokio::test]
+    async fn unknown_capacity_skips_the_check_silently() {
+        let root = tempfile::tempdir().expect("temp root");
+        let source = root.path().join("source.bin");
+        std::fs::write(&source, b"0123456789").expect("write source");
+        let destination = root.path().join("destination");
+        std::fs::create_dir(&destination).expect("create destination dir");
+        let executor = capacity_executor(&source, &destination, None, true);
+        let operation = copy_operation(&destination, fm_operations::ConflictPolicy::Ask);
+
+        executor
+            .plan(&operation, &CancellationToken::new())
+            .await
+            .expect("providers without capacity information are never blocked");
     }
 
     /// Fake destination provider recording the `expected_size` it was
@@ -4057,6 +4409,9 @@ mod tests {
             Arc::new(fm_vfs_local::LocalFileSystemProvider::new());
 
         let executor = CopyExecutor {
+            check_capacity: true,
+            skip_space_check: false,
+            space_note: Arc::new(Mutex::new(None)),
             source_provider,
             destination_provider,
             destination_directory: destination_directory.clone(),
@@ -4150,6 +4505,9 @@ mod tests {
             Arc::new(fm_vfs_local::LocalFileSystemProvider::new());
 
         let executor = CopyExecutor {
+            check_capacity: true,
+            skip_space_check: false,
+            space_note: Arc::new(Mutex::new(None)),
             source_provider,
             destination_provider,
             destination_directory: destination_directory.clone(),
@@ -4610,6 +4968,9 @@ mod tests {
         destination_resumable_upload: bool,
     ) -> CopyExecutor {
         CopyExecutor {
+            check_capacity: true,
+            skip_space_check: false,
+            space_note: Arc::new(Mutex::new(None)),
             source_provider,
             destination_provider,
             destination_directory,
