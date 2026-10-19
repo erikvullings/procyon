@@ -23,6 +23,11 @@ export default defineConfig({
       [API_PREFIX]: createApiProxyOptions(backendOrigin),
     },
   },
+  // Lazily imported map libraries would otherwise be discovered mid-session, triggering a
+  // re-optimisation that 504s ("Outdated Optimize Dep") the already-requested MapLibre worker.
+  optimizeDeps: {
+    include: ['maplibre-gl', 'terra-draw', 'terra-draw-maplibre-gl-adapter', 'pmtiles'],
+  },
   build: {
     target: 'es2023',
     sourcemap: true,
