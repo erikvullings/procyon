@@ -14,6 +14,14 @@ pub struct ReadGeoFileRequestDto {
     pub location: LocationDto,
 }
 
+/// Parses GeoJSON text without a file (`POST /api/v1/geo/parse`), for live validation in editors.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ParseGeoTextRequestDto {
+    /// The GeoJSON text, at most about 2 MiB.
+    pub text: String,
+}
+
 /// A warning about data that is not represented faithfully.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

@@ -278,6 +278,7 @@ export * from './operationUndoDto.ts';
 export * from './orphanLlmCredentialDispositionDto.ts';
 export * from './ownershipInfoDto.ts';
 export * from './paneStateDto.ts';
+export * from './parseGeoTextRequestDto.ts';
 export * from './parseKnowledgeQueryRequestDto.ts';
 export * from './permissionsInfoDto.ts';
 export * from './persistedFilterDto.ts';

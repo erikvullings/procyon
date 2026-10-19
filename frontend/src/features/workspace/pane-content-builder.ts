@@ -992,6 +992,7 @@ export function createPaneContentBuilder(
                     controller: editor.controller,
                     paneId,
                     onClose: () => context.closeEditor(paneId),
+                    mapClient: client,
                     links: context.getEditorLinkHandlers(paneId, editor.state.entry.location),
                   });
             })(),
@@ -1088,6 +1089,16 @@ export function createPaneContentBuilder(
                               context.openDocumentSummary?.(paneId, viewer.state.entry),
                           }
                         : {}),
+                      onEditGeo: () =>
+                        context.invokeActionById(
+                          'core.edit',
+                          { uri: viewer.state.entry.location.uri },
+                          {
+                            paneId,
+                            selectedEntryIds: [viewer.state.entry.id],
+                            cursorEntryId: viewer.state.entry.id,
+                          },
+                        ),
                       ...(context.showEntryOnMap === undefined
                         ? {}
                         : {

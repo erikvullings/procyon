@@ -38,6 +38,10 @@ export interface MapViewAttrs {
   readonly dataBounds?: readonly [number, number, number, number];
   /** Index (in `features.features`) of the feature that was clicked, or undefined for empty space. */
   readonly onFeatureClick?: (index: number | undefined) => void;
+  /** Called once the map has loaded, so editors can attach their own layers (task 0278). */
+  readonly onMapReady?: (map: MapLibre.Map) => void;
+  /** Called when the map is torn down; attached layers are gone with it. */
+  readonly onMapGone?: () => void;
   /** Index of the feature to emphasise. */
   readonly highlightIndex?: number;
   readonly ariaLabel?: string;
@@ -399,6 +403,7 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
       created.once('load', () => {
         status = 'ready';
         syncFeatures();
+        latest.onMapReady?.(created);
         syncMarkers();
         appliedFitKey = latest.fitKey;
         if (!hasFitted) {
@@ -434,6 +439,7 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
     },
     onremove: () => {
       destroyed = true;
+      latest.onMapGone?.();
       clearDrawn();
       map?.remove();
       map = undefined;

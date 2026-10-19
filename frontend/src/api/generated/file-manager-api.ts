@@ -121,6 +121,7 @@ import type {
   OpenStructuredViewResponseDto,
   OperationDto,
   OperationPageDto,
+  ParseGeoTextRequestDto,
   ParseKnowledgeQueryRequestDto,
   PlanKnowledgeSearchRequestDto,
   PlanSemanticExclusionRequestDto,
@@ -4210,6 +4211,56 @@ return fetchMutator<forgetFolderViewResponse>(getForgetFolderViewUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(forgetFolderViewRequestDto)
+  }
+);}
+
+
+
+export type parseGeoTextResponse200 = {
+  data: GeoDocumentDto
+  status: 200
+}
+
+export type parseGeoTextResponseSuccess = (parseGeoTextResponse200) & {
+  headers: Headers;
+};
+;
+
+export type parseGeoTextResponse = (parseGeoTextResponseSuccess)
+
+export const getParseGeoTextUrl = () => {
+
+
+
+
+  return `/api/v1/geo/parse`
+}
+
+/**
+ * @summary Parses GeoJSON text for live validation in editors (task 0278).
+ */
+export const parseGeoText = async (parseGeoTextRequestDto: ParseGeoTextRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<parseGeoTextResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<parseGeoTextResponse>(getParseGeoTextUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(parseGeoTextRequestDto)
   }
 );}
 

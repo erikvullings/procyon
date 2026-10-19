@@ -5,6 +5,8 @@ import { closeIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { PaneId } from '../../models';
+import { looksLikeGeoJson } from '../geo/geo-document';
+import { GeoMapEditor, type GeoMapEditorAttrs } from '../geo-editor/geo-map-editor';
 import { jsonParseLinter, languageExtension } from './editor-language';
 import type { FileEditorController, FileEditorState } from './file-editor-controller';
 import type { EditorLinkHandlers } from './link-actions';
@@ -18,6 +20,8 @@ export interface FileEditorAttrs {
   readonly onClose: () => void;
   /** Actions for paths and URLs in the text (task 0271); absent where none are available. */
   readonly links?: EditorLinkHandlers;
+  /** Client for the GeoJSON map editor (task 0278); the map toggle is hidden without it. */
+  readonly mapClient?: GeoMapEditorAttrs['client'];
 }
 
 interface UnsavedChangesDialogAttrs {
@@ -123,6 +127,11 @@ export const FileEditor: Component<FileEditorAttrs> = {
     const requestClose = () => {
       if (controller.requestClose()) attrs.onClose();
     };
+    const geoCapable =
+      attrs.mapClient !== undefined &&
+      state.language === 'json' &&
+      (state.entry.name.toLowerCase().endsWith('.geojson') ||
+        looksLikeGeoJson(state.content.slice(0, 4096)));
     return m(
       'section.fm-file-editor',
       {
@@ -148,6 +157,13 @@ export const FileEditor: Component<FileEditorAttrs> = {
             ? m('span.fm-file-editor-dirty', { title: t('editor', 'unsavedChanges') }, '●')
             : undefined,
           m('span.fm-file-editor-spacer'),
+          geoCapable
+            ? m(FlatButton, {
+                label: state.mapMode === true ? t('geoEdit', 'textMode') : t('geoEdit', 'mapMode'),
+                'aria-pressed': state.mapMode === true,
+                onclick: () => controller.toggleMapMode(),
+              })
+            : undefined,
           state.language === 'json'
             ? m(FlatButton, {
                 label: t('editor', 'formatJson'),
@@ -210,20 +226,26 @@ export const FileEditor: Component<FileEditorAttrs> = {
           : undefined,
         m(
           '.fm-file-editor-content',
-          state.language === 'markdown' && state.previewVisible
-            ? m('.fm-file-editor-preview', { innerHTML: state.previewHtml ?? '' })
-            : m(LinkAwareEditor, {
+          state.mapMode === true && attrs.mapClient !== undefined
+            ? m(GeoMapEditor, {
+                client: attrs.mapClient,
                 content: state.content,
-                language: languageExtension(state.language),
-                extensions: state.language === 'json' ? [linter(jsonParseLinter())] : [],
                 onChange: (content) => controller.setContent(content),
-                onSave: () => void controller.save(),
-                onCursorChange: (offset) => controller.setCursor(offset),
-                ...(state.initialSelection === undefined
-                  ? {}
-                  : { selection: state.initialSelection }),
-                ...(attrs.links === undefined ? {} : { links: attrs.links }),
-              }),
+              })
+            : state.language === 'markdown' && state.previewVisible
+              ? m('.fm-file-editor-preview', { innerHTML: state.previewHtml ?? '' })
+              : m(LinkAwareEditor, {
+                  content: state.content,
+                  language: languageExtension(state.language),
+                  extensions: state.language === 'json' ? [linter(jsonParseLinter())] : [],
+                  onChange: (content) => controller.setContent(content),
+                  onSave: () => void controller.save(),
+                  onCursorChange: (offset) => controller.setCursor(offset),
+                  ...(state.initialSelection === undefined
+                    ? {}
+                    : { selection: state.initialSelection }),
+                  ...(attrs.links === undefined ? {} : { links: attrs.links }),
+                }),
         ),
         m(UnsavedChangesDialog, {
           open: state.closePending,

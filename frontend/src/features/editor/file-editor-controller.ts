@@ -22,6 +22,8 @@ export type FileEditorState =
       readonly previewVisible: boolean;
       readonly conflict: boolean;
       readonly closePending: boolean;
+      /** The GeoJSON map editor replaces the text view (task 0278). */
+      readonly mapMode?: boolean;
       /** Range selected when the file opened at a line (task 0271). */
       readonly initialSelection?: { readonly from: number; readonly to: number };
       readonly error?: string;
@@ -33,6 +35,8 @@ export interface FileEditorController {
   reload(): Promise<void>;
   formatJson(): void;
   togglePreview(): void;
+  /** Switches a GeoJSON file between the text editor and the map editor (task 0278). */
+  toggleMapMode(): void;
   requestClose(): boolean;
   cancelClose(): void;
   /** Records the caret position, so actions can act on the path or URL under it (task 0271). */
@@ -169,6 +173,9 @@ export function createFileEditorController(options: {
   const togglePreview = () => {
     if (state.status === 'ready') publish({ ...state, previewVisible: !state.previewVisible });
   };
+  const toggleMapMode = () => {
+    if (state.status === 'ready') publish({ ...state, mapMode: state.mapMode !== true });
+  };
   const requestClose = () => {
     if (state.status !== 'ready' || !state.dirty) return true;
     publish({ ...state, closePending: true });
@@ -184,6 +191,7 @@ export function createFileEditorController(options: {
     reload,
     formatJson,
     togglePreview,
+    toggleMapMode,
     requestClose,
     cancelClose,
     setCursor: (offset) => {

@@ -32,6 +32,26 @@ describe('file editor controller', () => {
     controller.dispose();
   });
 
+  it('toggles the GeoJSON map editor without touching the content or the dirty flag', async () => {
+    const states: FileEditorState[] = [];
+    const controller = createFileEditorController({
+      client: {
+        loadEditableFile: vi
+          .fn()
+          .mockResolvedValue({ content: '{"a":1}', revision: 'r1', size: 7 }),
+        saveEditableFile: vi.fn(),
+      },
+      entry,
+      update: (state) => states.push(state),
+    });
+    await vi.waitFor(() => expect(states.at(-1)?.status).toBe('ready'));
+    controller.toggleMapMode();
+    expect(states.at(-1)).toMatchObject({ mapMode: true, dirty: false, content: '{"a":1}' });
+    controller.toggleMapMode();
+    expect(states.at(-1)).toMatchObject({ mapMode: false });
+    controller.dispose();
+  });
+
   it('tracks dirtiness, formats JSON, and saves with the loaded revision', async () => {
     const states: FileEditorState[] = [];
     const client = {

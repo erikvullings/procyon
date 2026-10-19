@@ -117,7 +117,9 @@ pub use files::{
     StructuredViewStatusDto, UpdateStructuredViewRequestDto,
 };
 pub use finder_tags::{FinderTagColorDto, FinderTagDto, FinderTagsDto, SpotlightCommentDto};
-pub use geo::{GeoDocumentDto, GeoErrorDto, GeoIssueDto, ReadGeoFileRequestDto};
+pub use geo::{
+    GeoDocumentDto, GeoErrorDto, GeoIssueDto, ParseGeoTextRequestDto, ReadGeoFileRequestDto,
+};
 pub use health::{HealthDto, HealthStatusDto};
 pub use image_metadata::{
     CaptureTimeDto, GpsPositionDto, ImageGpsEntryDto, ImageMetadataDto, ImageMetadataEditDto,

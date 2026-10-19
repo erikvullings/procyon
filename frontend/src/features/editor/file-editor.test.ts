@@ -24,6 +24,7 @@ function controller(): FileEditorController {
     reload: vi.fn().mockResolvedValue(undefined),
     formatJson: vi.fn(),
     togglePreview: vi.fn(),
+    toggleMapMode: vi.fn(),
     requestClose: vi.fn().mockReturnValue(true),
     cancelClose: vi.fn(),
     setCursor: vi.fn(),
@@ -201,5 +202,90 @@ describe('FileEditor', () => {
 
     root.querySelector<HTMLButtonElement>('.fm-file-editor-close-cancel')?.click();
     expect(editorController.cancelClose).toHaveBeenCalledOnce();
+  });
+
+  describe('GeoJSON map editor (task 0278)', () => {
+    const mapClient = {
+      parseGeoText: vi.fn().mockResolvedValue({
+        format: 'geojson',
+        collection: { type: 'FeatureCollection', features: [] },
+        totalFeatures: 0,
+        displayedFeatures: 0,
+        truncated: false,
+        warnings: [],
+        skipped: [],
+      }),
+      getSettings: vi.fn().mockRejectedValue(new Error('offline')),
+      mapTileUrlTemplate: vi.fn(),
+      mediaUrl: vi.fn(),
+    };
+
+    function geoState(mapMode: boolean): Extract<FileEditorState, { readonly status: 'ready' }> {
+      return {
+        ...state(false),
+        entry: { ...entry, name: 'places.geojson', extension: 'geojson' },
+        language: 'json',
+        content: '{"type":"FeatureCollection","features":[]}',
+        savedContent: '{"type":"FeatureCollection","features":[]}',
+        mapMode,
+      };
+    }
+
+    it('offers the map editor for GeoJSON and toggles it through the controller', () => {
+      const editorController = controller();
+      m.mount(root, {
+        view: () =>
+          m(FileEditor, {
+            state: geoState(false),
+            controller: editorController,
+            onClose: vi.fn(),
+            mapClient,
+          }),
+      });
+      const toggle = [...root.querySelectorAll('button')].find(
+        (item) => item.textContent === 'Map editor',
+      );
+      toggle?.click();
+      expect(editorController.toggleMapMode).toHaveBeenCalledOnce();
+      expect(root.querySelector('.cm-editor')).not.toBeNull();
+    });
+
+    it('replaces the text editor with the map editor in map mode and keeps Save', () => {
+      m.mount(root, {
+        view: () =>
+          m(FileEditor, {
+            state: { ...geoState(true), dirty: true },
+            controller: controller(),
+            onClose: vi.fn(),
+            mapClient,
+          }),
+      });
+      expect(root.querySelector('.fm-geo-editor')).not.toBeNull();
+      expect(root.querySelector('.cm-editor')).toBeNull();
+      expect(root.querySelector('.fm-file-editor-header')?.textContent).toContain('Text');
+      expect(root.querySelector('.fm-file-editor-header')?.textContent).toContain('Save');
+    });
+
+    it('does not offer the map for ordinary JSON or without a map client', () => {
+      m.mount(root, {
+        view: () =>
+          m(FileEditor, {
+            state: {
+              ...geoState(false),
+              entry: { ...entry, name: 'data.json', extension: 'json' },
+              content: '{"name":"x"}',
+            },
+            controller: controller(),
+            onClose: vi.fn(),
+            mapClient,
+          }),
+      });
+      expect(root.querySelector('.fm-file-editor-header')?.textContent).not.toContain('Map editor');
+      m.mount(root, {
+        view: () =>
+          m(FileEditor, { state: geoState(false), controller: controller(), onClose: vi.fn() }),
+      });
+      expect(root.querySelector('.fm-file-editor-header')?.textContent).not.toContain('Map editor');
+    });
   });
 });

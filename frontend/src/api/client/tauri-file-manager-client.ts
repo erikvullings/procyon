@@ -900,6 +900,10 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<FileRangeChunk>('read_file_range', { request });
   }
 
+  parseGeoText(text: string, _signal?: AbortSignal): Promise<GeoDocument> {
+    return invoke<GeoDocument>('parse_geo_text', { request: { text } });
+  }
+
   readGeoFile(location: Location, _signal?: AbortSignal): Promise<GeoDocument> {
     return invoke<GeoDocument>('read_geo_file', { request: { location } });
   }

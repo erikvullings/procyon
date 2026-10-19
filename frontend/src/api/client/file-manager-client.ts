@@ -556,6 +556,8 @@ export interface FileManagerClient {
    * Works for local, archive and remote entries because the backend reads through the VFS.
    */
   readImageMetadata(location: Location, signal?: AbortSignal): Promise<ImageMetadata>;
+  /** Parses GeoJSON text for live validation while editing (task 0278); never throws on bad text. */
+  parseGeoText(text: string, signal?: AbortSignal): Promise<GeoDocument>;
   /** Reads a GeoJSON, GPX, KML or KMZ file into GeoJSON features (tasks 0277-0280). */
   readGeoFile(location: Location, signal?: AbortSignal): Promise<GeoDocument>;
   /**

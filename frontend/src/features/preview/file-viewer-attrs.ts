@@ -13,6 +13,7 @@ export type FileViewerAttrsExtras = Pick<
       | 'onDocumentSummary'
       | 'onPlayTracks'
       | 'onOpenOnMap'
+      | 'onEditGeo'
       | 'mapClient'
       | 'links'
     >

@@ -7,7 +7,9 @@
 
 use fm_domain::{EntryId, Location};
 use fm_geo::{GeoDocument, GeoFormat, GeoJsonError, Limits, detect_format, parse_geojson};
-use fm_transport_dto::{GeoDocumentDto, GeoErrorDto, GeoIssueDto, ReadGeoFileRequestDto};
+use fm_transport_dto::{
+    GeoDocumentDto, GeoErrorDto, GeoIssueDto, ParseGeoTextRequestDto, ReadGeoFileRequestDto,
+};
 use fm_vfs::{EntryRef, ProviderRegistry};
 use serde_json::json;
 use tokio::io::AsyncReadExt;
@@ -102,42 +104,58 @@ pub(crate) async fn read_geo_file(
         .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
 
     let extension = extension_of(&location);
-    let parsed = tokio::task::spawn_blocking(move || {
-        let Some(format) = detect_format(&extension, &bytes) else {
-            return Err((
-                String::new(),
-                plain_error("this is not a recognised geographic file".into()),
-            ));
-        };
-        match format {
-            GeoFormat::GeoJson => parse_geojson(&bytes, Limits::default())
-                .map(document_dto)
-                .map_err(|error| {
-                    (
-                        format.id().to_owned(),
-                        match error {
-                            GeoJsonError::Syntax {
-                                message,
-                                line,
-                                column,
-                            } => GeoErrorDto {
-                                message,
-                                line: u32::try_from(line).ok(),
-                                column: u32::try_from(column).ok(),
-                                path: None,
-                            },
-                            GeoJsonError::Invalid(issue) => GeoErrorDto {
-                                message: issue.message,
-                                line: None,
-                                column: None,
-                                path: Some(issue.path),
-                            },
-                        },
-                    )
-                }),
-        }
-    })
-    .await
-    .map_err(|_| ApplicationError::Internal)?;
+    parse_off_thread(extension, bytes).await
+}
+
+/// Parses `text` as GeoJSON, for live validation while a document is being edited.
+pub(crate) async fn parse_geo_text(
+    request: ParseGeoTextRequestDto,
+) -> Result<GeoDocumentDto, ApplicationError> {
+    parse_off_thread("geojson".to_owned(), request.text.into_bytes()).await
+}
+
+async fn parse_off_thread(
+    extension: String,
+    bytes: Vec<u8>,
+) -> Result<GeoDocumentDto, ApplicationError> {
+    let parsed = tokio::task::spawn_blocking(move || parse_bytes(&extension, &bytes))
+        .await
+        .map_err(|_| ApplicationError::Internal)?;
     Ok(parsed.unwrap_or_else(|(format, error)| empty(&format, error)))
+}
+
+fn parse_bytes(extension: &str, bytes: &[u8]) -> Result<GeoDocumentDto, (String, GeoErrorDto)> {
+    let Some(format) = detect_format(extension, bytes) else {
+        return Err((
+            String::new(),
+            plain_error("this is not a recognised geographic file".into()),
+        ));
+    };
+    match format {
+        GeoFormat::GeoJson => parse_geojson(bytes, Limits::default())
+            .map(document_dto)
+            .map_err(|error| {
+                (
+                    format.id().to_owned(),
+                    match error {
+                        GeoJsonError::Syntax {
+                            message,
+                            line,
+                            column,
+                        } => GeoErrorDto {
+                            message,
+                            line: u32::try_from(line).ok(),
+                            column: u32::try_from(column).ok(),
+                            path: None,
+                        },
+                        GeoJsonError::Invalid(issue) => GeoErrorDto {
+                            message: issue.message,
+                            line: None,
+                            column: None,
+                            path: Some(issue.path),
+                        },
+                    },
+                )
+            }),
+    }
 }

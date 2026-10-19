@@ -43,6 +43,8 @@
     "pmtiles": "4.5.0",
     "slimdown-js": "1.5.4",
     "supercluster": "9.1.0",
+    "terra-draw": "1.37.0",
+    "terra-draw-maplibre-gl-adapter": "1.5.0",
     "translate.js": "^1.3.2"
   },
   "devDependencies": {

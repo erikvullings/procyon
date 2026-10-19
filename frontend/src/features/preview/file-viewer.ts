@@ -108,6 +108,8 @@ export interface FileViewerAttrs {
   readonly mapClient?: GeoViewAttrs['client'];
   readonly onSelectGeoFeature?: (index: number | undefined) => void;
   readonly onToggleGeoRaw?: () => void;
+  /** Opens the file in the editor (GeoJSON offers the map editor there, task 0278). */
+  readonly onEditGeo?: () => void;
   /** Actions for paths and URLs in the viewed text (task 0271). */
   readonly links?: EditorLinkHandlers;
   readonly onClose: () => void;
@@ -1875,6 +1877,17 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                   'button.fm-file-viewer-geo-toggle',
                   { type: 'button', onclick: attrs.onToggleGeoRaw },
                   state.geoView === 'map' ? t('geo', 'showRaw') : t('geo', 'showMap'),
+                )
+              : undefined,
+            state.status === 'ready' &&
+            state.content.kind === 'geo' &&
+            state.content.document.error == null &&
+            state.entry.name.toLowerCase().endsWith('.geojson') &&
+            attrs.onEditGeo !== undefined
+              ? m(
+                  'button.fm-file-viewer-geo-edit',
+                  { type: 'button', onclick: attrs.onEditGeo },
+                  t('geoEdit', 'edit'),
                 )
               : undefined,
             attrs.onDocumentSummary === undefined

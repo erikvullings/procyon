@@ -658,3 +658,30 @@ async fn reads_geojson_files_and_reports_invalid_ones_with_a_position() {
     assert_eq!(body["format"], "");
     assert!(body["error"]["message"].as_str().is_some());
 }
+
+#[tokio::test]
+async fn validates_geojson_text_without_a_file() {
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/v1/geo/parse", server.base_url);
+    let ok: Value = client
+        .post(&url)
+        .json(&json!({"text": r#"{"type":"Point","coordinates":[1,2]}"#}))
+        .send()
+        .await
+        .expect("request must succeed")
+        .json()
+        .await
+        .expect("body must be JSON");
+    assert_eq!(ok["displayedFeatures"], 1);
+    let bad: Value = client
+        .post(&url)
+        .json(&json!({"text": "{\n \"type\": }"}))
+        .send()
+        .await
+        .expect("request must succeed")
+        .json()
+        .await
+        .expect("body must be JSON");
+    assert_eq!(bad["error"]["line"], 2);
+}

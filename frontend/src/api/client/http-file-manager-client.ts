@@ -316,6 +316,7 @@ import {
   listOperations as requestOperations,
   undoOperation as requestOperationUndo,
   setPaneActivity as requestPaneActivity,
+  parseGeoText as requestParseGeoText,
   disablePlugin as requestPluginDisable,
   enablePlugin as requestPluginEnable,
   getPluginIconThemeAsset as requestPluginIconThemeAsset,
@@ -1384,6 +1385,17 @@ export class HttpFileManagerClient implements FileManagerClient {
       throw new Error(`Unexpected readFileRange response status: ${response.status}`);
     }
     return response.data;
+  }
+
+  async parseGeoText(text: string, signal?: AbortSignal): Promise<GeoDocument> {
+    const response = await requestParseGeoText(
+      { text },
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected parseGeoText response status: ${response.status}`);
+    }
+    return response.data as unknown as GeoDocument;
   }
 
   async readGeoFile(location: FileLocation, signal?: AbortSignal): Promise<GeoDocument> {

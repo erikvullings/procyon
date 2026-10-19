@@ -3210,6 +3210,34 @@
         }
       }
     },
+    "/api/v1/geo/parse": {
+      "post": {
+        "summary": "Parses GeoJSON text for live validation in editors (task 0278).",
+        "operationId": "parseGeoText",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseGeoTextRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The features, or why the text is invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeoDocumentDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/health": {
       "get": {
         "summary": "Reports that the backend process is running and able to serve requests.",
@@ -16651,6 +16679,19 @@
               "null"
             ],
             "description": "An optional user-facing title override for this pane."
+          }
+        }
+      },
+      "ParseGeoTextRequestDto": {
+        "type": "object",
+        "description": "Parses GeoJSON text without a file (`POST /api/v1/geo/parse`), for live validation in editors.",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The GeoJSON text, at most about 2 MiB."
           }
         }
       },

@@ -3845,6 +3845,14 @@ impl FileManagerService {
         crate::geo_files::read_geo_file(&self.providers, request).await
     }
 
+    /// Parses GeoJSON text for live validation in editors (task 0278).
+    pub async fn parse_geo_text(
+        &self,
+        request: fm_transport_dto::ParseGeoTextRequestDto,
+    ) -> Result<fm_transport_dto::GeoDocumentDto, ApplicationError> {
+        crate::geo_files::parse_geo_text(request).await
+    }
+
     /// Reads the GPS position and capture time of up to 100 images from their leading bytes
     /// (task 0276).
     pub async fn read_image_gps(

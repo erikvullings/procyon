@@ -2932,6 +2932,19 @@ pub(crate) async fn read_geo_file(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Parses GeoJSON text for live validation in editors (task 0278).
+#[tauri::command]
+pub(crate) async fn parse_geo_text(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ParseGeoTextRequestDto,
+) -> Result<fm_transport_dto::GeoDocumentDto, ApplicationErrorDto> {
+    state
+        .service
+        .parse_geo_text(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Starts a cancellable music duplicate scan through the shared service (task 0265).
 ///
 /// Must be `async` so the scan task is spawned on the Tokio runtime.

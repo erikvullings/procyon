@@ -361,6 +361,7 @@ export type MockClientMethod =
   | 'setSpotlightComment'
   | 'cacheArchivePassword'
   | 'readFileRange'
+  | 'parseGeoText'
   | 'readGeoFile'
   | 'readImageGps'
   | 'readImageMetadata'
@@ -3074,6 +3075,38 @@ export class MockFileManagerClient implements FileManagerClient {
 
   setPaneActivity(_request: SetPaneActivityRequest, signal?: AbortSignal): Promise<void> {
     return this.perform('setPaneActivity', signal, () => undefined);
+  }
+
+  parseGeoText(text: string, signal?: AbortSignal): Promise<GeoDocument> {
+    return this.perform('parseGeoText', signal, () => {
+      const empty = { type: 'FeatureCollection' as const, features: [] };
+      try {
+        const value = JSON.parse(text) as { type?: string; features?: unknown[] };
+        const features = (
+          value.type === 'FeatureCollection' ? (value.features ?? []) : [value]
+        ) as GeoJSON.Feature[];
+        return {
+          format: 'geojson',
+          collection: { type: 'FeatureCollection' as const, features },
+          totalFeatures: features.length,
+          displayedFeatures: features.length,
+          truncated: false,
+          warnings: [],
+          skipped: [],
+        };
+      } catch (error) {
+        return {
+          format: 'geojson',
+          collection: empty,
+          totalFeatures: 0,
+          displayedFeatures: 0,
+          truncated: false,
+          warnings: [],
+          skipped: [],
+          error: { message: error instanceof Error ? error.message : String(error) },
+        };
+      }
+    });
   }
 
   readGeoFile(_location: Location, signal?: AbortSignal): Promise<GeoDocument> {

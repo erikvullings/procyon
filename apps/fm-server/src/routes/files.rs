@@ -11,12 +11,13 @@ use fm_transport_dto::{
     LoadEditableFileResponseDto, OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto,
     OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, OpenSqliteViewRequestDto,
     OpenSqliteViewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
-    PptxPreviewSessionRequestDto, QuerySqliteViewRequestDto, QuerySqliteViewResponseDto,
-    ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
-    ReadFileRangeResponseDto, ReadGeoFileRequestDto, ReadImageGpsRequestDto,
-    ReadImageGpsResponseDto, ReadImageMetadataRequestDto, ReadPptxPreviewPdfRequestDto,
-    ReadStructuredJsonWindowRequestDto, ReadStructuredJsonWindowResponseDto,
-    ReadStructuredRowsRequestDto, ReadStructuredRowsResponseDto, ResolveMetadataTokensRequestDto,
+    ParseGeoTextRequestDto, PptxPreviewSessionRequestDto, QuerySqliteViewRequestDto,
+    QuerySqliteViewResponseDto, ReadDocxPreviewResourceRequestDto,
+    ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
+    ReadGeoFileRequestDto, ReadImageGpsRequestDto, ReadImageGpsResponseDto,
+    ReadImageMetadataRequestDto, ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
+    ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
+    ReadStructuredRowsResponseDto, ResolveMetadataTokensRequestDto,
     ResolveMetadataTokensResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
     ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
     SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto, SqliteViewSessionRequestDto,
@@ -188,6 +189,28 @@ pub(crate) async fn read_geo_file(
     state
         .service
         .read_geo_file(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Parses GeoJSON text for live validation in editors (task 0278).
+#[utoipa::path(
+    post,
+    path = "/api/v1/geo/parse",
+    operation_id = "parseGeoText",
+    request_body = ParseGeoTextRequestDto,
+    responses((status = 200, description = "The features, or why the text is invalid", body = GeoDocumentDto))
+)]
+pub(crate) async fn parse_geo_text(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ParseGeoTextRequestDto>,
+) -> Result<Json<GeoDocumentDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    state
+        .service
+        .parse_geo_text(request)
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, request_id))
