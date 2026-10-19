@@ -256,6 +256,7 @@ pub struct FileManagerService {
     music_duplicates: crate::music_duplicates::MusicDuplicateCoordinator,
     link_doctor: crate::link_doctor::LinkDoctorCoordinator,
     snapshots: crate::snapshots::SnapshotCoordinator,
+    map_tiles: crate::map_tiles::MapTileService,
     disk_usage: DiskUsageCoordinator,
     thumbnails: ThumbnailService,
     semantic: SemanticService,
@@ -717,6 +718,7 @@ impl FileManagerService {
             music_duplicates: crate::music_duplicates::MusicDuplicateCoordinator::default(),
             link_doctor: crate::link_doctor::LinkDoctorCoordinator::default(),
             snapshots: crate::snapshots::SnapshotCoordinator::default(),
+            map_tiles: crate::map_tiles::MapTileService::new(settings_mutex.clone()),
             disk_usage,
             thumbnails: ThumbnailService::new(settings_directory.join("thumbnails")),
             semantic,
@@ -3178,6 +3180,10 @@ impl FileManagerService {
     /// Atomically persists and returns a complete settings replacement.
     pub fn update_settings(&self, settings: SettingsDto) -> Result<SettingsDto, ApplicationError> {
         let mut settings = settings_from_dto(settings);
+        settings
+            .map
+            .validate()
+            .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
         let mut current = self
             .settings
             .lock()
@@ -3818,6 +3824,17 @@ impl FileManagerService {
         request: fm_transport_dto::ResolveMetadataTokensRequestDto,
     ) -> Result<fm_transport_dto::ResolveMetadataTokensResponseDto, ApplicationError> {
         crate::metadata_tokens::resolve_metadata_tokens(&self.providers, request).await
+    }
+
+    /// Returns one raster basemap tile from the configured provider (task 0275). The web view
+    /// asks here instead of contacting the tile host itself.
+    pub async fn map_tile(
+        &self,
+        z: u8,
+        x: u32,
+        y: u32,
+    ) -> Result<crate::map_tiles::MapTile, ApplicationError> {
+        self.map_tiles.tile(z, x, y).await
     }
 
     /// Reads every EXIF/GPS/IPTC/XMP/ICC tag of an image from its leading bytes (task 0273).

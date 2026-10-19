@@ -4,16 +4,17 @@
 //! conversion functions with no dependency on the rest of the facade.
 
 use fm_settings::{
-    ConflictPolicy, DateFormat, DefaultPaneLayout, Language, MultiRenameCaseTransform,
-    MultiRenamePreset, MultiRenameRules, MultiRenameSequence, Settings, SizeFormat, Theme,
+    ConflictPolicy, DateFormat, DefaultPaneLayout, Language, MapBasemap, MapSettings,
+    MultiRenameCaseTransform, MultiRenamePreset, MultiRenameRules, MultiRenameSequence, Settings,
+    SizeFormat, Theme,
 };
 use fm_transport_dto::{
     ConceptHierarchyScopeDto, ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, LanguageDto,
-    MultiRenameCaseTransformDto, MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto,
-    SavedSearchDto, SearchConceptPredicateDto, SearchContentPredicateDto, SearchEntryKindDto,
-    SearchGitStatusDto, SearchModeDto, SearchNameModeDto, SearchNamePredicateDto, SearchQueryDto,
-    SearchScopeDto, SearchSemanticPredicateDto, SemanticSearchScopeDto, SettingsDto, SizeFormatDto,
-    ThemeDto,
+    MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto, MultiRenamePresetDto,
+    MultiRenameRulesDto, MultiRenameSequenceDto, SavedSearchDto, SearchConceptPredicateDto,
+    SearchContentPredicateDto, SearchEntryKindDto, SearchGitStatusDto, SearchModeDto,
+    SearchNameModeDto, SearchNamePredicateDto, SearchQueryDto, SearchScopeDto,
+    SearchSemanticPredicateDto, SemanticSearchScopeDto, SettingsDto, SizeFormatDto, ThemeDto,
 };
 
 pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
@@ -128,6 +129,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
         check_for_updates_automatically: settings.check_for_updates_automatically,
         viewer_in_separate_window: settings.viewer_in_separate_window,
         remember_folder_views: settings.remember_folder_views,
+        map: map_settings_to_dto(&settings.map),
     }
 }
 
@@ -244,6 +246,69 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         remember_folder_views: settings.remember_folder_views,
         // Backend-owned: `update_settings` keeps the live list.
         folder_views: Vec::new(),
+        map: map_settings_from_dto(settings.map),
+    }
+}
+
+fn map_settings_to_dto(settings: &MapSettings) -> MapSettingsDto {
+    let mut dto = MapSettingsDto {
+        online_tiles: settings.online_tiles,
+        remote_host: settings.basemap.remote_host(),
+        ..MapSettingsDto::default()
+    };
+    match &settings.basemap {
+        MapBasemap::Raster {
+            url_template,
+            attribution,
+            max_zoom,
+        } => {
+            dto.basemap_kind = MapBasemapKindDto::Raster;
+            dto.url_template.clone_from(url_template);
+            dto.attribution.clone_from(attribution);
+            dto.max_zoom = *max_zoom;
+        }
+        MapBasemap::Style { url, attribution } => {
+            dto.basemap_kind = MapBasemapKindDto::Style;
+            dto.style_url.clone_from(url);
+            dto.attribution.clone_from(attribution);
+        }
+        MapBasemap::Pmtiles {
+            location,
+            attribution,
+        } => {
+            dto.basemap_kind = MapBasemapKindDto::Pmtiles;
+            dto.pmtiles_location = Some(location.clone().into());
+            dto.attribution.clone_from(attribution);
+        }
+    }
+    dto
+}
+
+fn map_settings_from_dto(dto: MapSettingsDto) -> MapSettings {
+    let basemap = match dto.basemap_kind {
+        MapBasemapKindDto::Raster => MapBasemap::Raster {
+            url_template: dto.url_template,
+            attribution: dto.attribution,
+            max_zoom: dto.max_zoom,
+        },
+        MapBasemapKindDto::Style => MapBasemap::Style {
+            url: dto.style_url,
+            attribution: dto.attribution,
+        },
+        MapBasemapKindDto::Pmtiles => MapBasemap::Pmtiles {
+            location: dto
+                .pmtiles_location
+                .map(Into::into)
+                .unwrap_or_else(|| fm_domain::Location {
+                    provider_id: fm_domain::ProviderId::new("local"),
+                    uri: String::new(),
+                }),
+            attribution: dto.attribution,
+        },
+    };
+    MapSettings {
+        online_tiles: dto.online_tiles,
+        basemap,
     }
 }
 

@@ -1,0 +1,293 @@
+import m from 'mithril';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MapSettings } from '../../models';
+import { DEFAULT_MAP_SETTINGS } from './map-settings';
+import { MapView, type MapViewAttrs, type MapViewClient } from './map-view';
+import type { MapMarker } from './marker-index';
+
+const fake = vi.hoisted(() => {
+  class Evented {
+    handlers = new Map<string, ((event?: unknown) => void)[]>();
+    on(name: string, handler: (event?: unknown) => void): this {
+      this.handlers.set(name, [...(this.handlers.get(name) ?? []), handler]);
+      return this;
+    }
+    once(name: string, handler: (event?: unknown) => void): this {
+      return this.on(name, handler);
+    }
+    fire(name: string, event?: unknown): void {
+      for (const handler of this.handlers.get(name) ?? []) handler(event);
+    }
+  }
+  class FakeMap extends Evented {
+    removed = false;
+    calls: { method: string; args: unknown[] }[] = [];
+    controls: unknown[] = [];
+    constructor(public options: Record<string, unknown>) {
+      super();
+      maps.push(this);
+    }
+    addControl(control: unknown): void {
+      this.controls.push(control);
+    }
+    getBounds() {
+      return { getWest: () => -180, getSouth: () => -85, getEast: () => 180, getNorth: () => 85 };
+    }
+    getZoom(): number {
+      return zoom.value;
+    }
+    easeTo(...args: unknown[]): void {
+      this.calls.push({ method: 'easeTo', args });
+    }
+    jumpTo(...args: unknown[]): void {
+      this.calls.push({ method: 'jumpTo', args });
+    }
+    fitBounds(...args: unknown[]): void {
+      this.calls.push({ method: 'fitBounds', args });
+    }
+    setStyle(...args: unknown[]): void {
+      this.calls.push({ method: 'setStyle', args });
+    }
+    remove(): void {
+      this.removed = true;
+    }
+  }
+  class FakeMarker extends Evented {
+    removed = false;
+    lngLat: [number, number] = [0, 0];
+    constructor(public options: { element: HTMLElement; draggable?: boolean }) {
+      super();
+      markers.push(this);
+    }
+    setLngLat(lngLat: [number, number]): this {
+      this.lngLat = lngLat;
+      return this;
+    }
+    getLngLat() {
+      return { lng: this.lngLat[0], lat: this.lngLat[1] };
+    }
+    addTo(): this {
+      document.body.append(this.options.element);
+      return this;
+    }
+    remove(): void {
+      this.removed = true;
+      this.options.element.remove();
+    }
+  }
+  class FakePopup {
+    content: unknown;
+    removed = false;
+    constructor() {
+      popups.push(this);
+    }
+    setLngLat(): this {
+      return this;
+    }
+    setText(text: string): this {
+      this.content = text;
+      return this;
+    }
+    setDOMContent(node: Node): this {
+      this.content = node;
+      return this;
+    }
+    addTo(): this {
+      return this;
+    }
+    remove(): void {
+      this.removed = true;
+    }
+  }
+  const maps: FakeMap[] = [];
+  const markers: FakeMarker[] = [];
+  const popups: FakePopup[] = [];
+  const zoom = { value: 2 };
+  const protocols: string[] = [];
+  return { FakeMap, FakeMarker, FakePopup, maps, markers, popups, zoom, protocols };
+});
+
+vi.mock('maplibre-gl', () => ({
+  Map: fake.FakeMap,
+  Marker: fake.FakeMarker,
+  Popup: fake.FakePopup,
+  NavigationControl: class {},
+  addProtocol: (name: string) => fake.protocols.push(name),
+  removeProtocol: (name: string) => fake.protocols.splice(fake.protocols.indexOf(name), 1),
+}));
+vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
+vi.mock('pmtiles', () => ({
+  Protocol: class {
+    tile = () => undefined;
+  },
+}));
+
+const markers: MapMarker[] = [
+  { id: 'a', latitude: 52, longitude: 4, title: 'A' },
+  { id: 'b', latitude: 52.0001, longitude: 4.0001, title: 'B' },
+  { id: 'c', latitude: -33.9, longitude: 151.2, title: 'C' },
+];
+
+function client(): MapViewClient & {
+  mapTileUrlTemplate: ReturnType<typeof vi.fn>;
+  mediaUrl: ReturnType<typeof vi.fn>;
+} {
+  return {
+    mapTileUrlTemplate: vi.fn().mockResolvedValue('/api/v1/map/tiles/{z}/{x}/{y}'),
+    mediaUrl: vi.fn().mockResolvedValue('/api/v1/media?location=x'),
+  };
+}
+
+let root: HTMLElement;
+
+function mount(attrs: () => MapViewAttrs): void {
+  m.mount(root, { view: () => m(MapView, attrs()) });
+}
+
+async function loaded(): Promise<InstanceType<typeof fake.FakeMap>> {
+  await vi.waitFor(() => expect(fake.maps).toHaveLength(1));
+  const map = fake.maps[0];
+  if (map === undefined) throw new Error('map missing');
+  map.fire('load');
+  m.redraw.sync();
+  return map;
+}
+
+beforeEach(() => {
+  root = document.createElement('div');
+  document.body.append(root);
+  fake.maps.length = 0;
+  fake.markers.length = 0;
+  fake.popups.length = 0;
+  fake.zoom.value = 2;
+});
+
+afterEach(() => {
+  m.mount(root, null);
+  document.body.replaceChildren();
+});
+
+describe('MapView', () => {
+  it('requests nothing until it is mounted and then builds the proxy-backed basemap', async () => {
+    const api = client();
+    expect(api.mapTileUrlTemplate).not.toHaveBeenCalled();
+    mount(() => ({ client: api, settings: DEFAULT_MAP_SETTINGS, dark: false, markers: [] }));
+    const map = await loaded();
+    expect(api.mapTileUrlTemplate).toHaveBeenCalledTimes(1);
+    expect(map.options.style).toMatchObject({
+      sources: { basemap: { tiles: ['/api/v1/map/tiles/{z}/{x}/{y}'] } },
+    });
+    expect(map.options.attributionControl).toMatchObject({
+      compact: false,
+      customAttribution: DEFAULT_MAP_SETTINGS.attribution,
+    });
+  });
+
+  it('never asks the client for tiles when online tiles are disabled', async () => {
+    const api = client();
+    const offline: MapSettings = { ...DEFAULT_MAP_SETTINGS, onlineTiles: false };
+    mount(() => ({ client: api, settings: offline, dark: true, markers: [] }));
+    const map = await loaded();
+    expect(api.mapTileUrlTemplate).not.toHaveBeenCalled();
+    expect(JSON.stringify(map.options.style)).not.toMatch(/https?:\/\//);
+    expect(root.textContent).toContain('blank grid');
+  });
+
+  it('reads a local PMTiles file through the media URL and registers the protocol', async () => {
+    const api = client();
+    const settings: MapSettings = {
+      ...DEFAULT_MAP_SETTINGS,
+      basemapKind: 'pmtiles',
+      pmtilesLocation: { providerId: 'local', uri: 'file:///maps/w.pmtiles' },
+    };
+    mount(() => ({ client: api, settings, dark: false, markers: [] }));
+    await loaded();
+    expect(api.mediaUrl).toHaveBeenCalledWith({
+      providerId: 'local',
+      uri: 'file:///maps/w.pmtiles',
+    });
+    expect(fake.protocols).toEqual(['pmtiles']);
+    m.mount(root, null);
+    expect(fake.protocols).toEqual([]);
+  });
+
+  it('clusters markers, zooms into a cluster on click and fits to the markers once', async () => {
+    mount(() => ({ client: client(), settings: DEFAULT_MAP_SETTINGS, dark: false, markers }));
+    const map = await loaded();
+    expect(map.calls.filter((call) => call.method === 'fitBounds')).toHaveLength(1);
+    const clusters = [...document.querySelectorAll<HTMLElement>('.fm-map-cluster')];
+    expect(clusters.map((element) => element.textContent)).toEqual(['2']);
+    expect(document.querySelectorAll('.fm-map-marker')).toHaveLength(1);
+    clusters[0]?.click();
+    expect(map.calls.find((call) => call.method === 'easeTo')).toBeDefined();
+  });
+
+  it('opens a popup and reports clicks on a single marker', async () => {
+    const onMarkerClick = vi.fn();
+    fake.zoom.value = 18;
+    mount(() => ({
+      client: client(),
+      settings: DEFAULT_MAP_SETTINGS,
+      dark: false,
+      markers,
+      renderPopup: (marker) => `Popup ${marker.title}`,
+      onMarkerClick,
+    }));
+    await loaded();
+    const first = document.querySelector<HTMLElement>('.fm-map-marker');
+    first?.click();
+    expect(onMarkerClick).toHaveBeenCalledTimes(1);
+    expect(fake.popups.at(-1)?.content).toMatch(/^Popup /);
+  });
+
+  it('highlights selected markers without redrawing them and reports drags', async () => {
+    const onMarkerDrag = vi.fn();
+    fake.zoom.value = 18;
+    let selected = new Set<string>();
+    const draggable = markers.map((marker) => ({ ...marker, draggable: true }));
+    mount(() => ({
+      client: client(),
+      settings: DEFAULT_MAP_SETTINGS,
+      dark: false,
+      markers: draggable,
+      selectedIds: selected,
+      onMarkerDrag,
+    }));
+    await loaded();
+    expect(document.querySelectorAll('.fm-map-marker.is-selected')).toHaveLength(0);
+    const before = fake.markers.length;
+    selected = new Set(['a']);
+    m.redraw.sync();
+    expect(document.querySelectorAll('.fm-map-marker.is-selected')).toHaveLength(1);
+    expect(fake.markers).toHaveLength(before);
+
+    const dragged = fake.markers.find((entry) => entry.options.draggable === true);
+    dragged?.setLngLat([5, 6]);
+    dragged?.fire('dragend');
+    expect(onMarkerDrag).toHaveBeenCalledWith(expect.objectContaining({ draggable: true }), {
+      latitude: 6,
+      longitude: 5,
+    });
+  });
+
+  it('swaps the style when the basemap settings change and removes the map on teardown', async () => {
+    let settings: MapSettings = DEFAULT_MAP_SETTINGS;
+    mount(() => ({ client: client(), settings, dark: false, markers: [] }));
+    const map = await loaded();
+    settings = { ...DEFAULT_MAP_SETTINGS, onlineTiles: false };
+    m.redraw.sync();
+    await vi.waitFor(() => expect(map.calls.some((call) => call.method === 'setStyle')).toBe(true));
+    m.mount(root, null);
+    expect(map.removed).toBe(true);
+  });
+
+  it('reports a failure to load the map', async () => {
+    const api = client();
+    api.mapTileUrlTemplate.mockRejectedValue(new Error('offline'));
+    mount(() => ({ client: api, settings: DEFAULT_MAP_SETTINGS, dark: false, markers: [] }));
+    await vi.waitFor(() => {
+      m.redraw.sync();
+      expect(root.querySelector('[role="alert"]')).not.toBeNull();
+    });
+  });
+});

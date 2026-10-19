@@ -161,6 +161,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::files::resolve_metadata_tokens))
         .routes(utoipa_axum::routes!(routes::files::read_image_metadata))
         .routes(utoipa_axum::routes!(routes::media::stream_media))
+        .routes(utoipa_axum::routes!(routes::map::get_map_tile))
         .routes(utoipa_axum::routes!(routes::files::open_docx_preview))
         .routes(utoipa_axum::routes!(
             routes::files::read_docx_preview_resource

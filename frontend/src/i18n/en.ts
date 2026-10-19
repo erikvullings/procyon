@@ -2390,6 +2390,38 @@ export const en = {
     started: 'Updating metadata of {n} image(s).',
     failed: 'Could not start the metadata edit: {message}',
   },
+  map: {
+    sectionTitle: 'Map',
+    onlineTiles: 'Allow online map tiles',
+    basemapKind: 'Basemap source',
+    kindRaster: 'Raster tile URL',
+    kindStyle: 'MapLibre style URL',
+    kindPmtiles: 'Local PMTiles file (offline)',
+    urlTemplate: 'Tile URL template',
+    urlTemplateHint: 'Use {z}, {x} and {y} as placeholders.',
+    styleUrl: 'Style URL',
+    pmtilesPath: 'Path of a raster .pmtiles file',
+    attribution: 'Attribution',
+    maxZoom: 'Maximum zoom',
+    resetToDefault: 'Reset to OpenStreetMap',
+    hostProxied:
+      'Procyon requests tiles from {host} on your behalf; the web view never contacts it. Respect the provider tile usage policy.',
+    hostDirect: 'This app connects directly to {host}.',
+    offlineNotice: 'Online tiles are off: no map data is requested from the network.',
+    localNotice: 'Tiles are read from the local file; no network requests are made.',
+    urlInvalid: 'Enter an https URL (http is only allowed for localhost) without credentials.',
+    urlPlaceholders: 'The tile URL must contain {z}, {x} and {y}.',
+    attributionRequired:
+      'Attribution is required by tile providers and is always shown on the map.',
+    zoomRange: 'The maximum zoom must be a whole number from 1 to 24.',
+    pmtilesFile: 'Enter the path of a .pmtiles file.',
+    blankGrid: 'Online map tiles are disabled. Showing a blank grid.',
+    loading: 'Loading map...',
+    loadFailed: 'The map could not be loaded.',
+    cluster: 'Group of {n} items. Click to zoom in.',
+    showPreview: 'Show preview map',
+    hidePreview: 'Hide preview map',
+  },
 } as const satisfies CatalogueShape;
 
 /** Canonical translation groups and keys. Values remain locale-specific. */

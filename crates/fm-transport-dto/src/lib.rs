@@ -201,8 +201,9 @@ pub use semantic_ocr::*;
 pub use semantic_vocabulary::*;
 pub use settings::{
     ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, FavouriteLocationDto, LanguageDto,
-    MultiRenameCaseTransformDto, MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto,
-    SavedSearchDto, SettingsDto, SizeFormatDto, ThemeDto,
+    MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto, MultiRenamePresetDto,
+    MultiRenameRulesDto, MultiRenameSequenceDto, SavedSearchDto, SettingsDto, SizeFormatDto,
+    ThemeDto,
 };
 pub use snapshot::{DirectorySnapshotDto, LoadingStateDto, VolumeCapacityDto};
 pub use snapshots::{

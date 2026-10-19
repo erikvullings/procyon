@@ -1,6 +1,6 @@
 # 0275 Map component with a replaceable tile source
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: frontend, backend
 Depends on: 0030
@@ -20,4 +20,5 @@ Several features need a map (images on a map, GeoJSON viewing and editing). Buil
 - Settings go through the settings migration machinery (0030) and i18n (0098); keep tile URLs out of logs.
 
 ## Agent Notes
-- Created 2026-10-18 from the image-metadata/map/GeoJSON discussion. No work started.
+- Created 2026-10-18 from the image-metadata/map/GeoJSON discussion. 
+- 2026-10-18 claude: Shared map: features/map/map-view.ts (Mithril, MapLibre GL JS 6 loaded via dynamic import - separate 1 MB lazy chunk, nothing requested until a map mounts; DOM markers with supercluster clustering, popups, drag, selection highlight, fit-to-bounds, light/dark via CSS filter on imagery, attribution always visible non-compact). Basemap settings: fm-settings MapSettings (online tiles switch; raster URL template + attribution + max zoom | MapLibre style URL | local raster PMTiles via VFS media streaming) in SettingsDto.map, validated in Rust (https or localhost only, no credentials, placeholders, attribution required) and mirrored in the settings editor 'Map' section with reset-to-OSM default, network notice naming the host, preview map button. Default OSM raster tiles are fetched by a BACKEND proxy (fm-application map_tiles: user agent, max 2 concurrent, 1 MiB cap, image/* only, 512-tile memory cache, no prefetch) exposed as GET /api/v1/map/tiles/{z}/{x}/{y} and Tauri procyon-tiles scheme, so the web view never contacts the provider (no CSP exceptions needed; the app has no CSP today). Offline switch -> only PMTiles or a blank graticule grid, no URL in the style (tested). Style-URL kind is fetched directly by the web view (UI says so). Not done / honest limits: MBTiles unsupported (PMTiles only, raster only; vector PMTiles needs a style); real WebGL rendering, tile loading and Tauri scheme not verifiable in jsdom/CI (MapLibre mocked); no explicit CSP added; no consumer yet (0276+ use it).

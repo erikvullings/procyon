@@ -1,3 +1,4 @@
+import { DEFAULT_MAP_SETTINGS } from '../../features/map/map-settings';
 import type { Location as FileLocation, SearchQuery, Settings } from '../../models';
 import type { SettingsDto } from '../generated/models/settingsDto';
 
@@ -32,6 +33,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
     terminalCommand: settings.terminalCommand ?? null,
     editorCommand: settings.editorCommand ?? null,
     rememberFolderViews: settings.rememberFolderViews ?? true,
+    map: settings.map ?? DEFAULT_MAP_SETTINGS,
   };
 }
 

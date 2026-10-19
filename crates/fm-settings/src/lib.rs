@@ -12,6 +12,13 @@
 //! validation, and atomic writes without this crate depending on the types it
 //! stores.
 
+mod map;
+
+pub use map::{
+    DEFAULT_ATTRIBUTION, DEFAULT_MAX_ZOOM, DEFAULT_TILE_TEMPLATE, MapBasemap, MapSettings,
+    MapSettingsError,
+};
+
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -300,6 +307,8 @@ pub struct Settings {
     /// Remembered folder views, most recently used first, at most [`MAX_FOLDER_VIEWS`]. Owned
     /// by the backend: a client replacing the settings document cannot overwrite it.
     pub folder_views: Vec<FolderViewMemory>,
+    /// Basemap of the shared map component (task 0275).
+    pub map: MapSettings,
 }
 
 impl Settings {
@@ -384,6 +393,7 @@ impl Default for Settings {
             viewer_in_separate_window: false,
             remember_folder_views: true,
             folder_views: Vec::new(),
+            map: MapSettings::default(),
         }
     }
 }

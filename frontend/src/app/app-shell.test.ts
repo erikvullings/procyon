@@ -1,10 +1,10 @@
 import m from 'mithril';
 import { ThemeManager, Toast } from 'mithril-materialized';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { createFileManagerClient } from '../api/client/create-client';
 import { MockFileManagerClient } from '../api/client/mock-file-manager-client';
 import { ApiError } from '../api/fetch-mutator';
+import { DEFAULT_MAP_SETTINGS } from '../features/map/map-settings';
 import { decodeViewerRequest } from '../features/preview/viewer-window';
 import type { DirectorySnapshot, EntrySummary, Location, Operation } from '../models';
 import { encodeDiskUsageTree } from '../models';
@@ -5834,6 +5834,7 @@ describe('AppShell', () => {
       checkForUpdatesAutomatically: true,
       viewerInSeparateWindow: false,
       rememberFolderViews: true,
+      map: DEFAULT_MAP_SETTINGS,
     });
     const iconTheme = {
       iconDefinitions: { file: { iconPath: 'icons/file.svg' } },

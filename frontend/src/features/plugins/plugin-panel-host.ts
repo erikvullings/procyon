@@ -2,6 +2,7 @@ import m, { type FactoryComponent } from 'mithril';
 import type { FileManagerClient, PluginPanelBounds } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type { Location, PluginId, TabId } from '../../models';
+import { resolvedTheme } from '../../utilities/resolved-theme';
 import './plugin-panel-host.css';
 
 export interface PluginPanelHostAttrs {
@@ -18,12 +19,6 @@ export interface PluginPanelHostAttrs {
 export interface PluginPaneState extends PluginPanelHostAttrs {
   readonly panelId: number;
   readonly tabId: TabId;
-}
-
-function resolvedTheme(): 'light' | 'dark' {
-  const theme = document.documentElement.dataset.theme;
-  if (theme === 'light' || theme === 'dark') return theme;
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 export const PluginPanelHost: FactoryComponent<PluginPaneState> = () => {

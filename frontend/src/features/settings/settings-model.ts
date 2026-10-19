@@ -1,10 +1,16 @@
 import { t } from '../../i18n';
 import type { Settings } from '../../models';
+import { validateMapSettings } from '../map/map-settings';
 
 /** Deep-clones a settings document so drafts never alias the saved copy. */
 export function cloneSettings(settings: Settings): Settings {
   return {
     ...settings,
+    map: {
+      ...settings.map,
+      pmtilesLocation:
+        settings.map.pmtilesLocation == null ? null : { ...settings.map.pmtilesLocation },
+    },
     defaultColumns: [...settings.defaultColumns],
     keybindings: { ...settings.keybindings },
     enabledPlugins: [...settings.enabledPlugins],
@@ -71,6 +77,10 @@ export function validateSettingsDraft(draft: Settings): readonly SettingsValidat
   }
   if (!Number.isFinite(draft.rowHeight) || draft.rowHeight < 16 || draft.rowHeight > 64) {
     errors.push({ field: 'rowHeight', message: t('settings', 'rowHeightRange') });
+  }
+  const mapProblem = validateMapSettings(draft.map);
+  if (mapProblem !== undefined) {
+    errors.push({ field: 'map', message: t('map', mapProblem) });
   }
   if (!Number.isInteger(draft.operationConcurrency) || draft.operationConcurrency < 1) {
     errors.push({

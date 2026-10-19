@@ -65,4 +65,25 @@ export interface Settings {
   readonly viewerInSeparateWindow: boolean;
   /** Remembers and restores the view (sort, columns, mode) chosen for each folder (task 0270). */
   readonly rememberFolderViews: boolean;
+  /** Basemap of the shared map component (task 0275). */
+  readonly map: MapSettings;
+}
+
+export type MapBasemapKind = 'raster' | 'style' | 'pmtiles';
+
+/** Where the map component gets its imagery. Only the fields of `basemapKind` are used. */
+export interface MapSettings {
+  /** Whether requests to remote tile or style hosts are allowed at all. */
+  readonly onlineTiles: boolean;
+  readonly basemapKind: MapBasemapKind;
+  /** Raster tile template with `{z}`, `{x}` and `{y}`; fetched by the backend. */
+  readonly urlTemplate: string;
+  /** MapLibre style URL, fetched directly by the web view. */
+  readonly styleUrl: string;
+  /** Local `.pmtiles` raster archive. */
+  readonly pmtilesLocation?: Location | null;
+  readonly attribution: string;
+  readonly maxZoom: number;
+  /** Host that receives requests for the selected basemap, derived by the backend. */
+  readonly remoteHost?: string | null;
 }

@@ -543,6 +543,11 @@ export interface FileManagerClient {
    * bounded byte ranges, so large and remote files never load into memory whole.
    */
   mediaUrl(location: Location, signal?: AbortSignal): Promise<string>;
+  /**
+   * URL template (`{z}/{x}/{y}` placeholders) of the backend tile proxy for the configured raster
+   * basemap. The web view loads tiles from the backend and never contacts the provider (task 0275).
+   */
+  mapTileUrlTemplate(): Promise<string>;
 
   /**
    * Reads every EXIF, GPS, IPTC, XMP and ICC tag of an image from its leading bytes (task 0273).

@@ -5094,6 +5094,68 @@ export const testLlmProfile = async (profileId: string, options?: Parameters<typ
 
 
 
+export type getMapTileResponse200 = {
+  data: Blob
+  status: 200
+}
+
+export type getMapTileResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type getMapTileResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type getMapTileResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type getMapTileResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type getMapTileResponseSuccess = (getMapTileResponse200) & {
+  headers: Headers;
+};
+export type getMapTileResponseError = (getMapTileResponse400 | getMapTileResponse403 | getMapTileResponse404 | getMapTileResponse503) & {
+  headers: Headers;
+};
+
+export type getMapTileResponse = (getMapTileResponseSuccess | getMapTileResponseError)
+
+export const getGetMapTileUrl = (z: number,
+    x: number,
+    y: number,) => {
+
+
+
+
+  return `/api/v1/map/tiles/${z}/${x}/${y}`
+}
+
+/**
+ * @summary Returns one tile of the configured raster basemap.
+ */
+export const getMapTile = async (z: number,
+    x: number,
+    y: number, options?: Parameters<typeof fetchMutator>[1]): Promise<getMapTileResponse> => {
+
+  return fetchMutator<getMapTileResponse>(getGetMapTileUrl(z,x,y),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type streamMediaResponse200 = {
   data: Blob
   status: 200

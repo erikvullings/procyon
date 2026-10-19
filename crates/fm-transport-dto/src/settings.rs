@@ -232,6 +232,61 @@ pub struct SettingsDto {
     /// (task 0270). The remembered views themselves are backend-owned and not part of this DTO.
     #[serde(default = "remember_folder_views_default")]
     pub remember_folder_views: bool,
+    /// Basemap of the shared map component (task 0275).
+    #[serde(default)]
+    pub map: MapSettingsDto,
+}
+
+/// Where basemap imagery comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum MapBasemapKindDto {
+    /// A raster tile URL template, fetched by the backend.
+    Raster,
+    /// A MapLibre style URL fetched directly by the web view.
+    Style,
+    /// A local raster PMTiles file read through the VFS.
+    Pmtiles,
+}
+
+/// Map component settings (task 0275). Only the fields of the selected `basemapKind` are used.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MapSettingsDto {
+    /// Whether requests to remote tile or style hosts are allowed at all.
+    pub online_tiles: bool,
+    /// Selected basemap kind.
+    pub basemap_kind: MapBasemapKindDto,
+    /// Raster tile template with `{z}`, `{x}` and `{y}`.
+    pub url_template: String,
+    /// MapLibre style document URL.
+    pub style_url: String,
+    /// Local `.pmtiles` file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pmtiles_location: Option<LocationDto>,
+    /// Attribution text shown on the map.
+    pub attribution: String,
+    /// Highest zoom level a raster provider serves.
+    pub max_zoom: u8,
+    /// Remote host that receives requests for the selected basemap; read-only, derived by the
+    /// backend. Absent for local files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_host: Option<String>,
+}
+
+impl Default for MapSettingsDto {
+    fn default() -> Self {
+        Self {
+            online_tiles: true,
+            basemap_kind: MapBasemapKindDto::Raster,
+            url_template: "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_owned(),
+            style_url: String::new(),
+            pmtiles_location: None,
+            attribution: "\u{a9} OpenStreetMap contributors".to_owned(),
+            max_zoom: 19,
+            remote_host: Some("tile.openstreetmap.org".to_owned()),
+        }
+    }
 }
 
 fn remember_folder_views_default() -> bool {

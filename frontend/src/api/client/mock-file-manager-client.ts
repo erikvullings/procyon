@@ -1,6 +1,7 @@
 import actionFixtures from '../../../../fixtures/mock-responses/actions.json';
 import directoryFixtures from '../../../../fixtures/mock-responses/directories.json';
 import pluginFixtures from '../../../../fixtures/mock-responses/plugins.json';
+import { DEFAULT_MAP_SETTINGS } from '../../features/map/map-settings';
 import type {
   AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
@@ -1427,6 +1428,7 @@ export class MockFileManagerClient implements FileManagerClient {
     checkForUpdatesAutomatically: true,
     viewerInSeparateWindow: false,
     rememberFolderViews: true,
+    map: DEFAULT_MAP_SETTINGS,
   };
   private operationSequence = 0;
   private tabSequence = 0;
@@ -3121,6 +3123,13 @@ export class MockFileManagerClient implements FileManagerClient {
         unknownTokens,
       };
     });
+  }
+
+  mapTileUrlTemplate(): Promise<string> {
+    // A flat grey tile: the mock runtime has no backend to proxy a provider.
+    return Promise.resolve(
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mO89OLFfwAJVwP8GZfV0AAAAABJRU5ErkJggg==',
+    );
   }
 
   mediaUrl(location: Location, signal?: AbortSignal): Promise<string> {

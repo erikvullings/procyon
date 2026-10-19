@@ -12,6 +12,7 @@ import {
 import type {
   ActionDescriptor,
   Location,
+  MapSettings,
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
@@ -20,6 +21,7 @@ import type {
   WorkspaceId,
 } from '../../models';
 import { DiagnosticsViewComponent } from '../diagnostics/diagnostics-view';
+import { MapSettingsSection } from '../map/map-settings-section';
 import { PluginManagement } from '../plugin-management/plugin-management';
 import type { SelectionPlatform } from '../selection/keybindings';
 import { AppUpdateSettings } from './app-update-settings';
@@ -51,6 +53,7 @@ const AVAILABLE_DEFAULT_COLUMNS = [
 export type SettingsSection =
   | 'appearance'
   | 'files'
+  | 'map'
   | 'keybindings'
   | 'plugins'
   | 'semantic'
@@ -226,6 +229,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
       const sections: ReadonlyArray<{ id: SettingsSection; label: string }> = [
         { id: 'appearance', label: t('settings', 'appearance') },
         { id: 'files', label: t('settings', 'filesAndOperations') },
+        { id: 'map', label: t('map', 'sectionTitle') },
         { id: 'keybindings', label: t('settings', 'keybindings') },
         { id: 'plugins', label: t('settings', 'plugins') },
         { id: 'semantic', label: t('settings', 'semantic') },
@@ -537,6 +541,14 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                       }),
                     ]),
                   ]
+                : undefined,
+
+              activeSection === 'map'
+                ? m(MapSettingsSection, {
+                    client: current.client,
+                    settings: activeDraft.map,
+                    onChange: (map: MapSettings) => update(current, { map }),
+                  })
                 : undefined,
 
               activeSection === 'keybindings'

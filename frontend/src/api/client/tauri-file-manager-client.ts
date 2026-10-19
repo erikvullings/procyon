@@ -909,6 +909,13 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<ResolveMetadataTokensResult>('resolve_metadata_tokens', { request });
   }
 
+  mapTileUrlTemplate(): Promise<string> {
+    // Served by the desktop host's `procyon-tiles` URI scheme (task 0275). `convertFileSrc`
+    // encodes its argument, so a one-letter probe is replaced by the placeholders afterwards.
+    const probe = convertFileSrc('x', 'procyon-tiles');
+    return Promise.resolve(`${probe.slice(0, -1)}{z}/{x}/{y}`);
+  }
+
   mediaUrl(location: Location, _signal?: AbortSignal): Promise<string> {
     // Served by the desktop host's `procyon-media` URI scheme (task 0260).
     return Promise.resolve(

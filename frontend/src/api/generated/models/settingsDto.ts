@@ -7,6 +7,7 @@ import type { DateFormatDto } from './dateFormatDto.ts';
 import type { DefaultPaneLayoutDto } from './defaultPaneLayoutDto.ts';
 import type { FavouriteLocationDto } from './favouriteLocationDto.ts';
 import type { LanguageDto } from './languageDto.ts';
+import type { MapSettingsDto } from './mapSettingsDto.ts';
 import type { MultiRenamePresetDto } from './multiRenamePresetDto.ts';
 import type { SavedSearchDto } from './savedSearchDto.ts';
 import type { SettingsDtoColumnWidths } from './settingsDtoColumnWidths.ts';
@@ -58,6 +59,8 @@ export interface SettingsDto {
   keybindings: SettingsDtoKeybindings;
   /** UI language. */
   language: LanguageDto;
+  /** Basemap of the shared map component (task 0275). */
+  map?: MapSettingsDto;
   /** User-named reusable multi-rename configurations. */
   multiRenamePresets: MultiRenamePresetDto[];
   /**

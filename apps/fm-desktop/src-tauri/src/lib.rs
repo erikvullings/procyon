@@ -18,6 +18,7 @@ mod plugin_spa;
 mod semantic_developer;
 mod semantic_production;
 mod terminal;
+mod tile_protocol;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -185,10 +186,10 @@ pub fn run() {
     init_tracing();
     let run_started = std::time::Instant::now();
     let panel_registry = Arc::new(plugin_spa::PanelRegistry::default());
-    media_protocol::register(plugin_spa::register_schemes(
+    tile_protocol::register(media_protocol::register(plugin_spa::register_schemes(
         tauri::Builder::default(),
         Arc::clone(&panel_registry),
-    ))
+    )))
         .manage(panel_registry)
         .on_page_load(|webview, payload| {
             #[cfg(feature = "native-spa-smoke")]

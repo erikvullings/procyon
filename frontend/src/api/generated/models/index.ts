@@ -229,6 +229,8 @@ export * from './loadEditableFileRequestDto.ts';
 export * from './loadEditableFileResponseDto.ts';
 export * from './loadingStateDto.ts';
 export * from './locationDto.ts';
+export * from './mapBasemapKindDto.ts';
+export * from './mapSettingsDto.ts';
 export * from './mediaMetadataDto.ts';
 export * from './metadataTokenValuesDto.ts';
 export * from './metadataTokenValuesDtoValues.ts';

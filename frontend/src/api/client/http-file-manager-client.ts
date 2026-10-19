@@ -1407,6 +1407,14 @@ export class HttpFileManagerClient implements FileManagerClient {
     return response.data;
   }
 
+  mapTileUrlTemplate(): Promise<string> {
+    // Built by hand: `URL` would percent-encode the {z}/{x}/{y} placeholders.
+    const token = getSessionToken();
+    const query =
+      token !== undefined && token.length > 0 ? `?token=${encodeURIComponent(token)}` : '';
+    return Promise.resolve(`${resolveBaseUrl()}/api/v1/map/tiles/{z}/{x}/{y}${query}`);
+  }
+
   mediaUrl(location: FileLocation, _signal?: AbortSignal): Promise<string> {
     return Promise.resolve(buildMediaUrl(resolveBaseUrl(), location, getSessionToken()));
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-
 import type { Settings } from '../../models';
+import { DEFAULT_MAP_SETTINGS } from '../map/map-settings';
 import {
   cloneSettings,
   formatListInput,
@@ -41,6 +41,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     checkForUpdatesAutomatically: true,
     viewerInSeparateWindow: false,
     rememberFolderViews: true,
+    map: DEFAULT_MAP_SETTINGS,
     ...overrides,
   };
 }

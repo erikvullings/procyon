@@ -3966,6 +3966,95 @@
         }
       }
     },
+    "/api/v1/map/tiles/{z}/{x}/{y}": {
+      "get": {
+        "summary": "Returns one tile of the configured raster basemap.",
+        "operationId": "getMapTile",
+        "parameters": [
+          {
+            "name": "z",
+            "in": "path",
+            "description": "Zoom level",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "description": "Tile column",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "description": "Tile row",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The tile image",
+            "content": {
+              "image/*": {}
+            }
+          },
+          "400": {
+            "description": "Coordinates outside the world or the configured zoom range",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Online tiles are disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The provider has no such tile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The tile provider is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/media": {
       "get": {
         "summary": "Streams a file, honouring HTTP `Range` requests.",
@@ -14850,6 +14939,73 @@
           "uri": "file:///Users/erik/Documents"
         }
       },
+      "MapBasemapKindDto": {
+        "type": "string",
+        "description": "Where basemap imagery comes from.",
+        "enum": [
+          "raster",
+          "style",
+          "pmtiles"
+        ]
+      },
+      "MapSettingsDto": {
+        "type": "object",
+        "description": "Map component settings (task 0275). Only the fields of the selected `basemapKind` are used.",
+        "required": [
+          "onlineTiles",
+          "basemapKind",
+          "urlTemplate",
+          "styleUrl",
+          "attribution",
+          "maxZoom"
+        ],
+        "properties": {
+          "attribution": {
+            "type": "string",
+            "description": "Attribution text shown on the map."
+          },
+          "basemapKind": {
+            "$ref": "#/components/schemas/MapBasemapKindDto",
+            "description": "Selected basemap kind."
+          },
+          "maxZoom": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Highest zoom level a raster provider serves.",
+            "minimum": 0
+          },
+          "onlineTiles": {
+            "type": "boolean",
+            "description": "Whether requests to remote tile or style hosts are allowed at all."
+          },
+          "pmtilesLocation": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LocationDto",
+                "description": "Local `.pmtiles` file."
+              }
+            ]
+          },
+          "remoteHost": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Remote host that receives requests for the selected basemap; read-only, derived by the\nbackend. Absent for local files."
+          },
+          "styleUrl": {
+            "type": "string",
+            "description": "MapLibre style document URL."
+          },
+          "urlTemplate": {
+            "type": "string",
+            "description": "Raster tile template with `{z}`, `{x}` and `{y}`."
+          }
+        }
+      },
       "MediaMetadataDto": {
         "type": "object",
         "description": "Media (audio/video) metadata for an entry.",
@@ -21744,6 +21900,10 @@
           "language": {
             "$ref": "#/components/schemas/LanguageDto",
             "description": "UI language."
+          },
+          "map": {
+            "$ref": "#/components/schemas/MapSettingsDto",
+            "description": "Basemap of the shared map component (task 0275)."
           },
           "multiRenamePresets": {
             "type": "array",

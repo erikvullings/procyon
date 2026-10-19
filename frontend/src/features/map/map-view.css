@@ -1,0 +1,82 @@
+.fm-map {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 240px;
+  background: var(--fm-surface);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  overflow: hidden;
+}
+
+.fm-map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* Imagery from raster providers is bright; dim and invert it in the dark theme. Vector styles and
+   the blank grid pick their own colours. */
+.fm-map[data-theme="dark"][data-basemap="imagery"] .maplibregl-canvas {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
+}
+
+.fm-map-status,
+.fm-map-notice {
+  position: absolute;
+  left: 8px;
+  bottom: 28px;
+  z-index: 2;
+  padding: 2px 8px;
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text-muted);
+  font-size: 0.85em;
+}
+
+.fm-map-status.is-error {
+  color: var(--fm-error);
+}
+
+.fm-map-marker {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid var(--fm-surface);
+  border-radius: 50%;
+  background: var(--fm-accent);
+  box-shadow: 0 1px 3px var(--fm-shadow);
+  cursor: pointer;
+}
+
+.fm-map-marker.is-selected {
+  outline: 3px solid var(--fm-selection);
+  transform: scale(1.2);
+}
+
+.fm-map-cluster {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  border: 2px solid var(--fm-surface);
+  border-radius: 16px;
+  background: var(--fm-accent);
+  color: var(--fm-surface);
+  font-weight: 600;
+  box-shadow: 0 1px 3px var(--fm-shadow);
+  cursor: pointer;
+}
+
+.maplibregl-popup-content {
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text);
+}
+
+.fm-map-network-notice {
+  color: var(--fm-text-muted);
+  font-size: 0.9em;
+}
+
+.fm-map-preview {
+  height: 280px;
+  margin-top: 0.5rem;
+}
