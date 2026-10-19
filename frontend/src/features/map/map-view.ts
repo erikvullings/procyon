@@ -109,9 +109,50 @@ const FEATURE_LAYERS = [
   'fm-features-icon',
 ] as const;
 const HIGHLIGHT_LAYER = 'fm-features-highlight';
+const HIGHLIGHT_CASING_LAYER = 'fm-features-highlight-casing';
+const HIGHLIGHT_POINT_LAYER = 'fm-features-highlight-point';
+const HIGHLIGHT_COLOUR = 'rgb(255, 140, 0)';
+/** Zoom a selected point is brought to when the map is further out. */
+const FOCUS_POINT_ZOOM = 15;
+const FOCUS_MAX_ZOOM = 17;
 const ICON_LAYER = 'fm-features-icon';
 const OVERLAY_PREFIX = 'fm-overlay-';
 const DEFAULT_FEATURE_COLOUR = 'rgb(25, 118, 210)';
+
+/** `[west, south, east, north]` of a geometry, or undefined when it has no positions. */
+export function geometryBounds(
+  geometry: GeoJSON.Geometry,
+): [number, number, number, number] | undefined {
+  let bounds: [number, number, number, number] | undefined;
+  const visit = (node: unknown): void => {
+    if (!Array.isArray(node)) return;
+    if (typeof node[0] === 'number' && typeof node[1] === 'number') {
+      const [x, y] = node as [number, number];
+      bounds = bounds
+        ? [
+            Math.min(bounds[0], x),
+            Math.min(bounds[1], y),
+            Math.max(bounds[2], x),
+            Math.max(bounds[3], y),
+          ]
+        : [x, y, x, y];
+      return;
+    }
+    for (const child of node) visit(child);
+  };
+  if (geometry.type === 'GeometryCollection') {
+    for (const part of geometry.geometries) {
+      const inner = geometryBounds(part);
+      if (inner) {
+        visit([inner[0], inner[1]]);
+        visit([inner[2], inner[3]]);
+      }
+    }
+  } else {
+    visit(geometry.coordinates);
+  }
+  return bounds;
+}
 
 /** Copies features with their position in the list, so a click can be mapped back to the source. */
 export function withFeatureIndexes(
@@ -400,12 +441,35 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
           'icon-size': ['match', ['get', 'marker-size'], 'small', 0.6, 'large', 1.2, 1] as never,
         },
       });
+      // A white casing under the coloured line keeps the selection visible on any background.
+      target.addLayer({
+        id: HIGHLIGHT_CASING_LAYER,
+        type: 'line',
+        source: FEATURE_SOURCE,
+        filter: ['==', ['get', '_fmIndex'], -1],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': 'rgb(255, 255, 255)', 'line-width': 10, 'line-opacity': 0.9 },
+      });
       target.addLayer({
         id: HIGHLIGHT_LAYER,
         type: 'line',
         source: FEATURE_SOURCE,
         filter: ['==', ['get', '_fmIndex'], -1],
-        paint: { 'line-color': 'rgb(255, 160, 0)', 'line-width': 5, 'line-opacity': 0.8 },
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': HIGHLIGHT_COLOUR, 'line-width': 6 },
+      });
+      target.addLayer({
+        id: HIGHLIGHT_POINT_LAYER,
+        type: 'circle',
+        source: FEATURE_SOURCE,
+        filter: ['==', ['get', '_fmIndex'], -1],
+        paint: {
+          'circle-radius': 14,
+          'circle-color': HIGHLIGHT_COLOUR,
+          'circle-opacity': 0.35,
+          'circle-stroke-color': HIGHLIGHT_COLOUR,
+          'circle-stroke-width': 4,
+        },
       });
       appliedHighlight = undefined;
     }
@@ -454,7 +518,38 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
     if (map === undefined || map.getLayer(HIGHLIGHT_LAYER) === undefined) return;
     if (appliedHighlight === latest.highlightIndex) return;
     appliedHighlight = latest.highlightIndex;
-    map.setFilter(HIGHLIGHT_LAYER, ['==', ['get', '_fmIndex'], latest.highlightIndex ?? -1]);
+    const wanted: MapLibre.FilterSpecification = [
+      '==',
+      ['get', '_fmIndex'],
+      latest.highlightIndex ?? -1,
+    ];
+    map.setFilter(HIGHLIGHT_CASING_LAYER, wanted);
+    map.setFilter(HIGHLIGHT_LAYER, wanted);
+    map.setFilter(HIGHLIGHT_POINT_LAYER, ['all', wanted, ['==', ['geometry-type'], 'Point']]);
+    focusHighlight();
+  }
+
+  /** Brings the highlighted feature into view: a point is centred, a line or polygon fitted. */
+  function focusHighlight(): void {
+    const index = latest.highlightIndex;
+    const geometry = index === undefined ? undefined : latest.features?.features[index]?.geometry;
+    const bounds = geometry == null ? undefined : geometryBounds(geometry);
+    if (map === undefined || bounds === undefined) return;
+    const [west, south, east, north] = bounds;
+    if (west === east && south === north) {
+      map.easeTo({
+        center: [west, south],
+        zoom: Math.min(Math.max(map.getZoom(), FOCUS_POINT_ZOOM), latest.settings.maxZoom),
+      });
+    } else {
+      map.fitBounds(
+        [
+          [west, south],
+          [east, north],
+        ],
+        { padding: 60, maxZoom: Math.min(FOCUS_MAX_ZOOM, latest.settings.maxZoom) },
+      );
+    }
   }
 
   function syncFeatures(): void {

@@ -2,7 +2,7 @@ import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MapSettings } from '../../models';
 import { DEFAULT_MAP_SETTINGS } from './map-settings';
-import { MapView, type MapViewAttrs, type MapViewClient } from './map-view';
+import { geometryBounds, MapView, type MapViewAttrs, type MapViewClient } from './map-view';
 import type { MapMarker } from './marker-index';
 
 const fake = vi.hoisted(() => {
@@ -392,7 +392,9 @@ describe('MapView', () => {
       'fm-features-line',
       'fm-features-circle',
       'fm-features-icon',
+      'fm-features-highlight-casing',
       'fm-features-highlight',
+      'fm-features-highlight-point',
     ]);
     const source = map.sources.get('fm-features');
     expect(JSON.stringify(source?.data)).toContain('"_fmIndex":1');
@@ -411,11 +413,11 @@ describe('MapView', () => {
 
     highlightIndex = 1;
     m.redraw.sync();
-    expect(map.calls.filter((call) => call.method === 'setFilter').at(-1)?.args[1]).toEqual([
-      '==',
-      ['get', '_fmIndex'],
-      1,
-    ]);
+    expect(
+      map.calls.findLast(
+        (call) => call.method === 'setFilter' && call.args[0] === 'fm-features-highlight',
+      )?.args[1],
+    ).toEqual(['==', ['get', '_fmIndex'], 1]);
   });
 
   it('shows and moves a cursor marker, and removes it when the cursor goes away', async () => {
@@ -474,5 +476,36 @@ describe('MapView', () => {
     map.renderedAt = [{ properties: { _fmIndex: 0 } }];
     map.fire('click', { lngLat: { lat: 52, lng: 4 }, point: { x: 1, y: 1 } });
     expect(fake.popups.at(-1)?.content).toBe('Feature 0');
+  });
+});
+
+describe('geometryBounds', () => {
+  it('spans points, lines and nested polygons', () => {
+    expect(geometryBounds({ type: 'Point', coordinates: [4, 52] })).toEqual([4, 52, 4, 52]);
+    expect(
+      geometryBounds({
+        type: 'LineString',
+        coordinates: [
+          [4, 52],
+          [5, 51],
+        ],
+      }),
+    ).toEqual([4, 51, 5, 52]);
+    expect(
+      geometryBounds({
+        type: 'MultiPolygon',
+        coordinates: [
+          [
+            [
+              [0, 0],
+              [2, 0],
+              [2, 3],
+              [0, 0],
+            ],
+          ],
+        ],
+      }),
+    ).toEqual([0, 0, 2, 3]);
+    expect(geometryBounds({ type: 'GeometryCollection', geometries: [] })).toBeUndefined();
   });
 });
