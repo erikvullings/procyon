@@ -9,7 +9,8 @@
   overflow: hidden;
 }
 
-.fm-map-canvas {
+.fm-map .fm-map-canvas {
+  /* MapLibre's stylesheet gives its container `position: relative`, which would collapse it. */
   position: absolute;
   inset: 0;
 }
