@@ -4,10 +4,11 @@
 //! bounded, so a zip bomb cannot exhaust memory.
 
 use std::cell::RefCell;
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Write};
 
 use thiserror::Error;
 use zip::ZipArchive;
+use zip::write::SimpleFileOptions;
 
 use crate::kml::{KmlError, ResourceSource, parse_kml};
 use crate::model::{GeoDocument, GeoFormat, Limits};
@@ -108,12 +109,69 @@ pub fn parse_kmz(bytes: &[u8], limits: Limits) -> Result<GeoDocument, KmzError> 
     Ok(parse_kml(&kml, limits, &archive, GeoFormat::Kmz)?)
 }
 
+/// Rewrites a KMZ with the strongest compression, compacting every `.kml` entry and keeping all
+/// other entries (images, models) byte for byte. Entry order and names are preserved.
+///
+/// # Errors
+///
+/// Fails when the archive is unreadable, too large, or a KML entry is not well-formed XML.
+pub fn repack_kmz(bytes: &[u8]) -> Result<Vec<u8>, KmzError> {
+    const MAX_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
+    let mut zip = ZipArchive::new(Cursor::new(bytes))
+        .map_err(|error| KmzError::Archive(error.to_string()))?;
+    if zip.len() > MAX_ENTRIES {
+        return Err(KmzError::TooLarge(format!(
+            "the KMZ archive has more than {MAX_ENTRIES} entries"
+        )));
+    }
+    let mut output = Cursor::new(Vec::new());
+    let mut writer = zip::ZipWriter::new(&mut output);
+    let options = SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .compression_level(Some(9));
+    let mut total = 0_u64;
+    for index in 0..zip.len() {
+        let mut entry = zip
+            .by_index(index)
+            .map_err(|error| KmzError::Archive(error.to_string()))?;
+        let name = entry.name().to_owned();
+        if entry.is_dir() {
+            writer
+                .add_directory(&name, options)
+                .map_err(|error| KmzError::Archive(error.to_string()))?;
+            continue;
+        }
+        total += entry.size();
+        if entry.size() > MAX_KML_BYTES || total > MAX_TOTAL_BYTES {
+            return Err(KmzError::TooLarge(
+                "the KMZ archive is too large to repack".into(),
+            ));
+        }
+        let mut data = Vec::new();
+        entry
+            .by_ref()
+            .take(MAX_KML_BYTES + 1)
+            .read_to_end(&mut data)
+            .map_err(|error| KmzError::Archive(error.to_string()))?;
+        if name.to_ascii_lowercase().ends_with(".kml") {
+            data = crate::minify::compact_xml(&data)
+                .map_err(|message| KmzError::Archive(format!("{name}: {message}")))?;
+        }
+        writer
+            .start_file(&name, options)
+            .map_err(|error| KmzError::Archive(error.to_string()))?;
+        writer
+            .write_all(&data)
+            .map_err(|error| KmzError::Archive(error.to_string()))?;
+    }
+    writer
+        .finish()
+        .map_err(|error| KmzError::Archive(error.to_string()))?;
+    Ok(output.into_inner())
+}
+
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
-    use zip::write::SimpleFileOptions;
-
     use super::*;
 
     const PNG: &[u8] = b"\x89PNG\r\n\x1a\nrest";

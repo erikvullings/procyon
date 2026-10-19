@@ -6,9 +6,10 @@ use std::time::Duration;
 use fm_application::FileManagerService;
 use fm_domain::Location;
 use fm_transport_dto::{
-    ConvertGeoTextRequestDto, GeoTransformDto, LocationDto, OperationConflictPolicyDto,
-    OperationDto, OperationKindDto, OperationStateDto, PreviewGeoConversionRequestDto,
-    RuntimeKindDto, StartOperationRequestDto,
+    ConvertGeoTextRequestDto, GeoMinifyDto, GeoTransformDto, LocationDto,
+    OperationConflictPolicyDto, OperationDto, OperationKindDto, OperationStateDto,
+    PreviewGeoConversionRequestDto, PreviewGeoMinifyRequestDto, RuntimeKindDto,
+    StartOperationRequestDto,
 };
 use uuid::Uuid;
 
@@ -66,8 +67,11 @@ async fn transform(
                 skip_space_check: false,
                 image_metadata_edit: None,
                 geo_transform: Some(GeoTransformDto {
-                    target_format: format.into(),
+                    target_format: Some(format.into()),
                     csv_wkt: false,
+                    minify: None,
+                    in_place: false,
+                    backup_original: false,
                 }),
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
@@ -265,4 +269,222 @@ async fn converts_editor_text_but_not_to_kmz() {
             .await
             .is_err()
     );
+}
+
+async fn minify(
+    service: &FileManagerService,
+    files: &[&Path],
+    options: GeoMinifyDto,
+    in_place: bool,
+    backup: bool,
+    policy: OperationConflictPolicyDto,
+) -> Result<OperationDto, fm_application::ApplicationError> {
+    let operation = service.start_operation(
+        StartOperationRequestDto {
+            operation_type: OperationKindDto::TransformGeo,
+            sources: files.iter().map(|path| location(path)).collect(),
+            destination: None,
+            destinations: vec![],
+            conflict_policy: policy,
+            name: None,
+            archive_format: None,
+            archive_compression_level: None,
+            create_intermediate_directories: false,
+            initial_content: None,
+            skip_space_check: false,
+            image_metadata_edit: None,
+            geo_transform: Some(GeoTransformDto {
+                target_format: None,
+                csv_wkt: false,
+                minify: Some(options),
+                in_place,
+                backup_original: backup,
+            }),
+            symlink_policy: Default::default(),
+            permanent_delete_confirmed: false,
+            override_read_only: false,
+            link: None,
+        },
+        None,
+    )?;
+    Ok(wait(service, operation.id).await)
+}
+
+const PRETTY: &str = "{\n  \"type\": \"FeatureCollection\",\n  \"features\": [\n    {\"type\": \"Feature\", \"geometry\": {\"type\": \"LineString\", \"coordinates\": [[4.123456789, 52.987654321], [4.123456799, 52.987654331], [4.2, 53.1]]}, \"properties\": {\"name\": \"A\"}}\n  ]\n}\n";
+
+#[tokio::test]
+async fn minify_writes_a_new_min_file_and_never_touches_the_original() {
+    let root = tempfile::tempdir().expect("temporary directory");
+    let source = root.path().join("route.geojson");
+    std::fs::write(&source, PRETTY).expect("fixture");
+    let service = service(&root);
+    let options = GeoMinifyDto {
+        precision: Some(4),
+        remove_duplicates: true,
+        ..GeoMinifyDto::default()
+    };
+    let done = minify(
+        &service,
+        &[&source],
+        options,
+        false,
+        false,
+        OperationConflictPolicyDto::Ask,
+    )
+    .await
+    .expect("accepted");
+    assert_ne!(done.state, OperationStateDto::Failed);
+    assert_eq!(std::fs::read_to_string(&source).expect("untouched"), PRETTY);
+    let output = std::fs::read_to_string(root.path().join("route.min.geojson")).expect("output");
+    assert!(output.contains("[4.1235,52.9877]"), "{output}");
+    assert!(output.len() < PRETTY.len());
+    assert!(done.undo.available);
+    let undo = service
+        .undo_operation(done.id.into())
+        .expect("undo accepted");
+    assert_eq!(
+        wait(&service, undo.id).await.state,
+        OperationStateDto::Completed
+    );
+    assert!(!root.path().join("route.min.geojson").exists());
+}
+
+#[tokio::test]
+async fn in_place_minify_keeps_a_backup_and_can_be_undone() {
+    let root = tempfile::tempdir().expect("temporary directory");
+    let source = root.path().join("route.geojson");
+    std::fs::write(&source, PRETTY).expect("fixture");
+    let service = service(&root);
+    let whitespace_only = GeoMinifyDto::default();
+    let done = minify(
+        &service,
+        &[&source],
+        whitespace_only,
+        true,
+        true,
+        OperationConflictPolicyDto::Ask,
+    )
+    .await
+    .expect("accepted");
+    assert_eq!(done.state, OperationStateDto::Completed);
+    let compact = std::fs::read_to_string(&source).expect("rewritten");
+    assert!(
+        !compact.contains('\n') && compact.contains("4.123456789"),
+        "lossless: {compact}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("route.geojson.orig")).expect("backup"),
+        PRETTY
+    );
+    assert!(done.undo.available, "{:?}", done.undo.reason);
+    let undo = service
+        .undo_operation(done.id.into())
+        .expect("undo accepted");
+    assert_eq!(
+        wait(&service, undo.id).await.state,
+        OperationStateDto::Completed
+    );
+    assert_eq!(std::fs::read_to_string(&source).expect("restored"), PRETTY);
+    assert!(!root.path().join("route.geojson.orig").exists());
+}
+
+#[tokio::test]
+async fn in_place_without_a_backup_cannot_be_undone_and_invalid_combinations_are_refused() {
+    let root = tempfile::tempdir().expect("temporary directory");
+    let source = root.path().join("route.geojson");
+    std::fs::write(&source, PRETTY).expect("fixture");
+    let service = service(&root);
+    let done = minify(
+        &service,
+        &[&source],
+        GeoMinifyDto::default(),
+        true,
+        false,
+        OperationConflictPolicyDto::Ask,
+    )
+    .await
+    .expect("accepted");
+    assert_eq!(done.state, OperationStateDto::Completed);
+    assert!(!done.undo.available);
+    assert!(!root.path().join("route.geojson.orig").exists());
+
+    // Converting and replacing in place at once is not allowed.
+    let refused = service.start_operation(
+        StartOperationRequestDto {
+            operation_type: OperationKindDto::TransformGeo,
+            sources: vec![location(&source)],
+            destination: None,
+            destinations: vec![],
+            conflict_policy: OperationConflictPolicyDto::Ask,
+            name: None,
+            archive_format: None,
+            archive_compression_level: None,
+            create_intermediate_directories: false,
+            initial_content: None,
+            skip_space_check: false,
+            image_metadata_edit: None,
+            geo_transform: Some(GeoTransformDto {
+                target_format: Some("gpx".into()),
+                csv_wkt: false,
+                minify: Some(GeoMinifyDto::default()),
+                in_place: true,
+                backup_original: true,
+            }),
+            symlink_policy: Default::default(),
+            permanent_delete_confirmed: false,
+            override_read_only: false,
+            link: None,
+        },
+        None,
+    );
+    assert!(refused.is_err());
+}
+
+#[tokio::test]
+async fn the_minify_preview_reports_sizes_statistics_and_the_result() {
+    let root = tempfile::tempdir().expect("temporary directory");
+    let source = root.path().join("route.geojson");
+    std::fs::write(&source, PRETTY).expect("fixture");
+    let broken = root.path().join("broken.geojson");
+    std::fs::write(&broken, "{").expect("fixture");
+    let service = service(&root);
+    let preview = service
+        .preview_geo_minify(PreviewGeoMinifyRequestDto {
+            location: location(&source),
+            minify: GeoMinifyDto {
+                precision: Some(4),
+                tolerance_meters: Some(50.0),
+                ..GeoMinifyDto::default()
+            },
+        })
+        .await
+        .expect("preview");
+    assert_eq!(preview.original_bytes, PRETTY.len() as u64);
+    assert!(preview.minified_bytes < preview.original_bytes);
+    assert_eq!((preview.positions_before, preview.positions_after), (3, 2));
+    assert!(preview.distance_before_meters > 0.0 && preview.distance_after_meters > 0.0);
+    assert!(preview.collection.is_some());
+    assert!(preview.error.is_none());
+    let whitespace = service
+        .preview_geo_minify(PreviewGeoMinifyRequestDto {
+            location: location(&source),
+            minify: GeoMinifyDto::default(),
+        })
+        .await
+        .expect("preview");
+    assert!(
+        whitespace.collection.is_none(),
+        "whitespace-only changes nothing to draw"
+    );
+    let unreadable = service
+        .preview_geo_minify(PreviewGeoMinifyRequestDto {
+            location: location(&broken),
+            minify: GeoMinifyDto {
+                precision: Some(3),
+                ..GeoMinifyDto::default()
+            },
+        })
+        .await
+        .expect("preview answers");
+    assert!(unreadable.error.is_some());
 }

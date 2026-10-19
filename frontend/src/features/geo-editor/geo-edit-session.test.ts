@@ -98,6 +98,17 @@ describe('GeoEditSession', () => {
     expect(session.state().document?.features).toHaveLength(1);
   });
 
+  it('rewrites the text compact or indented without touching the data or the undo history', () => {
+    const harness = setup();
+    harness.session.reformat(true);
+    expect(harness.content.trim().split('\n')).toHaveLength(1);
+    expect(harness.session.state().canUndo).toBe(false);
+    harness.session.reformat(false);
+    expect(harness.content.split('\n').length).toBeGreaterThan(5);
+    expect(JSON.parse(harness.content)).toEqual(JSON.parse(SAMPLE));
+    expect(harness.session.state().rawText).toBe(harness.content);
+  });
+
   it('nudges a feature by a few metres', () => {
     const harness = setup();
     const id = harness.session.state().document?.ids[0] as string;

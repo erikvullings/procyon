@@ -174,15 +174,92 @@ pub struct GeoDocumentDto {
     pub error: Option<GeoErrorDto>,
 }
 
+/// How to make a geographic file smaller (task 0282). Omitted options are not applied; with none
+/// at all only whitespace is removed, which changes nothing else.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoMinifyDto {
+    /// Round longitude and latitude to this many decimals.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub precision: Option<u8>,
+    /// Remove line and area points closer than this many metres to the simplified shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tolerance_meters: Option<f64>,
+    /// Remove elevation values.
+    #[serde(default)]
+    pub drop_elevation: bool,
+    /// Remove timestamps.
+    #[serde(default)]
+    pub drop_time: bool,
+    /// Remove heart rates and custom properties.
+    #[serde(default)]
+    pub drop_extensions: bool,
+    /// Remove repeated points, empty features and duplicate features.
+    #[serde(default)]
+    pub remove_duplicates: bool,
+}
+
 /// What a `transformGeo` operation does with every source file (tasks 0281, 0282).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GeoTransformDto {
-    /// Output format: `geojson`, `gpx`, `kml`, `kmz` or `csv`.
-    pub target_format: String,
+    /// Output format: `geojson`, `gpx`, `kml`, `kmz` or `csv`; absent keeps each file's format.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_format: Option<String>,
     /// CSV only: add a `wkt` column so lines and areas are kept.
     #[serde(default)]
     pub csv_wkt: bool,
+    /// Size reductions to apply.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minify: Option<GeoMinifyDto>,
+    /// Replace the source file instead of writing a new one; needs no `targetFormat`.
+    #[serde(default)]
+    pub in_place: bool,
+    /// With `inPlace`: keep the original as `<name>.orig`, which also makes the job undoable.
+    #[serde(default)]
+    pub backup_original: bool,
+}
+
+/// Previews a minification (`POST /api/v1/geo/minify/preview`): sizes, statistics and the result.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewGeoMinifyRequestDto {
+    /// The file.
+    pub location: LocationDto,
+    /// The reductions to preview.
+    pub minify: GeoMinifyDto,
+}
+
+/// What a minification would do.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewGeoMinifyResponseDto {
+    /// Size of the source file.
+    pub original_bytes: u64,
+    /// Size the result would have.
+    pub minified_bytes: u64,
+    /// Features before.
+    pub features_before: u64,
+    /// Features after.
+    pub features_after: u64,
+    /// Positions before.
+    pub positions_before: u64,
+    /// Positions after.
+    pub positions_after: u64,
+    /// Summed length of all lines before, metres.
+    pub distance_before_meters: f64,
+    /// Summed length of all lines after, metres.
+    pub distance_after_meters: f64,
+    /// What was removed or could not be represented.
+    pub notes: Vec<String>,
+    /// The minified features as a GeoJSON `FeatureCollection`, for the before/after overlay; absent
+    /// when the result is too large to show or only whitespace changes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<Object>)]
+    pub collection: Option<serde_json::Value>,
+    /// Set when the file cannot be read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// Previews a conversion (`POST /api/v1/geo/convert/preview`): what would be lost, per file.

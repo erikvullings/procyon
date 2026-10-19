@@ -62,6 +62,8 @@ import type {
   GenerateSyncPlanRequest,
   GeoConversionReport,
   GeoDocument,
+  GeoMinify,
+  GeoMinifyPreview,
   GeoTargetFormat,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
@@ -330,6 +332,7 @@ import {
   openPptxPreview as requestPptxPreviewOpen,
   readPptxPreviewPdf as requestPptxPreviewPdf,
   previewGeoConversion as requestPreviewGeoConversion,
+  previewGeoMinify as requestPreviewGeoMinify,
   querySqliteView as requestQuerySqliteView,
   resolveRagCitation as requestRagCitationResolution,
   deleteRagConversation as requestRagConversationDeletion,
@@ -1405,6 +1408,21 @@ export class HttpFileManagerClient implements FileManagerClient {
       throw new Error(`Unexpected previewGeoConversion response status: ${response.status}`);
     }
     return response.data.reports;
+  }
+
+  async previewGeoMinify(
+    location: FileLocation,
+    minify: GeoMinify,
+    signal?: AbortSignal,
+  ): Promise<GeoMinifyPreview> {
+    const response = await requestPreviewGeoMinify(
+      { location, minify },
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected previewGeoMinify response status: ${response.status}`);
+    }
+    return response.data as unknown as GeoMinifyPreview;
   }
 
   async convertGeoText(

@@ -1,6 +1,7 @@
 import { t } from '../../i18n';
 import type { ActionDescriptor, EntrySummary, PluginDescriptor } from '../../models';
 import { CONVERT_GEO_ACTION_ID, isConvertibleGeoFile } from '../geo/convert-geo-actions';
+import { MINIFY_GEO_ACTION_ID } from '../geo/minify-geo-actions';
 import { isGeoCandidate } from '../image-map/gps-scan';
 import { SHOW_ON_MAP_ACTION_ID } from '../image-map/image-map-actions';
 import {
@@ -75,6 +76,7 @@ const SELECTION_ACTION_IDS = new Set([
   EDIT_IMAGE_METADATA_ACTION_ID,
   SHOW_ON_MAP_ACTION_ID,
   CONVERT_GEO_ACTION_ID,
+  MINIFY_GEO_ACTION_ID,
 ]);
 
 /**
@@ -102,7 +104,12 @@ const CONTEXT_MENU_SELECTION_GROUPS: readonly (readonly string[])[] = [
     'core.documentSummary',
   ],
   ['core.pack', 'core.moveToArchive', 'core.extract'],
-  [SHOW_ON_MAP_ACTION_ID, EDIT_IMAGE_METADATA_ACTION_ID, CONVERT_GEO_ACTION_ID],
+  [
+    SHOW_ON_MAP_ACTION_ID,
+    EDIT_IMAGE_METADATA_ACTION_ID,
+    CONVERT_GEO_ACTION_ID,
+    MINIFY_GEO_ACTION_ID,
+  ],
   ['core.trash', 'core.delete', 'core.uninstallApplication'],
 ];
 
@@ -231,7 +238,10 @@ export function evaluateActionAvailability(
   ) {
     return unavailable(action, t('availability', 'selectFiles'));
   }
-  if (action.id === CONVERT_GEO_ACTION_ID && !context.selectedEntries.some(isConvertibleGeoFile)) {
+  if (
+    (action.id === CONVERT_GEO_ACTION_ID || action.id === MINIFY_GEO_ACTION_ID) &&
+    !context.selectedEntries.some(isConvertibleGeoFile)
+  ) {
     return unavailable(action, t('availability', 'selectFiles'));
   }
   if (

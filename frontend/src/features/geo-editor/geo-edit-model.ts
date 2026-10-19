@@ -86,8 +86,9 @@ export function parseEditDocument(text: string): GeoEditParse {
 }
 
 /** The JSON text written back to the file. */
-export function serializeEditDocument(document: GeoEditDocument): string {
-  return `${JSON.stringify({ ...document.root, features: document.features }, null, 2)}\n`;
+export function serializeEditDocument(document: GeoEditDocument, pretty = true): string {
+  const value = { ...document.root, features: document.features };
+  return pretty ? `${JSON.stringify(value, null, 2)}\n` : `${JSON.stringify(value)}\n`;
 }
 
 function withFeatures(

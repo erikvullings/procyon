@@ -70,6 +70,8 @@ import type {
   GenerateSyncPlanRequest,
   GeoConversionReport,
   GeoDocument,
+  GeoMinify,
+  GeoMinifyPreview,
   GeoTargetFormat,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
@@ -912,6 +914,14 @@ export class TauriFileManagerClient implements FileManagerClient {
       request: { locations, targetFormat: format, csvWkt },
     });
     return response.reports;
+  }
+
+  previewGeoMinify(
+    location: Location,
+    minify: GeoMinify,
+    _signal?: AbortSignal,
+  ): Promise<GeoMinifyPreview> {
+    return invoke<GeoMinifyPreview>('preview_geo_minify', { request: { location, minify } });
   }
 
   convertGeoText(

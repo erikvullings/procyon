@@ -71,6 +71,8 @@ import type {
   GenerateSyncPlanRequest,
   GeoConversionReport,
   GeoDocument,
+  GeoMinify,
+  GeoMinifyPreview,
   GeoTargetFormat,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
@@ -364,6 +366,7 @@ export type MockClientMethod =
   | 'cacheArchivePassword'
   | 'readFileRange'
   | 'previewGeoConversion'
+  | 'previewGeoMinify'
   | 'convertGeoText'
   | 'parseGeoText'
   | 'readGeoFile'
@@ -3094,6 +3097,24 @@ export class MockFileManagerClient implements FileManagerClient {
         notes: format === 'gpx' ? ['polygons cannot be stored in GPX'] : [],
       })),
     );
+  }
+
+  previewGeoMinify(
+    _location: Location,
+    minify: GeoMinify,
+    signal?: AbortSignal,
+  ): Promise<GeoMinifyPreview> {
+    return this.perform('previewGeoMinify', signal, () => ({
+      originalBytes: 1000,
+      minifiedBytes: minify.precision === undefined ? 900 : 400,
+      featuresBefore: 1,
+      featuresAfter: 1,
+      positionsBefore: 10,
+      positionsAfter: 5,
+      distanceBeforeMeters: 1000,
+      distanceAfterMeters: 990,
+      notes: [],
+    }));
   }
 
   convertGeoText(

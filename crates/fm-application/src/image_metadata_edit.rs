@@ -202,7 +202,7 @@ pub(crate) fn sibling(location: &Location, name: &str) -> Result<Location, Execu
 }
 
 /// Replaces the content of `entry` with `bytes` through a private sibling temporary file.
-async fn replace_content(
+pub(crate) async fn replace_content(
     provider: &Arc<dyn FileSystemProvider>,
     entry: &EntryRef,
     bytes: &[u8],
@@ -241,7 +241,7 @@ async fn replace_content(
     outcome
 }
 
-async fn write_backup(
+pub(crate) async fn write_backup(
     provider: &Arc<dyn FileSystemProvider>,
     original: &Location,
     bytes: &[u8],

@@ -15,6 +15,7 @@ export type FileViewerAttrsExtras = Pick<
       | 'onOpenOnMap'
       | 'onEditGeo'
       | 'onConvertGeo'
+      | 'onMinifyGeo'
       | 'mapClient'
       | 'links'
     >

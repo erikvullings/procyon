@@ -3853,6 +3853,14 @@ impl FileManagerService {
         crate::geo_transform::preview_conversion(&self.providers, request).await
     }
 
+    /// Reports sizes and statistics of a minification without writing anything (task 0282).
+    pub async fn preview_geo_minify(
+        &self,
+        request: fm_transport_dto::PreviewGeoMinifyRequestDto,
+    ) -> Result<fm_transport_dto::PreviewGeoMinifyResponseDto, ApplicationError> {
+        crate::geo_transform::preview_minify(&self.providers, request).await
+    }
+
     /// Converts GeoJSON text into another text format, for editor export (task 0281).
     pub async fn convert_geo_text(
         &self,

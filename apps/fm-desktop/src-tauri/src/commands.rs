@@ -2945,6 +2945,19 @@ pub(crate) async fn preview_geo_conversion(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Reports sizes and statistics of a minification (task 0282).
+#[tauri::command]
+pub(crate) async fn preview_geo_minify(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::PreviewGeoMinifyRequestDto,
+) -> Result<fm_transport_dto::PreviewGeoMinifyResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .preview_geo_minify(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Converts GeoJSON text into another text format (task 0281).
 #[tauri::command]
 pub(crate) async fn convert_geo_text(

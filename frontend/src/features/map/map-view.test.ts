@@ -366,6 +366,8 @@ describe('MapView', () => {
     }));
     const map = await loaded();
     expect([...map.layers.keys()]).toEqual([
+      'fm-compare-line',
+      'fm-compare-circle',
       'fm-features-fill',
       'fm-features-line',
       'fm-features-circle',

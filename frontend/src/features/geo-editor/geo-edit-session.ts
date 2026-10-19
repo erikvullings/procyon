@@ -79,6 +79,8 @@ export interface GeoEditSession {
   deleteProperty(id: string, key: string): void;
   undo(): void;
   redo(): void;
+  /** Rewrites the text without changing the data: one line (`compact`) or indented. */
+  reformat(compact: boolean): void;
   /** Called on every edit of the raw JSON pane. */
   setRaw(text: string): void;
   /** Merges pasted or dropped GeoJSON text into the document; returns an error message if invalid. */
@@ -254,6 +256,13 @@ export function createGeoEditSession(context: GeoEditSessionContext): GeoEditSes
       if (indexOfId(document, selectedId) < 0) selectedId = undefined;
       write(document);
       void validate(rawText);
+    },
+    reformat(compact) {
+      if (history === undefined) return;
+      const text = serializeEditDocument(history.document, !compact);
+      lastWritten = text;
+      rawText = text;
+      context.setContent(text);
     },
     setRaw(text) {
       rawText = text;

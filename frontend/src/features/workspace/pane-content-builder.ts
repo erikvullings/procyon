@@ -222,6 +222,8 @@ export interface PaneContentContext {
   playQueueItems?: PlaylistViewAttrs['onPlay'];
   /** Opens the geographic file conversion dialog for the viewed entry (task 0281). */
   convertGeo?: (entry: EntrySummary) => void;
+  /** Opens the geographic file minify dialog for the viewed entry (task 0282). */
+  minifyGeo?: (entry: EntrySummary) => void;
   /** Shows an image of the F3 viewer on the map (task 0276). */
   showEntryOnMap?: (paneId: PaneId, entry: EntrySummary) => void;
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
@@ -1097,6 +1099,10 @@ export function createPaneContentBuilder(
                               context.openDocumentSummary?.(paneId, viewer.state.entry),
                           }
                         : {}),
+                      ...(context.minifyGeo === undefined ||
+                      !isConvertibleGeoFile(viewer.state.entry)
+                        ? {}
+                        : { onMinifyGeo: () => context.minifyGeo?.(viewer.state.entry) }),
                       ...(context.convertGeo === undefined ||
                       !isConvertibleGeoFile(viewer.state.entry)
                         ? {}

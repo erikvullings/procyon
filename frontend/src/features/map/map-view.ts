@@ -35,6 +35,8 @@ export interface MapViewAttrs {
   readonly onMarkerDrag?: (marker: MapMarker, position: MapPosition) => void;
   /** Vector data drawn under the markers: points, lines and polygons with simplestyle colours. */
   readonly features?: GeoJSON.FeatureCollection<GeoJSON.Geometry | null>;
+  /** Reference geometry drawn faintly beneath `features`, for before/after comparisons. */
+  readonly comparison?: GeoJSON.FeatureCollection<GeoJSON.Geometry | null>;
   /** Extent of `features`; the map fits to it (when there are no markers) on load and fitKey changes. */
   readonly dataBounds?: readonly [number, number, number, number];
   /** Index (in `features.features`) of the feature that was clicked, or undefined for empty space. */
@@ -91,6 +93,7 @@ function clusterElement(count: number): HTMLElement {
 }
 
 const FEATURE_SOURCE = 'fm-features';
+const COMPARE_SOURCE = 'fm-compare';
 const FEATURE_LAYERS = [
   'fm-features-fill',
   'fm-features-line',
@@ -291,6 +294,7 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
   }
 
   let appliedFeatures: GeoJSON.FeatureCollection<GeoJSON.Geometry | null> | undefined;
+  let appliedComparison: GeoJSON.FeatureCollection<GeoJSON.Geometry | null> | undefined;
   let appliedHighlight: number | undefined;
 
   /** Adds the vector data source and layers; safe to call again after a style swap. */
@@ -303,6 +307,30 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
         data: withFeatureIndexes(latest.features ?? { type: 'FeatureCollection', features: [] }),
       });
       appliedFeatures = latest.features;
+      if (target.getSource(COMPARE_SOURCE) === undefined) {
+        target.addSource(COMPARE_SOURCE, {
+          type: 'geojson',
+          data: latest.comparison ?? { type: 'FeatureCollection', features: [] },
+        } as never);
+        appliedComparison = latest.comparison;
+        target.addLayer({
+          id: 'fm-compare-line',
+          type: 'line',
+          source: COMPARE_SOURCE,
+          paint: { 'line-color': 'rgb(130, 130, 130)', 'line-width': 4, 'line-opacity': 0.5 },
+        });
+        target.addLayer({
+          id: 'fm-compare-circle',
+          type: 'circle',
+          source: COMPARE_SOURCE,
+          filter: ['==', ['geometry-type'], 'Point'],
+          paint: {
+            'circle-color': 'rgb(130, 130, 130)',
+            'circle-radius': 7,
+            'circle-opacity': 0.5,
+          },
+        });
+      }
       const colour = (key: string): unknown => ['coalesce', ['get', key], DEFAULT_FEATURE_COLOUR];
       target.addLayer({
         id: 'fm-features-fill',
@@ -417,6 +445,11 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
       source?.setData(
         withFeatureIndexes(latest.features ?? { type: 'FeatureCollection', features: [] }),
       );
+    }
+    if (appliedComparison !== latest.comparison) {
+      appliedComparison = latest.comparison;
+      const compare = map.getSource(COMPARE_SOURCE) as MapLibre.GeoJSONSource | undefined;
+      compare?.setData((latest.comparison ?? { type: 'FeatureCollection', features: [] }) as never);
     }
     applyHighlight();
   }

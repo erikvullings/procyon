@@ -66,10 +66,41 @@ export interface GeoConversionReport {
 
 export type GeoTargetFormat = 'geojson' | 'gpx' | 'kml' | 'kmz' | 'csv';
 
+/** Size reductions of a minification (task 0282); with none set only whitespace is removed. */
+export interface GeoMinify {
+  precision?: number;
+  toleranceMeters?: number;
+  dropElevation?: boolean;
+  dropTime?: boolean;
+  dropExtensions?: boolean;
+  removeDuplicates?: boolean;
+}
+
 /** What a `transformGeo` operation does with each file. */
 export interface GeoTransform {
-  targetFormat: GeoTargetFormat;
+  /** Output format; absent keeps each file's own format. */
+  targetFormat?: GeoTargetFormat;
   csvWkt?: boolean;
+  minify?: GeoMinify;
+  /** Replace the source instead of writing a new file (reductions only). */
+  inPlace?: boolean;
+  /** With `inPlace`: keep the original as `<name>.orig`, which makes the job undoable. */
+  backupOriginal?: boolean;
+}
+
+/** Sizes, statistics and the result of a minification preview (task 0282). */
+export interface GeoMinifyPreview {
+  readonly originalBytes: number;
+  readonly minifiedBytes: number;
+  readonly featuresBefore: number;
+  readonly featuresAfter: number;
+  readonly positionsBefore: number;
+  readonly positionsAfter: number;
+  readonly distanceBeforeMeters: number;
+  readonly distanceAfterMeters: number;
+  readonly notes: readonly string[];
+  readonly collection?: GeoJSON.FeatureCollection<GeoJSON.Geometry | null> | null;
+  readonly error?: string | null;
 }
 
 /** A geographic file as GeoJSON features, parsed by the backend. */

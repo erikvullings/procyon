@@ -1366,4 +1366,5 @@ export const es = {
   geoTrack: en.geoTrack,
   geoLayers: en.geoLayers,
   geoConvert: en.geoConvert,
+  geoMinify: en.geoMinify,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

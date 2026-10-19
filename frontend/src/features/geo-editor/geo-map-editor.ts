@@ -588,6 +588,16 @@ export const GeoMapEditor: FactoryComponent<GeoMapEditorAttrs> = (initial) => {
               },
               t('geoEdit', 'importButton'),
             ),
+            m(
+              'button.btn-flat',
+              { type: 'button', onclick: () => session.reformat(true) },
+              t('geoMinify', 'compact'),
+            ),
+            m(
+              'button.btn-flat',
+              { type: 'button', onclick: () => session.reformat(false) },
+              t('geoMinify', 'pretty'),
+            ),
             latest.onExport === undefined
               ? undefined
               : m(

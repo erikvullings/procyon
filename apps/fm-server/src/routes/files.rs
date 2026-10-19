@@ -12,13 +12,13 @@ use fm_transport_dto::{
     OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto,
     OpenSqliteViewRequestDto, OpenSqliteViewResponseDto, OpenStructuredViewRequestDto,
     OpenStructuredViewResponseDto, ParseGeoTextRequestDto, PptxPreviewSessionRequestDto,
-    PreviewGeoConversionRequestDto, PreviewGeoConversionResponseDto, QuerySqliteViewRequestDto,
-    QuerySqliteViewResponseDto, ReadDocxPreviewResourceRequestDto,
-    ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    ReadGeoFileRequestDto, ReadImageGpsRequestDto, ReadImageGpsResponseDto,
-    ReadImageMetadataRequestDto, ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
-    ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
-    ReadStructuredRowsResponseDto, ResolveMetadataTokensRequestDto,
+    PreviewGeoConversionRequestDto, PreviewGeoConversionResponseDto, PreviewGeoMinifyRequestDto,
+    PreviewGeoMinifyResponseDto, QuerySqliteViewRequestDto, QuerySqliteViewResponseDto,
+    ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
+    ReadFileRangeResponseDto, ReadGeoFileRequestDto, ReadImageGpsRequestDto,
+    ReadImageGpsResponseDto, ReadImageMetadataRequestDto, ReadPptxPreviewPdfRequestDto,
+    ReadStructuredJsonWindowRequestDto, ReadStructuredJsonWindowResponseDto,
+    ReadStructuredRowsRequestDto, ReadStructuredRowsResponseDto, ResolveMetadataTokensRequestDto,
     ResolveMetadataTokensResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
     ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
     SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto, SqliteViewSessionRequestDto,
@@ -219,6 +219,32 @@ pub(crate) async fn preview_geo_conversion(
     state
         .service
         .preview_geo_conversion(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Reports sizes and statistics of a minification without writing anything (task 0282).
+#[utoipa::path(
+    post,
+    path = "/api/v1/geo/minify/preview",
+    operation_id = "previewGeoMinify",
+    request_body = PreviewGeoMinifyRequestDto,
+    responses(
+        (status = 200, description = "Sizes, statistics and the minified features", body = PreviewGeoMinifyResponseDto),
+        (status = 403, description = "The file is outside the accessible roots", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn preview_geo_minify(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<PreviewGeoMinifyRequestDto>,
+) -> Result<Json<PreviewGeoMinifyResponseDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    crate::error::require_within_roots(&request.location, &state.accessible_roots, request_id)?;
+    state
+        .service
+        .preview_geo_minify(request)
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, request_id))

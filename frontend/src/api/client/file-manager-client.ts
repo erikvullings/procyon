@@ -63,6 +63,8 @@ import type {
   GenerateSyncPlanRequest,
   GeoConversionReport,
   GeoDocument,
+  GeoMinify,
+  GeoMinifyPreview,
   GeoTargetFormat,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
@@ -565,6 +567,12 @@ export interface FileManagerClient {
     csvWkt: boolean,
     signal?: AbortSignal,
   ): Promise<GeoConversionReport[]>;
+  /** Estimates what a minification would do to a file, without writing anything (task 0282). */
+  previewGeoMinify(
+    location: Location,
+    minify: GeoMinify,
+    signal?: AbortSignal,
+  ): Promise<GeoMinifyPreview>;
   /** Converts GeoJSON text (an editor's content) into a text format (task 0281). */
   convertGeoText(
     text: string,

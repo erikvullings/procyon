@@ -3296,6 +3296,44 @@
         }
       }
     },
+    "/api/v1/geo/minify/preview": {
+      "post": {
+        "summary": "Reports sizes and statistics of a minification without writing anything (task 0282).",
+        "operationId": "previewGeoMinify",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewGeoMinifyRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Sizes, statistics and the minified features",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewGeoMinifyResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The file is outside the accessible roots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/geo/parse": {
       "post": {
         "summary": "Parses GeoJSON text for live validation in editors (task 0278).",
@@ -12354,6 +12392,45 @@
           }
         }
       },
+      "GeoMinifyDto": {
+        "type": "object",
+        "description": "How to make a geographic file smaller (task 0282). Omitted options are not applied; with none\nat all only whitespace is removed, which changes nothing else.",
+        "properties": {
+          "dropElevation": {
+            "type": "boolean",
+            "description": "Remove elevation values."
+          },
+          "dropExtensions": {
+            "type": "boolean",
+            "description": "Remove heart rates and custom properties."
+          },
+          "dropTime": {
+            "type": "boolean",
+            "description": "Remove timestamps."
+          },
+          "precision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Round longitude and latitude to this many decimals.",
+            "minimum": 0
+          },
+          "removeDuplicates": {
+            "type": "boolean",
+            "description": "Remove repeated points, empty features and duplicate features."
+          },
+          "toleranceMeters": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Remove line and area points closer than this many metres to the simplified shape."
+          }
+        }
+      },
       "GeoOverlayDto": {
         "type": "object",
         "description": "An image draped over a rectangle of the map (KML ground overlay).",
@@ -12578,17 +12655,36 @@
       "GeoTransformDto": {
         "type": "object",
         "description": "What a `transformGeo` operation does with every source file (tasks 0281, 0282).",
-        "required": [
-          "targetFormat"
-        ],
         "properties": {
+          "backupOriginal": {
+            "type": "boolean",
+            "description": "With `inPlace`: keep the original as `<name>.orig`, which also makes the job undoable."
+          },
           "csvWkt": {
             "type": "boolean",
             "description": "CSV only: add a `wkt` column so lines and areas are kept."
           },
+          "inPlace": {
+            "type": "boolean",
+            "description": "Replace the source file instead of writing a new one; needs no `targetFormat`."
+          },
+          "minify": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GeoMinifyDto",
+                "description": "Size reductions to apply."
+              }
+            ]
+          },
           "targetFormat": {
-            "type": "string",
-            "description": "Output format: `geojson`, `gpx`, `kml`, `kmz` or `csv`."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Output format: `geojson`, `gpx`, `kml`, `kmz` or `csv`; absent keeps each file's format."
           }
         }
       },
@@ -17762,6 +17858,108 @@
               "$ref": "#/components/schemas/GeoConversionReportDto"
             },
             "description": "One report per file."
+          }
+        }
+      },
+      "PreviewGeoMinifyRequestDto": {
+        "type": "object",
+        "description": "Previews a minification (`POST /api/v1/geo/minify/preview`): sizes, statistics and the result.",
+        "required": [
+          "location",
+          "minify"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The file."
+          },
+          "minify": {
+            "$ref": "#/components/schemas/GeoMinifyDto",
+            "description": "The reductions to preview."
+          }
+        }
+      },
+      "PreviewGeoMinifyResponseDto": {
+        "type": "object",
+        "description": "What a minification would do.",
+        "required": [
+          "originalBytes",
+          "minifiedBytes",
+          "featuresBefore",
+          "featuresAfter",
+          "positionsBefore",
+          "positionsAfter",
+          "distanceBeforeMeters",
+          "distanceAfterMeters",
+          "notes"
+        ],
+        "properties": {
+          "collection": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "The minified features as a GeoJSON `FeatureCollection`, for the before/after overlay; absent\nwhen the result is too large to show or only whitespace changes."
+          },
+          "distanceAfterMeters": {
+            "type": "number",
+            "format": "double",
+            "description": "Summed length of all lines after, metres."
+          },
+          "distanceBeforeMeters": {
+            "type": "number",
+            "format": "double",
+            "description": "Summed length of all lines before, metres."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Set when the file cannot be read."
+          },
+          "featuresAfter": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Features after.",
+            "minimum": 0
+          },
+          "featuresBefore": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Features before.",
+            "minimum": 0
+          },
+          "minifiedBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Size the result would have.",
+            "minimum": 0
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What was removed or could not be represented."
+          },
+          "originalBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Size of the source file.",
+            "minimum": 0
+          },
+          "positionsAfter": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Positions after.",
+            "minimum": 0
+          },
+          "positionsBefore": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Positions before.",
+            "minimum": 0
           }
         }
       },

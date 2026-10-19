@@ -9,20 +9,24 @@ mod geojson;
 mod gpx;
 mod kml;
 mod kmz;
+mod minify;
 mod model;
 mod read;
 mod time;
 mod track_stats;
+mod transform;
 
 pub use convert::{ConvertError, Converted, Target, convert};
 pub use geojson::{GeoJsonError, parse_geojson};
 pub use gpx::{GpxError, parse_gpx};
 pub use kml::{KmlError, NoResources, ResourceSource, parse_kml};
-pub use kmz::{KmzError, parse_kmz};
+pub use kmz::{KmzError, parse_kmz, repack_kmz};
+pub use minify::{MinifyOptions, MinifyStats, compact_json, compact_xml, minify_document};
 pub use model::{
     Bounds, GeoDocument, GeoFormat, GeoIssue, GroundOverlay, Limits, ProfilePoint, TrackSummary,
 };
 pub use read::{ReadFailure, conversion_limits, read_document};
+pub use transform::{TransformSpec, Transformed, transform};
 
 /// Guesses the format of a file from its extension and leading bytes.
 ///
