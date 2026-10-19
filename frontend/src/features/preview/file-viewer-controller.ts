@@ -3,6 +3,7 @@ import { t } from '../../i18n';
 import type {
   EntrySummary,
   GitLogEntry,
+  ImageMetadata,
   JsonTokenSpan,
   Location,
   SearchInFileMatch,
@@ -78,6 +79,7 @@ export type FileViewerClient = Pick<
   | 'listDirectory'
   | 'archiveSummary'
   | 'gitFileHistory'
+  | 'readImageMetadata'
   | 'openStructuredView'
   | 'getStructuredViewStatus'
   | 'updateStructuredView'
@@ -407,6 +409,8 @@ export type FileViewerState =
       /** `'loading'` while EXIF/dimensions are being parsed for an image; absent for content kinds
        * with no metadata view (audio) until/unless one is added. */
       readonly metadata?: FileViewerMetadata | 'loading';
+      /** Every EXIF/GPS/IPTC/XMP/ICC tag of an image, read by the backend (task 0273). */
+      readonly fullMetadata?: ImageMetadata | 'loading' | 'failed';
       /** The Alt+Space panel's git history section (task 0135): commits touching this file,
        * newest first. `'loading'` while the request is in flight; an empty array once resolved
        * means the file has no history to show (outside a git working tree, on a non-local
@@ -2322,7 +2326,8 @@ export function createFileViewerController(
     }
     if (ready.content.kind !== 'image') return;
     const dataUri = ready.content.dataUri;
-    publish({ ...ready, metadata: 'loading' });
+    publish({ ...ready, metadata: 'loading', fullMetadata: 'loading' });
+    void loadFullImageMetadata();
     const [dimensions, exif] = await Promise.all([
       readImageDimensions(dataUri),
       readImageExif(dataUri),
@@ -2339,6 +2344,18 @@ export function createFileViewerController(
         ...exif,
       },
     });
+  }
+
+  /** Reads every tag of the image through the backend; a failure shows a message, not a crash. */
+  async function loadFullImageMetadata(): Promise<void> {
+    let fullMetadata: ImageMetadata | 'failed';
+    try {
+      fullMetadata = await client.readImageMetadata(entry.location);
+    } catch {
+      fullMetadata = 'failed';
+    }
+    if (disposed || current.status !== 'ready' || current.content.kind !== 'image') return;
+    publish({ ...(current as Extract<FileViewerState, { status: 'ready' }>), fullMetadata });
   }
 
   /** Fetches the info panel's git history section (task 0135). Never throws to the caller - a

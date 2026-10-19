@@ -65,6 +65,7 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImageMetadata,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
@@ -266,6 +267,7 @@ import {
   recordFrontendDiagnostic as requestFrontendDiagnostic,
   updateGemmaMedia as requestGemmaMediaUpdate,
   getFileGitHistory as requestGitFileHistory,
+  readImageMetadata as requestImageMetadata,
   cancelKnowledgeAnswer as requestKnowledgeAnswerCancellation,
   generateKnowledgeAnswer as requestKnowledgeAnswerGeneration,
   getKnowledgeCapabilities as requestKnowledgeCapabilities,
@@ -1376,6 +1378,17 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200) {
       throw new Error(`Unexpected readFileRange response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async readImageMetadata(location: Location, signal?: AbortSignal): Promise<ImageMetadata> {
+    const response = await requestImageMetadata(
+      { location },
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected readImageMetadata response status: ${response.status}`);
     }
     return response.data;
   }

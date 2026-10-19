@@ -2342,6 +2342,24 @@ export const en = {
     cancel: 'Cancel',
     skippedWarning: 'Disk-space check skipped at your request.',
   },
+  imageMetadata: {
+    title: 'All metadata',
+    search: 'Filter tags',
+    loading: 'Reading metadata...',
+    failed: 'The metadata could not be read.',
+    unsupported: 'This file format has no readable image metadata.',
+    empty: 'No metadata found in this image.',
+    noMatches: 'No tags match the filter.',
+    showRaw: 'Show raw values',
+    hideRaw: 'Hide raw values',
+    copyValue: 'Copy {name}',
+    copied: '{name} copied',
+    copyAll: 'Copy all',
+    allCopied: 'Metadata copied',
+    coordinates: 'Location',
+    openOnMap: 'Open on map',
+    format: 'Format',
+  },
 } as const satisfies CatalogueShape;
 
 /** Canonical translation groups and keys. Values remain locale-specific. */

@@ -7,13 +7,13 @@ use fm_transport_dto::{
     ApplicationErrorDto, ArchiveCredentialRequestDto, ArchiveSummaryRequestDto,
     ArchiveSummaryResponseDto, CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto,
     DocxPreviewSessionRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
-    LoadEditableFileRequestDto, LoadEditableFileResponseDto, OpenDocxPreviewRequestDto,
-    OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto,
-    OpenSqliteViewRequestDto, OpenSqliteViewResponseDto, OpenStructuredViewRequestDto,
-    OpenStructuredViewResponseDto, PptxPreviewSessionRequestDto, QuerySqliteViewRequestDto,
-    QuerySqliteViewResponseDto, ReadDocxPreviewResourceRequestDto,
+    ImageMetadataDto, LoadEditableFileRequestDto, LoadEditableFileResponseDto,
+    OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto,
+    OpenPptxPreviewResponseDto, OpenSqliteViewRequestDto, OpenSqliteViewResponseDto,
+    OpenStructuredViewRequestDto, OpenStructuredViewResponseDto, PptxPreviewSessionRequestDto,
+    QuerySqliteViewRequestDto, QuerySqliteViewResponseDto, ReadDocxPreviewResourceRequestDto,
     ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
+    ReadImageMetadataRequestDto, ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, ResolveMetadataTokensRequestDto,
     ResolveMetadataTokensResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
@@ -104,6 +104,33 @@ pub(crate) async fn resolve_metadata_tokens(
     state
         .service
         .resolve_metadata_tokens(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Reads all EXIF, GPS, IPTC, XMP and ICC tags of an image (task 0273).
+#[utoipa::path(
+    post,
+    path = "/api/v1/files/image-metadata",
+    operation_id = "readImageMetadata",
+    request_body = ReadImageMetadataRequestDto,
+    responses(
+        (status = 200, description = "Image metadata grouped by namespace", body = ImageMetadataDto),
+        (status = 403, description = "The file is outside the accessible roots", body = ApplicationErrorDto),
+        (status = 404, description = "The file does not exist", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn read_image_metadata(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ReadImageMetadataRequestDto>,
+) -> Result<Json<ImageMetadataDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    crate::error::require_within_roots(&request.location, &state.accessible_roots, request_id)?;
+    state
+        .service
+        .read_image_metadata(request)
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, request_id))

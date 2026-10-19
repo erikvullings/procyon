@@ -112,8 +112,3 @@ export function textMetadataFor(
     windowedCount,
   };
 }
-
-/** A Google Maps link for a GPS coordinate pair, for the info panel's clickable location field. */
-export function mapLinkFor(latitude: number, longitude: number): string {
-  return `https://www.google.com/maps?q=${latitude},${longitude}`;
-}

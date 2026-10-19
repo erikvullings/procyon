@@ -66,6 +66,7 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImageMetadata,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
@@ -542,6 +543,12 @@ export interface FileManagerClient {
    * bounded byte ranges, so large and remote files never load into memory whole.
    */
   mediaUrl(location: Location, signal?: AbortSignal): Promise<string>;
+
+  /**
+   * Reads every EXIF, GPS, IPTC, XMP and ICC tag of an image from its leading bytes (task 0273).
+   * Works for local, archive and remote entries because the backend reads through the VFS.
+   */
+  readImageMetadata(location: Location, signal?: AbortSignal): Promise<ImageMetadata>;
 
   /**
    * Resolves audio-tag and EXIF tokens for multi-rename patterns (task 0267). The backend

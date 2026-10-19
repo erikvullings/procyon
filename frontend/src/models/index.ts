@@ -11,6 +11,7 @@ export * from './events';
 export * from './finder-tags';
 export * from './frontend-diagnostic';
 export * from './ids';
+export * from './image-metadata';
 export * from './knowledge';
 export * from './link-doctor';
 export * from './llm-profile';

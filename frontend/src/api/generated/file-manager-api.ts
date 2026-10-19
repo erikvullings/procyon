@@ -79,6 +79,7 @@ import type {
   GetThumbnailParams,
   HealthDto,
   HostKeyProbeDto,
+  ImageMetadataDto,
   ImportSemanticLocalModelRequestDto,
   ImportSemanticVocabularyRequestDto,
   InstallSemanticWorkerPatchRequestDto,
@@ -137,6 +138,7 @@ import type {
   ReadDocxPreviewResourceResponseDto,
   ReadFileRangeRequestDto,
   ReadFileRangeResponseDto,
+  ReadImageMetadataRequestDto,
   ReadPptxPreviewPdfRequestDto,
   ReadStructuredJsonWindowRequestDto,
   ReadStructuredJsonWindowResponseDto,
@@ -2850,6 +2852,68 @@ return fetchMutator<getFileGitHistoryResponse>(getGetFileGitHistoryUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(getFileGitHistoryRequestDto)
+  }
+);}
+
+
+
+export type readImageMetadataResponse200 = {
+  data: ImageMetadataDto
+  status: 200
+}
+
+export type readImageMetadataResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type readImageMetadataResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type readImageMetadataResponseSuccess = (readImageMetadataResponse200) & {
+  headers: Headers;
+};
+export type readImageMetadataResponseError = (readImageMetadataResponse403 | readImageMetadataResponse404) & {
+  headers: Headers;
+};
+
+export type readImageMetadataResponse = (readImageMetadataResponseSuccess | readImageMetadataResponseError)
+
+export const getReadImageMetadataUrl = () => {
+
+
+
+
+  return `/api/v1/files/image-metadata`
+}
+
+/**
+ * @summary Reads all EXIF, GPS, IPTC, XMP and ICC tags of an image (task 0273).
+ */
+export const readImageMetadata = async (readImageMetadataRequestDto: ReadImageMetadataRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readImageMetadataResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<readImageMetadataResponse>(getReadImageMetadataUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(readImageMetadataRequestDto)
   }
 );}
 

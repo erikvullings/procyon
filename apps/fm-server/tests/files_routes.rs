@@ -537,3 +537,49 @@ async fn resolves_metadata_tokens_for_files() {
     assert_eq!(body["entries"].as_array().map(Vec::len), Some(1));
     assert_eq!(body["entries"][0]["values"], json!({}));
 }
+
+#[tokio::test]
+async fn reads_image_metadata_and_flags_unsupported_files() {
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    let png = root.path().join("pic.png");
+    let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
+    let mut ihdr = Vec::new();
+    ihdr.extend_from_slice(&7_u32.to_be_bytes());
+    ihdr.extend_from_slice(&3_u32.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 2, 0, 0, 0]);
+    bytes.extend_from_slice(&13_u32.to_be_bytes());
+    bytes.extend_from_slice(b"IHDR");
+    bytes.extend_from_slice(&ihdr);
+    bytes.extend_from_slice(&[0; 4]);
+    std::fs::write(&png, bytes).expect("must create fixture");
+    let text = root.path().join("notes.txt");
+    std::fs::write(&text, b"hello").expect("must create fixture");
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/v1/files/image-metadata", server.base_url);
+
+    let body: Value = client
+        .post(&url)
+        .json(&json!({"location": location_json(&png)}))
+        .send()
+        .await
+        .expect("request must succeed")
+        .json()
+        .await
+        .expect("body must be JSON");
+    assert_eq!(body["format"], "PNG");
+    assert_eq!(body["supported"], true);
+    assert_eq!(body["groups"][0]["namespace"], "File");
+
+    let body: Value = client
+        .post(&url)
+        .json(&json!({"location": location_json(&text)}))
+        .send()
+        .await
+        .expect("request must succeed")
+        .json()
+        .await
+        .expect("body must be JSON");
+    assert_eq!(body["supported"], false);
+    assert_eq!(body["groups"], json!([]));
+}

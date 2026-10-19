@@ -73,6 +73,7 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImageMetadata,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
@@ -357,6 +358,7 @@ export type MockClientMethod =
   | 'setSpotlightComment'
   | 'cacheArchivePassword'
   | 'readFileRange'
+  | 'readImageMetadata'
   | 'resolveMetadataTokens'
   | 'openDocxPreview'
   | 'readDocxPreviewResource'
@@ -3066,6 +3068,22 @@ export class MockFileManagerClient implements FileManagerClient {
 
   setPaneActivity(_request: SetPaneActivityRequest, signal?: AbortSignal): Promise<void> {
     return this.perform('setPaneActivity', signal, () => undefined);
+  }
+
+  readImageMetadata(_location: Location, signal?: AbortSignal): Promise<ImageMetadata> {
+    return this.perform('readImageMetadata', signal, () => ({
+      format: 'JPEG',
+      supported: true,
+      groups: [
+        {
+          namespace: 'EXIF',
+          tags: [
+            { name: 'Make', value: 'Mock Camera Co.' },
+            { name: 'Model', value: 'Mock 9000' },
+          ],
+        },
+      ],
+    }));
   }
 
   resolveMetadataTokens(

@@ -73,6 +73,7 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImageMetadata,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
@@ -895,6 +896,10 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   readFileRange(request: ReadFileRangeRequest, _signal?: AbortSignal): Promise<FileRangeChunk> {
     return invoke<FileRangeChunk>('read_file_range', { request });
+  }
+
+  readImageMetadata(location: Location, _signal?: AbortSignal): Promise<ImageMetadata> {
+    return invoke<ImageMetadata>('read_image_metadata', { request: { location } });
   }
 
   resolveMetadataTokens(

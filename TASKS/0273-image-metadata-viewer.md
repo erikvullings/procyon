@@ -1,6 +1,6 @@
 # 0273 Full image metadata viewer (EXIF, IPTC, XMP)
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: frontend, backend
 Depends on: 0088
@@ -19,4 +19,5 @@ The F3 viewer parses only a few EXIF fields client-side (camera make/model, date
 - Keep the existing Alt+Space info sub-panel working; this task enriches it.
 
 ## Agent Notes
-- Created 2026-10-18 from the image-metadata/map/GeoJSON discussion. No work started.
+- Created 2026-10-18 from the image-metadata/map/GeoJSON discussion. 
+- 2026-10-18 claude: Backend parse (single implementation for 0274 writer + host parity): fm-metadata::image_tags reads EXIF/GPS/EXIF-thumbnail (kamadak-exif; JPEG, TIFF/RAW containers, PNG, WebP, HEIC/AVIF), IPTC-IIM (JPEG APP13), XMP (packet marker scan, works in any container), ICC header+description (JPEG APP2, PNG iCCP), PNG text chunks. MakerNotes shown as opaque byte count. Bounded: first 4 MiB through VFS provider (local/archive/remote). POST /api/v1/files/image-metadata + Tauri read_image_metadata + client.readImageMetadata on all 3 adapters. Unsupported format -> supported=false and the panel says so. Viewer: ImageMetadataView in the Alt+Space panel (grouped, filter, raw on demand, copy value/all); existing info fields kept. Google Maps link removed; GPS shows coordinates, 'Open on map' button appears when FileViewer gets onOpenOnMap - NOT wired yet, 0276 must pass it (no map exists before 0275). Limitations: RAW files whose EXIF lies beyond 4 MiB, GIF/legacy formats yield only what exists; XMP parsed as flat properties (nested structs not expanded); not verified against real camera files (synthetic fixtures).

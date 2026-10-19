@@ -1,12 +1,5 @@
 import m, { type FactoryComponent } from 'mithril';
-import {
-  FlatButton,
-  ModalPanel,
-  PaginationControls,
-  Select,
-  Skeleton,
-  toast,
-} from 'mithril-materialized';
+import { FlatButton, ModalPanel, PaginationControls, Select, Skeleton } from 'mithril-materialized';
 import {
   closeIcon,
   copyIcon,
@@ -16,7 +9,7 @@ import {
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
-import type { GitLogEntry } from '../../models';
+import type { GitLogEntry, GpsPosition } from '../../models';
 import { calculateVisibleWindow } from '../directory-table/windowing';
 import { editableLanguageForExtension, languageExtension } from '../editor/editor-language';
 import type { EditorLinkHandlers } from '../editor/link-actions';
@@ -29,7 +22,8 @@ import {
 } from '../entry-formatting/entry-formatting';
 import { PlaylistView, type PlaylistViewAttrs } from '../playlist/playlist-view';
 import { copyText } from './clipboard';
-import { type FileViewerMetadata, mapLinkFor } from './file-metadata';
+import { copyWithToast } from './copy-with-toast';
+import type { FileViewerMetadata } from './file-metadata';
 import type {
   FileViewerEpubSearchState,
   FileViewerPdfSearchState,
@@ -43,6 +37,7 @@ import {
 } from './file-viewer-controller';
 import { formatHexDump } from './hex-preview';
 import { searchHtml } from './html-search-highlight';
+import { ImageMetadataView } from './image-metadata-view';
 import { renderMarkdownWithHighlight } from './markdown-search-highlight';
 import {
   type PDFDocumentProxy,
@@ -52,23 +47,13 @@ import {
 import { SqliteBrowser, type SqliteBrowserActions } from './sqlite-view';
 import './file-viewer.css';
 
-/** Copies `value` to the clipboard and reports success/failure via toast - the same feedback
- * mechanism used elsewhere in the app (e.g. diagnostics' "Copy for Bug Report"), so the F3 viewer
- * doesn't invent a second, silent copy affordance. */
-async function copyWithToast(action: () => Promise<void>, successMessage: string): Promise<void> {
-  try {
-    await action();
-    toast({ html: successMessage });
-  } catch {
-    toast({ html: t('viewer', 'copyFailed') });
-  }
-}
-
 /** Presentational Lister-style large-file viewer (task 0088); all state/async work lives in
  * `createFileViewerController` - this component only renders `attrs.state` and forwards intent
  * via callbacks, per this repo's convention of keeping application logic out of components. */
 export interface FileViewerAttrs {
   readonly state: FileViewerState;
+  /** Opens a GPS position on the map; the button is hidden when absent (task 0276). */
+  readonly onOpenOnMap?: (position: GpsPosition) => void;
   readonly onLoadMore: () => void;
   readonly onLoadPrevious: () => void;
   readonly onLoadTextPage: (pageIndex: number) => void;
@@ -338,7 +323,6 @@ function renderMetadataPanel(metadata: FileViewerMetadata | 'loading' | undefine
         metadataField(
           t('viewer', 'location'),
           `${metadata.gpsLatitude.toFixed(6)}, ${metadata.gpsLongitude.toFixed(6)}`,
-          mapLinkFor(metadata.gpsLatitude, metadata.gpsLongitude),
         ),
       );
     }
@@ -2054,6 +2038,14 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
           state.status === 'ready' && state.metadataPanelOpen === true
             ? m('.fm-file-viewer-info-panel', [
                 renderMetadataPanel(state.metadata),
+                state.fullMetadata === undefined
+                  ? undefined
+                  : m(ImageMetadataView, {
+                      metadata: state.fullMetadata,
+                      ...(attrs.onOpenOnMap === undefined
+                        ? {}
+                        : { onOpenOnMap: attrs.onOpenOnMap }),
+                    }),
                 renderGitHistorySection(state.gitHistory),
               ])
             : undefined,

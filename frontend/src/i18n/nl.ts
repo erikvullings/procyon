@@ -2169,4 +2169,5 @@ export const nl = {
   snapshots: en.snapshots,
   editorLinks: en.editorLinks,
   spaceGuard: en.spaceGuard,
+  imageMetadata: en.imageMetadata,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

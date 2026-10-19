@@ -3820,6 +3820,14 @@ impl FileManagerService {
         crate::metadata_tokens::resolve_metadata_tokens(&self.providers, request).await
     }
 
+    /// Reads every EXIF/GPS/IPTC/XMP/ICC tag of an image from its leading bytes (task 0273).
+    pub async fn read_image_metadata(
+        &self,
+        request: fm_transport_dto::ReadImageMetadataRequestDto,
+    ) -> Result<fm_transport_dto::ImageMetadataDto, ApplicationError> {
+        crate::image_metadata::read_image_metadata(&self.providers, request).await
+    }
+
     /// Starts a cancellable duplicate and near-duplicate music scan (task 0265).
     pub fn start_music_duplicate_scan(
         &self,

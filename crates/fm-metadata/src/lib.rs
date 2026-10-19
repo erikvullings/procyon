@@ -6,6 +6,7 @@
 
 mod audio;
 mod cache;
+mod image_tags;
 mod pdf;
 mod photo;
 mod thumbnail;
@@ -16,6 +17,9 @@ pub use audio::{
     read_audio_info, read_audio_info_from_bytes,
 };
 pub use cache::{ThumbnailCache, ThumbnailCacheError};
+pub use image_tags::{
+    GpsPosition, ImageTag, ImageTagGroup, ImageTags, detect_format, read_image_tags,
+};
 pub use pdf::{SUPPORTED_PDF_EXTENSIONS, generate_pdf_thumbnail, is_supported_pdf_extension};
 pub use photo::{CaptureTime, PhotoInfo, read_photo_info};
 pub use thumbnail::{

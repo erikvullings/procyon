@@ -18,6 +18,7 @@ pub mod error;
 pub mod files;
 pub mod finder_tags;
 pub mod health;
+pub mod image_metadata;
 pub mod knowledge;
 pub mod link_doctor;
 pub mod llm_profile;
@@ -116,6 +117,9 @@ pub use files::{
 };
 pub use finder_tags::{FinderTagColorDto, FinderTagDto, FinderTagsDto, SpotlightCommentDto};
 pub use health::{HealthDto, HealthStatusDto};
+pub use image_metadata::{
+    GpsPositionDto, ImageMetadataDto, ImageTagDto, ImageTagGroupDto, ReadImageMetadataRequestDto,
+};
 pub use knowledge::{
     CancelKnowledgeAnswerRequestDto, CancelKnowledgeSearchRequestDto,
     ExecuteKnowledgeSearchRequestDto, GenerateKnowledgeAnswerRequestDto, KnowledgeActionDto,

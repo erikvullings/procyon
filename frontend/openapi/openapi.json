@@ -2161,6 +2161,54 @@
         }
       }
     },
+    "/api/v1/files/image-metadata": {
+      "post": {
+        "summary": "Reads all EXIF, GPS, IPTC, XMP and ICC tags of an image (task 0273).",
+        "operationId": "readImageMetadata",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadImageMetadataRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Image metadata grouped by namespace",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageMetadataDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The file is outside the accessible roots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The file does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/files/metadata-tokens": {
       "post": {
         "summary": "Resolves audio-tag and EXIF tokens for multi-rename patterns (task 0267).",
@@ -11848,6 +11896,26 @@
           "summary": "fix(app): handle empty selection"
         }
       },
+      "GpsPositionDto": {
+        "type": "object",
+        "description": "A decimal GPS position.",
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Degrees north; negative is south."
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Degrees east; negative is west."
+          }
+        }
+      },
       "HardlinkClusterDto": {
         "type": "object",
         "description": "Two or more paths that are the same file through a hardlink.",
@@ -12007,6 +12075,91 @@
             "format": "int32",
             "description": "Width in pixels.",
             "minimum": 0
+          }
+        }
+      },
+      "ImageMetadataDto": {
+        "type": "object",
+        "description": "All metadata of an image.",
+        "required": [
+          "supported",
+          "groups"
+        ],
+        "properties": {
+          "format": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Detected container format; absent when the file is not a supported image."
+          },
+          "gps": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GpsPositionDto",
+                "description": "GPS position when the EXIF GPS tags are complete."
+              }
+            ]
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageTagGroupDto"
+            },
+            "description": "Non-empty tag groups."
+          },
+          "supported": {
+            "type": "boolean",
+            "description": "False when the format cannot be parsed, so the UI can say so instead of showing nothing."
+          }
+        }
+      },
+      "ImageTagDto": {
+        "type": "object",
+        "description": "One metadata tag.",
+        "required": [
+          "name",
+          "value"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Tag name, for example `Make` or `dc:title`."
+          },
+          "raw": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The raw stored value when it differs from `value`."
+          },
+          "value": {
+            "type": "string",
+            "description": "Human-readable value."
+          }
+        }
+      },
+      "ImageTagGroupDto": {
+        "type": "object",
+        "description": "Tags of one namespace.",
+        "required": [
+          "namespace",
+          "tags"
+        ],
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "`EXIF`, `GPS`, `IPTC`, `XMP`, `ICC`, `PNG` or `File`."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageTagDto"
+            },
+            "description": "The tags of the namespace."
           }
         }
       },
@@ -17285,6 +17438,19 @@
           "length": 5,
           "eof": true,
           "probablyBinary": false
+        }
+      },
+      "ReadImageMetadataRequestDto": {
+        "type": "object",
+        "description": "Reads all metadata tags of an image (`POST /api/v1/files/image-metadata`).",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The image file."
+          }
         }
       },
       "ReadPptxPreviewPdfRequestDto": {

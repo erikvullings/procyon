@@ -70,6 +70,7 @@ function setup(): {
   return {
     client: {
       readFileRange: vi.fn(),
+      readImageMetadata: vi.fn(),
       mediaUrl: vi.fn(),
       resolveLinkTarget: vi.fn(),
       renderPluginPreview: vi.fn(),
@@ -1805,6 +1806,55 @@ describe('file viewer controller', () => {
         language: 'typescript',
       },
     });
+  });
+
+  it('loads every image tag through the backend when the info panel opens', async () => {
+    const context = setup();
+    vi.mocked(context.client.readFileRange).mockResolvedValue({
+      data: [1],
+      offset: 0,
+      length: 1,
+      eof: true,
+    });
+    const tags = {
+      format: 'JPEG',
+      supported: true,
+      groups: [{ namespace: 'EXIF', tags: [{ name: 'Make', value: 'ACME' }] }],
+    };
+    vi.mocked(context.client.readImageMetadata).mockResolvedValue(tags);
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'photo.jpg', extension: 'jpg' }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+
+    controller.toggleMetadataPanel();
+
+    await vi.waitFor(() => expect(context.states.at(-1)).toMatchObject({ fullMetadata: tags }));
+  });
+
+  it('reports a failed tag read without breaking the viewer', async () => {
+    const context = setup();
+    vi.mocked(context.client.readFileRange).mockResolvedValue({
+      data: [1],
+      offset: 0,
+      length: 1,
+      eof: true,
+    });
+    vi.mocked(context.client.readImageMetadata).mockRejectedValue(new Error('boom'));
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ name: 'photo.jpg', extension: 'jpg' }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+
+    controller.toggleMetadataPanel();
+
+    await vi.waitFor(() =>
+      expect(context.states.at(-1)).toMatchObject({ status: 'ready', fullMetadata: 'failed' }),
+    );
   });
 
   it('toggles the metadata panel closed again without discarding the computed metadata', async () => {

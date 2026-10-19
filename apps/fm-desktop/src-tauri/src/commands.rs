@@ -2893,6 +2893,19 @@ pub(crate) async fn resolve_metadata_tokens(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Reads all EXIF, GPS, IPTC, XMP and ICC tags of an image (task 0273).
+#[tauri::command]
+pub(crate) async fn read_image_metadata(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ReadImageMetadataRequestDto,
+) -> Result<fm_transport_dto::ImageMetadataDto, ApplicationErrorDto> {
+    state
+        .service
+        .read_image_metadata(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Starts a cancellable music duplicate scan through the shared service (task 0265).
 ///
 /// Must be `async` so the scan task is spawned on the Tokio runtime.

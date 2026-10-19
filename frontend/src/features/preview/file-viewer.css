@@ -1693,3 +1693,59 @@ textarea.fm-sqlite-sql.browser-default {
 .fm-playlist-action:focus-visible {
   background: var(--fm-hover);
 }
+
+/* Full image metadata (task 0273) */
+.fm-image-metadata {
+  margin-top: 1rem;
+}
+
+.fm-image-metadata-heading {
+  margin: 0 0 0.5rem;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--fm-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.fm-image-metadata-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.fm-image-metadata-search {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+}
+
+.fm-image-metadata-group h5 {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--fm-text-muted);
+}
+
+.fm-image-metadata-tag {
+  display: grid;
+  grid-template-columns: minmax(6rem, 35%) 1fr;
+  gap: 0.5rem;
+}
+
+.fm-image-metadata-tag dt {
+  color: var(--fm-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.fm-image-metadata-tag dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.fm-image-metadata-raw {
+  display: block;
+  font-size: 0.85em;
+  color: var(--fm-text-muted);
+}
