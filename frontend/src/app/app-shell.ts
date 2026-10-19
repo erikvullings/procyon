@@ -2266,7 +2266,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         });
         m.redraw();
       },
-    ).catch(() => undefined);
+    ).catch((error: unknown) => {
+      console.error('openViewerInPane failed', error);
+      toast({ html: error instanceof Error ? error.message : String(error) });
+    });
   }
 
   function closeViewer(paneId: PaneId, tabId?: TabId): void {

@@ -36,6 +36,11 @@ describe('previewPluginRoutes', () => {
       ]),
     ).toEqual([{ pluginId: 'a', extensions: ['torrent'] }]);
   });
+
+  it('treats the backend null preview as no preview', () => {
+    const nullPreview = { ...plugin('d', true), preview: null } as unknown as PluginDescriptor;
+    expect(previewPluginRoutes([nullPreview])).toEqual([]);
+  });
 });
 
 describe('previewPluginFor', () => {
