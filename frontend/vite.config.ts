@@ -23,10 +23,12 @@ export default defineConfig({
       [API_PREFIX]: createApiProxyOptions(backendOrigin),
     },
   },
-  // Lazily imported map libraries would otherwise be discovered mid-session, triggering a
-  // re-optimisation that 504s ("Outdated Optimize Dep") the already-requested MapLibre worker.
+  // MapLibre locates its worker with `new URL('./maplibre-gl-worker.mjs', import.meta.url)`; once
+  // pre-bundled into .vite/deps that sibling file is missing and the dev server answers 504
+  // ("Outdated Optimize Dep"). Serve it straight from node_modules instead.
   optimizeDeps: {
-    include: ['maplibre-gl', 'terra-draw', 'terra-draw-maplibre-gl-adapter', 'pmtiles'],
+    exclude: ['maplibre-gl'],
+    include: ['terra-draw', 'terra-draw-maplibre-gl-adapter', 'pmtiles'],
   },
   build: {
     target: 'es2023',
