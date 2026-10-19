@@ -87,22 +87,6 @@ export const MAP_PRESETS: readonly MapPreset[] = [
     20,
   ),
   raster(
-    'carto-light',
-    'CARTO Positron (light)',
-    'Raster, quiet background for data overlays.',
-    'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-    `${OSM_ATTRIBUTION} © CARTO`,
-    20,
-  ),
-  raster(
-    'carto-dark',
-    'CARTO Dark Matter',
-    'Raster, dark background for data overlays.',
-    'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-    `${OSM_ATTRIBUTION} © CARTO`,
-    20,
-  ),
-  raster(
     'pdok-brt',
     'PDOK BRT Achtergrondkaart (NL)',
     'Raster, Netherlands, official topographic map.',
