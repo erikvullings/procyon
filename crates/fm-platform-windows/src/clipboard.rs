@@ -7,8 +7,11 @@
 //! source files.
 
 use std::ffi::OsString;
+use std::fs::{self, File};
+use std::io::Read;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
-use std::path::PathBuf;
+use std::os::windows::fs::MetadataExt;
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
@@ -51,9 +54,84 @@ pub(crate) fn drop_files_payload(paths: &[PathBuf]) -> Result<Vec<u8>, PlatformE
     Ok(payload)
 }
 
+const FILE_ATTRIBUTE_OFFLINE: u32 = 0x0000_1000;
+const FILE_ATTRIBUTE_RECALL_ON_OPEN: u32 = 0x0004_0000;
+const FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS: u32 = 0x0040_0000;
+
+/// Whether the attributes mark a cloud placeholder whose content is not on the disk yet
+/// (OneDrive "online-only" files and similar).
+pub(crate) fn is_cloud_placeholder(attributes: u32) -> bool {
+    attributes
+        & (FILE_ATTRIBUTE_OFFLINE
+            | FILE_ATTRIBUTE_RECALL_ON_OPEN
+            | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS)
+        != 0
+}
+
+/// Downloads the content of an online-only file by reading it once. Opening a placeholder makes
+/// the cloud sync engine fetch it, so the bytes are on the disk when this returns.
+fn hydrate_file(path: &Path) -> Result<(), PlatformError> {
+    let mut file = File::open(path).map_err(|error| {
+        io(&format!(
+            "{} could not be downloaded: {error}",
+            path.display()
+        ))
+    })?;
+    let mut buffer = vec![0u8; 1024 * 1024];
+    loop {
+        match file.read(&mut buffer) {
+            Ok(0) => return Ok(()),
+            Ok(_) => {}
+            Err(error) => {
+                return Err(io(&format!(
+                    "{} could not be downloaded: {error}",
+                    path.display()
+                )));
+            }
+        }
+    }
+}
+
+/// Makes every online-only file among `paths` (and inside copied folders) available locally.
+///
+/// Other applications read the clipboard's file paths themselves - often a remote-desktop or
+/// virtual-machine bridge that does not trigger a cloud download - and would otherwise receive
+/// empty files that still show their size. Explorer avoids this by streaming the content itself.
+fn hydrate_placeholders(paths: &[PathBuf]) -> Result<(), PlatformError> {
+    for path in paths {
+        hydrate_tree(path)?;
+    }
+    Ok(())
+}
+
+fn hydrate_tree(path: &Path) -> Result<(), PlatformError> {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return Ok(());
+    };
+    let file_type = metadata.file_type();
+    if file_type.is_symlink() {
+        return Ok(());
+    }
+    if file_type.is_dir() {
+        let Ok(entries) = fs::read_dir(path) else {
+            return Ok(());
+        };
+        for entry in entries.flatten() {
+            hydrate_tree(&entry.path())?;
+        }
+        return Ok(());
+    }
+    if is_cloud_placeholder(metadata.file_attributes()) {
+        hydrate_file(path)?;
+    }
+    Ok(())
+}
+
 /// Replaces the clipboard contents with `paths` as a copy-only `CF_HDROP`.
 pub(crate) fn write_file_references(owner: HWND, paths: &[PathBuf]) -> Result<(), PlatformError> {
     let payload = drop_files_payload(paths)?;
+    // Before the clipboard is opened: the download can take long and must not block other apps.
+    hydrate_placeholders(paths)?;
     let drop_effect = DROPEFFECT_COPY.to_le_bytes();
     let preferred_drop_effect = preferred_drop_effect_format()?;
     let _clipboard = OpenedClipboard::open(owner)?;
@@ -189,6 +267,26 @@ mod tests {
                 r"D:\Folder".to_owned()
             ]
         );
+    }
+
+    #[test]
+    fn recognises_cloud_placeholders_by_their_attributes() {
+        assert!(is_cloud_placeholder(
+            FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS | 0x20
+        ));
+        assert!(is_cloud_placeholder(FILE_ATTRIBUTE_RECALL_ON_OPEN));
+        assert!(is_cloud_placeholder(FILE_ATTRIBUTE_OFFLINE));
+        assert!(!is_cloud_placeholder(0x20)); // archive only
+        assert!(!is_cloud_placeholder(0x10)); // directory
+    }
+
+    #[test]
+    fn hydrating_ordinary_files_and_folders_is_a_no_op() {
+        let dir = std::env::temp_dir().join(format!("procyon-hydrate-{}", std::process::id()));
+        fs::create_dir_all(dir.join("sub")).expect("dir");
+        fs::write(dir.join("sub").join("a.txt"), b"data").expect("file");
+        assert!(hydrate_placeholders(&[dir.clone(), dir.join("missing")]).is_ok());
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
