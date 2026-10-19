@@ -15,8 +15,11 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use uuid::Uuid;
 
-fn local_shell_command(shell: &str, cwd: &Path) -> CommandBuilder {
-    let mut command = CommandBuilder::new(shell);
+/// Builds the user's default shell as a login shell (`-zsh` argv0 on Unix,
+/// `%ComSpec%` on Windows) so it sees the same `PATH` as a regular terminal
+/// rather than the minimal environment a GUI app inherits.
+fn local_shell_command(cwd: &Path) -> CommandBuilder {
+    let mut command = CommandBuilder::new_default_prog();
     command.cwd(cwd);
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
@@ -275,15 +278,7 @@ impl TerminalRegistry {
         channel: Channel<TerminalEvent>,
     ) -> Result<String, TerminalError> {
         let pair = native_pty_system().openpty(size).map_err(backend)?;
-        let shell =
-            std::env::var(if cfg!(windows) { "COMSPEC" } else { "SHELL" }).unwrap_or_else(|_| {
-                if cfg!(windows) {
-                    "cmd.exe".into()
-                } else {
-                    "/bin/sh".into()
-                }
-            });
-        let command = local_shell_command(&shell, cwd);
+        let command = local_shell_command(cwd);
         let child = pair.slave.spawn_command(command).map_err(backend)?;
         let writer = pair.master.take_writer().map_err(backend)?;
         let mut reader = pair.master.try_clone_reader().map_err(backend)?;
@@ -478,9 +473,44 @@ mod tests {
         ));
     }
 
+    /// GUI apps on macOS inherit launchd's minimal `PATH`; only a login shell
+    /// reads `.zprofile`/`.profile`, where Homebrew and similar tools add
+    /// their directories (e.g. `sccache` for a `rustc-wrapper`).
+    #[cfg(unix)]
+    #[test]
+    fn a_local_shell_starts_as_a_login_shell() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            temp.path().join(".profile"),
+            "echo login-profile-loaded\nexit 0\n",
+        )
+        .unwrap();
+
+        let mut command = local_shell_command(temp.path());
+        command.env("SHELL", "/bin/sh");
+        command.env("HOME", temp.path());
+        let pair = native_pty_system()
+            .openpty(PtySize::default())
+            .expect("open pty");
+        let mut child = pair.slave.spawn_command(command).expect("spawn shell");
+        drop(pair.slave);
+        let mut reader = pair.master.try_clone_reader().unwrap();
+        // Drain before waiting: on macOS the child cannot finish exiting while
+        // its PTY output buffer is unread.
+        let mut output = String::new();
+        let _ = reader.read_to_string(&mut output);
+        child.wait().unwrap();
+        drop(pair.master);
+
+        assert!(
+            output.contains("login-profile-loaded"),
+            "expected a login shell, got {output:?}"
+        );
+    }
+
     #[test]
     fn a_local_shell_uses_the_same_terminal_protocol_as_xterm() {
-        let command = local_shell_command("/bin/sh", Path::new("/tmp"));
+        let command = local_shell_command(Path::new("/tmp"));
 
         assert_eq!(
             command.get_env("TERM"),

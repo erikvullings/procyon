@@ -136,7 +136,6 @@
   height: var(--fm-header-height);
   padding: 0 0.5rem;
   border: 0;
-  border-right: 1px solid var(--fm-border);
   background: var(--fm-tab-inactive-background);
   color: var(--fm-text-muted);
   font: inherit;
@@ -146,10 +145,22 @@
   position: relative;
 }
 
-/* The last tab is immediately followed by the New tab / Favourites buttons, not another tab -
-   drop its separator so it doesn't read as a border between the tabs and those icons. */
-.fm-pane-tab:last-of-type {
-  border-right: 0;
+/* A short, centred divider only between two inactive tabs; a full-height border has no visible
+   top end against the pane edge, and the active tab already stands out by its fill. */
+.fm-pane-tab + .fm-pane-tab::before {
+  content: "";
+  position: absolute;
+  top: 25%;
+  bottom: 25%;
+  left: 0;
+  width: 1px;
+  background: var(--fm-border);
+  pointer-events: none;
+}
+
+.fm-pane-tab[aria-selected="true"]::before,
+.fm-pane-tab[aria-selected="true"] + .fm-pane-tab::before {
+  display: none;
 }
 
 .fm-pane-tab.fm-drop-target {
@@ -171,12 +182,6 @@
 
 .fm-pane-tabs.fm-tab-append-target {
   box-shadow: inset -1px 0 var(--fm-accent);
-}
-
-/* A lone tab has nothing to separate it from -- the divider would just float next to the
- * new-tab/favourites buttons. */
-.fm-pane-tab.fm-pane-tab-only {
-  border-right: 0;
 }
 
 .fm-pane-tab[aria-selected="true"] {

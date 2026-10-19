@@ -884,6 +884,14 @@ describe('breadcrumbSegments', () => {
       { label: 'Erik', path: 'C:\\Users\\Erik' },
     ]);
   });
+
+  it('roots a Windows drive path from a file URI at the drive, not at /', () => {
+    expect(breadcrumbSegments('/C:/dev')).toEqual([
+      { label: 'C:', path: '/C:/' },
+      { label: 'dev', path: '/C:/dev' },
+    ]);
+    expect(breadcrumbSegments('/D:/')).toEqual([{ label: 'D:', path: '/D:/' }]);
+  });
 });
 
 describe('searchResultTitle', () => {
