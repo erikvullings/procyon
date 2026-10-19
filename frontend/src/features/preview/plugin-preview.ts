@@ -16,7 +16,7 @@ const BUILT_IN_PLAIN_TEXT_EXTENSIONS: readonly string[] = ['txt', 'log'];
 /** Routes for every enabled plugin that contributes a preview. */
 export function previewPluginRoutes(plugins: readonly PluginDescriptor[]): PreviewPluginRoute[] {
   return plugins.flatMap((plugin) =>
-    plugin.enabled && plugin.preview !== undefined
+    plugin.enabled && plugin.preview != null
       ? [{ pluginId: plugin.id, extensions: plugin.preview.extensions }]
       : [],
   );
