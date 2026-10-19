@@ -2429,8 +2429,6 @@ export const en = {
     loading: 'Loading map...',
     loadFailed: 'The map could not be loaded.',
     cluster: 'Group of {n} items. Click to zoom in.',
-    showPreview: 'Show preview map',
-    hidePreview: 'Hide preview map',
   },
   imageMap: {
     action: 'Show on map',

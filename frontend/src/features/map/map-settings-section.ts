@@ -39,36 +39,25 @@ export function networkNotice(settings: MapSettings): string {
 
 /** Settings editor section for the basemap of the shared map component (task 0275). */
 export const MapSettingsSection: FactoryComponent<MapSettingsSectionAttrs> = () => {
-  // Transient: whether the preview map (which loads the map library and tiles) is open.
-  let previewOpen = false;
-  // Bumped when the settings change from outside the text fields (a preset or the reset button),
-  // so the fields, which keep their own text while typing, are rebuilt with the new values.
-  let formRevision = 0;
   return {
     view: ({ attrs: { client, settings, onChange } }) => {
       const change = (patch: Partial<MapSettings>): void => onChange({ ...settings, ...patch });
       const problem = validateMapSettings(settings);
-      const replace = (next: MapSettings): void => {
-        formRevision += 1;
-        previewOpen = false;
-        onChange(next);
-      };
       const preset = presetFor(settings);
-      return m.fragment({ key: formRevision }, [
+      const raster = settings.basemapKind === 'raster';
+      return m.fragment({}, [
         m('.row', m('h4.fm-settings-section-heading.col.s12', t('map', 'sectionTitle'))),
         m('.row', [
           m(Switch, {
-            className: 'col s12',
+            className: 'col s12 m4',
             label: t('map', 'onlineTiles'),
             checked: settings.onlineTiles,
             left: t('settings', 'off'),
             right: t('settings', 'on'),
             onchange: (onlineTiles: boolean) => change({ onlineTiles }),
           }),
-        ]),
-        m('.row', [
           m(Select<string>, {
-            className: 'col s12',
+            className: 'col s12 m8',
             label: t('map', 'preset'),
             placeholder: t('map', 'presetCustom'),
             options: MAP_PRESETS.map((entry) => ({
@@ -78,13 +67,13 @@ export const MapSettingsSection: FactoryComponent<MapSettingsSectionAttrs> = () 
             ...(preset === undefined ? {} : { checkedId: preset.id }),
             onchange: ([value]) => {
               const chosen = MAP_PRESETS.find((entry) => entry.id === value);
-              if (chosen !== undefined) replace(applyPreset(settings, chosen));
+              if (chosen !== undefined) onChange(applyPreset(settings, chosen));
             },
           }),
         ]),
         m('.row', [
           m(Select<MapBasemapKind>, {
-            className: 'col s12',
+            className: 'col s12 m4',
             label: t('map', 'basemapKind'),
             options: (['raster', 'style', 'pmtiles'] as const).map((id) => ({
               id,
@@ -93,82 +82,65 @@ export const MapSettingsSection: FactoryComponent<MapSettingsSectionAttrs> = () 
             checkedId: settings.basemapKind,
             onchange: ([value]) => value !== undefined && change({ basemapKind: value }),
           }),
-        ]),
-        settings.basemapKind === 'raster'
-          ? m('.row', [
-              m(TextInput, {
-                className: 'col s12',
+          raster
+            ? m(TextInput, {
+                className: 'col s12 m8',
                 label: t('map', 'urlTemplate'),
                 helperText: t('map', 'urlTemplateHint'),
-                initialValue: settings.urlTemplate,
+                value: settings.urlTemplate,
                 oninput: (value: string) => change({ urlTemplate: value }),
-              }),
-              m(NumberInput, {
-                className: 'col s6',
-                label: t('map', 'maxZoom'),
-                value: settings.maxZoom,
-                min: 1,
-                max: 24,
-                oninput: (value: number) => change({ maxZoom: value }),
-              }),
-            ])
-          : undefined,
-        settings.basemapKind === 'style'
-          ? m('.row', [
-              m(TextInput, {
-                className: 'col s12',
+              })
+            : undefined,
+          settings.basemapKind === 'style'
+            ? m(TextInput, {
+                className: 'col s12 m8',
                 label: t('map', 'styleUrl'),
-                initialValue: settings.styleUrl,
+                value: settings.styleUrl,
                 oninput: (value: string) => change({ styleUrl: value }),
-              }),
-            ])
-          : undefined,
-        settings.basemapKind === 'pmtiles'
-          ? m('.row', [
-              m(TextInput, {
-                className: 'col s12',
+              })
+            : undefined,
+          settings.basemapKind === 'pmtiles'
+            ? m(TextInput, {
+                className: 'col s12 m8',
                 label: t('map', 'pmtilesPath'),
-                initialValue: pathInputFromLocation(settings.pmtilesLocation),
+                value: pathInputFromLocation(settings.pmtilesLocation),
                 oninput: (value: string) =>
                   change({ pmtilesLocation: locationFromPathInput(value) }),
-              }),
-            ])
-          : undefined,
+              })
+            : undefined,
+        ]),
         settings.basemapKind === 'style'
           ? undefined
           : m('.row', [
               m(TextInput, {
-                className: 'col s12',
+                className: raster ? 'col s12 m8' : 'col s12',
                 label: t('map', 'attribution'),
-                initialValue: settings.attribution,
+                value: settings.attribution,
                 oninput: (value: string) => change({ attribution: value }),
               }),
+              raster
+                ? m(NumberInput, {
+                    className: 'col s12 m4',
+                    label: t('map', 'maxZoom'),
+                    value: settings.maxZoom,
+                    min: 1,
+                    max: 24,
+                    oninput: (value: number) => change({ maxZoom: value }),
+                  })
+                : undefined,
             ]),
-        m('p.fm-map-network-notice', networkNotice(settings)),
+        m('.fm-map-settings-footer', [
+          m('p.fm-map-network-notice', networkNotice(settings)),
+          m(
+            'button.btn-flat.fm-map-reset',
+            { type: 'button', onclick: () => onChange(DEFAULT_MAP_SETTINGS) },
+            t('map', 'resetToDefault'),
+          ),
+        ]),
         problem === undefined
           ? undefined
           : m('p.fm-field-error', { role: 'alert' }, t('map', problem)),
-        m('.row', [
-          m(
-            'button.btn-flat.fm-map-reset',
-            { type: 'button', onclick: () => replace(DEFAULT_MAP_SETTINGS) },
-            t('map', 'resetToDefault'),
-          ),
-          client === undefined
-            ? undefined
-            : m(
-                'button.btn-flat.fm-map-preview-toggle',
-                {
-                  type: 'button',
-                  disabled: problem !== undefined,
-                  onclick: () => {
-                    previewOpen = !previewOpen;
-                  },
-                },
-                previewOpen ? t('map', 'hidePreview') : t('map', 'showPreview'),
-              ),
-        ]),
-        client !== undefined && previewOpen && problem === undefined
+        client !== undefined && problem === undefined
           ? m(
               '.fm-map-preview',
               m(MapView, {

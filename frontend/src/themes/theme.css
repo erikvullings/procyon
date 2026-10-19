@@ -1249,8 +1249,8 @@ main.fm-workspace {
 
 .fm-settings-editor-panel {
   width: min(64rem, calc(100vw - 2rem));
-  height: min(42rem, calc(100vh - 4rem));
-  max-height: calc(100vh - 4rem);
+  height: min(50rem, calc(100vh - 3rem));
+  max-height: calc(100vh - 3rem);
   overflow-y: auto;
   border: 1px solid var(--fm-border);
   border-radius: var(--fm-radius);

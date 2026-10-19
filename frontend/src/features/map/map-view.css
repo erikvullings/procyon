@@ -78,8 +78,19 @@
 }
 
 .fm-map-preview {
-  height: 280px;
+  height: 300px;
   margin-top: 0.5rem;
+}
+
+.fm-map-settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.fm-map-settings-footer .fm-map-network-notice {
+  margin: 0.25rem 0;
 }
 
 /* Show-on-map panel (task 0276) */
