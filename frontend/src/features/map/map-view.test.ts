@@ -382,4 +382,27 @@ describe('MapView', () => {
       1,
     ]);
   });
+
+  it('shows and moves a cursor marker, and removes it when the cursor goes away', async () => {
+    let cursor: { latitude: number; longitude: number } | undefined = { latitude: 1, longitude: 2 };
+    mount(() => ({
+      client: client(),
+      settings: DEFAULT_MAP_SETTINGS,
+      dark: false,
+      markers: [],
+      ...(cursor === undefined ? {} : { cursor }),
+    }));
+    await loaded();
+    m.redraw.sync();
+    const cursorMarker = fake.markers.find((entry) =>
+      entry.options.element.classList.contains('fm-map-cursor'),
+    );
+    expect(cursorMarker?.lngLat).toEqual([2, 1]);
+    cursor = { latitude: 5, longitude: 6 };
+    m.redraw.sync();
+    expect(cursorMarker?.lngLat).toEqual([6, 5]);
+    cursor = undefined;
+    m.redraw.sync();
+    expect(cursorMarker?.removed).toBe(true);
+  });
 });

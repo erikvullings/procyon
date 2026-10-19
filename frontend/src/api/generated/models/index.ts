@@ -122,6 +122,8 @@ export * from './geoDocumentDto.ts';
 export * from './geoDocumentDtoCollection.ts';
 export * from './geoErrorDto.ts';
 export * from './geoIssueDto.ts';
+export * from './geoProfilePointDto.ts';
+export * from './geoTrackDto.ts';
 export * from './getChecksumsParams.ts';
 export * from './getComparisonParams.ts';
 export * from './getDocumentSummaryRequestDto.ts';

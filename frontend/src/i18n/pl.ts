@@ -1357,4 +1357,5 @@ export const pl = {
   imageMap: en.imageMap,
   geo: en.geo,
   geoEdit: en.geoEdit,
+  geoTrack: en.geoTrack,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

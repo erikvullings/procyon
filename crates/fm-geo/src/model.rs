@@ -5,6 +5,8 @@ use serde_json::{Value, json};
 pub enum GeoFormat {
     /// GeoJSON (RFC 7946).
     GeoJson,
+    /// GPX 1.0 and 1.1 tracks, routes and waypoints.
+    Gpx,
 }
 
 impl GeoFormat {
@@ -13,6 +15,7 @@ impl GeoFormat {
     pub fn id(self) -> &'static str {
         match self {
             Self::GeoJson => "geojson",
+            Self::Gpx => "gpx",
         }
     }
 }
@@ -64,6 +67,60 @@ pub struct GeoDocument {
     pub warnings: Vec<GeoIssue>,
     /// Source features or elements that were left out because they have no 2D representation.
     pub skipped: Vec<String>,
+    /// Statistics per recorded track (GPX).
+    pub tracks: Vec<TrackSummary>,
+}
+
+/// One sample of a track's elevation and speed profile.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProfilePoint {
+    /// Distance from the start of the track in metres.
+    pub distance_meters: f64,
+    /// Position of the sample.
+    pub longitude: f64,
+    /// Position of the sample.
+    pub latitude: f64,
+    /// Elevation in metres, when recorded.
+    pub elevation: Option<f64>,
+    /// Speed over the last leg, when timestamps allow it.
+    pub speed_meters_per_second: Option<f64>,
+    /// Heart rate in beats per minute, when recorded.
+    pub heart_rate: Option<f64>,
+}
+
+/// Statistics of one recorded track. Values the file cannot support are `None`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrackSummary {
+    /// Track name.
+    pub name: Option<String>,
+    /// Index of the track's feature in [`GeoDocument::features`].
+    pub feature_index: usize,
+    /// Recorded fixes.
+    pub points: usize,
+    /// Length in metres over the whole recording (segments are not connected).
+    pub distance_meters: f64,
+    /// Last minus first timestamp.
+    pub elapsed_seconds: Option<f64>,
+    /// Time spent faster than walking pace.
+    pub moving_seconds: Option<f64>,
+    /// Climbed metres, ignoring changes below the noise floor.
+    pub ascent_meters: Option<f64>,
+    /// Descended metres, ignoring changes below the noise floor.
+    pub descent_meters: Option<f64>,
+    /// Lowest recorded elevation.
+    pub min_elevation: Option<f64>,
+    /// Highest recorded elevation.
+    pub max_elevation: Option<f64>,
+    /// Distance covered while moving divided by the moving time.
+    pub average_speed: Option<f64>,
+    /// Fastest speed sustained for at least ten seconds.
+    pub max_speed: Option<f64>,
+    /// First timestamp, UTC.
+    pub start_time: Option<String>,
+    /// Last timestamp, UTC.
+    pub end_time: Option<String>,
+    /// At most about 500 samples for charts.
+    pub profile: Vec<ProfilePoint>,
 }
 
 impl GeoDocument {

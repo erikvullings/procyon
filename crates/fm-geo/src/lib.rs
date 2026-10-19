@@ -5,10 +5,14 @@
 //! Parsing is bounded and never panics on malformed input.
 
 mod geojson;
+mod gpx;
 mod model;
+mod time;
+mod track_stats;
 
 pub use geojson::{GeoJsonError, parse_geojson};
-pub use model::{Bounds, GeoDocument, GeoFormat, GeoIssue, Limits};
+pub use gpx::{GpxError, parse_gpx};
+pub use model::{Bounds, GeoDocument, GeoFormat, GeoIssue, Limits, ProfilePoint, TrackSummary};
 
 /// Guesses the format of a file from its extension and leading bytes.
 ///
@@ -18,6 +22,7 @@ pub use model::{Bounds, GeoDocument, GeoFormat, GeoIssue, Limits};
 pub fn detect_format(extension: &str, head: &[u8]) -> Option<GeoFormat> {
     match extension.to_ascii_lowercase().as_str() {
         "geojson" => Some(GeoFormat::GeoJson),
+        "gpx" => Some(GeoFormat::Gpx),
         "json" => sniff_geojson(head).then_some(GeoFormat::GeoJson),
         _ => None,
     }
@@ -70,5 +75,6 @@ mod tests {
         );
         assert_eq!(detect_format("json", b"[1,2,3]"), None);
         assert_eq!(detect_format("txt", br#"{"type":"Point"}"#), None);
+        assert_eq!(detect_format("GPX", b"<gpx/>"), Some(GeoFormat::Gpx));
     }
 }

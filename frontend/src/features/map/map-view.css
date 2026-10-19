@@ -211,3 +211,51 @@
   font-weight: 500;
   width: 35%;
 }
+
+.fm-map-cursor {
+  width: 14px;
+  height: 14px;
+  border: 3px solid var(--fm-surface);
+  border-radius: 50%;
+  background: var(--fm-error);
+  box-shadow: 0 0 0 2px var(--fm-error);
+  pointer-events: none;
+}
+
+.fm-elevation-chart {
+  width: 100%;
+  height: auto;
+  background: var(--fm-surface-elevated);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+}
+
+.fm-elevation-line {
+  stroke: var(--fm-accent);
+  stroke-width: 1.5;
+}
+
+.fm-elevation-guide {
+  stroke: var(--fm-error);
+  stroke-width: 1;
+}
+
+.fm-elevation-readout {
+  color: var(--fm-text-muted);
+  font-size: 0.85em;
+}
+
+.fm-track-summary dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 0.75rem;
+  margin: 0;
+}
+
+.fm-track-summary dt {
+  color: var(--fm-text-muted);
+}
+
+.fm-track-summary dd {
+  margin: 0;
+}

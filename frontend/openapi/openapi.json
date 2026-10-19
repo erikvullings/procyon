@@ -12092,6 +12092,13 @@
             "description": "Features in the source file.",
             "minimum": 0
           },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeoTrackDto"
+            },
+            "description": "Statistics per recorded track (GPX)."
+          },
           "truncated": {
             "type": "boolean",
             "description": "Whether limits cut the document short."
@@ -12158,6 +12165,177 @@
           "path": {
             "type": "string",
             "description": "Where in the document, for example `/features/3/geometry`."
+          }
+        }
+      },
+      "GeoProfilePointDto": {
+        "type": "object",
+        "description": "One sample of a track's elevation, speed and heart-rate profile.",
+        "required": [
+          "distanceMeters",
+          "longitude",
+          "latitude"
+        ],
+        "properties": {
+          "distanceMeters": {
+            "type": "number",
+            "format": "double",
+            "description": "Metres from the start of the track."
+          },
+          "elevation": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Elevation in metres."
+          },
+          "heartRate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Heart rate in beats per minute."
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Position of the sample."
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "description": "Position of the sample."
+          },
+          "speedMetersPerSecond": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Speed over the last leg in metres per second."
+          }
+        }
+      },
+      "GeoTrackDto": {
+        "type": "object",
+        "description": "Statistics of one recorded GPX track; absent values were not in the file.",
+        "required": [
+          "featureIndex",
+          "points",
+          "distanceMeters",
+          "profile"
+        ],
+        "properties": {
+          "ascentMeters": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Climbed metres."
+          },
+          "averageSpeed": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Average moving speed in metres per second."
+          },
+          "descentMeters": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Descended metres."
+          },
+          "distanceMeters": {
+            "type": "number",
+            "format": "double",
+            "description": "Length in metres."
+          },
+          "elapsedSeconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Last minus first timestamp."
+          },
+          "endTime": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last timestamp, UTC."
+          },
+          "featureIndex": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Index of the track's feature in the collection.",
+            "minimum": 0
+          },
+          "maxElevation": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Highest elevation."
+          },
+          "maxSpeed": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Fastest sustained speed in metres per second."
+          },
+          "minElevation": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Lowest elevation."
+          },
+          "movingSeconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Time spent faster than walking pace."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Track name."
+          },
+          "points": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Recorded fixes.",
+            "minimum": 0
+          },
+          "profile": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeoProfilePointDto"
+            },
+            "description": "Chart samples, at most about 500."
+          },
+          "startTime": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "First timestamp, UTC."
           }
         }
       },

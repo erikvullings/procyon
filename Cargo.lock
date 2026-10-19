@@ -3143,6 +3143,7 @@ dependencies = [
 name = "fm-geo"
 version = "0.6.0"
 dependencies = [
+ "quick-xml 0.41.0",
  "serde_json",
  "thiserror 2.0.20",
 ]

@@ -685,3 +685,59 @@ async fn validates_geojson_text_without_a_file() {
         .expect("body must be JSON");
     assert_eq!(bad["error"]["line"], 2);
 }
+
+#[tokio::test]
+async fn reads_gpx_tracks_with_statistics_and_rejects_entity_declarations() {
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    let track = root.path().join("run.gpx");
+    std::fs::write(
+        &track,
+        r#"<gpx version="1.1"><trk><name>Run</name><trkseg>
+        <trkpt lat="52.000" lon="4.0"><ele>1</ele><time>2024-05-05T08:00:00Z</time></trkpt>
+        <trkpt lat="52.001" lon="4.0"><ele>9</ele><time>2024-05-05T08:00:30Z</time></trkpt>
+        </trkseg></trk></gpx>"#,
+    )
+    .expect("must create fixture");
+    let hostile = root.path().join("hostile.gpx");
+    std::fs::write(
+        &hostile,
+        r#"<?xml version="1.0"?><!DOCTYPE gpx [<!ENTITY x SYSTEM "file:///etc/passwd">]><gpx version="1.1"/>"#,
+    )
+    .expect("must create fixture");
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/v1/files/geo/read", server.base_url);
+    let read = |path: std::path::PathBuf| {
+        let client = client.clone();
+        let url = url.clone();
+        async move {
+            client
+                .post(url)
+                .json(&json!({"location": location_json(&path)}))
+                .send()
+                .await
+                .expect("request must succeed")
+                .json::<Value>()
+                .await
+                .expect("body must be JSON")
+        }
+    };
+
+    let body = read(track).await;
+    assert_eq!(body["format"], "gpx");
+    assert_eq!(body["tracks"][0]["name"], "Run");
+    assert_eq!(body["tracks"][0]["elapsedSeconds"], 30.0);
+    assert_eq!(body["tracks"][0]["ascentMeters"], 8.0);
+    assert!(
+        body["tracks"][0]["profile"]
+            .as_array()
+            .is_some_and(|p| p.len() == 2)
+    );
+
+    let body = read(hostile).await;
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("DOCTYPE"))
+    );
+}

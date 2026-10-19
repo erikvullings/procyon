@@ -1,11 +1,13 @@
 import m, { type FactoryComponent } from 'mithril';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
-import type { GeoDocument, MapSettings } from '../../models';
+import type { GeoDocument, GeoProfilePoint, GeoTrack, MapSettings } from '../../models';
 import { resolvedTheme } from '../../utilities/resolved-theme';
 import { DEFAULT_MAP_SETTINGS } from '../map/map-settings';
 import { MapView } from '../map/map-view';
+import { ElevationProfile } from './elevation-profile';
 import { propertyText } from './geo-document';
+import { formatDistance, formatDuration, formatElevation, formatSpeed } from './track-format';
 
 export interface GeoViewAttrs {
   readonly client: Pick<FileManagerClient, 'mapTileUrlTemplate' | 'mediaUrl' | 'getSettings'>;
@@ -28,6 +30,66 @@ function describeError(document: GeoDocument): m.Children {
     error.path != null && error.path !== ''
       ? m('p', t('geo', 'errorPath', { path: error.path }))
       : undefined,
+  ]);
+}
+
+function statRow(label: string, value: string | undefined): m.Children {
+  return value === undefined ? undefined : [m('dt', label), m('dd', value)];
+}
+
+/** Distance, durations, climb and speeds of a recorded track; unavailable values are not shown. */
+function trackSummary(track: GeoTrack, onHover: (point: GeoProfilePoint | undefined) => void) {
+  const present = (value: number | null | undefined): value is number =>
+    value !== null && value !== undefined;
+  const hasTimes = present(track.elapsedSeconds);
+  const hasElevation = present(track.minElevation);
+  return m('.fm-track-summary', { key: track.featureIndex }, [
+    m('h5', track.name ?? t('geoTrack', 'unnamed')),
+    m('dl', [
+      statRow(t('geoTrack', 'distance'), formatDistance(track.distanceMeters)),
+      statRow(
+        t('geoTrack', 'elapsed'),
+        present(track.elapsedSeconds) ? formatDuration(track.elapsedSeconds) : undefined,
+      ),
+      statRow(
+        t('geoTrack', 'moving'),
+        present(track.movingSeconds) ? formatDuration(track.movingSeconds) : undefined,
+      ),
+      statRow(
+        t('geoTrack', 'ascent'),
+        present(track.ascentMeters) ? formatElevation(track.ascentMeters) : undefined,
+      ),
+      statRow(
+        t('geoTrack', 'descent'),
+        present(track.descentMeters) ? formatElevation(track.descentMeters) : undefined,
+      ),
+      statRow(
+        t('geoTrack', 'minElevation'),
+        present(track.minElevation) ? formatElevation(track.minElevation) : undefined,
+      ),
+      statRow(
+        t('geoTrack', 'maxElevation'),
+        present(track.maxElevation) ? formatElevation(track.maxElevation) : undefined,
+      ),
+      statRow(
+        t('geoTrack', 'averageSpeed'),
+        present(track.averageSpeed) ? formatSpeed(track.averageSpeed) : undefined,
+      ),
+      statRow(
+        t('geoTrack', 'maxSpeed'),
+        present(track.maxSpeed) ? formatSpeed(track.maxSpeed) : undefined,
+      ),
+      statRow(t('geoTrack', 'start'), track.startTime ?? undefined),
+      statRow(t('geoTrack', 'end'), track.endTime ?? undefined),
+      statRow(t('geoTrack', 'points'), String(track.points)),
+    ]),
+    hasTimes ? undefined : m('p.fm-geo-hint', t('geoTrack', 'noTimes')),
+    hasElevation ? undefined : m('p.fm-geo-hint', t('geoTrack', 'noElevation')),
+    m(ElevationProfile, {
+      name: track.name ?? t('geoTrack', 'unnamed'),
+      points: track.profile,
+      onHover,
+    }),
   ]);
 }
 
@@ -62,6 +124,8 @@ function propertiesTable(document: GeoDocument, index: number | undefined): m.Ch
 export const GeoView: FactoryComponent<GeoViewAttrs> = () => {
   let mapSettings: MapSettings = DEFAULT_MAP_SETTINGS;
   let requested = false;
+  // Transient: the chart sample under the pointer, shown as a marker on the map.
+  let cursor: GeoProfilePoint | undefined;
   return {
     oncreate: ({ attrs }) => {
       if (requested) return;
@@ -96,6 +160,9 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = () => {
             fitKey: document.displayedFeatures,
             ariaLabel: t('geo', 'mapLabel', { name: attrs.name }),
             onFeatureClick: attrs.onSelect,
+            ...(cursor === undefined
+              ? {}
+              : { cursor: { latitude: cursor.latitude, longitude: cursor.longitude } }),
           }),
         ),
         m('aside.fm-geo-side', [
@@ -132,6 +199,12 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = () => {
                   document.skipped.map((item, index) => m('li', { key: index }, item)),
                 ),
               ]),
+          (document.tracks ?? []).map((track) =>
+            trackSummary(track, (point) => {
+              cursor = point;
+              m.redraw();
+            }),
+          ),
           propertiesTable(document, attrs.selectedIndex),
         ]),
       ]);

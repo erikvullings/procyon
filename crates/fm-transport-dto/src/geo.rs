@@ -49,6 +49,74 @@ pub struct GeoErrorDto {
     pub path: Option<String>,
 }
 
+/// One sample of a track's elevation, speed and heart-rate profile.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoProfilePointDto {
+    /// Metres from the start of the track.
+    pub distance_meters: f64,
+    /// Position of the sample.
+    pub longitude: f64,
+    /// Position of the sample.
+    pub latitude: f64,
+    /// Elevation in metres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elevation: Option<f64>,
+    /// Speed over the last leg in metres per second.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed_meters_per_second: Option<f64>,
+    /// Heart rate in beats per minute.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heart_rate: Option<f64>,
+}
+
+/// Statistics of one recorded GPX track; absent values were not in the file.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoTrackDto {
+    /// Track name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Index of the track's feature in the collection.
+    pub feature_index: u32,
+    /// Recorded fixes.
+    pub points: u64,
+    /// Length in metres.
+    pub distance_meters: f64,
+    /// Last minus first timestamp.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elapsed_seconds: Option<f64>,
+    /// Time spent faster than walking pace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moving_seconds: Option<f64>,
+    /// Climbed metres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ascent_meters: Option<f64>,
+    /// Descended metres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub descent_meters: Option<f64>,
+    /// Lowest elevation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_elevation: Option<f64>,
+    /// Highest elevation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_elevation: Option<f64>,
+    /// Average moving speed in metres per second.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub average_speed: Option<f64>,
+    /// Fastest sustained speed in metres per second.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_speed: Option<f64>,
+    /// First timestamp, UTC.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<String>,
+    /// Last timestamp, UTC.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<String>,
+    /// Chart samples, at most about 500.
+    pub profile: Vec<GeoProfilePointDto>,
+}
+
 /// A geographic file read into GeoJSON features.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -71,6 +139,9 @@ pub struct GeoDocumentDto {
     pub warnings: Vec<GeoIssueDto>,
     /// Source elements without a 2D representation that were left out.
     pub skipped: Vec<String>,
+    /// Statistics per recorded track (GPX).
+    #[serde(default)]
+    pub tracks: Vec<GeoTrackDto>,
     /// Set when the file could not be read; `collection` is then empty.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<GeoErrorDto>,

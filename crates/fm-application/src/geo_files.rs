@@ -6,9 +6,12 @@
 //! raw text.
 
 use fm_domain::{EntryId, Location};
-use fm_geo::{GeoDocument, GeoFormat, GeoJsonError, Limits, detect_format, parse_geojson};
+use fm_geo::{
+    GeoDocument, GeoFormat, GeoJsonError, GpxError, Limits, detect_format, parse_geojson, parse_gpx,
+};
 use fm_transport_dto::{
-    GeoDocumentDto, GeoErrorDto, GeoIssueDto, ParseGeoTextRequestDto, ReadGeoFileRequestDto,
+    GeoDocumentDto, GeoErrorDto, GeoIssueDto, GeoProfilePointDto, GeoTrackDto,
+    ParseGeoTextRequestDto, ReadGeoFileRequestDto,
 };
 use fm_vfs::{EntryRef, ProviderRegistry};
 use serde_json::json;
@@ -41,6 +44,7 @@ fn empty(format: &str, error: GeoErrorDto) -> GeoDocumentDto {
         bounds: None,
         warnings: Vec::new(),
         skipped: Vec::new(),
+        tracks: Vec::new(),
         error: Some(error),
     }
 }
@@ -51,6 +55,37 @@ fn plain_error(message: String) -> GeoErrorDto {
         line: None,
         column: None,
         path: None,
+    }
+}
+
+fn track_dto(track: fm_geo::TrackSummary) -> GeoTrackDto {
+    GeoTrackDto {
+        name: track.name,
+        feature_index: u32::try_from(track.feature_index).unwrap_or(u32::MAX),
+        points: track.points as u64,
+        distance_meters: track.distance_meters,
+        elapsed_seconds: track.elapsed_seconds,
+        moving_seconds: track.moving_seconds,
+        ascent_meters: track.ascent_meters,
+        descent_meters: track.descent_meters,
+        min_elevation: track.min_elevation,
+        max_elevation: track.max_elevation,
+        average_speed: track.average_speed,
+        max_speed: track.max_speed,
+        start_time: track.start_time,
+        end_time: track.end_time,
+        profile: track
+            .profile
+            .into_iter()
+            .map(|point| GeoProfilePointDto {
+                distance_meters: point.distance_meters,
+                longitude: point.longitude,
+                latitude: point.latitude,
+                elevation: point.elevation,
+                speed_meters_per_second: point.speed_meters_per_second,
+                heart_rate: point.heart_rate,
+            })
+            .collect(),
     }
 }
 
@@ -71,6 +106,7 @@ fn document_dto(document: GeoDocument) -> GeoDocumentDto {
             })
             .collect(),
         skipped: document.skipped,
+        tracks: document.tracks.into_iter().map(track_dto).collect(),
         error: None,
     }
 }
@@ -132,6 +168,26 @@ fn parse_bytes(extension: &str, bytes: &[u8]) -> Result<GeoDocumentDto, (String,
         ));
     };
     match format {
+        GeoFormat::Gpx => parse_gpx(bytes, Limits::default())
+            .map(document_dto)
+            .map_err(|error| {
+                (
+                    format.id().to_owned(),
+                    match error {
+                        GpxError::Syntax {
+                            message,
+                            line,
+                            column,
+                        } => GeoErrorDto {
+                            message,
+                            line: u32::try_from(line).ok(),
+                            column: u32::try_from(column).ok(),
+                            path: None,
+                        },
+                        other => plain_error(other.to_string()),
+                    },
+                )
+            }),
         GeoFormat::GeoJson => parse_geojson(bytes, Limits::default())
             .map(document_dto)
             .map_err(|error| {

@@ -9,6 +9,7 @@ describe('geo detection', () => {
   it('treats geojson and json files as candidates', () => {
     expect(isGeoCandidate(entry('a.geojson'))).toBe(true);
     expect(isGeoCandidate(entry('a.JSON'))).toBe(true);
+    expect(isGeoCandidate(entry('a.gpx'))).toBe(true);
     expect(isGeoCandidate(entry('a.txt'))).toBe(false);
     expect(isGeoCandidate(entry('a.geojson', 'directory'))).toBe(false);
   });

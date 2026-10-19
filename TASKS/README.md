@@ -288,7 +288,7 @@ Looking at and editing file contents without leaving the app.
 - [x] 0271 Editor actions on a path or URL under the cursor *(needs 0099)*
 - [x] 0277 View GeoJSON on a map *(needs 0275, 0088)*
 - [x] 0278 Simple GeoJSON editor (geojson.io-style) *(needs 0277, 0099)*
-- [ ] 0279 View GPX tracks, routes and waypoints on a map *(needs 0275, 0088)*
+- [x] 0279 View GPX tracks, routes and waypoints on a map *(needs 0275, 0088)*
 - [ ] 0280 View KML and KMZ on a map *(needs 0275, 0088, 0076)*
 - [ ] 0281 Convert and export between GeoJSON, GPX, KML/KMZ and CSV *(needs 0277, 0279, 0280)*
 - [ ] 0282 Minify GeoJSON, GPX and KML files *(needs 0281)*

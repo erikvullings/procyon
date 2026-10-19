@@ -5,6 +5,7 @@
 import type { GeoDocumentDtoCollection } from './geoDocumentDtoCollection.ts';
 import type { GeoErrorDto } from './geoErrorDto.ts';
 import type { GeoIssueDto } from './geoIssueDto.ts';
+import type { GeoTrackDto } from './geoTrackDto.ts';
 
 /**
  * A geographic file read into GeoJSON features.
@@ -32,6 +33,8 @@ export interface GeoDocumentDto {
      * @minimum 0
      */
   totalFeatures: number;
+  /** Statistics per recorded track (GPX). */
+  tracks?: GeoTrackDto[];
   /** Whether limits cut the document short. */
   truncated: boolean;
   /** Non-fatal issues. */

@@ -42,6 +42,8 @@ export interface MapViewAttrs {
   readonly onMapReady?: (map: MapLibre.Map) => void;
   /** Called when the map is torn down; attached layers are gone with it. */
   readonly onMapGone?: () => void;
+  /** A position to mark, for example under the pointer on an elevation chart. */
+  readonly cursor?: MapPosition;
   /** Index of the feature to emphasise. */
   readonly highlightIndex?: number;
   readonly ariaLabel?: string;
@@ -125,6 +127,7 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
   let hasFitted = false;
   let popup: MapLibre.Popup | undefined;
   const drawn = new Map<string, DrawnItem>();
+  let cursorMarker: MapLibre.Marker | undefined;
   let pmtilesProtocolRegistered = false;
 
   async function resolveSources(attrs: MapViewAttrs): Promise<BasemapSources> {
@@ -171,6 +174,23 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
         { padding: FIT_PADDING, maxZoom: FIT_MAX_ZOOM, duration: 0 },
       );
     }
+  }
+
+  function syncCursor(): void {
+    const library = lib;
+    if (map === undefined || library === undefined) return;
+    const position = latest.cursor;
+    if (position === undefined) {
+      cursorMarker?.remove();
+      cursorMarker = undefined;
+      return;
+    }
+    if (cursorMarker === undefined) {
+      const element = document.createElement('div');
+      element.className = 'fm-map-cursor';
+      cursorMarker = new library.Marker({ element }).addTo(map);
+    }
+    cursorMarker.setLngLat([position.longitude, position.latitude]);
   }
 
   function applySelection(): void {
@@ -431,6 +451,7 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
       if (basemapKey(attrs.settings, attrs.dark) !== appliedBasemap) void applyBasemap();
       syncFeatures();
       syncMarkers();
+      syncCursor();
       applySelection();
       if (attrs.fitKey !== appliedFitKey) {
         appliedFitKey = attrs.fitKey;
@@ -441,6 +462,8 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
       destroyed = true;
       latest.onMapGone?.();
       clearDrawn();
+      cursorMarker?.remove();
+      cursorMarker = undefined;
       map?.remove();
       map = undefined;
       if (pmtilesProtocolRegistered) lib?.removeProtocol('pmtiles');
