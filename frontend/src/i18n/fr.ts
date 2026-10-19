@@ -503,6 +503,7 @@ export const fr = {
     kindDelete: 'Supprimer',
     kindUndo: 'Annuler',
     kindEditImageMetadata: "Modifier les métadonnées d'image",
+    kindTransformGeo: 'Convertir des fichiers géographiques',
     kindSearch: 'Recherche',
     kindCompare: 'Comparaison',
     stateQueued: "En file d'attente",
@@ -1366,4 +1367,5 @@ export const fr = {
   geoEdit: en.geoEdit,
   geoTrack: en.geoTrack,
   geoLayers: en.geoLayers,
+  geoConvert: en.geoConvert,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

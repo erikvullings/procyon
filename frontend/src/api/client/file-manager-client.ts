@@ -61,7 +61,9 @@ import type {
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
+  GeoConversionReport,
   GeoDocument,
+  GeoTargetFormat,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
@@ -556,6 +558,20 @@ export interface FileManagerClient {
    * Works for local, archive and remote entries because the backend reads through the VFS.
    */
   readImageMetadata(location: Location, signal?: AbortSignal): Promise<ImageMetadata>;
+  /** Reports what converting geographic files to `format` would lose, per file (task 0281). */
+  previewGeoConversion(
+    locations: readonly Location[],
+    format: GeoTargetFormat,
+    csvWkt: boolean,
+    signal?: AbortSignal,
+  ): Promise<GeoConversionReport[]>;
+  /** Converts GeoJSON text (an editor's content) into a text format (task 0281). */
+  convertGeoText(
+    text: string,
+    format: GeoTargetFormat,
+    csvWkt: boolean,
+    signal?: AbortSignal,
+  ): Promise<{ content: string; extension: string; notes: string[] }>;
   /** Parses GeoJSON text for live validation while editing (task 0278); never throws on bad text. */
   parseGeoText(text: string, signal?: AbortSignal): Promise<GeoDocument>;
   /** Reads a GeoJSON, GPX, KML or KMZ file into GeoJSON features (tasks 0277-0280). */

@@ -22,6 +22,8 @@ export interface FileEditorAttrs {
   readonly links?: EditorLinkHandlers;
   /** Client for the GeoJSON map editor (task 0278); the map toggle is hidden without it. */
   readonly mapClient?: GeoMapEditorAttrs['client'];
+  /** Writes an exported copy of the GeoJSON next to the file (task 0281). */
+  readonly onExportGeo?: GeoMapEditorAttrs['onExport'];
 }
 
 interface UnsavedChangesDialogAttrs {
@@ -230,6 +232,8 @@ export const FileEditor: Component<FileEditorAttrs> = {
             ? m(GeoMapEditor, {
                 client: attrs.mapClient,
                 content: state.content,
+                fileName: state.entry.name,
+                ...(attrs.onExportGeo === undefined ? {} : { onExport: attrs.onExportGeo }),
                 onChange: (content) => controller.setContent(content),
               })
             : state.language === 'markdown' && state.previewVisible

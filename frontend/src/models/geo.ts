@@ -1,3 +1,5 @@
+import type { Location } from './location';
+
 /** A warning about data that is not represented faithfully (tasks 0277-0280). */
 export interface GeoIssue {
   readonly path: string;
@@ -52,6 +54,22 @@ export interface GeoOverlay {
   readonly east: number;
   readonly west: number;
   readonly rotation: number;
+}
+
+/** What converting one geographic file would lose (task 0281). */
+export interface GeoConversionReport {
+  readonly location: Location;
+  readonly outputName?: string | null;
+  readonly notes: readonly string[];
+  readonly error?: string | null;
+}
+
+export type GeoTargetFormat = 'geojson' | 'gpx' | 'kml' | 'kmz' | 'csv';
+
+/** What a `transformGeo` operation does with each file. */
+export interface GeoTransform {
+  targetFormat: GeoTargetFormat;
+  csvWkt?: boolean;
 }
 
 /** A geographic file as GeoJSON features, parsed by the backend. */

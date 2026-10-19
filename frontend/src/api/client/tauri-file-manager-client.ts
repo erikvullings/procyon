@@ -68,7 +68,9 @@ import type {
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
+  GeoConversionReport,
   GeoDocument,
+  GeoTargetFormat,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
@@ -898,6 +900,27 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   readFileRange(request: ReadFileRangeRequest, _signal?: AbortSignal): Promise<FileRangeChunk> {
     return invoke<FileRangeChunk>('read_file_range', { request });
+  }
+
+  async previewGeoConversion(
+    locations: readonly Location[],
+    format: GeoTargetFormat,
+    csvWkt: boolean,
+    _signal?: AbortSignal,
+  ): Promise<GeoConversionReport[]> {
+    const response = await invoke<{ reports: GeoConversionReport[] }>('preview_geo_conversion', {
+      request: { locations, targetFormat: format, csvWkt },
+    });
+    return response.reports;
+  }
+
+  convertGeoText(
+    text: string,
+    format: GeoTargetFormat,
+    csvWkt: boolean,
+    _signal?: AbortSignal,
+  ): Promise<{ content: string; extension: string; notes: string[] }> {
+    return invoke('convert_geo_text', { request: { text, targetFormat: format, csvWkt } });
   }
 
   parseGeoText(text: string, _signal?: AbortSignal): Promise<GeoDocument> {

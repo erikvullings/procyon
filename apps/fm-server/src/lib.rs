@@ -163,6 +163,8 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::files::read_image_gps))
         .routes(utoipa_axum::routes!(routes::files::read_geo_file))
         .routes(utoipa_axum::routes!(routes::files::parse_geo_text))
+        .routes(utoipa_axum::routes!(routes::files::preview_geo_conversion))
+        .routes(utoipa_axum::routes!(routes::files::convert_geo_text))
         .routes(utoipa_axum::routes!(routes::media::stream_media))
         .routes(utoipa_axum::routes!(routes::map::get_map_tile))
         .routes(utoipa_axum::routes!(routes::files::open_docx_preview))

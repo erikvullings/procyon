@@ -6,10 +6,7 @@
 //! raw text.
 
 use fm_domain::{EntryId, Location};
-use fm_geo::{
-    GeoDocument, GeoFormat, GeoJsonError, GpxError, KmlError, KmzError, Limits, NoResources,
-    detect_format, parse_geojson, parse_gpx, parse_kml, parse_kmz,
-};
+use fm_geo::{GeoDocument, Limits, read_document};
 use fm_transport_dto::{
     GeoDocumentDto, GeoErrorDto, GeoIssueDto, GeoOverlayDto, GeoProfilePointDto, GeoTrackDto,
     ParseGeoTextRequestDto, ReadGeoFileRequestDto,
@@ -177,88 +174,21 @@ async fn parse_off_thread(
     Ok(parsed.unwrap_or_else(|(format, error)| empty(&format, error)))
 }
 
-fn kml_error(error: KmlError) -> GeoErrorDto {
-    match error {
-        KmlError::Syntax {
-            message,
-            line,
-            column,
-        } => GeoErrorDto {
-            message,
-            line: u32::try_from(line).ok(),
-            column: u32::try_from(column).ok(),
-            path: None,
-        },
-        other => plain_error(other.to_string()),
-    }
-}
-
 fn parse_bytes(extension: &str, bytes: &[u8]) -> Result<GeoDocumentDto, (String, GeoErrorDto)> {
-    let Some(format) = detect_format(extension, bytes) else {
-        return Err((
-            String::new(),
-            plain_error("this is not a recognised geographic file".into()),
-        ));
-    };
-    match format {
-        GeoFormat::Kml => parse_kml(bytes, Limits::default(), &NoResources, GeoFormat::Kml)
-            .map(document_dto)
-            .map_err(|error| (format.id().to_owned(), kml_error(error))),
-        GeoFormat::Kmz => parse_kmz(bytes, Limits::default())
-            .map(document_dto)
-            .map_err(|error| {
-                (
-                    format.id().to_owned(),
-                    match error {
-                        KmzError::Kml(inner) => kml_error(inner),
-                        other => plain_error(other.to_string()),
-                    },
-                )
-            }),
-        GeoFormat::Gpx => parse_gpx(bytes, Limits::default())
-            .map(document_dto)
-            .map_err(|error| {
-                (
-                    format.id().to_owned(),
-                    match error {
-                        GpxError::Syntax {
-                            message,
-                            line,
-                            column,
-                        } => GeoErrorDto {
-                            message,
-                            line: u32::try_from(line).ok(),
-                            column: u32::try_from(column).ok(),
-                            path: None,
-                        },
-                        other => plain_error(other.to_string()),
-                    },
-                )
-            }),
-        GeoFormat::GeoJson => parse_geojson(bytes, Limits::default())
-            .map(document_dto)
-            .map_err(|error| {
-                (
-                    format.id().to_owned(),
-                    match error {
-                        GeoJsonError::Syntax {
-                            message,
-                            line,
-                            column,
-                        } => GeoErrorDto {
-                            message,
-                            line: u32::try_from(line).ok(),
-                            column: u32::try_from(column).ok(),
-                            path: None,
-                        },
-                        GeoJsonError::Invalid(issue) => GeoErrorDto {
-                            message: issue.message,
-                            line: None,
-                            column: None,
-                            path: Some(issue.path),
-                        },
-                    },
-                )
-            }),
-    }
+    read_document(extension, bytes, Limits::default())
+        .map(document_dto)
+        .map_err(|failure| {
+            (
+                failure
+                    .format
+                    .map(|format| format.id().to_owned())
+                    .unwrap_or_default(),
+                GeoErrorDto {
+                    message: failure.message,
+                    line: failure.line.and_then(|line| u32::try_from(line).ok()),
+                    column: failure.column.and_then(|column| u32::try_from(column).ok()),
+                    path: failure.path,
+                },
+            )
+        })
 }

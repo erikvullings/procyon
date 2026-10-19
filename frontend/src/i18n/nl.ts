@@ -508,6 +508,7 @@ export const nl = {
     kindDelete: 'Verwijderen',
     kindUndo: 'Ongedaan maken',
     kindEditImageMetadata: 'Afbeeldingsmetadata bewerken',
+    kindTransformGeo: 'Geografische bestanden converteren',
     kindSearch: 'Zoeken',
     kindCompare: 'Vergelijken',
     stateQueued: 'In wachtrij',
@@ -2178,4 +2179,5 @@ export const nl = {
   geoEdit: en.geoEdit,
   geoTrack: en.geoTrack,
   geoLayers: en.geoLayers,
+  geoConvert: en.geoConvert,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

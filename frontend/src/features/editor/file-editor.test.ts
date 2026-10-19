@@ -206,6 +206,7 @@ describe('FileEditor', () => {
 
   describe('GeoJSON map editor (task 0278)', () => {
     const mapClient = {
+      convertGeoText: vi.fn(),
       parseGeoText: vi.fn().mockResolvedValue({
         format: 'geojson',
         collection: { type: 'FeatureCollection', features: [] },

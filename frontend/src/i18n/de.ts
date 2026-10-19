@@ -506,6 +506,7 @@ export const de = {
     kindDelete: 'Löschen',
     kindUndo: 'Rückgängig machen',
     kindEditImageMetadata: 'Bildmetadaten bearbeiten',
+    kindTransformGeo: 'Geodateien konvertieren',
     kindSearch: 'Suche',
     kindCompare: 'Vergleich',
     stateQueued: 'In Warteschlange',
@@ -1372,4 +1373,5 @@ export const de = {
   geoEdit: en.geoEdit,
   geoTrack: en.geoTrack,
   geoLayers: en.geoLayers,
+  geoConvert: en.geoConvert,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

@@ -318,6 +318,8 @@ pub enum OperationKind {
     Undo,
     /// Rewrite the metadata of image files in place (task 0274).
     EditImageMetadata,
+    /// Convert or minify geographic files into new files (tasks 0281, 0282).
+    TransformGeo,
 }
 
 /// Observable progress for one operation.

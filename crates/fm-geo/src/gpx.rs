@@ -366,7 +366,7 @@ fn waypoint_properties(point: &Point) -> Map<String, Value> {
     if let Some(time) = &point.time_text {
         properties.insert("time".into(), json!(time));
     }
-    properties.insert("_gpx".into(), json!("waypoint"));
+    properties.insert("gpxType".into(), json!("waypoint"));
     properties
 }
 
@@ -443,7 +443,7 @@ fn build_document(
         }
         positions += shown.len();
         let mut properties = route.properties.clone();
-        properties.insert("_gpx".into(), json!("route"));
+        properties.insert("gpxType".into(), json!("route"));
         features.push(feature(
             json!({
                 "type": "LineString",
@@ -482,7 +482,11 @@ fn build_document(
         let elevation_everywhere = segments
             .iter()
             .all(|s| s.iter().all(|p| p.elevation.is_some()));
-        let per_segment = (DISPLAY_POINTS_PER_TRACK / segments.len()).max(2);
+        let per_segment = if limits.lossless {
+            usize::MAX
+        } else {
+            (DISPLAY_POINTS_PER_TRACK / segments.len()).max(2)
+        };
         let mut decimated = false;
         let lines: Vec<Vec<Value>> = segments
             .iter()
@@ -511,7 +515,45 @@ fn build_document(
             json!({ "type": "MultiLineString", "coordinates": lines })
         };
         let mut properties = track.properties.clone();
-        properties.insert("_gpx".into(), json!("track"));
+        properties.insert("gpxType".into(), json!("track"));
+        if limits.lossless {
+            // Per-point data in the GeoJSON convention used by common converters.
+            let times: Vec<Vec<Value>> = segments
+                .iter()
+                .map(|segment| {
+                    segment
+                        .iter()
+                        .map(|p| p.time_text.as_ref().map_or(Value::Null, |t| json!(t)))
+                        .collect()
+                })
+                .collect();
+            let rates: Vec<Vec<Value>> = segments
+                .iter()
+                .map(|segment| {
+                    segment
+                        .iter()
+                        .map(|p| p.heart_rate.map_or(Value::Null, |r| json!(r)))
+                        .collect()
+                })
+                .collect();
+            let mut extra = Map::new();
+            let unwrap = |lists: Vec<Vec<Value>>| -> Value {
+                if lists.len() == 1 {
+                    Value::Array(lists.into_iter().next().unwrap_or_default())
+                } else {
+                    Value::Array(lists.into_iter().map(Value::Array).collect())
+                }
+            };
+            if times.iter().flatten().any(|v| !v.is_null()) {
+                extra.insert("times".into(), unwrap(times));
+            }
+            if rates.iter().flatten().any(|v| !v.is_null()) {
+                extra.insert("heartRates".into(), unwrap(rates));
+            }
+            if !extra.is_empty() {
+                properties.insert("coordinateProperties".into(), Value::Object(extra));
+            }
+        }
         let feature_index = features.len();
         features.push(feature(geometry, properties));
 
@@ -646,7 +688,7 @@ mod tests {
         let route = &document.features[0];
         assert_eq!(route["geometry"]["type"], "LineString");
         assert_eq!(route["geometry"]["coordinates"][0], json!([2.0, 1.0, 3.0]));
-        assert_eq!(route["properties"]["_gpx"], "route");
+        assert_eq!(route["properties"]["gpxType"], "route");
         // The track keeps its own points; the route's did not leak into it.
         assert_eq!(
             document.features[1]["geometry"]["coordinates"]

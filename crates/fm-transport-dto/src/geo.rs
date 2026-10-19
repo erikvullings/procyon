@@ -173,3 +173,76 @@ pub struct GeoDocumentDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<GeoErrorDto>,
 }
+
+/// What a `transformGeo` operation does with every source file (tasks 0281, 0282).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoTransformDto {
+    /// Output format: `geojson`, `gpx`, `kml`, `kmz` or `csv`.
+    pub target_format: String,
+    /// CSV only: add a `wkt` column so lines and areas are kept.
+    #[serde(default)]
+    pub csv_wkt: bool,
+}
+
+/// Previews a conversion (`POST /api/v1/geo/convert/preview`): what would be lost, per file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewGeoConversionRequestDto {
+    /// Files to convert, at most 200.
+    pub locations: Vec<LocationDto>,
+    /// Output format.
+    pub target_format: String,
+    /// CSV only: add a `wkt` column.
+    #[serde(default)]
+    pub csv_wkt: bool,
+}
+
+/// The report for one file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoConversionReportDto {
+    /// The source file.
+    pub location: LocationDto,
+    /// Name the output would get.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_name: Option<String>,
+    /// What the target format cannot represent.
+    pub notes: Vec<String>,
+    /// Set when this file cannot be converted at all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Reports for all requested files, in request order.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewGeoConversionResponseDto {
+    /// One report per file.
+    pub reports: Vec<GeoConversionReportDto>,
+}
+
+/// Converts text without a file (`POST /api/v1/geo/convert/text`), for editor export.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConvertGeoTextRequestDto {
+    /// GeoJSON text.
+    pub text: String,
+    /// Output format; `kmz` is not available for text.
+    pub target_format: String,
+    /// CSV only: add a `wkt` column.
+    #[serde(default)]
+    pub csv_wkt: bool,
+}
+
+/// The converted text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConvertGeoTextResponseDto {
+    /// The converted content.
+    pub content: String,
+    /// File extension of the format, without a dot.
+    pub extension: String,
+    /// What the target format cannot represent.
+    pub notes: Vec<String>,
+}

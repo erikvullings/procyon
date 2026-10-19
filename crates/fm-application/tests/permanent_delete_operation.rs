@@ -28,6 +28,7 @@ fn request(
         initial_content: None,
         skip_space_check: false,
         image_metadata_edit: None,
+        geo_transform: None,
         symlink_policy: Default::default(),
         permanent_delete_confirmed: confirmed,
         override_read_only,

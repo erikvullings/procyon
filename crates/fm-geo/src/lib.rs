@@ -4,14 +4,17 @@
 //! longitude/latitude) plus warnings about what the source format could not express faithfully.
 //! Parsing is bounded and never panics on malformed input.
 
+mod convert;
 mod geojson;
 mod gpx;
 mod kml;
 mod kmz;
 mod model;
+mod read;
 mod time;
 mod track_stats;
 
+pub use convert::{ConvertError, Converted, Target, convert};
 pub use geojson::{GeoJsonError, parse_geojson};
 pub use gpx::{GpxError, parse_gpx};
 pub use kml::{KmlError, NoResources, ResourceSource, parse_kml};
@@ -19,6 +22,7 @@ pub use kmz::{KmzError, parse_kmz};
 pub use model::{
     Bounds, GeoDocument, GeoFormat, GeoIssue, GroundOverlay, Limits, ProfilePoint, TrackSummary,
 };
+pub use read::{ReadFailure, conversion_limits, read_document};
 
 /// Guesses the format of a file from its extension and leading bytes.
 ///

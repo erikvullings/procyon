@@ -64,6 +64,11 @@ function attrs(patch: Partial<GeoMapEditorAttrs> = {}): GeoMapEditorAttrs {
   return {
     client: {
       parseGeoText: vi.fn(async () => parsed()),
+      convertGeoText: vi.fn(async (text: string, format: string) => ({
+        content: `${format}:${text.length}`,
+        extension: format,
+        notes: format === 'gpx' ? ['polygons cannot be stored in GPX'] : [],
+      })),
       getSettings: vi.fn().mockRejectedValue(new Error('offline')),
       mapTileUrlTemplate: vi.fn(),
       mediaUrl: vi.fn(),
@@ -207,5 +212,27 @@ describe('GeoMapEditor', () => {
       m.redraw.sync();
       expect(root.textContent).toContain('Line 2, column 3: bad');
     });
+  });
+
+  it('exports a converted copy after showing what the format cannot hold', async () => {
+    const onExport = vi.fn().mockResolvedValue(undefined);
+    mount({ onExport, fileName: 'places.geojson' });
+    button('Export...').click();
+    m.redraw.sync();
+    await vi.waitFor(() => {
+      m.redraw.sync();
+      expect(root.textContent).toContain('polygons cannot be stored in GPX');
+    });
+    const name = root.querySelector<HTMLInputElement>('.fm-geo-editor-export input[type="text"]');
+    expect(name?.value).toBe('places.gpx');
+    button('Save').click();
+    expect(onExport).toHaveBeenCalledWith('places.gpx', expect.stringMatching(/^gpx:\d+$/));
+  });
+
+  it('hides the export button when the host cannot save copies', () => {
+    mount();
+    expect(
+      [...root.querySelectorAll('button')].some((item) => item.textContent === 'Export...'),
+    ).toBe(false);
   });
 });

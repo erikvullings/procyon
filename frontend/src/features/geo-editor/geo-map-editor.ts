@@ -2,7 +2,7 @@ import type * as MapLibre from 'maplibre-gl';
 import m, { type FactoryComponent } from 'mithril';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
-import type { MapSettings } from '../../models';
+import type { GeoTargetFormat, MapSettings } from '../../models';
 import { resolvedTheme } from '../../utilities/resolved-theme';
 import { DEFAULT_MAP_SETTINGS } from '../map/map-settings';
 import { MapView } from '../map/map-view';
@@ -22,11 +22,15 @@ import './geo-editor.css';
 export interface GeoMapEditorAttrs {
   readonly client: Pick<
     FileManagerClient,
-    'parseGeoText' | 'getSettings' | 'mapTileUrlTemplate' | 'mediaUrl'
+    'parseGeoText' | 'convertGeoText' | 'getSettings' | 'mapTileUrlTemplate' | 'mediaUrl'
   >;
   /** The text of the file editor; the map editor reads and writes it. */
   readonly content: string;
   readonly onChange: (content: string) => void;
+  /** Name of the file being edited, used to suggest the export name. */
+  readonly fileName?: string;
+  /** Saves an exported copy; the export button is hidden without it (task 0281). */
+  readonly onExport?: (name: string, content: string) => Promise<void>;
 }
 
 type SideTab = 'features' | 'properties' | 'json';
@@ -85,6 +89,14 @@ export const GeoMapEditor: FactoryComponent<GeoMapEditorAttrs> = (initial) => {
   let loadedRevision = -1;
   let tab: SideTab = 'features';
   let newKey = '';
+  let exportOpen = false;
+  let exportFormat: GeoTargetFormat = 'gpx';
+  let exportWkt = false;
+  let exportName = '';
+  let exportNotes: readonly string[] = [];
+  let exportContent: string | undefined;
+  let exportError: string | undefined;
+  let exportToken = 0;
   let importOpen = false;
   let importText = '';
   let message: string | undefined;
@@ -355,6 +367,124 @@ export const GeoMapEditor: FactoryComponent<GeoMapEditorAttrs> = (initial) => {
     ]);
   }
 
+  function exportExtension(): string {
+    return exportFormat;
+  }
+
+  function suggestedExportName(): string {
+    const base = (latest.fileName ?? 'features').replace(/\.[^.]+$/, '');
+    return `${base}.${exportExtension()}`;
+  }
+
+  /** Converts the current text with the chosen format, to show the report before saving. */
+  function refreshExport(): void {
+    const token = ++exportToken;
+    exportContent = undefined;
+    exportError = undefined;
+    exportNotes = [];
+    void latest.client
+      .convertGeoText(latest.content, exportFormat, exportWkt)
+      .then((result) => {
+        if (token !== exportToken) return;
+        exportContent = result.content;
+        exportNotes = result.notes;
+        m.redraw();
+      })
+      .catch((error: unknown) => {
+        if (token !== exportToken) return;
+        exportError = error instanceof Error ? error.message : String(error);
+        m.redraw();
+      });
+  }
+
+  function exportPanel(): m.Children {
+    return m('.fm-geo-editor-export', [
+      m('label', [
+        m('span', t('geoEdit', 'exportFormat')),
+        m(
+          'select.browser-default',
+          {
+            'aria-label': t('geoEdit', 'exportFormat'),
+            value: exportFormat,
+            onchange: (event: Event) => {
+              exportFormat = (event.currentTarget as HTMLSelectElement).value as GeoTargetFormat;
+              exportName = suggestedExportName();
+              refreshExport();
+            },
+          },
+          (['geojson', 'gpx', 'kml', 'csv'] as const).map((id) =>
+            m('option', { value: id, selected: id === exportFormat }, id.toUpperCase()),
+          ),
+        ),
+      ]),
+      exportFormat === 'csv'
+        ? m('label', [
+            m('input', {
+              type: 'checkbox',
+              checked: exportWkt,
+              onchange: (event: Event) => {
+                exportWkt = (event.currentTarget as HTMLInputElement).checked;
+                refreshExport();
+              },
+            }),
+            m('span', t('geoConvert', 'csvWkt')),
+          ])
+        : undefined,
+      m('label', [
+        m('span', t('geoConvert', 'exportName')),
+        m('input', {
+          type: 'text',
+          value: exportName,
+          oninput: (event: Event) => {
+            exportName = (event.currentTarget as HTMLInputElement).value;
+          },
+        }),
+      ]),
+      exportError === undefined
+        ? exportNotes.length === 0
+          ? m(
+              'p.fm-geo-hint',
+              exportContent === undefined
+                ? t('geoConvert', 'checking')
+                : t('geoConvert', 'lossless'),
+            )
+          : [
+              m('p.fm-geo-warning', t('geoConvert', 'lossHeading')),
+              m(
+                'ul',
+                exportNotes.map((note, index) => m('li', { key: index }, note)),
+              ),
+            ]
+        : m('p.fm-field-error', { role: 'alert' }, exportError),
+      m(
+        'button.btn-flat',
+        {
+          type: 'button',
+          disabled: exportContent === undefined || exportName.trim() === '',
+          onclick: () => {
+            const content = exportContent;
+            const name = exportName.trim();
+            if (content === undefined || latest.onExport === undefined) return;
+            void latest
+              .onExport(name, content)
+              .then(() => {
+                message = undefined;
+                exportOpen = false;
+                m.redraw();
+              })
+              .catch((error: unknown) => {
+                exportError = t('geoConvert', 'exportFailed', {
+                  message: error instanceof Error ? error.message : String(error),
+                });
+                m.redraw();
+              });
+          },
+        },
+        t('geoConvert', 'exportSave'),
+      ),
+    ]);
+  }
+
   async function dropped(event: DragEvent): Promise<void> {
     event.preventDefault();
     const file = event.dataTransfer?.files[0];
@@ -458,7 +588,25 @@ export const GeoMapEditor: FactoryComponent<GeoMapEditorAttrs> = (initial) => {
               },
               t('geoEdit', 'importButton'),
             ),
+            latest.onExport === undefined
+              ? undefined
+              : m(
+                  'button.btn-flat',
+                  {
+                    type: 'button',
+                    'aria-expanded': String(exportOpen),
+                    onclick: () => {
+                      exportOpen = !exportOpen;
+                      if (exportOpen) {
+                        exportName = suggestedExportName();
+                        refreshExport();
+                      }
+                    },
+                  },
+                  t('geoConvert', 'exportButton'),
+                ),
           ]),
+          exportOpen ? exportPanel() : undefined,
           importOpen
             ? m('.fm-geo-editor-import', [
                 m('p.fm-geo-hint', t('geoEdit', 'importHint')),

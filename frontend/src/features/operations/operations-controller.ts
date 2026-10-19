@@ -1,5 +1,11 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import type { ImageMetadataEdit, LinkRequest, Location, Operation } from '../../models';
+import type {
+  GeoTransform,
+  ImageMetadataEdit,
+  LinkRequest,
+  Location,
+  Operation,
+} from '../../models';
 import { perfMark } from '../../utilities/perf';
 
 export interface OperationsController {
@@ -49,6 +55,12 @@ export interface OperationsController {
   editImageMetadata(
     sources: readonly Location[],
     edit: ImageMetadataEdit,
+    signal?: AbortSignal,
+  ): Promise<Operation>;
+  /** Converts geographic files into new files next to them (task 0281). */
+  transformGeo(
+    sources: readonly Location[],
+    transform: GeoTransform,
     signal?: AbortSignal,
   ): Promise<Operation>;
   /** Creates a link named `name` in `destination` that points at `target` (task 0168). */
@@ -274,6 +286,13 @@ export function createOperationsController(rawClient: FileManagerClient): Operat
           conflictPolicy: 'ask',
           name,
         },
+        signal,
+      );
+    },
+
+    transformGeo(sources, transform, signal) {
+      return client.startOperation(
+        { type: 'transformGeo', sources, conflictPolicy: 'ask', geoTransform: transform },
         signal,
       );
     },

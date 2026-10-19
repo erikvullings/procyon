@@ -3845,6 +3845,22 @@ impl FileManagerService {
         crate::geo_files::read_geo_file(&self.providers, request).await
     }
 
+    /// Reports what converting geographic files to another format would lose (task 0281).
+    pub async fn preview_geo_conversion(
+        &self,
+        request: fm_transport_dto::PreviewGeoConversionRequestDto,
+    ) -> Result<fm_transport_dto::PreviewGeoConversionResponseDto, ApplicationError> {
+        crate::geo_transform::preview_conversion(&self.providers, request).await
+    }
+
+    /// Converts GeoJSON text into another text format, for editor export (task 0281).
+    pub async fn convert_geo_text(
+        &self,
+        request: fm_transport_dto::ConvertGeoTextRequestDto,
+    ) -> Result<fm_transport_dto::ConvertGeoTextResponseDto, ApplicationError> {
+        crate::geo_transform::convert_text(request).await
+    }
+
     /// Parses GeoJSON text for live validation in editors (task 0278).
     pub async fn parse_geo_text(
         &self,
@@ -7208,6 +7224,7 @@ mod tests {
             initial_content: None,
             skip_space_check: false,
             image_metadata_edit: None,
+            geo_transform: None,
             symlink_policy: Default::default(),
             permanent_delete_confirmed: false,
             override_read_only: false,
@@ -7826,6 +7843,7 @@ mod tests {
             initial_content: None,
             skip_space_check: false,
             image_metadata_edit: None,
+            geo_transform: None,
             symlink_policy: fm_transport_dto::SymlinkPolicyDto::default(),
             permanent_delete_confirmed: false,
             override_read_only: false,

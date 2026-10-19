@@ -43,6 +43,7 @@ import type { FileEditorController, FileEditorState } from '../editor/file-edito
 import type { EditorLinkHandlers } from '../editor/link-actions';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
 import { isRestorableFavouriteLocation, reorderFavourites } from '../favourites/favourites';
+import { isConvertibleGeoFile } from '../geo/convert-geo-actions';
 import { archiveRootForEntry } from '../navigation/archive-location';
 import {
   type NavigationController,
@@ -219,6 +220,8 @@ export interface PaneContentContext {
   isDocumentSummaryAvailable?(): boolean;
   /** Hands playlist rows to the audio queue (task 0262). */
   playQueueItems?: PlaylistViewAttrs['onPlay'];
+  /** Opens the geographic file conversion dialog for the viewed entry (task 0281). */
+  convertGeo?: (entry: EntrySummary) => void;
   /** Shows an image of the F3 viewer on the map (task 0276). */
   showEntryOnMap?: (paneId: PaneId, entry: EntrySummary) => void;
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
@@ -993,6 +996,11 @@ export function createPaneContentBuilder(
                     paneId,
                     onClose: () => context.closeEditor(paneId),
                     mapClient: client,
+                    onExportGeo: (name, content) =>
+                      context
+                        .getOpsController()
+                        .createTextFile(parentLocation(editor.state.entry.location), name, content)
+                        .then(() => undefined),
                     links: context.getEditorLinkHandlers(paneId, editor.state.entry.location),
                   });
             })(),
@@ -1089,6 +1097,10 @@ export function createPaneContentBuilder(
                               context.openDocumentSummary?.(paneId, viewer.state.entry),
                           }
                         : {}),
+                      ...(context.convertGeo === undefined ||
+                      !isConvertibleGeoFile(viewer.state.entry)
+                        ? {}
+                        : { onConvertGeo: () => context.convertGeo?.(viewer.state.entry) }),
                       onEditGeo: () =>
                         context.invokeActionById(
                           'core.edit',

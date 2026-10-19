@@ -69,7 +69,9 @@ import type {
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
+  GeoConversionReport,
   GeoDocument,
+  GeoTargetFormat,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
@@ -361,6 +363,8 @@ export type MockClientMethod =
   | 'setSpotlightComment'
   | 'cacheArchivePassword'
   | 'readFileRange'
+  | 'previewGeoConversion'
+  | 'convertGeoText'
   | 'parseGeoText'
   | 'readGeoFile'
   | 'readImageGps'
@@ -3075,6 +3079,34 @@ export class MockFileManagerClient implements FileManagerClient {
 
   setPaneActivity(_request: SetPaneActivityRequest, signal?: AbortSignal): Promise<void> {
     return this.perform('setPaneActivity', signal, () => undefined);
+  }
+
+  previewGeoConversion(
+    locations: readonly Location[],
+    format: GeoTargetFormat,
+    _csvWkt: boolean,
+    signal?: AbortSignal,
+  ): Promise<GeoConversionReport[]> {
+    return this.perform('previewGeoConversion', signal, () =>
+      locations.map((location) => ({
+        location,
+        outputName: `converted.${format}`,
+        notes: format === 'gpx' ? ['polygons cannot be stored in GPX'] : [],
+      })),
+    );
+  }
+
+  convertGeoText(
+    text: string,
+    format: GeoTargetFormat,
+    _csvWkt: boolean,
+    signal?: AbortSignal,
+  ): Promise<{ content: string; extension: string; notes: string[] }> {
+    return this.perform('convertGeoText', signal, () => ({
+      content: text,
+      extension: format,
+      notes: [],
+    }));
   }
 
   parseGeoText(text: string, signal?: AbortSignal): Promise<GeoDocument> {

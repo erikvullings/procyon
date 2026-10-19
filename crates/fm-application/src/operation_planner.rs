@@ -179,6 +179,9 @@ impl OperationPlanner {
                         .into_bytes(),
                 })
             }
+            OperationKindDto::TransformGeo => {
+                crate::geo_transform::plan_transform_geo(&self.providers, request)?
+            }
             OperationKindDto::EditImageMetadata => {
                 crate::image_metadata_edit::plan_edit_image_metadata(&self.providers, request)?
             }
@@ -553,6 +556,7 @@ impl OperationPlanner {
                 initial_content: None,
                 skip_space_check: false,
                 image_metadata_edit: None,
+                geo_transform: None,
                 symlink_policy: SymlinkPolicyDto::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
@@ -3532,6 +3536,7 @@ mod tests {
             initial_content: None,
             skip_space_check: false,
             image_metadata_edit: None,
+            geo_transform: None,
             override_read_only: false,
             link: None,
             permanent_delete_confirmed: false,

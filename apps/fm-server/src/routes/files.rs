@@ -6,12 +6,13 @@ use axum::{Json, http::StatusCode};
 use fm_transport_dto::{
     ApplicationErrorDto, ArchiveCredentialRequestDto, ArchiveSummaryRequestDto,
     ArchiveSummaryResponseDto, CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto,
-    DocxPreviewSessionRequestDto, GeoDocumentDto, GetFileGitHistoryRequestDto,
-    GetFileGitHistoryResponseDto, ImageMetadataDto, LoadEditableFileRequestDto,
-    LoadEditableFileResponseDto, OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto,
-    OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, OpenSqliteViewRequestDto,
-    OpenSqliteViewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
-    ParseGeoTextRequestDto, PptxPreviewSessionRequestDto, QuerySqliteViewRequestDto,
+    ConvertGeoTextRequestDto, ConvertGeoTextResponseDto, DocxPreviewSessionRequestDto,
+    GeoDocumentDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, ImageMetadataDto,
+    LoadEditableFileRequestDto, LoadEditableFileResponseDto, OpenDocxPreviewRequestDto,
+    OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto,
+    OpenSqliteViewRequestDto, OpenSqliteViewResponseDto, OpenStructuredViewRequestDto,
+    OpenStructuredViewResponseDto, ParseGeoTextRequestDto, PptxPreviewSessionRequestDto,
+    PreviewGeoConversionRequestDto, PreviewGeoConversionResponseDto, QuerySqliteViewRequestDto,
     QuerySqliteViewResponseDto, ReadDocxPreviewResourceRequestDto,
     ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
     ReadGeoFileRequestDto, ReadImageGpsRequestDto, ReadImageGpsResponseDto,
@@ -189,6 +190,60 @@ pub(crate) async fn read_geo_file(
     state
         .service
         .read_geo_file(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Reports what converting geographic files to another format would lose (task 0281).
+#[utoipa::path(
+    post,
+    path = "/api/v1/geo/convert/preview",
+    operation_id = "previewGeoConversion",
+    request_body = PreviewGeoConversionRequestDto,
+    responses(
+        (status = 200, description = "A report per file", body = PreviewGeoConversionResponseDto),
+        (status = 400, description = "Unknown format or too many files", body = ApplicationErrorDto),
+        (status = 403, description = "A file is outside the accessible roots", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn preview_geo_conversion(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<PreviewGeoConversionRequestDto>,
+) -> Result<Json<PreviewGeoConversionResponseDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    for location in &request.locations {
+        crate::error::require_within_roots(location, &state.accessible_roots, request_id)?;
+    }
+    state
+        .service
+        .preview_geo_conversion(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Converts GeoJSON text into another text format for editor export (task 0281).
+#[utoipa::path(
+    post,
+    path = "/api/v1/geo/convert/text",
+    operation_id = "convertGeoText",
+    request_body = ConvertGeoTextRequestDto,
+    responses(
+        (status = 200, description = "The converted text", body = ConvertGeoTextResponseDto),
+        (status = 400, description = "Invalid GeoJSON or unsupported format", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn convert_geo_text(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ConvertGeoTextRequestDto>,
+) -> Result<Json<ConvertGeoTextResponseDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    state
+        .service
+        .convert_geo_text(request)
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, request_id))

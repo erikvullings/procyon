@@ -3210,6 +3210,92 @@
         }
       }
     },
+    "/api/v1/geo/convert/preview": {
+      "post": {
+        "summary": "Reports what converting geographic files to another format would lose (task 0281).",
+        "operationId": "previewGeoConversion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewGeoConversionRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "A report per file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewGeoConversionResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown format or too many files",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A file is outside the accessible roots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/geo/convert/text": {
+      "post": {
+        "summary": "Converts GeoJSON text into another text format for editor export (task 0281).",
+        "operationId": "convertGeoText",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConvertGeoTextRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The converted text",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConvertGeoTextResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid GeoJSON or unsupported format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/geo/parse": {
       "post": {
         "summary": "Parses GeoJSON text for live validation in editors (task 0278).",
@@ -10075,6 +10161,54 @@
           "failed"
         ]
       },
+      "ConvertGeoTextRequestDto": {
+        "type": "object",
+        "description": "Converts text without a file (`POST /api/v1/geo/convert/text`), for editor export.",
+        "required": [
+          "text",
+          "targetFormat"
+        ],
+        "properties": {
+          "csvWkt": {
+            "type": "boolean",
+            "description": "CSV only: add a `wkt` column."
+          },
+          "targetFormat": {
+            "type": "string",
+            "description": "Output format; `kmz` is not available for text."
+          },
+          "text": {
+            "type": "string",
+            "description": "GeoJSON text."
+          }
+        }
+      },
+      "ConvertGeoTextResponseDto": {
+        "type": "object",
+        "description": "The converted text.",
+        "required": [
+          "content",
+          "extension",
+          "notes"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "The converted content."
+          },
+          "extension": {
+            "type": "string",
+            "description": "File extension of the format, without a dot."
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What the target format cannot represent."
+          }
+        }
+      },
       "CreateConnectionRequestDto": {
         "type": "object",
         "description": "Request body for `POST /api/v1/connections`.",
@@ -12030,6 +12164,41 @@
           }
         }
       },
+      "GeoConversionReportDto": {
+        "type": "object",
+        "description": "The report for one file.",
+        "required": [
+          "location",
+          "notes"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Set when this file cannot be converted at all."
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The source file."
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What the target format cannot represent."
+          },
+          "outputName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Name the output would get."
+          }
+        }
+      },
       "GeoDocumentDto": {
         "type": "object",
         "description": "A geographic file read into GeoJSON features.",
@@ -12403,6 +12572,23 @@
               "null"
             ],
             "description": "First timestamp, UTC."
+          }
+        }
+      },
+      "GeoTransformDto": {
+        "type": "object",
+        "description": "What a `transformGeo` operation does with every source file (tasks 0281, 0282).",
+        "required": [
+          "targetFormat"
+        ],
+        "properties": {
+          "csvWkt": {
+            "type": "boolean",
+            "description": "CSV only: add a `wkt` column so lines and areas are kept."
+          },
+          "targetFormat": {
+            "type": "string",
+            "description": "Output format: `geojson`, `gpx`, `kml`, `kmz` or `csv`."
           }
         }
       },
@@ -16670,6 +16856,7 @@
           "delete",
           "undo",
           "editImageMetadata",
+          "transformGeo",
           "search",
           "compare"
         ]
@@ -17534,6 +17721,47 @@
           "target": {
             "$ref": "#/components/schemas/DocumentSummaryTargetDto",
             "description": "File occurrence to summarize."
+          }
+        }
+      },
+      "PreviewGeoConversionRequestDto": {
+        "type": "object",
+        "description": "Previews a conversion (`POST /api/v1/geo/convert/preview`): what would be lost, per file.",
+        "required": [
+          "locations",
+          "targetFormat"
+        ],
+        "properties": {
+          "csvWkt": {
+            "type": "boolean",
+            "description": "CSV only: add a `wkt` column."
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Files to convert, at most 200."
+          },
+          "targetFormat": {
+            "type": "string",
+            "description": "Output format."
+          }
+        }
+      },
+      "PreviewGeoConversionResponseDto": {
+        "type": "object",
+        "description": "Reports for all requested files, in request order.",
+        "required": [
+          "reports"
+        ],
+        "properties": {
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeoConversionReportDto"
+            },
+            "description": "One report per file."
           }
         }
       },
@@ -23608,6 +23836,17 @@
               "$ref": "#/components/schemas/LocationDto"
             },
             "description": "Per-source destinations for a batch `rename` (task 0072 multi-rename), one entry per\n`sources` item in the same order. Empty for every other operation kind and for a\nsingle-entry rename, which keeps using `destination` instead."
+          },
+          "geoTransform": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GeoTransformDto",
+                "description": "What a `transformGeo` operation does with each file (tasks 0281, 0282)."
+              }
+            ]
           },
           "imageMetadataEdit": {
             "oneOf": [

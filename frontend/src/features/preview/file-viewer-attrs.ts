@@ -14,6 +14,7 @@ export type FileViewerAttrsExtras = Pick<
       | 'onPlayTracks'
       | 'onOpenOnMap'
       | 'onEditGeo'
+      | 'onConvertGeo'
       | 'mapClient'
       | 'links'
     >

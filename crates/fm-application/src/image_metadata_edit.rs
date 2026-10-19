@@ -151,18 +151,18 @@ struct EditImageMetadataExecutor {
     temporary: Mutex<Option<Location>>,
 }
 
-fn entry_of(location: &Location) -> EntryRef {
+pub(crate) fn entry_of(location: &Location) -> EntryRef {
     EntryRef {
         id: EntryId::new(),
         location: location.clone(),
     }
 }
 
-fn io_failure(error: std::io::Error) -> ExecutionError {
+pub(crate) fn io_failure(error: std::io::Error) -> ExecutionError {
     ExecutionError::Failed(error.to_string())
 }
 
-async fn read_all(
+pub(crate) async fn read_all(
     provider: &Arc<dyn FileSystemProvider>,
     entry: &EntryRef,
     cancellation: &CancellationToken,
@@ -174,7 +174,7 @@ async fn read_all(
 }
 
 /// Writes `bytes` to a new file; refuses to replace an existing one.
-async fn write_new(
+pub(crate) async fn write_new(
     provider: &Arc<dyn FileSystemProvider>,
     destination: &Location,
     bytes: &[u8],
@@ -192,7 +192,7 @@ async fn write_new(
     Ok(())
 }
 
-fn sibling(location: &Location, name: &str) -> Result<Location, ExecutionError> {
+pub(crate) fn sibling(location: &Location, name: &str) -> Result<Location, ExecutionError> {
     location
         .parent()
         .map_err(|error| ExecutionError::Failed(error.to_string()))?

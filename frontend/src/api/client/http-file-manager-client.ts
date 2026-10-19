@@ -60,7 +60,9 @@ import type {
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
+  GeoConversionReport,
   GeoDocument,
+  GeoTargetFormat,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
@@ -246,6 +248,7 @@ import {
   listConnections as requestConnections,
   testConnection as requestConnectionTest,
   updateConnection as requestConnectionUpdate,
+  convertGeoText as requestConvertGeoText,
   getDiagnostics as requestDiagnostics,
   listDirectory as requestDirectory,
   listDirectoryChildren as requestDirectoryChildren,
@@ -326,6 +329,7 @@ import {
   closePptxPreview as requestPptxPreviewClose,
   openPptxPreview as requestPptxPreviewOpen,
   readPptxPreviewPdf as requestPptxPreviewPdf,
+  previewGeoConversion as requestPreviewGeoConversion,
   querySqliteView as requestQuerySqliteView,
   resolveRagCitation as requestRagCitationResolution,
   deleteRagConversation as requestRagConversationDeletion,
@@ -1383,6 +1387,38 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200) {
       throw new Error(`Unexpected readFileRange response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async previewGeoConversion(
+    locations: readonly FileLocation[],
+    format: GeoTargetFormat,
+    csvWkt: boolean,
+    signal?: AbortSignal,
+  ): Promise<GeoConversionReport[]> {
+    const response = await requestPreviewGeoConversion(
+      { locations: [...locations], targetFormat: format, csvWkt },
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected previewGeoConversion response status: ${response.status}`);
+    }
+    return response.data.reports;
+  }
+
+  async convertGeoText(
+    text: string,
+    format: GeoTargetFormat,
+    csvWkt: boolean,
+    signal?: AbortSignal,
+  ): Promise<{ content: string; extension: string; notes: string[] }> {
+    const response = await requestConvertGeoText(
+      { text, targetFormat: format, csvWkt },
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected convertGeoText response status: ${response.status}`);
     }
     return response.data;
   }

@@ -30,6 +30,8 @@ import type {
   ConfirmSemanticIndexRemovalRequestDto,
   ConfirmSemanticModelMigrationRequestDto,
   ConnectionDto,
+  ConvertGeoTextRequestDto,
+  ConvertGeoTextResponseDto,
   CreateConnectionRequestDto,
   CreateSemanticIndexRemovalPlanRequestDto,
   CreateSemanticInstallationOfferRequestDto,
@@ -131,6 +133,8 @@ import type {
   PluginPreviewResultDto,
   PptxPreviewSessionRequestDto,
   PreviewDocumentSummaryRequestDto,
+  PreviewGeoConversionRequestDto,
+  PreviewGeoConversionResponseDto,
   PreviewRagRequestDto,
   PreviewSemanticEnrolmentRequestDto,
   QuerySqliteViewRequestDto,
@@ -4211,6 +4215,125 @@ return fetchMutator<forgetFolderViewResponse>(getForgetFolderViewUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(forgetFolderViewRequestDto)
+  }
+);}
+
+
+
+export type previewGeoConversionResponse200 = {
+  data: PreviewGeoConversionResponseDto
+  status: 200
+}
+
+export type previewGeoConversionResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type previewGeoConversionResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type previewGeoConversionResponseSuccess = (previewGeoConversionResponse200) & {
+  headers: Headers;
+};
+export type previewGeoConversionResponseError = (previewGeoConversionResponse400 | previewGeoConversionResponse403) & {
+  headers: Headers;
+};
+
+export type previewGeoConversionResponse = (previewGeoConversionResponseSuccess | previewGeoConversionResponseError)
+
+export const getPreviewGeoConversionUrl = () => {
+
+
+
+
+  return `/api/v1/geo/convert/preview`
+}
+
+/**
+ * @summary Reports what converting geographic files to another format would lose (task 0281).
+ */
+export const previewGeoConversion = async (previewGeoConversionRequestDto: PreviewGeoConversionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<previewGeoConversionResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<previewGeoConversionResponse>(getPreviewGeoConversionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(previewGeoConversionRequestDto)
+  }
+);}
+
+
+
+export type convertGeoTextResponse200 = {
+  data: ConvertGeoTextResponseDto
+  status: 200
+}
+
+export type convertGeoTextResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type convertGeoTextResponseSuccess = (convertGeoTextResponse200) & {
+  headers: Headers;
+};
+export type convertGeoTextResponseError = (convertGeoTextResponse400) & {
+  headers: Headers;
+};
+
+export type convertGeoTextResponse = (convertGeoTextResponseSuccess | convertGeoTextResponseError)
+
+export const getConvertGeoTextUrl = () => {
+
+
+
+
+  return `/api/v1/geo/convert/text`
+}
+
+/**
+ * @summary Converts GeoJSON text into another text format for editor export (task 0281).
+ */
+export const convertGeoText = async (convertGeoTextRequestDto: ConvertGeoTextRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<convertGeoTextResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<convertGeoTextResponse>(getConvertGeoTextUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(convertGeoTextRequestDto)
   }
 );}
 

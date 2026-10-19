@@ -2932,6 +2932,32 @@ pub(crate) async fn read_geo_file(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Reports what converting geographic files would lose (task 0281).
+#[tauri::command]
+pub(crate) async fn preview_geo_conversion(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::PreviewGeoConversionRequestDto,
+) -> Result<fm_transport_dto::PreviewGeoConversionResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .preview_geo_conversion(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Converts GeoJSON text into another text format (task 0281).
+#[tauri::command]
+pub(crate) async fn convert_geo_text(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ConvertGeoTextRequestDto,
+) -> Result<fm_transport_dto::ConvertGeoTextResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .convert_geo_text(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Parses GeoJSON text for live validation in editors (task 0278).
 #[tauri::command]
 pub(crate) async fn parse_geo_text(

@@ -45,6 +45,9 @@ pub struct Limits {
     pub max_features: usize,
     /// Most coordinate positions kept for display.
     pub max_positions: usize,
+    /// Keep everything a converter needs: no thinning of tracks and per-point data (times, heart
+    /// rates) in `coordinateProperties`. Meant for conversion, not for drawing.
+    pub lossless: bool,
 }
 
 impl Default for Limits {
@@ -52,6 +55,7 @@ impl Default for Limits {
         Self {
             max_features: 50_000,
             max_positions: 2_000_000,
+            lossless: false,
         }
     }
 }

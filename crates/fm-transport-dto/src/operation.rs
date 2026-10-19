@@ -48,6 +48,9 @@ pub struct StartOperationRequestDto {
     /// The edit applied by an `editImageMetadata` operation (task 0274).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_metadata_edit: Option<crate::ImageMetadataEditDto>,
+    /// What a `transformGeo` operation does with each file (tasks 0281, 0282).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geo_transform: Option<crate::GeoTransformDto>,
     /// Policy for symbolic links encountered during recursive copying.
     #[serde(default)]
     pub symlink_policy: SymlinkPolicyDto,
@@ -184,6 +187,8 @@ pub enum OperationKindDto {
     Undo,
     /// Rewrite the metadata of image files in place (task 0274).
     EditImageMetadata,
+    /// Convert or minify geographic files into new files (tasks 0281, 0282).
+    TransformGeo,
     /// Search files.
     Search,
     /// Compare two directory trees (task 0075).

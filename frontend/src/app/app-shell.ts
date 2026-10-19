@@ -113,6 +113,8 @@ import {
   createBackendEventHandler,
 } from '../features/events/backend-event-handler';
 import { recordRecentLocation } from '../features/favourites/favourites';
+import { CONVERT_GEO_ACTION_ID, isConvertibleGeoFile } from '../features/geo/convert-geo-actions';
+import { ConvertGeoDialog, type ConvertGeoRequest } from '../features/geo/convert-geo-dialog';
 import { isGeoCandidate } from '../features/image-map/gps-scan';
 import { SHOW_ON_MAP_ACTION_ID } from '../features/image-map/image-map-actions';
 import {
@@ -328,6 +330,7 @@ import type {
   Connection,
   DirectoryDelta,
   EntrySummary,
+  GeoTransform,
   ImageMetadataEdit,
   KnowledgeEvidence,
   Location,
@@ -640,6 +643,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         requiresSelection: true,
       }),
       descriptor(SHOW_ON_MAP_ACTION_ID, t('imageMap', 'action'), {}),
+      descriptor(CONVERT_GEO_ACTION_ID, t('geoConvert', 'action'), { requiresSelection: true }),
     ];
   }
 
@@ -807,6 +811,49 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       .catch((error: unknown) => {
         toast({ html: error instanceof Error ? error.message : String(error) });
       });
+  }
+
+  /** Opens "Convert geographic files…" for the selection (task 0281). */
+  function beginConvertGeo(invocation: ActionInvocationContext | undefined): void {
+    const paneId = invocation?.paneId ?? workspace?.activePaneId;
+    if (paneId === undefined) return;
+    const ids = new Set(
+      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
+    );
+    const files = (directories.get(activeTabKey(paneId))?.entries ?? []).filter(
+      (entry) => ids.has(entry.id) && isConvertibleGeoFile(entry),
+    );
+    if (files.length === 0) {
+      toast({ html: t('geoConvert', 'files', { n: 0 }) });
+      return;
+    }
+    convertGeoRequest = {
+      files: files.map((entry) => ({ location: entry.location, name: entry.name })),
+    };
+    m.redraw();
+  }
+
+  function confirmConvertGeo(transform: GeoTransform): void {
+    const request = convertGeoRequest;
+    convertGeoRequest = undefined;
+    if (request === undefined) return;
+    void opsController
+      .transformGeo(
+        request.files.map((file) => file.location),
+        transform,
+      )
+      .then(() => {
+        toast({ html: t('geoConvert', 'started', { n: request.files.length }) });
+        m.redraw();
+      })
+      .catch((error: unknown) => {
+        toast({
+          html: t('geoConvert', 'failed', {
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        });
+      });
+    m.redraw();
   }
 
   /** Opens the "Show on map" panel for the selection, or for the whole active folder (task 0276). */
@@ -1032,6 +1079,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (player === undefined) return false;
     if (actionId === SAVE_PLAYLIST_ACTION_ID) {
       beginSavePlaylist(invocation);
+      return true;
+    }
+    if (actionId === CONVERT_GEO_ACTION_ID) {
+      beginConvertGeo(invocation);
       return true;
     }
     if (actionId === SHOW_ON_MAP_ACTION_ID) {
@@ -1578,6 +1629,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let playerController: PlayerController | undefined;
   let savePlaylistRequest: SavePlaylistRequest | undefined;
   let editImageMetadataRequest: EditImageMetadataRequest | undefined;
+  let convertGeoRequest: ConvertGeoRequest | undefined;
   let imageMapState: ImageMapState = INITIAL_IMAGE_MAP_STATE;
   let imageMapController: ImageMapController | undefined;
   /** The pane whose folder feeds the open map panel; used to reveal and highlight entries. */
@@ -5013,6 +5065,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     closeViewer,
     isDocumentSummaryAvailable: () => semanticAssistantAvailable,
     showEntryOnMap,
+    convertGeo: (entry) => {
+      convertGeoRequest = { files: [{ location: entry.location, name: entry.name }] };
+      m.redraw();
+    },
     playQueueItems: (items, startId, mode, skipped) => {
       const player = playerController;
       if (player === undefined) return;
@@ -7018,6 +7074,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             },
             onCancel: () => {
               saveSnapshotRequest = undefined;
+            },
+          }),
+          m(ConvertGeoDialog, {
+            request: convertGeoRequest,
+            client: attrs.client,
+            onConvert: confirmConvertGeo,
+            onCancel: () => {
+              convertGeoRequest = undefined;
+              m.redraw();
             },
           }),
           m(EditImageMetadataDialog, {

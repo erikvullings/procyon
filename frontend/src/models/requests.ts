@@ -58,6 +58,7 @@ import {
   type SyncPlanItem,
   syncPlanItemFromDto,
 } from './comparison';
+import type { GeoTransform } from './geo';
 import type { ActionId, EntryId, OperationId, PaneId } from './ids';
 import type { ImageMetadataEdit } from './image-metadata';
 import type { Location } from './location';
@@ -154,6 +155,8 @@ export interface StartOperationRequest {
   skipSpaceCheck?: boolean;
   /** The metadata changes of an `editImageMetadata` operation (task 0274). */
   imageMetadataEdit?: ImageMetadataEdit;
+  /** The conversion of a `transformGeo` operation (task 0281). */
+  geoTransform?: GeoTransform;
   symlinkPolicy?: 'copyLink' | 'copyTarget';
   permanentDeleteConfirmed?: boolean;
   overrideReadOnly?: boolean;
