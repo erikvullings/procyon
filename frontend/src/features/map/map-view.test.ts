@@ -226,6 +226,22 @@ describe('MapView', () => {
     });
   });
 
+  it('loads the draft template directly when previewing unsaved settings', async () => {
+    const api = client();
+    mount(() => ({
+      client: api,
+      settings: DEFAULT_MAP_SETTINGS,
+      directTiles: true,
+      dark: false,
+      markers: [],
+    }));
+    const map = await loaded();
+    expect(api.mapTileUrlTemplate).not.toHaveBeenCalled();
+    expect(map.options.style).toMatchObject({
+      sources: { basemap: { tiles: [DEFAULT_MAP_SETTINGS.urlTemplate] } },
+    });
+  });
+
   it('never asks the client for tiles when online tiles are disabled', async () => {
     const api = client();
     const offline: MapSettings = { ...DEFAULT_MAP_SETTINGS, onlineTiles: false };

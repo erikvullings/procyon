@@ -171,7 +171,13 @@ export const MapSettingsSection: FactoryComponent<MapSettingsSectionAttrs> = () 
         client !== undefined && previewOpen && problem === undefined
           ? m(
               '.fm-map-preview',
-              m(MapView, { client, settings, dark: resolvedTheme() === 'dark', markers: [] }),
+              m(MapView, {
+                client,
+                settings,
+                directTiles: true,
+                dark: resolvedTheme() === 'dark',
+                markers: [],
+              }),
             )
           : undefined,
       ]);

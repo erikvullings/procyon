@@ -22,6 +22,11 @@ export interface MapViewAttrs {
   readonly client: MapViewClient;
   readonly settings: MapSettings;
   readonly dark: boolean;
+  /**
+   * Loads raster tiles straight from `settings.urlTemplate` instead of through the backend proxy,
+   * which only knows the saved settings. For previewing settings that are not saved yet.
+   */
+  readonly directTiles?: boolean;
   readonly markers: readonly MapMarker[];
   readonly selectedIds?: ReadonlySet<string>;
   /** Re-fits the viewport to the markers whenever this value changes (and once on load). */
@@ -169,7 +174,9 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
     const { settings } = attrs;
     const tileTemplate =
       settings.basemapKind === 'raster' && settings.onlineTiles
-        ? withVersion(await attrs.client.mapTileUrlTemplate(), settings.urlTemplate)
+        ? attrs.directTiles === true
+          ? settings.urlTemplate
+          : withVersion(await attrs.client.mapTileUrlTemplate(), settings.urlTemplate)
         : undefined;
     const pmtilesUrl =
       settings.basemapKind === 'pmtiles' && settings.pmtilesLocation != null
