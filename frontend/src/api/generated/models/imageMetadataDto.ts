@@ -9,6 +9,8 @@ import type { ImageTagGroupDto } from './imageTagGroupDto.ts';
  * All metadata of an image.
  */
 export interface ImageMetadataDto {
+  /** Field ids this file's format can store and write; empty when it cannot be edited. */
+  editableFields?: string[];
   /**
      * Detected container format; absent when the file is not a supported image.
      * @nullable

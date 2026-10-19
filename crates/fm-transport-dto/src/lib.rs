@@ -118,7 +118,8 @@ pub use files::{
 pub use finder_tags::{FinderTagColorDto, FinderTagDto, FinderTagsDto, SpotlightCommentDto};
 pub use health::{HealthDto, HealthStatusDto};
 pub use image_metadata::{
-    GpsPositionDto, ImageMetadataDto, ImageTagDto, ImageTagGroupDto, ReadImageMetadataRequestDto,
+    CaptureTimeDto, GpsPositionDto, ImageMetadataDto, ImageMetadataEditDto, ImageTagDto,
+    ImageTagGroupDto, ReadImageMetadataRequestDto,
 };
 pub use knowledge::{
     CancelKnowledgeAnswerRequestDto, CancelKnowledgeSearchRequestDto,

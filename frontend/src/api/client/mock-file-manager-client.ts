@@ -3074,6 +3074,17 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('readImageMetadata', signal, () => ({
       format: 'JPEG',
       supported: true,
+      editableFields: [
+        'dateTaken',
+        'gps',
+        'description',
+        'copyright',
+        'author',
+        'orientation',
+        'title',
+        'keywords',
+        'rating',
+      ],
       groups: [
         {
           namespace: 'EXIF',

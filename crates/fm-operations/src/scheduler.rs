@@ -1061,6 +1061,7 @@ fn operation_payload(operation: &Operation) -> OperationPayload {
             crate::OperationKind::Trash => OperationKindPayload::Trash,
             crate::OperationKind::Delete => OperationKindPayload::Delete,
             crate::OperationKind::Undo => OperationKindPayload::Undo,
+            crate::OperationKind::EditImageMetadata => OperationKindPayload::EditImageMetadata,
         },
         state: state_payload(operation.state),
         sources: operation.sources.iter().map(entry_payload).collect(),

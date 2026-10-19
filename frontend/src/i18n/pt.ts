@@ -500,6 +500,7 @@ export const pt = {
     kindTrash: 'Enviar para o lixo',
     kindDelete: 'Eliminar',
     kindUndo: 'Anular',
+    kindEditImageMetadata: 'Editar metadados da imagem',
     kindSearch: 'Pesquisa',
     kindCompare: 'Comparação',
     stateQueued: 'Em fila',
@@ -1356,4 +1357,5 @@ export const pt = {
   editorLinks: en.editorLinks,
   spaceGuard: en.spaceGuard,
   imageMetadata: en.imageMetadata,
+  imageEdit: en.imageEdit,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

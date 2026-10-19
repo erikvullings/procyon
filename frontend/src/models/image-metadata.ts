@@ -25,4 +25,37 @@ export interface ImageMetadata {
   readonly supported: boolean;
   readonly groups: readonly ImageTagGroup[];
   readonly gps?: GpsPosition | null;
+  /** Field ids this file's format can store and write; empty when it cannot be edited. */
+  readonly editableFields?: readonly string[];
+}
+
+export interface CaptureTime {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+/**
+ * Changes applied to every file of an `editImageMetadata` operation (task 0274). A field left out
+ * stays unchanged; ids in `clearFields` are removed.
+ */
+export interface ImageMetadataEdit {
+  removeAll?: boolean;
+  removeLocation?: boolean;
+  clearFields?: string[];
+  /** Keep the original as `<name>.orig`, which also makes the edit undoable. */
+  backupOriginal?: boolean;
+  dateTaken?: CaptureTime;
+  shiftDateSeconds?: number;
+  gps?: GpsPosition;
+  title?: string;
+  description?: string;
+  copyright?: string;
+  author?: string;
+  keywords?: string[];
+  rating?: number;
+  orientation?: number;
 }

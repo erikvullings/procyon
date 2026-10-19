@@ -1,5 +1,5 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import type { LinkRequest, Location, Operation } from '../../models';
+import type { ImageMetadataEdit, LinkRequest, Location, Operation } from '../../models';
 import { perfMark } from '../../utilities/perf';
 
 export interface OperationsController {
@@ -43,6 +43,12 @@ export interface OperationsController {
     location: Location,
     name: string,
     content: string,
+    signal?: AbortSignal,
+  ): Promise<Operation>;
+  /** Rewrites the metadata of image files in place; undoable when the original is kept (task 0274). */
+  editImageMetadata(
+    sources: readonly Location[],
+    edit: ImageMetadataEdit,
     signal?: AbortSignal,
   ): Promise<Operation>;
   /** Creates a link named `name` in `destination` that points at `target` (task 0168). */
@@ -268,6 +274,13 @@ export function createOperationsController(rawClient: FileManagerClient): Operat
           conflictPolicy: 'ask',
           name,
         },
+        signal,
+      );
+    },
+
+    editImageMetadata(sources, edit, signal) {
+      return client.startOperation(
+        { type: 'editImageMetadata', sources, conflictPolicy: 'ask', imageMetadataEdit: edit },
         signal,
       );
     },

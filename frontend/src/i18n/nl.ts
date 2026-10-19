@@ -507,6 +507,7 @@ export const nl = {
     kindTrash: 'Naar prullenbak',
     kindDelete: 'Verwijderen',
     kindUndo: 'Ongedaan maken',
+    kindEditImageMetadata: 'Afbeeldingsmetadata bewerken',
     kindSearch: 'Zoeken',
     kindCompare: 'Vergelijken',
     stateQueued: 'In wachtrij',
@@ -2170,4 +2171,5 @@ export const nl = {
   editorLinks: en.editorLinks,
   spaceGuard: en.spaceGuard,
   imageMetadata: en.imageMetadata,
+  imageEdit: en.imageEdit,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

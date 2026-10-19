@@ -51,6 +51,7 @@ pub(crate) fn copy_request(
         create_intermediate_directories: false,
         initial_content: None,
         skip_space_check: false,
+        image_metadata_edit: None,
         symlink_policy: fm_transport_dto::SymlinkPolicyDto::default(),
         permanent_delete_confirmed: false,
         override_read_only: false,
@@ -85,6 +86,7 @@ pub(crate) fn delete_request(
         create_intermediate_directories: false,
         initial_content: None,
         skip_space_check: false,
+        image_metadata_edit: None,
         symlink_policy: fm_transport_dto::SymlinkPolicyDto::default(),
         permanent_delete_confirmed: true,
         override_read_only: false,
@@ -106,6 +108,7 @@ pub(crate) fn operation_kind(kind: OperationKindDto) -> fm_operations::Operation
         OperationKindDto::Trash => fm_operations::OperationKind::Trash,
         OperationKindDto::Delete => fm_operations::OperationKind::Delete,
         OperationKindDto::Undo => fm_operations::OperationKind::Undo,
+        OperationKindDto::EditImageMetadata => fm_operations::OperationKind::EditImageMetadata,
         // Search is handled via start_search, not the executor.
         OperationKindDto::Search => {
             unreachable!("search must be handled before calling operation_kind")

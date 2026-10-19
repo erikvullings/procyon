@@ -160,6 +160,8 @@ export function operationKindLabel(kind: OperationKind | null | undefined): stri
       return t('operation', 'kindDelete');
     case 'undo':
       return t('operation', 'kindUndo');
+    case 'editImageMetadata':
+      return t('operation', 'kindEditImageMetadata');
     case 'search':
       return t('operation', 'kindSearch');
     case 'compare':

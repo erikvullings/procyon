@@ -499,6 +499,7 @@ export const it = {
     kindTrash: 'Sposta nel cestino',
     kindDelete: 'Elimina',
     kindUndo: 'Annulla',
+    kindEditImageMetadata: 'Modifica metadati immagine',
     kindSearch: 'Ricerca',
     kindCompare: 'Confronto',
     stateQueued: 'In coda',
@@ -1349,4 +1350,5 @@ export const it = {
   editorLinks: en.editorLinks,
   spaceGuard: en.spaceGuard,
   imageMetadata: en.imageMetadata,
+  imageEdit: en.imageEdit,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

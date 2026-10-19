@@ -590,6 +590,8 @@ pub enum OperationKindPayload {
     Delete,
     /// Safely reverse a completed operation.
     Undo,
+    /// Rewrite the metadata of image files in place (task 0274).
+    EditImageMetadata,
     /// Search files.
     Search,
     /// Compare two directory trees (task 0075).

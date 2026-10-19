@@ -60,4 +60,77 @@ pub struct ImageMetadataDto {
     /// GPS position when the EXIF GPS tags are complete.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gps: Option<GpsPositionDto>,
+    /// Field ids this file's format can store and write; empty when it cannot be edited.
+    #[serde(default)]
+    pub editable_fields: Vec<String>,
+}
+
+/// A calendar date and time without a time zone, as stored by cameras.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptureTimeDto {
+    /// Four-digit year.
+    pub year: u16,
+    /// Month 1-12.
+    pub month: u8,
+    /// Day 1-31.
+    pub day: u8,
+    /// Hour 0-23.
+    pub hour: u8,
+    /// Minute 0-59.
+    pub minute: u8,
+    /// Second 0-59.
+    pub second: u8,
+}
+
+/// Metadata changes applied to every file of an `editImageMetadata` operation (task 0274).
+///
+/// A field that is absent is left alone; a field listed in `clearFields` is removed. The ids are
+/// the ones returned in `editableFields`: `dateTaken`, `gps`, `description`, `copyright`,
+/// `author`, `orientation`, `title`, `keywords` and `rating`.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageMetadataEditDto {
+    /// Remove EXIF, XMP and IPTC; the orientation is kept.
+    #[serde(default)]
+    pub remove_all: bool,
+    /// Remove GPS coordinates only.
+    #[serde(default)]
+    pub remove_location: bool,
+    /// Fields to remove.
+    #[serde(default)]
+    pub clear_fields: Vec<String>,
+    /// Keep the original file as `<name>.orig` next to it; required for undo.
+    #[serde(default)]
+    pub backup_original: bool,
+    /// New capture time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_taken: Option<CaptureTimeDto>,
+    /// Shift each file's own capture time by this many seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shift_date_seconds: Option<i64>,
+    /// New GPS position.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gps: Option<GpsPositionDto>,
+    /// New title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// New description.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// New copyright notice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copyright: Option<String>,
+    /// New author.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    /// New keywords.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keywords: Option<Vec<String>>,
+    /// New rating 0-5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rating: Option<u8>,
+    /// New EXIF orientation 1-8.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orientation: Option<u8>,
 }

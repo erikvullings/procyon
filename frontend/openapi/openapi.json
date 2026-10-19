@@ -8830,6 +8830,56 @@
           }
         }
       },
+      "CaptureTimeDto": {
+        "type": "object",
+        "description": "A calendar date and time without a time zone, as stored by cameras.",
+        "required": [
+          "year",
+          "month",
+          "day",
+          "hour",
+          "minute",
+          "second"
+        ],
+        "properties": {
+          "day": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Day 1-31.",
+            "minimum": 0
+          },
+          "hour": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Hour 0-23.",
+            "minimum": 0
+          },
+          "minute": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Minute 0-59.",
+            "minimum": 0
+          },
+          "month": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Month 1-12.",
+            "minimum": 0
+          },
+          "second": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Second 0-59.",
+            "minimum": 0
+          },
+          "year": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Four-digit year.",
+            "minimum": 0
+          }
+        }
+      },
       "CheckpointSemanticModelMigrationRequestDto": {
         "type": "object",
         "description": "Persists a resumable model migration checkpoint.",
@@ -12086,6 +12136,13 @@
           "groups"
         ],
         "properties": {
+          "editableFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Field ids this file's format can store and write; empty when it cannot be edited."
+          },
           "format": {
             "type": [
               "string",
@@ -12114,6 +12171,117 @@
           "supported": {
             "type": "boolean",
             "description": "False when the format cannot be parsed, so the UI can say so instead of showing nothing."
+          }
+        }
+      },
+      "ImageMetadataEditDto": {
+        "type": "object",
+        "description": "Metadata changes applied to every file of an `editImageMetadata` operation (task 0274).\n\nA field that is absent is left alone; a field listed in `clearFields` is removed. The ids are\nthe ones returned in `editableFields`: `dateTaken`, `gps`, `description`, `copyright`,\n`author`, `orientation`, `title`, `keywords` and `rating`.",
+        "properties": {
+          "author": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New author."
+          },
+          "backupOriginal": {
+            "type": "boolean",
+            "description": "Keep the original file as `<name>.orig` next to it; required for undo."
+          },
+          "clearFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Fields to remove."
+          },
+          "copyright": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New copyright notice."
+          },
+          "dateTaken": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CaptureTimeDto",
+                "description": "New capture time."
+              }
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New description."
+          },
+          "gps": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GpsPositionDto",
+                "description": "New GPS position."
+              }
+            ]
+          },
+          "keywords": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "New keywords."
+          },
+          "orientation": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "New EXIF orientation 1-8.",
+            "minimum": 0
+          },
+          "rating": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "New rating 0-5.",
+            "minimum": 0
+          },
+          "removeAll": {
+            "type": "boolean",
+            "description": "Remove EXIF, XMP and IPTC; the orientation is kept."
+          },
+          "removeLocation": {
+            "type": "boolean",
+            "description": "Remove GPS coordinates only."
+          },
+          "shiftDateSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Shift each file's own capture time by this many seconds."
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New title."
           }
         }
       },
@@ -15810,6 +15978,7 @@
           "trash",
           "delete",
           "undo",
+          "editImageMetadata",
           "search",
           "compare"
         ]
@@ -22686,6 +22855,17 @@
               "$ref": "#/components/schemas/LocationDto"
             },
             "description": "Per-source destinations for a batch `rename` (task 0072 multi-rename), one entry per\n`sources` item in the same order. Empty for every other operation kind and for a\nsingle-entry rename, which keeps using `destination` instead."
+          },
+          "imageMetadataEdit": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ImageMetadataEditDto",
+                "description": "The edit applied by an `editImageMetadata` operation (task 0274)."
+              }
+            ]
           },
           "initialContent": {
             "type": [

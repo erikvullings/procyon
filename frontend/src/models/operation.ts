@@ -15,6 +15,7 @@ export type OperationKind =
   | 'trash'
   | 'delete'
   | 'undo'
+  | 'editImageMetadata'
   | 'search'
   | 'compare';
 

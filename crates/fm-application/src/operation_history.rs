@@ -499,6 +499,7 @@ pub(crate) fn operation_dto(mut operation: Operation, queue_position: Option<u64
             fm_operations::OperationKind::Trash => OperationKindDto::Trash,
             fm_operations::OperationKind::Delete => OperationKindDto::Delete,
             fm_operations::OperationKind::Undo => OperationKindDto::Undo,
+            fm_operations::OperationKind::EditImageMetadata => OperationKindDto::EditImageMetadata,
         },
         state: match operation.state {
             fm_operations::OperationState::Queued => OperationStateDto::Queued,

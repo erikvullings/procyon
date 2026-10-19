@@ -22,6 +22,7 @@ export const OperationKindDto = {
   trash: 'trash',
   delete: 'delete',
   undo: 'undo',
+  editImageMetadata: 'editImageMetadata',
   search: 'search',
   compare: 'compare',
 } as const;

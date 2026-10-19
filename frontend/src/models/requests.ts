@@ -59,6 +59,7 @@ import {
   syncPlanItemFromDto,
 } from './comparison';
 import type { ActionId, EntryId, OperationId, PaneId } from './ids';
+import type { ImageMetadataEdit } from './image-metadata';
 import type { Location } from './location';
 import type { ConflictPolicy, LinkRequest, OperationKind } from './operation';
 import type { SearchExecutionMode, SearchProviderLimitation, SearchQuery } from './search';
@@ -151,6 +152,8 @@ export interface StartOperationRequest {
   initialContent?: string;
   /** Proceed although the destination looks too small; recorded as a warning (task 0272). */
   skipSpaceCheck?: boolean;
+  /** The metadata changes of an `editImageMetadata` operation (task 0274). */
+  imageMetadataEdit?: ImageMetadataEdit;
   symlinkPolicy?: 'copyLink' | 'copyTarget';
   permanentDeleteConfirmed?: boolean;
   overrideReadOnly?: boolean;

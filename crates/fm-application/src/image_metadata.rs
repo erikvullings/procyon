@@ -37,6 +37,10 @@ fn to_dto(tags: ImageTags) -> ImageMetadataDto {
                     .collect(),
             })
             .collect(),
+        editable_fields: fm_metadata::editable_fields(tags.format)
+            .iter()
+            .map(|field| field.id().to_owned())
+            .collect(),
         gps: tags.gps.map(|gps| GpsPositionDto {
             latitude: gps.latitude,
             longitude: gps.longitude,

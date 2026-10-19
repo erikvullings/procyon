@@ -114,6 +114,15 @@ import {
 } from '../features/events/backend-event-handler';
 import { recordRecentLocation } from '../features/favourites/favourites';
 import {
+  EditImageMetadataDialog,
+  type EditImageMetadataRequest,
+} from '../features/image-metadata/edit-image-metadata-dialog';
+import {
+  EDIT_IMAGE_METADATA_ACTION_ID,
+  isMetadataEditable,
+  supportsRichFields,
+} from '../features/image-metadata/image-metadata-edit';
+import {
   createGlobalKeydownHandler,
   type GlobalKeydownContext,
 } from '../features/keybindings/global-keydown-handler';
@@ -311,6 +320,7 @@ import type {
   Connection,
   DirectoryDelta,
   EntrySummary,
+  ImageMetadataEdit,
   KnowledgeEvidence,
   Location,
   NativeMenuSpec,
@@ -618,6 +628,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         descriptor(id, t('player', title), { requiresSelection: true }),
       ),
       descriptor(SAVE_PLAYLIST_ACTION_ID, t('playlistExport', 'action'), {}),
+      descriptor(EDIT_IMAGE_METADATA_ACTION_ID, t('imageEdit', 'action'), {
+        requiresSelection: true,
+      }),
     ];
   }
 
@@ -787,6 +800,47 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       });
   }
 
+  /** Opens "Edit image metadata…" for the editable images of the selection (task 0274). */
+  function beginEditImageMetadata(invocation: ActionInvocationContext | undefined): void {
+    const paneId = invocation?.paneId ?? workspace?.activePaneId;
+    if (paneId === undefined) return;
+    const ids = new Set(
+      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
+    );
+    const images = (directories.get(activeTabKey(paneId))?.entries ?? []).filter(
+      (entry) => ids.has(entry.id) && isMetadataEditable(entry),
+    );
+    if (images.length === 0) {
+      toast({ html: t('imageEdit', 'noEditableImages') });
+      return;
+    }
+    editImageMetadataRequest = {
+      files: images.map((entry) => entry.location),
+      richFields: supportsRichFields(images),
+    };
+    m.redraw();
+  }
+
+  function confirmEditImageMetadata(edit: ImageMetadataEdit): void {
+    const request = editImageMetadataRequest;
+    editImageMetadataRequest = undefined;
+    if (request === undefined) return;
+    void opsController
+      .editImageMetadata(request.files, edit)
+      .then(() => {
+        toast({ html: t('imageEdit', 'started', { n: request.files.length }) });
+        m.redraw();
+      })
+      .catch((error: unknown) => {
+        toast({
+          html: t('imageEdit', 'failed', {
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        });
+      });
+    m.redraw();
+  }
+
   function confirmSavePlaylist(
     fileName: string,
     format: PlaylistExportFormat,
@@ -869,6 +923,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (player === undefined) return false;
     if (actionId === SAVE_PLAYLIST_ACTION_ID) {
       beginSavePlaylist(invocation);
+      return true;
+    }
+    if (actionId === EDIT_IMAGE_METADATA_ACTION_ID) {
+      beginEditImageMetadata(invocation);
       return true;
     }
     if (actionId === FIND_MUSIC_DUPLICATES_ACTION_ID) {
@@ -1406,6 +1464,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let appState: AppState | undefined;
   let playerController: PlayerController | undefined;
   let savePlaylistRequest: SavePlaylistRequest | undefined;
+  let editImageMetadataRequest: EditImageMetadataRequest | undefined;
   let musicDuplicatesController: MusicDuplicatesController | undefined;
   let linkDoctorController: LinkDoctorController | undefined;
   let snapshotController: SnapshotController | undefined;
@@ -6816,6 +6875,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             },
             onCancel: () => {
               saveSnapshotRequest = undefined;
+            },
+          }),
+          m(EditImageMetadataDialog, {
+            request: editImageMetadataRequest,
+            onApply: confirmEditImageMetadata,
+            onCancel: () => {
+              editImageMetadataRequest = undefined;
+              m.redraw();
             },
           }),
           m(SavePlaylistDialog, {

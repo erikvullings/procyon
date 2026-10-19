@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::LocationDto;
 
 /// A request to start one backend-owned semantic operation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StartOperationRequestDto {
     /// Semantic operation discriminator. `type` is the stable JSON field name.
@@ -45,6 +45,9 @@ pub struct StartOperationRequestDto {
     /// space (task 0272). The decision is recorded in the operation as a warning.
     #[serde(default)]
     pub skip_space_check: bool,
+    /// The edit applied by an `editImageMetadata` operation (task 0274).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_metadata_edit: Option<crate::ImageMetadataEditDto>,
     /// Policy for symbolic links encountered during recursive copying.
     #[serde(default)]
     pub symlink_policy: SymlinkPolicyDto,
@@ -179,6 +182,8 @@ pub enum OperationKindDto {
     Trash,
     Delete,
     Undo,
+    /// Rewrite the metadata of image files in place (task 0274).
+    EditImageMetadata,
     /// Search files.
     Search,
     /// Compare two directory trees (task 0075).

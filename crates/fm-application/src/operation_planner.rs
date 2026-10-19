@@ -179,6 +179,9 @@ impl OperationPlanner {
                         .into_bytes(),
                 })
             }
+            OperationKindDto::EditImageMetadata => {
+                crate::image_metadata_edit::plan_edit_image_metadata(&self.providers, request)?
+            }
             OperationKindDto::CreateLink => {
                 crate::link_operation::plan_create_link(&self.providers, &self.platform, request)?
             }
@@ -549,6 +552,7 @@ impl OperationPlanner {
                 create_intermediate_directories: false,
                 initial_content: None,
                 skip_space_check: false,
+                image_metadata_edit: None,
                 symlink_policy: SymlinkPolicyDto::default(),
                 permanent_delete_confirmed: false,
                 override_read_only: false,
@@ -956,6 +960,16 @@ impl OperationExecutor for UndoExecutor {
                     self.verify_original_absent(original, cancellation).await?;
                     items.push(PlanItem::new(trashed.entry.clone(), 0));
                 }
+                UndoAction::RestoreContent { current, backup } => {
+                    crate::image_metadata_edit::verify_restorable(
+                        &self.providers,
+                        current,
+                        backup,
+                        cancellation,
+                    )
+                    .await?;
+                    items.push(PlanItem::new(current.entry.clone(), 0));
+                }
             }
         }
         Ok(OperationPlan::new(items))
@@ -988,6 +1002,9 @@ impl OperationExecutor for UndoExecutor {
                     .any(|entry| entry.entry.location == item.entry.location),
                 UndoAction::RestoreTrash { trashed, .. } => {
                     trashed.entry.location == item.entry.location
+                }
+                UndoAction::RestoreContent { current, .. } => {
+                    current.entry.location == item.entry.location
                 }
             })
             .ok_or_else(|| ExecutionError::Failed("Undo plan entry is missing.".into()))?;
@@ -1022,6 +1039,15 @@ impl OperationExecutor for UndoExecutor {
             }
             UndoAction::CrossProviderMoveBack { .. } => {
                 unreachable!("cross-provider undo uses the guarded move executor")
+            }
+            UndoAction::RestoreContent { current, backup } => {
+                crate::image_metadata_edit::restore_content(
+                    &self.providers,
+                    current,
+                    backup,
+                    cancellation,
+                )
+                .await?;
             }
             UndoAction::RestoreTrash { original, trashed } => {
                 self.verify_fingerprint(trashed, cancellation).await?;
@@ -3505,6 +3531,7 @@ mod tests {
             create_intermediate_directories: false,
             initial_content: None,
             skip_space_check: false,
+            image_metadata_edit: None,
             override_read_only: false,
             link: None,
             permanent_delete_confirmed: false,

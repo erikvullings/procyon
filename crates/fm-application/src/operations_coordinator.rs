@@ -327,6 +327,7 @@ mod tests {
             create_intermediate_directories: false,
             initial_content: None,
             skip_space_check: false,
+            image_metadata_edit: None,
             symlink_policy: Default::default(),
             permanent_delete_confirmed: false,
             override_read_only: false,

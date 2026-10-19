@@ -3,6 +3,7 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type { ArchiveFormatDto } from './archiveFormatDto.ts';
+import type { ImageMetadataEditDto } from './imageMetadataEditDto.ts';
 import type { LinkRequestDto } from './linkRequestDto.ts';
 import type { LocationDto } from './locationDto.ts';
 import type { OperationConflictPolicyDto } from './operationConflictPolicyDto.ts';
@@ -30,6 +31,7 @@ export interface StartOperationRequestDto {
      * single-entry rename, which keeps using `destination` instead.
      */
   destinations?: LocationDto[];
+  imageMetadataEdit?: null | ImageMetadataEditDto;
   /**
      * UTF-8 text written into the new file by a `createFile` operation (task 0264); an empty
      * file is created when absent. Existing files are never overwritten.

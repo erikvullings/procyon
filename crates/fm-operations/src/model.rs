@@ -133,6 +133,14 @@ pub enum UndoAction {
         /// Created entries, including descendants, in parent-before-child order.
         entries: Vec<EntryFingerprint>,
     },
+    /// Put back the content of a file edited in place, from the backup copy kept for that purpose
+    /// (task 0274). Refused when the edited file changed since.
+    RestoreContent {
+        /// The edited file as the operation left it.
+        current: EntryFingerprint,
+        /// Backup copy holding the content from before the edit.
+        backup: Location,
+    },
     /// Restore a platform-trash entry to its recorded original location.
     RestoreTrash {
         /// Location occupied before trashing.
@@ -308,6 +316,8 @@ pub enum OperationKind {
     Delete,
     /// Safely reverse a completed operation.
     Undo,
+    /// Rewrite the metadata of image files in place (task 0274).
+    EditImageMetadata,
 }
 
 /// Observable progress for one operation.

@@ -1,5 +1,9 @@
 import { t } from '../../i18n';
 import type { ActionDescriptor, EntrySummary, PluginDescriptor } from '../../models';
+import {
+  EDIT_IMAGE_METADATA_ACTION_ID,
+  isMetadataEditable,
+} from '../image-metadata/image-metadata-edit';
 import { archiveRootForEntry } from '../navigation/archive-location';
 import { isParentEntry } from '../panes/parent-entry';
 import { hasPlayableSelection } from '../player/play-selection';
@@ -65,6 +69,7 @@ const SELECTION_ACTION_IDS = new Set([
   'core.documentSummary',
   ...MEDIA_QUEUE_ACTIONS.filter((action) => action.inContextMenu).map((action) => action.id),
   SAVE_PLAYLIST_ACTION_ID,
+  EDIT_IMAGE_METADATA_ACTION_ID,
 ]);
 
 /**
@@ -92,6 +97,7 @@ const CONTEXT_MENU_SELECTION_GROUPS: readonly (readonly string[])[] = [
     'core.documentSummary',
   ],
   ['core.pack', 'core.moveToArchive', 'core.extract'],
+  [EDIT_IMAGE_METADATA_ACTION_ID],
   ['core.trash', 'core.delete', 'core.uninstallApplication'],
 ];
 
@@ -212,6 +218,12 @@ export function evaluateActionAvailability(
     !hasPlayableSelection(context.selectedEntries)
   ) {
     return unavailable(action, t('availability', 'selectFiles'));
+  }
+  if (
+    action.id === EDIT_IMAGE_METADATA_ACTION_ID &&
+    !context.selectedEntries.some(isMetadataEditable)
+  ) {
+    return unavailable(action, t('imageEdit', 'noEditableImages'));
   }
   if (action.id === 'core.findDuplicates' && context.hasActiveLocation === false) {
     return unavailable(action, t('availability', 'openDirectoryFirst'));

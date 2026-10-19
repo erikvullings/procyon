@@ -99,6 +99,18 @@ pub fn read_image_tags(bytes: &[u8]) -> ImageTags {
             };
             let value = match &field.value {
                 Value::Undefined(data, _) if data.len() > 64 => format!("{} bytes", data.len()),
+                Value::Ascii(parts)
+                    if !matches!(
+                        field.tag,
+                        Tag::DateTime | Tag::DateTimeOriginal | Tag::DateTimeDigitized
+                    ) =>
+                {
+                    parts
+                        .iter()
+                        .map(|part| String::from_utf8_lossy(part).trim_matches('\0').to_owned())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                }
                 _ => field.display_value().with_unit(&exif).to_string(),
             };
             let raw = raw_of(&field.value);
