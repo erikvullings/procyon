@@ -741,3 +741,72 @@ async fn reads_gpx_tracks_with_statistics_and_rejects_entity_declarations() {
             .is_some_and(|m| m.contains("DOCTYPE"))
     );
 }
+
+#[tokio::test]
+async fn reads_kml_and_kmz_files_with_styles_icons_and_skipped_elements() {
+    use std::io::Write;
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    let kml = br#"<kml><Document><name>Trip</name>
+        <Style id="s"><LineStyle><color>ff0000ff</color><width>3</width></LineStyle><IconStyle><Icon><href>pin.png</href></Icon></IconStyle></Style>
+        <Placemark><name>Line</name><styleUrl>#s</styleUrl><LineString><coordinates>1,2 3,4</coordinates></LineString></Placemark>
+        <Placemark><name>Pin</name><styleUrl>#s</styleUrl><Point><coordinates>1,2</coordinates></Point></Placemark>
+        <NetworkLink><name>Live</name><Link><href>http://x.example/f.kml</href></Link></NetworkLink>
+        </Document></kml>"#;
+    let plain = root.path().join("trip.kml");
+    std::fs::write(&plain, kml).expect("must create fixture");
+    let archive = root.path().join("trip.kmz");
+    {
+        let file = std::fs::File::create(&archive).expect("must create archive");
+        let mut writer = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        writer.start_file("doc.kml", options).expect("start");
+        writer.write_all(kml).expect("write");
+        writer.start_file("pin.png", options).expect("start");
+        writer.write_all(b"\x89PNG\r\n\x1a\nxx").expect("write");
+        writer.finish().expect("finish");
+    }
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/v1/files/geo/read", server.base_url);
+    let read = |path: std::path::PathBuf| {
+        let client = client.clone();
+        let url = url.clone();
+        async move {
+            client
+                .post(url)
+                .json(&json!({"location": location_json(&path)}))
+                .send()
+                .await
+                .expect("request must succeed")
+                .json::<Value>()
+                .await
+                .expect("body must be JSON")
+        }
+    };
+
+    let body = read(plain).await;
+    assert_eq!(body["format"], "kml");
+    assert_eq!(body["displayedFeatures"], 2);
+    assert_eq!(
+        body["collection"]["features"][0]["properties"]["stroke"],
+        "#ff0000"
+    );
+    assert!(
+        body["skipped"][0]
+            .as_str()
+            .is_some_and(|s| s.contains("not fetched"))
+    );
+    assert_eq!(body["resources"], json!({}));
+
+    let body = read(archive).await;
+    assert_eq!(body["format"], "kmz");
+    assert_eq!(
+        body["collection"]["features"][1]["properties"]["_icon"],
+        "pin.png"
+    );
+    assert!(
+        body["resources"]["pin.png"]
+            .as_str()
+            .is_some_and(|s| s.starts_with("data:image/png"))
+    );
+}

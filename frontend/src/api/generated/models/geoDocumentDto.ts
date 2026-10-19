@@ -3,8 +3,10 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type { GeoDocumentDtoCollection } from './geoDocumentDtoCollection.ts';
+import type { GeoDocumentDtoResources } from './geoDocumentDtoResources.ts';
 import type { GeoErrorDto } from './geoErrorDto.ts';
 import type { GeoIssueDto } from './geoIssueDto.ts';
+import type { GeoOverlayDto } from './geoOverlayDto.ts';
 import type { GeoTrackDto } from './geoTrackDto.ts';
 
 /**
@@ -26,6 +28,10 @@ export interface GeoDocumentDto {
   error?: null | GeoErrorDto;
   /** `geojson`, `gpx`, `kml` or `kmz`; empty when the file is not a geographic file. */
   format: string;
+  /** Ground overlays whose image is in `resources`. */
+  overlays?: GeoOverlayDto[];
+  /** Images shipped inside a KMZ as `data:` URIs, by path; features reference them by `_icon`. */
+  resources?: GeoDocumentDtoResources;
   /** Source elements without a 2D representation that were left out. */
   skipped: string[];
   /**

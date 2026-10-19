@@ -23,6 +23,8 @@ const fake = vi.hoisted(() => {
     removed = false;
     sources = new Map<string, { data: unknown; setData(data: unknown): void }>();
     layers = new Map<string, Record<string, unknown>>();
+    images = new Set<string>();
+    loadedImages: string[] = [];
     renderedAt: unknown[] = [];
     calls: { method: string; args: unknown[] }[] = [];
     controls: unknown[] = [];
@@ -33,10 +35,20 @@ const fake = vi.hoisted(() => {
     addControl(control: unknown): void {
       this.controls.push(control);
     }
+    hasImage(name: string): boolean {
+      return this.images.has(name);
+    }
+    async loadImage(url: string) {
+      this.loadedImages.push(url);
+      return { data: { width: 1, height: 1 } };
+    }
+    addImage(name: string): void {
+      this.images.add(name);
+    }
     getSource(id: string) {
       return this.sources.get(id);
     }
-    addSource(id: string, spec: { data: unknown }): void {
+    addSource(id: string, spec: { data?: unknown }): void {
       const source = {
         data: spec.data,
         setData(data: unknown) {
@@ -48,8 +60,8 @@ const fake = vi.hoisted(() => {
     getLayer(id: string) {
       return this.layers.get(id);
     }
-    addLayer(layer: { id: string }): void {
-      this.layers.set(layer.id, layer);
+    addLayer(layer: { id: string }, before?: string): void {
+      this.layers.set(layer.id, { ...layer, before });
     }
     setFilter(id: string, filter: unknown): void {
       this.calls.push({ method: 'setFilter', args: [id, filter] });
@@ -357,6 +369,7 @@ describe('MapView', () => {
       'fm-features-fill',
       'fm-features-line',
       'fm-features-circle',
+      'fm-features-icon',
       'fm-features-highlight',
     ]);
     const source = map.sources.get('fm-features');
@@ -404,5 +417,40 @@ describe('MapView', () => {
     cursor = undefined;
     m.redraw.sync();
     expect(cursorMarker?.removed).toBe(true);
+  });
+
+  it('registers icons, drapes overlays under the vector data and opens a popup on a feature click', async () => {
+    const collection = {
+      type: 'FeatureCollection' as const,
+      features: [
+        {
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [4, 52] },
+          properties: { _icon: 'pin.png', name: 'Pin' },
+        },
+      ],
+    };
+    mount(() => ({
+      client: client(),
+      settings: DEFAULT_MAP_SETTINGS,
+      dark: false,
+      markers: [],
+      features: collection,
+      icons: { 'pin.png': 'data:image/png;base64,AA==' },
+      overlays: [
+        { id: '0', url: 'data:image/png;base64,AA==', north: 2, south: 1, east: 2, west: 1 },
+      ],
+      renderFeaturePopup: (index) => `Feature ${index}`,
+    }));
+    const map = await loaded();
+    await vi.waitFor(() => expect(map.images.has('pin.png')).toBe(true));
+    expect(map.loadedImages).toEqual(['data:image/png;base64,AA==']);
+    const overlay = map.layers.get('fm-overlay-0');
+    expect(overlay).toMatchObject({ type: 'raster', before: 'fm-features-fill' });
+    expect(JSON.stringify(map.layers.get('fm-features-icon'))).toContain('_icon');
+
+    map.renderedAt = [{ properties: { _fmIndex: 0 } }];
+    map.fire('click', { lngLat: { lat: 52, lng: 4 }, point: { x: 1, y: 1 } });
+    expect(fake.popups.at(-1)?.content).toBe('Feature 0');
   });
 });

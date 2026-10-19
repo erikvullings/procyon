@@ -5,8 +5,10 @@ import type { GeoDocument, GeoProfilePoint, GeoTrack, MapSettings } from '../../
 import { resolvedTheme } from '../../utilities/resolved-theme';
 import { DEFAULT_MAP_SETTINGS } from '../map/map-settings';
 import { MapView } from '../map/map-view';
+import { sanitizePluginPreviewHtml } from '../preview/plugin-preview';
 import { ElevationProfile } from './elevation-profile';
 import { propertyText } from './geo-document';
+import { layersOf, visibleFeatures } from './geo-layers';
 import { formatDistance, formatDuration, formatElevation, formatSpeed } from './track-format';
 
 export interface GeoViewAttrs {
@@ -93,6 +95,32 @@ function trackSummary(track: GeoTrack, onHover: (point: GeoProfilePoint | undefi
   ]);
 }
 
+/** Name and sanitised description of a feature, for the popup (links and images are inert). */
+function describeFeature(
+  document: GeoDocument,
+  index: number | undefined,
+): HTMLElement | undefined {
+  const properties =
+    index === undefined ? undefined : document.collection.features[index]?.properties;
+  const name = typeof properties?.name === 'string' ? properties.name : undefined;
+  const description =
+    typeof properties?.description === 'string' ? properties.description : undefined;
+  if (name === undefined && description === undefined) return undefined;
+  const root = window.document.createElement('div');
+  root.className = 'fm-geo-popup';
+  if (name !== undefined) {
+    const title = window.document.createElement('strong');
+    title.textContent = name;
+    root.append(title);
+  }
+  if (description !== undefined) {
+    const body = window.document.createElement('div');
+    body.innerHTML = sanitizePluginPreviewHtml(description);
+    root.append(body);
+  }
+  return root;
+}
+
 function propertiesTable(document: GeoDocument, index: number | undefined): m.Children {
   if (index === undefined) return m('p.fm-geo-hint', t('geo', 'selectFeature'));
   const feature = document.collection.features[index];
@@ -110,7 +138,15 @@ function propertiesTable(document: GeoDocument, index: number | undefined): m.Ch
           m(
             'tbody',
             entries.map(([key, value]) =>
-              m('tr', { key }, [m('th', { scope: 'row' }, key), m('td', propertyText(value))]),
+              m('tr', { key }, [
+                m('th', { scope: 'row' }, key),
+                m(
+                  'td',
+                  key === 'description' && typeof value === 'string'
+                    ? m.trust(sanitizePluginPreviewHtml(value))
+                    : propertyText(value),
+                ),
+              ]),
             ),
           ),
         ),
@@ -121,9 +157,14 @@ function propertiesTable(document: GeoDocument, index: number | undefined): m.Ch
  * GeoJSON on the shared map (task 0277): features drawn with simplestyle colours, click for the
  * property table, and the parse warnings, limits and skipped elements stated beside the map.
  */
-export const GeoView: FactoryComponent<GeoViewAttrs> = () => {
+export const GeoView: FactoryComponent<GeoViewAttrs> = (initial) => {
   let mapSettings: MapSettings = DEFAULT_MAP_SETTINGS;
   let requested = false;
+  // Transient view state: switched-off KML folders.
+  let hiddenLayers: ReadonlySet<string> = new Set();
+  let visibleKey: GeoDocument | undefined;
+  let visibleSet: ReadonlySet<string> | undefined;
+  let visible = visibleFeatures(initial.attrs.document, hiddenLayers);
   // Transient: the chart sample under the pointer, shown as a marker on the map.
   let cursor: GeoProfilePoint | undefined;
   return {
@@ -146,6 +187,16 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = () => {
           m('button.btn-flat', { type: 'button', onclick: attrs.onShowRaw }, t('geo', 'showRaw')),
         ]);
       }
+      if (visibleKey !== document || visibleSet !== hiddenLayers) {
+        visible = visibleFeatures(document, hiddenLayers);
+        visibleKey = document;
+        visibleSet = hiddenLayers;
+      }
+      const shownIndex =
+        attrs.selectedIndex === undefined
+          ? undefined
+          : visible.originalIndexes.indexOf(attrs.selectedIndex);
+      const layers = layersOf(document);
       return m('.fm-geo-view', [
         m(
           '.fm-geo-map',
@@ -154,12 +205,20 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = () => {
             settings: mapSettings,
             dark: resolvedTheme() === 'dark',
             markers: [],
-            features: document.collection,
+            features: visible.collection,
+            icons: document.resources ?? {},
+            overlays: (document.overlays ?? []).flatMap((overlay, index) => {
+              const url = document.resources?.[overlay.image];
+              return url === undefined ? [] : [{ id: String(index), url, ...overlay }];
+            }),
+            renderFeaturePopup: (index) =>
+              describeFeature(document, visible.originalIndexes[index]),
             ...(document.bounds == null ? {} : { dataBounds: document.bounds }),
-            ...(attrs.selectedIndex === undefined ? {} : { highlightIndex: attrs.selectedIndex }),
+            ...(shownIndex === undefined || shownIndex < 0 ? {} : { highlightIndex: shownIndex }),
             fitKey: document.displayedFeatures,
             ariaLabel: t('geo', 'mapLabel', { name: attrs.name }),
-            onFeatureClick: attrs.onSelect,
+            onFeatureClick: (index) =>
+              attrs.onSelect(index === undefined ? undefined : visible.originalIndexes[index]),
             ...(cursor === undefined
               ? {}
               : { cursor: { latitude: cursor.latitude, longitude: cursor.longitude } }),
@@ -167,6 +226,33 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = () => {
         ),
         m('aside.fm-geo-side', [
           m('p', t('geo', 'summary', { n: document.totalFeatures })),
+          layers.length === 0
+            ? undefined
+            : m('.fm-geo-layers', [
+                m('h5', t('geoLayers', 'title')),
+                m(
+                  'ul',
+                  layers.map((layer) =>
+                    m('li', { key: layer.path, style: { paddingLeft: `${layer.depth}rem` } }, [
+                      m('label', [
+                        m('input', {
+                          type: 'checkbox',
+                          checked: !hiddenLayers.has(layer.path),
+                          'aria-label': t('geoLayers', 'show', { name: layer.name }),
+                          onchange: (event: Event) => {
+                            const next = new Set(hiddenLayers);
+                            if ((event.currentTarget as HTMLInputElement).checked) {
+                              next.delete(layer.path);
+                            } else next.add(layer.path);
+                            hiddenLayers = next;
+                          },
+                        }),
+                        m('span', ` ${layer.name} (${layer.count})`),
+                      ]),
+                    ]),
+                  ),
+                ),
+              ]),
           document.truncated
             ? m(
                 'p.fm-geo-warning',

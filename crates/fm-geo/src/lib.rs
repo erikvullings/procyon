@@ -6,13 +6,19 @@
 
 mod geojson;
 mod gpx;
+mod kml;
+mod kmz;
 mod model;
 mod time;
 mod track_stats;
 
 pub use geojson::{GeoJsonError, parse_geojson};
 pub use gpx::{GpxError, parse_gpx};
-pub use model::{Bounds, GeoDocument, GeoFormat, GeoIssue, Limits, ProfilePoint, TrackSummary};
+pub use kml::{KmlError, NoResources, ResourceSource, parse_kml};
+pub use kmz::{KmzError, parse_kmz};
+pub use model::{
+    Bounds, GeoDocument, GeoFormat, GeoIssue, GroundOverlay, Limits, ProfilePoint, TrackSummary,
+};
 
 /// Guesses the format of a file from its extension and leading bytes.
 ///
@@ -23,6 +29,8 @@ pub fn detect_format(extension: &str, head: &[u8]) -> Option<GeoFormat> {
     match extension.to_ascii_lowercase().as_str() {
         "geojson" => Some(GeoFormat::GeoJson),
         "gpx" => Some(GeoFormat::Gpx),
+        "kml" => Some(GeoFormat::Kml),
+        "kmz" => Some(GeoFormat::Kmz),
         "json" => sniff_geojson(head).then_some(GeoFormat::GeoJson),
         _ => None,
     }

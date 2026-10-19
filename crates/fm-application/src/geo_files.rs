@@ -7,10 +7,11 @@
 
 use fm_domain::{EntryId, Location};
 use fm_geo::{
-    GeoDocument, GeoFormat, GeoJsonError, GpxError, Limits, detect_format, parse_geojson, parse_gpx,
+    GeoDocument, GeoFormat, GeoJsonError, GpxError, KmlError, KmzError, Limits, NoResources,
+    detect_format, parse_geojson, parse_gpx, parse_kml, parse_kmz,
 };
 use fm_transport_dto::{
-    GeoDocumentDto, GeoErrorDto, GeoIssueDto, GeoProfilePointDto, GeoTrackDto,
+    GeoDocumentDto, GeoErrorDto, GeoIssueDto, GeoOverlayDto, GeoProfilePointDto, GeoTrackDto,
     ParseGeoTextRequestDto, ReadGeoFileRequestDto,
 };
 use fm_vfs::{EntryRef, ProviderRegistry};
@@ -45,6 +46,8 @@ fn empty(format: &str, error: GeoErrorDto) -> GeoDocumentDto {
         warnings: Vec::new(),
         skipped: Vec::new(),
         tracks: Vec::new(),
+        resources: std::collections::BTreeMap::new(),
+        overlays: Vec::new(),
         error: Some(error),
     }
 }
@@ -107,6 +110,20 @@ fn document_dto(document: GeoDocument) -> GeoDocumentDto {
             .collect(),
         skipped: document.skipped,
         tracks: document.tracks.into_iter().map(track_dto).collect(),
+        resources: document.resources,
+        overlays: document
+            .overlays
+            .into_iter()
+            .map(|overlay| GeoOverlayDto {
+                name: overlay.name,
+                image: overlay.image,
+                north: overlay.north,
+                south: overlay.south,
+                east: overlay.east,
+                west: overlay.west,
+                rotation: overlay.rotation,
+            })
+            .collect(),
         error: None,
     }
 }
@@ -160,6 +177,22 @@ async fn parse_off_thread(
     Ok(parsed.unwrap_or_else(|(format, error)| empty(&format, error)))
 }
 
+fn kml_error(error: KmlError) -> GeoErrorDto {
+    match error {
+        KmlError::Syntax {
+            message,
+            line,
+            column,
+        } => GeoErrorDto {
+            message,
+            line: u32::try_from(line).ok(),
+            column: u32::try_from(column).ok(),
+            path: None,
+        },
+        other => plain_error(other.to_string()),
+    }
+}
+
 fn parse_bytes(extension: &str, bytes: &[u8]) -> Result<GeoDocumentDto, (String, GeoErrorDto)> {
     let Some(format) = detect_format(extension, bytes) else {
         return Err((
@@ -168,6 +201,20 @@ fn parse_bytes(extension: &str, bytes: &[u8]) -> Result<GeoDocumentDto, (String,
         ));
     };
     match format {
+        GeoFormat::Kml => parse_kml(bytes, Limits::default(), &NoResources, GeoFormat::Kml)
+            .map(document_dto)
+            .map_err(|error| (format.id().to_owned(), kml_error(error))),
+        GeoFormat::Kmz => parse_kmz(bytes, Limits::default())
+            .map(document_dto)
+            .map_err(|error| {
+                (
+                    format.id().to_owned(),
+                    match error {
+                        KmzError::Kml(inner) => kml_error(inner),
+                        other => plain_error(other.to_string()),
+                    },
+                )
+            }),
         GeoFormat::Gpx => parse_gpx(bytes, Limits::default())
             .map(document_dto)
             .map_err(|error| {

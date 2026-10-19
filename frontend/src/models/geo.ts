@@ -42,6 +42,18 @@ export interface GeoTrack {
   readonly profile: readonly GeoProfilePoint[];
 }
 
+/** An image draped over a rectangle of the map (KML ground overlay). */
+export interface GeoOverlay {
+  readonly name?: string | null;
+  /** Path of the image in {@link GeoDocument.resources}. */
+  readonly image: string;
+  readonly north: number;
+  readonly south: number;
+  readonly east: number;
+  readonly west: number;
+  readonly rotation: number;
+}
+
 /** A geographic file as GeoJSON features, parsed by the backend. */
 export interface GeoDocument {
   /** `geojson`, `gpx`, `kml` or `kmz`; empty when the file is not a geographic file. */
@@ -55,5 +67,9 @@ export interface GeoDocument {
   readonly skipped: readonly string[];
   /** Statistics per recorded track (GPX). */
   readonly tracks?: readonly GeoTrack[];
+  /** Images shipped inside a KMZ as `data:` URIs by path; features reference them by `_icon`. */
+  readonly resources?: Readonly<Record<string, string>>;
+  /** Ground overlays whose image is in `resources`. */
+  readonly overlays?: readonly GeoOverlay[];
   readonly error?: GeoError | null;
 }

@@ -259,3 +259,14 @@
 .fm-track-summary dd {
   margin: 0;
 }
+
+.fm-geo-layers ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-geo-popup {
+  max-width: 260px;
+  overflow-wrap: anywhere;
+}

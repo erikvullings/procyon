@@ -10,6 +10,8 @@ describe('geo detection', () => {
     expect(isGeoCandidate(entry('a.geojson'))).toBe(true);
     expect(isGeoCandidate(entry('a.JSON'))).toBe(true);
     expect(isGeoCandidate(entry('a.gpx'))).toBe(true);
+    expect(isGeoCandidate(entry('a.KMZ'))).toBe(true);
+    expect(isGeoCandidate(entry('a.kml'))).toBe(true);
     expect(isGeoCandidate(entry('a.txt'))).toBe(false);
     expect(isGeoCandidate(entry('a.geojson', 'directory'))).toBe(false);
   });

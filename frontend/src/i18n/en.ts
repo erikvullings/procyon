@@ -2542,6 +2542,13 @@ export const en = {
     pointerReadout: '{distance} - {value}',
     unnamed: 'Unnamed track',
   },
+  geoLayers: {
+    title: 'Layers',
+    show: 'Show {name}',
+    description: 'Description',
+    noName: 'Unnamed',
+    icons: 'Custom icons are drawn only when they are stored inside the KMZ.',
+  },
 } as const satisfies CatalogueShape;
 
 /** Canonical translation groups and keys. Values remain locale-specific. */

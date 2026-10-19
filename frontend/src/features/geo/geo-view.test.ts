@@ -184,3 +184,84 @@ describe('GeoView tracks (task 0279)', () => {
     expect(captured.attrs?.cursor).toBeUndefined();
   });
 });
+
+describe('GeoView KML (task 0280)', () => {
+  const kml: GeoDocument = {
+    format: 'kml',
+    collection: {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [1, 1] },
+          properties: {
+            name: 'Museum',
+            folder: 'Trip / Day 1',
+            description:
+              '<b>Open</b> <a href="http://evil.example">link</a><img src="http://evil.example/x.png"><script>alert(1)</script>',
+          },
+        },
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [2, 2] },
+          properties: { name: 'Park', folder: 'Trip / Day 2' },
+        },
+      ],
+    },
+    totalFeatures: 2,
+    displayedFeatures: 2,
+    truncated: false,
+    warnings: [],
+    skipped: ['network link (not fetched)'],
+    resources: { 'pin.png': 'data:image/png;base64,AA==' },
+    overlays: [{ image: 'pin.png', north: 2, south: 1, east: 2, west: 1, rotation: 0 }],
+  };
+
+  it('lists folders as layers and hides the features of a switched-off folder', () => {
+    const root = render(attrs({ document: kml }));
+    const boxes = root.querySelectorAll<HTMLInputElement>('.fm-geo-layers input');
+    expect(boxes).toHaveLength(3);
+    expect(captured.attrs?.features?.features).toHaveLength(2);
+    const day1 = [...boxes].find((box) => box.getAttribute('aria-label') === 'Show Day 1');
+    if (day1 === undefined) throw new Error('Day 1 layer missing');
+    day1.checked = false;
+    day1.dispatchEvent(new Event('change'));
+    m.render(root, m(GeoView, attrs({ document: kml })));
+    expect(captured.attrs?.features?.features).toHaveLength(1);
+    // A click on the remaining feature maps back to its original position in the file.
+    const onSelect = vi.fn();
+    m.render(root, m(GeoView, attrs({ document: kml, onSelect })));
+    captured.attrs?.onFeatureClick?.(0);
+    expect(onSelect).toHaveBeenCalledWith(1);
+  });
+
+  it('passes the shipped images and overlays to the map and states what was left out', () => {
+    const root = render(attrs({ document: kml }));
+    expect(captured.attrs?.icons).toEqual({ 'pin.png': 'data:image/png;base64,AA==' });
+    expect(captured.attrs?.overlays).toEqual([
+      expect.objectContaining({ id: '0', url: 'data:image/png;base64,AA==', north: 2 }),
+    ]);
+    expect(root.textContent).toContain('network link (not fetched)');
+  });
+
+  it('builds popups from sanitised descriptions: no scripts, images or live links', () => {
+    render(attrs({ document: kml }));
+    const popup = captured.attrs?.renderFeaturePopup?.(0) as HTMLElement;
+    expect(popup.textContent).toContain('Museum');
+    expect(popup.innerHTML).toContain('<b>Open</b>');
+    expect(popup.innerHTML).not.toContain('script');
+    expect(popup.innerHTML).not.toContain('<img');
+    expect(popup.innerHTML).not.toContain('href');
+    expect(captured.attrs?.renderFeaturePopup?.(1)).toBeDefined();
+  });
+
+  it('shows the description in the property table as inert HTML', () => {
+    const root = render(attrs({ document: kml, selectedIndex: 0 }));
+    const cell = [...root.querySelectorAll('tr')].find((row) =>
+      row.textContent?.startsWith('description'),
+    );
+    expect(cell?.querySelector('b')?.textContent).toBe('Open');
+    expect(cell?.querySelector('a')?.getAttribute('href')).toBeNull();
+    expect(cell?.querySelector('script')).toBeNull();
+  });
+});

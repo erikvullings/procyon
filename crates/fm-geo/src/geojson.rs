@@ -353,6 +353,8 @@ pub fn parse_geojson(bytes: &[u8], limits: Limits) -> Result<GeoDocument, GeoJso
         warnings: scan.warnings,
         skipped: Vec::new(),
         tracks: Vec::new(),
+        resources: std::collections::BTreeMap::new(),
+        overlays: Vec::new(),
     })
 }
 

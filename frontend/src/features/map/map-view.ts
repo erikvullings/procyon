@@ -4,6 +4,7 @@ import m, { type FactoryComponent } from 'mithril';
 import { t } from '../../i18n';
 import type { Location, MapSettings } from '../../models';
 import { type BasemapSources, buildBasemapStyle } from './basemap-style';
+import { type MapOverlay, overlayCorners } from './map-overlays';
 import { boundsOf, type MapMarker, MarkerIndex } from './marker-index';
 
 /** What the map needs from the file-manager client. */
@@ -42,6 +43,12 @@ export interface MapViewAttrs {
   readonly onMapReady?: (map: MapLibre.Map) => void;
   /** Called when the map is torn down; attached layers are gone with it. */
   readonly onMapGone?: () => void;
+  /** Images for point features that name one in `_icon`, as `data:` URIs by that name. */
+  readonly icons?: Readonly<Record<string, string>>;
+  /** Images draped over rectangles, drawn under the vector data. */
+  readonly overlays?: readonly MapOverlay[];
+  /** Content of the popup opened by clicking a feature; none when it returns undefined. */
+  readonly renderFeaturePopup?: (index: number) => string | HTMLElement | undefined;
   /** A position to mark, for example under the pointer on an elevation chart. */
   readonly cursor?: MapPosition;
   /** Index of the feature to emphasise. */
@@ -84,8 +91,15 @@ function clusterElement(count: number): HTMLElement {
 }
 
 const FEATURE_SOURCE = 'fm-features';
-const FEATURE_LAYERS = ['fm-features-fill', 'fm-features-line', 'fm-features-circle'] as const;
+const FEATURE_LAYERS = [
+  'fm-features-fill',
+  'fm-features-line',
+  'fm-features-circle',
+  'fm-features-icon',
+] as const;
 const HIGHLIGHT_LAYER = 'fm-features-highlight';
+const ICON_LAYER = 'fm-features-icon';
+const OVERLAY_PREFIX = 'fm-overlay-';
 const DEFAULT_FEATURE_COLOUR = 'rgb(25, 118, 210)';
 
 /** Copies features with their position in the list, so a click can be mapped back to the source. */
@@ -128,6 +142,7 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
   let popup: MapLibre.Popup | undefined;
   const drawn = new Map<string, DrawnItem>();
   let cursorMarker: MapLibre.Marker | undefined;
+  const iconLoads = new Set<string>();
   let pmtilesProtocolRegistered = false;
 
   async function resolveSources(attrs: MapViewAttrs): Promise<BasemapSources> {
@@ -314,12 +329,23 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
         id: 'fm-features-circle',
         type: 'circle',
         source: FEATURE_SOURCE,
-        filter: ['==', ['geometry-type'], 'Point'],
+        filter: ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', '_icon']]],
         paint: {
           'circle-color': colour('marker-color') as never,
           'circle-radius': ['match', ['get', 'marker-size'], 'small', 4, 'large', 9, 6] as never,
           'circle-stroke-width': 1.5,
           'circle-stroke-color': 'rgb(255, 255, 255)',
+        },
+      });
+      target.addLayer({
+        id: ICON_LAYER,
+        type: 'symbol',
+        source: FEATURE_SOURCE,
+        filter: ['all', ['==', ['geometry-type'], 'Point'], ['has', '_icon']],
+        layout: {
+          'icon-image': ['get', '_icon'] as never,
+          'icon-allow-overlap': true,
+          'icon-size': ['match', ['get', 'marker-size'], 'small', 0.6, 'large', 1.2, 1] as never,
         },
       });
       target.addLayer({
@@ -334,6 +360,44 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
     applyHighlight();
   }
 
+  /** Registers the icon images; MapLibre forgets them with the style, so this runs again. */
+  function ensureIcons(): void {
+    const target = map;
+    if (target === undefined) return;
+    for (const [name, uri] of Object.entries(latest.icons ?? {})) {
+      if (target.hasImage(name) || iconLoads.has(name)) continue;
+      iconLoads.add(name);
+      void target
+        .loadImage(uri)
+        .then((loadedImage) => {
+          if (map === target && !target.hasImage(name)) target.addImage(name, loadedImage.data);
+        })
+        .catch(() => undefined)
+        .finally(() => iconLoads.delete(name));
+    }
+  }
+
+  /** Adds ground overlays under the vector data; safe to call again after a style swap. */
+  function ensureOverlays(): void {
+    const target = map;
+    if (target === undefined) return;
+    const wanted = new Set<string>();
+    for (const overlay of latest.overlays ?? []) {
+      const id = `${OVERLAY_PREFIX}${overlay.id}`;
+      wanted.add(id);
+      if (target.getSource(id) !== undefined) continue;
+      target.addSource(id, {
+        type: 'image',
+        url: overlay.url,
+        coordinates: overlayCorners(overlay),
+      });
+      target.addLayer(
+        { id, type: 'raster', source: id, paint: { 'raster-opacity': 0.85 } },
+        target.getLayer('fm-features-fill') === undefined ? undefined : 'fm-features-fill',
+      );
+    }
+  }
+
   function applyHighlight(): void {
     if (map === undefined || map.getLayer(HIGHLIGHT_LAYER) === undefined) return;
     if (appliedHighlight === latest.highlightIndex) return;
@@ -343,7 +407,10 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
 
   function syncFeatures(): void {
     if (map === undefined) return;
+    // Layers first, so that overlays can be inserted beneath them.
     ensureFeatureLayers();
+    ensureOverlays();
+    ensureIcons();
     if (appliedFeatures !== latest.features) {
       appliedFeatures = latest.features;
       const source = map.getSource(FEATURE_SOURCE) as MapLibre.GeoJSONSource | undefined;
@@ -409,13 +476,26 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
       created.on('click', (event) => {
         popup?.remove();
         popup = undefined;
-        if (latest.features !== undefined && latest.onFeatureClick !== undefined) {
+        if (
+          latest.features !== undefined &&
+          (latest.onFeatureClick !== undefined || latest.renderFeaturePopup !== undefined)
+        ) {
           const hit = created
             .queryRenderedFeatures(event.point, {
               layers: FEATURE_LAYERS.filter((layer) => created.getLayer(layer) !== undefined),
             })
             .find((feature) => typeof feature.properties?._fmIndex === 'number');
-          latest.onFeatureClick(hit === undefined ? undefined : Number(hit.properties._fmIndex));
+          const index = hit === undefined ? undefined : Number(hit.properties._fmIndex);
+          latest.onFeatureClick?.(index);
+          const content = index === undefined ? undefined : latest.renderFeaturePopup?.(index);
+          if (content !== undefined) {
+            const next = new library.Popup({ offset: 8, closeButton: true });
+            next.setLngLat(event.lngLat);
+            if (typeof content === 'string') next.setText(content);
+            else next.setDOMContent(content);
+            next.addTo(created);
+            popup = next;
+          }
         }
         latest.onMapClick?.({ latitude: event.lngLat.lat, longitude: event.lngLat.lng });
       });

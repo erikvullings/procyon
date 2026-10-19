@@ -565,6 +565,8 @@ fn build_document(
         warnings,
         skipped,
         tracks: summaries,
+        resources: std::collections::BTreeMap::new(),
+        overlays: Vec::new(),
     }
 }
 

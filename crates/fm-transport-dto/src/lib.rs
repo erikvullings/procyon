@@ -118,7 +118,7 @@ pub use files::{
 };
 pub use finder_tags::{FinderTagColorDto, FinderTagDto, FinderTagsDto, SpotlightCommentDto};
 pub use geo::{
-    GeoDocumentDto, GeoErrorDto, GeoIssueDto, GeoProfilePointDto, GeoTrackDto,
+    GeoDocumentDto, GeoErrorDto, GeoIssueDto, GeoOverlayDto, GeoProfilePointDto, GeoTrackDto,
     ParseGeoTextRequestDto, ReadGeoFileRequestDto,
 };
 pub use health::{HealthDto, HealthStatusDto};

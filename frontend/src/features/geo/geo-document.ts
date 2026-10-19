@@ -1,7 +1,7 @@
 import type { EntrySummary } from '../../models';
 
 /** Extensions that always open on the map. `json` is added only after sniffing its content. */
-export const GEO_EXTENSIONS: ReadonlySet<string> = new Set(['geojson', 'gpx']);
+export const GEO_EXTENSIONS: ReadonlySet<string> = new Set(['geojson', 'gpx', 'kml', 'kmz']);
 
 export function geoExtension(entry: EntrySummary): string {
   return (entry.extension ?? entry.name.split('.').pop() ?? '').toLowerCase();

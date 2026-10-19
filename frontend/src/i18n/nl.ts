@@ -2177,4 +2177,5 @@ export const nl = {
   geo: en.geo,
   geoEdit: en.geoEdit,
   geoTrack: en.geoTrack,
+  geoLayers: en.geoLayers,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

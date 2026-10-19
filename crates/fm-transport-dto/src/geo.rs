@@ -117,6 +117,27 @@ pub struct GeoTrackDto {
     pub profile: Vec<GeoProfilePointDto>,
 }
 
+/// An image draped over a rectangle of the map (KML ground overlay).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoOverlayDto {
+    /// Overlay name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Path of the image in `resources`.
+    pub image: String,
+    /// Northern edge in degrees.
+    pub north: f64,
+    /// Southern edge in degrees.
+    pub south: f64,
+    /// Eastern edge in degrees.
+    pub east: f64,
+    /// Western edge in degrees.
+    pub west: f64,
+    /// Counter-clockwise rotation in degrees around the centre.
+    pub rotation: f64,
+}
+
 /// A geographic file read into GeoJSON features.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -142,6 +163,12 @@ pub struct GeoDocumentDto {
     /// Statistics per recorded track (GPX).
     #[serde(default)]
     pub tracks: Vec<GeoTrackDto>,
+    /// Images shipped inside a KMZ as `data:` URIs, by path; features reference them by `_icon`.
+    #[serde(default)]
+    pub resources: std::collections::BTreeMap<String, String>,
+    /// Ground overlays whose image is in `resources`.
+    #[serde(default)]
+    pub overlays: Vec<GeoOverlayDto>,
     /// Set when the file could not be read; `collection` is then empty.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<GeoErrorDto>,

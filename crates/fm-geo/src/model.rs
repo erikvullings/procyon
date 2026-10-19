@@ -7,6 +7,10 @@ pub enum GeoFormat {
     GeoJson,
     /// GPX 1.0 and 1.1 tracks, routes and waypoints.
     Gpx,
+    /// KML (Google Earth).
+    Kml,
+    /// KMZ: zipped KML with its icons and overlay images.
+    Kmz,
 }
 
 impl GeoFormat {
@@ -16,6 +20,8 @@ impl GeoFormat {
         match self {
             Self::GeoJson => "geojson",
             Self::Gpx => "gpx",
+            Self::Kml => "kml",
+            Self::Kmz => "kmz",
         }
     }
 }
@@ -69,6 +75,29 @@ pub struct GeoDocument {
     pub skipped: Vec<String>,
     /// Statistics per recorded track (GPX).
     pub tracks: Vec<TrackSummary>,
+    /// Images (icons, overlays) shipped inside a KMZ, as `data:` URIs by their path in the archive.
+    pub resources: std::collections::BTreeMap<String, String>,
+    /// Ground overlays whose image is available in `resources`.
+    pub overlays: Vec<GroundOverlay>,
+}
+
+/// An image draped over a rectangle of the map (KML `GroundOverlay`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct GroundOverlay {
+    /// Overlay name.
+    pub name: Option<String>,
+    /// Path of the image in `GeoDocument::resources`.
+    pub image: String,
+    /// Northern edge in degrees.
+    pub north: f64,
+    /// Southern edge in degrees.
+    pub south: f64,
+    /// Eastern edge in degrees.
+    pub east: f64,
+    /// Western edge in degrees.
+    pub west: f64,
+    /// Counter-clockwise rotation in degrees around the centre.
+    pub rotation: f64,
 }
 
 /// One sample of a track's elevation and speed profile.
