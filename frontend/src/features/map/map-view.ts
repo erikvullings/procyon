@@ -32,6 +32,14 @@ export interface MapViewAttrs {
   readonly onMarkerClick?: (marker: MapMarker) => void;
   readonly onMapClick?: (position: MapPosition) => void;
   readonly onMarkerDrag?: (marker: MapMarker, position: MapPosition) => void;
+  /** Vector data drawn under the markers: points, lines and polygons with simplestyle colours. */
+  readonly features?: GeoJSON.FeatureCollection<GeoJSON.Geometry | null>;
+  /** Extent of `features`; the map fits to it (when there are no markers) on load and fitKey changes. */
+  readonly dataBounds?: readonly [number, number, number, number];
+  /** Index (in `features.features`) of the feature that was clicked, or undefined for empty space. */
+  readonly onFeatureClick?: (index: number | undefined) => void;
+  /** Index of the feature to emphasise. */
+  readonly highlightIndex?: number;
   readonly ariaLabel?: string;
 }
 
@@ -67,6 +75,25 @@ function clusterElement(count: number): HTMLElement {
   element.title = t('map', 'cluster', { n: count });
   element.setAttribute('aria-label', t('map', 'cluster', { n: count }));
   return element;
+}
+
+const FEATURE_SOURCE = 'fm-features';
+const FEATURE_LAYERS = ['fm-features-fill', 'fm-features-line', 'fm-features-circle'] as const;
+const HIGHLIGHT_LAYER = 'fm-features-highlight';
+const DEFAULT_FEATURE_COLOUR = 'rgb(25, 118, 210)';
+
+/** Copies features with their position in the list, so a click can be mapped back to the source. */
+export function withFeatureIndexes(
+  collection: GeoJSON.FeatureCollection<GeoJSON.Geometry | null>,
+): GeoJSON.FeatureCollection {
+  // Features without geometry are valid GeoJSON and simply draw nothing.
+  return {
+    type: 'FeatureCollection',
+    features: collection.features.map((feature, index) => ({
+      ...feature,
+      properties: { ...(feature.properties ?? {}), _fmIndex: index },
+    })) as GeoJSON.Feature[],
+  };
 }
 
 function basemapKey(settings: MapSettings, dark: boolean): string {
@@ -126,7 +153,7 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
 
   function fit(): void {
     if (map === undefined || lib === undefined) return;
-    const bounds = boundsOf(latest.markers);
+    const bounds = boundsOf(latest.markers) ?? latest.dataBounds;
     if (bounds === undefined) return;
     const [west, south, east, north] = bounds;
     if (west === east && south === north) {
@@ -224,6 +251,85 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
     }
   }
 
+  let appliedFeatures: GeoJSON.FeatureCollection<GeoJSON.Geometry | null> | undefined;
+  let appliedHighlight: number | undefined;
+
+  /** Adds the vector data source and layers; safe to call again after a style swap. */
+  function ensureFeatureLayers(): void {
+    const target = map;
+    if (target === undefined) return;
+    if (target.getSource(FEATURE_SOURCE) === undefined) {
+      target.addSource(FEATURE_SOURCE, {
+        type: 'geojson',
+        data: withFeatureIndexes(latest.features ?? { type: 'FeatureCollection', features: [] }),
+      });
+      appliedFeatures = latest.features;
+      const colour = (key: string): unknown => ['coalesce', ['get', key], DEFAULT_FEATURE_COLOUR];
+      target.addLayer({
+        id: 'fm-features-fill',
+        type: 'fill',
+        source: FEATURE_SOURCE,
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: {
+          'fill-color': colour('fill') as never,
+          'fill-opacity': ['coalesce', ['get', 'fill-opacity'], 0.3] as never,
+        },
+      });
+      target.addLayer({
+        id: 'fm-features-line',
+        type: 'line',
+        source: FEATURE_SOURCE,
+        filter: ['in', ['geometry-type'], ['literal', ['LineString', 'Polygon']]],
+        paint: {
+          'line-color': colour('stroke') as never,
+          'line-width': ['coalesce', ['get', 'stroke-width'], 2] as never,
+          'line-opacity': ['coalesce', ['get', 'stroke-opacity'], 1] as never,
+        },
+      });
+      target.addLayer({
+        id: 'fm-features-circle',
+        type: 'circle',
+        source: FEATURE_SOURCE,
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: {
+          'circle-color': colour('marker-color') as never,
+          'circle-radius': ['match', ['get', 'marker-size'], 'small', 4, 'large', 9, 6] as never,
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': 'rgb(255, 255, 255)',
+        },
+      });
+      target.addLayer({
+        id: HIGHLIGHT_LAYER,
+        type: 'line',
+        source: FEATURE_SOURCE,
+        filter: ['==', ['get', '_fmIndex'], -1],
+        paint: { 'line-color': 'rgb(255, 160, 0)', 'line-width': 5, 'line-opacity': 0.8 },
+      });
+      appliedHighlight = undefined;
+    }
+    applyHighlight();
+  }
+
+  function applyHighlight(): void {
+    if (map === undefined || map.getLayer(HIGHLIGHT_LAYER) === undefined) return;
+    if (appliedHighlight === latest.highlightIndex) return;
+    appliedHighlight = latest.highlightIndex;
+    map.setFilter(HIGHLIGHT_LAYER, ['==', ['get', '_fmIndex'], latest.highlightIndex ?? -1]);
+  }
+
+  function syncFeatures(): void {
+    if (map === undefined) return;
+    ensureFeatureLayers();
+    if (appliedFeatures !== latest.features) {
+      appliedFeatures = latest.features;
+      const source = map.getSource(FEATURE_SOURCE) as MapLibre.GeoJSONSource | undefined;
+      source?.setData(
+        withFeatureIndexes(latest.features ?? { type: 'FeatureCollection', features: [] }),
+      );
+    }
+    applyHighlight();
+  }
+
   function syncMarkers(): void {
     if (indexedMarkers === latest.markers) return;
     indexedMarkers = latest.markers;
@@ -279,10 +385,20 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
       created.on('click', (event) => {
         popup?.remove();
         popup = undefined;
+        if (latest.features !== undefined && latest.onFeatureClick !== undefined) {
+          const hit = created
+            .queryRenderedFeatures(event.point, {
+              layers: FEATURE_LAYERS.filter((layer) => created.getLayer(layer) !== undefined),
+            })
+            .find((feature) => typeof feature.properties?._fmIndex === 'number');
+          latest.onFeatureClick(hit === undefined ? undefined : Number(hit.properties._fmIndex));
+        }
         latest.onMapClick?.({ latitude: event.lngLat.lat, longitude: event.lngLat.lng });
       });
+      created.on('style.load', syncFeatures);
       created.once('load', () => {
         status = 'ready';
+        syncFeatures();
         syncMarkers();
         appliedFitKey = latest.fitKey;
         if (!hasFitted) {
@@ -308,6 +424,7 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
       latest = attrs;
       if (map === undefined || status !== 'ready') return;
       if (basemapKey(attrs.settings, attrs.dark) !== appliedBasemap) void applyBasemap();
+      syncFeatures();
       syncMarkers();
       applySelection();
       if (attrs.fitKey !== appliedFitKey) {

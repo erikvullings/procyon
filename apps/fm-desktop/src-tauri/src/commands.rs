@@ -2919,6 +2919,19 @@ pub(crate) async fn read_image_gps(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Reads a GeoJSON, GPX, KML or KMZ file into GeoJSON features (task 0277).
+#[tauri::command]
+pub(crate) async fn read_geo_file(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ReadGeoFileRequestDto,
+) -> Result<fm_transport_dto::GeoDocumentDto, ApplicationErrorDto> {
+    state
+        .service
+        .read_geo_file(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Starts a cancellable music duplicate scan through the shared service (task 0265).
 ///
 /// Must be `async` so the scan task is spawned on the Tokio runtime.

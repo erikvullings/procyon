@@ -1360,4 +1360,5 @@ export const es = {
   imageEdit: en.imageEdit,
   map: en.map,
   imageMap: en.imageMap,
+  geo: en.geo,
 } as const satisfies LocalisedCatalogue<EnglishCatalogue>;

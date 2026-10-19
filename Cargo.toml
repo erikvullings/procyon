@@ -39,6 +39,7 @@ fm-credentials-macos = {path = "crates/fm-credentials-macos"}
 fm-credentials-windows = {path = "crates/fm-credentials-windows"}
 fm-domain = {path = "crates/fm-domain"}
 fm-events = {path = "crates/fm-events"}
+fm-geo = {path = "crates/fm-geo"}
 fm-metadata = {path = "crates/fm-metadata"}
 fm-operations = {path = "crates/fm-operations"}
 fm-platform = {path = "crates/fm-platform"}

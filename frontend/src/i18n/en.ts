@@ -2451,6 +2451,23 @@ export const en = {
     failed: 'Reading the locations failed: {message}',
     taken: 'Taken {date}',
   },
+  geo: {
+    showRaw: 'Show raw text',
+    showMap: 'Show on map',
+    summary: '{n} feature(s)',
+    truncated: 'Only {shown} of {total} features are drawn to keep the map responsive.',
+    warnings: 'Warnings',
+    skipped: 'Left out',
+    properties: 'Properties',
+    noProperties: 'This feature has no properties.',
+    selectFeature: 'Click a feature to see its properties.',
+    errorTitle: 'This file could not be shown on the map',
+    errorAt: 'At line {line}, column {column}.',
+    errorPath: 'At {path}.',
+    noGeometry: 'Feature without geometry',
+    legend: 'Geometry: {type}',
+    mapLabel: 'Map of {name}',
+  },
 } as const satisfies CatalogueShape;
 
 /** Canonical translation groups and keys. Values remain locale-specific. */

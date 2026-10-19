@@ -6,17 +6,17 @@ use axum::{Json, http::StatusCode};
 use fm_transport_dto::{
     ApplicationErrorDto, ArchiveCredentialRequestDto, ArchiveSummaryRequestDto,
     ArchiveSummaryResponseDto, CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto,
-    DocxPreviewSessionRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
-    ImageMetadataDto, LoadEditableFileRequestDto, LoadEditableFileResponseDto,
-    OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto,
-    OpenPptxPreviewResponseDto, OpenSqliteViewRequestDto, OpenSqliteViewResponseDto,
-    OpenStructuredViewRequestDto, OpenStructuredViewResponseDto, PptxPreviewSessionRequestDto,
-    QuerySqliteViewRequestDto, QuerySqliteViewResponseDto, ReadDocxPreviewResourceRequestDto,
-    ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    ReadImageGpsRequestDto, ReadImageGpsResponseDto, ReadImageMetadataRequestDto,
-    ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
-    ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
-    ReadStructuredRowsResponseDto, ResolveMetadataTokensRequestDto,
+    DocxPreviewSessionRequestDto, GeoDocumentDto, GetFileGitHistoryRequestDto,
+    GetFileGitHistoryResponseDto, ImageMetadataDto, LoadEditableFileRequestDto,
+    LoadEditableFileResponseDto, OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto,
+    OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, OpenSqliteViewRequestDto,
+    OpenSqliteViewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
+    PptxPreviewSessionRequestDto, QuerySqliteViewRequestDto, QuerySqliteViewResponseDto,
+    ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
+    ReadFileRangeResponseDto, ReadGeoFileRequestDto, ReadImageGpsRequestDto,
+    ReadImageGpsResponseDto, ReadImageMetadataRequestDto, ReadPptxPreviewPdfRequestDto,
+    ReadStructuredJsonWindowRequestDto, ReadStructuredJsonWindowResponseDto,
+    ReadStructuredRowsRequestDto, ReadStructuredRowsResponseDto, ResolveMetadataTokensRequestDto,
     ResolveMetadataTokensResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
     ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
     SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto, SqliteViewSessionRequestDto,
@@ -161,6 +161,33 @@ pub(crate) async fn read_image_gps(
     state
         .service
         .read_image_gps(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Reads a GeoJSON, GPX, KML or KMZ file into GeoJSON features for the map viewer (task 0277).
+#[utoipa::path(
+    post,
+    path = "/api/v1/files/geo/read",
+    operation_id = "readGeoFile",
+    request_body = ReadGeoFileRequestDto,
+    responses(
+        (status = 200, description = "The features, or the reason the file could not be read", body = GeoDocumentDto),
+        (status = 403, description = "The file is outside the accessible roots", body = ApplicationErrorDto),
+        (status = 404, description = "The file does not exist", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn read_geo_file(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ReadGeoFileRequestDto>,
+) -> Result<Json<GeoDocumentDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    crate::error::require_within_roots(&request.location, &state.accessible_roots, request_id)?;
+    state
+        .service
+        .read_geo_file(request)
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, request_id))

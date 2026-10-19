@@ -20,6 +20,7 @@ import {
   formatEntryModifiedAt,
   formatEntrySize,
 } from '../entry-formatting/entry-formatting';
+import { GeoView, type GeoViewAttrs } from '../geo/geo-view';
 import { PlaylistView, type PlaylistViewAttrs } from '../playlist/playlist-view';
 import { copyText } from './clipboard';
 import { copyWithToast } from './copy-with-toast';
@@ -46,6 +47,8 @@ import {
 } from './pdf-preview';
 import { SqliteBrowser, type SqliteBrowserActions } from './sqlite-view';
 import './file-viewer.css';
+
+const noop = (): void => undefined;
 
 /** Presentational Lister-style large-file viewer (task 0088); all state/async work lives in
  * `createFileViewerController` - this component only renders `attrs.state` and forwards intent
@@ -101,6 +104,10 @@ export interface FileViewerAttrs {
   readonly onDocumentSummary?: () => void;
   /** Sends playable playlist rows to the audio queue (task 0262); absent when no player exists. */
   readonly onPlayTracks?: PlaylistViewAttrs['onPlay'];
+  /** Client used by the geographic map view for settings and tiles (task 0277). */
+  readonly mapClient?: GeoViewAttrs['client'];
+  readonly onSelectGeoFeature?: (index: number | undefined) => void;
+  readonly onToggleGeoRaw?: () => void;
   /** Actions for paths and URLs in the viewed text (task 0271). */
   readonly links?: EditorLinkHandlers;
   readonly onClose: () => void;
@@ -1863,6 +1870,13 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                   ),
                 )
               : undefined,
+            state.status === 'ready' && state.geoView !== undefined && attrs.onToggleGeoRaw
+              ? m(
+                  'button.fm-file-viewer-geo-toggle',
+                  { type: 'button', onclick: attrs.onToggleGeoRaw },
+                  state.geoView === 'map' ? t('geo', 'showRaw') : t('geo', 'showMap'),
+                )
+              : undefined,
             attrs.onDocumentSummary === undefined
               ? undefined
               : m(
@@ -2027,14 +2041,25 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                                             ? renderDocxBody(state)
                                             : state.content.kind === 'archiveSummary'
                                               ? renderArchiveSummary(state)
-                                              : state.content.kind === 'playlist'
-                                                ? m(PlaylistView, {
-                                                    content: state.content,
-                                                    ...(attrs.onPlayTracks === undefined
-                                                      ? {}
-                                                      : { onPlay: attrs.onPlayTracks }),
-                                                  })
-                                                : renderImageBody(attrs, state),
+                                              : state.content.kind === 'geo'
+                                                ? attrs.mapClient === undefined
+                                                  ? m('p.fm-geo-hint', t('geo', 'errorTitle'))
+                                                  : m(GeoView, {
+                                                      client: attrs.mapClient,
+                                                      name: state.entry.name,
+                                                      document: state.content.document,
+                                                      selectedIndex: state.content.selectedIndex,
+                                                      onSelect: attrs.onSelectGeoFeature ?? noop,
+                                                      onShowRaw: attrs.onToggleGeoRaw ?? noop,
+                                                    })
+                                                : state.content.kind === 'playlist'
+                                                  ? m(PlaylistView, {
+                                                      content: state.content,
+                                                      ...(attrs.onPlayTracks === undefined
+                                                        ? {}
+                                                        : { onPlay: attrs.onPlayTracks }),
+                                                    })
+                                                  : renderImageBody(attrs, state),
           state.status === 'ready' && state.metadataPanelOpen === true
             ? m('.fm-file-viewer-info-panel', [
                 renderMetadataPanel(state.metadata),

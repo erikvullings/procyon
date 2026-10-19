@@ -3837,6 +3837,14 @@ impl FileManagerService {
         self.map_tiles.tile(z, x, y).await
     }
 
+    /// Reads a GeoJSON, GPX, KML or KMZ file into GeoJSON features (tasks 0277-0280).
+    pub async fn read_geo_file(
+        &self,
+        request: fm_transport_dto::ReadGeoFileRequestDto,
+    ) -> Result<fm_transport_dto::GeoDocumentDto, ApplicationError> {
+        crate::geo_files::read_geo_file(&self.providers, request).await
+    }
+
     /// Reads the GPS position and capture time of up to 100 images from their leading bytes
     /// (task 0276).
     pub async fn read_image_gps(

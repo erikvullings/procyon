@@ -17,6 +17,7 @@ pub mod entry;
 pub mod error;
 pub mod files;
 pub mod finder_tags;
+pub mod geo;
 pub mod health;
 pub mod image_metadata;
 pub mod knowledge;
@@ -116,6 +117,7 @@ pub use files::{
     StructuredViewStatusDto, UpdateStructuredViewRequestDto,
 };
 pub use finder_tags::{FinderTagColorDto, FinderTagDto, FinderTagsDto, SpotlightCommentDto};
+pub use geo::{GeoDocumentDto, GeoErrorDto, GeoIssueDto, ReadGeoFileRequestDto};
 pub use health::{HealthDto, HealthStatusDto};
 pub use image_metadata::{
     CaptureTimeDto, GpsPositionDto, ImageGpsEntryDto, ImageMetadataDto, ImageMetadataEditDto,

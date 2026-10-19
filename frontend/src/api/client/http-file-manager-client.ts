@@ -60,6 +60,7 @@ import type {
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
+  GeoDocument,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
@@ -267,6 +268,7 @@ import {
   forgetFolderView as requestFolderViewForget,
   recordFrontendDiagnostic as requestFrontendDiagnostic,
   updateGemmaMedia as requestGemmaMediaUpdate,
+  readGeoFile as requestGeoFile,
   getFileGitHistory as requestGitFileHistory,
   readImageGps as requestImageGps,
   readImageMetadata as requestImageMetadata,
@@ -1382,6 +1384,17 @@ export class HttpFileManagerClient implements FileManagerClient {
       throw new Error(`Unexpected readFileRange response status: ${response.status}`);
     }
     return response.data;
+  }
+
+  async readGeoFile(location: FileLocation, signal?: AbortSignal): Promise<GeoDocument> {
+    const response = await requestGeoFile(
+      { location },
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected readGeoFile response status: ${response.status}`);
+    }
+    return response.data as unknown as GeoDocument;
   }
 
   async readImageGps(

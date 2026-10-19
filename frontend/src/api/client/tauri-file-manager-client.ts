@@ -68,6 +68,7 @@ import type {
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
+  GeoDocument,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
@@ -897,6 +898,10 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   readFileRange(request: ReadFileRangeRequest, _signal?: AbortSignal): Promise<FileRangeChunk> {
     return invoke<FileRangeChunk>('read_file_range', { request });
+  }
+
+  readGeoFile(location: Location, _signal?: AbortSignal): Promise<GeoDocument> {
+    return invoke<GeoDocument>('read_geo_file', { request: { location } });
   }
 
   async readImageGps(

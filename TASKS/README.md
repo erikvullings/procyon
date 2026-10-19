@@ -286,7 +286,7 @@ Looking at and editing file contents without leaving the app.
 - [x] 0264 Export selection or basket as a playlist *(needs 0165, 0261)*
 - [x] 0269 Archive-aware playback and preview *(needs 0076, 0260)*
 - [x] 0271 Editor actions on a path or URL under the cursor *(needs 0099)*
-- [ ] 0277 View GeoJSON on a map *(needs 0275, 0088)*
+- [x] 0277 View GeoJSON on a map *(needs 0275, 0088)*
 - [ ] 0278 Simple GeoJSON editor (geojson.io-style) *(needs 0277, 0099)*
 - [ ] 0279 View GPX tracks, routes and waypoints on a map *(needs 0275, 0088)*
 - [ ] 0280 View KML and KMZ on a map *(needs 0275, 0088, 0076)*

@@ -28,6 +28,7 @@ mod file_editor;
 mod folder_size;
 mod folder_views;
 mod ftp;
+mod geo_files;
 mod image_metadata;
 mod image_metadata_edit;
 pub mod knowledge;

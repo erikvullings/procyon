@@ -9,7 +9,12 @@ export type FileViewerAttrsExtras = Pick<
   Partial<
     Pick<
       FileViewerAttrs,
-      'videoPosterDataUri' | 'onDocumentSummary' | 'onPlayTracks' | 'onOpenOnMap' | 'links'
+      | 'videoPosterDataUri'
+      | 'onDocumentSummary'
+      | 'onPlayTracks'
+      | 'onOpenOnMap'
+      | 'mapClient'
+      | 'links'
     >
   > & {
     readonly openExternalUrl: (url: string) => void;
@@ -54,6 +59,8 @@ export function fileViewerAttrs(
     onResetZoom: () => controller.resetZoom(),
     onCopy: () => controller.copyContent(),
     onToggleMetadata: () => controller.toggleMetadataPanel(),
+    onSelectGeoFeature: (index) => controller.selectGeoFeature(index),
+    onToggleGeoRaw: () => controller.toggleGeoRaw(),
     onNextPage: () => controller.nextPage(),
     onPreviousPage: () => controller.previousPage(),
     onPdfSearchQueryChange: (query) => controller.setPdfSearchQuery(query),

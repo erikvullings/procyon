@@ -70,6 +70,7 @@ function setup(): {
   return {
     client: {
       readFileRange: vi.fn(),
+      readGeoFile: vi.fn(),
       readImageMetadata: vi.fn(),
       mediaUrl: vi.fn(),
       resolveLinkTarget: vi.fn(),
@@ -2717,5 +2718,95 @@ describe('file viewer controller', () => {
     await controller.loadMore();
 
     expect(context.states.length).toBe(countBeforeDispose);
+  });
+
+  describe('geographic files (task 0277)', () => {
+    const document = {
+      format: 'geojson',
+      collection: { type: 'FeatureCollection' as const, features: [] },
+      totalFeatures: 0,
+      displayedFeatures: 0,
+      truncated: false,
+      warnings: [],
+      skipped: [],
+    };
+
+    it('opens a .geojson file on the map and lets the user select a feature', async () => {
+      const context = setup();
+      vi.mocked(context.client.readGeoFile).mockResolvedValue(document);
+      const controller = createFileViewerController({
+        client: context.client,
+        entry: entry({ name: 'places.geojson', extension: 'geojson' }),
+        update: (state) => context.states.push(state),
+      });
+      await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+      expect(context.states.at(-1)).toMatchObject({
+        geoView: 'map',
+        content: { kind: 'geo', selectedIndex: undefined },
+      });
+      controller.selectGeoFeature(2);
+      expect(context.states.at(-1)).toMatchObject({ content: { kind: 'geo', selectedIndex: 2 } });
+    });
+
+    it('switches to the raw text view and back', async () => {
+      const context = setup();
+      vi.mocked(context.client.readGeoFile).mockResolvedValue(document);
+      vi.mocked(context.client.readFileRange).mockResolvedValue({
+        data: Array.from(new TextEncoder().encode('{"type":"FeatureCollection"}')),
+        offset: 0,
+        length: 28,
+        eof: true,
+      });
+      const controller = createFileViewerController({
+        client: context.client,
+        entry: entry({ name: 'places.geojson', extension: 'geojson' }),
+        update: (state) => context.states.push(state),
+      });
+      await vi.waitFor(() => expect(context.states.at(-1)).toMatchObject({ geoView: 'map' }));
+      controller.toggleGeoRaw();
+      await vi.waitFor(() =>
+        expect(context.states.at(-1)).toMatchObject({ geoView: 'raw', content: { kind: 'text' } }),
+      );
+      controller.toggleGeoRaw();
+      await vi.waitFor(() =>
+        expect(context.states.at(-1)).toMatchObject({ geoView: 'map', content: { kind: 'geo' } }),
+      );
+    });
+
+    it('opens an ordinary .json file as data, without asking the backend to parse it', async () => {
+      const context = setup();
+      vi.mocked(context.client.readFileRange).mockResolvedValue({
+        data: Array.from(new TextEncoder().encode('{"name":"x"}')),
+        offset: 0,
+        length: 12,
+        eof: true,
+      });
+      createFileViewerController({
+        client: context.client,
+        entry: entry({ name: 'data.json', extension: 'json' }),
+        update: (state) => context.states.push(state),
+      });
+      await vi.waitFor(() => expect(context.states.at(-1)?.status).not.toBe('loading'));
+      expect(context.client.readGeoFile).not.toHaveBeenCalled();
+    });
+
+    it('sends a .json file that starts like GeoJSON to the map', async () => {
+      const context = setup();
+      vi.mocked(context.client.readGeoFile).mockResolvedValue(document);
+      vi.mocked(context.client.readFileRange).mockResolvedValue({
+        data: Array.from(new TextEncoder().encode('{"type":"FeatureCollection","features":[]}')),
+        offset: 0,
+        length: 40,
+        eof: true,
+      });
+      createFileViewerController({
+        client: context.client,
+        entry: entry({ name: 'data.json', extension: 'json' }),
+        update: (state) => context.states.push(state),
+      });
+      await vi.waitFor(() =>
+        expect(context.states.at(-1)).toMatchObject({ content: { kind: 'geo' } }),
+      );
+    });
   });
 });

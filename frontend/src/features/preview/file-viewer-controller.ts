@@ -2,6 +2,7 @@ import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type {
   EntrySummary,
+  GeoDocument,
   GitLogEntry,
   ImageMetadata,
   JsonTokenSpan,
@@ -11,6 +12,7 @@ import type {
 } from '../../models';
 import { IMAGE_EXTENSIONS } from '../directory-table/entry-icons';
 import { editableLanguageForExtension } from '../editor/editor-language';
+import { geoExtension, isGeoCandidate, looksLikeGeoJson } from '../geo/geo-document';
 import { archiveEntryLocation, archiveRootForEntry } from '../navigation/archive-location';
 import {
   decodePlaylistBytes,
@@ -72,6 +74,7 @@ import {
 export type FileViewerClient = Pick<
   FileManagerClient,
   | 'readFileRange'
+  | 'readGeoFile'
   | 'mediaUrl'
   | 'resolveLinkTarget'
   | 'renderPluginPreview'
@@ -331,6 +334,14 @@ export interface FileViewerPlaylistContent {
   readonly error: string | undefined;
 }
 
+/** A GeoJSON file drawn on the map (task 0277); the backend parses and validates it. */
+export interface FileViewerGeoContent {
+  readonly kind: 'geo';
+  readonly document: GeoDocument;
+  /** Index of the clicked feature in `document.collection.features`. */
+  readonly selectedIndex: number | undefined;
+}
+
 /** Occurrence-based PDF search state. Matching text fragments on the current page are highlighted
  * by pdf.js's positioned text layer while previous/next navigation moves between individual hits. */
 export interface FileViewerPdfSearchState {
@@ -394,6 +405,7 @@ export type FileViewerState =
         | FileViewerExternalPptxContent
         | FileViewerArchiveSummaryContent
         | FileViewerPlaylistContent
+        | FileViewerGeoContent
         | FileViewerStructuredTableContent
         | FileViewerStructuredJsonContent
         | FileViewerStructuredFallbackContent
@@ -411,6 +423,8 @@ export type FileViewerState =
       readonly metadata?: FileViewerMetadata | 'loading';
       /** Every EXIF/GPS/IPTC/XMP/ICC tag of an image, read by the backend (task 0273). */
       readonly fullMetadata?: ImageMetadata | 'loading' | 'failed';
+      /** Set for geographic files: the map or the raw text/tree view is shown (task 0277). */
+      readonly geoView?: 'map' | 'raw';
       /** The Alt+Space panel's git history section (task 0135): commits touching this file,
        * newest first. `'loading'` while the request is in flight; an empty array once resolved
        * means the file has no history to show (outside a git working tree, on a non-local
@@ -490,6 +504,10 @@ export interface FileViewerController {
   copyContent(): Promise<void>;
   /** Opens/closes the Alt+Space metadata/info sub-panel, computing its content on first open. */
   toggleMetadataPanel(): void;
+  /** Selects (or clears) the clicked feature of a geographic file (task 0277). */
+  selectGeoFeature(index: number | undefined): void;
+  /** Switches a geographic file between the map and its raw text or tree view. */
+  toggleGeoRaw(): void;
   /** Advances to the next PDF/comic page. No-op for other content kinds or at the last page. */
   nextPage(): void;
   /** Returns to the previous PDF/comic page. No-op for other content kinds or at the first page. */
@@ -617,6 +635,9 @@ export function createFileViewerController(
 ): FileViewerController {
   const { client, entry } = options;
   let disposed = false;
+  /** The entry opened as a geographic document, so the map/raw toggle is offered (task 0277). */
+  let geoActive = false;
+  let geoRaw = false;
   let activeController: AbortController | undefined;
   let current: FileViewerState = { status: 'loading', entry };
   let search: FileViewerSearchState | undefined;
@@ -673,7 +694,8 @@ export function createFileViewerController(
   }
 
   function publish(next: FileViewerState): void {
-    current = next;
+    current =
+      next.status === 'ready' && geoActive ? { ...next, geoView: geoRaw ? 'raw' : 'map' } : next;
     options.update(current);
   }
 
@@ -1355,6 +1377,49 @@ export function createFileViewerController(
     }
   }
 
+  /** Opens a GeoJSON file on the map; false when the file is not a geographic document. */
+  async function tryLoadGeo(controller: AbortController): Promise<boolean> {
+    if (!isGeoCandidate(entry)) return false;
+    if (geoExtension(entry) === 'json') {
+      // A failed sniff only means the file opens as ordinary JSON.
+      let sniffed = false;
+      try {
+        const head = await client.readFileRange(
+          { location: entry.location, offset: 0, length: 4096 },
+          controller.signal,
+        );
+        sniffed = looksLikeGeoJson(new TextDecoder().decode(Uint8Array.from(head.data)));
+      } catch {
+        sniffed = false;
+      }
+      if (!sniffed) return false;
+    }
+    const document = await client.readGeoFile(entry.location, controller.signal);
+    if (!isCurrent(controller)) return true;
+    if (document.format === '' && document.error != null && geoExtension(entry) === 'json') {
+      return false;
+    }
+    geoActive = true;
+    publish({
+      status: 'ready',
+      entry,
+      metadataPanelOpen: initialMetadataOpen,
+      content: { kind: 'geo', document, selectedIndex: undefined },
+    });
+    return true;
+  }
+
+  function selectGeoFeature(index: number | undefined): void {
+    if (current.status !== 'ready' || current.content.kind !== 'geo') return;
+    publish({ ...current, content: { ...current.content, selectedIndex: index } });
+  }
+
+  function toggleGeoRaw(): void {
+    if (!geoActive) return;
+    geoRaw = !geoRaw;
+    void load();
+  }
+
   async function loadPlaylist(controller: AbortController, format: PlaylistFormat): Promise<void> {
     const bytes = await readEntireFileBytes(client, entry, controller.signal, MAX_PLAYLIST_BYTES);
     if (!isCurrent(controller)) return;
@@ -1461,7 +1526,9 @@ export function createFileViewerController(
     try {
       const format = structuredFormat();
       const kind = resolvePreviewKind(entry);
-      if (format !== undefined) {
+      if (!geoRaw && (await tryLoadGeo(controller))) {
+        // Opened on the map.
+      } else if (format !== undefined) {
         await loadStructured(controller, format);
       } else if (isSqliteCandidate(entry.extension) && (await tryLoadSqlite(controller))) {
         // Opened as a database browser.
@@ -2974,6 +3041,8 @@ export function createFileViewerController(
     resetZoom,
     copyContent,
     toggleMetadataPanel,
+    selectGeoFeature,
+    toggleGeoRaw,
     nextPage,
     previousPage,
     setPdfSearchQuery,

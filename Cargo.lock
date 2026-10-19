@@ -2862,6 +2862,7 @@ dependencies = [
  "fm-credentials",
  "fm-domain",
  "fm-events",
+ "fm-geo",
  "fm-metadata",
  "fm-operations",
  "fm-platform",
@@ -3136,6 +3137,14 @@ dependencies = [
  "serde_json",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "fm-geo"
+version = "0.6.0"
+dependencies = [
+ "serde_json",
+ "thiserror 2.0.20",
 ]
 
 [[package]]

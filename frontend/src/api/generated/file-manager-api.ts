@@ -62,6 +62,7 @@ import type {
   GenerateRagAnswerRequestDto,
   GenerateRagAnswerResponseDto,
   GenerateSyncPlanRequestDto,
+  GeoDocumentDto,
   GetChecksumsParams,
   GetComparisonParams,
   GetDocumentSummaryRequestDto,
@@ -138,6 +139,7 @@ import type {
   ReadDocxPreviewResourceResponseDto,
   ReadFileRangeRequestDto,
   ReadFileRangeResponseDto,
+  ReadGeoFileRequestDto,
   ReadImageGpsRequestDto,
   ReadImageGpsResponseDto,
   ReadImageMetadataRequestDto,
@@ -2795,6 +2797,68 @@ return fetchMutator<saveEditableFileResponse>(getSaveEditableFileUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(saveEditableFileRequestDto)
+  }
+);}
+
+
+
+export type readGeoFileResponse200 = {
+  data: GeoDocumentDto
+  status: 200
+}
+
+export type readGeoFileResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type readGeoFileResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type readGeoFileResponseSuccess = (readGeoFileResponse200) & {
+  headers: Headers;
+};
+export type readGeoFileResponseError = (readGeoFileResponse403 | readGeoFileResponse404) & {
+  headers: Headers;
+};
+
+export type readGeoFileResponse = (readGeoFileResponseSuccess | readGeoFileResponseError)
+
+export const getReadGeoFileUrl = () => {
+
+
+
+
+  return `/api/v1/files/geo/read`
+}
+
+/**
+ * @summary Reads a GeoJSON, GPX, KML or KMZ file into GeoJSON features for the map viewer (task 0277).
+ */
+export const readGeoFile = async (readGeoFileRequestDto: ReadGeoFileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readGeoFileResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<readGeoFileResponse>(getReadGeoFileUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(readGeoFileRequestDto)
   }
 );}
 

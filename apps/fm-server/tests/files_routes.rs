@@ -607,3 +607,54 @@ async fn reads_image_gps_in_bulk_and_flags_unreadable_files() {
     assert!(body["entries"][0].get("gps").is_none());
     assert_eq!(body["entries"][1]["unreadable"], true);
 }
+
+#[tokio::test]
+async fn reads_geojson_files_and_reports_invalid_ones_with_a_position() {
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    let good = root.path().join("places.geojson");
+    std::fs::write(
+        &good,
+        r#"{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[4.9,52.3]},"properties":{"name":"A"}}]}"#,
+    )
+    .expect("must create fixture");
+    let bad = root.path().join("bad.geojson");
+    std::fs::write(
+        &bad,
+        r#"{"type":"Feature","geometry":{"type":"LineString","coordinates":[[0,0]]},"properties":{}}"#,
+    )
+    .expect("must create fixture");
+    let plain = root.path().join("data.json");
+    std::fs::write(&plain, r#"{"name":"x"}"#).expect("must create fixture");
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/v1/files/geo/read", server.base_url);
+    let read = |path: std::path::PathBuf| {
+        let client = client.clone();
+        let url = url.clone();
+        async move {
+            client
+                .post(url)
+                .json(&json!({"location": location_json(&path)}))
+                .send()
+                .await
+                .expect("request must succeed")
+                .json::<Value>()
+                .await
+                .expect("body must be JSON")
+        }
+    };
+
+    let body = read(good).await;
+    assert_eq!(body["format"], "geojson");
+    assert_eq!(body["displayedFeatures"], 1);
+    assert_eq!(body["bounds"], json!([4.9, 52.3, 4.9, 52.3]));
+    assert!(body.get("error").is_none());
+
+    let body = read(bad).await;
+    assert_eq!(body["error"]["path"], "/geometry/coordinates");
+    assert_eq!(body["displayedFeatures"], 0);
+
+    let body = read(plain).await;
+    assert_eq!(body["format"], "");
+    assert!(body["error"]["message"].as_str().is_some());
+}

@@ -21,6 +21,9 @@ const fake = vi.hoisted(() => {
   }
   class FakeMap extends Evented {
     removed = false;
+    sources = new Map<string, { data: unknown; setData(data: unknown): void }>();
+    layers = new Map<string, Record<string, unknown>>();
+    renderedAt: unknown[] = [];
     calls: { method: string; args: unknown[] }[] = [];
     controls: unknown[] = [];
     constructor(public options: Record<string, unknown>) {
@@ -29,6 +32,30 @@ const fake = vi.hoisted(() => {
     }
     addControl(control: unknown): void {
       this.controls.push(control);
+    }
+    getSource(id: string) {
+      return this.sources.get(id);
+    }
+    addSource(id: string, spec: { data: unknown }): void {
+      const source = {
+        data: spec.data,
+        setData(data: unknown) {
+          source.data = data;
+        },
+      };
+      this.sources.set(id, source);
+    }
+    getLayer(id: string) {
+      return this.layers.get(id);
+    }
+    addLayer(layer: { id: string }): void {
+      this.layers.set(layer.id, layer);
+    }
+    setFilter(id: string, filter: unknown): void {
+      this.calls.push({ method: 'setFilter', args: [id, filter] });
+    }
+    queryRenderedFeatures() {
+      return this.renderedAt;
     }
     getBounds() {
       return { getWest: () => -180, getSouth: () => -85, getEast: () => 180, getNorth: () => 85 };
@@ -289,5 +316,70 @@ describe('MapView', () => {
       m.redraw.sync();
       expect(root.querySelector('[role="alert"]')).not.toBeNull();
     });
+  });
+
+  it('draws vector features with simplestyle expressions, fits to their bounds and maps clicks back to a feature', async () => {
+    const onFeatureClick = vi.fn();
+    const collection = {
+      type: 'FeatureCollection' as const,
+      features: [
+        {
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [4, 52] },
+          properties: { 'marker-color': '#ff0000' },
+        },
+        {
+          type: 'Feature' as const,
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: [
+              [0, 0],
+              [1, 1],
+            ],
+          },
+          properties: null,
+        },
+      ],
+    };
+    let highlightIndex: number | undefined;
+    mount(() => ({
+      client: client(),
+      settings: DEFAULT_MAP_SETTINGS,
+      dark: false,
+      markers: [],
+      features: collection,
+      dataBounds: [0, 0, 4, 52],
+      onFeatureClick,
+      ...(highlightIndex === undefined ? {} : { highlightIndex }),
+    }));
+    const map = await loaded();
+    expect([...map.layers.keys()]).toEqual([
+      'fm-features-fill',
+      'fm-features-line',
+      'fm-features-circle',
+      'fm-features-highlight',
+    ]);
+    const source = map.sources.get('fm-features');
+    expect(JSON.stringify(source?.data)).toContain('"_fmIndex":1');
+    expect(JSON.stringify(map.layers.get('fm-features-circle'))).toContain('marker-color');
+    expect(map.calls.find((call) => call.method === 'fitBounds')?.args[0]).toEqual([
+      [0, 0],
+      [4, 52],
+    ]);
+
+    map.renderedAt = [{ properties: { _fmIndex: 1 } }];
+    map.fire('click', { lngLat: { lat: 0, lng: 0 }, point: { x: 1, y: 1 } });
+    expect(onFeatureClick).toHaveBeenLastCalledWith(1);
+    map.renderedAt = [];
+    map.fire('click', { lngLat: { lat: 0, lng: 0 }, point: { x: 1, y: 1 } });
+    expect(onFeatureClick).toHaveBeenLastCalledWith(undefined);
+
+    highlightIndex = 1;
+    m.redraw.sync();
+    expect(map.calls.filter((call) => call.method === 'setFilter').at(-1)?.args[1]).toEqual([
+      '==',
+      ['get', '_fmIndex'],
+      1,
+    ]);
   });
 });

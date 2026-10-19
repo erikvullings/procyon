@@ -69,6 +69,7 @@ import type {
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
+  GeoDocument,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
@@ -360,6 +361,7 @@ export type MockClientMethod =
   | 'setSpotlightComment'
   | 'cacheArchivePassword'
   | 'readFileRange'
+  | 'readGeoFile'
   | 'readImageGps'
   | 'readImageMetadata'
   | 'resolveMetadataTokens'
@@ -3072,6 +3074,28 @@ export class MockFileManagerClient implements FileManagerClient {
 
   setPaneActivity(_request: SetPaneActivityRequest, signal?: AbortSignal): Promise<void> {
     return this.perform('setPaneActivity', signal, () => undefined);
+  }
+
+  readGeoFile(_location: Location, signal?: AbortSignal): Promise<GeoDocument> {
+    return this.perform('readGeoFile', signal, () => ({
+      format: 'geojson',
+      collection: {
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [4.9, 52.37] },
+            properties: { name: 'Amsterdam' },
+          },
+        ],
+      },
+      totalFeatures: 1,
+      displayedFeatures: 1,
+      truncated: false,
+      bounds: [4.9, 52.37, 4.9, 52.37],
+      warnings: [],
+      skipped: [],
+    }));
   }
 
   readImageGps(locations: readonly Location[], signal?: AbortSignal): Promise<ImageGpsEntry[]> {

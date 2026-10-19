@@ -61,6 +61,7 @@ import type {
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
   GenerateSyncPlanRequest,
+  GeoDocument,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
@@ -555,6 +556,8 @@ export interface FileManagerClient {
    * Works for local, archive and remote entries because the backend reads through the VFS.
    */
   readImageMetadata(location: Location, signal?: AbortSignal): Promise<ImageMetadata>;
+  /** Reads a GeoJSON, GPX, KML or KMZ file into GeoJSON features (tasks 0277-0280). */
+  readGeoFile(location: Location, signal?: AbortSignal): Promise<GeoDocument>;
   /**
    * Reads GPS position and capture time of up to 100 images from their leading bytes only
    * (task 0276); an unreadable image is flagged instead of failing the batch.

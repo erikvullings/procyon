@@ -2123,6 +2123,54 @@
         }
       }
     },
+    "/api/v1/files/geo/read": {
+      "post": {
+        "summary": "Reads a GeoJSON, GPX, KML or KMZ file into GeoJSON features for the map viewer (task 0277).",
+        "operationId": "readGeoFile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadGeoFileRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The features, or the reason the file could not be read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeoDocumentDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The file is outside the accessible roots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The file does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/files/git-history": {
       "post": {
         "summary": "Fetches a file's git commit history, for the Alt+Space metadata panel's history section\n(task 0135). Local provider only; returns an empty commit list (never an error) when the\nfile is outside a git working tree, on a non-local provider, or not yet committed.",
@@ -11954,6 +12002,137 @@
           }
         }
       },
+      "GeoDocumentDto": {
+        "type": "object",
+        "description": "A geographic file read into GeoJSON features.",
+        "required": [
+          "format",
+          "collection",
+          "totalFeatures",
+          "displayedFeatures",
+          "truncated",
+          "warnings",
+          "skipped"
+        ],
+        "properties": {
+          "bounds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "description": "West, south, east, north of the displayed features."
+          },
+          "collection": {
+            "type": "object",
+            "description": "The displayed features as a GeoJSON `FeatureCollection`."
+          },
+          "displayedFeatures": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Features in `collection`; less than `totalFeatures` when limits applied.",
+            "minimum": 0
+          },
+          "error": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GeoErrorDto",
+                "description": "Set when the file could not be read; `collection` is then empty."
+              }
+            ]
+          },
+          "format": {
+            "type": "string",
+            "description": "`geojson`, `gpx`, `kml` or `kmz`; empty when the file is not a geographic file."
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Source elements without a 2D representation that were left out."
+          },
+          "totalFeatures": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Features in the source file.",
+            "minimum": 0
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether limits cut the document short."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeoIssueDto"
+            },
+            "description": "Non-fatal issues."
+          }
+        }
+      },
+      "GeoErrorDto": {
+        "type": "object",
+        "description": "Why a file could not be read.",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "column": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "One-based column of a syntax error.",
+            "minimum": 0
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "One-based line of a syntax error.",
+            "minimum": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message."
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Location of a validation error inside the document."
+          }
+        }
+      },
+      "GeoIssueDto": {
+        "type": "object",
+        "description": "A warning about data that is not represented faithfully.",
+        "required": [
+          "path",
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "What is wrong or left out."
+          },
+          "path": {
+            "type": "string",
+            "description": "Where in the document, for example `/features/3/geometry`."
+          }
+        }
+      },
       "GetDocumentSummaryRequestDto": {
         "type": "object",
         "description": "Reads the current summary for an authorized file occurrence.",
@@ -17846,6 +18025,19 @@
           "length": 5,
           "eof": true,
           "probablyBinary": false
+        }
+      },
+      "ReadGeoFileRequestDto": {
+        "type": "object",
+        "description": "Reads a geographic file (`POST /api/v1/files/geo/read`).",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The GeoJSON, GPX, KML or KMZ file."
+          }
         }
       },
       "ReadImageGpsRequestDto": {

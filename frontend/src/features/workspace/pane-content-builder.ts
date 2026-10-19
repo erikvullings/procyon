@@ -1059,6 +1059,7 @@ export function createPaneContentBuilder(
                     FileViewer,
                     fileViewerAttrs(viewer.state, viewer.controller, {
                       openExternalUrl: (url) => void client.openExternalUrl(url),
+                      mapClient: client,
                       ...(videoPosterDataUri === undefined ? {} : { videoPosterDataUri }),
                       quickLookAvailable,
                       onQuickLook: () =>

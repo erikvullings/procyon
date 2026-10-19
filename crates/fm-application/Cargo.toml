@@ -31,6 +31,7 @@ fm-comparison.workspace = true
 fm-connections.workspace = true
 fm-credentials.workspace = true
 fm-events.workspace = true
+fm-geo.workspace = true
 fm-metadata.workspace = true
 fm-operations.workspace = true
 fm-platform.workspace = true

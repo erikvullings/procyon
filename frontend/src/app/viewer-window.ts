@@ -138,6 +138,7 @@ export const ViewerWindow: FactoryComponent<ViewerWindowAttrs> = () => {
           FileViewer,
           fileViewerAttrs(state, controller, {
             openExternalUrl: (url) => void client.openExternalUrl(url),
+            mapClient: client,
             quickLookAvailable,
             onQuickLook: () => invokeOnEntry('core.quickLook'),
             onOpenExternally: () => invokeOnEntry('core.open'),
