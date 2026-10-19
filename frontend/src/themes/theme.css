@@ -1097,8 +1097,20 @@ main.fm-workspace {
 }
 
 .fm-windows-titlebar-controls button {
+  display: inline-flex;
   width: 46px;
+  align-items: center;
+  justify-content: center;
   font-size: var(--fm-type-body);
+}
+
+.fm-windows-titlebar-glyph {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.1;
+  shape-rendering: geometricPrecision;
 }
 
 .fm-windows-titlebar-controls button:hover,

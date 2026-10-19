@@ -81,10 +81,14 @@ export const WindowsNativeMenu: FactoryComponent<WindowsNativeMenuAttrs> = () =>
   return {
     oncreate: ({ dom }) => {
       menuBar = dom as HTMLElement;
-      document.addEventListener('click', handleDocumentClick, true);
+      // `pointerdown`, not `click`: titlebar drag regions and other mousedown handlers can
+      // swallow the click, which left the menu open.
+      document.addEventListener('pointerdown', handleDocumentPointerDown, true);
+      window.addEventListener('blur', closeMenu);
     },
     onremove: () => {
-      document.removeEventListener('click', handleDocumentClick, true);
+      document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
+      window.removeEventListener('blur', closeMenu);
       menuBar = undefined;
     },
     view: ({ attrs }) => {
@@ -122,7 +126,7 @@ export const WindowsNativeMenu: FactoryComponent<WindowsNativeMenuAttrs> = () =>
     },
   };
 
-  function handleDocumentClick(event: MouseEvent): void {
+  function handleDocumentPointerDown(event: Event): void {
     if (menuBar !== undefined && !menuBar.contains(event.target as Node)) closeMenu();
   }
 };

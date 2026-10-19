@@ -531,6 +531,15 @@ export function removeDiskUsageNodes(
  * A factory component so that per-instance state lives in the closure rather
  * than on a shared module-level object.
  */
+/** Windows-style caption-button glyph; text glyphs (−, □, ×) render far smaller than native ones. */
+function windowControlIcon(path: string): m.Vnode {
+  return m(
+    'svg.fm-windows-titlebar-glyph',
+    { viewBox: '0 0 12 12', 'aria-hidden': 'true', focusable: 'false' },
+    m('path', { d: path }),
+  );
+}
+
 export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let theme: Theme = DEFAULT_THEME;
   let currentSettings: Settings | undefined;
@@ -5916,7 +5925,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       'aria-label': t('shell', 'minimize'),
                       onclick: () => void getCurrentWindow().minimize(),
                     },
-                    '−',
+                    windowControlIcon('M1 6.5h10'),
                   ),
                   m(
                     'button',
@@ -5925,7 +5934,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       'aria-label': t('shell', 'maximize'),
                       onclick: () => void getCurrentWindow().toggleMaximize(),
                     },
-                    '□',
+                    windowControlIcon('M1.5 1.5h9v9h-9z'),
                   ),
                   m(
                     'button.fm-windows-titlebar-close',
@@ -5934,7 +5943,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       'aria-label': t('button', 'close'),
                       onclick: () => void getCurrentWindow().close(),
                     },
-                    '×',
+                    windowControlIcon('M1.5 1.5l9 9M10.5 1.5l-9 9'),
                   ),
                 ]),
               ])

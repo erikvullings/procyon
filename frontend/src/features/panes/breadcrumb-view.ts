@@ -98,6 +98,14 @@ function posixSegments(path: string): readonly BreadcrumbSegment[] {
       path: index === 0 ? '~' : `~/${parts.slice(1, index + 1).join('/')}`,
     }));
   }
+  // Windows `file:` paths arrive as `/C:/dev`; the drive is the root, as in Explorer.
+  if (parts[0] !== undefined && /^[A-Za-z]:$/.test(parts[0])) {
+    const drive = parts[0];
+    return parts.map((label, index) => ({
+      label,
+      path: index === 0 ? `/${drive}/` : `/${parts.slice(0, index + 1).join('/')}`,
+    }));
+  }
   return [
     { label: '/', path: '/' },
     ...parts.map((label, index) => ({
