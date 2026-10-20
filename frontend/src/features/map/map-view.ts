@@ -56,6 +56,8 @@ export interface MapViewAttrs {
   readonly overlays?: readonly MapOverlay[];
   /** Content of the popup opened by clicking a feature; none when it returns undefined. */
   readonly renderFeaturePopup?: (index: number) => string | HTMLElement | undefined;
+  /** Content of a tooltip shown while the pointer rests on a feature; none when it returns undefined. */
+  readonly renderFeatureHover?: (index: number) => string | HTMLElement | undefined;
   /** A position to mark, for example under the pointer on an elevation chart. */
   readonly cursor?: MapPosition;
   /** Index of the feature to emphasise. */
@@ -112,9 +114,6 @@ const HIGHLIGHT_LAYER = 'fm-features-highlight';
 const HIGHLIGHT_CASING_LAYER = 'fm-features-highlight-casing';
 const HIGHLIGHT_POINT_LAYER = 'fm-features-highlight-point';
 const HIGHLIGHT_COLOUR = 'rgb(255, 140, 0)';
-/** Zoom a selected point is brought to when the map is further out. */
-const FOCUS_POINT_ZOOM = 15;
-const FOCUS_MAX_ZOOM = 17;
 const ICON_LAYER = 'fm-features-icon';
 const OVERLAY_PREFIX = 'fm-overlay-';
 const DEFAULT_FEATURE_COLOUR = 'rgb(25, 118, 210)';
@@ -206,6 +205,10 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
   let appliedFitKey: string | number | undefined;
   let hasFitted = false;
   let popup: MapLibre.Popup | undefined;
+  let hoverPopup: MapLibre.Popup | undefined;
+  let hoverIndex: number | undefined;
+  /** Feature selected by a click on the map itself, which must not move the viewport. */
+  let clickedIndex: number | undefined;
   const drawn = new Map<string, DrawnItem>();
   let cursorMarker: MapLibre.Marker | undefined;
   const iconLoads = new Set<string>();
@@ -529,27 +532,24 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
     focusHighlight();
   }
 
-  /** Brings the highlighted feature into view: a point is centred, a line or polygon fitted. */
+  /** Pans the highlighted feature to the centre of the map, keeping the zoom level. */
   function focusHighlight(): void {
     const index = latest.highlightIndex;
+    if (index === clickedIndex) {
+      clickedIndex = undefined;
+      return;
+    }
     const geometry = index === undefined ? undefined : latest.features?.features[index]?.geometry;
     const bounds = geometry == null ? undefined : geometryBounds(geometry);
     if (map === undefined || bounds === undefined) return;
     const [west, south, east, north] = bounds;
-    if (west === east && south === north) {
-      map.easeTo({
-        center: [west, south],
-        zoom: Math.min(Math.max(map.getZoom(), FOCUS_POINT_ZOOM), latest.settings.maxZoom),
-      });
-    } else {
-      map.fitBounds(
-        [
-          [west, south],
-          [east, north],
-        ],
-        { padding: 60, maxZoom: Math.min(FOCUS_MAX_ZOOM, latest.settings.maxZoom) },
-      );
-    }
+    map.easeTo({ center: [(west + east) / 2, (south + north) / 2] });
+  }
+
+  function hideHover(): void {
+    hoverPopup?.remove();
+    hoverPopup = undefined;
+    hoverIndex = undefined;
   }
 
   function syncFeatures(): void {
@@ -638,6 +638,8 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
             })
             .find((feature) => typeof feature.properties?._fmIndex === 'number');
           const index = hit === undefined ? undefined : Number(hit.properties._fmIndex);
+          hideHover();
+          clickedIndex = index;
           latest.onFeatureClick?.(index);
           const content = index === undefined ? undefined : latest.renderFeaturePopup?.(index);
           if (content !== undefined) {
@@ -651,6 +653,38 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
         }
         latest.onMapClick?.({ latitude: event.lngLat.lat, longitude: event.lngLat.lng });
       });
+      created.on('mousemove', (event) => {
+        const render = latest.renderFeatureHover;
+        if (render === undefined || latest.features === undefined) return hideHover();
+        const hit = created
+          .queryRenderedFeatures(event.point, {
+            layers: FEATURE_LAYERS.filter((layer) => created.getLayer(layer) !== undefined),
+          })
+          .find((feature) => typeof feature.properties?._fmIndex === 'number');
+        const index = hit === undefined ? undefined : Number(hit.properties._fmIndex);
+        if (index === undefined) return hideHover();
+        if (index === hoverIndex && hoverPopup !== undefined) {
+          hoverPopup.setLngLat(event.lngLat);
+          return;
+        }
+        hideHover();
+        const content = render(index);
+        if (content === undefined) return;
+        hoverIndex = index;
+        const next = new library.Popup({
+          offset: 12,
+          closeButton: false,
+          closeOnClick: false,
+          className: 'fm-geo-hover',
+          maxWidth: '24rem',
+        });
+        next.setLngLat(event.lngLat);
+        if (typeof content === 'string') next.setText(content);
+        else next.setDOMContent(content);
+        next.addTo(created);
+        hoverPopup = next;
+      });
+      created.on('mouseout', hideHover);
       created.on('style.load', syncFeatures);
       // 'load' also waits for the first tiles, which may never arrive; the style is enough to draw.
       const loadTimer = setTimeout(() => {
