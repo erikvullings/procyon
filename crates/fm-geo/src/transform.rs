@@ -61,6 +61,7 @@ pub fn transform(
             GeoFormat::GeoJson => compact_json(bytes),
             GeoFormat::Gpx | GeoFormat::Kml => compact_xml(bytes)?,
             GeoFormat::Kmz => repack_kmz(bytes).map_err(|error| error.to_string())?,
+            GeoFormat::Csv => return Err("CSV files cannot be minified".into()),
         };
         return Ok(Transformed {
             bytes: compact,

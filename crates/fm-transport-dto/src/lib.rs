@@ -118,11 +118,11 @@ pub use files::{
 };
 pub use finder_tags::{FinderTagColorDto, FinderTagDto, FinderTagsDto, SpotlightCommentDto};
 pub use geo::{
-    ConvertGeoTextRequestDto, ConvertGeoTextResponseDto, GeoConversionReportDto, GeoDocumentDto,
-    GeoErrorDto, GeoIssueDto, GeoMinifyDto, GeoOverlayDto, GeoProfilePointDto, GeoTrackDto,
-    GeoTransformDto, ParseGeoTextRequestDto, PreviewGeoConversionRequestDto,
-    PreviewGeoConversionResponseDto, PreviewGeoMinifyRequestDto, PreviewGeoMinifyResponseDto,
-    ReadGeoFileRequestDto,
+    ConvertGeoTextRequestDto, ConvertGeoTextResponseDto, CsvGeoInfoDto, CsvGeoOptionsDto,
+    GeoConversionReportDto, GeoDocumentDto, GeoErrorDto, GeoIssueDto, GeoMinifyDto, GeoOverlayDto,
+    GeoProfilePointDto, GeoTrackDto, GeoTransformDto, ParseGeoTextRequestDto,
+    PreviewGeoConversionRequestDto, PreviewGeoConversionResponseDto, PreviewGeoMinifyRequestDto,
+    PreviewGeoMinifyResponseDto, ReadGeoFileRequestDto,
 };
 pub use health::{HealthDto, HealthStatusDto};
 pub use image_metadata::{

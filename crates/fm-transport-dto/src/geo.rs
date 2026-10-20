@@ -10,8 +10,63 @@ use crate::LocationDto;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadGeoFileRequestDto {
-    /// The GeoJSON, GPX, KML or KMZ file.
+    /// The GeoJSON, GPX, KML, KMZ or delimited-text (CSV) file.
     pub location: LocationDto,
+    /// Which columns and coordinate system to use for a CSV file; detected when omitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub csv: Option<CsvGeoOptionsDto>,
+}
+
+/// What the user chose for reading a CSV file as geographic data; omitted fields are detected.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvGeoOptionsDto {
+    /// Column with the easting or longitude.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x_column: Option<String>,
+    /// Column with the northing or latitude.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y_column: Option<String>,
+    /// Column with WKT geometries, used instead of the x/y columns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wkt_column: Option<String>,
+    /// Coordinate system of the coordinates: any EPSG code (`EPSG:28992`, `28992`) or a
+    /// `+proj=...` definition. WGS84 longitude/latitude when it can be recognised from the values.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crs: Option<String>,
+}
+
+/// How a CSV file was read, and what it offers, for a "columns and coordinate system" dialog.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvGeoInfoDto {
+    /// Column names of the first row.
+    pub headers: Vec<String>,
+    /// The field separator that was detected.
+    pub delimiter: String,
+    /// Easting/longitude column in use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x_column: Option<String>,
+    /// Northing/latitude column in use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y_column: Option<String>,
+    /// WKT column in use.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wkt_column: Option<String>,
+    /// Coordinate system in use, for example `EPSG:28992`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crs: Option<String>,
+    /// Its name, for example `Amersfoort / RD New`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crs_name: Option<String>,
+    /// Whether the coordinate system was guessed from the values.
+    pub crs_guessed: bool,
+    /// Whether the columns were found by name rather than chosen.
+    pub columns_detected: bool,
+    /// Data rows in the file.
+    pub rows: u64,
+    /// Rows without usable coordinates.
+    pub skipped_rows: u64,
 }
 
 /// Parses GeoJSON text without a file (`POST /api/v1/geo/parse`), for live validation in editors.
@@ -172,6 +227,9 @@ pub struct GeoDocumentDto {
     /// Set when the file could not be read; `collection` is then empty.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<GeoErrorDto>,
+    /// How a CSV file was read; also present, with only the columns, when it has no coordinates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub csv: Option<CsvGeoInfoDto>,
 }
 
 /// How to make a geographic file smaller (task 0282). Omitted options are not applied; with none

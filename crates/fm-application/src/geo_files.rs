@@ -6,10 +6,10 @@
 //! raw text.
 
 use fm_domain::{EntryId, Location};
-use fm_geo::{GeoDocument, Limits, read_document};
+use fm_geo::{CsvError, CsvInfo, CsvOptions, GeoDocument, Limits, read_csv, read_document};
 use fm_transport_dto::{
-    GeoDocumentDto, GeoErrorDto, GeoIssueDto, GeoOverlayDto, GeoProfilePointDto, GeoTrackDto,
-    ParseGeoTextRequestDto, ReadGeoFileRequestDto,
+    CsvGeoInfoDto, CsvGeoOptionsDto, GeoDocumentDto, GeoErrorDto, GeoIssueDto, GeoOverlayDto,
+    GeoProfilePointDto, GeoTrackDto, ParseGeoTextRequestDto, ReadGeoFileRequestDto,
 };
 use fm_vfs::{EntryRef, ProviderRegistry};
 use serde_json::json;
@@ -46,6 +46,7 @@ fn empty(format: &str, error: GeoErrorDto) -> GeoDocumentDto {
         resources: std::collections::BTreeMap::new(),
         overlays: Vec::new(),
         error: Some(error),
+        csv: None,
     }
 }
 
@@ -122,6 +123,69 @@ fn document_dto(document: GeoDocument) -> GeoDocumentDto {
             })
             .collect(),
         error: None,
+        csv: None,
+    }
+}
+
+fn csv_info_dto(info: CsvInfo) -> CsvGeoInfoDto {
+    CsvGeoInfoDto {
+        headers: info.headers,
+        delimiter: info.delimiter.to_string(),
+        x_column: info.x_column,
+        y_column: info.y_column,
+        wkt_column: info.wkt_column,
+        crs: Some(info.crs),
+        crs_name: Some(info.crs_name),
+        crs_guessed: info.crs_guessed,
+        columns_detected: info.columns_detected,
+        rows: info.rows as u64,
+        skipped_rows: info.skipped_rows as u64,
+    }
+}
+
+fn csv_options(options: Option<CsvGeoOptionsDto>) -> CsvOptions {
+    let options = options.unwrap_or_default();
+    let text = |value: Option<String>| {
+        value
+            .map(|text| text.trim().to_owned())
+            .filter(|text| !text.is_empty())
+    };
+    CsvOptions {
+        x_column: text(options.x_column),
+        y_column: text(options.y_column),
+        wkt_column: text(options.wkt_column),
+        crs: text(options.crs),
+    }
+}
+
+/// Reads delimited text. A file without coordinates still reports its columns, so the viewer can
+/// offer them in the "columns and coordinate system" dialog.
+fn parse_csv(bytes: &[u8], options: CsvOptions) -> GeoDocumentDto {
+    match read_csv(bytes, Limits::default(), &options) {
+        Ok((document, info)) => {
+            let mut dto = document_dto(document);
+            dto.csv = Some(csv_info_dto(info));
+            dto
+        }
+        Err(error) => {
+            let mut dto = empty("csv", plain_error(error.to_string()));
+            if let CsvError::NoCoordinates { headers, .. } = error {
+                dto.csv = Some(CsvGeoInfoDto {
+                    headers,
+                    delimiter: String::new(),
+                    x_column: None,
+                    y_column: None,
+                    wkt_column: None,
+                    crs: None,
+                    crs_name: None,
+                    crs_guessed: false,
+                    columns_detected: false,
+                    rows: 0,
+                    skipped_rows: 0,
+                });
+            }
+            dto
+        }
     }
 }
 
@@ -154,6 +218,12 @@ pub(crate) async fn read_geo_file(
         .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
 
     let extension = extension_of(&location);
+    if matches!(extension.to_ascii_lowercase().as_str(), "csv" | "tsv") {
+        let options = csv_options(request.csv);
+        return tokio::task::spawn_blocking(move || parse_csv(&bytes, options))
+            .await
+            .map_err(|_| ApplicationError::Internal);
+    }
     parse_off_thread(extension, bytes).await
 }
 

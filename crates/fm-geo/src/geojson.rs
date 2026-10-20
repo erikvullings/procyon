@@ -3,6 +3,7 @@
 use serde_json::{Map, Value};
 use thiserror::Error;
 
+use crate::crs::{Crs, reproject_geojson};
 use crate::model::{Bounds, GeoDocument, GeoFormat, GeoIssue, Limits};
 
 const MAX_GEOMETRY_DEPTH: usize = 8;
@@ -244,31 +245,45 @@ fn feature(value: &Value, path: &str, scan: &mut Scan) -> Result<Value, GeoJsonE
     Ok(Value::Object(kept))
 }
 
-fn crs_warning(object: &Map<String, Value>, scan: &mut Scan) {
-    let Some(crs) = object.get("crs") else {
+/// Handles the legacy `crs` member. Systems other than WGS84 are converted to WGS84 in `root`
+/// before anything is read, so drawing, converting and editing all see longitude/latitude.
+fn apply_crs(root: &mut Value, scan: &mut Scan) {
+    let Some(crs) = root.get("crs") else {
         return;
     };
     let name = crs
         .pointer("/properties/name")
         .and_then(Value::as_str)
-        .unwrap_or_default();
-    let wgs84 = ["CRS84", "EPSG::4326", "EPSG:4326"]
-        .iter()
-        .any(|known| name.contains(known));
-    if wgs84 {
+        .unwrap_or_default()
+        .to_owned();
+    let Ok(system) = Crs::parse(&name) else {
+        scan.warn(
+            "/crs",
+            format!(
+                "the legacy crs member declares '{name}', which is not a coordinate system that can \
+                 be converted: RFC 7946 requires WGS84 longitude/latitude, so the data may be drawn \
+                 in the wrong place"
+            ),
+        );
+        return;
+    };
+    if system.is_wgs84() {
         scan.warn(
             "/crs",
             "the legacy crs member was removed in RFC 7946; coordinates are WGS84 longitude/latitude",
         );
-    } else {
-        scan.warn(
-            "/crs",
-            format!(
-                "the legacy crs member declares '{name}', which is ignored: RFC 7946 requires WGS84 \
-                 longitude/latitude, so the data may be drawn in the wrong place"
-            ),
-        );
+        return;
     }
+    let failed = reproject_geojson(root, &system);
+    let mut message = format!(
+        "coordinates were converted from {} ({}) to WGS84",
+        system.label(),
+        system.name()
+    );
+    if failed > 0 {
+        message.push_str(&format!("; {failed} position(s) could not be converted"));
+    }
+    scan.warn("/crs", message);
 }
 
 /// Reads GeoJSON bytes: a `FeatureCollection`, a `Feature` or a bare geometry.
@@ -278,11 +293,15 @@ fn crs_warning(object: &Map<String, Value>, scan: &mut Scan) {
 /// Returns the first syntax or validation problem with its position.
 pub fn parse_geojson(bytes: &[u8], limits: Limits) -> Result<GeoDocument, GeoJsonError> {
     let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
-    let root: Value = serde_json::from_slice(bytes).map_err(|error| GeoJsonError::Syntax {
+    let mut root: Value = serde_json::from_slice(bytes).map_err(|error| GeoJsonError::Syntax {
         message: error.to_string(),
         line: error.line(),
         column: error.column(),
     })?;
+    let mut scan = Scan::default();
+    if root.is_object() {
+        apply_crs(&mut root, &mut scan);
+    }
     let object = root
         .as_object()
         .ok_or_else(|| invalid("", "a GeoJSON document must be a JSON object"))?;
@@ -290,8 +309,6 @@ pub fn parse_geojson(bytes: &[u8], limits: Limits) -> Result<GeoDocument, GeoJso
         .get("type")
         .and_then(Value::as_str)
         .ok_or_else(|| invalid("/type", "a GeoJSON object needs a type"))?;
-    let mut scan = Scan::default();
-    crs_warning(object, &mut scan);
     let mut features = Vec::new();
     let total_features;
     let mut truncated = false;
@@ -373,6 +390,45 @@ mod tests {
             Err(GeoJsonError::Invalid(issue)) => issue,
             other => panic!("expected a validation error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn converts_a_legacy_crs_member_to_wgs84() {
+        let document = parse(
+            r#"{"type":"FeatureCollection",
+                "crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::28992"}},
+                "features":[{"type":"Feature","properties":{},
+                  "geometry":{"type":"Point","coordinates":[155000,463000]}}]}"#,
+        )
+        .expect("valid");
+        let longitude = document.features[0]
+            .pointer("/geometry/coordinates/0")
+            .and_then(Value::as_f64)
+            .expect("longitude");
+        assert!((longitude - 5.3872).abs() < 0.001, "{longitude}");
+        assert!(
+            document
+                .warnings
+                .iter()
+                .any(|w| w.message.contains("converted from EPSG:28992"))
+        );
+        let bounds = document.bounds.expect("bounds");
+        assert!((bounds[0] - 5.3872).abs() < 0.001);
+    }
+
+    #[test]
+    fn keeps_data_with_an_unconvertible_crs_and_says_so() {
+        let document = parse(
+            r#"{"type":"Feature","crs":{"type":"name","properties":{"name":"local grid"}},
+                "properties":{},"geometry":{"type":"Point","coordinates":[10,20]}}"#,
+        )
+        .expect("valid");
+        assert!(
+            document
+                .warnings
+                .iter()
+                .any(|w| w.message.contains("not a coordinate system"))
+        );
     }
 
     #[test]
@@ -515,12 +571,16 @@ mod tests {
     }
 
     #[test]
-    fn legacy_crs_members_are_flagged() {
+    fn legacy_crs_members_are_converted_or_flagged() {
         let named = parse(
             r#"{"type":"FeatureCollection","crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:EPSG::3857"}},"features":[]}"#,
         )
         .expect("valid");
-        assert!(named.warnings[0].message.contains("EPSG::3857"));
+        assert!(
+            named.warnings[0]
+                .message
+                .contains("converted from EPSG:3857")
+        );
         let wgs84 = parse(
             r#"{"type":"FeatureCollection","crs":{"type":"name","properties":{"name":"urn:ogc:def:crs:OGC:1.3:CRS84"}},"features":[]}"#,
         )

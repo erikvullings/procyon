@@ -5,6 +5,8 @@
 //! Parsing is bounded and never panics on malformed input.
 
 mod convert;
+mod crs;
+mod csv_geo;
 mod geojson;
 mod gpx;
 mod kml;
@@ -17,6 +19,8 @@ mod track_stats;
 mod transform;
 
 pub use convert::{ConvertError, Converted, Target, convert};
+pub use crs::{Crs, CrsError, guess_crs, reproject_geojson};
+pub use csv_geo::{CsvError, CsvInfo, CsvOptions, parse_wkt, read_csv};
 pub use geojson::{GeoJsonError, parse_geojson};
 pub use gpx::{GpxError, parse_gpx};
 pub use kml::{KmlError, NoResources, ResourceSource, parse_kml};
@@ -39,6 +43,7 @@ pub fn detect_format(extension: &str, head: &[u8]) -> Option<GeoFormat> {
         "gpx" => Some(GeoFormat::Gpx),
         "kml" => Some(GeoFormat::Kml),
         "kmz" => Some(GeoFormat::Kmz),
+        "csv" | "tsv" => Some(GeoFormat::Csv),
         "json" => sniff_geojson(head).then_some(GeoFormat::GeoJson),
         _ => None,
     }

@@ -9,6 +9,9 @@ license.workspace = true
 [dependencies]
 base64.workspace = true
 quick-xml.workspace = true
+proj4rs.workspace = true
+crs-definitions.workspace = true
+csv.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 zip.workspace = true

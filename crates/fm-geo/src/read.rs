@@ -1,5 +1,6 @@
 //! One entry point for reading any supported format.
 
+use crate::csv_geo::{CsvOptions, read_csv};
 use crate::geojson::{GeoJsonError, parse_geojson};
 use crate::gpx::{GpxError, parse_gpx};
 use crate::kml::{KmlError, NoResources, parse_kml};
@@ -98,6 +99,9 @@ pub fn read_document(
         GeoFormat::Kml => {
             parse_kml(bytes, limits, &NoResources, GeoFormat::Kml).map_err(Into::into)
         }
+        GeoFormat::Csv => read_csv(bytes, limits, &CsvOptions::default())
+            .map(|(document, _)| document)
+            .map_err(|error| ReadFailure::plain(Some(format), error.to_string())),
         GeoFormat::Kmz => parse_kmz(bytes, limits).map_err(|error| match error {
             KmzError::Kml(inner) => ReadFailure::from(inner),
             other => ReadFailure::plain(Some(format), other.to_string()),

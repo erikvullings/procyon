@@ -64,6 +64,8 @@ export * from './createConnectionRequestDto.ts';
 export * from './createSemanticIndexRemovalPlanRequestDto.ts';
 export * from './createSemanticInstallationOfferRequestDto.ts';
 export * from './createWorkspaceRequestDto.ts';
+export * from './csvGeoInfoDto.ts';
+export * from './csvGeoOptionsDto.ts';
 export * from './dateFormatDto.ts';
 export * from './defaultPaneLayoutDto.ts';
 export * from './deleteLlmProfileRequestDto.ts';

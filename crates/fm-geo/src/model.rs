@@ -11,6 +11,8 @@ pub enum GeoFormat {
     Kml,
     /// KMZ: zipped KML with its icons and overlay images.
     Kmz,
+    /// Delimited text with coordinate columns or WKT geometries.
+    Csv,
 }
 
 impl GeoFormat {
@@ -22,6 +24,7 @@ impl GeoFormat {
             Self::Gpx => "gpx",
             Self::Kml => "kml",
             Self::Kmz => "kmz",
+            Self::Csv => "csv",
         }
     }
 }

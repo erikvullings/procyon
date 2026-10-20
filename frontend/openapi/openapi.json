@@ -10325,6 +10325,120 @@
           "name": "Photos"
         }
       },
+      "CsvGeoInfoDto": {
+        "type": "object",
+        "description": "How a CSV file was read, and what it offers, for a \"columns and coordinate system\" dialog.",
+        "required": [
+          "headers",
+          "delimiter",
+          "crsGuessed",
+          "columnsDetected",
+          "rows",
+          "skippedRows"
+        ],
+        "properties": {
+          "columnsDetected": {
+            "type": "boolean",
+            "description": "Whether the columns were found by name rather than chosen."
+          },
+          "crs": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Coordinate system in use, for example `EPSG:28992`."
+          },
+          "crsGuessed": {
+            "type": "boolean",
+            "description": "Whether the coordinate system was guessed from the values."
+          },
+          "crsName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its name, for example `Amersfoort / RD New`."
+          },
+          "delimiter": {
+            "type": "string",
+            "description": "The field separator that was detected."
+          },
+          "headers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Column names of the first row."
+          },
+          "rows": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Data rows in the file.",
+            "minimum": 0
+          },
+          "skippedRows": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows without usable coordinates.",
+            "minimum": 0
+          },
+          "wktColumn": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "WKT column in use."
+          },
+          "xColumn": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Easting/longitude column in use."
+          },
+          "yColumn": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Northing/latitude column in use."
+          }
+        }
+      },
+      "CsvGeoOptionsDto": {
+        "type": "object",
+        "description": "What the user chose for reading a CSV file as geographic data; omitted fields are detected.",
+        "properties": {
+          "crs": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Coordinate system of the coordinates: any EPSG code (`EPSG:28992`, `28992`) or a\n`+proj=...` definition. WGS84 longitude/latitude when it can be recognised from the values."
+          },
+          "wktColumn": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Column with WKT geometries, used instead of the x/y columns."
+          },
+          "xColumn": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Column with the easting or longitude."
+          },
+          "yColumn": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Column with the northing or latitude."
+          }
+        }
+      },
       "DateFormatDto": {
         "type": "string",
         "description": "Timestamp presentation.",
@@ -12264,6 +12378,17 @@
           "collection": {
             "type": "object",
             "description": "The displayed features as a GeoJSON `FeatureCollection`."
+          },
+          "csv": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CsvGeoInfoDto",
+                "description": "How a CSV file was read; also present, with only the columns, when it has no coordinates."
+              }
+            ]
           },
           "displayedFeatures": {
             "type": "integer",
@@ -18746,9 +18871,20 @@
           "location"
         ],
         "properties": {
+          "csv": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CsvGeoOptionsDto",
+                "description": "Which columns and coordinate system to use for a CSV file; detected when omitted."
+              }
+            ]
+          },
           "location": {
             "$ref": "#/components/schemas/LocationDto",
-            "description": "The GeoJSON, GPX, KML or KMZ file."
+            "description": "The GeoJSON, GPX, KML, KMZ or delimited-text (CSV) file."
           }
         }
       },
