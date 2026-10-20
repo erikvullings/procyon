@@ -600,6 +600,13 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
     if (style !== undefined) map?.setStyle(style);
   }
 
+  /** MapLibre opens a compact attribution control at first; this folds it back to its icon. */
+  function minimizeAttribution(container: HTMLElement): void {
+    container
+      .querySelector('.maplibregl-ctrl-attrib.maplibregl-compact')
+      ?.classList.remove('maplibregl-compact-show');
+  }
+
   async function start(container: HTMLElement): Promise<void> {
     try {
       const [library] = await Promise.all([
@@ -617,8 +624,9 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
         center: INITIAL_CENTER,
         zoom: INITIAL_ZOOM,
         maxZoom: settings.maxZoom,
+        // The credit line is a small icon until clicked: it covers a lot of the map otherwise.
         attributionControl: {
-          compact: false,
+          compact: true,
           ...(settings.attribution === '' ? {} : { customAttribution: settings.attribution }),
         },
       });
@@ -709,6 +717,8 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
         clearTimeout(loadTimer);
         status = 'ready';
         syncFeatures();
+        minimizeAttribution(container);
+        created.once('idle', () => minimizeAttribution(container));
         latest.onMapReady?.(created);
         syncMarkers();
         appliedFitKey = latest.fitKey;

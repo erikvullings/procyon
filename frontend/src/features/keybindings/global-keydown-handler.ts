@@ -1827,7 +1827,15 @@ const ACTION_KEYDOWN_ROUTES = [
         );
         if (parameters !== undefined) {
           event.preventDefault();
-          context.invokeActionById(viewActionId, parameters, context.actionContext());
+          // These shortcuts act on the cursor entry, but the backend validates "exactly one
+          // selected entry": with nothing (or several entries) selected, F3 on a folder was
+          // rejected as unavailable. Describe the cursor entry as the selection.
+          const baseContext = context.actionContext();
+          const invocation =
+            selected !== undefined && selected.length === 1
+              ? { ...baseContext, selectedEntryIds: selected.map((entry) => entry.id) }
+              : baseContext;
+          context.invokeActionById(viewActionId, parameters, invocation);
         }
         return;
       }

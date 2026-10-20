@@ -51,14 +51,15 @@ export const ElevationProfile: FactoryComponent<ElevationProfileAttrs> = () => {
         options.length > 1
           ? m(
               '.fm-elevation-series',
-              { role: 'group', 'aria-label': t('geoTrack', 'profile') },
+              { role: 'tablist', 'aria-label': t('geoTrack', 'profile') },
               options.map((option) =>
                 m(
-                  'button.btn-flat',
+                  'button.fm-elevation-tab',
                   {
                     key: option,
                     type: 'button',
-                    'aria-pressed': String(option === series),
+                    role: 'tab',
+                    'aria-selected': String(option === series),
                     onclick: () => {
                       series = option;
                     },

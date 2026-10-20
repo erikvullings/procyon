@@ -39,6 +39,7 @@ import type {
   CreateSemanticIndexRemovalPlanRequest,
   CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
+  CsvGeoOptions,
   DeleteLlmProfileRequest,
   DeleteRagConversationRequest,
   DeleteSemanticVocabularyImpact,
@@ -947,8 +948,14 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<GeoDocument>('parse_geo_text', { request: { text } });
   }
 
-  readGeoFile(location: Location, _signal?: AbortSignal): Promise<GeoDocument> {
-    return invoke<GeoDocument>('read_geo_file', { request: { location } });
+  readGeoFile(
+    location: Location,
+    _signal?: AbortSignal,
+    csv?: CsvGeoOptions,
+  ): Promise<GeoDocument> {
+    return invoke<GeoDocument>('read_geo_file', {
+      request: { location, ...(csv === undefined ? {} : { csv }) },
+    });
   }
 
   async readImageGps(

@@ -161,6 +161,8 @@ export interface PaneContentContext {
   >;
   getPluginByPane(): Map<PaneId, PluginPaneState>;
   getDiskUsageByTab(): Map<string, { state: DiskUsageViewState }>;
+  /** The "Show photos on map" panel when it is open in `paneId`. */
+  getImageMapPane?(paneId: PaneId): { tabId: TabId; content: m.Children } | undefined;
   getKnowledgeSearchByTab(): Map<string, KnowledgeSearchTabState>;
 
   // Scalar state setters
@@ -380,6 +382,8 @@ export function createPaneContentBuilder(
     const nativeIconLoader = context.getNativeIconLoader();
     const thumbnailLoader = context.getThumbnailLoader();
     const finderTagsLoader = context.getFinderTagsLoader();
+    const imageMapPane = context.getImageMapPane?.(paneId);
+    const imageMapContent = imageMapPane?.tabId === tab?.id ? imageMapPane?.content : undefined;
     const knowledgeSearch =
       key === undefined ? undefined : context.getKnowledgeSearchByTab().get(key);
     const viewerTitles = new Map(
@@ -397,6 +401,7 @@ export function createPaneContentBuilder(
       }
     }
     if (pluginPanel !== undefined) viewerTitles.set(pluginPanel.tabId, pluginPanel.title);
+    if (imageMapPane !== undefined) viewerTitles.set(imageMapPane.tabId, t('imageMap', 'title'));
     const defaultFavouriteLabel =
       tab === undefined ? undefined : context.searchFavouriteNameForLocationUri(tab.location.uri);
     const currentSearchQuery =
@@ -1132,6 +1137,9 @@ export function createPaneContentBuilder(
                 })(),
               }
             : {}),
+      // The "Show photos on map" panel takes over the pane it was opened in (the opposite pane of
+      // the folder being mapped) until it is closed.
+      ...(imageMapContent === undefined ? {} : { viewerContent: imageMapContent }),
     };
   };
 }

@@ -8,6 +8,7 @@ import type {
   GeoMinifyPreview,
   GeoTransform,
   Location,
+  MapSettings,
 } from '../../models';
 import { resolvedTheme } from '../../utilities/resolved-theme';
 import { DEFAULT_MAP_SETTINGS } from '../map/map-settings';
@@ -62,6 +63,9 @@ export const MinifyGeoDialog: FactoryComponent<MinifyGeoDialogAttrs> = () => {
   let previewedKey = '';
   let wasOpen = false;
   let loadedFor = '';
+  let mapSettings: MapSettings = DEFAULT_MAP_SETTINGS;
+  let settingsRequested = false;
+  let settingsLoaded = false;
 
   function schedule(attrs: MinifyGeoDialogAttrs): void {
     if (timer !== undefined) clearTimeout(timer);
@@ -86,6 +90,22 @@ export const MinifyGeoDialog: FactoryComponent<MinifyGeoDialogAttrs> = () => {
           m.redraw();
         });
     }, DEBOUNCE_MS);
+  }
+
+  /** The preview map uses the configured basemap, not the built-in default. */
+  function loadMapSettings(attrs: MinifyGeoDialogAttrs): void {
+    if (settingsRequested) return;
+    settingsRequested = true;
+    void attrs.client
+      .getSettings()
+      .then((settings) => {
+        mapSettings = settings.map ?? DEFAULT_MAP_SETTINGS;
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        settingsLoaded = true;
+        m.redraw();
+      });
   }
 
   function loadOriginal(attrs: MinifyGeoDialogAttrs): void {
@@ -134,6 +154,7 @@ export const MinifyGeoDialog: FactoryComponent<MinifyGeoDialogAttrs> = () => {
       const key = `${attrs.request?.files[0]?.location.uri}|${JSON.stringify(cleanMinify(options))}`;
       if (open && (!wasOpen || key !== previewedKey)) {
         previewedKey = key;
+        loadMapSettings(attrs);
         loadOriginal(attrs);
         schedule(attrs);
       }
@@ -161,180 +182,196 @@ export const MinifyGeoDialog: FactoryComponent<MinifyGeoDialogAttrs> = () => {
       const length = preview === undefined ? undefined : lengthChange(preview);
       return m(ModalPanel, {
         title: t('geoMinify', 'title'),
-        className: 'fm-dense-modal',
+        className: 'fm-dense-modal fm-geo-minify-modal',
         description:
           attrs.request === undefined
             ? undefined
             : m('.fm-geo-minify', [
-                m('p', t('geoConvert', 'files', attrs.request.files.length)),
-                m('label.fm-create-directory-field', [
-                  m('span', t('geoMinify', 'preset')),
-                  m(
-                    'select.browser-default',
-                    {
-                      value: current,
-                      onchange: (event: Event) => {
-                        const preset = (event.currentTarget as HTMLSelectElement)
-                          .value as MinifyPreset;
-                        if (preset !== 'custom') options = presetOptions(preset);
+                m('.fm-geo-minify-options', [
+                  m('p', t('geoConvert', 'files', attrs.request.files.length)),
+                  m('label.fm-create-directory-field', [
+                    m('span', t('geoMinify', 'preset')),
+                    m(
+                      'select.browser-default',
+                      {
+                        value: current,
+                        onchange: (event: Event) => {
+                          const preset = (event.currentTarget as HTMLSelectElement)
+                            .value as MinifyPreset;
+                          if (preset !== 'custom') options = presetOptions(preset);
+                        },
                       },
-                    },
-                    (
-                      [
-                        ['whitespace', 'presetWhitespace'],
-                        ['web', 'presetWeb'],
-                        ['share', 'presetShare'],
-                        ['custom', 'presetCustom'],
-                      ] as const
-                    ).map(([id, label]) =>
-                      m('option', { value: id, selected: id === current }, t('geoMinify', label)),
-                    ),
-                  ),
-                ]),
-                m('label.fm-create-directory-field', [
-                  m('span', t('geoMinify', 'precision')),
-                  m('input', {
-                    type: 'number',
-                    min: 0,
-                    max: 15,
-                    value: options.precision ?? '',
-                    oninput: (event: Event) => {
-                      const { precision: _unused, ...rest } = options;
-                      const value = number(event);
-                      options = value === undefined ? rest : { ...rest, precision: value };
-                    },
-                  }),
-                ]),
-                m('label.fm-create-directory-field', [
-                  m('span', t('geoMinify', 'tolerance')),
-                  m('input', {
-                    type: 'number',
-                    min: 0,
-                    step: 0.5,
-                    value: options.toleranceMeters ?? '',
-                    oninput: (event: Event) => {
-                      const { toleranceMeters: _unused, ...rest } = options;
-                      const value = number(event);
-                      options = value === undefined ? rest : { ...rest, toleranceMeters: value };
-                    },
-                  }),
-                ]),
-                check(t('geoMinify', 'dropElevation'), 'dropElevation'),
-                check(t('geoMinify', 'dropTime'), 'dropTime'),
-                check(t('geoMinify', 'dropExtensions'), 'dropExtensions'),
-                check(t('geoMinify', 'removeDuplicates'), 'removeDuplicates'),
-                m('fieldset.fm-geo-minify-output', [
-                  m('label', [
-                    m('input', {
-                      type: 'radio',
-                      name: 'minify-output',
-                      checked: !replace,
-                      onchange: () => {
-                        replace = false;
-                      },
-                    }),
-                    m('span', ` ${t('geoMinify', 'outputNew')}`),
-                  ]),
-                  m('label', [
-                    m('input', {
-                      type: 'radio',
-                      name: 'minify-output',
-                      checked: replace,
-                      onchange: () => {
-                        replace = true;
-                      },
-                    }),
-                    m('span', ` ${t('geoMinify', 'outputReplace')}`),
-                  ]),
-                  replace
-                    ? m('label.fm-image-edit-check', [
-                        m('input', {
-                          type: 'checkbox',
-                          checked: backup,
-                          onchange: (event: Event) => {
-                            backup = (event.currentTarget as HTMLInputElement).checked;
-                          },
-                        }),
-                        m('span', t('geoMinify', 'keepBackup')),
-                      ])
-                    : undefined,
-                  replace && !backup
-                    ? m('p.fm-geo-warning', t('geoMinify', 'noBackupWarning'))
-                    : undefined,
-                ]),
-                m('.fm-geo-minify-estimate', { 'aria-live': 'polite' }, [
-                  preview === undefined && failure === undefined
-                    ? m('p', t('geoMinify', 'estimating'))
-                    : undefined,
-                  failure === undefined
-                    ? undefined
-                    : m(
-                        'p.fm-field-error',
-                        { role: 'alert' },
-                        t('geoMinify', 'previewFailed', { message: failure }),
+                      (
+                        [
+                          ['whitespace', 'presetWhitespace'],
+                          ['web', 'presetWeb'],
+                          ['share', 'presetShare'],
+                          ['custom', 'presetCustom'],
+                        ] as const
+                      ).map(([id, label]) =>
+                        m('option', { value: id, selected: id === current }, t('geoMinify', label)),
                       ),
-                  preview === undefined || failure !== undefined
-                    ? undefined
-                    : [
-                        m(
-                          'p',
-                          percent === undefined
-                            ? t('geoMinify', 'notSmaller', {
-                                before: bytes(preview.originalBytes),
-                                after: bytes(preview.minifiedBytes),
-                              })
-                            : t('geoMinify', 'estimate', {
-                                before: bytes(preview.originalBytes),
-                                after: bytes(preview.minifiedBytes),
-                                percent: `${percent}%`,
-                              }),
-                        ),
-                        preview.positionsBefore > 0
-                          ? m(
-                              'p',
-                              t('geoMinify', 'positions', {
-                                before: preview.positionsBefore,
-                                after: preview.positionsAfter,
-                              }),
-                            )
-                          : undefined,
-                        length === undefined
-                          ? undefined
-                          : m(
-                              'p',
-                              t('geoMinify', 'distance', {
-                                before: formatDistance(preview.distanceBeforeMeters),
-                                after: formatDistance(preview.distanceAfterMeters),
-                                percent: length,
-                              }),
-                            ),
-                        preview.notes.length === 0
-                          ? undefined
-                          : m(
-                              'ul.fm-geo-warning',
-                              preview.notes.map((note, index) => m('li', { key: index }, note)),
-                            ),
-                      ],
-                ]),
-                m('p.fm-geo-hint', t('geoMinify', 'previewOf', { name })),
-                preview?.collection == null
-                  ? preview === undefined
-                    ? undefined
-                    : m('p.fm-geo-hint', t('geoMinify', 'noPreview'))
-                  : m('.fm-geo-minify-map', [
-                      m(MapView, {
-                        client: attrs.client,
-                        settings: DEFAULT_MAP_SETTINGS,
-                        dark: resolvedTheme() === 'dark',
-                        markers: [],
-                        features: preview.collection,
-                        ...(original === undefined ? {} : { comparison: original.collection }),
-                        ...(original?.bounds == null ? {} : { dataBounds: original.bounds }),
-                        fitKey: loadedFor,
-                        ariaLabel: t('geoMinify', 'previewOf', { name }),
+                    ),
+                  ]),
+                  m('.fm-geo-minify-pair', [
+                    m('label.fm-create-directory-field', [
+                      m('span', t('geoMinify', 'precision')),
+                      m('input', {
+                        type: 'number',
+                        min: 0,
+                        max: 15,
+                        value: options.precision ?? '',
+                        oninput: (event: Event) => {
+                          const { precision: _unused, ...rest } = options;
+                          const value = number(event);
+                          options = value === undefined ? rest : { ...rest, precision: value };
+                        },
                       }),
-                      m('p.fm-geo-hint', t('geoMinify', 'overlayHint')),
                     ]),
+                    m('label.fm-create-directory-field', [
+                      m('span', t('geoMinify', 'tolerance')),
+                      m('input', {
+                        type: 'number',
+                        min: 0,
+                        step: 0.5,
+                        value: options.toleranceMeters ?? '',
+                        oninput: (event: Event) => {
+                          const { toleranceMeters: _unused, ...rest } = options;
+                          const value = number(event);
+                          options =
+                            value === undefined ? rest : { ...rest, toleranceMeters: value };
+                        },
+                      }),
+                    ]),
+                  ]),
+                  m('.fm-geo-minify-pair', [
+                    check(t('geoMinify', 'dropElevation'), 'dropElevation'),
+                    check(t('geoMinify', 'dropTime'), 'dropTime'),
+                    check(t('geoMinify', 'dropExtensions'), 'dropExtensions'),
+                    check(t('geoMinify', 'removeDuplicates'), 'removeDuplicates'),
+                  ]),
+                  m('fieldset.fm-geo-minify-output', [
+                    m('label', [
+                      m('input', {
+                        type: 'radio',
+                        name: 'minify-output',
+                        checked: !replace,
+                        onchange: () => {
+                          replace = false;
+                        },
+                      }),
+                      m('span', ` ${t('geoMinify', 'outputNew')}`),
+                    ]),
+                    m('label', [
+                      m('input', {
+                        type: 'radio',
+                        name: 'minify-output',
+                        checked: replace,
+                        onchange: () => {
+                          replace = true;
+                        },
+                      }),
+                      m('span', ` ${t('geoMinify', 'outputReplace')}`),
+                    ]),
+                    replace
+                      ? m('label.fm-image-edit-check', [
+                          m('input', {
+                            type: 'checkbox',
+                            checked: backup,
+                            onchange: (event: Event) => {
+                              backup = (event.currentTarget as HTMLInputElement).checked;
+                            },
+                          }),
+                          m('span', t('geoMinify', 'keepBackup')),
+                        ])
+                      : undefined,
+                    replace && !backup
+                      ? m('p.fm-geo-warning', t('geoMinify', 'noBackupWarning'))
+                      : undefined,
+                  ]),
+                ]),
+                m('.fm-geo-minify-result', [
+                  m('.fm-geo-minify-estimate', { 'aria-live': 'polite' }, [
+                    preview === undefined && failure === undefined
+                      ? m('p', t('geoMinify', 'estimating'))
+                      : undefined,
+                    failure === undefined
+                      ? undefined
+                      : m(
+                          'p.fm-field-error',
+                          { role: 'alert' },
+                          t('geoMinify', 'previewFailed', { message: failure }),
+                        ),
+                    preview === undefined || failure !== undefined
+                      ? undefined
+                      : [
+                          m(
+                            'p',
+                            percent === undefined
+                              ? t('geoMinify', 'notSmaller', {
+                                  before: bytes(preview.originalBytes),
+                                  after: bytes(preview.minifiedBytes),
+                                })
+                              : t('geoMinify', 'estimate', {
+                                  before: bytes(preview.originalBytes),
+                                  after: bytes(preview.minifiedBytes),
+                                  percent: `${percent}%`,
+                                }),
+                          ),
+                          preview.positionsBefore > 0
+                            ? m(
+                                'p',
+                                t('geoMinify', 'positions', {
+                                  before: preview.positionsBefore,
+                                  after: preview.positionsAfter,
+                                }),
+                              )
+                            : undefined,
+                          length === undefined
+                            ? undefined
+                            : m(
+                                'p',
+                                t('geoMinify', 'distance', {
+                                  before: formatDistance(preview.distanceBeforeMeters),
+                                  after: formatDistance(preview.distanceAfterMeters),
+                                  percent: length,
+                                }),
+                              ),
+                          preview.notes.length === 0
+                            ? undefined
+                            : m(
+                                'ul.fm-geo-warning',
+                                preview.notes.map((note, index) => m('li', { key: index }, note)),
+                              ),
+                        ],
+                  ]),
+                  m('p.fm-geo-hint', t('geoMinify', 'previewOf', { name })),
+                  // The map is there from the first frame, so the dialog does not resize when the
+                  // preview arrives. It waits for the configured basemap rather than flashing (and
+                  // requesting tiles for) the built-in default.
+                  m('.fm-geo-minify-map', [
+                    settingsLoaded
+                      ? m(MapView, {
+                          client: attrs.client,
+                          settings: mapSettings,
+                          dark: resolvedTheme() === 'dark',
+                          markers: [],
+                          ...(preview?.collection == null
+                            ? original === undefined
+                              ? {}
+                              : { features: original.collection }
+                            : { features: preview.collection }),
+                          ...(original === undefined ? {} : { comparison: original.collection }),
+                          ...(original?.bounds == null ? {} : { dataBounds: original.bounds }),
+                          fitKey: loadedFor,
+                          ariaLabel: t('geoMinify', 'previewOf', { name }),
+                        })
+                      : m('.fm-geo-minify-map-placeholder'),
+                    preview !== undefined && preview.collection == null
+                      ? m('p.fm-geo-hint', t('geoMinify', 'noPreview'))
+                      : m('p.fm-geo-hint', t('geoMinify', 'overlayHint')),
+                  ]),
+                ]),
               ]),
         isOpen: attrs.request !== undefined,
         closeOnEsc: true,

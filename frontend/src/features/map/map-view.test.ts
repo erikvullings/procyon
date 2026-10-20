@@ -221,7 +221,7 @@ describe('MapView', () => {
       },
     });
     expect(map.options.attributionControl).toMatchObject({
-      compact: false,
+      compact: true,
       customAttribution: DEFAULT_MAP_SETTINGS.attribution,
     });
   });

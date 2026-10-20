@@ -32,6 +32,7 @@ import type {
   CreateSemanticIndexRemovalPlanRequest,
   CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
+  CsvGeoOptions,
   DeleteLlmProfileRequest,
   DeleteRagConversationRequest,
   DeleteSemanticVocabularyImpact,
@@ -583,7 +584,7 @@ export interface FileManagerClient {
   /** Parses GeoJSON text for live validation while editing (task 0278); never throws on bad text. */
   parseGeoText(text: string, signal?: AbortSignal): Promise<GeoDocument>;
   /** Reads a GeoJSON, GPX, KML or KMZ file into GeoJSON features (tasks 0277-0280). */
-  readGeoFile(location: Location, signal?: AbortSignal): Promise<GeoDocument>;
+  readGeoFile(location: Location, signal?: AbortSignal, csv?: CsvGeoOptions): Promise<GeoDocument>;
   /**
    * Reads GPS position and capture time of up to 100 images from their leading bytes only
    * (task 0276); an unreadable image is flagged instead of failing the batch.

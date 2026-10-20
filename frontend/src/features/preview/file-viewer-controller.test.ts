@@ -70,7 +70,7 @@ function setup(): {
   return {
     client: {
       readFileRange: vi.fn(),
-      readGeoFile: vi.fn(),
+      readGeoFile: vi.fn().mockRejectedValue(new Error('not geographic')),
       readImageMetadata: vi.fn(),
       mediaUrl: vi.fn(),
       resolveLinkTarget: vi.fn(),
@@ -2771,6 +2771,91 @@ describe('file viewer controller', () => {
       await vi.waitFor(() =>
         expect(context.states.at(-1)).toMatchObject({ geoView: 'map', content: { kind: 'geo' } }),
       );
+    });
+
+    it('opens a CSV with detected coordinates on the map and re-reads it with chosen options', async () => {
+      const context = setup();
+      vi.mocked(context.client.readGeoFile).mockResolvedValue({
+        ...document,
+        format: 'csv',
+        csv: {
+          headers: ['name', 'X', 'Y'],
+          delimiter: ',',
+          xColumn: 'X',
+          yColumn: 'Y',
+          crs: 'EPSG:28992',
+          crsGuessed: true,
+          columnsDetected: true,
+          rows: 2,
+          skippedRows: 0,
+        },
+      });
+      const controller = createFileViewerController({
+        client: context.client,
+        entry: entry({ name: 'places.csv', extension: 'csv', size: 100 }),
+        update: (state) => context.states.push(state),
+      });
+      await vi.waitFor(() => expect(context.states.at(-1)).toMatchObject({ geoView: 'map' }));
+      expect(context.client.readGeoFile).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.anything(),
+        undefined,
+      );
+
+      controller.setCsvOptions({ crs: 'EPSG:25832', xColumn: 'Y', yColumn: 'X' });
+      await vi.waitFor(() =>
+        expect(context.client.readGeoFile).toHaveBeenLastCalledWith(
+          expect.anything(),
+          expect.anything(),
+          { crs: 'EPSG:25832', xColumn: 'Y', yColumn: 'X' },
+        ),
+      );
+    });
+
+    it('keeps a CSV without coordinates as a table, and shows the map error when asked for', async () => {
+      const context = setup();
+      vi.mocked(context.client.readGeoFile).mockResolvedValue({
+        ...document,
+        format: 'csv',
+        error: { message: 'no latitude/longitude, x/y or WKT geometry column was found' },
+        csv: {
+          headers: ['name', 'age'],
+          delimiter: ',',
+          crsGuessed: false,
+          columnsDetected: false,
+          rows: 0,
+          skippedRows: 0,
+        },
+      });
+      const controller = createFileViewerController({
+        client: context.client,
+        entry: entry({ name: 'people.csv', extension: 'csv', size: 100 }),
+        update: (state) => context.states.push(state),
+      });
+      await vi.waitFor(() => expect(context.client.readGeoFile).toHaveBeenCalled());
+      await vi.waitFor(() => expect(context.states.at(-1)?.status).not.toBe('loading'));
+      expect(
+        context.states.some((state) => state.status === 'ready' && state.content.kind === 'geo'),
+      ).toBe(false);
+
+      controller.openCsvOnMap();
+      await vi.waitFor(() =>
+        expect(context.states.at(-1)).toMatchObject({
+          geoView: 'map',
+          content: { kind: 'geo', document: { csv: { headers: ['name', 'age'] } } },
+        }),
+      );
+    });
+
+    it('does not try a large CSV on the map unless asked', async () => {
+      const context = setup();
+      createFileViewerController({
+        client: context.client,
+        entry: entry({ name: 'big.csv', extension: 'csv', size: 50 * 1024 * 1024 }),
+        update: (state) => context.states.push(state),
+      });
+      await vi.waitFor(() => expect(context.states.at(-1)?.status).not.toBe('loading'));
+      expect(context.client.readGeoFile).not.toHaveBeenCalled();
     });
 
     it('opens an ordinary .json file as data, without asking the backend to parse it', async () => {

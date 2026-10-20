@@ -71,50 +71,6 @@ export const ImageMapPanel: FactoryComponent<ImageMapPanelAttrs> = () => {
       }
       const byId = new Map(state.located.map((image) => [image.entry.id, image]));
       return m('.fm-image-map', [
-        m('.fm-image-map-header', [
-          m('strong', t('imageMap', 'title')),
-          state.scanning
-            ? m(
-                'span',
-                { role: 'status' },
-                t('imageMap', 'scanning', { done: state.done, total: state.total }),
-              )
-            : m(
-                'span',
-                t('imageMap', 'summary', {
-                  located: state.located.length,
-                  unlocated: state.unlocated.length,
-                }),
-              ),
-          state.unreadable.length > 0
-            ? m(
-                'span.fm-image-map-warning',
-                t('imageMap', 'unreadable', { n: state.unreadable.length }),
-              )
-            : undefined,
-          state.truncated
-            ? m('span.fm-image-map-warning', t('imageMap', 'truncated', { n: state.total }))
-            : undefined,
-          state.foldersOffered
-            ? m('label.fm-image-map-recursive', [
-                m('input', {
-                  type: 'checkbox',
-                  checked: state.recursive,
-                  onchange: (event: Event) =>
-                    attrs.onRecursive((event.currentTarget as HTMLInputElement).checked),
-                }),
-                m('span', t('imageMap', 'includeSubfolders')),
-              ])
-            : undefined,
-          state.scanning
-            ? m(
-                'button.btn-flat',
-                { type: 'button', onclick: attrs.onCancel },
-                t('imageMap', 'cancel'),
-              )
-            : undefined,
-          m('button.btn-flat', { type: 'button', onclick: attrs.onClose }, t('imageMap', 'close')),
-        ]),
         state.failure === undefined
           ? undefined
           : m(
@@ -163,7 +119,7 @@ export const ImageMapPanel: FactoryComponent<ImageMapPanelAttrs> = () => {
                     const root = document.createElement('div');
                     root.className = 'fm-image-map-popup';
                     root.append(
-                      thumbnailImage(attrs.client, image.entry, 'medium', 'fm-image-map-preview'),
+                      thumbnailImage(attrs.client, image.entry, 'large', 'fm-image-map-preview'),
                     );
                     const name = document.createElement('strong');
                     name.textContent = image.entry.name;
@@ -221,6 +177,50 @@ export const ImageMapPanel: FactoryComponent<ImageMapPanelAttrs> = () => {
                     ),
                   ]),
             ]),
+        m('.fm-image-map-status', [
+          m('strong.fm-image-map-title', t('imageMap', 'title')),
+          state.scanning
+            ? m(
+                'span',
+                { role: 'status' },
+                t('imageMap', 'scanning', { done: state.done, total: state.total }),
+              )
+            : m(
+                'span',
+                t('imageMap', 'summary', {
+                  located: state.located.length,
+                  unlocated: state.unlocated.length,
+                }),
+              ),
+          state.unreadable.length > 0
+            ? m(
+                'span.fm-image-map-warning',
+                t('imageMap', 'unreadable', { n: state.unreadable.length }),
+              )
+            : undefined,
+          state.truncated
+            ? m('span.fm-image-map-warning', t('imageMap', 'truncated', { n: state.total }))
+            : undefined,
+          state.foldersOffered
+            ? m('label.fm-image-map-recursive', [
+                m('input', {
+                  type: 'checkbox',
+                  checked: state.recursive,
+                  onchange: (event: Event) =>
+                    attrs.onRecursive((event.currentTarget as HTMLInputElement).checked),
+                }),
+                m('span', t('imageMap', 'includeSubfolders')),
+              ])
+            : undefined,
+          state.scanning
+            ? m(
+                'button.btn-flat',
+                { type: 'button', onclick: attrs.onCancel },
+                t('imageMap', 'cancel'),
+              )
+            : undefined,
+          m('button.btn-flat', { type: 'button', onclick: attrs.onClose }, t('imageMap', 'close')),
+        ]),
         m(ModalPanel, {
           title: t('imageMap', 'confirmTitle'),
           className: 'fm-dense-modal',

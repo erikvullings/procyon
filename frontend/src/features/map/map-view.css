@@ -114,22 +114,53 @@
   margin: 0.25rem 0;
 }
 
-/* Show-on-map panel (task 0276) */
+/* Show-photos-on-map panel (task 0276): fills the pane it is opened in. */
 .fm-image-map {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  border-top: 1px solid var(--fm-border);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   background: var(--fm-surface);
 }
 
-.fm-image-map-header,
 .fm-image-map-placing {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+}
+
+/* Same look as the file pane's status bar, so the map reads as part of the pane. */
+.fm-image-map-status {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.25rem 1rem;
+  min-height: var(--fm-row-height);
+  padding: 0 0.5rem;
+  border-top: 1px solid var(--fm-border);
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text-muted);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-image-map-title {
+  color: var(--fm-text);
+}
+
+.fm-image-map-status .btn-flat {
+  height: auto;
+  min-height: 0;
+  line-height: inherit;
+  padding: 0 0.5rem;
+}
+
+.fm-image-map-status .fm-image-map-recursive {
+  margin-inline-start: auto;
 }
 
 .fm-image-map-warning {
@@ -138,18 +169,26 @@
 
 .fm-image-map-body {
   display: flex;
-  gap: 0.5rem;
-  height: 320px;
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .fm-image-map-canvas {
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
+}
+
+.fm-image-map-canvas .fm-map {
+  border: 0;
+  border-radius: 0;
 }
 
 .fm-image-map-unlocated {
   flex: 0 0 14rem;
   overflow-y: auto;
+  padding: 0.5rem;
+  border-inline-start: 1px solid var(--fm-border);
 }
 
 .fm-image-map-unlocated li {
@@ -158,10 +197,21 @@
   align-items: center;
 }
 
+/* Photos are their own markers: a small framed thumbnail; the click opens it larger. */
 .fm-image-map-marker {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   overflow: hidden;
+  border: 2px solid var(--fm-text);
+  border-radius: 4px;
+  background: var(--fm-surface-elevated);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  cursor: pointer;
+}
+
+.fm-image-map-marker.is-selected {
+  border-color: var(--fm-accent);
 }
 
 .fm-image-map-thumb {
@@ -180,12 +230,12 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-width: 220px;
+  max-width: 320px;
 }
 
 .fm-image-map-preview {
-  max-width: 200px;
-  max-height: 150px;
+  max-width: 320px;
+  max-height: 240px;
   object-fit: contain;
 }
 
@@ -228,12 +278,43 @@
   pointer-events: none;
 }
 
+.fm-elevation-series {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--fm-border);
+}
+
+/* Real tabs: the active one is underlined and lit, the others are muted. */
+.fm-elevation-tab {
+  margin-bottom: -1px;
+  padding: 0.2rem 0.75rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--fm-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.fm-elevation-tab:hover {
+  color: var(--fm-text);
+}
+
+.fm-elevation-tab[aria-selected="true"] {
+  border-bottom-color: var(--fm-accent);
+  color: var(--fm-accent);
+  font-weight: 500;
+}
+
 .fm-elevation-chart {
+  display: block;
   width: 100%;
   height: auto;
+  margin-top: 0.4rem;
   background: var(--fm-surface-elevated);
   border: 1px solid var(--fm-border);
-  border-radius: var(--fm-radius);
+  border-bottom: 0;
+  border-radius: var(--fm-radius) var(--fm-radius) 0 0;
 }
 
 .fm-elevation-line {
@@ -246,24 +327,41 @@
   stroke-width: 1;
 }
 
+/* Styled like the file pane's status bar, so it reads as the chart's footer. */
 .fm-elevation-readout {
+  display: flex;
+  align-items: center;
+  min-height: var(--fm-row-height);
+  padding: 0 0.5rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 0 0 var(--fm-radius) var(--fm-radius);
+  background: var(--fm-surface-elevated);
   color: var(--fm-text-muted);
-  font-size: 0.85em;
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
 }
 
+/* Two label/value pairs per line, so the side panel needs no scrollbar; values never wrap. */
 .fm-track-summary dl {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
   gap: 2px 0.75rem;
-  margin: 0;
-}
-
-.fm-track-summary dt {
-  color: var(--fm-text-muted);
+  margin: 0.25rem 0;
 }
 
 .fm-track-summary dd {
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-track-summary dd.is-wide {
+  grid-column: 2 / -1;
+}
+
+.fm-track-summary dt {
+  color: var(--fm-text-muted);
 }
 
 .fm-geo-layers ul {
@@ -460,11 +558,17 @@
 }
 
 .fm-geo-extra {
-  flex: 0 1 auto;
-  max-height: 40%;
-  overflow-y: auto;
-  padding: 0 0.75rem;
+  flex: 0 0 auto;
+  padding: 0 0.75rem 0.5rem;
   border-top: 1px solid var(--fm-border);
+}
+
+.fm-geo-extra h5 {
+  margin: 0.5rem 0 0.25rem;
+}
+
+.fm-geo-feature-panel {
+  min-height: 8rem;
 }
 
 .fm-geo-extra:empty {
@@ -493,4 +597,77 @@
 .fm-geo-hover-content dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+/* Minify dialog: options on the left, estimate and before/after map on the right. */
+/* biome-ignore-start lint/complexity/noImportantStyles: overrides ModalPanel's inline styles */
+.modal.fm-dense-modal.fm-geo-minify-modal {
+  max-width: min(48rem, calc(100vw - 2rem)) !important;
+}
+/* biome-ignore-end lint/complexity/noImportantStyles: overrides ModalPanel's inline styles */
+
+.fm-geo-minify {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem 1.5rem;
+  align-items: start;
+}
+
+.fm-geo-minify-options,
+.fm-geo-minify-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.fm-geo-minify p {
+  margin: 0;
+}
+
+.fm-geo-minify-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.5rem 0.75rem;
+}
+
+.fm-geo-minify-pair .fm-image-edit-check {
+  align-items: flex-start;
+}
+
+/* Material's number-input rule removes the horizontal padding the other fields have. */
+.fm-app-shell .fm-geo-minify input[type="number"] {
+  padding-inline: 0.35rem;
+}
+
+.fm-geo-minify-map {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fm-geo-minify-map .fm-map,
+.fm-geo-minify-map-placeholder {
+  box-sizing: border-box;
+  height: 16rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+}
+
+/* Material gives a checkbox label a fixed one-line height, so a wrapped label spilled over the
+   controls below it. */
+.fm-geo-minify .fm-image-edit-check span {
+  height: auto;
+  line-height: 1.3;
+}
+
+.fm-geo-minify-output {
+  margin: 0.25rem 0 0;
+}
+
+@media (max-width: 40rem) {
+  .fm-geo-minify {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

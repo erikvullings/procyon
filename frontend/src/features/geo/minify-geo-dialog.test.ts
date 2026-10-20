@@ -53,7 +53,7 @@ function attrs(patch: Partial<MinifyGeoDialogAttrs> = {}): MinifyGeoDialogAttrs 
     client: {
       previewGeoMinify: vi.fn().mockResolvedValue(preview),
       readGeoFile: vi.fn().mockResolvedValue(original),
-      getSettings: vi.fn(),
+      getSettings: vi.fn().mockRejectedValue(new Error('offline')),
       mapTileUrlTemplate: vi.fn(),
       mediaUrl: vi.fn(),
     },

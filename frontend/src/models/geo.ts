@@ -104,8 +104,32 @@ export interface GeoMinifyPreview {
 }
 
 /** A geographic file as GeoJSON features, parsed by the backend. */
+/** What the user chose for reading a CSV file as geographic data; omitted fields are detected. */
+export interface CsvGeoOptions {
+  readonly xColumn?: string;
+  readonly yColumn?: string;
+  readonly wktColumn?: string;
+  /** Any EPSG code (`EPSG:28992`, `28992`) or a `+proj=...` definition. */
+  readonly crs?: string;
+}
+
+/** How a CSV file was read, and what it offers for the "columns and coordinate system" dialog. */
+export interface CsvGeoInfo {
+  readonly headers: readonly string[];
+  readonly delimiter: string;
+  readonly xColumn?: string | null;
+  readonly yColumn?: string | null;
+  readonly wktColumn?: string | null;
+  readonly crs?: string | null;
+  readonly crsName?: string | null;
+  readonly crsGuessed: boolean;
+  readonly columnsDetected: boolean;
+  readonly rows: number;
+  readonly skippedRows: number;
+}
+
 export interface GeoDocument {
-  /** `geojson`, `gpx`, `kml` or `kmz`; empty when the file is not a geographic file. */
+  /** `geojson`, `gpx`, `kml`, `kmz` or `csv`; empty when the file is not a geographic file. */
   readonly format: string;
   readonly collection: GeoJSON.FeatureCollection<GeoJSON.Geometry | null>;
   readonly totalFeatures: number;
@@ -121,4 +145,6 @@ export interface GeoDocument {
   /** Ground overlays whose image is in `resources`. */
   readonly overlays?: readonly GeoOverlay[];
   readonly error?: GeoError | null;
+  /** How a CSV file was read; with only the columns when the file has no coordinates. */
+  readonly csv?: CsvGeoInfo | null;
 }

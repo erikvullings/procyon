@@ -1478,6 +1478,53 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     expect(openViewer).toHaveBeenCalledWith(PANE_B, cursorLink, undefined);
   });
 
+  it('F3 on a folder describes the cursor folder as the single selection of the OS-open fallback', () => {
+    const invokeActionById = vi.fn();
+    const folder: EntrySummary = {
+      id: 'folder-1' as never,
+      location: { providerId: 'local', uri: 'file:///a/b/photos' },
+      name: 'photos',
+      kind: 'directory',
+      hidden: false,
+      readOnly: false,
+      metadataRevision: 0,
+    };
+    const coreViewAction: ActionDescriptor = {
+      id: 'core.view',
+      title: 'View',
+      defaultShortcuts: [{ key: 'F3' }],
+      category: 'test',
+      contextRequirements: {},
+      source: { kind: 'core' },
+    };
+    const coreOpenAction: ActionDescriptor = {
+      ...coreViewAction,
+      id: 'core.open',
+      defaultShortcuts: [],
+    };
+    const context = makeContext({
+      getRegisteredActions: () => [...ACTIONS, coreViewAction, coreOpenAction],
+      actionsWithFavourites: () => [...ACTIONS, coreViewAction, coreOpenAction],
+      getViewer: () => undefined,
+      invokeActionById,
+      platformActionParameters: () => ({ uri: folder.location.uri }),
+      // Nothing is selected: only the cursor rests on the folder.
+      actionContext: () => ({ paneId: PANE_A }),
+      getSelections: () =>
+        new Map([['pane-a:tab', { selectedEntryIds: [], cursorEntryId: folder.id }]]),
+      getDirectories: () =>
+        new Map([['pane-a:tab', { entries: [folder] } as unknown as PaneDirectoryView]]),
+    });
+
+    createGlobalKeydownHandler(context)(keydown('F3'));
+
+    expect(invokeActionById).toHaveBeenCalledWith(
+      'core.view',
+      { uri: folder.location.uri },
+      expect.objectContaining({ selectedEntryIds: [folder.id] }),
+    );
+  });
+
   it('F3 opens a selected PDF image result on its exact indexed page', () => {
     const openViewer = vi.fn();
     const pdf: EntrySummary = {

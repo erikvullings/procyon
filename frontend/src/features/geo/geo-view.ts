@@ -2,11 +2,18 @@ import m, { type FactoryComponent } from 'mithril';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
-import type { GeoDocument, GeoProfilePoint, GeoTrack, MapSettings } from '../../models';
+import type {
+  CsvGeoOptions,
+  GeoDocument,
+  GeoProfilePoint,
+  GeoTrack,
+  MapSettings,
+} from '../../models';
 import { resolvedTheme } from '../../utilities/resolved-theme';
 import { DEFAULT_MAP_SETTINGS } from '../map/map-settings';
 import { MapView } from '../map/map-view';
 import { sanitizePluginPreviewHtml } from '../preview/plugin-preview';
+import { CsvGeoDialog } from './csv-geo-dialog';
 import { ElevationProfile } from './elevation-profile';
 import { describeValue, featureLabel } from './geo-feature-model';
 import { GeoFeaturePanel } from './geo-feature-panel';
@@ -20,6 +27,8 @@ export interface GeoViewAttrs {
   readonly selectedIndex: number | undefined;
   readonly onSelect: (index: number | undefined) => void;
   readonly onShowRaw: () => void;
+  /** Re-reads a CSV file with the chosen columns and coordinate system. */
+  readonly onCsvOptions?: (options: CsvGeoOptions) => void;
 }
 
 function describeError(document: GeoDocument): m.Children {
@@ -37,8 +46,26 @@ function describeError(document: GeoDocument): m.Children {
   ]);
 }
 
-function statRow(label: string, value: string | undefined): m.Children {
-  return value === undefined ? undefined : [m('dt', label), m('dd', value)];
+interface Stat {
+  readonly label: string;
+  readonly value: string;
+}
+
+function stat(label: string, value: string | undefined): Stat | undefined {
+  return value === undefined ? undefined : { label, value };
+}
+
+/** Two label/value pairs on one line; when only one exists the other half stays empty. */
+function statPair(left: Stat | undefined, right: Stat | undefined): m.Children {
+  if (left === undefined && right === undefined) return undefined;
+  const half = (item: Stat | undefined) =>
+    item === undefined ? [m('dt'), m('dd')] : [m('dt', item.label), m('dd', item.value)];
+  return [half(left), half(right)];
+}
+
+/** A value too long to share its line (timestamps) takes the whole width. */
+function statWide(item: Stat | undefined): m.Children {
+  return item === undefined ? undefined : [m('dt', item.label), m('dd.is-wide', item.value)];
 }
 
 /** Distance, durations, climb and speeds of a recorded track; unavailable values are not shown. */
@@ -50,42 +77,52 @@ function trackSummary(track: GeoTrack, onHover: (point: GeoProfilePoint | undefi
   return m('.fm-track-summary', { key: track.featureIndex }, [
     m('h5', track.name ?? t('geoTrack', 'unnamed')),
     m('dl', [
-      statRow(t('geoTrack', 'distance'), formatDistance(track.distanceMeters)),
-      statRow(
-        t('geoTrack', 'elapsed'),
-        present(track.elapsedSeconds) ? formatDuration(track.elapsedSeconds) : undefined,
+      statPair(
+        stat(t('geoTrack', 'distance'), formatDistance(track.distanceMeters)),
+        stat(t('geoTrack', 'points'), String(track.points)),
       ),
-      statRow(
-        t('geoTrack', 'moving'),
-        present(track.movingSeconds) ? formatDuration(track.movingSeconds) : undefined,
+      statPair(
+        stat(
+          t('geoTrack', 'ascent'),
+          present(track.ascentMeters) ? formatElevation(track.ascentMeters) : undefined,
+        ),
+        stat(
+          t('geoTrack', 'descent'),
+          present(track.descentMeters) ? formatElevation(track.descentMeters) : undefined,
+        ),
       ),
-      statRow(
-        t('geoTrack', 'ascent'),
-        present(track.ascentMeters) ? formatElevation(track.ascentMeters) : undefined,
+      statPair(
+        stat(
+          t('geoTrack', 'minElevation'),
+          present(track.minElevation) ? formatElevation(track.minElevation) : undefined,
+        ),
+        stat(
+          t('geoTrack', 'maxElevation'),
+          present(track.maxElevation) ? formatElevation(track.maxElevation) : undefined,
+        ),
       ),
-      statRow(
-        t('geoTrack', 'descent'),
-        present(track.descentMeters) ? formatElevation(track.descentMeters) : undefined,
+      statPair(
+        stat(
+          t('geoTrack', 'elapsed'),
+          present(track.elapsedSeconds) ? formatDuration(track.elapsedSeconds) : undefined,
+        ),
+        stat(
+          t('geoTrack', 'moving'),
+          present(track.movingSeconds) ? formatDuration(track.movingSeconds) : undefined,
+        ),
       ),
-      statRow(
-        t('geoTrack', 'minElevation'),
-        present(track.minElevation) ? formatElevation(track.minElevation) : undefined,
+      statPair(
+        stat(
+          t('geoTrack', 'averageSpeed'),
+          present(track.averageSpeed) ? formatSpeed(track.averageSpeed) : undefined,
+        ),
+        stat(
+          t('geoTrack', 'maxSpeed'),
+          present(track.maxSpeed) ? formatSpeed(track.maxSpeed) : undefined,
+        ),
       ),
-      statRow(
-        t('geoTrack', 'maxElevation'),
-        present(track.maxElevation) ? formatElevation(track.maxElevation) : undefined,
-      ),
-      statRow(
-        t('geoTrack', 'averageSpeed'),
-        present(track.averageSpeed) ? formatSpeed(track.averageSpeed) : undefined,
-      ),
-      statRow(
-        t('geoTrack', 'maxSpeed'),
-        present(track.maxSpeed) ? formatSpeed(track.maxSpeed) : undefined,
-      ),
-      statRow(t('geoTrack', 'start'), track.startTime ?? undefined),
-      statRow(t('geoTrack', 'end'), track.endTime ?? undefined),
-      statRow(t('geoTrack', 'points'), String(track.points)),
+      statWide(stat(t('geoTrack', 'start'), track.startTime ?? undefined)),
+      statWide(stat(t('geoTrack', 'end'), track.endTime ?? undefined)),
     ]),
     hasTimes ? undefined : m('p.fm-geo-hint', t('geoTrack', 'noTimes')),
     hasElevation ? undefined : m('p.fm-geo-hint', t('geoTrack', 'noElevation')),
@@ -164,6 +201,38 @@ function describeProperties(
   return root;
 }
 
+/**
+ * The map settings fetched by the last viewer. A viewer that opens later starts from them, rather
+ * than from the built-in raster default - which, when a vector style is configured, makes the
+ * first tile requests fail until the real settings arrive.
+ */
+let lastLoadedMapSettings: MapSettings | undefined;
+
+/** How a CSV file was read, with the way to change it. */
+function csvSummary(document: GeoDocument, onChange: (() => void) | undefined): m.Children {
+  const csv = document.csv;
+  if (csv == null) return undefined;
+  const crs = `${csv.crs ?? ''}${csv.crsName ? ` (${csv.crsName})` : ''}${
+    csv.crsGuessed ? ` ${t('geoCsv', 'guessed')}` : ''
+  }`;
+  const columns =
+    csv.wktColumn != null
+      ? t('geoCsv', 'summaryWkt', { column: csv.wktColumn, crs })
+      : t('geoCsv', 'summary', {
+          columns: [csv.xColumn, csv.yColumn].filter(Boolean).join(' / '),
+          crs,
+        });
+  return m('.fm-geo-csv', [
+    m('p', columns),
+    csv.skippedRows > 0
+      ? m('p.fm-geo-warning', t('geoCsv', 'rowsSkipped', { n: csv.skippedRows }))
+      : undefined,
+    onChange === undefined
+      ? undefined
+      : m('button.btn-flat', { type: 'button', onclick: onChange }, t('geoCsv', 'change')),
+  ]);
+}
+
 type PanelMode = 'split' | 'full' | 'collapsed';
 
 function panelButton(label: string, glyph: string, onclick: () => void): m.Vnode {
@@ -178,7 +247,7 @@ function panelButton(label: string, glyph: string, onclick: () => void): m.Vnode
  * property table, and the parse warnings, limits and skipped elements stated beside the map.
  */
 export const GeoView: FactoryComponent<GeoViewAttrs> = (initial) => {
-  let mapSettings: MapSettings = DEFAULT_MAP_SETTINGS;
+  let mapSettings: MapSettings = lastLoadedMapSettings ?? DEFAULT_MAP_SETTINGS;
   let requested = false;
   // Transient view state: switched-off KML folders.
   let hiddenLayers: ReadonlySet<string> = new Set();
@@ -189,6 +258,7 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = (initial) => {
   let cursor: GeoProfilePoint | undefined;
   // Transient: how much of the pane the feature list takes.
   let mode: PanelMode = 'split';
+  let csvDialogOpen = false;
   return {
     oncreate: ({ attrs }) => {
       if (requested) return;
@@ -197,16 +267,39 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = (initial) => {
         .getSettings()
         .then((settings) => {
           mapSettings = settings.map ?? DEFAULT_MAP_SETTINGS;
+          lastLoadedMapSettings = mapSettings;
           m.redraw();
         })
         .catch(() => undefined);
     },
     view: ({ attrs }) => {
       const { document } = attrs;
+      const csvDialog = (): m.Children =>
+        document.csv == null || attrs.onCsvOptions === undefined
+          ? undefined
+          : m(CsvGeoDialog, {
+              open: csvDialogOpen,
+              info: document.csv,
+              onApply: (options) => {
+                csvDialogOpen = false;
+                attrs.onCsvOptions?.(options);
+              },
+              onCancel: () => {
+                csvDialogOpen = false;
+              },
+            });
       if (document.error != null) {
         return m('.fm-geo-view.is-error', [
           describeError(document),
+          document.csv == null || attrs.onCsvOptions === undefined
+            ? undefined
+            : m(
+                'button.btn-flat',
+                { type: 'button', onclick: () => (csvDialogOpen = true) },
+                t('geoCsv', 'change'),
+              ),
           m('button.btn-flat', { type: 'button', onclick: attrs.onShowRaw }, t('geo', 'showRaw')),
+          csvDialog(),
         ]);
       }
       if (visibleKey !== document || visibleSet !== hiddenLayers) {
@@ -220,6 +313,10 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = (initial) => {
           : visible.originalIndexes.indexOf(attrs.selectedIndex);
       const layers = layersOf(document);
       const extra: m.Children = [
+        csvSummary(
+          document,
+          attrs.onCsvOptions === undefined ? undefined : () => (csvDialogOpen = true),
+        ),
         layers.length === 0
           ? undefined
           : m('.fm-geo-layers', [
@@ -287,6 +384,7 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = (initial) => {
         ),
       ];
       return m('.fm-geo-view', { class: `is-${mode}` }, [
+        csvDialog(),
         m('aside.fm-geo-side', [
           mode === 'collapsed'
             ? m(

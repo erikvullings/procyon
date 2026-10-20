@@ -30,6 +30,7 @@ import type {
   CreateSemanticIndexRemovalPlanRequest,
   CreateSemanticInstallationOfferRequest,
   CreateWorkspaceRequest,
+  CsvGeoOptions,
   DeleteLlmProfileRequest,
   DeleteRagConversationRequest,
   DeleteSemanticVocabularyImpact,
@@ -1452,9 +1453,13 @@ export class HttpFileManagerClient implements FileManagerClient {
     return response.data as unknown as GeoDocument;
   }
 
-  async readGeoFile(location: FileLocation, signal?: AbortSignal): Promise<GeoDocument> {
+  async readGeoFile(
+    location: FileLocation,
+    signal?: AbortSignal,
+    csv?: CsvGeoOptions,
+  ): Promise<GeoDocument> {
     const response = await requestGeoFile(
-      { location },
+      { location, ...(csv === undefined ? {} : { csv }) },
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {

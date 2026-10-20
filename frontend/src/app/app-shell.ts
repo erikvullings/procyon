@@ -638,9 +638,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       id: string,
       title: string,
       contextRequirements: ActionDescriptor['contextRequirements'],
+      description?: string,
     ): ActionDescriptor => ({
       id,
       title,
+      ...(description === undefined ? {} : { description }),
       category: 'tools',
       defaultShortcuts: [],
       contextRequirements,
@@ -654,7 +656,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       descriptor(EDIT_IMAGE_METADATA_ACTION_ID, t('imageEdit', 'action'), {
         requiresSelection: true,
       }),
-      descriptor(SHOW_ON_MAP_ACTION_ID, t('imageMap', 'action'), {}),
+      descriptor(
+        SHOW_ON_MAP_ACTION_ID,
+        t('imageMap', 'action'),
+        {},
+        t('imageMap', 'actionDescription'),
+      ),
       descriptor(CONVERT_GEO_ACTION_ID, t('geoConvert', 'action'), { requiresSelection: true }),
       descriptor(MINIFY_GEO_ACTION_ID, t('geoMinify', 'action'), { requiresSelection: true }),
     ];
@@ -950,6 +957,91 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     );
   }
 
+  /** The "Show photos on map" panel and the tab that hosts it, when it is open in `paneId`. */
+  function imageMapPane(paneId: PaneId): { tabId: TabId; content: m.Children } | undefined {
+    const tab = imageMapTab;
+    if (
+      !imageMapState.open ||
+      imageMapController === undefined ||
+      currentSettings === undefined ||
+      tab === undefined ||
+      tab.paneId !== paneId
+    ) {
+      return undefined;
+    }
+    return {
+      tabId: tab.tabId,
+      content: m(ImageMapPanel, {
+        state: imageMapState,
+        client: attrsClient,
+        settings: currentSettings.map,
+        dark: resolvedTheme() === 'dark',
+        selectedIds: new Set(
+          (imageMapPaneId === undefined ? undefined : selections.get(activeTabKey(imageMapPaneId)))
+            ?.selectedEntryIds ?? [],
+        ),
+        onReveal: revealMappedEntry,
+        onRecursive: (recursive) => void imageMapController?.setRecursive(recursive),
+        onCancel: () => imageMapController?.cancel(),
+        onClose: closeImageMapTab,
+        onBeginPlacing: (entry) => imageMapController?.beginPlacing(entry),
+        onStopPlacing: () => imageMapController?.stopPlacing(),
+        onPropose: (entry, latitude, longitude) =>
+          imageMapController?.proposePlacement(entry, latitude, longitude),
+        onConfirm: () => void imageMapController?.confirmPlacement(),
+        onCancelPlacement: () => imageMapController?.cancelPlacement(),
+      }),
+    };
+  }
+
+  /** Opens (or reuses) the tab that shows the photo map, in the pane opposite `sourcePaneId`. */
+  function ensureImageMapTab(sourcePaneId: PaneId): void {
+    const current = workspace;
+    if (current === undefined) return;
+    const existing = imageMapTab;
+    if (existing !== undefined && current.panesById[existing.paneId]?.tabsById[existing.tabId]) {
+      selectTab(attrsClient, existing.paneId, existing.tabId);
+      focusPane?.(existing.paneId);
+      return;
+    }
+    imageMapTab = undefined;
+    const targetPaneId = current.paneOrder.find((candidate) => candidate !== sourcePaneId);
+    const target = targetPaneId ?? sourcePaneId;
+    const sourcePane = current.panesById[sourcePaneId];
+    const location = sourcePane?.tabsById[sourcePane.activeTabId]?.location;
+    if (location === undefined || current.panesById[target] === undefined) return;
+    void dispatchWorkspaceCommand(
+      attrsClient,
+      {
+        type: 'addTransientTab',
+        workspaceId: current.id,
+        paneId: target,
+        location,
+        expectedRevision: current.revision,
+      },
+      replaceWorkspace,
+    )
+      .then((next) => {
+        const tabId = next.panesById[target]?.activeTabId;
+        if (tabId !== undefined) {
+          imageMapTab = { paneId: target, tabId };
+          focusPane?.(target);
+        }
+        m.redraw();
+      })
+      .catch((error: unknown) => {
+        toast({ html: workspaceErrorMessage(error, t('imageMap', 'failed', { message: '' })) });
+      });
+  }
+
+  /** Stops the photo map and closes its tab. */
+  function closeImageMapTab(): void {
+    const tab = imageMapTab;
+    imageMapTab = undefined;
+    imageMapController?.close();
+    if (tab !== undefined) tabController.performCloseTab(tab.paneId, tab.tabId);
+  }
+
   /** Starts the map panel for `roots`; `folder` offers the "include subfolders" option. */
   function openImageMap(paneId: PaneId, roots: readonly EntrySummary[], folder: boolean): void {
     if (workspace === undefined) return;
@@ -957,6 +1049,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     const tab = pane?.tabsById[pane.activeTabId];
     const workspaceId = workspace.id;
     imageMapPaneId = paneId;
+    ensureImageMapTab(paneId);
     imageMapController ??= createImageMapController({
       getClient: () => attrsClient,
       getOpsController: () => opsController,
@@ -1695,6 +1788,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let imageMapController: ImageMapController | undefined;
   /** The pane whose folder feeds the open map panel; used to reveal and highlight entries. */
   let imageMapPaneId: PaneId | undefined;
+  /** The tab that hosts the map: a transient tab in the pane opposite the folder being mapped. */
+  let imageMapTab: { paneId: PaneId; tabId: TabId } | undefined;
   let musicDuplicatesController: MusicDuplicatesController | undefined;
   let linkDoctorController: LinkDoctorController | undefined;
   let snapshotController: SnapshotController | undefined;
@@ -2767,6 +2862,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       });
     }
     diskUsageByTab.delete(key);
+    if (imageMapTab?.paneId === paneId && imageMapTab.tabId === tabId) {
+      imageMapTab = undefined;
+      imageMapController?.close();
+    }
     knowledgeSearchByTab.delete(key);
     navigation.abort(paneId, tabId);
     directories.delete(key);
@@ -2812,6 +2911,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       diskUsage.key = targetKey;
       diskUsage.paneId = targetPaneId;
       diskUsageByTab.set(targetKey, diskUsage);
+    }
+    if (imageMapTab?.paneId === sourcePaneId && imageMapTab.tabId === tabId) {
+      imageMapTab = { paneId: targetPaneId, tabId };
     }
     const knowledgeSearch = knowledgeSearchByTab.get(sourceKey);
     if (knowledgeSearch !== undefined) {
@@ -4733,6 +4835,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       const paneA = liveWorkspace.panesById[paneAId];
       const paneB = liveWorkspace.panesById[paneBId];
       if (paneA === undefined || paneB === undefined) return;
+      if (imageMapTab?.paneId === paneAId) imageMapTab = { ...imageMapTab, paneId: paneBId };
+      else if (imageMapTab?.paneId === paneBId) imageMapTab = { ...imageMapTab, paneId: paneAId };
       const movedDiskUsage = new Map<string, DiskUsageTabEntry>();
       for (const tabId of paneA.tabOrder) {
         const entry = diskUsageByTab.get(tabKey(paneAId, tabId));
@@ -5077,6 +5181,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getEditorLinkHandlers: editorLinkHandlers,
     getPluginByPane: () => pluginByPane,
     getDiskUsageByTab: () => diskUsageByTab,
+    getImageMapPane: imageMapPane,
     getKnowledgeSearchByTab: () => knowledgeSearchByTab,
     getKnowledgeAnswerRevision: () => knowledgeAnswerRevision,
     setConnections: (conns) => {
@@ -6835,31 +6940,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 onOpenSource: (problem) => linkDoctorController?.openSource(problem),
                 onCancel: () => void linkDoctorController?.cancel(),
                 onClose: () => linkDoctorController?.close(),
-              }),
-            imageMapState.open &&
-              imageMapController !== undefined &&
-              currentSettings !== undefined &&
-              m(ImageMapPanel, {
-                state: imageMapState,
-                client: attrs.client,
-                settings: currentSettings.map,
-                dark: resolvedTheme() === 'dark',
-                selectedIds: new Set(
-                  (imageMapPaneId === undefined
-                    ? undefined
-                    : selections.get(activeTabKey(imageMapPaneId))
-                  )?.selectedEntryIds ?? [],
-                ),
-                onReveal: revealMappedEntry,
-                onRecursive: (recursive) => void imageMapController?.setRecursive(recursive),
-                onCancel: () => imageMapController?.cancel(),
-                onClose: () => imageMapController?.close(),
-                onBeginPlacing: (entry) => imageMapController?.beginPlacing(entry),
-                onStopPlacing: () => imageMapController?.stopPlacing(),
-                onPropose: (entry, latitude, longitude) =>
-                  imageMapController?.proposePlacement(entry, latitude, longitude),
-                onConfirm: () => void imageMapController?.confirmPlacement(),
-                onCancelPlacement: () => imageMapController?.cancelPlacement(),
               }),
             musicDuplicatesState.scanId !== undefined &&
               musicDuplicatesController !== undefined &&

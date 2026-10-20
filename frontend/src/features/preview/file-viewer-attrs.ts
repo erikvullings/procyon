@@ -64,6 +64,8 @@ export function fileViewerAttrs(
     onToggleMetadata: () => controller.toggleMetadataPanel(),
     onSelectGeoFeature: (index) => controller.selectGeoFeature(index),
     onToggleGeoRaw: () => controller.toggleGeoRaw(),
+    onOpenCsvOnMap: () => controller.openCsvOnMap(),
+    onCsvOptions: (options) => controller.setCsvOptions(options),
     onNextPage: () => controller.nextPage(),
     onPreviousPage: () => controller.previousPage(),
     onPdfSearchQueryChange: (query) => controller.setPdfSearchQuery(query),

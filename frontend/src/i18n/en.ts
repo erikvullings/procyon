@@ -2431,7 +2431,9 @@ export const en = {
     cluster: 'Group of {n} items. Click to zoom in.',
   },
   imageMap: {
-    action: 'Show on map',
+    action: 'Show photos on map',
+    actionDescription:
+      'Shows where the selected photos were taken, or those of the whole folder, on a map in the other pane.',
     title: 'Photos on a map',
     scanning: 'Reading locations: {done} of {total}',
     summary: '{located} on the map, {unlocated} without location',
@@ -2462,6 +2464,7 @@ export const en = {
   geo: {
     showRaw: 'Show raw text',
     showMap: 'Show on map',
+    showCsvOnMap: 'Show on map…',
     summary: { 1: '1 feature', n: '{n} features' },
     featureList: 'Features',
     showList: 'Show feature list',
@@ -2478,6 +2481,23 @@ export const en = {
     noGeometry: 'Feature without geometry',
     legend: 'Geometry: {type}',
     mapLabel: 'Map of {name}',
+  },
+  geoCsv: {
+    summary: 'Columns: {columns} - coordinate system: {crs}',
+    summaryWkt: 'Geometry column: {column} - coordinate system: {crs}',
+    guessed: '(guessed)',
+    change: 'Columns and coordinate system…',
+    title: 'Columns and coordinate system',
+    xColumn: 'Easting / longitude column',
+    yColumn: 'Northing / latitude column',
+    wktColumn: 'WKT geometry column (instead of the two above)',
+    wktHint: 'The geometry column is used and the two coordinate columns are ignored.',
+    none: '(none)',
+    crs: 'Coordinate system',
+    crsHint:
+      'Any EPSG code, for example EPSG:28992 (Amersfoort / RD New), or a +proj definition. Coordinates are converted to WGS84; use columns as (x, y) = (easting, northing) or (longitude, latitude).',
+    apply: 'Show on map',
+    rowsSkipped: '{n} rows have no usable coordinates.',
   },
   geoEdit: {
     edit: 'Edit',

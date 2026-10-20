@@ -9,7 +9,7 @@ import {
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
-import type { GitLogEntry, GpsPosition } from '../../models';
+import type { CsvGeoOptions, GitLogEntry, GpsPosition } from '../../models';
 import { calculateVisibleWindow } from '../directory-table/windowing';
 import { editableLanguageForExtension, languageExtension } from '../editor/editor-language';
 import type { EditorLinkHandlers } from '../editor/link-actions';
@@ -20,6 +20,7 @@ import {
   formatEntryModifiedAt,
   formatEntrySize,
 } from '../entry-formatting/entry-formatting';
+import { isCsvEntry } from '../geo/geo-document';
 import { GeoView, type GeoViewAttrs } from '../geo/geo-view';
 import { PlaylistView, type PlaylistViewAttrs } from '../playlist/playlist-view';
 import { copyText } from './clipboard';
@@ -108,6 +109,8 @@ export interface FileViewerAttrs {
   readonly mapClient?: GeoViewAttrs['client'];
   readonly onSelectGeoFeature?: (index: number | undefined) => void;
   readonly onToggleGeoRaw?: () => void;
+  readonly onOpenCsvOnMap?: () => void;
+  readonly onCsvOptions?: (options: CsvGeoOptions) => void;
   /** Opens the file in the editor (GeoJSON offers the map editor there, task 0278). */
   readonly onEditGeo?: () => void;
   /** Minifies the viewed geographic file (task 0282). */
@@ -1876,6 +1879,16 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                   ),
                 )
               : undefined,
+            state.status === 'ready' &&
+            state.geoView === undefined &&
+            attrs.onOpenCsvOnMap !== undefined &&
+            isCsvEntry(state.entry)
+              ? m(
+                  'button.fm-file-viewer-geo-toggle',
+                  { type: 'button', onclick: attrs.onOpenCsvOnMap },
+                  t('geo', 'showCsvOnMap'),
+                )
+              : undefined,
             state.status === 'ready' && state.geoView !== undefined && attrs.onToggleGeoRaw
               ? m(
                   'button.fm-file-viewer-geo-toggle',
@@ -2088,6 +2101,9 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                                                       selectedIndex: state.content.selectedIndex,
                                                       onSelect: attrs.onSelectGeoFeature ?? noop,
                                                       onShowRaw: attrs.onToggleGeoRaw ?? noop,
+                                                      ...(attrs.onCsvOptions === undefined
+                                                        ? {}
+                                                        : { onCsvOptions: attrs.onCsvOptions }),
                                                     })
                                                 : state.content.kind === 'playlist'
                                                   ? m(PlaylistView, {

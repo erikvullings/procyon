@@ -1,6 +1,7 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type {
+  CsvGeoOptions,
   EntrySummary,
   GeoDocument,
   GitLogEntry,
@@ -12,7 +13,13 @@ import type {
 } from '../../models';
 import { IMAGE_EXTENSIONS } from '../directory-table/entry-icons';
 import { editableLanguageForExtension } from '../editor/editor-language';
-import { geoExtension, isGeoCandidate, looksLikeGeoJson } from '../geo/geo-document';
+import {
+  CSV_AUTO_MAP_MAX_BYTES,
+  geoExtension,
+  isCsvEntry,
+  isGeoCandidate,
+  looksLikeGeoJson,
+} from '../geo/geo-document';
 import { archiveEntryLocation, archiveRootForEntry } from '../navigation/archive-location';
 import {
   decodePlaylistBytes,
@@ -508,6 +515,10 @@ export interface FileViewerController {
   selectGeoFeature(index: number | undefined): void;
   /** Switches a geographic file between the map and its raw text or tree view. */
   toggleGeoRaw(): void;
+  /** Opens a CSV file on the map even when its columns could not be detected. */
+  openCsvOnMap(): void;
+  /** Re-reads a CSV file on the map with the chosen columns and coordinate system. */
+  setCsvOptions(options: CsvGeoOptions): void;
   /** Advances to the next PDF/comic page. No-op for other content kinds or at the last page. */
   nextPage(): void;
   /** Returns to the previous PDF/comic page. No-op for other content kinds or at the first page. */
@@ -638,6 +649,9 @@ export function createFileViewerController(
   /** The entry opened as a geographic document, so the map/raw toggle is offered (task 0277). */
   let geoActive = false;
   let geoRaw = false;
+  /** The user asked for this CSV on the map, so a failed detection is shown instead of hidden. */
+  let csvRequested = false;
+  let csvOptions: CsvGeoOptions | undefined;
   let activeController: AbortController | undefined;
   let current: FileViewerState = { status: 'loading', entry };
   let search: FileViewerSearchState | undefined;
@@ -1380,6 +1394,8 @@ export function createFileViewerController(
   /** Opens a GeoJSON file on the map; false when the file is not a geographic document. */
   async function tryLoadGeo(controller: AbortController): Promise<boolean> {
     if (!isGeoCandidate(entry)) return false;
+    const csv = isCsvEntry(entry);
+    if (csv && !csvRequested && (entry.size ?? 0) > CSV_AUTO_MAP_MAX_BYTES) return false;
     if (geoExtension(entry) === 'json') {
       // A failed sniff only means the file opens as ordinary JSON.
       let sniffed = false;
@@ -1394,8 +1410,21 @@ export function createFileViewerController(
       }
       if (!sniffed) return false;
     }
-    const document = await client.readGeoFile(entry.location, controller.signal);
+    let document: GeoDocument;
+    try {
+      document = await client.readGeoFile(
+        entry.location,
+        controller.signal,
+        csv ? csvOptions : undefined,
+      );
+    } catch (error) {
+      // Trying the map is opportunistic for CSV: the table is still there.
+      if (csv && !csvRequested) return false;
+      throw error;
+    }
     if (!isCurrent(controller)) return true;
+    // A CSV without coordinates is just a table, unless the user asked for the map.
+    if (csv && document.error != null && !csvRequested) return false;
     if (document.format === '' && document.error != null && geoExtension(entry) === 'json') {
       return false;
     }
@@ -1417,6 +1446,21 @@ export function createFileViewerController(
   function toggleGeoRaw(): void {
     if (!geoActive) return;
     geoRaw = !geoRaw;
+    void load();
+  }
+
+  function openCsvOnMap(): void {
+    if (!isCsvEntry(entry)) return;
+    csvRequested = true;
+    geoRaw = false;
+    void load();
+  }
+
+  function setCsvOptions(options: CsvGeoOptions): void {
+    if (!isCsvEntry(entry)) return;
+    csvOptions = options;
+    csvRequested = true;
+    geoRaw = false;
     void load();
   }
 
@@ -3043,6 +3087,8 @@ export function createFileViewerController(
     toggleMetadataPanel,
     selectGeoFeature,
     toggleGeoRaw,
+    openCsvOnMap,
+    setCsvOptions,
     nextPage,
     previousPage,
     setPdfSearchQuery,
