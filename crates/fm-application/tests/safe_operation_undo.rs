@@ -218,7 +218,7 @@ async fn copy_and_duplicate_undo_remove_only_unchanged_created_entries() {
         wait(&service, duplicate.id).await.state,
         OperationStateDto::Completed
     );
-    let duplicated = root.path().join("source.txt (1)");
+    let duplicated = root.path().join("source (1).txt");
     assert!(duplicated.exists());
     let undo_duplicate = service.undo_operation(duplicate.id.into()).unwrap();
     assert_eq!(

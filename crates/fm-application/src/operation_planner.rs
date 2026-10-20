@@ -1910,9 +1910,21 @@ impl OperationExecutor for DuplicateExecutor {
             let source_name = source_location
                 .name()
                 .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+            let is_directory = copy
+                .source_provider
+                .inspect(
+                    &EntryRef {
+                        id: EntryId::new(),
+                        location: source_location.clone(),
+                    },
+                    cancellation.clone(),
+                )
+                .await?
+                .kind
+                == fm_domain::EntryKind::Directory;
             let mut index = 1_u32;
             loop {
-                let candidate = fm_operations::duplicate_name(&source_name, index);
+                let candidate = fm_operations::duplicate_name(&source_name, is_directory, index);
                 let destination = copy
                     .destination_directory
                     .join(&candidate)
