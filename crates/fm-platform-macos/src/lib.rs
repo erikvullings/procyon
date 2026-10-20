@@ -38,6 +38,7 @@
 #![allow(unsafe_code)]
 
 pub(crate) mod clipboard;
+mod clipboard_staging;
 pub(crate) mod dock;
 pub mod search;
 pub(crate) mod uninstall;
@@ -813,8 +814,8 @@ impl PlatformAdapter for MacosPlatformAdapter {
     }
 
     fn read_clipboard_file_references(&self) -> Result<Vec<PathBuf>, PlatformError> {
-        Ok(clipboard::read_file_references(
-            &clipboard::general_pasteboard(),
+        Ok(clipboard_staging::stage_unreadable(
+            clipboard::read_file_references(&clipboard::general_pasteboard()),
         ))
     }
 

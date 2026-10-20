@@ -10,5 +10,10 @@
 	     ../../../Cargo.toml's `info_plist` doc comment / tauri-utils' BundleConfig). -->
 	<key>LSMultipleInstancesProhibited</key>
 	<false/>
+	<!-- Shown when macOS asks to let Procyon control Finder. Used only to copy files that Finder
+	     may read but Procyon may not (for example files copied out of a Remote Desktop session
+	     into another app's protected container) when they are pasted. -->
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Procyon asks Finder to copy files that only Finder is allowed to read, such as files copied from a Remote Desktop session.</string>
 </dict>
 </plist>
