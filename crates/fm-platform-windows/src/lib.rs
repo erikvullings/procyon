@@ -1212,12 +1212,19 @@ impl PlatformAdapter for WindowsPlatformAdapter {
             )
         };
         if result as isize > 32 {
-            Ok(())
-        } else {
-            Err(PlatformError::Io {
-                message: "the Open With dialog could not be shown".to_owned(),
-            })
+            return Ok(());
         }
+        // `ShellExecute` needs an initialised COM apartment, which the worker threads running
+        // commands do not have, and some shells have no `openas` verb. The Open With dialog is
+        // also reachable through shell32's own entry point.
+        std::process::Command::new("rundll32.exe")
+            .arg("shell32.dll,OpenAs_RunDLL")
+            .arg(&target)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| PlatformError::Io {
+                message: format!("the Open With dialog could not be shown: {error}"),
+            })
     }
 
     fn read_clipboard_file_references(&self) -> Result<Vec<PathBuf>, PlatformError> {

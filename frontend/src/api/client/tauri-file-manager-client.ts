@@ -1,5 +1,5 @@
 import { getVersion } from '@tauri-apps/api/app';
-import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { relaunch } from '@tauri-apps/plugin-process';
@@ -235,6 +235,16 @@ import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
 import { trustedOneDriveAuthorizationUrl } from './onedrive-authorization-url';
 import { operationFromDto } from './operation-mapping';
 import { settingsFromDto, settingsToDto } from './settings-mapping';
+import { toCommandError } from './tauri-command-error';
+
+/** `invoke`, rejecting with an `Error` that carries the backend's message. */
+async function invoke<T>(...call: Parameters<typeof tauriInvoke>): Promise<T> {
+  try {
+    return await tauriInvoke<T>(...call);
+  } catch (rejection) {
+    throw toCommandError(call[0], rejection);
+  }
+}
 
 async function invokeCancellableRag<T>(
   command: 'preview_rag' | 'generate_rag_answer',
