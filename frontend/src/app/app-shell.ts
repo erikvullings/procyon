@@ -2877,7 +2877,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   function refetchAffectedPanes(
     paneId?: PaneId,
-    options?: { readonly background?: boolean; readonly settleMs?: number },
+    options?: {
+      readonly background?: boolean;
+      readonly settleMs?: number;
+      readonly force?: boolean;
+    },
   ): void {
     refreshDirectoryTree();
     scheduleBasketRefresh();
@@ -2893,7 +2897,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       // while some callers (operation completion) request a foreground reload to guarantee
       // authoritative source/destination listings after mutating actions.
       if (options?.settleMs !== undefined) {
-        scheduleSettledRefresh(candidate, options.settleMs, background);
+        scheduleSettledRefresh(candidate, options.settleMs, background, options.force === true);
         continue;
       }
       void navigation.load(candidate, background ? { background: true } : undefined);
@@ -2904,9 +2908,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    * Safety-net reload for a pane after a mutating operation. The backend already re-lists the
    * affected panes itself and pushes the result as a directory delta, so reloading immediately
    * made every operation cost two or three full relists of the same folder. This waits `settleMs`
-   * and only reloads when no delta or reload reached the pane in the meantime.
+   * and only reloads when no delta or reload reached the pane in the meantime, unless `force`.
    */
-  function scheduleSettledRefresh(paneId: PaneId, settleMs: number, background: boolean): void {
+  function scheduleSettledRefresh(
+    paneId: PaneId,
+    settleMs: number,
+    background: boolean,
+    force: boolean,
+  ): void {
     const startingRevision = directories.get(activeTabKey(paneId))?.revision;
     const pending = settledRefreshTimers.get(paneId);
     if (pending !== undefined) clearTimeout(pending);
@@ -2914,7 +2923,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       paneId,
       setTimeout(() => {
         settledRefreshTimers.delete(paneId);
-        if (directories.get(activeTabKey(paneId))?.revision !== startingRevision) return;
+        if (!force && directories.get(activeTabKey(paneId))?.revision !== startingRevision) return;
         void navigation.load(paneId, background ? { background: true } : undefined);
       }, settleMs),
     );

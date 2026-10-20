@@ -95,7 +95,11 @@ export interface BackendEventContext {
   applyDelta(paneId: PaneId, delta: DirectoryDelta): void;
   refetchAffectedPanes(
     paneId?: PaneId,
-    options?: { readonly background?: boolean; readonly settleMs?: number },
+    options?: {
+      readonly background?: boolean;
+      readonly settleMs?: number;
+      readonly force?: boolean;
+    },
   ): void;
 
   // Plugins
@@ -252,6 +256,7 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
             const previous = ctx.getOperations();
             let next = reduceOperationEvents(previous, events);
             let panesNeedRefresh = false;
+            let forceRefresh = false;
             for (const [id, current] of Object.entries(next.byId) as Array<
               [OperationId, Operation | undefined]
             >) {
@@ -265,6 +270,10 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
               }
               if (shouldRefreshOnTerminalOperation(current)) {
                 panesNeedRefresh = true;
+                // A rename changes only a name, which a watch delta may not have delivered (or
+                // delivered too early); the settled reload must not be skipped because some
+                // delta arrived in the meantime.
+                if (current.kind === 'rename') forceRefresh = true;
               }
               if (
                 current.state === 'completed' &&
@@ -298,6 +307,7 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
               ctx.refetchAffectedPanes(undefined, {
                 background: false,
                 settleMs: OPERATION_REFRESH_SETTLE_MS,
+                ...(forceRefresh ? { force: true } : {}),
               });
             }
             ctx.redraw();
