@@ -1867,6 +1867,8 @@ export const pl = {
     cancel: 'Zatrzymaj',
     close: 'Zamknij',
     noLocation: 'Bez lokalizacji',
+    collapseUnlocated: 'Ukryj obrazy bez lokalizacji',
+    expandUnlocated: 'Pokaż obrazy bez lokalizacji',
     place: 'Umieść na mapie',
     placingHint: 'Kliknij mapę, aby ustawić lokalizację pliku {name}.',
     stopPlacing: 'Anuluj umieszczanie',
@@ -1887,7 +1889,7 @@ export const pl = {
   geo: {
     ...en.geo,
     showCsvOnMap: 'Pokaż na mapie…',
-    showRaw: 'Pokaż surowy tekst',
+    showRaw: 'Pokaż jako tekst',
     showMap: 'Pokaż na mapie',
     summary: { 1: '1 obiekt', n: '{n} obiektów' },
     featureList: 'Obiekty',

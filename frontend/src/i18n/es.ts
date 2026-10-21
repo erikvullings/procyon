@@ -1876,6 +1876,8 @@ export const es = {
     cancel: 'Detener',
     close: 'Cerrar',
     noLocation: 'Sin ubicación',
+    collapseUnlocated: 'Ocultar imágenes sin ubicación',
+    expandUnlocated: 'Mostrar imágenes sin ubicación',
     place: 'Colocar en el mapa',
     placingHint: 'Haz clic en el mapa para fijar la ubicación de {name}.',
     stopPlacing: 'Cancelar colocación',
@@ -1896,7 +1898,7 @@ export const es = {
   geo: {
     ...en.geo,
     showCsvOnMap: 'Mostrar en el mapa…',
-    showRaw: 'Mostrar texto sin formato',
+    showRaw: 'Mostrar como texto',
     showMap: 'Mostrar en el mapa',
     summary: { 1: '1 objeto', n: '{n} objetos' },
     featureList: 'Objetos',

@@ -229,7 +229,7 @@ function csvSummary(document: GeoDocument, onChange: (() => void) | undefined): 
       : undefined,
     onChange === undefined
       ? undefined
-      : m('button.btn-flat', { type: 'button', onclick: onChange }, t('geoCsv', 'change')),
+      : m('button.fm-geo-csv-change', { type: 'button', onclick: onChange }, t('geoCsv', 'change')),
   ]);
 }
 
@@ -294,7 +294,7 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = (initial) => {
           document.csv == null || attrs.onCsvOptions === undefined
             ? undefined
             : m(
-                'button.btn-flat',
+                'button.fm-geo-csv-change',
                 { type: 'button', onclick: () => (csvDialogOpen = true) },
                 t('geoCsv', 'change'),
               ),

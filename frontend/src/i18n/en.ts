@@ -2444,6 +2444,8 @@ export const en = {
     cancel: 'Stop',
     close: 'Close',
     noLocation: 'Without location',
+    collapseUnlocated: 'Hide images without location',
+    expandUnlocated: 'Show images without location',
     place: 'Place on map',
     placingHint: 'Click the map to set the location of {name}.',
     stopPlacing: 'Cancel placing',
@@ -2462,7 +2464,7 @@ export const en = {
     taken: 'Taken {date}',
   },
   geo: {
-    showRaw: 'Show raw text',
+    showRaw: 'Show as text',
     showMap: 'Show on map',
     showCsvOnMap: 'Show on map…',
     summary: { 1: '1 feature', n: '{n} features' },

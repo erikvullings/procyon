@@ -52,7 +52,6 @@ function attrs(
     onReveal: vi.fn(),
     onRecursive: vi.fn(),
     onCancel: vi.fn(),
-    onClose: vi.fn(),
     onBeginPlacing: vi.fn(),
     onStopPlacing: vi.fn(),
     onPropose: vi.fn(),
@@ -93,9 +92,28 @@ describe('ImageMapPanel', () => {
       attrs(openState({ located: [geo('a.jpg', 1)], unlocated: [entry('b.jpg'), entry('c.png')] })),
     );
     expect(root.textContent).toContain('1 on the map, 2 without location');
-    expect(root.querySelectorAll('.fm-image-map-unlocated li')).toHaveLength(2);
+    expect(root.querySelectorAll('.fm-image-map-row')).toHaveLength(2);
     // Only the JPEG can be placed.
     expect(root.querySelectorAll('.fm-image-map-place')).toHaveLength(1);
+  });
+
+  it('collapses the list of images without a location into a narrow strip and back', () => {
+    const view = attrs(openState({ located: [geo('a.jpg', 1)], unlocated: [entry('b.jpg')] }));
+    const root = render(view);
+    const toggle = () => root.querySelector<HTMLButtonElement>('.fm-image-map-side-head button');
+    expect(root.querySelector('.fm-image-map-side-rows')).not.toBeNull();
+    toggle()?.click();
+    m.render(root, m(ImageMapPanel, view));
+    expect(root.querySelector('.fm-image-map-side.is-collapsed')).not.toBeNull();
+    expect(root.querySelector('.fm-image-map-side-rows')).toBeNull();
+    toggle()?.click();
+    m.render(root, m(ImageMapPanel, view));
+    expect(root.querySelector('.fm-image-map-side-rows')).not.toBeNull();
+  });
+
+  it('has no close button: the tab has its own', () => {
+    const root = render(attrs(openState({ located: [geo('a.jpg', 1)] })));
+    expect(root.querySelector('.fm-image-map-status')?.textContent).not.toContain('Close');
   });
 
   it('feeds the map markers, the selection highlight and the interaction callbacks', () => {

@@ -2490,6 +2490,8 @@ export const nl = {
     cancel: 'Stoppen',
     close: 'Sluiten',
     noLocation: 'Zonder locatie',
+    collapseUnlocated: 'Afbeeldingen zonder locatie verbergen',
+    expandUnlocated: 'Afbeeldingen zonder locatie tonen',
     place: 'Op kaart plaatsen',
     placingHint: 'Klik op de kaart om de locatie van {name} in te stellen.',
     stopPlacing: 'Plaatsen annuleren',
@@ -2510,7 +2512,7 @@ export const nl = {
   geo: {
     ...en.geo,
     showCsvOnMap: 'Op kaart tonen…',
-    showRaw: 'Ruwe tekst tonen',
+    showRaw: 'Als tekst tonen',
     showMap: 'Op kaart tonen',
     summary: { 1: '1 object', n: '{n} objecten' },
     featureList: 'Objecten',

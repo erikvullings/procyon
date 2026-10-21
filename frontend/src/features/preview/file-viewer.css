@@ -1781,3 +1781,29 @@ textarea.fm-sqlite-sql.browser-default {
   color: var(--fm-text-muted);
   font-size: 0.85em;
 }
+
+/* Geographic file actions in the viewer header: quiet outlined buttons, like the other header
+   controls, instead of the browser's default button background. */
+.fm-file-viewer-geo-toggle,
+.fm-file-viewer-geo-minify,
+.fm-file-viewer-geo-convert,
+.fm-file-viewer-geo-edit {
+  flex: 0 0 auto;
+  height: calc(var(--fm-header-height) - 0.5rem);
+  padding: 0 0.6rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fm-file-viewer-geo-toggle:hover,
+.fm-file-viewer-geo-minify:hover,
+.fm-file-viewer-geo-convert:hover,
+.fm-file-viewer-geo-edit:hover {
+  border-color: var(--fm-accent);
+  color: var(--fm-accent);
+}

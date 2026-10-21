@@ -1,6 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
+import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { EntrySummary, MapSettings } from '../../models';
 import { MapView, type MapViewClient } from '../map/map-view';
@@ -19,7 +20,6 @@ export interface ImageMapPanelAttrs {
   readonly onReveal: (entry: EntrySummary) => void;
   readonly onRecursive: (recursive: boolean) => void;
   readonly onCancel: () => void;
-  readonly onClose: () => void;
   readonly onBeginPlacing: (entry: EntrySummary) => void;
   readonly onStopPlacing: () => void;
   readonly onPropose: (entry: EntrySummary, latitude: number, longitude: number) => void;
@@ -48,6 +48,49 @@ export function markersOf(located: readonly GeoImage[]): MapMarker[] {
   }));
 }
 
+/** Images without a location, one row each like the file panes, in a collapsible left panel. */
+function unlocatedPanel(attrs: ImageMapPanelAttrs, open: boolean, toggle: () => void): m.Children {
+  const { unlocated } = attrs.state;
+  if (unlocated.length === 0) return undefined;
+  const label = open ? t('imageMap', 'collapseUnlocated') : t('imageMap', 'expandUnlocated');
+  return m('.fm-image-map-side', { class: open ? undefined : 'is-collapsed' }, [
+    m('.fm-image-map-side-head', [
+      open
+        ? m('span.fm-image-map-side-title', `${t('imageMap', 'noLocation')} (${unlocated.length})`)
+        : undefined,
+      tooltip(
+        label,
+        m(
+          'button.fm-geo-panel-button',
+          { type: 'button', 'aria-label': label, 'aria-expanded': String(open), onclick: toggle },
+          open ? '«' : `» ${unlocated.length}`,
+        ),
+      ),
+    ]),
+    open
+      ? m(
+          '.fm-image-map-side-rows',
+          unlocated.map((entry) =>
+            m('.fm-geo-row.fm-image-map-row', { key: entry.id }, [
+              m(
+                'button.fm-image-map-reveal',
+                { type: 'button', title: entry.name, onclick: () => attrs.onReveal(entry) },
+                entry.name,
+              ),
+              canWriteGps(entry)
+                ? m(
+                    'button.fm-image-map-place',
+                    { type: 'button', onclick: () => attrs.onBeginPlacing(entry) },
+                    t('imageMap', 'place'),
+                  )
+                : undefined,
+            ]),
+          ),
+        )
+      : undefined,
+  ]);
+}
+
 /**
  * "Show on map" panel (task 0276): thumbnail markers with clustering and popups, the images
  * without GPS listed beside the map, and confirmed drag-or-click placement through the metadata
@@ -58,6 +101,7 @@ export const ImageMapPanel: FactoryComponent<ImageMapPanelAttrs> = () => {
   let lastLocated: readonly GeoImage[] | undefined;
   let markers: MapMarker[] = [];
   let fitKey = 0;
+  let sideOpen = true;
 
   return {
     view: ({ attrs }) => {
@@ -91,6 +135,7 @@ export const ImageMapPanel: FactoryComponent<ImageMapPanelAttrs> = () => {
         !state.scanning && state.total === 0 && state.failure === undefined
           ? m('p', t('imageMap', 'noImages'))
           : m('.fm-image-map-body', [
+              unlocatedPanel(attrs, sideOpen, () => (sideOpen = !sideOpen)),
               m('.fm-image-map-canvas', [
                 m(MapView, {
                   client: attrs.client,
@@ -152,30 +197,6 @@ export const ImageMapPanel: FactoryComponent<ImageMapPanelAttrs> = () => {
                   },
                 }),
               ]),
-              state.unlocated.length === 0
-                ? undefined
-                : m('.fm-image-map-unlocated', [
-                    m('h5', t('imageMap', 'noLocation')),
-                    m(
-                      'ul',
-                      state.unlocated.map((entry) =>
-                        m('li', { key: entry.id }, [
-                          m(
-                            'button.btn-flat.fm-image-map-reveal',
-                            { type: 'button', onclick: () => attrs.onReveal(entry) },
-                            entry.name,
-                          ),
-                          canWriteGps(entry)
-                            ? m(
-                                'button.btn-flat.fm-image-map-place',
-                                { type: 'button', onclick: () => attrs.onBeginPlacing(entry) },
-                                t('imageMap', 'place'),
-                              )
-                            : undefined,
-                        ]),
-                      ),
-                    ),
-                  ]),
             ]),
         m('.fm-image-map-status', [
           m('strong.fm-image-map-title', t('imageMap', 'title')),
@@ -219,7 +240,6 @@ export const ImageMapPanel: FactoryComponent<ImageMapPanelAttrs> = () => {
                 t('imageMap', 'cancel'),
               )
             : undefined,
-          m('button.btn-flat', { type: 'button', onclick: attrs.onClose }, t('imageMap', 'close')),
         ]),
         m(ModalPanel, {
           title: t('imageMap', 'confirmTitle'),

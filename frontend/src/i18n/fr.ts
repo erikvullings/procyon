@@ -1888,6 +1888,8 @@ export const fr = {
     cancel: 'Arrêter',
     close: 'Fermer',
     noLocation: 'Sans emplacement',
+    collapseUnlocated: 'Masquer les images sans position',
+    expandUnlocated: 'Afficher les images sans position',
     place: 'Placer sur la carte',
     placingHint: "Cliquez sur la carte pour définir l'emplacement de {name}.",
     stopPlacing: 'Annuler le placement',
@@ -1908,7 +1910,7 @@ export const fr = {
   geo: {
     ...en.geo,
     showCsvOnMap: 'Afficher sur la carte…',
-    showRaw: 'Afficher le texte brut',
+    showRaw: 'Afficher comme texte',
     showMap: 'Afficher sur la carte',
     summary: { 1: '1 objet', n: '{n} objets' },
     featureList: 'Objets',

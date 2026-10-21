@@ -983,7 +983,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         onReveal: revealMappedEntry,
         onRecursive: (recursive) => void imageMapController?.setRecursive(recursive),
         onCancel: () => imageMapController?.cancel(),
-        onClose: closeImageMapTab,
         onBeginPlacing: (entry) => imageMapController?.beginPlacing(entry),
         onStopPlacing: () => imageMapController?.stopPlacing(),
         onPropose: (entry, latitude, longitude) =>
@@ -1032,14 +1031,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       .catch((error: unknown) => {
         toast({ html: workspaceErrorMessage(error, t('imageMap', 'failed', { message: '' })) });
       });
-  }
-
-  /** Stops the photo map and closes its tab. */
-  function closeImageMapTab(): void {
-    const tab = imageMapTab;
-    imageMapTab = undefined;
-    imageMapController?.close();
-    if (tab !== undefined) tabController.performCloseTab(tab.paneId, tab.tabId);
   }
 
   /** Starts the map panel for `roots`; `folder` offers the "include subfolders" option. */
