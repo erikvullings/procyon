@@ -2518,6 +2518,7 @@ export const nl = {
     featureList: 'Objecten',
     showList: 'Objectenlijst tonen',
     collapseList: 'Objectenlijst verbergen',
+    resizePanel: 'Paneelbreedte aanpassen',
     maximizeList: 'Objectenlijst over de volledige breedte',
     restoreList: 'Objectenlijst naast de kaart',
     truncated: 'Alleen {shown} van {total} objecten worden getekend zodat de kaart soepel blijft.',

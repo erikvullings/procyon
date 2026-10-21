@@ -12,6 +12,7 @@ import type {
 import { resolvedTheme } from '../../utilities/resolved-theme';
 import { DEFAULT_MAP_SETTINGS } from '../map/map-settings';
 import { MapView } from '../map/map-view';
+import { SidePanelResizer, sidePanelStyle } from '../map/side-panel-width';
 import { sanitizePluginPreviewHtml } from '../preview/plugin-preview';
 import { CsvGeoDialog } from './csv-geo-dialog';
 import { ElevationProfile } from './elevation-profile';
@@ -385,7 +386,7 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = (initial) => {
       ];
       return m('.fm-geo-view', { class: `is-${mode}` }, [
         csvDialog(),
-        m('aside.fm-geo-side', [
+        m('aside.fm-geo-side', mode === 'split' ? { style: sidePanelStyle() } : {}, [
           mode === 'collapsed'
             ? m(
                 '.fm-geo-side-head',
@@ -410,6 +411,7 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = (initial) => {
                 m('.fm-geo-extra', extra),
               ],
         ]),
+        mode === 'split' ? m(SidePanelResizer) : undefined,
         m(
           '.fm-geo-map',
           m(MapView, {

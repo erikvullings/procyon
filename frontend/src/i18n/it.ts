@@ -1893,6 +1893,7 @@ export const it = {
     featureList: 'Oggetti',
     showList: "Mostra l'elenco degli oggetti",
     collapseList: "Nascondi l'elenco degli oggetti",
+    resizePanel: 'Ridimensiona il pannello',
     maximizeList: 'Elenco degli oggetti a tutta larghezza',
     restoreList: 'Elenco degli oggetti accanto alla mappa',
     truncated: 'Solo {shown} oggetti su {total} vengono disegnati per mantenere reattiva la mappa.',

@@ -6,6 +6,7 @@ import { t } from '../../i18n';
 import type { EntrySummary, MapSettings } from '../../models';
 import { MapView, type MapViewClient } from '../map/map-view';
 import type { MapMarker } from '../map/marker-index';
+import { SidePanelResizer, sidePanelStyle } from '../map/side-panel-width';
 import { canWriteGps, type GeoImage } from './gps-scan';
 import type { ImageMapState } from './image-map-state';
 import { thumbnailImage } from './thumbnail-image';
@@ -53,42 +54,50 @@ function unlocatedPanel(attrs: ImageMapPanelAttrs, open: boolean, toggle: () => 
   const { unlocated } = attrs.state;
   if (unlocated.length === 0) return undefined;
   const label = open ? t('imageMap', 'collapseUnlocated') : t('imageMap', 'expandUnlocated');
-  return m('.fm-image-map-side', { class: open ? undefined : 'is-collapsed' }, [
-    m('.fm-image-map-side-head', [
-      open
-        ? m('span.fm-image-map-side-title', `${t('imageMap', 'noLocation')} (${unlocated.length})`)
-        : undefined,
-      tooltip(
-        label,
-        m(
-          'button.fm-geo-panel-button',
-          { type: 'button', 'aria-label': label, 'aria-expanded': String(open), onclick: toggle },
-          open ? '«' : `» ${unlocated.length}`,
-        ),
-      ),
-    ]),
-    open
-      ? m(
-          '.fm-image-map-side-rows',
-          unlocated.map((entry) =>
-            m('.fm-geo-row.fm-image-map-row', { key: entry.id }, [
-              m(
-                'button.fm-image-map-reveal',
-                { type: 'button', title: entry.name, onclick: () => attrs.onReveal(entry) },
-                entry.name,
-              ),
-              canWriteGps(entry)
-                ? m(
-                    'button.fm-image-map-place',
-                    { type: 'button', onclick: () => attrs.onBeginPlacing(entry) },
-                    t('imageMap', 'place'),
-                  )
-                : undefined,
-            ]),
+  const panel = m(
+    '.fm-image-map-side',
+    { class: open ? undefined : 'is-collapsed', ...(open ? { style: sidePanelStyle() } : {}) },
+    [
+      m('.fm-image-map-side-head', [
+        open
+          ? m(
+              'span.fm-image-map-side-title',
+              `${t('imageMap', 'noLocation')} (${unlocated.length})`,
+            )
+          : undefined,
+        tooltip(
+          label,
+          m(
+            'button.fm-geo-panel-button',
+            { type: 'button', 'aria-label': label, 'aria-expanded': String(open), onclick: toggle },
+            open ? '«' : `» ${unlocated.length}`,
           ),
-        )
-      : undefined,
-  ]);
+        ),
+      ]),
+      open
+        ? m(
+            '.fm-image-map-side-rows',
+            unlocated.map((entry) =>
+              m('.fm-geo-row.fm-image-map-row', { key: entry.id }, [
+                m(
+                  'button.fm-image-map-reveal',
+                  { type: 'button', title: entry.name, onclick: () => attrs.onReveal(entry) },
+                  entry.name,
+                ),
+                canWriteGps(entry)
+                  ? m(
+                      'button.fm-image-map-place',
+                      { type: 'button', onclick: () => attrs.onBeginPlacing(entry) },
+                      t('imageMap', 'place'),
+                    )
+                  : undefined,
+              ]),
+            ),
+          )
+        : undefined,
+    ],
+  );
+  return [panel, open ? m(SidePanelResizer) : undefined];
 }
 
 /**

@@ -1916,6 +1916,7 @@ export const fr = {
     featureList: 'Objets',
     showList: 'Afficher la liste des objets',
     collapseList: 'Masquer la liste des objets',
+    resizePanel: 'Redimensionner le panneau',
     maximizeList: 'Liste des objets sur toute la largeur',
     restoreList: 'Liste des objets à côté de la carte',
     truncated: 'Seuls {shown} objets sur {total} sont dessinés pour que la carte reste réactive.',

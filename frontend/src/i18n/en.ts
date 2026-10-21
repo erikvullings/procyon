@@ -2471,6 +2471,7 @@ export const en = {
     featureList: 'Features',
     showList: 'Show feature list',
     collapseList: 'Hide feature list',
+    resizePanel: 'Resize panel',
     maximizeList: 'Feature list over the full width',
     restoreList: 'Feature list beside the map',
     truncated: 'Only {shown} of {total} features are drawn to keep the map responsive.',

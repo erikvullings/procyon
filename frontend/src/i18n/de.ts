@@ -1918,6 +1918,7 @@ export const de = {
     featureList: 'Objekte',
     showList: 'Objektliste anzeigen',
     collapseList: 'Objektliste ausblenden',
+    resizePanel: 'Panelbreite ändern',
     maximizeList: 'Objektliste in voller Breite',
     restoreList: 'Objektliste neben der Karte',
     truncated:

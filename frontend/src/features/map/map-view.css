@@ -182,7 +182,11 @@
   appearance: auto;
 }
 
-.fm-image-map-status .fm-image-map-recursive span {
+.fm-app-shell
+  .fm-image-map-status
+  .fm-image-map-recursive
+  input[type="checkbox"]
+  + span:not(.lever) {
   height: auto;
   padding: 0;
   line-height: 1;
@@ -190,8 +194,16 @@
   font-size: inherit;
 }
 
-.fm-image-map-status .fm-image-map-recursive span::before,
-.fm-image-map-status .fm-image-map-recursive span::after {
+.fm-app-shell
+  .fm-image-map-status
+  .fm-image-map-recursive
+  input[type="checkbox"]
+  + span:not(.lever)::before,
+.fm-app-shell
+  .fm-image-map-status
+  .fm-image-map-recursive
+  input[type="checkbox"]
+  + span:not(.lever)::after {
   display: none;
 }
 
@@ -403,11 +415,7 @@
   display: block;
   width: 100%;
   height: auto;
-  margin-top: 0.4rem;
-  background: var(--fm-surface-elevated);
-  border: 1px solid var(--fm-border);
-  border-bottom: 0;
-  border-radius: var(--fm-radius) var(--fm-radius) 0 0;
+  margin: 0.4rem 0;
 }
 
 .fm-elevation-line {
@@ -420,14 +428,14 @@
   stroke-width: 1;
 }
 
-/* Styled like the file pane's status bar, so it reads as the chart's footer. */
+/* A full-width status bar at the foot of the side panel, flush with the pane's own status bar. */
 .fm-elevation-readout {
   display: flex;
   align-items: center;
   min-height: var(--fm-row-height);
-  padding: 0 0.5rem;
-  border: 1px solid var(--fm-border);
-  border-radius: 0 0 var(--fm-radius) var(--fm-radius);
+  margin-inline: -0.75rem;
+  padding: 0 0.75rem;
+  border-top: 1px solid var(--fm-border);
   background: var(--fm-surface-elevated);
   color: var(--fm-text-muted);
   font-size: 0.9em;
@@ -457,6 +465,13 @@
   color: var(--fm-text-muted);
 }
 
+/* A narrow side panel shows one label/value pair per line instead of squeezing the values out. */
+@container fm-geo-side (max-width: 21rem) {
+  .fm-track-summary dl {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+}
+
 .fm-geo-layers ul {
   margin: 0;
   padding: 0;
@@ -474,6 +489,7 @@
 }
 
 .fm-geo-side {
+  container: fm-geo-side / inline-size;
   display: flex;
   flex-direction: column;
   flex: 0 0 24rem;
@@ -652,8 +668,13 @@
 
 .fm-geo-extra {
   flex: 0 0 auto;
-  padding: 0 0.75rem 0.5rem;
+  padding: 0 0.75rem;
   border-top: 1px solid var(--fm-border);
+}
+
+.fm-geo-warnings,
+.fm-geo-skipped {
+  padding-bottom: 0.5rem;
 }
 
 .fm-geo-extra h5 {
@@ -779,4 +800,22 @@
 
 .fm-geo-csv-change:hover {
   border-color: var(--fm-accent);
+}
+
+/* Drag handle between a geo side panel and the map; overlaps the panel border, no layout width. */
+.fm-side-resizer {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 6px;
+  margin-inline: -3px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.fm-side-resizer:hover,
+.fm-side-resizer:focus-visible,
+.fm-side-resizer.is-dragging {
+  background: var(--fm-accent);
+  opacity: 0.6;
+  outline: none;
 }

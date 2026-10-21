@@ -1904,6 +1904,7 @@ export const es = {
     featureList: 'Objetos',
     showList: 'Mostrar lista de objetos',
     collapseList: 'Ocultar lista de objetos',
+    resizePanel: 'Cambiar el ancho del panel',
     maximizeList: 'Lista de objetos a todo el ancho',
     restoreList: 'Lista de objetos junto al mapa',
     truncated: 'Solo se dibujan {shown} de {total} objetos para mantener la fluidez del mapa.',

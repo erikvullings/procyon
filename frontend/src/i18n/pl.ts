@@ -1895,6 +1895,7 @@ export const pl = {
     featureList: 'Obiekty',
     showList: 'Pokaż listę obiektów',
     collapseList: 'Ukryj listę obiektów',
+    resizePanel: 'Zmień szerokość panelu',
     maximizeList: 'Lista obiektów na pełną szerokość',
     restoreList: 'Lista obiektów obok mapy',
     truncated: 'Aby mapa pozostała responsywna, rysowane jest tylko {shown} z {total} obiektów.',

@@ -1901,6 +1901,7 @@ export const pt = {
     featureList: 'Objetos',
     showList: 'Mostrar lista de objetos',
     collapseList: 'Ocultar lista de objetos',
+    resizePanel: 'Redimensionar o painel',
     maximizeList: 'Lista de objetos em largura total',
     restoreList: 'Lista de objetos ao lado do mapa',
     truncated: 'Só {shown} de {total} objetos são desenhados para manter o mapa fluido.',
