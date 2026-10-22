@@ -30,6 +30,9 @@ const CRATE_LAYERS: &[(&str, u8)] = &[
     // Layer 0 - foundational models and wire contracts, dependent on nothing
     // else in the workspace.
     ("fm-domain", 0),
+    // `fm-geo` parses GeoJSON/GPX/KML/CSV into one feature model and has no workspace
+    // dependencies.
+    ("fm-geo", 0),
     ("fm-semantic-protocol", 0),
     // Layer 1 - contracts expressed in terms of the domain model.
     ("fm-auth-oauth", 1),
