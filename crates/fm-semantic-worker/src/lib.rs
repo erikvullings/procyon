@@ -3564,7 +3564,7 @@ async fn handle_frame(
     request_permit: Option<OwnedSemaphorePermit>,
     request_registration: RequestRegistration,
 ) {
-    let _request_permit = request_permit;
+    let mut request_permit = request_permit;
     let correlation_id = frame.correlation_id;
     let payload = match frame.payload {
         Some(v1::client_frame::Payload::Negotiate(request)) => {
@@ -4782,7 +4782,16 @@ async fn handle_frame(
             return;
         }
     };
+    if matches!(
+        payload,
+        v1::server_frame::Payload::Negotiated(_) | v1::server_frame::Payload::SessionOpened(_)
+    ) {
+        // A client may start its next handshake the moment it reads this
+        // reply, so the slot must already be free by then.
+        drop(request_permit.take());
+    }
     send_payload(&writer, correlation_id, payload, state.config.limits).await;
+    drop(request_permit);
 }
 
 fn cancel_connection_work(connection: &ConnectionState) {
