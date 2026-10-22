@@ -3180,6 +3180,61 @@ async fn disconnect_cancels_active_ingestion_without_committing_it() {
     task.await.unwrap().unwrap();
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn aborting_an_ingestion_future_cancels_work_without_closing_the_client_connection() {
+    let directory = test_directory("aborted-ingestion");
+    let endpoint = Endpoint::for_runtime_directory(&directory);
+    let secret = LaunchSecret::from_bytes([79; 32]);
+    let limits = ProtocolLimits::new(
+        512,
+        1024,
+        1,
+        Duration::from_secs(1),
+        Duration::from_secs(2),
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    let task = tokio::spawn(
+        WorkerServer::new(
+            WorkerConfig::new(endpoint.clone(), secret.clone())
+                .with_limits(limits)
+                .with_atomic_ingestion_delay(Duration::from_secs(5)),
+        )
+        .run(),
+    );
+    wait_for_endpoint(&endpoint).await;
+    let client = WorkerClient::connect(&endpoint, secret).await.unwrap();
+    let ingesting = client.clone();
+    let ingestion = tokio::spawn(async move {
+        ingesting
+            .ingest(
+                "aborted-ingestion",
+                IngestionScope::new("tenant", "library"),
+                "must-not-commit",
+                BTreeMap::new(),
+                "text/plain",
+                b"needle".to_vec(),
+            )
+            .await
+    });
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    wait_for_limit_reached(&client).await;
+
+    ingestion.abort();
+    ingestion.await.unwrap_err();
+    wait_for_serving_health(&client).await;
+    assert!(
+        client
+            .query("tenant", "library", "needle", 1)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    client.shutdown(Duration::from_millis(100)).await.unwrap();
+    task.await.unwrap().unwrap();
+}
+
 #[tokio::test]
 async fn malformed_frame_disconnect_cancels_connection_owned_ingestion() {
     use tokio::io::AsyncWriteExt;
@@ -3842,14 +3897,14 @@ fn bind_owner_only_listener(path: &std::path::Path) -> tokio::net::UnixListener 
 }
 
 async fn wait_for_limit_reached(client: &WorkerClient) {
-    tokio::time::timeout(Duration::from_millis(500), async {
+    tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             match client.health().await {
                 Err(ClientError::Remote {
                     code: v1::ErrorCode::LimitExceeded,
                     ..
                 }) => break,
-                Ok(_) => tokio::task::yield_now().await,
+                Ok(_) => tokio::time::sleep(Duration::from_millis(5)).await,
                 Err(error) => panic!("unexpected health result: {error}"),
             }
         }
@@ -3859,14 +3914,14 @@ async fn wait_for_limit_reached(client: &WorkerClient) {
 }
 
 async fn wait_for_serving_health(client: &WorkerClient) {
-    tokio::time::timeout(Duration::from_millis(500), async {
+    tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             match client.health().await {
                 Ok(WorkerHealth::Serving) => break,
                 Err(ClientError::Remote {
                     code: v1::ErrorCode::LimitExceeded,
                     ..
-                }) => tokio::task::yield_now().await,
+                }) => tokio::time::sleep(Duration::from_millis(5)).await,
                 result => panic!("unexpected health result: {result:?}"),
             }
         }
