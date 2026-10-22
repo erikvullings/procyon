@@ -21,6 +21,8 @@ import type { ThemeDto } from './themeDto.ts';
  * Versioned global settings. Live workspace content is deliberately absent.
  */
 export interface SettingsDto {
+  /** Whether update checks also offer beta releases (not yet approved for the stable channel). */
+  checkForBetaUpdates?: boolean;
   /** Whether the desktop host checks for signed application updates after startup. */
   checkForUpdatesAutomatically: boolean;
   /** Column widths in CSS pixels, keyed by column id, shared by every tab and pane. */

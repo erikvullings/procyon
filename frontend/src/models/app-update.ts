@@ -6,6 +6,12 @@ export interface AppUpdateInfo {
   readonly body?: string;
 }
 
+/** How an update check chooses its channel. */
+export interface AppUpdateCheckOptions {
+  /** Also offer beta releases that are not yet approved for the stable channel. */
+  readonly includeBeta?: boolean;
+}
+
 /** Result of an explicit update check against the build's configured endpoint. */
 export interface AppUpdateCheck {
   readonly currentVersion: string;

@@ -256,13 +256,15 @@ test('protected release workflow signs updater artifacts and notarizes macOS pac
   assert.equal(release.jobs.release.steps[3]['working-directory'], 'release-source');
   assert.match(release.jobs.release.steps[3].run, /check-desktop-release\.mjs/u);
 
-  for (const jobName of ['macos', 'linux', 'windows', 'updater-manifest', 'homebrew']) {
+  for (const jobName of ['macos', 'linux', 'windows', 'updater-manifest']) {
     const checkout = release.jobs[jobName].steps.find((step) =>
       step.uses?.startsWith('actions/checkout@'),
     );
     assert.equal(checkout?.with?.ref, `\${{ needs.release.outputs.release_commit }}`);
   }
-  const createRelease = release.jobs.release.steps.at(-1);
+  const createRelease = release.jobs.release.steps.find(
+    (step) => step.uses === 'softprops/action-gh-release@v3',
+  );
   assert.equal(createRelease.with.tag_name, `\${{ env.RELEASE_TAG }}`);
   assert.equal(
     createRelease.with.prerelease,
@@ -313,6 +315,8 @@ test('protected release workflow signs updater artifacts and notarizes macOS pac
 test('release workflow publishes signed macOS and unsigned Windows and Linux packages', () => {
   const releaseText = workflowText('release-desktop.yml');
   const release = workflow('release-desktop.yml');
+  const homebrewText = workflowText('publish-homebrew.yml');
+  const homebrew = workflow('publish-homebrew.yml');
   const chocolateyText = workflowText('publish-chocolatey.yml');
   const chocolatey = workflow('publish-chocolatey.yml');
 
@@ -338,28 +342,26 @@ test('release workflow publishes signed macOS and unsigned Windows and Linux pac
   assert.match(releaseText, /bundle\/nsis\/\*-setup\.exe\.sig/);
   assert.deepEqual(release.jobs['updater-manifest'].needs, ['macos', 'linux', 'windows']);
   assert.match(releaseText, /generate-updater-manifest\.mjs/);
-  assert.match(releaseText, /gh release upload "\$UPDATE_TAG" latest\.json --clobber/u);
+  assert.match(releaseText, /gh release upload "\$1" latest\.json --clobber/u);
   assert.deepEqual(release.jobs.homebrew.needs, ['macos', 'linux']);
   assert.equal(
     release.jobs.homebrew.if,
-    `\${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.macos.result == 'success' && needs.linux.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}`,
+    `\${{ always() && github.event_name == 'workflow_dispatch' && inputs.channel == 'stable' && needs.macos.result == 'success' && needs.linux.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}`,
   );
-  assert.equal(release.jobs.homebrew.environment, 'desktop-release');
+  assert.equal(release.jobs.homebrew.uses, './.github/workflows/publish-homebrew.yml');
+  assert.equal(homebrew.jobs.homebrew.environment, 'desktop-release');
   assert.equal(release.jobs.chocolatey.needs, 'windows');
   assert.equal(
     release.jobs.chocolatey.if,
-    `\${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.windows.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}`,
+    `\${{ always() && github.event_name == 'workflow_dispatch' && inputs.channel == 'stable' && needs.windows.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}`,
   );
   assert.equal(release.jobs.chocolatey.uses, './.github/workflows/publish-chocolatey.yml');
-  assert.equal(
-    release.jobs.chocolatey.with.release_tag,
-    `\${{ inputs.release_tag || github.ref_name }}`,
-  );
+  assert.equal(release.jobs.chocolatey.with.release_tag, `\${{ inputs.release_tag }}`);
   assert.equal(chocolatey.jobs.chocolatey.environment, 'desktop-release');
   assert.ok(chocolatey.on.workflow_dispatch);
   assert.ok(chocolatey.on.workflow_call);
-  assert.match(releaseText, /vars\.HOMEBREW_TAP_REPOSITORY/);
-  assert.match(releaseText, /secrets\.HOMEBREW_TAP_TOKEN/);
+  assert.match(homebrewText, /vars\.HOMEBREW_TAP_REPOSITORY/);
+  assert.match(homebrewText, /secrets\.HOMEBREW_TAP_TOKEN/);
   assert.match(chocolateyText, /secrets\.CHOCOLATEY_API_KEY/);
   assert.match(chocolateyText, /choco pack/);
   assert.match(chocolateyText, /choco push/);
@@ -454,9 +456,9 @@ test('Gemma releases share the single updater channel and skip package managers'
   assert.match(description.body, /Intel Macs run Procyon without semantic search/u);
   assert.doesNotMatch(description.body, /Apple Silicon \(arm64\) only/u);
   const updater = release.jobs['updater-manifest'];
-  const publish = updater.steps.find((step) => step.name === 'Publish update endpoint');
-  assert.match(publish.run, /UPDATE_TAG=updater-latest\n/u);
-  assert.doesNotMatch(publish.run, /UPDATE_TAG=updater-gemma/u);
+  const publish = updater.steps.find((step) => step.name === 'Publish update endpoints');
+  assert.match(publish.run, /publish updater-latest\n/u);
+  assert.doesNotMatch(publish.run, /publish updater-gemma/u);
   for (const legacy of [
     'updater-gemma-experimental',
     'updater-gemma',
@@ -1323,4 +1325,55 @@ test('README documents release versioning, package managers, smoke checks, and s
   assert.match(readme, /TAURI_SIGNING_PRIVATE_KEY/);
   assert.match(readme, /\.deb/);
   assert.match(readme, /AppImage/);
+});
+
+test('beta releases reach only the beta update channel until a human approves them', () => {
+  const release = workflow('release-desktop.yml');
+  assert.equal(
+    release.env.RELEASE_CHANNEL,
+    `\${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'beta' }}`,
+  );
+  assert.deepEqual(release.on.workflow_dispatch.inputs.channel.options, ['beta', 'stable']);
+  assert.equal(release.on.workflow_dispatch.inputs.channel.default, 'beta');
+  const publish = release.jobs['updater-manifest'].steps.find(
+    (step) => step.name === 'Publish update endpoints',
+  );
+  // The beta manifest is a superset: betas go there only, stable releases to both.
+  assert.match(publish.run, /publish updater-beta\n/u);
+  assert.match(
+    publish.run,
+    /if \[\[ "\$RELEASE_CHANNEL" == "stable" \]\]; then\n\s+publish updater-latest/u,
+  );
+  const marker = release.jobs.release.steps.find((step) => step.name === 'Mark beta releases');
+  assert.equal(marker.if, "env.RELEASE_CHANNEL == 'beta'");
+  assert.match(marker.run, /--prerelease/u);
+  // Neither package manager sees a beta; Chocolatey in particular has human reviewers.
+  for (const job of ['homebrew', 'chocolatey']) {
+    assert.match(release.jobs[job].if, /inputs\.channel == 'stable'/u);
+  }
+  const stable = JSON.parse(read('apps', 'fm-desktop', 'src-tauri', 'tauri.conf.json'));
+  assert.match(stable.plugins.updater.endpoints[0], /updater-latest\/latest\.json$/u);
+  assert.match(
+    read('apps', 'fm-desktop', 'src-tauri', 'src', 'app_update.rs'),
+    /updater-beta\/latest\.json/u,
+  );
+});
+
+test('promoting a beta publishes its existing assets to stable without rebuilding', () => {
+  const promote = workflow('promote-desktop-release.yml');
+  const text = workflowText('promote-desktop-release.yml');
+  assert.deepEqual(Object.keys(promote.on), ['workflow_dispatch']);
+  assert.equal(promote.jobs.promote.environment, 'desktop-release');
+  assert.match(promote.jobs.promote.if, /refs\/heads\/main/u);
+  assert.match(text, /merge-base --is-ancestor/u);
+  assert.match(text, /generate-updater-manifest\.mjs/u);
+  assert.match(text, /publish updater-latest/u);
+  assert.match(text, /publish updater-beta/u);
+  assert.doesNotMatch(text, /build:tauri|cargo build/u);
+  assert.equal(promote.jobs.homebrew.uses, './.github/workflows/publish-homebrew.yml');
+  assert.equal(promote.jobs.chocolatey.uses, './.github/workflows/publish-chocolatey.yml');
+  for (const job of ['homebrew', 'chocolatey']) {
+    assert.equal(promote.jobs[job].needs, 'promote');
+    assert.match(promote.jobs[job].if, /SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true'/u);
+  }
 });

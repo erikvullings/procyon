@@ -22961,6 +22961,10 @@
           "viewerInSeparateWindow"
         ],
         "properties": {
+          "checkForBetaUpdates": {
+            "type": "boolean",
+            "description": "Whether update checks also offer beta releases (not yet approved for the stable channel)."
+          },
           "checkForUpdatesAutomatically": {
             "type": "boolean",
             "description": "Whether the desktop host checks for signed application updates after startup."

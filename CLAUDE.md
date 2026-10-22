@@ -205,8 +205,11 @@ Version is workspace-wide via `[workspace.package].version` in the root `Cargo.t
 accepts numeric pre-release identifiers, hence `0.1.0-1`, `0.1.0-2`, ... not `0.1.0-alpha.1`).
 Flow: bump version → commit → push → wait for `main` CI green (near-instant when the PR was up to
 date with `main` and fully green: `scripts/ci-reuse-gate.mjs` reuses that run for an identical tree) → tag (`vX.Y.Z-N`, matching the
-Cargo version) → push tag → `release-desktop.yml` builds macOS/Windows/Linux, publishes the GitHub
-Release, updates the Homebrew tap, and attempts a Chocolatey push. That push has failed with an
+Cargo version) → push tag → `release-desktop.yml` builds macOS/Windows/Linux and publishes a **beta**
+(GitHub pre-release titled "(beta)", update channel `updater-beta` only; no Homebrew/Chocolatey).
+Opted-in installs (Settings → Updates) receive it. After testing, run the **Promote desktop
+release** workflow (`promote-desktop-release.yml`, input: the tag) to publish the same assets to
+`updater-latest`, update the Homebrew tap, and attempt a Chocolatey push — no rebuild. That push has failed with an
 upstream 504 on every release so far ([chocolatey/home#264](https://github.com/chocolatey/home/issues/264))
 — the built `.nupkg` is still attached to the GitHub Release as a fallback for a manual push, so
 treat the automated failure as a known non-blocking issue, not something to keep re-diagnosing.

@@ -1,9 +1,8 @@
 import { getVersion } from '@tauri-apps/api/app';
-import { convertFileSrc, invoke as tauriInvoke } from '@tauri-apps/api/core';
+import { Channel, convertFileSrc, invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { relaunch } from '@tauri-apps/plugin-process';
-import { check } from '@tauri-apps/plugin-updater';
 
 import type {
   AcceptSemanticInstallationOfferRequest,
@@ -12,6 +11,7 @@ import type {
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
   AppUpdateCheck,
+  AppUpdateCheckOptions,
   AppUpdateProgress,
   ArchiveCredentialRequest,
   ArchiveSummaryRequest,
@@ -272,6 +272,19 @@ async function invokeCancellableRag<T>(
   }
 }
 
+/** An update the desktop host offered, as serialised by its `check_app_update` command. */
+interface AppUpdateMetadata {
+  readonly currentVersion: string;
+  readonly version: string;
+  readonly body: string | null;
+}
+
+/** Download events the desktop host streams while it installs an update. */
+type AppUpdateDownloadEvent =
+  | { readonly event: 'Started'; readonly data: { readonly contentLength: number | null } }
+  | { readonly event: 'Progress'; readonly data: { readonly chunkLength: number } }
+  | { readonly event: 'Finished' };
+
 /**
  * Tauri transport adapter, calling `FileManagerService` through `invoke`
  * (spec §11, §12). Only commands registered on the Rust side (task 0015) are
@@ -280,7 +293,6 @@ async function invokeCancellableRag<T>(
  */
 export class TauriFileManagerClient implements FileManagerClient {
   readonly supportsAppUpdates = true;
-  private pendingAppUpdate: Awaited<ReturnType<typeof check>> | undefined;
 
   openExternalUrl(url: string): Promise<void> {
     return openUrl(url);
@@ -739,22 +751,18 @@ export class TauriFileManagerClient implements FileManagerClient {
     return getVersion();
   }
 
-  async checkForAppUpdate(signal?: AbortSignal): Promise<AppUpdateCheck> {
+  async checkForAppUpdate(
+    signal?: AbortSignal,
+    options: AppUpdateCheckOptions = {},
+  ): Promise<AppUpdateCheck> {
     signal?.throwIfAborted();
-    await this.pendingAppUpdate?.close();
-    this.pendingAppUpdate = undefined;
-    const update = await check({ timeout: 30_000 });
-    try {
-      signal?.throwIfAborted();
-    } catch (error) {
-      await update?.close();
-      throw error;
-    }
-    this.pendingAppUpdate = update;
+    const includeBeta = options.includeBeta === true;
+    const update = await invoke<AppUpdateMetadata | null>('check_app_update', { includeBeta });
+    signal?.throwIfAborted();
     if (update === null) {
       const [currentVersion, latestVersion] = await Promise.all([
         getVersion(),
-        invoke<string>('get_app_update_channel_version'),
+        invoke<string>('get_app_update_channel_version', { includeBeta }),
       ]);
       signal?.throwIfAborted();
       return { currentVersion, latestVersion };
@@ -765,8 +773,7 @@ export class TauriFileManagerClient implements FileManagerClient {
       update: {
         currentVersion: update.currentVersion,
         version: update.version,
-        ...(update.date === undefined ? {} : { date: update.date }),
-        ...(update.body === undefined ? {} : { body: update.body }),
+        ...(update.body === null ? {} : { body: update.body }),
       },
     };
   }
@@ -776,16 +783,11 @@ export class TauriFileManagerClient implements FileManagerClient {
     signal?: AbortSignal,
   ): Promise<void> {
     signal?.throwIfAborted();
-    const update = this.pendingAppUpdate ?? (await check({ timeout: 30_000 }));
-    if (update === null) throw new Error('The selected application update is no longer available.');
-    this.pendingAppUpdate = update;
-    await update.downloadAndInstall((event) => {
+    const onEvent = new Channel<AppUpdateDownloadEvent>((event) => {
       if (event.event === 'Started') {
         onProgress?.({
           event: 'started',
-          ...(event.data.contentLength === undefined
-            ? {}
-            : { contentLength: event.data.contentLength }),
+          ...(event.data.contentLength == null ? {} : { contentLength: event.data.contentLength }),
         });
       } else if (event.event === 'Progress') {
         onProgress?.({ event: 'progress', chunkLength: event.data.chunkLength });
@@ -793,6 +795,7 @@ export class TauriFileManagerClient implements FileManagerClient {
         onProgress?.({ event: 'finished' });
       }
     });
+    await invoke('install_app_update', { onEvent });
     await relaunch();
   }
 

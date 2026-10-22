@@ -736,6 +736,9 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                       automaticChecks: activeDraft.checkForUpdatesAutomatically,
                       onAutomaticChecksChange: (enabled) =>
                         update(current, { checkForUpdatesAutomatically: enabled }),
+                      includeBeta: activeDraft.checkForBetaUpdates,
+                      onIncludeBetaChange: (enabled) =>
+                        update(current, { checkForBetaUpdates: enabled }),
                     }),
                   ]
                 : undefined,

@@ -299,6 +299,9 @@ pub struct Settings {
     pub icon_theme: String,
     /// Whether the desktop host checks for signed application updates after startup.
     pub check_for_updates_automatically: bool,
+    /// Whether update checks also offer beta releases, which reach this channel before they are
+    /// approved for the stable one.
+    pub check_for_beta_updates: bool,
     /// Whether F3 opens the viewer in its own window instead of a tab in the active pane.
     pub viewer_in_separate_window: bool,
     /// Whether the view (sort, columns, mode) a user picks for a folder is remembered and
@@ -390,6 +393,7 @@ impl Default for Settings {
             saved_searches: Vec::new(),
             icon_theme: GENERIC_ICON_THEME.to_owned(),
             check_for_updates_automatically: true,
+            check_for_beta_updates: false,
             viewer_in_separate_window: false,
             remember_folder_views: true,
             folder_views: Vec::new(),
@@ -1085,6 +1089,7 @@ mod tests {
 
         assert_eq!(settings.schema_version, CURRENT_SCHEMA_VERSION);
         assert!(settings.check_for_updates_automatically);
+        assert!(!settings.check_for_beta_updates);
     }
 
     #[test]

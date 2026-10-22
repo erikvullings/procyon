@@ -47,6 +47,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     savedSearches: [],
     iconTheme: 'generic',
     checkForUpdatesAutomatically: true,
+    checkForBetaUpdates: false,
     viewerInSeparateWindow: false,
     rememberFolderViews: true,
     map: DEFAULT_MAP_SETTINGS,
@@ -167,6 +168,19 @@ describe('SettingsEditor', () => {
     expect(onPreview).toHaveBeenCalledWith(
       expect.objectContaining({ checkForUpdatesAutomatically: false }),
     );
+  });
+
+  it('persists the beta channel choice', async () => {
+    const client = new MockFileManagerClient();
+    Object.defineProperty(client, 'supportsAppUpdates', { value: true });
+    vi.spyOn(client as FileManagerClient, 'getAppVersion').mockResolvedValue('0.1.5');
+    const { onPreview } = mountEditor({ client });
+    openSection('Updates');
+
+    const toggles = root.querySelectorAll<HTMLInputElement>('.fm-app-update-settings input');
+    expect(toggles[1]?.checked).toBe(false);
+    toggles[1]?.click();
+    expect(onPreview).toHaveBeenCalledWith(expect.objectContaining({ checkForBetaUpdates: true }));
   });
 
   it('checks for and installs an available signed desktop update on demand', async () => {

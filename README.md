@@ -364,8 +364,8 @@ restart without user confirmation, and a manual **Check now** action remains ava
 The v0.6.0 opt-in Gemma macOS package is Apple Silicon (arm64) only. Later
 Gemma macOS packages are universal: Intel Macs run Procyon and receive updates,
 but semantic search is unavailable on them. Gemma is also available in the
-Linux x86-64 and Windows x86-64 installers. All builds use the single
-`updater-latest` channel. The Gemma package is downloaded directly from its GitHub
+Linux x86-64 and Windows x86-64 installers. All builds use the
+`updater-latest` channel unless beta releases are enabled. The Gemma package is downloaded directly from its GitHub
 Release and does not replace the stable cask or Chocolatey package. E5 remains
 the default. This risk-accepted release is not five-gate qualified; CPU
 resource ceilings, CPU fallback, Windows GPU behavior, cross-host citation
@@ -376,15 +376,25 @@ your needs and report reproducible issues.
 
 The workspace version in `Cargo.toml` is the source for desktop tags named `v<version>`.
 `.github/workflows/release-desktop.yml` builds the Developer ID Application-signed and notarized
-macOS DMG, unsigned Windows MSI/NSIS installers, Linux `.deb` and AppImage packages, then updates
-Homebrew and Chocolatey.
-Release notes and a manual smoke pass are required before promotion. Protected release
+macOS DMG, unsigned Windows MSI/NSIS installers and Linux `.deb` and AppImage packages.
+
+Releases move through two channels. A pushed `v<version>` tag is built as a **beta**: it is
+published as a GitHub pre-release titled "(beta)" and offered only through the `updater-beta`
+update channel, to installs that enabled **Settings → Updates → Also check for beta releases**. It
+does not touch Homebrew or Chocolatey (which has human reviewers). After smoke-testing the beta,
+approve it by running the **Promote desktop release** workflow with the tag: it publishes the very
+assets that were tested to `updater-latest` (and `updater-beta`), updates Homebrew, and submits
+Chocolatey, without rebuilding. To skip the beta step, run `release-desktop.yml` manually for an
+existing tag with `channel: stable`. Stable builds poll `updater-latest`; beta builds poll
+`updater-beta`, which also receives every stable release so beta users never lag behind.
+Release notes and a manual smoke pass are required before promoting a beta. Protected release
 configuration includes `APPLE_CERTIFICATE`, `APPLE_API_KEY_P8`, `HOMEBREW_TAP_TOKEN`, and
 `CHOCOLATEY_API_KEY`. Updater bundles are independently signed on every platform with
 `TAURI_SIGNING_PRIVATE_KEY` and its optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; the public key
 is compiled into the desktop app. The release workflow publishes versioned signed artifacts and
-atomically replaces the `latest.json` asset on the managed `updater-latest` prerelease. This is
-the only update channel: every build, including Gemma release modes, polls it. Builds up to v0.6.0
+atomically replaces the `latest.json` asset on the managed `updater-latest` (stable) and
+`updater-beta` prereleases. Every build, including Gemma release modes, polls one of those two.
+Builds up to v0.6.0
 polled retired `updater-gemma*` channels, so the workflow also refreshes any of those that still exist
 until existing installs have moved to an `updater-latest` build.
 

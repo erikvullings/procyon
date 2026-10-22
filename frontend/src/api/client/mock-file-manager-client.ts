@@ -1438,6 +1438,7 @@ export class MockFileManagerClient implements FileManagerClient {
     savedSearches: [],
     iconTheme: 'generic',
     checkForUpdatesAutomatically: true,
+    checkForBetaUpdates: false,
     viewerInSeparateWindow: false,
     rememberFolderViews: true,
     map: DEFAULT_MAP_SETTINGS,

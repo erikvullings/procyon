@@ -9,9 +9,22 @@ on:
         description: Existing desktop release tag to build
         required: true
         type: string
+      channel:
+        description: >-
+          beta publishes to the beta update channel only; stable also publishes to the stable
+          channel, Homebrew and Chocolatey. Pushed tags always start as beta; approve them with
+          the "Promote desktop release" workflow instead of rebuilding.
+        required: true
+        default: beta
+        type: choice
+        options: [beta, stable]
 
 permissions:
   contents: write
+
+env:
+  # Pushed tags are betas until approved; only a manual stable dispatch skips that step.
+  RELEASE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'beta' }}
 
 jobs:
   release:
@@ -92,6 +105,15 @@ jobs:
           name: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && format('Procyon {0} - Experimental Gemma', env.RELEASE_TAG) || vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' && format('Procyon {0} - Gemma', env.RELEASE_TAG) || vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true' && format('Procyon {0} - Gemma (risk accepted)', env.RELEASE_TAG) || env.RELEASE_TAG }}
           body: >-
             ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL == 'true' && 'EXPERIMENTAL OPT-IN: multilingual E5 remains the default. No model-quality claim is made; the candidate and evaluation remain no-go for model quality, with E5 used only as a negative control. Resource ceilings and anonymous PDF spool peak are unqualified. CPU fallback, cross-host navigation, and upgrade/rollback are unqualified. CPU PDF page-image indexing is slow (up to about 106 seconds per indexed page); the four-page CPU budget takes about eight minutes. PDF text indexing is unaffected. Intel Macs run Procyon without semantic search.' || vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' && 'EmbeddingGemma 2 passed the release-owner five-gate qualification and remains opt-in. Existing E5 libraries are unchanged. Intel Macs run Procyon without semantic search.' || vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true' && 'RISK-ACCEPTED, NOT FIVE-GATE QUALIFIED: EmbeddingGemma 2 is opt-in; multilingual E5 remains the default. The release owner explicitly accepted known gaps: resource gates 1a/1c failed; CPU performance, Windows GPU, and remaining qualification gates are unqualified. Users may choose E5 instead and should file issues for platform problems. Existing E5 libraries are unchanged. Intel Macs run Procyon without semantic search.' || '' }}
+
+      - name: Mark beta releases
+        if: env.RELEASE_CHANNEL == 'beta'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="$(gh release view "$RELEASE_TAG" --json name --jq .name)"
+          case "$TITLE" in *"(beta)") ;; *) TITLE="$TITLE (beta)" ;; esac
+          gh release edit "$RELEASE_TAG" --prerelease --title "$TITLE"
 
   macos:
     name: Signed and notarized macOS bundles
@@ -598,86 +620,47 @@ jobs:
             --tag "$RELEASE_TAG" \
             --version "${RELEASE_TAG#v}" \
             --output latest.json
-      - name: Publish update endpoint
+      - name: Publish update endpoints
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Every build polls the single updater-latest channel.
-          UPDATE_TAG=updater-latest
-          if ! gh release view "$UPDATE_TAG" >/dev/null 2>&1; then
-            gh release create "$UPDATE_TAG" \
-              --prerelease \
-              --title "Procyon updater metadata" \
-              --notes "Managed endpoint for signed desktop update metadata."
-          fi
-          gh release upload "$UPDATE_TAG" latest.json --clobber
-          # Builds up to v0.6.0 poll retired Gemma channels; keep any that still
-          # exist current so those installs migrate to an updater-latest build.
-          for legacy in updater-gemma-experimental updater-gemma updater-gemma-risk-accepted; do
-            if gh release view "$legacy" >/dev/null 2>&1; then
-              gh release upload "$legacy" latest.json --clobber
+          publish() {
+            if ! gh release view "$1" >/dev/null 2>&1; then
+              gh release create "$1" \
+                --prerelease \
+                --title "Procyon updater metadata ($1)" \
+                --notes "Managed endpoint for signed desktop update metadata."
             fi
-          done
+            gh release upload "$1" latest.json --clobber
+          }
+          # Betas reach only the beta channel. A stable release also goes to the beta channel so
+          # beta users never lag behind stable ones.
+          publish updater-beta
+          if [[ "$RELEASE_CHANNEL" == "stable" ]]; then
+            publish updater-latest
+            # Builds up to v0.6.0 poll retired Gemma channels; keep any that still
+            # exist current so those installs migrate to an updater-latest build.
+            for legacy in updater-gemma-experimental updater-gemma updater-gemma-risk-accepted; do
+              if gh release view "$legacy" >/dev/null 2>&1; then
+                gh release upload "$legacy" latest.json --clobber
+              fi
+            done
+          fi
 
   homebrew:
     name: Publish cross-platform Homebrew cask
     needs: [macos, linux]
-    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.macos.result == 'success' && needs.linux.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}
-    runs-on: macos-latest
-    environment: desktop-release
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.release.outputs.release_commit }}
-      - name: Download the macOS and Linux release packages
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download "$RELEASE_TAG" \
-            --pattern "*.dmg" \
-            --pattern "*.AppImage" \
-            --dir package-input
-      - name: Generate the cask from the released packages
-        run: |
-          DMG_PATH="$(find package-input -type f -name '*.dmg' -print -quit)"
-          APPIMAGE_PATH="$(find package-input -type f -name '*.AppImage' -print -quit)"
-          test -n "$DMG_PATH"
-          test -n "$APPIMAGE_PATH"
-          VERSION="${RELEASE_TAG#v}"
-          DMG_SHA256="$(shasum -a 256 "$DMG_PATH" | cut -d ' ' -f 1)"
-          APPIMAGE_SHA256="$(shasum -a 256 "$APPIMAGE_PATH" | cut -d ' ' -f 1)"
-          node scripts/generate-package-manager-files.mjs homebrew \
-            --version "$VERSION" \
-            --sha256 "$DMG_SHA256" \
-            --repository "$GITHUB_REPOSITORY" \
-            --asset "$(basename "$DMG_PATH")" \
-            --linux-sha256 "$APPIMAGE_SHA256" \
-            --linux-asset "$(basename "$APPIMAGE_PATH")" \
-            --output generated-cask/procyon.rb
-      - uses: actions/checkout@v7
-        with:
-          repository: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: homebrew-tap
-      - name: Commit the cask to the tap
-        env:
-          HOMEBREW_TAP_REPOSITORY: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
-        run: |
-          mkdir -p homebrew-tap/Casks
-          cp generated-cask/procyon.rb homebrew-tap/Casks/procyon.rb
-          git -C homebrew-tap config user.name "github-actions[bot]"
-          git -C homebrew-tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C homebrew-tap add Casks/procyon.rb
-          git -C homebrew-tap diff --cached --quiet && exit 0
-          git -C homebrew-tap commit -m "procyon ${RELEASE_TAG#v}"
-          git -C homebrew-tap push
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.channel == 'stable' && needs.macos.result == 'success' && needs.linux.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}
+    uses: ./.github/workflows/publish-homebrew.yml
+    with:
+      release_tag: ${{ inputs.release_tag }}
+    secrets: inherit
 
+  # Chocolatey has human reviewers, so only approved (stable) releases are submitted.
   chocolatey:
     needs: windows
-    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.windows.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.channel == 'stable' && needs.windows.result == 'success' && vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}
     uses: ./.github/workflows/publish-chocolatey.yml
     with:
-      release_tag: ${{ inputs.release_tag || github.ref_name }}
+      release_tag: ${{ inputs.release_tag }}
     secrets: inherit

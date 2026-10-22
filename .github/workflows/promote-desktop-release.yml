@@ -1,0 +1,108 @@
+name: Promote desktop release
+
+# Approves a beta release for everyone: the already-built, already-tested assets are published to
+# the stable update channel, the Homebrew tap and Chocolatey. Nothing is rebuilt.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Beta release tag to approve for the stable channel
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    name: Publish the stable update channel
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    environment: desktop-release
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Require a complete beta release on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          git merge-base --is-ancestor "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" origin/main
+          # The updater metadata of a complete release carries the signed packages of all platforms.
+          gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' > assets.txt
+          for pattern in '\.dmg$' '\.app\.tar\.gz\.sig$' '\.AppImage\.sig$' '-setup\.exe\.sig$'; do
+            grep -Eq "$pattern" assets.txt || { echo "::error::$RELEASE_TAG has no asset matching $pattern; the release build is incomplete."; exit 1; }
+          done
+      - name: Download signed updater artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir updater-assets
+          gh release download "$RELEASE_TAG" \
+            --pattern "*.app.tar.gz" \
+            --pattern "*.app.tar.gz.sig" \
+            --pattern "*.AppImage" \
+            --pattern "*.AppImage.sig" \
+            --pattern "*-setup.exe" \
+            --pattern "*-setup.exe.sig" \
+            --dir updater-assets
+      - name: Generate signed update metadata
+        run: |
+          node scripts/generate-updater-manifest.mjs \
+            --assets updater-assets \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG" \
+            --version "${RELEASE_TAG#v}" \
+            --output latest.json
+      - name: Publish update endpoints
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          publish() {
+            if ! gh release view "$1" >/dev/null 2>&1; then
+              gh release create "$1" \
+                --prerelease \
+                --title "Procyon updater metadata ($1)" \
+                --notes "Managed endpoint for signed desktop update metadata."
+            fi
+            gh release upload "$1" latest.json --clobber
+          }
+          publish updater-beta
+          publish updater-latest
+          for legacy in updater-gemma-experimental updater-gemma updater-gemma-risk-accepted; do
+            if gh release view "$legacy" >/dev/null 2>&1; then
+              gh release upload "$legacy" latest.json --clobber
+            fi
+          done
+      - name: Drop the beta marker from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE="$(gh release view "$RELEASE_TAG" --json name --jq .name)"
+          # Tags with a pre-release part (0.1.0-N) stay GitHub pre-releases, as before.
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            gh release edit "$RELEASE_TAG" --title "${TITLE% (beta)}"
+          else
+            gh release edit "$RELEASE_TAG" --title "${TITLE% (beta)}" --prerelease=false --latest
+          fi
+
+  homebrew:
+    name: Publish cross-platform Homebrew cask
+    needs: promote
+    if: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}
+    uses: ./.github/workflows/publish-homebrew.yml
+    with:
+      release_tag: ${{ inputs.release_tag }}
+    secrets: inherit
+
+  chocolatey:
+    needs: promote
+    if: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}
+    uses: ./.github/workflows/publish-chocolatey.yml
+    with:
+      release_tag: ${{ inputs.release_tag }}
+    secrets: inherit

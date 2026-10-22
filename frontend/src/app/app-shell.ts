@@ -1942,7 +1942,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       return;
     }
     try {
-      availableAppUpdate = (await client.checkForAppUpdate()).update;
+      availableAppUpdate = (
+        await client.checkForAppUpdate(undefined, {
+          includeBeta: currentSettings.checkForBetaUpdates,
+        })
+      ).update;
       m.redraw();
     } catch (error) {
       console.warn('Automatic application update check failed.', error);

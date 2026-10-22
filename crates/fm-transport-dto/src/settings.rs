@@ -226,6 +226,9 @@ pub struct SettingsDto {
     pub icon_theme: String,
     /// Whether the desktop host checks for signed application updates after startup.
     pub check_for_updates_automatically: bool,
+    /// Whether update checks also offer beta releases (not yet approved for the stable channel).
+    #[serde(default)]
+    pub check_for_beta_updates: bool,
     /// Whether F3 opens the viewer in its own window instead of a tab in the active pane.
     pub viewer_in_separate_window: bool,
     /// Whether the view a user picks for a folder is remembered and restored on the next visit

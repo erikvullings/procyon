@@ -61,6 +61,8 @@ export interface Settings {
   readonly savedSearches: readonly SavedSearch[];
   readonly iconTheme: string;
   readonly checkForUpdatesAutomatically: boolean;
+  /** Update checks also offer beta releases not yet approved for the stable channel. */
+  readonly checkForBetaUpdates: boolean;
   /** Opens F3 in its own window instead of a tab in the active pane. */
   readonly viewerInSeparateWindow: boolean;
   /** Remembers and restores the view (sort, columns, mode) chosen for each folder (task 0270). */

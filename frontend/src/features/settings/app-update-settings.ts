@@ -9,6 +9,8 @@ export interface AppUpdateSettingsAttrs {
   readonly client: FileManagerClient;
   readonly automaticChecks: boolean;
   readonly onAutomaticChecksChange: (enabled: boolean) => void;
+  readonly includeBeta: boolean;
+  readonly onIncludeBetaChange: (enabled: boolean) => void;
 }
 
 type UpdatePhase = 'idle' | 'checking' | 'current' | 'available' | 'installing' | 'error';
@@ -27,14 +29,14 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
   let downloadedBytes = 0;
   let totalBytes: number | undefined;
 
-  async function check(client: FileManagerClient): Promise<void> {
+  async function check(client: FileManagerClient, includeBeta: boolean): Promise<void> {
     phase = 'checking';
     update = undefined;
     latestVersion = undefined;
     error = undefined;
     m.redraw();
     try {
-      const result = await client.checkForAppUpdate();
+      const result = await client.checkForAppUpdate(undefined, { includeBeta });
       currentVersion = result.currentVersion;
       latestVersion = result.latestVersion;
       update = result.update;
@@ -86,6 +88,14 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
           onchange: attrs.onAutomaticChecksChange,
         }),
         m('p.fm-settings-help', t('settings', 'automaticUpdateChecksHint')),
+        m(Switch, {
+          label: t('settings', 'betaUpdateChecks'),
+          checked: attrs.includeBeta,
+          left: t('settings', 'off'),
+          right: t('settings', 'on'),
+          onchange: attrs.onIncludeBetaChange,
+        }),
+        m('p.fm-settings-help', t('settings', 'betaUpdateChecksHint')),
         attrs.client.supportsAppUpdates
           ? [
               currentVersion === undefined
@@ -106,7 +116,7 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
                   type: 'button',
                   ...busyButtonAttrs(phase === 'checking'),
                   disabled: phase === 'checking' || phase === 'installing',
-                  onclick: () => void check(attrs.client),
+                  onclick: () => void check(attrs.client, attrs.includeBeta),
                 },
                 phase === 'checking'
                   ? t('settings', 'checkingForUpdates')

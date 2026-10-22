@@ -1,0 +1,72 @@
+name: Publish Homebrew
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: Existing GitHub release tag to package
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub release tag to package
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  homebrew:
+    name: Publish cross-platform Homebrew cask
+    runs-on: macos-latest
+    environment: desktop-release
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+      - name: Download the macOS and Linux release packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$RELEASE_TAG" \
+            --pattern "*.dmg" \
+            --pattern "*.AppImage" \
+            --dir package-input
+      - name: Generate the cask from the released packages
+        run: |
+          DMG_PATH="$(find package-input -type f -name '*.dmg' -print -quit)"
+          APPIMAGE_PATH="$(find package-input -type f -name '*.AppImage' -print -quit)"
+          test -n "$DMG_PATH"
+          test -n "$APPIMAGE_PATH"
+          VERSION="${RELEASE_TAG#v}"
+          DMG_SHA256="$(shasum -a 256 "$DMG_PATH" | cut -d ' ' -f 1)"
+          APPIMAGE_SHA256="$(shasum -a 256 "$APPIMAGE_PATH" | cut -d ' ' -f 1)"
+          node scripts/generate-package-manager-files.mjs homebrew \
+            --version "$VERSION" \
+            --sha256 "$DMG_SHA256" \
+            --repository "$GITHUB_REPOSITORY" \
+            --asset "$(basename "$DMG_PATH")" \
+            --linux-sha256 "$APPIMAGE_SHA256" \
+            --linux-asset "$(basename "$APPIMAGE_PATH")" \
+            --output generated-cask/procyon.rb
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+      - name: Commit the cask to the tap
+        env:
+          HOMEBREW_TAP_REPOSITORY: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
+        run: |
+          mkdir -p homebrew-tap/Casks
+          cp generated-cask/procyon.rb homebrew-tap/Casks/procyon.rb
+          git -C homebrew-tap config user.name "github-actions[bot]"
+          git -C homebrew-tap config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C homebrew-tap add Casks/procyon.rb
+          git -C homebrew-tap diff --cached --quiet && exit 0
+          git -C homebrew-tap commit -m "procyon ${RELEASE_TAG#v}"
+          git -C homebrew-tap push

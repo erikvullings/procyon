@@ -476,6 +476,7 @@ pub fn run() {
         .manage(event_stream::EventSubscriptionRegistry::default())
         .manage(terminal::TerminalRegistry::default())
         .manage(native_menu::NativeMenuActionChannel::default())
+        .manage(app_update::PendingAppUpdate::default())
         .manage(QuittingFlag::default())
         .manage(ExitWarning::default())
         .manage(WindowStateSaveDebouncer::default())
@@ -561,6 +562,8 @@ pub fn run() {
             commands::subscribe_events,
             commands::unsubscribe_events,
             commands::get_runtime_capabilities,
+            app_update::check_app_update,
+            app_update::install_app_update,
             app_update::get_app_update_channel_version,
             commands::get_semantic_component_capabilities,
             commands::get_semantic_ocr_status,
@@ -960,10 +963,13 @@ mod tests {
             })
             .manage(event_stream::EventSubscriptionRegistry::default())
             .manage(native_menu::NativeMenuActionChannel::default())
+            .manage(app_update::PendingAppUpdate::default())
             .invoke_handler(tauri::generate_handler![
                 commands::subscribe_events,
                 commands::unsubscribe_events,
                 commands::get_runtime_capabilities,
+                app_update::check_app_update,
+                app_update::install_app_update,
                 app_update::get_app_update_channel_version,
                 commands::get_semantic_component_capabilities,
                 commands::get_semantic_ocr_status,
