@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import {
   checkDesktopGemmaRelease,
+  semanticWorkerLockClosure,
   verifySemanticWorkerSource,
 } from './check-desktop-gemma-release.mjs';
 import {
@@ -257,6 +258,97 @@ test('desktop release allows reviewed manifest commits but rejects worker source
     () => verifySemanticWorkerSource(candidateRevision, changedWorkerRevision, root),
     /build inputs changed after signed candidate/u,
   );
+});
+
+function lockPackage(name, version, dependencies = [], source = undefined) {
+  const lines = ['[[package]]', `name = "${name}"`, `version = "${version}"`];
+  if (source) lines.push(`source = "${source}"`, `checksum = "${name}-${version}-sum"`);
+  if (dependencies.length > 0) {
+    lines.push('dependencies = [', ...dependencies.map((dependency) => ` "${dependency}",`), ']');
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+const registry = 'registry+https://github.com/rust-lang/crates.io-index';
+
+function workerLock({ version, serde = '1.0.0', unrelated = '1.0.0' }) {
+  return [
+    lockPackage('fm-semantic-worker', version, ['fm-semantic-protocol', 'serde']),
+    lockPackage('fm-semantic-protocol', version, ['serde']),
+    lockPackage('fm-desktop', version, ['tauri']),
+    lockPackage('serde', serde, [], registry),
+    lockPackage('tauri', unrelated, [], registry),
+  ].join('\n');
+}
+
+test('desktop release ignores version bumps, unrelated packages and tests but not worker inputs', (context) => {
+  const root = mkdtempSync(join(tmpdir(), 'semantic-worker-inputs-'));
+  context.after(() => rmSync(root, { force: true, recursive: true }));
+  const run = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+  run('init', '-q');
+  run('config', 'user.email', 'test@example.invalid');
+  run('config', 'user.name', 'Test');
+  for (const crate of ['fm-semantic-worker', 'fm-semantic-protocol', 'fm-desktop']) {
+    mkdirSync(join(root, 'crates', crate, 'src'), { recursive: true });
+    mkdirSync(join(root, 'crates', crate, 'tests'), { recursive: true });
+    writeFileSync(join(root, 'crates', crate, 'src/lib.rs'), 'pub fn run() {}\n');
+    writeFileSync(join(root, 'crates', crate, 'tests/it.rs'), '// test\n');
+  }
+  const manifest = (version, members) =>
+    `[workspace]\nmembers = [${members}]\n\n[workspace.package]\nversion = "${version}"\n\n[workspace.dependencies]\nserde = "1"\n`;
+  const commit = (message, files) => {
+    for (const [file, content] of Object.entries(files)) writeFileSync(join(root, file), content);
+    run('add', '.');
+    run('commit', '-qm', message);
+    return run('rev-parse', 'HEAD');
+  };
+  const signed = commit('Signed candidate', {
+    'Cargo.toml': manifest('0.1.0', '"crates/*"'),
+    'Cargo.lock': workerLock({ version: '0.1.0' }),
+    'rust-toolchain.toml': '[toolchain]\nchannel = "1.0"\n',
+  });
+
+  const harmless = commit('Bump version, change unrelated code, tests and members', {
+    'Cargo.toml': manifest('0.2.0', '"crates/*", "apps/*"'),
+    'Cargo.lock': workerLock({ version: '0.2.0', unrelated: '2.0.0' }),
+    'crates/fm-desktop/src/lib.rs': 'pub fn changed() {}\n',
+    'crates/fm-semantic-worker/tests/it.rs': '// changed test\n',
+  });
+  assert.doesNotThrow(() => verifySemanticWorkerSource(signed, harmless, root));
+
+  const dependency = commit('Update a worker dependency', {
+    'Cargo.lock': workerLock({ version: '0.2.0', unrelated: '2.0.0', serde: '1.0.1' }),
+  });
+  assert.throws(
+    () => verifySemanticWorkerSource(signed, dependency, root),
+    /Cargo\.lock: serde 1\.0\.1|Cargo\.lock: serde 1\.0\.0/u,
+  );
+
+  const protocol = commit('Change a crate the worker depends on', {
+    'Cargo.lock': workerLock({ version: '0.2.0', unrelated: '2.0.0' }),
+    'crates/fm-semantic-protocol/src/lib.rs': 'pub fn changed() {}\n',
+  });
+  assert.throws(
+    () => verifySemanticWorkerSource(signed, protocol, root),
+    /crates\/fm-semantic-protocol\/src\/lib\.rs/u,
+  );
+
+  const toolchain = commit('Change the toolchain', {
+    'rust-toolchain.toml': '[toolchain]\nchannel = "1.1"\n',
+  });
+  assert.throws(
+    () => verifySemanticWorkerSource(harmless, toolchain, root),
+    /rust-toolchain\.toml/u,
+  );
+});
+
+test('worker lock closure covers only packages reachable from the worker', () => {
+  const closure = semanticWorkerLockClosure(workerLock({ version: '0.1.0' }));
+  assert.deepEqual([...closure.keys()].sort(), [
+    'fm-semantic-protocol',
+    'fm-semantic-worker',
+    'serde 1.0.0',
+  ]);
 });
 
 test('catalog source identity requires one matching Procyon worker provenance record', () => {
