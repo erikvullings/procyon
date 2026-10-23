@@ -50,6 +50,24 @@ fn remove_dir_retrying(path: &Path) -> std::io::Result<()> {
     fs::remove_dir(path)
 }
 
+/// A directory without owner read/write/search permission (mode 000, say) can be neither listed
+/// nor emptied, yet its owner may always restore access. Only called once the user has
+/// overridden read-only protection; failures are left for the real operation to report.
+#[cfg(unix)]
+fn grant_owner_access(directory: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    const OWNER_ALL: u32 = 0o700;
+    if let Ok(metadata) = fs::symlink_metadata(directory) {
+        let mode = metadata.permissions().mode();
+        if metadata.is_dir() && mode & OWNER_ALL != OWNER_ALL {
+            let _ = fs::set_permissions(directory, fs::Permissions::from_mode(mode | OWNER_ALL));
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn grant_owner_access(_directory: &Path) {}
+
 struct Queue {
     directories: VecDeque<PathBuf>,
     /// Directories currently being scanned by a worker.
@@ -93,6 +111,9 @@ impl Shared<'_> {
 
     /// Scans one directory: unlinks its files and queues its subdirectories.
     fn scan(&self, directory: &Path) {
+        if self.override_read_only {
+            grant_owner_access(directory);
+        }
         let children = match fs::read_dir(directory) {
             Ok(children) => children,
             Err(error) => return self.fail(directory, error),
