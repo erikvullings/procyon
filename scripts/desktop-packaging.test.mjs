@@ -275,7 +275,7 @@ test('protected release workflow signs updater artifacts and notarizes macOS pac
     `\${{ (vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED == 'true' || vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true') && 'false' || '' }}`,
   );
   assert.match(createRelease.with.body, /EXPERIMENTAL OPT-IN:/u);
-  assert.match(createRelease.with.body, /RISK-ACCEPTED, NOT FIVE-GATE QUALIFIED:/u);
+  assert.match(createRelease.with.body, /has not completed the full qualification yet:/u);
 
   for (const jobName of ['macos', 'windows', 'linux']) {
     assert.equal(release.jobs[jobName].environment, 'desktop-release');

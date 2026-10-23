@@ -152,10 +152,10 @@ describe('SemanticComponentManagement', () => {
     await waitForLoaded();
 
     expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
-      'risk accepted; not five-gate qualified',
+      'EmbeddingGemma 2 (opt-in)',
     );
     expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
-      'has not passed the five-gate qualification',
+      'has not completed the full qualification yet',
     );
     expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
       'file an issue for CPU or Windows GPU problems',

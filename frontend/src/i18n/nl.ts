@@ -1492,11 +1492,11 @@ export const nl = {
       'Meertalig zoeken van hogere kwaliteit met meer schijf-, geheugen- en indexeerkosten.',
     gemmaName: 'EmbeddingGemma 2 (experimenteel)',
     gemmaQualifiedName: 'EmbeddingGemma 2',
-    gemmaRiskAcceptedName: 'EmbeddingGemma 2 (risico geaccepteerd; niet vijf-gates gekwalificeerd)',
+    gemmaRiskAcceptedName: 'EmbeddingGemma 2 (optioneel)',
     gemmaDescription:
       'Tekst en code op de CPU, met optionele indexering van afbeeldingen, audio en video. Vereist een afzonderlijke, nieuwe index.',
     gemmaRiskAcceptedDescription:
-      'Optioneel pakket met door de release-eigenaar geaccepteerde risico’s; het heeft de kwalificatie met vijf gates niet doorstaan. Resourcegates 1a en 1c zijn mislukt; CPU-prestaties, overige resourcegates, navigatie tussen hosts, upgrade/rollback, privé-mediakwalificatie en Windows-GPU zijn niet gekwalificeerd. Gebruik zo nodig E5 en meld problemen met CPU of Windows-GPU als issue. Gemma op macOS vereist Apple Silicon.',
+      'Optioneel model; meertalig E5 blijft de standaard. Gemma heeft de volledige kwalificatie nog niet doorlopen: resourcegebruik, CPU-prestaties, navigatie tussen hosts, upgrade/rollback, indexering van privémedia en Windows-GPU zijn nog niet volledig geverifieerd. Gebruik zo nodig E5 en meld problemen met CPU of Windows-GPU als issue. Gemma op macOS vereist Apple Silicon.',
     gemmaSetupTitle: 'Nieuwe EmbeddingGemma 2-bibliotheek',
     gemmaFreshLibraryExplanation:
       'Dit begint met een lege bibliotheek. Uw E5-bibliotheek en index blijven intact. De gekozen embeddingdimensie staat vast voor deze bibliotheek; keuzes voor media-indexering kunnen later worden gewijzigd. Instellingen opslaan installeert Gemma niet. Met Accepteren en installeren wordt de nieuwe bibliotheek gemaakt en begint het downloaden van het model.',
