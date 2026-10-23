@@ -284,6 +284,12 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
               ) {
                 ctx.removeOperationSourcesFromSearchResults(current);
                 ctx.removeOperationSourcesFromDiskUsage(current);
+              } else if (
+                shouldRefreshOnTerminalOperation(current) &&
+                (current.kind === 'trash' || current.kind === 'delete' || current.kind === 'move')
+              ) {
+                // A partly failed removal leaves an unknown remainder; the scan must be redone.
+                ctx.removeOperationSourcesFromDiskUsage(current);
               }
               if (!shouldAutoDismissOperation(current)) continue;
               if (

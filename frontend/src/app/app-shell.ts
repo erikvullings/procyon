@@ -3064,6 +3064,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       if (entry.state.type !== 'loaded') continue;
       const root = removeDiskUsageNodes(entry.state.result.root, sourceUris);
       if (root === entry.state.result.root) continue;
+      if (operation.state !== 'completed') {
+        // Some sources may remain, so their sizes are unknown: scan the tab's root again.
+        startDiskUsageScan(entry.paneId, entry.tabId, entry.location);
+        continue;
+      }
       if (!entry.progressComplete) {
         entry.abort.abort();
         entry.progressComplete = true;

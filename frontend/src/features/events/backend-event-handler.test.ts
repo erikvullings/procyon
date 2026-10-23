@@ -1063,6 +1063,45 @@ describe('createBackendEventHandler', () => {
       );
     });
 
+    it('asks disk usage to rescan after a partly failed delete', () => {
+      const failedOperation: Operation = {
+        id: 'op-failed' as never,
+        kind: 'delete',
+        state: 'failed',
+        sources: [
+          {
+            id: 'entry-1' as never,
+            location: { providerId: 'local', uri: 'file:///tmp/worktree' },
+          },
+        ],
+        progress: { completedItems: 1, completedBytes: 1 },
+        conflictPolicy: 'ask',
+        createdAt: '2026-01-01T00:00:00Z',
+      };
+      const pending: BackendEvent[] = [];
+      const ctx = makeContext({
+        pushPendingOperationEvent: vi.fn((event: BackendEvent) => pending.push(event)),
+        clearPendingOperationEvents: vi.fn(() => pending.splice(0)),
+      });
+      const raf = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+
+      try {
+        createBackendEventHandler(ctx)(
+          makeEvent({ type: 'operation.completed', operation: failedOperation }, WS_ID),
+        );
+      } finally {
+        raf.mockRestore();
+      }
+
+      expect(ctx.removeOperationSourcesFromDiskUsage).toHaveBeenCalledExactlyOnceWith(
+        failedOperation,
+      );
+      expect(ctx.removeOperationSourcesFromSearchResults).not.toHaveBeenCalled();
+    });
+
     it('does not auto-dismiss a completed operation while undo remains available', () => {
       const runningOperation: Operation = {
         id: 'undoable-trash' as never,
