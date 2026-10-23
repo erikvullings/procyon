@@ -9,6 +9,8 @@ import { diagnosticsFromDto } from './diagnostics';
 
 interface DiagnosticsViewAttrs {
   readonly client: FileManagerClient;
+  /** Whether this install also checks for beta releases (Settings → Updates). */
+  readonly betaUpdates?: boolean;
 }
 
 interface DiagnosticsState {
@@ -46,7 +48,7 @@ export const DiagnosticsViewComponent: FactoryComponent<DiagnosticsViewAttrs> = 
     oncreate: () => {
       void loadDiagnostics();
     },
-    view: (): Vnode => {
+    view: ({ attrs: current }): Vnode => {
       if (state.loading) {
         return m('div.diagnostics-view', m('p', t('diagnostics', 'loading')));
       }
@@ -70,7 +72,7 @@ export const DiagnosticsViewComponent: FactoryComponent<DiagnosticsViewAttrs> = 
           m(
             'button.copy-btn',
             {
-              onclick: () => void copyDiagnosticsToClipboard(diag),
+              onclick: () => void copyDiagnosticsToClipboard(diag, current.betaUpdates === true),
               title: t('diagnostics', 'copyTitle'),
             },
             t('diagnostics', 'copyForBugReport'),
@@ -89,6 +91,14 @@ export const DiagnosticsViewComponent: FactoryComponent<DiagnosticsViewAttrs> = 
               : []),
             m('dt', t('diagnostics', 'platform')),
             m('dd', diag.platform),
+            m('dt', t('diagnostics', 'updateChannel')),
+            m(
+              'dd',
+              t(
+                'diagnostics',
+                current.betaUpdates === true ? 'updateChannelBeta' : 'updateChannelStable',
+              ),
+            ),
           ]),
         ]),
 
@@ -244,13 +254,17 @@ function formatDuration(seconds: number): string {
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
 
-async function copyDiagnosticsToClipboard(diag: DiagnosticsView): Promise<void> {
+async function copyDiagnosticsToClipboard(
+  diag: DiagnosticsView,
+  betaUpdates: boolean,
+): Promise<void> {
   const lines = [
     '=== Application Diagnostics ===',
     `Frontend: ${diag.frontendVersion}`,
     `Backend: ${diag.backendVersion}`,
     diag.tauriVersion !== undefined ? `Tauri: ${diag.tauriVersion}` : null,
     `Platform: ${diag.platform}`,
+    `Update channel: ${betaUpdates ? 'beta' : 'stable'}`,
     `Runtime: ${diag.runtimeCapabilities.runtime ?? 'Unknown'}`,
     `Semantic component authority: ${diag.runtimeCapabilities.semanticComponentAuthority}`,
     `Semantic executable download: ${diag.runtimeCapabilities.semanticRuntimeExecutableDownload}`,

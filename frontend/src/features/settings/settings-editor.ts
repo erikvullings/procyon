@@ -749,7 +749,10 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                       '.row',
                       m('h4.fm-settings-section-heading.col.s12', t('shell', 'systemDiagnostics')),
                     ),
-                    m(DiagnosticsViewComponent, { client: current.client }),
+                    m(DiagnosticsViewComponent, {
+                      client: current.client,
+                      betaUpdates: activeDraft.checkForBetaUpdates,
+                    }),
                   ]
                 : undefined,
 
