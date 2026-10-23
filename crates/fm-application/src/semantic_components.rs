@@ -3678,6 +3678,12 @@ fn map_managed_status(
         .components()
         .iter()
         .any(|component| trusted_artifact_ids.contains(component.artifact_id().as_str()));
+    // A worker from an older catalog generation is no longer launchable, so the install is
+    // incomplete (not enabled) until the current signed worker is installed again.
+    let has_trusted_worker = report.components().iter().any(|component| {
+        matches!(component.kind(), core::ArtifactKind::Worker)
+            && trusted_artifact_ids.contains(component.artifact_id().as_str())
+    });
     let migration = has_trusted_components
         .then(|| state.pending_model_migration().map(map_pending_migration))
         .flatten();
@@ -3693,7 +3699,7 @@ fn map_managed_status(
             | SemanticComponentLifecycle::Uninstalled { .. }
     ) {
         observed
-    } else if !has_trusted_components {
+    } else if !has_trusted_components || !has_trusted_worker {
         SemanticComponentLifecycle::Absent
     } else {
         SemanticComponentLifecycle::InstalledEnabled

@@ -1289,13 +1289,16 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
 
   function renderManagement(current: LoadedState): Vnode[] {
     const { capabilities, profiles, status } = current;
-    const switchProfiles = status.activeModel
-      ? profiles.filter((profile) =>
-          status.activeModel?.profile === 'embeddingGemma2'
-            ? profile.profile !== 'embeddingGemma2'
-            : profile.profile === 'embeddingGemma2',
-        )
-      : profiles;
+    // An active model whose worker generation is missing reports `absent`: every profile,
+    // including the active one, is then offered so the current worker can be installed again.
+    const switchProfiles =
+      status.activeModel && status.lifecycle.state !== 'absent'
+        ? profiles.filter((profile) =>
+            status.activeModel?.profile === 'embeddingGemma2'
+              ? profile.profile !== 'embeddingGemma2'
+              : profile.profile === 'embeddingGemma2',
+          )
+        : profiles;
     const managed =
       capabilities.authority === 'desktopManaged' || capabilities.authority === 'deterministicMock';
     const developerBundle = profiles.some((profile) =>
