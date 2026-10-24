@@ -64,3 +64,31 @@
   outline-offset: 1px;
   color: inherit;
 }
+
+.fm-quick-filter-advanced {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  height: 1.5rem;
+  min-width: 1.5rem;
+  padding: 0 0.25rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fm-text-muted);
+  cursor: pointer;
+}
+
+.fm-quick-filter-advanced:hover,
+.fm-quick-filter-advanced[aria-pressed="true"] {
+  color: inherit;
+  background: var(--fm-hover);
+}
+
+.fm-quick-filter-advanced:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 1px;
+  color: inherit;
+}

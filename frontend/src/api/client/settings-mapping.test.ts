@@ -84,3 +84,35 @@ it('preserves existing exact-concept predicates independently of similarity prov
     enrolledRootIds: ['root-1'],
   });
 });
+
+it('round-trips saved filter presets and tolerates older settings without them', async () => {
+  const settings = await new MockFileManagerClient().getSettings();
+  const presets = [
+    {
+      name: 'Big recent videos',
+      criteria: {
+        name: '*.mkv',
+        kind: 'file' as const,
+        minSize: 1_048_576,
+        maxSize: null,
+        modifiedWithinDays: 30,
+        modifiedOlderThanDays: null,
+        hidden: 'exclude' as const,
+        executable: 'any' as const,
+      },
+    },
+  ];
+  const dto = settingsToDto({ ...settings, filterPresets: presets });
+  expect(settingsFromDto(dto).filterPresets).toEqual(presets);
+
+  const { filterPresets: _omitted, ...older } = dto;
+  expect(settingsFromDto(older).filterPresets).toEqual([]);
+  // Omitted numeric bounds (serialised `null` or absent) both mean "no bound".
+  const sparse: typeof dto = {
+    ...dto,
+    filterPresets: [
+      { name: 'x', criteria: { name: '', kind: 'any', hidden: 'any', executable: 'any' } },
+    ],
+  };
+  expect(settingsFromDto(sparse).filterPresets[0]?.criteria.minSize).toBeNull();
+});

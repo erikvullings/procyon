@@ -30,6 +30,27 @@ export interface MultiRenamePreset {
   readonly rules: MultiRenameRules;
 }
 
+export type FilterKind = 'any' | 'file' | 'directory' | 'symlink';
+export type FilterToggle = 'any' | 'only' | 'exclude';
+
+/** Structured pane-filter criteria; applied to the loaded directory listing only (task 0169). */
+export interface FilterCriteria {
+  /** `;`-separated name masks (substring or `*`/`?` glob). */
+  readonly name: string;
+  readonly kind: FilterKind;
+  readonly minSize: number | null;
+  readonly maxSize: number | null;
+  readonly modifiedWithinDays: number | null;
+  readonly modifiedOlderThanDays: number | null;
+  readonly hidden: FilterToggle;
+  readonly executable: FilterToggle;
+}
+
+export interface FilterPreset {
+  readonly name: string;
+  readonly criteria: FilterCriteria;
+}
+
 /** Versioned application-wide settings returned by both backend transports. */
 export interface Settings {
   readonly schemaVersion: number;
@@ -58,6 +79,7 @@ export interface Settings {
   readonly favouriteLocations: readonly FavouriteLocation[];
   readonly recentLocationsByWorkspace: Readonly<Record<string, readonly Location[]>>;
   readonly multiRenamePresets: readonly MultiRenamePreset[];
+  readonly filterPresets: readonly FilterPreset[];
   readonly savedSearches: readonly SavedSearch[];
   readonly iconTheme: string;
   readonly checkForUpdatesAutomatically: boolean;

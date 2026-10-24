@@ -6,6 +6,7 @@ import type { ConflictPolicyDto } from './conflictPolicyDto.ts';
 import type { DateFormatDto } from './dateFormatDto.ts';
 import type { DefaultPaneLayoutDto } from './defaultPaneLayoutDto.ts';
 import type { FavouriteLocationDto } from './favouriteLocationDto.ts';
+import type { FilterPresetDto } from './filterPresetDto.ts';
 import type { LanguageDto } from './languageDto.ts';
 import type { MapSettingsDto } from './mapSettingsDto.ts';
 import type { MultiRenamePresetDto } from './multiRenamePresetDto.ts';
@@ -50,6 +51,8 @@ export interface SettingsDto {
   enabledPlugins: string[];
   /** User-managed named locations, in the order shown by the favourites menu. */
   favouriteLocations: FavouriteLocationDto[];
+  /** User-named reusable pane filters. */
+  filterPresets?: FilterPresetDto[];
   /**
      * Base font size in CSS pixels.
      * @minimum 0

@@ -5829,6 +5829,7 @@ describe('AppShell', () => {
       favouriteLocations: [],
       recentLocationsByWorkspace: {},
       multiRenamePresets: [],
+      filterPresets: [],
       savedSearches: [],
       iconTheme: 'mock.archive',
       checkForUpdatesAutomatically: true,

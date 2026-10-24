@@ -1,6 +1,6 @@
 import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
 import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
-import { closeIcon, filterIcon } from '../../components/tabler-icons';
+import { adjustmentsHorizontalIcon, closeIcon, filterIcon } from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import { FILE_CLIPBOARD_PASSTHROUGH_ATTRIBUTE } from './quick-filter';
 import './quick-filter.css';
@@ -12,6 +12,13 @@ export interface QuickFilterInputAttrs {
   readonly onCommit: () => void;
   /** Removes the filter and closes the box (Esc and the clear button). */
   readonly onClose: () => void;
+  /** Advanced-filter toggle (task 0169); absent where the host offers no advanced mode. */
+  readonly advanced?: {
+    readonly open: boolean;
+    /** How many structured criteria are set. */
+    readonly activeCount: number;
+    readonly onToggle: () => void;
+  };
 }
 
 function hasTextSelection(input: HTMLInputElement): boolean {
@@ -75,6 +82,33 @@ export const QuickFilterInput: FactoryComponent<QuickFilterInputAttrs> = () => {
             }
           },
         }),
+        attrs.advanced === undefined
+          ? undefined
+          : m(
+              'button.fm-quick-filter-advanced',
+              {
+                type: 'button',
+                'aria-label': t('advancedFilter', 'toggle'),
+                'aria-pressed': String(attrs.advanced.open),
+                title: t('advancedFilter', 'toggle'),
+                // Keep the text input's blur from committing before the panel opens.
+                onmousedown: (event: MouseEvent) => event.preventDefault(),
+                onclick: () => attrs.advanced?.onToggle(),
+                onkeydown: (event: KeyboardEvent) => {
+                  event.stopPropagation();
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    close(attrs);
+                  }
+                },
+              },
+              [
+                adjustmentsHorizontalIcon({ size: 14 }),
+                attrs.advanced.activeCount > 0
+                  ? m('span.fm-quick-filter-advanced-count', String(attrs.advanced.activeCount))
+                  : undefined,
+              ],
+            ),
         m(
           'button.fm-quick-filter-clear',
           {

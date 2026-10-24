@@ -133,3 +133,4 @@ some in the new Freezer section of `TASKS/README.md`, split others into real tas
   same product-priority call on which of the remaining rows to split out vs. freeze.
 - 2026-09-30 Copilot: Shift+Ctrl+F5 row resolved by 0168 (`core.createLink`: symbolic links,
   Windows junctions and `.lnk` shortcuts as operation-engine jobs).
+- 2026-10-24 Claude: Ctrl+F12 (saved filter presets) was delivered by [0169](0169-saved-advanced-filter-presets.md), including a structured advanced filter and an extension-based executable criterion (Ctrl+F11's intent).

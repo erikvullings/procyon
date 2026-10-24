@@ -4,12 +4,13 @@
 //! conversion functions with no dependency on the rest of the facade.
 
 use fm_settings::{
-    ConflictPolicy, DateFormat, DefaultPaneLayout, Language, MapBasemap, MapSettings,
-    MultiRenameCaseTransform, MultiRenamePreset, MultiRenameRules, MultiRenameSequence, Settings,
-    SizeFormat, Theme,
+    ConflictPolicy, DateFormat, DefaultPaneLayout, FilterCriteria, FilterKind, FilterPreset,
+    FilterToggle, Language, MapBasemap, MapSettings, MultiRenameCaseTransform, MultiRenamePreset,
+    MultiRenameRules, MultiRenameSequence, Settings, SizeFormat, Theme,
 };
 use fm_transport_dto::{
-    ConceptHierarchyScopeDto, ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, LanguageDto,
+    ConceptHierarchyScopeDto, ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto,
+    FilterCriteriaDto, FilterKindDto, FilterPresetDto, FilterToggleDto, LanguageDto,
     MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto, MultiRenamePresetDto,
     MultiRenameRulesDto, MultiRenameSequenceDto, SavedSearchDto, SearchConceptPredicateDto,
     SearchContentPredicateDto, SearchEntryKindDto, SearchGitStatusDto, SearchModeDto,
@@ -112,6 +113,28 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
                         MultiRenameCaseTransform::Lower => MultiRenameCaseTransformDto::Lower,
                         MultiRenameCaseTransform::Title => MultiRenameCaseTransformDto::Title,
                     },
+                },
+            })
+            .collect(),
+        filter_presets: settings
+            .filter_presets
+            .into_iter()
+            .map(|preset| FilterPresetDto {
+                name: preset.name,
+                criteria: FilterCriteriaDto {
+                    name: preset.criteria.name,
+                    kind: match preset.criteria.kind {
+                        FilterKind::Any => FilterKindDto::Any,
+                        FilterKind::File => FilterKindDto::File,
+                        FilterKind::Directory => FilterKindDto::Directory,
+                        FilterKind::Symlink => FilterKindDto::Symlink,
+                    },
+                    min_size: preset.criteria.min_size,
+                    max_size: preset.criteria.max_size,
+                    modified_within_days: preset.criteria.modified_within_days,
+                    modified_older_than_days: preset.criteria.modified_older_than_days,
+                    hidden: toggle_to_dto(preset.criteria.hidden),
+                    executable: toggle_to_dto(preset.criteria.executable),
                 },
             })
             .collect(),
@@ -231,6 +254,28 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
                 },
             })
             .collect(),
+        filter_presets: settings
+            .filter_presets
+            .into_iter()
+            .map(|preset| FilterPreset {
+                name: preset.name,
+                criteria: FilterCriteria {
+                    name: preset.criteria.name,
+                    kind: match preset.criteria.kind {
+                        FilterKindDto::Any => FilterKind::Any,
+                        FilterKindDto::File => FilterKind::File,
+                        FilterKindDto::Directory => FilterKind::Directory,
+                        FilterKindDto::Symlink => FilterKind::Symlink,
+                    },
+                    min_size: preset.criteria.min_size,
+                    max_size: preset.criteria.max_size,
+                    modified_within_days: preset.criteria.modified_within_days,
+                    modified_older_than_days: preset.criteria.modified_older_than_days,
+                    hidden: toggle_from_dto(preset.criteria.hidden),
+                    executable: toggle_from_dto(preset.criteria.executable),
+                },
+            })
+            .collect(),
         saved_searches: settings
             .saved_searches
             .into_iter()
@@ -249,6 +294,22 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         // Backend-owned: `update_settings` keeps the live list.
         folder_views: Vec::new(),
         map: map_settings_from_dto(settings.map),
+    }
+}
+
+fn toggle_to_dto(toggle: FilterToggle) -> FilterToggleDto {
+    match toggle {
+        FilterToggle::Any => FilterToggleDto::Any,
+        FilterToggle::Only => FilterToggleDto::Only,
+        FilterToggle::Exclude => FilterToggleDto::Exclude,
+    }
+}
+
+fn toggle_from_dto(toggle: FilterToggleDto) -> FilterToggle {
+    match toggle {
+        FilterToggleDto::Any => FilterToggle::Any,
+        FilterToggleDto::Only => FilterToggle::Only,
+        FilterToggleDto::Exclude => FilterToggle::Exclude,
     }
 }
 
@@ -565,5 +626,32 @@ mod semantic_source_tests {
         }))
         .expect("older semantic query");
         assert_eq!(query.selected_concept, None);
+    }
+}
+
+#[cfg(test)]
+mod filter_preset_tests {
+    use super::*;
+
+    #[test]
+    fn filter_presets_survive_the_dto_round_trip() {
+        let settings = Settings {
+            filter_presets: vec![FilterPreset {
+                name: "Scripts".into(),
+                criteria: FilterCriteria {
+                    name: "*.sh".into(),
+                    kind: FilterKind::File,
+                    min_size: Some(1),
+                    max_size: Some(4096),
+                    modified_within_days: Some(7),
+                    modified_older_than_days: Some(1),
+                    hidden: FilterToggle::Exclude,
+                    executable: FilterToggle::Only,
+                },
+            }],
+            ..Settings::default()
+        };
+        let round_tripped = settings_from_dto(settings_to_dto(settings.clone()));
+        assert_eq!(round_tripped.filter_presets, settings.filter_presets);
     }
 }

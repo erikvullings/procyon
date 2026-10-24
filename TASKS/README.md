@@ -73,7 +73,7 @@ The dual-pane shell: layout, panes, tabs, sorting, selection, and finding things
 - [x] 0162 Smart folders and saved searches *(needs 0030, 0068, 0089)*
 - [x] 0166 Native indexed search *(needs 0058, 0068, 0089)*
 - [x] 0223 Workspace chrome and splitter polish *(needs 0025, 0026, 0045, 0094, 0222)*
-- [ ] 0169 Saved advanced filter presets *(needs 0030, 0067)*
+- [x] 0169 Saved advanced filter presets *(needs 0030, 0067)*
 - [x] 0069 Tabs per pane
 - [x] 0070 Favourites, bookmarks and recent locations
 - [x] 0089 Content search across files

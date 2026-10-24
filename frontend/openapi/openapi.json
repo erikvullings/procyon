@@ -12548,6 +12548,107 @@
           "tooLarge"
         ]
       },
+      "FilterCriteriaDto": {
+        "type": "object",
+        "description": "Structured pane-filter criteria applied to the loaded directory listing.",
+        "required": [
+          "name",
+          "kind",
+          "hidden",
+          "executable"
+        ],
+        "properties": {
+          "executable": {
+            "$ref": "#/components/schemas/FilterToggleDto",
+            "description": "Executable-status constraint."
+          },
+          "hidden": {
+            "$ref": "#/components/schemas/FilterToggleDto",
+            "description": "Hidden-state constraint."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FilterKindDto",
+            "description": "Entry kind constraint."
+          },
+          "maxSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Largest size in bytes.",
+            "minimum": 0
+          },
+          "minSize": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Smallest size in bytes.",
+            "minimum": 0
+          },
+          "modifiedOlderThanDays": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Keep entries last modified more than this many days ago.",
+            "minimum": 0
+          },
+          "modifiedWithinDays": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Keep entries modified within this many days.",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "description": "`;`-separated name masks (substring or `*`/`?` glob)."
+          }
+        }
+      },
+      "FilterKindDto": {
+        "type": "string",
+        "description": "Entry-kind constraint of a saved pane filter.",
+        "enum": [
+          "any",
+          "file",
+          "directory",
+          "symlink"
+        ]
+      },
+      "FilterPresetDto": {
+        "type": "object",
+        "description": "A user-named reusable pane filter.",
+        "required": [
+          "name",
+          "criteria"
+        ],
+        "properties": {
+          "criteria": {
+            "$ref": "#/components/schemas/FilterCriteriaDto",
+            "description": "Criteria restored when the preset is loaded."
+          },
+          "name": {
+            "type": "string",
+            "description": "Unique user-visible preset name."
+          }
+        }
+      },
+      "FilterToggleDto": {
+        "type": "string",
+        "description": "Tri-state constraint of a saved pane filter.",
+        "enum": [
+          "any",
+          "only",
+          "exclude"
+        ]
+      },
       "FindLinkReplacementsRequestDto": {
         "type": "object",
         "description": "Searches for files that could replace a missing link target\n(`POST /api/v1/link-doctor-replacements`).",
@@ -23815,6 +23916,13 @@
               "$ref": "#/components/schemas/FavouriteLocationDto"
             },
             "description": "User-managed named locations, in the order shown by the favourites menu."
+          },
+          "filterPresets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilterPresetDto"
+            },
+            "description": "User-named reusable pane filters."
           },
           "fontSize": {
             "type": "integer",

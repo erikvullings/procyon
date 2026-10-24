@@ -43,6 +43,7 @@ import type {
   TableConfigAttrs,
 } from '../panes/pane';
 import { Pane, type PaneRenameRequest } from '../panes/pane';
+import type { AdvancedFilterAttrs } from '../quick-filter/advanced-filter-bar';
 import type { SearchPresentation } from '../search/search-presentation';
 import type { SelectionPlatform } from '../selection/keybindings';
 import type { SelectionAction } from '../selection/selection';
@@ -68,6 +69,7 @@ export interface WorkspacePaneContent {
   /** Backing volume's total/available capacity, when known (task 0096). */
   readonly volumeCapacity?: VolumeCapacity;
   readonly hiddenSelectedCount: number;
+  readonly advancedFilter?: AdvancedFilterAttrs;
   readonly filterOpen: boolean;
   readonly filterQuery: string;
   readonly formatSettings?: EntryFormatSettings;
@@ -683,6 +685,7 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             hiddenSelectedCount: content.hiddenSelectedCount,
           } satisfies DirectorySummaryAttrs,
           filter: {
+            ...(content.advancedFilter === undefined ? {} : { advanced: content.advancedFilter }),
             filterOpen: content.filterOpen,
             filterQuery: content.filterQuery,
             onFilterQueryChange: content.onFilterQueryChange,

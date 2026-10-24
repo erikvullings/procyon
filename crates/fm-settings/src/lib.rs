@@ -209,6 +209,112 @@ pub struct MultiRenamePreset {
     pub rules: MultiRenameRules,
 }
 
+/// Most saved filter presets kept; later entries are dropped on load and save (task 0169).
+pub const MAX_FILTER_PRESETS: usize = 100;
+/// Longest preset name, in characters.
+pub const MAX_FILTER_PRESET_NAME_CHARS: usize = 80;
+/// Longest filter mask text, in characters.
+pub const MAX_FILTER_MASK_CHARS: usize = 512;
+/// Largest number a filter size or age may carry; keeps values exact in JSON/JavaScript numbers.
+pub const MAX_FILTER_NUMBER: u64 = 9_007_199_254_740_991;
+
+/// Which entry kinds a saved pane filter keeps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum FilterKind {
+    /// Files, directories and symlinks.
+    #[default]
+    Any,
+    /// Regular files only.
+    File,
+    /// Directories only.
+    Directory,
+    /// Symbolic links only.
+    Symlink,
+}
+
+/// Tri-state constraint used for the hidden and executable criteria.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum FilterToggle {
+    /// No constraint.
+    #[default]
+    Any,
+    /// Only entries that have the property.
+    Only,
+    /// Only entries that lack the property.
+    Exclude,
+}
+
+/// Structured criteria of a pane filter. Applied to the loaded directory listing only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FilterCriteria {
+    /// `;`-separated name masks (substring or `*`/`?` glob); blank matches every name.
+    pub name: String,
+    /// Entry kind constraint.
+    pub kind: FilterKind,
+    /// Smallest file size in bytes.
+    pub min_size: Option<u64>,
+    /// Largest file size in bytes.
+    pub max_size: Option<u64>,
+    /// Keep entries modified within this many days.
+    pub modified_within_days: Option<u64>,
+    /// Keep entries last modified more than this many days ago.
+    pub modified_older_than_days: Option<u64>,
+    /// Hidden-state constraint.
+    pub hidden: FilterToggle,
+    /// Executable-status constraint.
+    pub executable: FilterToggle,
+}
+
+impl FilterCriteria {
+    fn sanitize(&mut self) {
+        self.name = self.name.chars().take(MAX_FILTER_MASK_CHARS).collect();
+        for value in [
+            &mut self.min_size,
+            &mut self.max_size,
+            &mut self.modified_within_days,
+            &mut self.modified_older_than_days,
+        ] {
+            *value = value.map(|number| number.min(MAX_FILTER_NUMBER));
+        }
+    }
+}
+
+/// A user-named reusable pane filter (task 0169).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilterPreset {
+    /// Unique user-visible preset name.
+    pub name: String,
+    /// Criteria restored when the preset is loaded.
+    pub criteria: FilterCriteria,
+}
+
+/// Trims names, drops blank or duplicate (case-insensitive) presets, and bounds the list.
+fn sanitize_filter_presets(presets: &mut Vec<FilterPreset>) {
+    let mut seen: Vec<String> = Vec::new();
+    presets.retain_mut(|preset| {
+        preset.name = preset
+            .name
+            .trim()
+            .chars()
+            .take(MAX_FILTER_PRESET_NAME_CHARS)
+            .collect::<String>()
+            .trim()
+            .to_owned();
+        let folded = preset.name.to_lowercase();
+        if preset.name.is_empty() || seen.contains(&folded) {
+            return false;
+        }
+        seen.push(folded);
+        preset.criteria.sanitize();
+        true
+    });
+    presets.truncate(MAX_FILTER_PRESETS);
+}
+
 /// Most folders whose view is remembered; older entries are pruned first (task 0270).
 pub const MAX_FOLDER_VIEWS: usize = 500;
 
@@ -291,6 +397,8 @@ pub struct Settings {
     pub recent_locations_by_workspace: BTreeMap<String, Vec<Location>>,
     /// User-named reusable multi-rename configurations.
     pub multi_rename_presets: Vec<MultiRenamePreset>,
+    /// User-named reusable pane filters (task 0169); sanitized on load and save.
+    pub filter_presets: Vec<FilterPreset>,
     /// Durable smart folders. Queries contain provider-neutral locations but
     /// never credentials or connection-session tokens.
     pub saved_searches: Vec<SavedSearch>,
@@ -390,6 +498,7 @@ impl Default for Settings {
             favourite_locations: Vec::new(),
             recent_locations_by_workspace: BTreeMap::new(),
             multi_rename_presets: Vec::new(),
+            filter_presets: Vec::new(),
             saved_searches: Vec::new(),
             icon_theme: GENERIC_ICON_THEME.to_owned(),
             check_for_updates_automatically: true,
@@ -471,6 +580,7 @@ impl SettingsStore {
         match migrate(&bytes) {
             Ok(mut settings) => {
                 settings.normalise_folder_views();
+                sanitize_filter_presets(&mut settings.filter_presets);
                 Ok(LoadOutcome {
                     settings,
                     warning: None,
@@ -517,6 +627,7 @@ impl SettingsStore {
             memory.location.uri = sanitize_persisted_location(&memory.location.uri);
         }
         current.normalise_folder_views();
+        sanitize_filter_presets(&mut current.filter_presets);
         let bytes = serde_json::to_vec_pretty(&current)?;
         atomic_write(&self.directory, SETTINGS_FILE_NAME, &bytes)?;
         Ok(())
@@ -909,6 +1020,17 @@ mod tests {
                     case_transform: MultiRenameCaseTransform::Lower,
                 },
             }],
+            filter_presets: vec![FilterPreset {
+                name: "Big recent videos".into(),
+                criteria: FilterCriteria {
+                    name: "*.mkv;*.mp4".into(),
+                    kind: FilterKind::File,
+                    min_size: Some(1_048_576),
+                    modified_within_days: Some(30),
+                    hidden: FilterToggle::Exclude,
+                    ..FilterCriteria::default()
+                },
+            }],
             icon_theme: "sample.icons".into(),
             ..Settings::default()
         };
@@ -1071,6 +1193,62 @@ mod tests {
         assert_eq!(loaded.settings.schema_version, CURRENT_SCHEMA_VERSION);
         assert!(loaded.settings.multi_rename_presets.is_empty());
         assert!(loaded.warning.is_none());
+    }
+
+    #[test]
+    fn older_fixtures_load_with_an_empty_filter_preset_list() {
+        for version in [1, 4, 8, CURRENT_SCHEMA_VERSION] {
+            let settings = migrate(format!(r#"{{"schemaVersion":{version}}}"#).as_bytes())
+                .expect("migrate older settings");
+            assert!(settings.filter_presets.is_empty(), "v{version}");
+        }
+    }
+
+    #[test]
+    fn filter_presets_are_sanitized_on_load_and_save() {
+        let directory = tempdir().expect("temp directory");
+        fs::write(
+            directory.path().join(SETTINGS_FILE_NAME),
+            format!(
+                r#"{{"schemaVersion":{CURRENT_SCHEMA_VERSION},"filterPresets":[
+                  {{"name":"  Docs ","criteria":{{"name":"*.md","minSize":18446744073709551615}}}},
+                  {{"name":"docs","criteria":{{}}}},
+                  {{"name":"   ","criteria":{{}}}},
+                  {{"name":"Keep","criteria":{{"hidden":"only","kind":"directory"}}}}
+                ]}}"#
+            ),
+        )
+        .expect("write fixture");
+        let store = SettingsStore::new(directory.path());
+
+        let loaded = store.load().expect("load").settings;
+
+        let names: Vec<_> = loaded
+            .filter_presets
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
+        assert_eq!(names, ["Docs", "Keep"]);
+        assert_eq!(
+            loaded.filter_presets[0].criteria.min_size,
+            Some(MAX_FILTER_NUMBER)
+        );
+        assert_eq!(loaded.filter_presets[1].criteria.hidden, FilterToggle::Only);
+
+        let oversized = Settings {
+            filter_presets: (0..MAX_FILTER_PRESETS + 20)
+                .map(|index| FilterPreset {
+                    name: format!("p{index}"),
+                    criteria: FilterCriteria::default(),
+                })
+                .collect(),
+            ..Settings::default()
+        };
+        store.save(&oversized).expect("save");
+        assert_eq!(
+            store.load().expect("reload").settings.filter_presets.len(),
+            MAX_FILTER_PRESETS
+        );
     }
 
     #[test]

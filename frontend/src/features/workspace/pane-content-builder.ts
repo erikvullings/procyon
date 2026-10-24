@@ -24,6 +24,7 @@ import type {
   Volume,
   WorkspaceProjection,
 } from '../../models';
+import type { FilterPreset } from '../../models/settings';
 import {
   type AppState,
   applyAppPatches,
@@ -59,6 +60,11 @@ import { PluginPanelHost, type PluginPaneState } from '../plugins/plugin-panel-h
 import { FileViewer } from '../preview/file-viewer';
 import { fileViewerAttrs } from '../preview/file-viewer-attrs';
 import type { FileViewerController, FileViewerState } from '../preview/file-viewer-controller';
+import {
+  type AdvancedFilterCriteria,
+  advancedFilterNotices,
+} from '../quick-filter/advanced-filter';
+import type { AdvancedFilterStore } from '../quick-filter/advanced-filter-store';
 import { hiddenSelectedEntryCount } from '../quick-filter/quick-filter';
 import { saveSearch } from '../search/saved-searches';
 import type { SelectionPlatform } from '../selection/keybindings';
@@ -196,6 +202,8 @@ export interface PaneContentContext {
     query: string,
   ): readonly EntrySummary[];
   quickFilterQueryFor(key: string, tab: TabProjection | undefined): string;
+  /** Per-tab structured-filter state (task 0169). */
+  readonly advancedFilters: AdvancedFilterStore;
   quickFilterOpenFor(key: string, tab: TabProjection | undefined): boolean;
   contentSearchInitialQuery(locationUri: string, entry: EntrySummary): InitialSearch | undefined;
   searchQueryForLocationUri(locationUri: string): SearchQuery | undefined;
@@ -359,6 +367,33 @@ export function createPaneContentBuilder(
         ? filteredFresh
         : withParentEntry(pathFromUri(tab.location.uri), filteredFresh);
     }
+    /** Esc / clear: drops the text filter, the structured criteria and closes the box. */
+    function closeFilter(): void {
+      if (key !== undefined) context.advancedFilters.clear(key);
+      if (key !== undefined) {
+        context.setQuickFilterOpen(key, false);
+        const appState = context.getAppState();
+        if (appState !== undefined) {
+          context.setAppState(applyAppPatches(appState, deleteQuickFilterDraftPatch(key)));
+        }
+      }
+      const liveWorkspace = context.getWorkspace();
+      if (liveWorkspace !== undefined && tab !== undefined && tab.view.quickFilter != null) {
+        void dispatchWorkspaceCommand(
+          client,
+          {
+            type: 'updateView',
+            workspaceId: liveWorkspace.id,
+            paneId,
+            tabId: tab.id,
+            patch: { quickFilter: { type: 'clear' } },
+            expectedRevision: liveWorkspace.revision,
+          },
+          context.replaceWorkspace,
+        ).catch(() => undefined);
+      }
+      m.redraw();
+    }
     const renameRequest = context.getRenameRequest?.(paneId);
     const locationEditRequest = context.getLocationEditRequest?.(paneId);
     const cursorIndex =
@@ -495,6 +530,34 @@ export function createPaneContentBuilder(
       totalEntryCount: directory.entries.length,
       totalKnownEntries,
       hiddenSelectedCount: hiddenSelectedEntryCount(directory.entries, filtered, selectedEntryIds),
+      ...(key === undefined
+        ? {}
+        : {
+            advancedFilter: {
+              criteria: context.advancedFilters.criteriaFor(key),
+              presets: currentSettings?.filterPresets ?? [],
+              panelOpen: context.advancedFilters.panelOpen(key),
+              notices: advancedFilterNotices(
+                directory.entries,
+                context.advancedFilters.criteriaFor(key),
+                { hasMore: directory.hasMore },
+              ),
+              onChange: (criteria: AdvancedFilterCriteria) => {
+                context.advancedFilters.setCriteria(key, criteria);
+                m.redraw();
+              },
+              onClear: () => closeFilter(),
+              onTogglePanel: () => {
+                context.advancedFilters.setPanelOpen(key, !context.advancedFilters.panelOpen(key));
+                m.redraw();
+              },
+              onPresetsChange: (presets: readonly FilterPreset[]) =>
+                context.updateLocationSettings(client, (settings) => ({
+                  ...settings,
+                  filterPresets: presets,
+                })),
+            },
+          }),
       filterOpen: key === undefined ? false : context.quickFilterOpenFor(key, tab),
       filterQuery: quickFilterQuery,
       formatSettings: entryFormatSettings,
@@ -837,31 +900,7 @@ export function createPaneContentBuilder(
           context.replaceWorkspace,
         ).catch(() => undefined);
       },
-      onFilterClose: () => {
-        if (key !== undefined) {
-          context.setQuickFilterOpen(key, false);
-          const appState = context.getAppState();
-          if (appState !== undefined) {
-            context.setAppState(applyAppPatches(appState, deleteQuickFilterDraftPatch(key)));
-          }
-        }
-        const liveWorkspace = context.getWorkspace();
-        if (liveWorkspace !== undefined && tab !== undefined && tab.view.quickFilter != null) {
-          void dispatchWorkspaceCommand(
-            client,
-            {
-              type: 'updateView',
-              workspaceId: liveWorkspace.id,
-              paneId,
-              tabId: tab.id,
-              patch: { quickFilter: { type: 'clear' } },
-              expectedRevision: liveWorkspace.revision,
-            },
-            context.replaceWorkspace,
-          ).catch(() => undefined);
-        }
-        m.redraw();
-      },
+      onFilterClose: closeFilter,
       onRename: (entry, name) => {
         const active = context.activeDirectory();
         if (active === undefined || active.paneId !== paneId) return;

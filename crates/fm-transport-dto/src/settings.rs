@@ -156,6 +156,64 @@ pub struct MultiRenamePresetDto {
     pub rules: MultiRenameRulesDto,
 }
 
+/// Entry-kind constraint of a saved pane filter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum FilterKindDto {
+    /// Files, directories and symlinks.
+    Any,
+    /// Regular files only.
+    File,
+    /// Directories only.
+    Directory,
+    /// Symbolic links only.
+    Symlink,
+}
+
+/// Tri-state constraint of a saved pane filter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum FilterToggleDto {
+    /// No constraint.
+    Any,
+    /// Only entries that have the property.
+    Only,
+    /// Only entries that lack the property.
+    Exclude,
+}
+
+/// Structured pane-filter criteria applied to the loaded directory listing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FilterCriteriaDto {
+    /// `;`-separated name masks (substring or `*`/`?` glob).
+    pub name: String,
+    /// Entry kind constraint.
+    pub kind: FilterKindDto,
+    /// Smallest size in bytes.
+    pub min_size: Option<u64>,
+    /// Largest size in bytes.
+    pub max_size: Option<u64>,
+    /// Keep entries modified within this many days.
+    pub modified_within_days: Option<u64>,
+    /// Keep entries last modified more than this many days ago.
+    pub modified_older_than_days: Option<u64>,
+    /// Hidden-state constraint.
+    pub hidden: FilterToggleDto,
+    /// Executable-status constraint.
+    pub executable: FilterToggleDto,
+}
+
+/// A user-named reusable pane filter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FilterPresetDto {
+    /// Unique user-visible preset name.
+    pub name: String,
+    /// Criteria restored when the preset is loaded.
+    pub criteria: FilterCriteriaDto,
+}
+
 /// A user-named reusable structured search.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -220,6 +278,9 @@ pub struct SettingsDto {
     pub recent_locations_by_workspace: BTreeMap<String, Vec<LocationDto>>,
     /// User-named reusable multi-rename configurations.
     pub multi_rename_presets: Vec<MultiRenamePresetDto>,
+    /// User-named reusable pane filters.
+    #[serde(default)]
+    pub filter_presets: Vec<FilterPresetDto>,
     /// Durable smart folders, ordered with pinned searches first by the UI.
     pub saved_searches: Vec<SavedSearchDto>,
     /// Directory-entry icon set: `"generic"` for the built-in glyphs, or a discovered plugin's id.

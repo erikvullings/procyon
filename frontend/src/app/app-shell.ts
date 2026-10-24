@@ -259,6 +259,11 @@ import {
 } from '../features/preview/file-viewer-controller';
 import { previewPluginRoutes } from '../features/preview/plugin-preview';
 import { openViewerWindow } from '../features/preview/viewer-window';
+import {
+  type AdvancedFilterCriteria,
+  filterEntriesAdvanced,
+} from '../features/quick-filter/advanced-filter';
+import { AdvancedFilterStore } from '../features/quick-filter/advanced-filter-store';
 import { filterEntries } from '../features/quick-filter/quick-filter';
 import {
   createFindFilesController,
@@ -1998,11 +2003,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   const cursorLoadTokens = new Map<string, object>();
   /** Whether the inline quick-filter box is shown for a pane, independent of a persisted query. */
   const quickFilterOpen = new Map<string, boolean>();
+  /** Structured (advanced) filter criteria and panel state per tab (task 0169). */
+  const advancedFilters = new AdvancedFilterStore();
   const filteredEntries = new Map<
     string,
     {
       readonly input: readonly EntrySummary[];
       readonly query: string;
+      readonly criteria: AdvancedFilterCriteria;
       readonly entries: readonly EntrySummary[];
     }
   >();
@@ -2285,12 +2293,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     entries: readonly EntrySummary[],
     query: string,
   ): readonly EntrySummary[] {
+    const criteria = advancedFilters.criteriaFor(key);
     const cached = filteredEntries.get(key);
-    if (cached?.input === entries && cached.query === query) {
+    if (cached?.input === entries && cached.query === query && cached.criteria === criteria) {
       return cached.entries;
     }
-    const filtered = filterEntries(entries, query);
-    filteredEntries.set(key, { input: entries, query, entries: filtered });
+    const filtered = filterEntriesAdvanced(filterEntries(entries, query), criteria);
+    filteredEntries.set(key, { input: entries, query, criteria, entries: filtered });
     return filtered;
   }
 
@@ -2299,7 +2308,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   function quickFilterOpenFor(key: string, tab: TabProjection | undefined): boolean {
-    return quickFilterOpen.get(key) === true || (tab?.view.quickFilter ?? null) !== null;
+    return (
+      quickFilterOpen.get(key) === true ||
+      (tab?.view.quickFilter ?? null) !== null ||
+      advancedFilters.isActive(key)
+    );
   }
 
   /** If `entry` came from a content-search results tab (`locationUri`) and has content matches,
@@ -3145,6 +3158,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (appState !== undefined)
       appState = applyAppPatches(appState, deleteQuickFilterDraftPatch(key));
     quickFilterOpen.delete(key);
+    advancedFilters.clear(key);
     filteredEntries.delete(key);
     if (openTerminalTabKeys.delete(key)) disposeTerminalTab?.(key);
   }
@@ -3168,6 +3182,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     rekey(sortRequests);
     rekey(cursorLoadTokens);
     rekey(quickFilterOpen);
+    advancedFilters.rekey(sourceKey, targetKey);
     rekey(filteredEntries);
     const viewer = viewerByTab.get(sourceKey);
     if (viewer !== undefined) {
@@ -5504,6 +5519,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     entriesFilteredFor,
     quickFilterQueryFor,
     quickFilterOpenFor,
+    advancedFilters,
     contentSearchInitialQuery,
     searchQueryForLocationUri: (locationUri) => findFilesQueriesByLocationUri.get(locationUri),
     searchFavouriteNameForLocationUri: (locationUri) => {
@@ -6892,6 +6908,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                                 await updateLocationSettings(attrs.client, (latest) => ({
                                   ...draft,
                                   multiRenamePresets: latest.multiRenamePresets,
+                                  filterPresets: latest.filterPresets,
                                 }));
                                 applyAppearance(draft);
                                 closeSettingsDialog();

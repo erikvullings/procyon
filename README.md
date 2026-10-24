@@ -251,6 +251,15 @@ the whole name, and `;` to combine masks, such as `*.jpg;*.png`. Press `Esc` or 
 remove the filter. While the filter box has focus, `Cmd/Ctrl+C` and `Cmd/Ctrl+X` copy or cut the
 selected files when no filter text is selected.
 
+The sliders button in the filter box opens an advanced filter: name or glob, type (files, folders,
+symlinks), minimum and maximum size (such as `10 MB`), modified within or more than N days ago,
+hidden state, and executable status. Active criteria show as chips with a one-click clear. Filters
+apply to the loaded entries of the current folder only (further pages are not fetched, and the
+panel says so); criteria a provider cannot answer (missing size or modified time) are explained
+rather than ignored. "Executable" is judged by file extension because listings carry no permission
+bits. Save the current criteria under a unique name, then load, rename, or delete it from either
+pane; saved filters persist in the settings file.
+
 The location editor accepts absolute paths, `~` or `~/...` for your home folder, and a file path
 (which opens its folder). Pasted paths are cleaned up: surrounding whitespace, backticks or code
 fences, and single or double quotes are removed, and a Markdown-escaped `\~` is read as `~`.

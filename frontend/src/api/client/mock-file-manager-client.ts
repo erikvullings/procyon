@@ -1447,6 +1447,7 @@ export class MockFileManagerClient implements FileManagerClient {
     favouriteLocations: [],
     recentLocationsByWorkspace: {},
     multiRenamePresets: [],
+    filterPresets: [],
     savedSearches: [],
     iconTheme: 'generic',
     checkForUpdatesAutomatically: true,

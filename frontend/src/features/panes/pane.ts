@@ -89,6 +89,8 @@ import type { ThumbnailLoader, ThumbnailViewport } from '../directory-table/thum
 import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
 import { isRestorableRecentLocation, truncateLocationForDisplay } from '../favourites/favourites';
+import { activeCriteriaIds } from '../quick-filter/advanced-filter';
+import { type AdvancedFilterAttrs, AdvancedFilterBar } from '../quick-filter/advanced-filter-bar';
 import { matchesGlobMask } from '../quick-filter/quick-filter';
 import { QuickFilterInput } from '../quick-filter/quick-filter-input';
 import type { SearchPresentation } from '../search/search-presentation';
@@ -146,6 +148,8 @@ export interface FavouritesAttrs {
 
 /** Quick-filter bar state and callbacks. */
 export interface FilterAttrs {
+  /** Structured filter state (task 0169); absent where the host offers no advanced mode. */
+  readonly advanced?: AdvancedFilterAttrs;
   readonly filterOpen: boolean;
   readonly filterQuery: string;
   readonly onFilterQueryChange: (query: string) => void;
@@ -1669,6 +1673,15 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                     attrs.filter.onFilterClose();
                     sectionElement?.focus();
                   },
+                  ...(attrs.filter.advanced === undefined
+                    ? {}
+                    : {
+                        advanced: {
+                          open: attrs.filter.advanced.panelOpen,
+                          activeCount: activeCriteriaIds(attrs.filter.advanced.criteria).length,
+                          onToggle: attrs.filter.advanced.onTogglePanel,
+                        },
+                      }),
                 })
               : attrs.breadcrumbLabel !== undefined
                 ? m(
@@ -1985,6 +1998,20 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               ),
             ),
           ]),
+          attrs.filter.filterOpen && attrs.filter.advanced !== undefined
+            ? m(AdvancedFilterBar, {
+                criteria: attrs.filter.advanced.criteria,
+                presets: attrs.filter.advanced.presets,
+                panelOpen: attrs.filter.advanced.panelOpen,
+                notices: attrs.filter.advanced.notices,
+                onChange: attrs.filter.advanced.onChange,
+                onClear: () => {
+                  attrs.filter.advanced?.onClear();
+                  sectionElement?.focus();
+                },
+                onPresetsChange: attrs.filter.advanced.onPresetsChange,
+              })
+            : undefined,
           semanticEvidencePanel(attrs),
           (() => {
             const isGridView = attrs.tableConfig.viewMode === 'grid';

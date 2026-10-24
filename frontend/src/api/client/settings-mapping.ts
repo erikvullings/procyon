@@ -1,5 +1,7 @@
 import { DEFAULT_MAP_SETTINGS } from '../../features/map/map-settings';
 import type { Location as FileLocation, SearchQuery, Settings } from '../../models';
+import type { FilterCriteria } from '../../models/settings';
+import type { FilterCriteriaDto } from '../generated/models/filterCriteriaDto';
 import type { SettingsDto } from '../generated/models/settingsDto';
 
 export function settingsFromDto(settings: SettingsDto): Settings {
@@ -8,6 +10,10 @@ export function settingsFromDto(settings: SettingsDto): Settings {
     multiRenamePresets: settings.multiRenamePresets.map((preset) => ({
       ...preset,
       rules: { ...preset.rules, sequence: { ...preset.rules.sequence } },
+    })),
+    filterPresets: (settings.filterPresets ?? []).map((preset) => ({
+      ...preset,
+      criteria: filterCriteriaFromDto(preset.criteria),
     })),
     savedSearches: settings.savedSearches.map((saved) => ({
       ...saved,
@@ -81,6 +87,19 @@ function searchQueryFromDto(query: SettingsDto['savedSearches'][number]['query']
   };
 }
 
+function filterCriteriaFromDto(criteria: FilterCriteriaDto): FilterCriteria {
+  return {
+    name: criteria.name,
+    kind: criteria.kind,
+    minSize: criteria.minSize ?? null,
+    maxSize: criteria.maxSize ?? null,
+    modifiedWithinDays: criteria.modifiedWithinDays ?? null,
+    modifiedOlderThanDays: criteria.modifiedOlderThanDays ?? null,
+    hidden: criteria.hidden,
+    executable: criteria.executable,
+  };
+}
+
 export function settingsToDto(settings: Settings): SettingsDto {
   return {
     ...settings,
@@ -90,6 +109,10 @@ export function settingsToDto(settings: Settings): SettingsDto {
     multiRenamePresets: settings.multiRenamePresets.map((preset) => ({
       ...preset,
       rules: { ...preset.rules, sequence: { ...preset.rules.sequence } },
+    })),
+    filterPresets: settings.filterPresets.map((preset) => ({
+      ...preset,
+      criteria: { ...preset.criteria },
     })),
     savedSearches: settings.savedSearches.map((saved) => ({
       ...saved,

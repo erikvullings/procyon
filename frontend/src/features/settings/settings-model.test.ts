@@ -36,6 +36,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     favouriteLocations: [],
     recentLocationsByWorkspace: {},
     multiRenamePresets: [],
+    filterPresets: [],
     savedSearches: [],
     iconTheme: 'generic',
     checkForUpdatesAutomatically: true,
