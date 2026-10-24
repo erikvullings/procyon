@@ -66,6 +66,7 @@ async fn edit(
                 initial_content: None,
                 skip_space_check: false,
                 image_metadata_edit: Some(edit),
+                attribute_change: None,
                 geo_transform: None,
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,
@@ -235,6 +236,7 @@ async fn rejects_requests_without_an_edit_and_unknown_fields() {
             initial_content: None,
             skip_space_check: false,
             image_metadata_edit: None,
+            attribute_change: None,
             geo_transform: None,
             symlink_policy: Default::default(),
             permanent_delete_confirmed: false,
@@ -258,6 +260,7 @@ async fn rejects_requests_without_an_edit_and_unknown_fields() {
             create_intermediate_directories: false,
             initial_content: None,
             skip_space_check: false,
+            attribute_change: None,
             image_metadata_edit: Some(ImageMetadataEditDto {
                 clear_fields: vec!["nonsense".into()],
                 ..ImageMetadataEditDto::default()

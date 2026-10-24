@@ -3,6 +3,7 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type { ArchiveFormatDto } from './archiveFormatDto.ts';
+import type { ChangeAttributesDto } from './changeAttributesDto.ts';
 import type { GeoTransformDto } from './geoTransformDto.ts';
 import type { ImageMetadataEditDto } from './imageMetadataEditDto.ts';
 import type { LinkRequestDto } from './linkRequestDto.ts';
@@ -21,6 +22,7 @@ export interface StartOperationRequestDto {
      */
   archiveCompressionLevel?: number | null;
   archiveFormat?: null | ArchiveFormatDto;
+  attributeChange?: null | ChangeAttributesDto;
   /** Conflict behavior selected before execution. */
   conflictPolicy: OperationConflictPolicyDto;
   /** Whether a multi-component create-directory name may create missing parents. */

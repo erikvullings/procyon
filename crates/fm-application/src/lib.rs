@@ -9,6 +9,7 @@ mod action;
 mod action_invoker;
 pub mod app_data;
 mod archive_summary;
+mod attribute_change;
 mod checksum_coordinator;
 mod checksum_mapping;
 mod comparison_mapping;

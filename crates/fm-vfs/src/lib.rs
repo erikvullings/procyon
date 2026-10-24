@@ -5,6 +5,7 @@
 //! core. Providers advertise what they can do through capability flags rather
 //! than failing at call time.
 
+mod attributes;
 mod capabilities;
 mod change_tracking;
 mod content;
@@ -15,6 +16,7 @@ mod registry;
 mod transfer;
 mod types;
 
+pub use attributes::{AttributeChange, AttributeSnapshot, AttributeSupport, EDITABLE_MODE_MASK};
 pub use capabilities::ProviderCapabilities;
 pub use change_tracking::{CONSERVATIVE_POLL_INTERVAL, ChangeTracking};
 pub use content::{

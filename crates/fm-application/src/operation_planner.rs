@@ -182,6 +182,9 @@ impl OperationPlanner {
             OperationKindDto::TransformGeo => {
                 crate::geo_transform::plan_transform_geo(&self.providers, request)?
             }
+            OperationKindDto::ChangeAttributes => {
+                crate::attribute_change::plan_change_attributes(&self.providers, request)?
+            }
             OperationKindDto::EditImageMetadata => {
                 crate::image_metadata_edit::plan_edit_image_metadata(&self.providers, request)?
             }
@@ -556,6 +559,7 @@ impl OperationPlanner {
                 initial_content: None,
                 skip_space_check: false,
                 image_metadata_edit: None,
+                attribute_change: None,
                 geo_transform: None,
                 symlink_policy: SymlinkPolicyDto::default(),
                 permanent_delete_confirmed: false,
@@ -964,6 +968,9 @@ impl OperationExecutor for UndoExecutor {
                     self.verify_original_absent(original, cancellation).await?;
                     items.push(PlanItem::new(trashed.entry.clone(), 0));
                 }
+                UndoAction::RestoreAttributes { entry, .. } => {
+                    items.push(PlanItem::new(entry.clone(), 0));
+                }
                 UndoAction::RestoreContent { current, backup } => {
                     crate::image_metadata_edit::verify_restorable(
                         &self.providers,
@@ -1010,6 +1017,9 @@ impl OperationExecutor for UndoExecutor {
                 UndoAction::RestoreContent { current, .. } => {
                     current.entry.location == item.entry.location
                 }
+                UndoAction::RestoreAttributes { entry, .. } => {
+                    entry.location == item.entry.location
+                }
             })
             .ok_or_else(|| ExecutionError::Failed("Undo plan entry is missing.".into()))?;
         match action {
@@ -1043,6 +1053,20 @@ impl OperationExecutor for UndoExecutor {
             }
             UndoAction::CrossProviderMoveBack { .. } => {
                 unreachable!("cross-provider undo uses the guarded move executor")
+            }
+            UndoAction::RestoreAttributes {
+                entry,
+                restore,
+                applied,
+            } => {
+                crate::attribute_change::restore_attributes(
+                    &self.providers,
+                    entry,
+                    *restore,
+                    *applied,
+                    cancellation,
+                )
+                .await?;
             }
             UndoAction::RestoreContent { current, backup } => {
                 crate::image_metadata_edit::restore_content(
@@ -3548,6 +3572,7 @@ mod tests {
             initial_content: None,
             skip_space_check: false,
             image_metadata_edit: None,
+            attribute_change: None,
             geo_transform: None,
             override_read_only: false,
             link: None,

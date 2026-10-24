@@ -48,6 +48,9 @@ pub struct StartOperationRequestDto {
     /// The edit applied by an `editImageMetadata` operation (task 0274).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_metadata_edit: Option<crate::ImageMetadataEditDto>,
+    /// The change applied by a `changeAttributes` operation (task 0258).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attribute_change: Option<crate::ChangeAttributesDto>,
     /// What a `transformGeo` operation does with each file (tasks 0281, 0282).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub geo_transform: Option<crate::GeoTransformDto>,
@@ -187,6 +190,8 @@ pub enum OperationKindDto {
     Undo,
     /// Rewrite the metadata of image files in place (task 0274).
     EditImageMetadata,
+    /// Change permissions, ownership or attributes in place (task 0258).
+    ChangeAttributes,
     /// Convert or minify geographic files into new files (tasks 0281, 0282).
     TransformGeo,
     /// Search files.

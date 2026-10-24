@@ -8,6 +8,8 @@ import type {
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
   AttachSemanticVocabularyRequest,
+  AttributeChangePreview,
+  AttributeScope,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
@@ -74,6 +76,7 @@ import type {
   ImageGpsEntry,
   ImageMetadata,
   ImportSemanticLocalModelRequest,
+  InspectAttributesResult,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   KnowledgeAnswer,
@@ -278,6 +281,7 @@ import {
   getFileGitHistory as requestGitFileHistory,
   readImageGps as requestImageGps,
   readImageMetadata as requestImageMetadata,
+  inspectAttributes as requestInspectAttributes,
   cancelKnowledgeAnswer as requestKnowledgeAnswerCancellation,
   generateKnowledgeAnswer as requestKnowledgeAnswerGeneration,
   getKnowledgeCapabilities as requestKnowledgeCapabilities,
@@ -332,6 +336,7 @@ import {
   closePptxPreview as requestPptxPreviewClose,
   openPptxPreview as requestPptxPreviewOpen,
   readPptxPreviewPdf as requestPptxPreviewPdf,
+  previewAttributeChange as requestPreviewAttributeChange,
   previewGeoConversion as requestPreviewGeoConversion,
   previewGeoMinify as requestPreviewGeoMinify,
   querySqliteView as requestQuerySqliteView,
@@ -1496,6 +1501,36 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200) {
       throw new Error(`Unexpected readImageMetadata response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async inspectAttributes(
+    locations: readonly Location[],
+    signal?: AbortSignal,
+  ): Promise<InspectAttributesResult> {
+    const response = await requestInspectAttributes(
+      { sources: [...locations] },
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected inspectAttributes response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async previewAttributeChange(
+    locations: readonly Location[],
+    recursive: boolean,
+    scope: AttributeScope,
+    signal?: AbortSignal,
+  ): Promise<AttributeChangePreview> {
+    const response = await requestPreviewAttributeChange(
+      { sources: [...locations], recursive, scope },
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected previewAttributeChange response status: ${response.status}`);
     }
     return response.data;
   }

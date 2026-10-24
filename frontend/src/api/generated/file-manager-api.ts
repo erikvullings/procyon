@@ -85,6 +85,8 @@ import type {
   ImageMetadataDto,
   ImportSemanticLocalModelRequestDto,
   ImportSemanticVocabularyRequestDto,
+  InspectAttributesRequestDto,
+  InspectAttributesResponseDto,
   InstallSemanticWorkerPatchRequestDto,
   InvokeActionRequestDto,
   KnowledgeAnswerDto,
@@ -132,6 +134,8 @@ import type {
   PluginLogEntryDto,
   PluginPreviewResultDto,
   PptxPreviewSessionRequestDto,
+  PreviewAttributeChangeRequestDto,
+  PreviewAttributeChangeResponseDto,
   PreviewDocumentSummaryRequestDto,
   PreviewGeoConversionRequestDto,
   PreviewGeoConversionResponseDto,
@@ -607,6 +611,130 @@ return fetchMutator<archiveSummaryResponse>(getArchiveSummaryUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(archiveSummaryRequestDto)
+  }
+);}
+
+
+
+export type inspectAttributesResponse200 = {
+  data: InspectAttributesResponseDto
+  status: 200
+}
+
+export type inspectAttributesResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type inspectAttributesResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type inspectAttributesResponseSuccess = (inspectAttributesResponse200) & {
+  headers: Headers;
+};
+export type inspectAttributesResponseError = (inspectAttributesResponse403 | inspectAttributesResponse404) & {
+  headers: Headers;
+};
+
+export type inspectAttributesResponse = (inspectAttributesResponseSuccess | inspectAttributesResponseError)
+
+export const getInspectAttributesUrl = () => {
+
+
+
+
+  return `/api/v1/attributes/inspect`
+}
+
+/**
+ * @summary Reads which attribute edits a selection supports and each entry's current state.
+ */
+export const inspectAttributes = async (inspectAttributesRequestDto: InspectAttributesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<inspectAttributesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<inspectAttributesResponse>(getInspectAttributesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(inspectAttributesRequestDto)
+  }
+);}
+
+
+
+export type previewAttributeChangeResponse200 = {
+  data: PreviewAttributeChangeResponseDto
+  status: 200
+}
+
+export type previewAttributeChangeResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type previewAttributeChangeResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type previewAttributeChangeResponseSuccess = (previewAttributeChangeResponse200) & {
+  headers: Headers;
+};
+export type previewAttributeChangeResponseError = (previewAttributeChangeResponse403 | previewAttributeChangeResponse404) & {
+  headers: Headers;
+};
+
+export type previewAttributeChangeResponse = (previewAttributeChangeResponseSuccess | previewAttributeChangeResponseError)
+
+export const getPreviewAttributeChangeUrl = () => {
+
+
+
+
+  return `/api/v1/attributes/preview`
+}
+
+/**
+ * @summary Counts the entries an attribute change would touch before it is applied.
+ */
+export const previewAttributeChange = async (previewAttributeChangeRequestDto: PreviewAttributeChangeRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<previewAttributeChangeResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<previewAttributeChangeResponse>(getPreviewAttributeChangeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(previewAttributeChangeRequestDto)
   }
 );}
 

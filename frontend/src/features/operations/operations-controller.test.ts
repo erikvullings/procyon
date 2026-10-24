@@ -40,6 +40,19 @@ describe('OperationsController', () => {
     );
   });
 
+  it('changeAttributes starts a changeAttributes operation carrying the change and scope', async () => {
+    const attributeChange = {
+      change: { mode: 0o640, modeMask: 0o770 },
+      recursive: true,
+      scope: 'filesOnly' as const,
+    };
+    await controller.changeAttributes([src, src2], attributeChange);
+    expect(client.startOperation).toHaveBeenCalledWith(
+      { type: 'changeAttributes', sources: [src, src2], conflictPolicy: 'ask', attributeChange },
+      undefined,
+    );
+  });
+
   it('trash calls startOperation with type trash and no destination', async () => {
     await controller.trash([src]);
     expect(client.startOperation).toHaveBeenCalledWith(

@@ -212,4 +212,39 @@ describe('PropertiesDialog', () => {
     closeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(onCancel).toHaveBeenCalledOnce();
   });
+
+  it('offers "Change attributes..." only when the host provides it and passes the entries on', async () => {
+    const localEntry = entry({ id: 'local-3', location: location('local', 'file:///y') });
+    const client: PropertiesMetadataClient = {
+      getEntryMetadata: vi.fn().mockResolvedValue(emptyMetadata(localEntry.id)),
+    };
+    const labelled = () =>
+      Array.from(root.querySelectorAll('button')).find((button) =>
+        button.textContent?.includes('Change attributes'),
+      );
+
+    m.mount(root, {
+      view: () =>
+        m(PropertiesDialog, { open: true, entries: [localEntry], client, onCancel: vi.fn() }),
+    });
+    m.redraw.sync();
+    await flush();
+    expect(labelled()).toBeUndefined();
+
+    const onChangeAttributes = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(PropertiesDialog, {
+          open: true,
+          entries: [localEntry],
+          client,
+          onCancel: vi.fn(),
+          onChangeAttributes,
+        }),
+    });
+    m.redraw.sync();
+    await flush();
+    labelled()?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(onChangeAttributes).toHaveBeenCalledWith([localEntry]);
+  });
 });

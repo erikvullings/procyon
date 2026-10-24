@@ -3886,6 +3886,23 @@ impl FileManagerService {
         crate::image_metadata::read_image_gps(&self.providers, request).await
     }
 
+    /// Reads which permission, ownership and attribute edits a selection supports, plus the
+    /// current state of each entry (task 0258).
+    pub async fn inspect_attributes(
+        &self,
+        request: fm_transport_dto::InspectAttributesRequestDto,
+    ) -> Result<fm_transport_dto::InspectAttributesResponseDto, ApplicationError> {
+        crate::attribute_change::inspect_attributes(&self.providers, request).await
+    }
+
+    /// Counts the entries a `changeAttributes` operation would touch (task 0258).
+    pub async fn preview_attribute_change(
+        &self,
+        request: fm_transport_dto::PreviewAttributeChangeRequestDto,
+    ) -> Result<fm_transport_dto::PreviewAttributeChangeResponseDto, ApplicationError> {
+        crate::attribute_change::preview_attribute_change(&self.providers, request).await
+    }
+
     /// Reads every EXIF/GPS/IPTC/XMP/ICC tag of an image from its leading bytes (task 0273).
     pub async fn read_image_metadata(
         &self,
@@ -7232,6 +7249,7 @@ mod tests {
             initial_content: None,
             skip_space_check: false,
             image_metadata_edit: None,
+            attribute_change: None,
             geo_transform: None,
             symlink_policy: Default::default(),
             permanent_delete_confirmed: false,
@@ -7851,6 +7869,7 @@ mod tests {
             initial_content: None,
             skip_space_check: false,
             image_metadata_edit: None,
+            attribute_change: None,
             geo_transform: None,
             symlink_policy: fm_transport_dto::SymlinkPolicyDto::default(),
             permanent_delete_confirmed: false,

@@ -17,6 +17,8 @@ import type {
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
   AttachSemanticVocabularyRequest,
+  AttributeChangePreview,
+  AttributeScope,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
@@ -82,6 +84,7 @@ import type {
   ImageGpsEntry,
   ImageMetadata,
   ImportSemanticLocalModelRequest,
+  InspectAttributesResult,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   KnowledgeAnswer,
@@ -974,6 +977,26 @@ export class TauriFileManagerClient implements FileManagerClient {
       request: { locations },
     });
     return response.entries;
+  }
+
+  inspectAttributes(
+    locations: readonly Location[],
+    _signal?: AbortSignal,
+  ): Promise<InspectAttributesResult> {
+    return invoke<InspectAttributesResult>('inspect_attributes', {
+      request: { sources: locations },
+    });
+  }
+
+  previewAttributeChange(
+    locations: readonly Location[],
+    recursive: boolean,
+    scope: AttributeScope,
+    _signal?: AbortSignal,
+  ): Promise<AttributeChangePreview> {
+    return invoke<AttributeChangePreview>('preview_attribute_change', {
+      request: { sources: locations, recursive, scope },
+    });
   }
 
   readImageMetadata(location: Location, _signal?: AbortSignal): Promise<ImageMetadata> {

@@ -13,8 +13,8 @@ use fm_ssh::{
     SshConnectionParameters, SshCredential, SshHostKeyPolicy,
 };
 use fm_vfs::{
-    CONSERVATIVE_POLL_INTERVAL, ChangeTracking, EntryRef, FileSystemProvider, ListOptions,
-    ProviderCapabilities, ProviderRegistry, RemoveOptions, VfsError, WriteOptions,
+    AttributeChange, CONSERVATIVE_POLL_INTERVAL, ChangeTracking, EntryRef, FileSystemProvider,
+    ListOptions, ProviderCapabilities, ProviderRegistry, RemoveOptions, VfsError, WriteOptions,
 };
 use fm_vfs_sftp::{SftpFileSystemProvider, SshConnectionResolver};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -681,4 +681,85 @@ async fn a_dropped_session_reconnects_transparently_for_a_subsequent_operation()
         .list(&root, ListOptions::default(), cancellation())
         .await
         .expect("a subsequent list must transparently reconnect and succeed");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn permissions_and_ownership_are_read_and_changed_through_setstat() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    let (provider, fixture) = provider_and_fixture().await;
+    std::fs::write(fixture.path("note.txt"), b"x").unwrap();
+    let target = entry_ref(location(&fixture, "note.txt"));
+
+    assert!(
+        provider
+            .capabilities()
+            .contains(ProviderCapabilities::SET_PERMISSIONS)
+    );
+    let support = provider.attribute_support(&target.location).unwrap();
+    assert!(support.mode && support.ownership && !support.windows_attributes);
+
+    provider
+        .change_attributes(
+            &target,
+            AttributeChange {
+                mode: Some(0o4750),
+                ..AttributeChange::default()
+            },
+            cancellation(),
+        )
+        .await
+        .expect("chmod over SFTP");
+    let mode = std::fs::metadata(fixture.path("note.txt"))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o7777, 0o4750);
+
+    let snapshot = provider
+        .read_attributes(&target, cancellation())
+        .await
+        .unwrap();
+    assert_eq!(snapshot.mode, Some(0o4750));
+    let meta = std::fs::metadata(fixture.path("note.txt")).unwrap();
+    assert_eq!(snapshot.uid, Some(meta.uid()));
+    assert_eq!(snapshot.gid, Some(meta.gid()));
+
+    // Handing the file to root must surface as a permission error for an unprivileged user.
+    if meta.uid() != 0 {
+        let error = provider
+            .change_attributes(
+                &target,
+                AttributeChange {
+                    uid: Some(0),
+                    ..AttributeChange::default()
+                },
+                cancellation(),
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, VfsError::PermissionDenied { .. }),
+            "{error:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn windows_attributes_are_unsupported_over_sftp() {
+    let (provider, fixture) = provider_and_fixture().await;
+    std::fs::write(fixture.path("note.txt"), b"x").unwrap();
+    let error = provider
+        .change_attributes(
+            &entry_ref(location(&fixture, "note.txt")),
+            AttributeChange {
+                hidden: Some(true),
+                ..AttributeChange::default()
+            },
+            cancellation(),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(error, VfsError::UnsupportedCapability { .. }));
 }

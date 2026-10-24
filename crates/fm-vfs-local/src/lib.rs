@@ -7,6 +7,7 @@
 //! as a single opaque item in listings; the underlying path is still a real
 //! directory and can be listed by navigating into it directly.
 
+mod attributes;
 #[cfg(target_os = "macos")]
 pub mod bulk_listing;
 #[cfg(windows)]
@@ -33,9 +34,10 @@ use fm_domain::{
     ProviderId,
 };
 use fm_vfs::{
-    CopyCommitOptions, DirectoryPage, EntryRef, FileSystemProvider, ListOptions,
-    ProviderCapabilities, ProviderChange, ProviderChangeStream, ProviderReadStream,
-    ProviderWriteStream, RemoveOptions, RemoveReport, VfsError, WriteOptions,
+    AttributeChange, AttributeSnapshot, AttributeSupport, CopyCommitOptions, DirectoryPage,
+    EntryRef, FileSystemProvider, ListOptions, ProviderCapabilities, ProviderChange,
+    ProviderChangeStream, ProviderReadStream, ProviderWriteStream, RemoveOptions, RemoveReport,
+    VfsError, WriteOptions,
 };
 use futures::stream;
 use notify::{Event, RecursiveMode, Watcher};
@@ -150,6 +152,50 @@ impl FileSystemProvider for LocalFileSystemProvider {
             archive: None,
             plugin_fields: BTreeMap::new(),
         })
+    }
+
+    fn attribute_support(&self, location: &Location) -> Result<AttributeSupport, VfsError> {
+        location
+            .validate_local_uri()
+            .map_err(|_| invalid_location(location))?;
+        Ok(attributes::support())
+    }
+
+    async fn read_attributes(
+        &self,
+        entry: &EntryRef,
+        cancellation: CancellationToken,
+    ) -> Result<AttributeSnapshot, VfsError> {
+        if cancellation.is_cancelled() {
+            return Err(VfsError::Cancelled);
+        }
+        let path = entry
+            .location
+            .to_native_path()
+            .map_err(|_| invalid_location(&entry.location))?;
+        let uri = entry.location.uri.clone();
+        tokio::task::spawn_blocking(move || attributes::read(&path, &uri))
+            .await
+            .map_err(|_| VfsError::Cancelled)?
+    }
+
+    async fn change_attributes(
+        &self,
+        entry: &EntryRef,
+        change: AttributeChange,
+        cancellation: CancellationToken,
+    ) -> Result<(), VfsError> {
+        if cancellation.is_cancelled() {
+            return Err(VfsError::Cancelled);
+        }
+        let path = entry
+            .location
+            .to_native_path()
+            .map_err(|_| invalid_location(&entry.location))?;
+        let uri = entry.location.uri.clone();
+        tokio::task::spawn_blocking(move || attributes::apply(&path, &uri, change))
+            .await
+            .map_err(|_| VfsError::Cancelled)?
     }
 
     async fn inspect(

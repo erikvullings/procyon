@@ -51,6 +51,7 @@ async fn duplicates_files_and_directory_trees_with_collision_safe_names() {
                 initial_content: None,
                 skip_space_check: false,
                 image_metadata_edit: None,
+                attribute_change: None,
                 geo_transform: None,
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,

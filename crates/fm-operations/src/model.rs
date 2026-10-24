@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use fm_domain::{EntryKind, Location, OperationId};
-use fm_vfs::EntryRef;
+use fm_vfs::{AttributeChange, EntryRef};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -140,6 +140,16 @@ pub enum UndoAction {
         current: EntryFingerprint,
         /// Backup copy holding the content from before the edit.
         backup: Location,
+    },
+    /// Put back the permissions, ownership or attributes an operation changed (task 0258).
+    /// Refused when the entry no longer has the values the operation set.
+    RestoreAttributes {
+        /// The entry whose attributes were changed.
+        entry: EntryRef,
+        /// The values to put back (only the fields the operation changed are set).
+        restore: AttributeChange,
+        /// The values the operation set, which the entry must still have.
+        applied: AttributeChange,
     },
     /// Restore a platform-trash entry to its recorded original location.
     RestoreTrash {
@@ -318,6 +328,8 @@ pub enum OperationKind {
     Undo,
     /// Rewrite the metadata of image files in place (task 0274).
     EditImageMetadata,
+    /// Change permissions, ownership or attributes in place (task 0258).
+    ChangeAttributes,
     /// Convert or minify geographic files into new files (tasks 0281, 0282).
     TransformGeo,
 }

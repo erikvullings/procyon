@@ -4,6 +4,7 @@ import { t } from '../../i18n';
 import type {
   Connection,
   ConnectionId,
+  EntrySummary,
   Location,
   OperationConflict,
   OperationId,
@@ -100,6 +101,8 @@ export interface AppDialogsContext {
   getFindFilesController(): FindFilesController;
   getTabController(): TabController;
   getOpsController(): OperationsController;
+  /** Opens "Change attributes…" for entries chosen in the Properties dialog (task 0258). */
+  openChangeAttributes?(entries: readonly EntrySummary[]): void;
   getActiveDirectoryLocation(): Location | undefined;
   getActivePaneId(): PaneId | undefined;
   navigateActiveLocation(location: Location, preferredCursorName?: string): Promise<void>;
@@ -353,6 +356,14 @@ export function renderAppDialogs(
       client,
       formatSettings: ctx.getFormatSettings(),
       onCancel: () => dialogs.cancelProperties(),
+      ...(ctx.openChangeAttributes === undefined
+        ? {}
+        : {
+            onChangeAttributes: (entries: readonly EntrySummary[]) => {
+              dialogs.cancelProperties();
+              ctx.openChangeAttributes?.(entries);
+            },
+          }),
     }),
     m(ArchivePasswordDialog, {
       open: ds.pendingArchiveCredential !== undefined,

@@ -1354,3 +1354,21 @@ describe('MockFileManagerClient OS file clipboard', () => {
     await expect(client.readOsClipboardFiles()).resolves.toEqual([]);
   });
 });
+
+describe('MockFileManagerClient attribute editing', () => {
+  const location = { providerId: 'local', uri: 'file:///home/report.pdf' };
+
+  it('inspects the selection and previews a recursive change for every runtime alike', async () => {
+    const client = new MockFileManagerClient();
+
+    const inspected = await client.inspectAttributes([location]);
+    expect(inspected.support.mode).toBe(true);
+    expect(inspected.entries[0]?.attributes?.mode).toBe(0o644);
+
+    const shallow = await client.previewAttributeChange([location], false, 'both');
+    expect(shallow).toMatchObject({ total: 1, files: 1, folders: 0, truncated: false });
+    const recursive = await client.previewAttributeChange([location], true, 'foldersOnly');
+    expect(recursive.files).toBe(0);
+    expect(recursive.folders).toBeGreaterThan(0);
+  });
+});

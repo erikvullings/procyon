@@ -28,6 +28,8 @@ export interface PropertiesDialogAttrs {
   readonly client: PropertiesMetadataClient;
   readonly formatSettings?: EntryFormatSettings;
   readonly onCancel: () => void;
+  /** Opens "Change attributes…" for these entries (task 0258); the button is hidden when absent. */
+  readonly onChangeAttributes?: (entries: readonly EntrySummary[]) => void;
 }
 
 function kindLabel(entry: EntrySummary): string {
@@ -222,7 +224,17 @@ export const PropertiesDialog: FactoryComponent<PropertiesDialogAttrs> = () => {
         onToggle: (open: boolean) => {
           if (!open) cancel(attrs);
         },
-        buttons: [{ label: t('button', 'close'), onclick: () => cancel(attrs) }],
+        buttons: [
+          ...(attrs.onChangeAttributes === undefined
+            ? []
+            : [
+                {
+                  label: t('attributes', 'action'),
+                  onclick: () => attrs.onChangeAttributes?.(attrs.entries),
+                },
+              ]),
+          { label: t('button', 'close'), onclick: () => cancel(attrs) },
+        ],
       });
     },
   };

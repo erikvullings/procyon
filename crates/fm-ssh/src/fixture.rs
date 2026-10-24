@@ -544,6 +544,41 @@ impl russh_sftp::server::Handler for FixtureSftpHandler {
         Ok(Name { id, files })
     }
 
+    async fn setstat(
+        &mut self,
+        id: u32,
+        path: String,
+        attrs: FileAttributes,
+    ) -> Result<Status, Self::Error> {
+        // Mirrors an OpenSSH server: SFTPv3 `SETSTAT` carries the permission bits and numeric
+        // owner/group, which the fixture applies to the real file under its temporary root.
+        let target = self.resolve(&path);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if attrs.uid.is_some() || attrs.gid.is_some() {
+                let (uid, gid) = (attrs.uid, attrs.gid);
+                let owned = target.clone();
+                tokio::task::spawn_blocking(move || std::os::unix::fs::lchown(owned, uid, gid))
+                    .await
+                    .map_err(|_| StatusCode::Failure)?
+                    .map_err(|error| map_io_error(&error))?;
+            }
+            if let Some(mode) = attrs.permissions {
+                tokio::fs::set_permissions(&target, std::fs::Permissions::from_mode(mode & 0o7777))
+                    .await
+                    .map_err(|error| map_io_error(&error))?;
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (&target, &attrs);
+            return Err(StatusCode::OpUnsupported);
+        }
+        #[cfg(unix)]
+        Ok(ok_status(id))
+    }
+
     async fn remove(&mut self, id: u32, filename: String) -> Result<Status, Self::Error> {
         tokio::fs::remove_file(self.resolve(&filename))
             .await

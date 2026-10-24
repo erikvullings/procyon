@@ -30,6 +30,11 @@ import {
   type ActionCommandControllerContext,
   createActionCommandController,
 } from '../features/actions/action-command-controller';
+import { CHANGE_ATTRIBUTES_ACTION_ID } from '../features/attributes/attribute-form';
+import {
+  ChangeAttributesDialog,
+  type ChangeAttributesRequest,
+} from '../features/attributes/change-attributes-dialog';
 import {
   addToBasket,
   type BasketState,
@@ -335,6 +340,7 @@ import type {
   ActionInvocationContext,
   AppUpdateInfo,
   BackendEvent,
+  ChangeAttributes,
   Connection,
   DirectoryDelta,
   EntrySummary,
@@ -659,6 +665,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       ),
       descriptor(SAVE_PLAYLIST_ACTION_ID, t('playlistExport', 'action'), {}),
       descriptor(EDIT_IMAGE_METADATA_ACTION_ID, t('imageEdit', 'action'), {
+        requiresSelection: true,
+      }),
+      descriptor(CHANGE_ATTRIBUTES_ACTION_ID, t('attributes', 'action'), {
         requiresSelection: true,
       }),
       descriptor(
@@ -1101,6 +1110,48 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     m.redraw();
   }
 
+  /** Opens "Change attributes…" for the selected entries of the pane (task 0258). */
+  function beginChangeAttributes(invocation: ActionInvocationContext | undefined): void {
+    const paneId = invocation?.paneId ?? workspace?.activePaneId;
+    if (paneId === undefined) return;
+    const ids = new Set(
+      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
+    );
+    const selected = (directories.get(activeTabKey(paneId))?.entries ?? []).filter((entry) =>
+      ids.has(entry.id),
+    );
+    openChangeAttributes(selected);
+  }
+
+  function openChangeAttributes(entries: readonly EntrySummary[]): void {
+    if (entries.length === 0) {
+      toast({ html: t('attributes', 'noSelection') });
+      return;
+    }
+    changeAttributesRequest = { files: entries.map((entry) => entry.location) };
+    m.redraw();
+  }
+
+  function confirmChangeAttributes(change: ChangeAttributes, count: number): void {
+    const request = changeAttributesRequest;
+    changeAttributesRequest = undefined;
+    if (request === undefined) return;
+    void opsController
+      .changeAttributes(request.files, change)
+      .then(() => {
+        toast({ html: t('attributes', 'started', count) });
+        m.redraw();
+      })
+      .catch((error: unknown) => {
+        toast({
+          html: t('attributes', 'failed', {
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        });
+      });
+    m.redraw();
+  }
+
   /** Opens "Edit image metadata…" for the editable images of the selection (task 0274). */
   function beginEditImageMetadata(invocation: ActionInvocationContext | undefined): void {
     const paneId = invocation?.paneId ?? workspace?.activePaneId;
@@ -1240,6 +1291,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }
     if (actionId === EDIT_IMAGE_METADATA_ACTION_ID) {
       beginEditImageMetadata(invocation);
+      return true;
+    }
+    if (actionId === CHANGE_ATTRIBUTES_ACTION_ID) {
+      beginChangeAttributes(invocation);
       return true;
     }
     if (actionId === FIND_MUSIC_DUPLICATES_ACTION_ID) {
@@ -1778,6 +1833,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let playerController: PlayerController | undefined;
   let savePlaylistRequest: SavePlaylistRequest | undefined;
   let editImageMetadataRequest: EditImageMetadataRequest | undefined;
+  let changeAttributesRequest: ChangeAttributesRequest | undefined;
   let convertGeoRequest: ConvertGeoRequest | undefined;
   let minifyGeoRequest: MinifyGeoRequest | undefined;
   let imageMapState: ImageMapState = INITIAL_IMAGE_MAP_STATE;
@@ -5552,6 +5608,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getFindFilesController: () => findFilesController,
     getTabController: () => tabController,
     getOpsController: () => rawOpsController,
+    openChangeAttributes,
     getActiveDirectoryLocation: () => activeDirectory()?.location,
     getActivePaneId: () => activeDirectory()?.paneId,
     navigateActiveLocation: async (location, preferredCursorName) => {
@@ -7294,6 +7351,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             onConvert: confirmConvertGeo,
             onCancel: () => {
               convertGeoRequest = undefined;
+              m.redraw();
+            },
+          }),
+          m(ChangeAttributesDialog, {
+            request: changeAttributesRequest,
+            client: attrs.client,
+            onApply: confirmChangeAttributes,
+            onCancel: () => {
+              changeAttributesRequest = undefined;
               m.redraw();
             },
           }),

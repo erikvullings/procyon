@@ -12,6 +12,8 @@ import type {
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
   AttachSemanticVocabularyRequest,
+  AttributeChangePreview,
+  AttributeScope,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
@@ -82,6 +84,7 @@ import type {
   ImageGpsEntry,
   ImageMetadata,
   ImportSemanticLocalModelRequest,
+  InspectAttributesResult,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   KnowledgeAnswer,
@@ -372,6 +375,8 @@ export type MockClientMethod =
   | 'readGeoFile'
   | 'readImageGps'
   | 'readImageMetadata'
+  | 'inspectAttributes'
+  | 'previewAttributeChange'
   | 'resolveMetadataTokens'
   | 'openDocxPreview'
   | 'readDocxPreviewResource'
@@ -3199,6 +3204,33 @@ export class MockFileManagerClient implements FileManagerClient {
           : { location },
       ),
     );
+  }
+
+  inspectAttributes(
+    locations: readonly Location[],
+    signal?: AbortSignal,
+  ): Promise<InspectAttributesResult> {
+    return this.perform('inspectAttributes', signal, () => ({
+      support: { mode: true, ownership: true, windowsAttributes: false },
+      entries: locations.map((location) => ({
+        location,
+        kind: 'file' as const,
+        attributes: { mode: 0o644, uid: 501, gid: 20 },
+      })),
+    }));
+  }
+
+  previewAttributeChange(
+    locations: readonly Location[],
+    recursive: boolean,
+    scope: AttributeScope,
+    signal?: AbortSignal,
+  ): Promise<AttributeChangePreview> {
+    return this.perform('previewAttributeChange', signal, () => {
+      const folders = recursive && scope !== 'filesOnly' ? locations.length * 3 : 0;
+      const files = scope === 'foldersOnly' ? 0 : locations.length * (recursive ? 12 : 1);
+      return { total: files + folders, files, folders, skippedSymlinks: 0, truncated: false };
+    });
   }
 
   readImageMetadata(_location: Location, signal?: AbortSignal): Promise<ImageMetadata> {

@@ -23,6 +23,7 @@ export const OperationKindDto = {
   delete: 'delete',
   undo: 'undo',
   editImageMetadata: 'editImageMetadata',
+  changeAttributes: 'changeAttributes',
   transformGeo: 'transformGeo',
   search: 'search',
   compare: 'compare',

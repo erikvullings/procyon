@@ -38,6 +38,7 @@ async fn create_file(
                 initial_content: content.map(str::to_owned),
                 skip_space_check: false,
                 image_metadata_edit: None,
+                attribute_change: None,
                 geo_transform: None,
                 symlink_policy: Default::default(),
                 permanent_delete_confirmed: false,

@@ -16,6 +16,7 @@ export type OperationKind =
   | 'delete'
   | 'undo'
   | 'editImageMetadata'
+  | 'changeAttributes'
   | 'transformGeo'
   | 'search'
   | 'compare';

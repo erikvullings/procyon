@@ -11,6 +11,8 @@ import type {
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
   AttachSemanticVocabularyRequest,
+  AttributeChangePreview,
+  AttributeScope,
   BackendEvent,
   BeginOneDriveAuthorizationResponse,
   CalculateFolderSizeRequest,
@@ -76,6 +78,7 @@ import type {
   ImageGpsEntry,
   ImageMetadata,
   ImportSemanticLocalModelRequest,
+  InspectAttributesResult,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   KnowledgeAnswer,
@@ -566,6 +569,21 @@ export interface FileManagerClient {
    * Works for local, archive and remote entries because the backend reads through the VFS.
    */
   readImageMetadata(location: Location, signal?: AbortSignal): Promise<ImageMetadata>;
+  /**
+   * Reads which permission, ownership and attribute edits the selection supports (per provider and
+   * platform) and each entry's current state (task 0258).
+   */
+  inspectAttributes(
+    locations: readonly Location[],
+    signal?: AbortSignal,
+  ): Promise<InspectAttributesResult>;
+  /** Counts the entries a `changeAttributes` operation would touch before it is applied (task 0258). */
+  previewAttributeChange(
+    locations: readonly Location[],
+    recursive: boolean,
+    scope: AttributeScope,
+    signal?: AbortSignal,
+  ): Promise<AttributeChangePreview>;
   /** Reports what converting geographic files to `format` would lose, per file (task 0281). */
   previewGeoConversion(
     locations: readonly Location[],

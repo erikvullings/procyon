@@ -1782,6 +1782,42 @@ textarea.fm-sqlite-sql.browser-default {
   font-size: 0.85em;
 }
 
+/* Change attributes dialog (task 0258) */
+.fm-attr-group {
+  margin: 0.5rem 0;
+  padding: 0.25rem 0.75rem 0.5rem;
+  border: 1px solid var(--fm-border, currentcolor);
+  border-radius: 4px;
+}
+
+.fm-attr-matrix {
+  width: auto;
+}
+
+.fm-attr-matrix th,
+.fm-attr-matrix td {
+  padding: 0.15rem 0.75rem 0.15rem 0;
+  text-align: left;
+}
+
+.fm-attr-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.fm-attr-special {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.fm-attr-note {
+  color: var(--fm-text-muted);
+  font-size: 0.85em;
+}
+
 /* Geographic file actions in the viewer header: quiet outlined buttons, like the other header
    controls, instead of the browser's default button background. */
 .fm-file-viewer-geo-toggle,

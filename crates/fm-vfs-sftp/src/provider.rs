@@ -13,14 +13,15 @@
 //! overridden to [`fm_vfs::ChangeTracking::Poll`] at
 //! [`fm_vfs::CONSERVATIVE_POLL_INTERVAL`], so `fm-application`'s directory
 //! service polls this provider's `list` conservatively rather than treating
-//! it as untracked (task 0109). `RANDOM_ACCESS`,
-//! `SET_TIMESTAMPS`, `SET_PERMISSIONS` and `CHECKSUM` are left unset: SFTPv3
-//! technically supports seeking/`fsetstat`, but nothing in this task's
-//! acceptance criteria needs them, and advertising a capability this
-//! provider hasn't actually exercised against a real server would be a
-//! worse failure mode (a caller trusting a claim that was never verified)
-//! than honestly under-advertising - a documented, explicit gap rather than
-//! a silent one.
+//! it as untracked (task 0109). `SET_PERMISSIONS` is implemented through
+//! SFTPv3 `SETSTAT` (permission bits and numeric uid/gid; task 0258) and is
+//! exercised against the `fm-ssh` fixture. `RANDOM_ACCESS` and
+//! `SET_TIMESTAMPS` are left unset: SFTPv3 technically supports
+//! seeking/`fsetstat`, but nothing in the acceptance criteria needs them, and
+//! advertising a capability this provider hasn't actually exercised against a
+//! real server would be a worse failure mode (a caller trusting a claim that
+//! was never verified) than honestly under-advertising - a documented,
+//! explicit gap rather than a silent one.
 //!
 //! ## Temporary files during transfers (spec §6.7 "do not require temporary
 //! local files")
@@ -49,7 +50,8 @@ use fm_domain::{
 };
 use fm_ssh::{SshConnectionManager, SshConnectionParameters, SshError};
 use fm_vfs::{
-    CONSERVATIVE_POLL_INTERVAL, ChangeTracking, CopyCommitOptions, DirectoryPage, EntryRef,
+    AttributeChange, AttributeSnapshot, AttributeSupport, CONSERVATIVE_POLL_INTERVAL,
+    ChangeTracking, CopyCommitOptions, DirectoryPage, EDITABLE_MODE_MASK, EntryRef,
     FileSystemProvider, ListOptions, ProviderCapabilities, ProviderChangeStream,
     ProviderReadStream, ProviderWriteStream, RemoveOptions, TransferCapabilities, TransferEndpoint,
     VfsError, WriteOptions,
@@ -208,6 +210,92 @@ impl FileSystemProvider for SftpFileSystemProvider {
             // thing they need (task 0077, spec §6). Note this means the file
             // is transferred to be hashed: there is no server-side digest.
             | ProviderCapabilities::CHECKSUM
+            // SFTPv3 `SETSTAT` carries permission bits and numeric uid/gid (task 0258).
+            | ProviderCapabilities::SET_PERMISSIONS
+    }
+
+    fn attribute_support(&self, location: &Location) -> Result<AttributeSupport, VfsError> {
+        ParsedSftpLocation::parse(location)?;
+        Ok(AttributeSupport {
+            mode: true,
+            ownership: true,
+            windows_attributes: false,
+        })
+    }
+
+    async fn read_attributes(
+        &self,
+        entry: &EntryRef,
+        cancellation: CancellationToken,
+    ) -> Result<AttributeSnapshot, VfsError> {
+        check_cancelled(&cancellation)?;
+        let parsed = ParsedSftpLocation::parse(&entry.location)?;
+        let remote_path = parsed.remote_path.clone();
+        let attrs = self
+            .with_sftp(&parsed.connection_id, move |sftp| {
+                let remote_path = remote_path.clone();
+                async move { sftp.symlink_metadata(remote_path).await }
+            })
+            .await?;
+        if attrs.is_symlink() {
+            return Err(VfsError::UnsupportedCapability {
+                capability: ProviderCapabilities::SET_PERMISSIONS,
+            });
+        }
+        Ok(AttributeSnapshot {
+            mode: attrs.permissions.map(|mode| mode & EDITABLE_MODE_MASK),
+            uid: attrs.uid,
+            gid: attrs.gid,
+            ..AttributeSnapshot::default()
+        })
+    }
+
+    async fn change_attributes(
+        &self,
+        entry: &EntryRef,
+        change: AttributeChange,
+        cancellation: CancellationToken,
+    ) -> Result<(), VfsError> {
+        check_cancelled(&cancellation)?;
+        let unsupported = || VfsError::UnsupportedCapability {
+            capability: ProviderCapabilities::SET_PERMISSIONS,
+        };
+        if change.exceeds(self.attribute_support(&entry.location)?) {
+            return Err(unsupported());
+        }
+        let parsed = ParsedSftpLocation::parse(&entry.location)?;
+        let remote_path = parsed.remote_path.clone();
+        let current = self
+            .with_sftp(&parsed.connection_id, move |sftp| {
+                let remote_path = remote_path.clone();
+                async move { sftp.symlink_metadata(remote_path).await }
+            })
+            .await?;
+        // SETSTAT follows symbolic links on the server, so a link is refused outright.
+        if current.is_symlink() {
+            return Err(unsupported());
+        }
+        // SFTPv3 sets uid and gid together; fill the unchanged half from the current state.
+        let ownership = (change.uid.is_some() || change.gid.is_some())
+            .then(|| (change.uid.or(current.uid), change.gid.or(current.gid)));
+        let remote_path = parsed.remote_path.clone();
+        self.with_sftp(&parsed.connection_id, move |sftp| {
+            let remote_path = remote_path.clone();
+            async move {
+                let mut attrs = FileAttributes::empty();
+                if let Some((uid, gid)) = ownership {
+                    attrs.uid = uid;
+                    attrs.gid = gid;
+                }
+                let current_mode = current.permissions.unwrap_or(0);
+                if let Some(mode) = change.resolve_mode(current_mode) {
+                    // Keep the file-type bits so the server sees a complete mode word.
+                    attrs.permissions = Some((current_mode & !EDITABLE_MODE_MASK) | mode);
+                }
+                sftp.set_metadata(remote_path, attrs).await
+            }
+        })
+        .await
     }
 
     /// Task 0108. The endpoint is the *connection id*, not the provider id:

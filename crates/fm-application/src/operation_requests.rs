@@ -52,6 +52,7 @@ pub(crate) fn copy_request(
         initial_content: None,
         skip_space_check: false,
         image_metadata_edit: None,
+        attribute_change: None,
         geo_transform: None,
         symlink_policy: fm_transport_dto::SymlinkPolicyDto::default(),
         permanent_delete_confirmed: false,
@@ -88,6 +89,7 @@ pub(crate) fn delete_request(
         initial_content: None,
         skip_space_check: false,
         image_metadata_edit: None,
+        attribute_change: None,
         geo_transform: None,
         symlink_policy: fm_transport_dto::SymlinkPolicyDto::default(),
         permanent_delete_confirmed: true,
@@ -111,6 +113,7 @@ pub(crate) fn operation_kind(kind: OperationKindDto) -> fm_operations::Operation
         OperationKindDto::Delete => fm_operations::OperationKind::Delete,
         OperationKindDto::Undo => fm_operations::OperationKind::Undo,
         OperationKindDto::EditImageMetadata => fm_operations::OperationKind::EditImageMetadata,
+        OperationKindDto::ChangeAttributes => fm_operations::OperationKind::ChangeAttributes,
         OperationKindDto::TransformGeo => fm_operations::OperationKind::TransformGeo,
         // Search is handled via start_search, not the executor.
         OperationKindDto::Search => {

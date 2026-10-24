@@ -7,6 +7,7 @@
 
 pub mod action;
 pub mod application_uninstall;
+pub mod attributes;
 pub mod checksum;
 pub mod comparison;
 pub mod connection;
@@ -53,6 +54,12 @@ pub use application_uninstall::{
     ApplicationUninstallCandidateDto, DiscoverApplicationUninstallCandidatesRequestDto,
     DiscoverApplicationUninstallCandidatesResponseDto, RemoveApplicationDockIconRequestDto,
     RemoveApplicationDockIconResponseDto,
+};
+pub use attributes::{
+    AttributeChangeDto, AttributeEntryDto, AttributeScopeDto, AttributeSnapshotDto,
+    AttributeSupportDto, AttributeUnsupportedReasonDto, ChangeAttributesDto,
+    InspectAttributesRequestDto, InspectAttributesResponseDto, PreviewAttributeChangeRequestDto,
+    PreviewAttributeChangeResponseDto,
 };
 pub use checksum::{
     ChecksumAlgorithmDto, ChecksumEntryDto, ChecksumFileDto, ChecksumPageDto, DuplicateGroupDto,

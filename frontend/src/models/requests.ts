@@ -49,6 +49,7 @@ import type { StructuredViewStatusDto } from '../api/generated/models/structured
 import type { SyncPlanDto } from '../api/generated/models/syncPlanDto';
 import type { UpdateStructuredViewRequestDto } from '../api/generated/models/updateStructuredViewRequestDto';
 import type { ActionInvocationContext } from './action';
+import type { ChangeAttributes } from './attributes';
 import type { ChecksumAlgorithm } from './checksum';
 import {
   type ComparisonCriteria,
@@ -155,6 +156,8 @@ export interface StartOperationRequest {
   skipSpaceCheck?: boolean;
   /** The metadata changes of an `editImageMetadata` operation (task 0274). */
   imageMetadataEdit?: ImageMetadataEdit;
+  /** The change of a `changeAttributes` operation (task 0258). */
+  attributeChange?: ChangeAttributes;
   /** The conversion of a `transformGeo` operation (task 0281). */
   geoTransform?: GeoTransform;
   symlinkPolicy?: 'copyLink' | 'copyTarget';

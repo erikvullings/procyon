@@ -5,9 +5,10 @@ use fm_domain::{EntryMetadata, EntrySummary, Location, ProviderId};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    ChangeTracking, CopyCommitOptions, DirectoryPage, EntryRef, ListOptions, ProviderCapabilities,
-    ProviderChangeStream, ProviderReadStream, ProviderWriteStream, RemoveOptions, RemoveReport,
-    TransferCapabilities, TransferEndpoint, VfsError, WriteOptions,
+    AttributeChange, AttributeSnapshot, AttributeSupport, ChangeTracking, CopyCommitOptions,
+    DirectoryPage, EntryRef, ListOptions, ProviderCapabilities, ProviderChangeStream,
+    ProviderReadStream, ProviderWriteStream, RemoveOptions, RemoveReport, TransferCapabilities,
+    TransferEndpoint, VfsError, WriteOptions,
 };
 
 /// Provider-neutral asynchronous filesystem interface.
@@ -350,6 +351,42 @@ pub trait FileSystemProvider: Send + Sync {
         let _ = (source, destination, cancellation);
         Err(VfsError::UnsupportedCapability {
             capability: ProviderCapabilities::SET_TIMESTAMPS,
+        })
+    }
+
+    /// Reports which permission, ownership and attribute edits a location accepts (task 0258).
+    ///
+    /// The default supports none; providers advertising
+    /// [`ProviderCapabilities::SET_PERMISSIONS`] override this together with
+    /// [`Self::read_attributes`] and [`Self::change_attributes`].
+    fn attribute_support(&self, location: &Location) -> Result<AttributeSupport, VfsError> {
+        let _ = location;
+        Ok(AttributeSupport::default())
+    }
+
+    /// Reads the editable attribute state of an entry without following a symbolic link.
+    async fn read_attributes(
+        &self,
+        entry: &EntryRef,
+        cancellation: CancellationToken,
+    ) -> Result<AttributeSnapshot, VfsError> {
+        let _ = (entry, cancellation);
+        Err(VfsError::UnsupportedCapability {
+            capability: ProviderCapabilities::SET_PERMISSIONS,
+        })
+    }
+
+    /// Applies a permission, ownership or attribute change to one entry. Symbolic links are never
+    /// followed: providers refuse them with [`VfsError::UnsupportedCapability`].
+    async fn change_attributes(
+        &self,
+        entry: &EntryRef,
+        change: AttributeChange,
+        cancellation: CancellationToken,
+    ) -> Result<(), VfsError> {
+        let _ = (entry, change, cancellation);
+        Err(VfsError::UnsupportedCapability {
+            capability: ProviderCapabilities::SET_PERMISSIONS,
         })
     }
 

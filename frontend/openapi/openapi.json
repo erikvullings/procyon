@@ -312,6 +312,102 @@
         }
       }
     },
+    "/api/v1/attributes/inspect": {
+      "post": {
+        "summary": "Reads which attribute edits a selection supports and each entry's current state.",
+        "operationId": "inspectAttributes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InspectAttributesRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Editable fields and current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectAttributesResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "An entry is outside the accessible roots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "An entry does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/attributes/preview": {
+      "post": {
+        "summary": "Counts the entries an attribute change would touch before it is applied.",
+        "operationId": "previewAttributeChange",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewAttributeChangeRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Entries the change would touch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewAttributeChangeResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "An entry is outside the accessible roots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "An entry does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/checksums": {
       "post": {
         "operationId": "startChecksums",
@@ -9075,6 +9171,193 @@
           }
         }
       },
+      "AttributeChangeDto": {
+        "type": "object",
+        "description": "Fields to change; an absent field is left untouched.",
+        "properties": {
+          "archive": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Windows archive attribute."
+          },
+          "gid": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "New numeric group.",
+            "minimum": 0
+          },
+          "hidden": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Windows hidden attribute."
+          },
+          "mode": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "New Unix permission bits (0 through 0o7777: rwx, setuid, setgid, sticky).",
+            "minimum": 0
+          },
+          "modeMask": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Which bits of `mode` to apply; the others keep each entry's own value. All twelve when\nabsent. Lets a mixed selection change only the bits the user touched.",
+            "minimum": 0
+          },
+          "readOnly": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Windows read-only attribute."
+          },
+          "uid": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "New numeric owner.",
+            "minimum": 0
+          }
+        }
+      },
+      "AttributeEntryDto": {
+        "type": "object",
+        "description": "Current state of one selected entry.",
+        "required": [
+          "location",
+          "kind"
+        ],
+        "properties": {
+          "attributes": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AttributeSnapshotDto",
+                "description": "Editable state; absent when the entry cannot be read or edited."
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EntryKindDto",
+            "description": "File, folder or symbolic link."
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The entry."
+          }
+        }
+      },
+      "AttributeScopeDto": {
+        "type": "string",
+        "description": "Which entries a (recursive) attribute change touches. Directories are always descended into;\nthe scope only decides which visited entries are changed.",
+        "enum": [
+          "both",
+          "filesOnly",
+          "foldersOnly"
+        ]
+      },
+      "AttributeSnapshotDto": {
+        "type": "object",
+        "description": "Editable attribute state of one entry; an absent field is not exposed by the provider.",
+        "properties": {
+          "archive": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Windows archive attribute."
+          },
+          "gid": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Numeric group.",
+            "minimum": 0
+          },
+          "hidden": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Windows hidden attribute."
+          },
+          "mode": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Unix permission bits.",
+            "minimum": 0
+          },
+          "readOnly": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Windows read-only attribute."
+          },
+          "uid": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Numeric owner.",
+            "minimum": 0
+          }
+        }
+      },
+      "AttributeSupportDto": {
+        "type": "object",
+        "description": "Which fields every selected entry's provider lets the user edit.",
+        "required": [
+          "mode",
+          "ownership",
+          "windowsAttributes"
+        ],
+        "properties": {
+          "mode": {
+            "type": "boolean",
+            "description": "Unix permission bits."
+          },
+          "ownership": {
+            "type": "boolean",
+            "description": "Numeric owner and group."
+          },
+          "windowsAttributes": {
+            "type": "boolean",
+            "description": "Windows read-only, hidden and archive attributes."
+          }
+        }
+      },
+      "AttributeUnsupportedReasonDto": {
+        "type": "string",
+        "description": "Why nothing can be edited for a selection.",
+        "enum": [
+          "providerUnsupported",
+          "mixedProviders",
+          "symbolicLink"
+        ]
+      },
       "BeginOneDriveAuthorizationResponseDto": {
         "type": "object",
         "description": "The outcome of beginning a OneDrive authorization attempt (task 0110,\n`POST /api/v1/connections/{connectionId}/onedrive/authorize`): the caller\nopens `authorization_url` in the system browser (the backend never opens\na browser or embedded webview itself) and polls `attempt_id` for\ncompletion. Never carries a token - the authorization code/token exchange\nhappens entirely on the backend, asynchronously.",
@@ -9214,6 +9497,27 @@
             "format": "int32",
             "description": "Four-digit year.",
             "minimum": 0
+          }
+        }
+      },
+      "ChangeAttributesDto": {
+        "type": "object",
+        "description": "The change carried by a `changeAttributes` operation.",
+        "required": [
+          "change"
+        ],
+        "properties": {
+          "change": {
+            "$ref": "#/components/schemas/AttributeChangeDto",
+            "description": "What to change."
+          },
+          "recursive": {
+            "type": "boolean",
+            "description": "Descend into selected folders."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/AttributeScopeDto",
+            "description": "Which visited entries to change."
           }
         }
       },
@@ -13472,6 +13776,54 @@
           }
         }
       },
+      "InspectAttributesRequestDto": {
+        "type": "object",
+        "description": "Reads the editable state of a selection (`POST /api/v1/attributes/inspect`).",
+        "required": [
+          "sources"
+        ],
+        "properties": {
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Selected entries."
+          }
+        }
+      },
+      "InspectAttributesResponseDto": {
+        "type": "object",
+        "description": "Result of inspecting a selection.",
+        "required": [
+          "support",
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttributeEntryDto"
+            },
+            "description": "State of each selected entry in request order."
+          },
+          "support": {
+            "$ref": "#/components/schemas/AttributeSupportDto",
+            "description": "Fields editable for every selected entry."
+          },
+          "unsupportedReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AttributeUnsupportedReasonDto",
+                "description": "Why `support` is empty, when it is."
+              }
+            ]
+          }
+        }
+      },
       "InstallSemanticWorkerPatchRequestDto": {
         "type": "object",
         "description": "Requests the newest compatible signed worker patch.",
@@ -17077,6 +17429,7 @@
           "delete",
           "undo",
           "editImageMetadata",
+          "changeAttributes",
           "transformGeo",
           "search",
           "compare"
@@ -17910,6 +18263,71 @@
             "type": "string",
             "format": "uuid",
             "description": "Opaque backend session identifier."
+          }
+        }
+      },
+      "PreviewAttributeChangeRequestDto": {
+        "type": "object",
+        "description": "Counts what a `changeAttributes` operation would touch (`POST /api/v1/attributes/preview`).",
+        "required": [
+          "sources"
+        ],
+        "properties": {
+          "recursive": {
+            "type": "boolean",
+            "description": "Descend into selected folders."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/AttributeScopeDto",
+            "description": "Which visited entries would be changed."
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Selected entries."
+          }
+        }
+      },
+      "PreviewAttributeChangeResponseDto": {
+        "type": "object",
+        "description": "Number of entries a change would be applied to.",
+        "required": [
+          "total",
+          "files",
+          "folders",
+          "skippedSymlinks",
+          "truncated"
+        ],
+        "properties": {
+          "files": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of which files.",
+            "minimum": 0
+          },
+          "folders": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of which folders.",
+            "minimum": 0
+          },
+          "skippedSymlinks": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Symbolic links that would be left alone.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entries that would be changed.",
+            "minimum": 0
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "The count stopped at the enumeration limit and is a lower bound."
           }
         }
       },
@@ -24146,6 +24564,17 @@
               {
                 "$ref": "#/components/schemas/ArchiveFormatDto",
                 "description": "Archive format requested by a `createArchive` or `moveToArchive` operation."
+              }
+            ]
+          },
+          "attributeChange": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ChangeAttributesDto",
+                "description": "The change applied by a `changeAttributes` operation (task 0258)."
               }
             ]
           },

@@ -1,5 +1,6 @@
 export * from './action';
 export * from './app-update';
+export * from './attributes';
 export * from './checksum';
 export * from './clipboard';
 export * from './comparison';

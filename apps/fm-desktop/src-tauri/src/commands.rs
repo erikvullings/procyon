@@ -2893,6 +2893,32 @@ pub(crate) async fn resolve_metadata_tokens(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Reads which attribute edits a selection supports and each entry's current state (task 0258).
+#[tauri::command]
+pub(crate) async fn inspect_attributes(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::InspectAttributesRequestDto,
+) -> Result<fm_transport_dto::InspectAttributesResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .inspect_attributes(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Counts the entries an attribute change would touch (task 0258).
+#[tauri::command]
+pub(crate) async fn preview_attribute_change(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::PreviewAttributeChangeRequestDto,
+) -> Result<fm_transport_dto::PreviewAttributeChangeResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .preview_attribute_change(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Reads all EXIF, GPS, IPTC, XMP and ICC tags of an image (task 0273).
 #[tauri::command]
 pub(crate) async fn read_image_metadata(

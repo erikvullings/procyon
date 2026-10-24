@@ -1,5 +1,6 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import type {
+  ChangeAttributes,
   GeoTransform,
   ImageMetadataEdit,
   LinkRequest,
@@ -55,6 +56,15 @@ export interface OperationsController {
   editImageMetadata(
     sources: readonly Location[],
     edit: ImageMetadataEdit,
+    signal?: AbortSignal,
+  ): Promise<Operation>;
+  /**
+   * Changes permissions, ownership or Windows attributes of the sources, optionally recursively, as
+   * a cancellable job; undoable while the entries keep the values it set (task 0258).
+   */
+  changeAttributes(
+    sources: readonly Location[],
+    change: ChangeAttributes,
     signal?: AbortSignal,
   ): Promise<Operation>;
   /** Converts geographic files into new files next to them (task 0281). */
@@ -293,6 +303,13 @@ export function createOperationsController(rawClient: FileManagerClient): Operat
     transformGeo(sources, transform, signal) {
       return client.startOperation(
         { type: 'transformGeo', sources, conflictPolicy: 'ask', geoTransform: transform },
+        signal,
+      );
+    },
+
+    changeAttributes(sources, change, signal) {
+      return client.startOperation(
+        { type: 'changeAttributes', sources, conflictPolicy: 'ask', attributeChange: change },
         signal,
       );
     },

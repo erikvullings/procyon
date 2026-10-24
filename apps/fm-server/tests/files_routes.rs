@@ -810,3 +810,48 @@ async fn reads_kml_and_kmz_files_with_styles_icons_and_skipped_elements() {
             .is_some_and(|s| s.starts_with("data:image/png"))
     );
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn inspects_and_previews_attributes_inside_accessible_roots() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    let dir = root.path().join("tree");
+    std::fs::create_dir(&dir).expect("must create fixture");
+    let file = dir.join("a.txt");
+    std::fs::write(&file, b"x").expect("must create fixture");
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644))
+        .expect("must set fixture mode");
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+
+    let inspected: Value = client
+        .post(format!("{}/api/v1/attributes/inspect", server.base_url))
+        .json(&json!({"sources": [location_json(&file)]}))
+        .send()
+        .await
+        .expect("request must succeed")
+        .json()
+        .await
+        .expect("body must be JSON");
+    assert_eq!(inspected["support"]["mode"], true);
+    assert_eq!(inspected["entries"][0]["attributes"]["mode"], 0o644);
+
+    let preview: Value = client
+        .post(format!("{}/api/v1/attributes/preview", server.base_url))
+        .json(&json!({
+            "sources": [location_json(&dir)],
+            "recursive": true,
+            "scope": "filesOnly"
+        }))
+        .send()
+        .await
+        .expect("request must succeed")
+        .json()
+        .await
+        .expect("body must be JSON");
+    assert_eq!(preview["total"], 1);
+    assert_eq!(preview["files"], 1);
+    assert_eq!(preview["truncated"], false);
+}

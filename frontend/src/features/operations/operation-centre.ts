@@ -162,6 +162,8 @@ export function operationKindLabel(kind: OperationKind | null | undefined): stri
       return t('operation', 'kindUndo');
     case 'editImageMetadata':
       return t('operation', 'kindEditImageMetadata');
+    case 'changeAttributes':
+      return t('operation', 'kindChangeAttributes');
     case 'transformGeo':
       return t('operation', 'kindTransformGeo');
     case 'search':

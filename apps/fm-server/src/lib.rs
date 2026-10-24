@@ -160,6 +160,10 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::files::read_file_range))
         .routes(utoipa_axum::routes!(routes::files::resolve_metadata_tokens))
         .routes(utoipa_axum::routes!(routes::files::read_image_metadata))
+        .routes(utoipa_axum::routes!(routes::attributes::inspect_attributes))
+        .routes(utoipa_axum::routes!(
+            routes::attributes::preview_attribute_change
+        ))
         .routes(utoipa_axum::routes!(routes::files::read_image_gps))
         .routes(utoipa_axum::routes!(routes::files::read_geo_file))
         .routes(utoipa_axum::routes!(routes::files::parse_geo_text))

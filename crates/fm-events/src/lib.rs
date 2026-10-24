@@ -592,6 +592,8 @@ pub enum OperationKindPayload {
     Undo,
     /// Rewrite the metadata of image files in place (task 0274).
     EditImageMetadata,
+    /// Change permissions, ownership or attributes in place (task 0258).
+    ChangeAttributes,
     /// Convert or minify geographic files into new files (tasks 0281, 0282).
     TransformGeo,
     /// Search files.
