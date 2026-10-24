@@ -12,6 +12,8 @@ pub mod bulk_listing;
 #[cfg(windows)]
 mod junction;
 mod remove_tree;
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod settle;
 
 use std::{
     collections::BTreeMap,
@@ -483,6 +485,11 @@ impl FileSystemProvider for LocalFileSystemProvider {
             .map_err(|error| map_io_error(error, &source.location.uri))?;
         if source_metadata.permissions().readonly() {
             return Ok(false);
+        }
+        // Files pasted from a remote-desktop client appear before their content has arrived.
+        #[cfg(target_os = "macos")]
+        if settle::needs_settling(&source_path) {
+            settle::wait_until_quiet(&source_path, settle::QUIET_PERIOD, &cancellation).await?;
         }
         #[cfg(target_os = "macos")]
         if source_metadata.len() >= 1024 * 1024 {
