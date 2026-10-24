@@ -14,6 +14,7 @@
   { "id": "core.focusLocation", "title": "Focus location", "category": "navigation", "defaultShortcuts": [{ "key": "l", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } },
   { "id": "core.quickFilter", "title": "Quick filter", "category": "navigation", "defaultShortcuts": [{ "key": "f", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } },
   { "id": "core.branchView", "title": "Branch view", "category": "navigation", "defaultShortcuts": [{ "key": "b", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } },
+  { "id": "core.syncBrowsing", "title": "Synchronized browsing", "category": "navigation", "defaultShortcuts": [{ "key": "s", "ctrl": true, "alt": true }], "contextRequirements": {}, "source": { "kind": "core" } },
   { "id": "core.findFiles", "title": "Find files", "category": "navigation", "defaultShortcuts": [{ "key": "F7", "alt": true }], "contextRequirements": {}, "source": { "kind": "core" } },
   { "id": "core.newTab", "title": "New tab", "category": "navigation", "defaultShortcuts": [{ "key": "t", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } },
   { "id": "core.closeTab", "title": "Close tab", "category": "navigation", "defaultShortcuts": [{ "key": "w", "ctrl": true }], "contextRequirements": {}, "source": { "kind": "core" } }

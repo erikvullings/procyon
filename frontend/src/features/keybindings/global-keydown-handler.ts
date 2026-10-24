@@ -112,6 +112,8 @@ export interface GlobalKeydownContext {
   actionsWithFavourites(): readonly ActionDescriptor[];
   openFindFiles(): void;
   toggleBranchView(): void;
+  /** Ctrl+Alt+S: toggles synchronized browsing for the workspace (task 0255). */
+  toggleSyncBrowsing(): void;
   replaceClipboard(next?: ClipboardState): void;
   /** The clipboard a paste uses: Procyon's own, or file references copied in the system file
    * manager when those are newer (task 0247). */
@@ -1132,6 +1134,16 @@ const ACTION_KEYDOWN_ROUTES = [
       if (context.activeDirectory() === undefined) return;
       event.preventDefault();
       context.toggleBranchView();
+      context.redraw();
+      return;
+    },
+  },
+  {
+    id: 'core.syncBrowsing',
+    tryHandle: (context, event, state) => {
+      if (state.dispatchedAction !== 'core.syncBrowsing') return false;
+      event.preventDefault();
+      context.toggleSyncBrowsing();
       context.redraw();
       return;
     },

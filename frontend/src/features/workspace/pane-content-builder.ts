@@ -206,6 +206,8 @@ export interface PaneContentContext {
 
   // Controller accessors
   getNavigation(): NavigationController;
+  getSyncBrowsingState(): 'off' | 'synced' | 'desynced';
+  toggleSyncBrowsing(): void;
   getWorkspaceController(): WorkspaceController;
   getOpsController(): OperationsController;
   openSavedSearch(saved: SavedSearch): void;
@@ -769,6 +771,8 @@ export function createPaneContentBuilder(
       viewMode: tab?.view.viewMode ?? 'table',
       iconSize: tab?.view.iconSize ?? 'medium',
       viewRemembered: directory.viewRemembered === true,
+      syncBrowsing: context.getSyncBrowsingState(),
+      onToggleSyncBrowsing: () => context.toggleSyncBrowsing(),
       onForgetView: () => {
         if (tab === undefined) return;
         void client

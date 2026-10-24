@@ -492,6 +492,7 @@ button.fm-breadcrumb-scheme:hover {
     .fm-pane-view-mode,
     .fm-pane-grid-sort,
     .fm-pane-photo-mode,
+    .fm-pane-sync-browsing,
     .fm-pane-tab-favourites
   ) {
   display: flex;
@@ -512,6 +513,7 @@ button.fm-breadcrumb-scheme:hover {
     .fm-pane-view-mode,
     .fm-pane-grid-sort,
     .fm-pane-photo-mode,
+    .fm-pane-sync-browsing,
     .fm-pane-tab-favourites
   )
   .fm-icon {
@@ -529,6 +531,7 @@ button.fm-breadcrumb-scheme:hover {
 .fm-pane-view-mode,
 .fm-pane-grid-sort,
 .fm-pane-photo-mode,
+.fm-pane-sync-browsing,
 .fm-pane-tab-favourites {
   /* Both the trigger button and the full-viewport backdrop (z-index 4) are siblings inside this
    * wrapper - without this the backdrop paints over the button once the menu is open, so a
@@ -915,4 +918,14 @@ button.fm-breadcrumb-scheme:hover {
 .toast.fm-toast-warning {
   background-color: var(--fm-selected-row-text);
   color: var(--fm-cursor-row-text);
+}
+
+/* Synchronized browsing toggle (task 0255): muted when off, accent when mirroring, warning while
+ * the panes are apart. */
+.fm-pane-sync-browsing.fm-pane-sync-synced {
+  color: var(--fm-accent);
+}
+
+.fm-pane-sync-browsing.fm-pane-sync-desynced {
+  color: var(--fm-warning);
 }

@@ -576,6 +576,18 @@ fn core_actions(capabilities: PlatformCapabilities) -> Vec<ActionDescriptor> {
             ActionContextRequirements::none(),
         ),
         core_action(
+            "core.syncBrowsing",
+            "Synchronized Browsing",
+            "navigation",
+            vec![KeyChord {
+                key: "s".to_owned(),
+                ctrl: true,
+                alt: true,
+                ..KeyChord::default()
+            }],
+            ActionContextRequirements::none(),
+        ),
+        core_action(
             "core.newTab",
             "New Tab",
             "navigation",
@@ -1057,6 +1069,7 @@ mod tests {
             "core.quickFilter",
             "core.findFiles",
             "core.branchView",
+            "core.syncBrowsing",
             "core.newTab",
             "core.closeTab",
             "core.nextTab",

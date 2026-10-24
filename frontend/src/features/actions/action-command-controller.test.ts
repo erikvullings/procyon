@@ -85,6 +85,7 @@ function fakeContext(
     openPropertiesForActivePane: () => {},
     openMultiRenameForActivePane: () => {},
     toggleBranchView: () => {},
+    toggleSyncBrowsing: () => {},
     openSemanticAssistant: () => {},
     openKnowledgeSearch: () => {},
     uninstallApplication: () => {},
@@ -302,6 +303,24 @@ describe('action-command-controller uninstallApplication wiring', () => {
       {},
     );
     expect(toggleBranchView).toHaveBeenCalledOnce();
+  });
+
+  it('toggles synchronized browsing from the command palette', () => {
+    const toggleSyncBrowsing = vi.fn();
+    const context = fakeContext({ toggleSyncBrowsing });
+    createActionCommandController(context).invokePaletteAction(
+      {
+        id: 'core.syncBrowsing',
+        title: 'Synchronized Browsing',
+        category: 'navigation',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' as const },
+      },
+      undefined,
+      {},
+    );
+    expect(toggleSyncBrowsing).toHaveBeenCalledOnce();
   });
 
   it('opens the Multi-Rename Tool from the palette instead of the generic backend invoke', () => {

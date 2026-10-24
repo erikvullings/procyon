@@ -86,7 +86,7 @@ The dual-pane shell: layout, panes, tabs, sorting, selection, and finding things
 - [x] 0253 Guided walkthroughs and in-app help
 - [x] 0259 Directory refresh amplification (large dirs, post-operation) *(needs 0156; real cause of slow delete was a 19 MB operation-history.json — see task notes)*
 - [x] 0254 Branch (flat) view *(needs 0019, 0024)*
-- [ ] 0255 Synchronized browsing *(needs 0027, 0026)*
+- [x] 0255 Synchronized browsing *(needs 0027, 0026)*
 - [x] 0270 Per-folder view memory *(needs 0029, 0134)*
 
 ## Semantic search, RAG & knowledge

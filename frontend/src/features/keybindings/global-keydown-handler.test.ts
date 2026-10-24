@@ -36,6 +36,11 @@ const ACTIONS: readonly ActionDescriptor[] = [
       { key: 'ArrowRight', ctrl: true },
     ],
   },
+  {
+    id: 'core.syncBrowsing',
+    title: 'Synchronized browsing',
+    defaultShortcuts: [{ key: 's', ctrl: true, alt: true }],
+  },
   { id: 'core.swapPanes', title: 'Swap panes', defaultShortcuts: [{ key: 'u', ctrl: true }] },
   {
     id: 'core.compareDirectories',
@@ -226,6 +231,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     actionsWithFavourites: () => ACTIONS,
     openFindFiles: vi.fn(),
     toggleBranchView: vi.fn(),
+    toggleSyncBrowsing: vi.fn(),
     replaceClipboard: vi.fn(),
     resolvePasteClipboard: () => Promise.resolve({ locations: [] }),
     selectedLocations: () => [],
@@ -505,6 +511,13 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     createGlobalKeydownHandler(context)(keydown('u', { ctrlKey: true }));
     expect(navigate).toHaveBeenCalledWith(PANE_A, locB);
     expect(navigate).toHaveBeenCalledWith(PANE_B, locA);
+  });
+
+  it('Ctrl+Alt+S toggles synchronized browsing', () => {
+    const toggleSyncBrowsing = vi.fn();
+    const context = makeContext({ toggleSyncBrowsing });
+    createGlobalKeydownHandler(context)(keydown('s', { ctrlKey: true, altKey: true }));
+    expect(toggleSyncBrowsing).toHaveBeenCalledOnce();
   });
 
   it('Ctrl+U does nothing in browser runtime (Chrome reserves it for View Source)', () => {

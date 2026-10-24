@@ -173,6 +173,11 @@ import {
 } from '../features/navigation/navigation';
 import { rootLocationFor } from '../features/navigation/root-location';
 import {
+  createLocalStorageSyncStore,
+  createSyncedBrowsing,
+  type SyncedBrowsingController,
+} from '../features/navigation/synced-browsing';
+import {
   requestSkippingSpaceCheck,
   spaceShortfallOf,
 } from '../features/operations/insufficient-space';
@@ -2841,6 +2846,27 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   let navigation: NavigationController;
+  let syncedBrowsing: SyncedBrowsingController | undefined;
+
+  /** Finds the directory `name` directly inside `parent`, matching case-insensitively (task 0255). */
+  async function resolveSyncChild(parent: Location, name: string): Promise<Location | undefined> {
+    const wanted = name.toLowerCase();
+    const children = await attrsClient.listDirectoryChildren(parent, true);
+    const exact = children.find((child) => child.name === name);
+    return (exact ?? children.find((child) => child.name.toLowerCase() === wanted))?.location;
+  }
+
+  /** Mirrors user navigation between the panes while synchronized browsing is on (task 0255). */
+  function wrapSyncedBrowsing(inner: NavigationController): NavigationController {
+    syncedBrowsing = createSyncedBrowsing({
+      navigation: inner,
+      getWorkspace: () => workspace,
+      resolveChild: resolveSyncChild,
+      store: createLocalStorageSyncStore(window.localStorage),
+      onChange: () => m.redraw(),
+    });
+    return syncedBrowsing.navigation;
+  }
 
   /** Clears every per-tab runtime cache for a closed tab, cancelling its in-flight request. */
   function clearTabState(paneId: PaneId, tabId: TabId): void {
@@ -4757,6 +4783,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     actionsWithFavourites,
     openFindFiles: () => findFilesController.openFindFiles(),
     toggleBranchView: () => findFilesController.toggleBranchView(),
+    toggleSyncBrowsing: () => syncedBrowsing?.toggle(),
     replaceClipboard,
     resolvePasteClipboard,
     selectedLocations,
@@ -5117,6 +5144,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openPropertiesForActivePane: () => globalKeydownHandlerContext.openPropertiesForActivePane(),
     openMultiRenameForActivePane: () => globalKeydownHandlerContext.openMultiRenameForActivePane(),
     toggleBranchView: () => findFilesController.toggleBranchView(),
+    toggleSyncBrowsing: () => syncedBrowsing?.toggle(),
     openDocumentSummary: (_paneId, entry) => {
       if (!semanticAssistantAvailable) return;
       if (workspace === undefined) return;
@@ -5238,6 +5266,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     locationForPath: (current, path) => locationForPath(current, path, homeDirectory),
     activeDirectory,
     getNavigation: () => navigation,
+    getSyncBrowsingState: () => syncedBrowsing?.state() ?? 'off',
+    toggleSyncBrowsing: () => syncedBrowsing?.toggle(),
     getWorkspaceController: () => workspaceController,
     getOpsController: () => opsController,
     openSavedSearch: (saved) => findFilesController.startSavedSearch(saved, 'currentPane'),
@@ -5703,99 +5733,109 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         },
         navigation: {
           create: () =>
-            createNavigationController({
-              client: attrs.client,
-              getWorkspace: () => workspace,
-              replaceWorkspace: (next) => replaceWorkspace(next),
-              onLocationVisited: (workspaceId, location) => {
-                unavailableLocations.delete(`${location.providerId}:${location.uri}`);
-                void updateLocationSettings(attrs.client, (settings) => ({
-                  ...settings,
-                  recentLocationsByWorkspace: {
-                    ...settings.recentLocationsByWorkspace,
-                    [workspaceId]: recordRecentLocation(
-                      settings.recentLocationsByWorkspace[workspaceId] ?? [],
-                      location,
-                    ),
-                  },
-                }));
-              },
-              onLocationUnavailable: (_workspaceId, location) => {
-                unavailableLocations.add(`${location.providerId}:${location.uri}`);
-                m.redraw();
-              },
-              requestArchivePassword,
-              // Mirrors the same "on and the directory actually reports git status" gate
-              // `pane-content-builder.ts` uses to decide whether to render the column - here it
-              // decides whether to *ask the backend to compute* git status at all, so a hidden
-              // column costs nothing server-side either. Read fresh on every request rather than
-              // snapshotted, since `currentSettings` can change between navigations.
-              getShowGitStatusColumn: () =>
-                currentSettings?.defaultColumns.includes('core.gitStatus') ?? false,
-              updatePane: (paneId, tabId, view, preferredCursorName) => {
-                if (basketTabIds.has(tabId)) return;
-                const key = tabKey(paneId, tabId);
-                const previous = directories.get(key);
-                if (
-                  previous !== undefined &&
-                  (previous.location?.uri !== view.location?.uri ||
-                    previous.location?.providerId !== view.location?.providerId)
-                ) {
-                  pendingCursorRestorations.delete(key);
-                }
-                directories.set(key, respectSystemLocationReadOnly(view, systemLocations));
-                if (previous !== undefined && previous.location?.uri === view.location?.uri) {
-                  reconcileSelectionAfterEntryChange(paneId, tabId, previous.entries, view.entries);
-                }
-                if (view.entries.length === 0) {
-                  // Keep the synthetic ".." navigation row out of cursor/selection state. This
-                  // also avoids a transient empty first page leaving ".." focused after the real
-                  // entries arrive during workspace restoration.
-                  selections.set(key, { selectedEntryIds: [] });
-                  const pending = pendingCursorRestorations.get(key);
-                  if (pending !== undefined) {
-                    pendingCursorRestorations.set(key, { ...pending, fallbackCursorId: undefined });
+            wrapSyncedBrowsing(
+              createNavigationController({
+                client: attrs.client,
+                getWorkspace: () => workspace,
+                replaceWorkspace: (next) => replaceWorkspace(next),
+                onLocationVisited: (workspaceId, location) => {
+                  unavailableLocations.delete(`${location.providerId}:${location.uri}`);
+                  void updateLocationSettings(attrs.client, (settings) => ({
+                    ...settings,
+                    recentLocationsByWorkspace: {
+                      ...settings.recentLocationsByWorkspace,
+                      [workspaceId]: recordRecentLocation(
+                        settings.recentLocationsByWorkspace[workspaceId] ?? [],
+                        location,
+                      ),
+                    },
+                  }));
+                },
+                onLocationUnavailable: (_workspaceId, location) => {
+                  unavailableLocations.add(`${location.providerId}:${location.uri}`);
+                  m.redraw();
+                },
+                requestArchivePassword,
+                // Mirrors the same "on and the directory actually reports git status" gate
+                // `pane-content-builder.ts` uses to decide whether to render the column - here it
+                // decides whether to *ask the backend to compute* git status at all, so a hidden
+                // column costs nothing server-side either. Read fresh on every request rather than
+                // snapshotted, since `currentSettings` can change between navigations.
+                getShowGitStatusColumn: () =>
+                  currentSettings?.defaultColumns.includes('core.gitStatus') ?? false,
+                updatePane: (paneId, tabId, view, preferredCursorName) => {
+                  if (basketTabIds.has(tabId)) return;
+                  const key = tabKey(paneId, tabId);
+                  const previous = directories.get(key);
+                  if (
+                    previous !== undefined &&
+                    (previous.location?.uri !== view.location?.uri ||
+                      previous.location?.providerId !== view.location?.providerId)
+                  ) {
+                    pendingCursorRestorations.delete(key);
                   }
-                } else if (
-                  preferredCursorName !== undefined ||
-                  selections.get(key)?.cursorEntryId === undefined ||
-                  previous?.location?.uri !== view.location?.uri
-                ) {
-                  // After `..` navigation, land the cursor back on the child directory
-                  // just navigated away from instead of always the listing's first entry.
-                  // Landing here (a fresh tab, a `..` navigation, switching back to a tab that
-                  // was never given a cursor) only positions the keyboard cursor - it must never
-                  // also select the entry. Selecting is a deliberate user action (click, keyboard
-                  // select), not a side effect of simply looking at a directory or switching to
-                  // it. `view.entries` is the raw, unsorted backend listing - the order the user
-                  // actually sees (and arrow-keys through) comes from sorting/filtering it the
-                  // same way `pane-content-builder.ts` does. The synthetic ".." row is
-                  // deliberately excluded here: the cursor should land on the first real file
-                  // below it, not on ".." itself (the empty-directory branch above already
-                  // handles landing on ".." when there's nothing else to select).
-                  const tab = workspace?.panesById[paneId]?.tabsById[tabId];
-                  const sorted = entriesSortedFor(
-                    key,
-                    view.entries,
-                    effectiveSort(tab?.view.sort ?? []),
-                    tab?.view.foldersFirst ?? false,
-                    tab?.location.uri.startsWith('search://') === true,
-                  );
-                  const filtered = entriesFilteredFor(key, sorted, quickFilterQueryFor(key, tab));
-                  const preferredEntry = filtered.find(
-                    (entry) => entry.name === preferredCursorName,
-                  );
-                  const firstEntry = preferredEntry ?? filtered[0];
-                  selections.set(key, {
-                    selectedEntryIds: [],
-                    ...(firstEntry === undefined
-                      ? {}
-                      : { cursorEntryId: firstEntry.id, anchorEntryId: firstEntry.id }),
-                  });
-                }
-                m.redraw();
-              },
-            }),
+                  directories.set(key, respectSystemLocationReadOnly(view, systemLocations));
+                  if (previous !== undefined && previous.location?.uri === view.location?.uri) {
+                    reconcileSelectionAfterEntryChange(
+                      paneId,
+                      tabId,
+                      previous.entries,
+                      view.entries,
+                    );
+                  }
+                  if (view.entries.length === 0) {
+                    // Keep the synthetic ".." navigation row out of cursor/selection state. This
+                    // also avoids a transient empty first page leaving ".." focused after the real
+                    // entries arrive during workspace restoration.
+                    selections.set(key, { selectedEntryIds: [] });
+                    const pending = pendingCursorRestorations.get(key);
+                    if (pending !== undefined) {
+                      pendingCursorRestorations.set(key, {
+                        ...pending,
+                        fallbackCursorId: undefined,
+                      });
+                    }
+                  } else if (
+                    preferredCursorName !== undefined ||
+                    selections.get(key)?.cursorEntryId === undefined ||
+                    previous?.location?.uri !== view.location?.uri
+                  ) {
+                    // After `..` navigation, land the cursor back on the child directory
+                    // just navigated away from instead of always the listing's first entry.
+                    // Landing here (a fresh tab, a `..` navigation, switching back to a tab that
+                    // was never given a cursor) only positions the keyboard cursor - it must never
+                    // also select the entry. Selecting is a deliberate user action (click, keyboard
+                    // select), not a side effect of simply looking at a directory or switching to
+                    // it. `view.entries` is the raw, unsorted backend listing - the order the user
+                    // actually sees (and arrow-keys through) comes from sorting/filtering it the
+                    // same way `pane-content-builder.ts` does. The synthetic ".." row is
+                    // deliberately excluded here: the cursor should land on the first real file
+                    // below it, not on ".." itself (the empty-directory branch above already
+                    // handles landing on ".." when there's nothing else to select).
+                    const tab = workspace?.panesById[paneId]?.tabsById[tabId];
+                    const sorted = entriesSortedFor(
+                      key,
+                      view.entries,
+                      effectiveSort(tab?.view.sort ?? []),
+                      tab?.view.foldersFirst ?? false,
+                      tab?.location.uri.startsWith('search://') === true,
+                    );
+                    const filtered = entriesFilteredFor(key, sorted, quickFilterQueryFor(key, tab));
+                    const preferredEntry = filtered.find(
+                      (entry) => entry.name === preferredCursorName,
+                    );
+                    const firstEntry = preferredEntry ?? filtered[0];
+                    selections.set(key, {
+                      selectedEntryIds: [],
+                      ...(firstEntry === undefined
+                        ? {}
+                        : { cursorEntryId: firstEntry.id, anchorEntryId: firstEntry.id }),
+                    });
+                  }
+                  m.redraw();
+                },
+              }),
+            ),
           dispose: (controller) => controller.dispose(),
         },
       });

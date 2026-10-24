@@ -109,6 +109,7 @@ export interface ActionCommandControllerContext {
   /** Opens the Multi-Rename Tool for the active pane's selection. */
   openMultiRenameForActivePane(): void;
   toggleBranchView(): void;
+  toggleSyncBrowsing(): void;
   /** Opens representative key passages and generation controls for one file. */
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
   /** Opens Ask or the active folder's semantic enrolment prompt. */
@@ -457,6 +458,10 @@ export function createActionCommandController(
     }
     if (action.id === 'core.branchView') {
       context.toggleBranchView();
+      return;
+    }
+    if (action.id === 'core.syncBrowsing') {
+      context.toggleSyncBrowsing();
       return;
     }
     if (action.id === 'core.openMultiRename') {
