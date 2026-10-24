@@ -367,6 +367,15 @@ export const de = {
     updateDownloadProgress: '{downloaded} von {total} Bytes heruntergeladen.',
     updateFailed: 'Die Anwendungsaktualisierung ist fehlgeschlagen.',
     updatesDesktopOnly: 'Anwendungsaktualisierungen sind nur in der Desktop-App verfügbar.',
+    removeDataHeading: 'Procyon-Daten entfernen',
+    removeDataHint:
+      'Entfernt Ihre Einstellungen, Arbeitsbereiche und den semantischen Suchindex. Verwenden Sie dies vor der Deinstallation.',
+    removeDataButton: 'Alle Daten entfernen…',
+    removeDataWarning:
+      'Dies löscht Ihre Procyon-Einstellungen, Arbeitsbereiche, semantischen Indexdaten, Protokolle und Caches dauerhaft und beendet anschließend Procyon. Entfernen Sie die Anwendung selbst danach über Ihren Paketmanager oder die App-Liste des Systems.',
+    removeDataConfirmButton: 'Daten löschen und beenden',
+    removeDataCancel: 'Abbrechen',
+    removeDataFailed: 'Das Entfernen der Anwendungsdaten ist fehlgeschlagen.',
     saving: 'Wird gespeichert…',
     saveError: 'Einstellungen konnten nicht gespeichert werden.',
     settingsEditor: 'Einstellungseditor',

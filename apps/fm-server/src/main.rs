@@ -212,6 +212,12 @@ async fn main() {
 
     init_tracing();
 
+    if let Err(error) = fm_application::app_data::remove_legacy_data(
+        &fm_application::app_data::DataBases::platform(),
+    ) {
+        tracing::warn!(%error, "could not fully clean up legacy fm data directories");
+    }
+
     let file_config = cli.config.as_deref().map(|path| {
         ServerFileConfig::load(path).unwrap_or_else(|err| {
             panic!("failed to load server config file: {err}");

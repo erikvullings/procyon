@@ -31,10 +31,19 @@ use windows_sys::Win32::Security::Credentials::{
 /// Prefix every credential's Credential Manager target name is built from.
 /// The suffix is the credential's [`CredentialRef`] (a random UUID), so
 /// entries from different connections never collide.
-const TARGET_PREFIX: &str = "dev.fm.credentials/";
+const TARGET_PREFIX: &str = "nl.erikvullings.procyon.credentials/";
+
+/// Prefix used before the `procyon` rename. Entries found only under this
+/// name are moved to [`TARGET_PREFIX`] on first read, and deleting a
+/// credential removes any copy left under it.
+const LEGACY_TARGET_PREFIX: &str = "dev.fm.credentials/";
 
 fn target_name(reference: &CredentialRef) -> String {
     format!("{TARGET_PREFIX}{reference}")
+}
+
+fn legacy_target_name(reference: &CredentialRef) -> String {
+    format!("{LEGACY_TARGET_PREFIX}{reference}")
 }
 
 fn to_wide(value: &str) -> Vec<u16> {
@@ -77,8 +86,12 @@ where
     })
 }
 
-fn write_credential(reference: CredentialRef, mut bytes: Vec<u8>) -> Result<(), CredentialError> {
-    let mut target_wide = to_wide(&target_name(&reference));
+fn write_credential(
+    reference: CredentialRef,
+    target: &str,
+    mut bytes: Vec<u8>,
+) -> Result<(), CredentialError> {
+    let mut target_wide = to_wide(target);
     let blob_size = u32::try_from(bytes.len())
         .map_err(|_| CredentialError::Backend("secret too large".to_owned()))?;
 
@@ -105,8 +118,8 @@ fn write_credential(reference: CredentialRef, mut bytes: Vec<u8>) -> Result<(), 
     }
 }
 
-fn read_credential(reference: CredentialRef) -> Result<Vec<u8>, CredentialError> {
-    let target_wide = to_wide(&target_name(&reference));
+fn read_credential(reference: CredentialRef, target: &str) -> Result<Vec<u8>, CredentialError> {
+    let target_wide = to_wide(target);
     let mut credential_ptr: *mut CREDENTIALW = ptr::null_mut();
 
     let succeeded = unsafe {
@@ -135,13 +148,28 @@ fn read_credential(reference: CredentialRef) -> Result<Vec<u8>, CredentialError>
     Ok(bytes)
 }
 
-fn delete_credential(reference: CredentialRef) -> Result<(), CredentialError> {
-    let target_wide = to_wide(&target_name(&reference));
+fn delete_credential(reference: CredentialRef, target: &str) -> Result<(), CredentialError> {
+    let target_wide = to_wide(target);
     let succeeded = unsafe { CredDeleteW(target_wide.as_ptr(), CRED_TYPE_GENERIC, 0) };
     if succeeded == 0 {
         Err(map_last_error(reference))
     } else {
         Ok(())
+    }
+}
+
+/// Reads the credential from the current target, falling back to the legacy
+/// one and moving the entry across so the legacy name disappears over time.
+fn read_migrating(reference: CredentialRef) -> Result<Vec<u8>, CredentialError> {
+    match read_credential(reference, &target_name(&reference)) {
+        Err(CredentialError::NotFound { .. }) => {
+            let bytes = read_credential(reference, &legacy_target_name(&reference))?;
+            write_credential(reference, &target_name(&reference), bytes.clone())?;
+            // Best effort: a leftover legacy copy is retried on the next delete.
+            let _ = delete_credential(reference, &legacy_target_name(&reference));
+            Ok(bytes)
+        }
+        other => other,
     }
 }
 
@@ -153,7 +181,7 @@ impl CredentialStore for WindowsCredentialStore {
     ) -> Result<CredentialRef, CredentialError> {
         let reference = CredentialRef::new();
         let bytes = codec::encode(&request.secret);
-        run_blocking(move || write_credential(reference, bytes)).await?;
+        run_blocking(move || write_credential(reference, &target_name(&reference), bytes)).await?;
         Ok(reference)
     }
 
@@ -162,14 +190,22 @@ impl CredentialStore for WindowsCredentialStore {
         reference: &CredentialRef,
     ) -> Result<ResolvedCredential, CredentialError> {
         let reference = *reference;
-        let bytes = run_blocking(move || read_credential(reference)).await?;
+        let bytes = run_blocking(move || read_migrating(reference)).await?;
         let secret = codec::decode(&bytes)?;
         Ok(ResolvedCredential { secret })
     }
 
     async fn delete(&self, reference: &CredentialRef) -> Result<(), CredentialError> {
         let reference = *reference;
-        run_blocking(move || delete_credential(reference)).await
+        run_blocking(move || {
+            let current = delete_credential(reference, &target_name(&reference));
+            let legacy = delete_credential(reference, &legacy_target_name(&reference));
+            match (current, legacy) {
+                (Ok(()), _) | (_, Ok(())) => Ok(()),
+                (Err(error), Err(_)) => Err(error),
+            }
+        })
+        .await
     }
 }
 

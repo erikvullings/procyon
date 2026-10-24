@@ -206,6 +206,15 @@ describe('TauriFileManagerClient', () => {
     expect(relaunch).toHaveBeenCalledOnce();
   });
 
+  it('removes application data through the desktop host', async () => {
+    invoke.mockResolvedValue(undefined);
+    const client = new TauriFileManagerClient();
+
+    await client.removeApplicationData();
+
+    expect(client.supportsAppDataRemoval).toBe(true);
+    expect(invoke).toHaveBeenCalledWith('remove_application_data');
+  });
   it('reports the installed and online versions when no update is offered', async () => {
     invoke.mockImplementation((command: string) =>
       Promise.resolve(command === 'check_app_update' ? null : '0.6.0'),

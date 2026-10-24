@@ -293,6 +293,7 @@ type AppUpdateDownloadEvent =
  */
 export class TauriFileManagerClient implements FileManagerClient {
   readonly supportsAppUpdates = true;
+  readonly supportsAppDataRemoval = true;
 
   openExternalUrl(url: string): Promise<void> {
     return openUrl(url);
@@ -776,6 +777,10 @@ export class TauriFileManagerClient implements FileManagerClient {
         ...(update.body === null ? {} : { body: update.body }),
       },
     };
+  }
+
+  async removeApplicationData(): Promise<void> {
+    await invoke('remove_application_data');
   }
 
   async installAppUpdate(

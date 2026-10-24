@@ -1343,6 +1343,7 @@ function mockCleanupCategories(complete: boolean): SemanticDeletionCategoryStatu
 export class MockFileManagerClient implements FileManagerClient {
   readonly connection = new MutableEventStreamStatus();
   readonly supportsAppUpdates = false;
+  readonly supportsAppDataRemoval = false;
   private readonly frontendDiagnostics: FrontendDiagnostic[] = [];
 
   async openExternalUrl(url: string): Promise<void> {
@@ -2683,6 +2684,10 @@ export class MockFileManagerClient implements FileManagerClient {
 
   checkForAppUpdate(_signal?: AbortSignal): Promise<never> {
     return Promise.reject(new Error('Application updates are unavailable in the mock host.'));
+  }
+
+  removeApplicationData(): Promise<void> {
+    return Promise.reject(new Error('Removing application data is unavailable in the mock host.'));
   }
 
   installAppUpdate(): Promise<void> {

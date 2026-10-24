@@ -432,6 +432,7 @@ import { settingsFromDto, settingsToDto } from './settings-mapping';
  */
 export class HttpFileManagerClient implements FileManagerClient {
   readonly supportsAppUpdates = false;
+  readonly supportsAppDataRemoval = false;
   async openExternalUrl(url: string): Promise<void> {
     const opened = globalThis.open(url, '_blank', 'noopener,noreferrer');
     if (opened === null) throw new Error('The browser blocked the external link.');
@@ -1208,6 +1209,12 @@ export class HttpFileManagerClient implements FileManagerClient {
 
   checkForAppUpdate(_signal?: AbortSignal): Promise<never> {
     return Promise.reject(new Error('Application updates are available only in the desktop app.'));
+  }
+
+  removeApplicationData(): Promise<void> {
+    return Promise.reject(
+      new Error('Removing application data is available only in the desktop app.'),
+    );
   }
 
   installAppUpdate(): Promise<void> {

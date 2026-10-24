@@ -362,6 +362,15 @@ export const es = {
     updateFailed: 'La actualización de la aplicación ha fallado.',
     updatesDesktopOnly:
       'Las actualizaciones de la aplicación solo están disponibles en la aplicación de escritorio.',
+    removeDataHeading: 'Eliminar los datos de Procyon',
+    removeDataHint:
+      'Elimina tus ajustes, espacios de trabajo y el índice de búsqueda semántica. Úsalo antes de desinstalar.',
+    removeDataButton: 'Eliminar todos los datos…',
+    removeDataWarning:
+      'Esto elimina de forma permanente tus ajustes de Procyon, espacios de trabajo, datos del índice semántico, registros y cachés, y luego cierra Procyon. Después, elimina la propia aplicación con tu gestor de paquetes o la lista de aplicaciones del sistema.',
+    removeDataConfirmButton: 'Eliminar datos y salir',
+    removeDataCancel: 'Cancelar',
+    removeDataFailed: 'No se pudieron eliminar los datos de la aplicación.',
     saving: 'Guardando…',
     saveError: 'No se pudo guardar la configuración.',
     settingsEditor: 'Editor de configuración',

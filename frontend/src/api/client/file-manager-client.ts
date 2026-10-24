@@ -255,6 +255,8 @@ export interface PluginPanelBounds {
 export interface FileManagerClient {
   readonly connection: EventStreamStatusObservable;
   readonly supportsAppUpdates: boolean;
+  /** True when the host can delete all Procyon user data and quit (desktop only). */
+  readonly supportsAppDataRemoval: boolean;
   getRuntimeCapabilities(signal?: AbortSignal): Promise<RuntimeCapabilities>;
   getSemanticComponentCapabilities(signal?: AbortSignal): Promise<SemanticComponentCapabilities>;
   getSemanticComponentStatus(signal?: AbortSignal): Promise<SemanticComponentStatus>;
@@ -426,6 +428,8 @@ export interface FileManagerClient {
   getAppVersion(signal?: AbortSignal): Promise<string | undefined>;
 
   /** Checks the host's signed update endpoint: stable, or stable plus beta releases. */
+  /** Deletes settings, workspaces, semantic index data, logs and caches after the app quits. */
+  removeApplicationData(): Promise<void>;
   checkForAppUpdate(signal?: AbortSignal, options?: AppUpdateCheckOptions): Promise<AppUpdateCheck>;
 
   /** Downloads, verifies, installs, and restarts into the most recently checked update. */

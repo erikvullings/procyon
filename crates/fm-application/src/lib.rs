@@ -7,6 +7,7 @@
 
 mod action;
 mod action_invoker;
+pub mod app_data;
 mod archive_summary;
 mod checksum_coordinator;
 mod checksum_mapping;

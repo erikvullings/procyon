@@ -366,6 +366,15 @@ export const nl = {
     updateDownloadProgress: '{downloaded} van {total} bytes gedownload.',
     updateFailed: 'De applicatie-update is mislukt.',
     updatesDesktopOnly: 'Applicatie-updates zijn alleen beschikbaar in de desktop-app.',
+    removeDataHeading: 'Procyon-gegevens verwijderen',
+    removeDataHint:
+      'Verwijdert je instellingen, werkruimtes en de semantische zoekindex. Gebruik dit vóór het verwijderen van de app.',
+    removeDataButton: 'Alle gegevens verwijderen…',
+    removeDataWarning:
+      'Dit verwijdert definitief je Procyon-instellingen, werkruimtes, semantische indexgegevens, logbestanden en caches en sluit daarna Procyon af. Verwijder de applicatie zelf daarna via je pakketbeheerder of de lijst met apps van het systeem.',
+    removeDataConfirmButton: 'Gegevens verwijderen en afsluiten',
+    removeDataCancel: 'Annuleren',
+    removeDataFailed: 'Het verwijderen van de applicatiegegevens is mislukt.',
     settingsSections: 'Instellingencategorieën',
     semanticEnableHint:
       'Installeer en activeer semantische onderdelen voordat u bibliotheken, woordenlijsten en generatieprofielen configureert.',

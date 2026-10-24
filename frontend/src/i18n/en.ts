@@ -381,6 +381,15 @@ export const en = {
     updateDownloadProgress: 'Downloaded {downloaded} of {total} bytes.',
     updateFailed: 'The application update failed.',
     updatesDesktopOnly: 'Application updates are available only in the desktop app.',
+    removeDataHeading: 'Remove Procyon data',
+    removeDataHint:
+      'Removes your settings, workspaces and the semantic search index. Use this before uninstalling.',
+    removeDataButton: 'Remove all data…',
+    removeDataWarning:
+      "This permanently deletes your Procyon settings, workspaces, semantic index data, logs and caches, then quits Procyon. Remove the application itself afterwards with your package manager or the system's app list.",
+    removeDataConfirmButton: 'Delete data and quit',
+    removeDataCancel: 'Cancel',
+    removeDataFailed: 'Removing the application data failed.',
     settingsSections: 'Settings sections',
     semanticEnableHint:
       'Install and enable semantic components before configuring libraries, vocabularies, and generation profiles.',

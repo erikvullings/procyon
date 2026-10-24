@@ -364,6 +364,15 @@ export const fr = {
     updateFailed: 'La mise à jour de l’application a échoué.',
     updatesDesktopOnly:
       'Les mises à jour de l’application sont disponibles uniquement dans l’application de bureau.',
+    removeDataHeading: 'Supprimer les données de Procyon',
+    removeDataHint:
+      "Supprime vos réglages, espaces de travail et l'index de recherche sémantique. À utiliser avant la désinstallation.",
+    removeDataButton: 'Supprimer toutes les données…',
+    removeDataWarning:
+      "Cela supprime définitivement vos réglages Procyon, espaces de travail, données d'index sémantique, journaux et caches, puis quitte Procyon. Supprimez ensuite l'application elle-même avec votre gestionnaire de paquets ou la liste d'applications du système.",
+    removeDataConfirmButton: 'Supprimer les données et quitter',
+    removeDataCancel: 'Annuler',
+    removeDataFailed: "La suppression des données de l'application a échoué.",
     saving: 'Enregistrement…',
     saveError: "Échec de l'enregistrement des paramètres.",
     settingsEditor: 'Éditeur de paramètres',

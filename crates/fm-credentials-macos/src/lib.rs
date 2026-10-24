@@ -21,7 +21,12 @@ use security_framework::passwords::{
 /// The "account" is the credential's [`CredentialRef`] (a random UUID), so
 /// entries from different connections never collide and one credential's
 /// secret cannot be looked up without already knowing its reference.
-const KEYCHAIN_SERVICE: &str = "dev.fm.credentials";
+const KEYCHAIN_SERVICE: &str = "nl.erikvullings.procyon.credentials";
+
+/// Service name used before the `procyon` rename. Entries found only under
+/// this name are moved to [`KEYCHAIN_SERVICE`] on first read, and deleting a
+/// credential removes any copy left under it.
+const LEGACY_KEYCHAIN_SERVICE: &str = "dev.fm.credentials";
 
 /// OSStatus `errSecItemNotFound` (Security framework `SecBase.h`): no item
 /// matches the given service/account. `security-framework`'s public API does
@@ -68,6 +73,23 @@ fn map_lookup_error(error: KeychainError, reference: CredentialRef) -> Credentia
     }
 }
 
+/// Reads `account` from the current service, falling back to the legacy one
+/// and moving the entry across so the legacy name disappears over time.
+fn resolve_migrating(account: &str, reference: CredentialRef) -> Result<Vec<u8>, CredentialError> {
+    match get_generic_password(KEYCHAIN_SERVICE, account) {
+        Ok(bytes) => Ok(bytes),
+        Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => {
+            let bytes = get_generic_password(LEGACY_KEYCHAIN_SERVICE, account)
+                .map_err(|error| map_lookup_error(error, reference))?;
+            set_generic_password(KEYCHAIN_SERVICE, account, &bytes).map_err(map_write_error)?;
+            // Best effort: a leftover legacy copy is retried on the next delete.
+            let _ = delete_generic_password(LEGACY_KEYCHAIN_SERVICE, account);
+            Ok(bytes)
+        }
+        Err(error) => Err(map_write_error(error)),
+    }
+}
+
 #[async_trait]
 impl CredentialStore for MacosCredentialStore {
     async fn store(
@@ -90,11 +112,7 @@ impl CredentialStore for MacosCredentialStore {
     ) -> Result<ResolvedCredential, CredentialError> {
         let account = reference.to_string();
         let reference = *reference;
-        let bytes = run_blocking(move || {
-            get_generic_password(KEYCHAIN_SERVICE, &account)
-                .map_err(|error| map_lookup_error(error, reference))
-        })
-        .await?;
+        let bytes = run_blocking(move || resolve_migrating(&account, reference)).await?;
         let secret = codec::decode(&bytes)?;
         Ok(ResolvedCredential { secret })
     }
@@ -103,8 +121,12 @@ impl CredentialStore for MacosCredentialStore {
         let account = reference.to_string();
         let reference = *reference;
         run_blocking(move || {
-            delete_generic_password(KEYCHAIN_SERVICE, &account)
-                .map_err(|error| map_lookup_error(error, reference))
+            let current = delete_generic_password(KEYCHAIN_SERVICE, &account);
+            let legacy = delete_generic_password(LEGACY_KEYCHAIN_SERVICE, &account);
+            match (current, legacy) {
+                (Ok(()), _) | (_, Ok(())) => Ok(()),
+                (Err(error), Err(_)) => Err(map_lookup_error(error, reference)),
+            }
         })
         .await
     }

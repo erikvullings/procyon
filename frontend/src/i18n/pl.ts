@@ -361,6 +361,15 @@ export const pl = {
     updateDownloadProgress: 'Pobrano {downloaded} z {total} bajtów.',
     updateFailed: 'Aktualizacja aplikacji nie powiodła się.',
     updatesDesktopOnly: 'Aktualizacje aplikacji są dostępne tylko w aplikacji komputerowej.',
+    removeDataHeading: 'Usuń dane Procyon',
+    removeDataHint:
+      'Usuwa ustawienia, obszary robocze i indeks wyszukiwania semantycznego. Użyj przed odinstalowaniem.',
+    removeDataButton: 'Usuń wszystkie dane…',
+    removeDataWarning:
+      'To trwale usuwa ustawienia Procyon, obszary robocze, dane indeksu semantycznego, dzienniki i pamięć podręczną, a następnie zamyka Procyon. Samą aplikację usuń potem menedżerem pakietów lub listą aplikacji systemu.',
+    removeDataConfirmButton: 'Usuń dane i zamknij',
+    removeDataCancel: 'Anuluj',
+    removeDataFailed: 'Nie udało się usunąć danych aplikacji.',
     saving: 'Zapisywanie…',
     saveError: 'Nie udało się zapisać ustawień.',
     settingsEditor: 'Edytor ustawień',

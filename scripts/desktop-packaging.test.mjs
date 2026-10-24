@@ -1158,6 +1158,8 @@ test('package-manager generator creates a Homebrew cask and Chocolatey installer
   assert.match(cask, /releases\/download\/v1\.2\.3\/#\{os\}/);
   assert.match(cask, /app "Procyon\.app"/);
   assert.match(cask, /binary "#{appdir}\/Procyon\.app\/Contents\/Resources\/procyon"/);
+  assert.match(cask, /zap trash: \[/);
+  assert.match(cask, /"~\/Library\/Application Support\/procyon"/);
   assert.match(cask, /on_linux do/);
   assert.match(cask, new RegExp(`sha256 "${'b'.repeat(64)}"`));
   assert.match(cask, /app_image "Procyon_1\.2\.3_amd64\.AppImage", target: "Procyon\.AppImage"/);

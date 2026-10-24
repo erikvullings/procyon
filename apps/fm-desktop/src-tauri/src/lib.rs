@@ -4,6 +4,7 @@
 //! entry point `main.rs` calls, and is also what the mock-runtime smoke test
 //! below builds, so both exercise the exact same `Builder`.
 
+mod app_data_removal;
 mod app_update;
 mod commands;
 mod credentials;
@@ -234,6 +235,11 @@ pub fn run() {
             // bundle; only plausible for an unbundled `cargo tauri dev`/test run) leaves the
             // compile-time-default bundled directory in place rather than panicking - one
             // missing plugin source is not worth aborting startup over.
+            if let Err(error) = fm_application::app_data::remove_legacy_data(
+                &fm_application::app_data::DataBases::platform(),
+            ) {
+                tracing::warn!(%error, "could not fully clean up legacy fm data directories");
+            }
             let workspace_directory =
                 fm_application::workspace::JsonFileWorkspaceRepository::default_directory();
             let app_data_directory = workspace_directory
@@ -565,6 +571,7 @@ pub fn run() {
             app_update::check_app_update,
             app_update::install_app_update,
             app_update::get_app_update_channel_version,
+            app_data_removal::remove_application_data,
             commands::get_semantic_component_capabilities,
             commands::get_semantic_ocr_status,
             commands::set_semantic_ocr_consent,
@@ -971,6 +978,7 @@ mod tests {
                 app_update::check_app_update,
                 app_update::install_app_update,
                 app_update::get_app_update_channel_version,
+                app_data_removal::remove_application_data,
                 commands::get_semantic_component_capabilities,
                 commands::get_semantic_ocr_status,
                 commands::set_semantic_ocr_consent,

@@ -72,6 +72,21 @@ function generateHomebrew() {
   name "Procyon"
   desc "Dual-pane file manager"
   homepage "https://github.com/${options.repository}"
+
+  # brew uninstall --zap also removes settings, workspaces and the semantic index.
+  zap trash: [
+    "~/.config/procyon",
+    "~/.local/share/procyon",
+    "~/.cache/procyon",
+    "~/Library/Application Support/procyon",
+    "~/Library/Application Support/nl.erikvullings.procyon",
+    "~/Library/Caches/procyon",
+    "~/Library/Caches/nl.erikvullings.procyon",
+    "~/Library/HTTPStorages/nl.erikvullings.procyon",
+    "~/Library/Preferences/nl.erikvullings.procyon.plist",
+    "~/Library/Saved Application State/nl.erikvullings.procyon.savedState",
+    "~/Library/WebKit/nl.erikvullings.procyon",
+  ]
 end
 `;
   mkdirSync(dirname(options.output), { recursive: true });

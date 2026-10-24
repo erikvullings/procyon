@@ -13,6 +13,8 @@ export interface AppUpdateSettingsAttrs {
   readonly onIncludeBetaChange: (enabled: boolean) => void;
 }
 
+type RemovePhase = 'idle' | 'confirming' | 'removing';
+
 type UpdatePhase = 'idle' | 'checking' | 'current' | 'available' | 'installing' | 'error';
 
 function message(error: unknown): string {
@@ -28,6 +30,8 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
   let error: string | undefined;
   let downloadedBytes = 0;
   let totalBytes: number | undefined;
+  let removePhase: RemovePhase = 'idle';
+  let removeError: string | undefined;
 
   async function check(client: FileManagerClient, includeBeta: boolean): Promise<void> {
     phase = 'checking';
@@ -65,6 +69,55 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
       error = message(cause);
       m.redraw();
     }
+  }
+
+  async function removeData(client: FileManagerClient): Promise<void> {
+    removePhase = 'removing';
+    removeError = undefined;
+    m.redraw();
+    try {
+      await client.removeApplicationData();
+    } catch (cause) {
+      removePhase = 'idle';
+      removeError = cause instanceof Error ? cause.message : t('settings', 'removeDataFailed');
+      m.redraw();
+    }
+  }
+
+  function removeDataControls(client: FileManagerClient): m.Children {
+    return m('.fm-remove-data', [
+      m('h5', t('settings', 'removeDataHeading')),
+      m('p.fm-settings-help', t('settings', 'removeDataHint')),
+      removePhase === 'idle'
+        ? m(
+            'button.fm-remove-data-start',
+            { type: 'button', onclick: () => (removePhase = 'confirming') },
+            t('settings', 'removeDataButton'),
+          )
+        : m('.fm-remove-data-confirm', { role: 'alertdialog' }, [
+            m('p', t('settings', 'removeDataWarning')),
+            m(
+              'button.fm-remove-data-confirm-button',
+              {
+                type: 'button',
+                ...busyButtonAttrs(removePhase === 'removing'),
+                disabled: removePhase === 'removing',
+                onclick: () => void removeData(client),
+              },
+              t('settings', 'removeDataConfirmButton'),
+            ),
+            m(
+              'button.fm-remove-data-cancel',
+              {
+                type: 'button',
+                disabled: removePhase === 'removing',
+                onclick: () => (removePhase = 'idle'),
+              },
+              t('settings', 'removeDataCancel'),
+            ),
+          ]),
+      removeError === undefined ? undefined : m('.fm-update-error', { role: 'alert' }, removeError),
+    ]);
   }
 
   return {
@@ -163,6 +216,7 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
               error === undefined ? undefined : m('.fm-update-error', { role: 'alert' }, error),
             ]
           : m('p.fm-update-unavailable', t('settings', 'updatesDesktopOnly')),
+        attrs.client.supportsAppDataRemoval ? removeDataControls(attrs.client) : undefined,
       ]),
   };
 };
