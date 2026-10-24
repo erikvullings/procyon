@@ -1,3 +1,4 @@
+import type { ComparisonCriteria, SyncMode } from './comparison';
 import type { Location } from './location';
 import type { SavedSearch } from './search';
 
@@ -51,6 +52,51 @@ export interface FilterPreset {
   readonly criteria: FilterCriteria;
 }
 
+/** Whether a scheduled synchronization run needs a human before anything changes (task 0161). */
+export type SyncScheduleConfirmation = 'required' | 'autoApplyAdditions';
+
+/** Opt-in schedule; fires only while the app is running. */
+export interface SyncSchedule {
+  readonly enabled: boolean;
+  readonly intervalMinutes: number;
+  readonly confirmation: SyncScheduleConfirmation;
+}
+
+export type SyncRunTrigger = 'manual' | 'scheduled';
+export type SyncRunOutcome = 'planned' | 'applied' | 'upToDate' | 'dismissed' | 'failed';
+
+/** Summary of a profile's most recent run. */
+export interface SyncRunSummary {
+  /** RFC 3339 timestamp. */
+  readonly at: string;
+  readonly trigger: SyncRunTrigger;
+  readonly outcome: SyncRunOutcome;
+  readonly plannedItems: number;
+  readonly appliedItems: number;
+  readonly message: string | null;
+}
+
+/**
+ * A named synchronization pair (task 0161): saved input to the comparison and sync-plan
+ * services. Locations are provider-neutral; credentials and connection tokens are never stored.
+ */
+export interface SyncProfile {
+  readonly id: string;
+  readonly name: string;
+  readonly left: Location;
+  readonly right: Location;
+  readonly mode: SyncMode;
+  readonly criteria: ComparisonCriteria;
+  readonly showHidden: boolean;
+  /** Glob patterns a path must match; empty admits every path. */
+  readonly include: readonly string[];
+  /** Glob patterns whose matches are never planned. */
+  readonly exclude: readonly string[];
+  readonly conflictPolicy: 'ask' | 'overwrite' | 'keepBoth' | 'skip';
+  readonly schedule: SyncSchedule | null;
+  readonly lastRun: SyncRunSummary | null;
+}
+
 /** Versioned application-wide settings returned by both backend transports. */
 export interface Settings {
   readonly schemaVersion: number;
@@ -80,6 +126,7 @@ export interface Settings {
   readonly recentLocationsByWorkspace: Readonly<Record<string, readonly Location[]>>;
   readonly multiRenamePresets: readonly MultiRenamePreset[];
   readonly filterPresets: readonly FilterPreset[];
+  readonly syncProfiles: readonly SyncProfile[];
   readonly savedSearches: readonly SavedSearch[];
   readonly iconTheme: string;
   readonly checkForUpdatesAutomatically: boolean;

@@ -30,6 +30,7 @@ pub(crate) fn copy_request(
     source_root: &Location,
     destination_root: &Location,
     relative_path: &str,
+    conflict_policy: OperationConflictPolicyDto,
 ) -> Result<StartOperationRequestDto, ApplicationError> {
     let source = fm_comparison::resolve_relative(source_root, relative_path)
         .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
@@ -43,8 +44,8 @@ pub(crate) fn copy_request(
         sources: vec![source.into()],
         destination: Some(destination_parent.into()),
         destinations: Vec::new(),
-        // Sync intentionally replaces a differing/older destination.
-        conflict_policy: OperationConflictPolicyDto::Overwrite,
+        // Sync replaces a differing/older destination unless the profile chose otherwise.
+        conflict_policy,
         name: None,
         archive_format: None,
         archive_compression_level: None,

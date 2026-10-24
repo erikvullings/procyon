@@ -1441,7 +1441,14 @@ export class TauriFileManagerClient implements FileManagerClient {
     request: GenerateSyncPlanRequest,
     _signal?: AbortSignal,
   ): Promise<SyncPlan> {
-    return invoke<SyncPlan>('generate_sync_plan', { comparisonId, request });
+    return invoke<SyncPlan>('generate_sync_plan', {
+      comparisonId,
+      request: {
+        mode: request.mode,
+        include: [...(request.include ?? [])],
+        exclude: [...(request.exclude ?? [])],
+      },
+    });
   }
 
   applySyncPlan(
@@ -1451,7 +1458,10 @@ export class TauriFileManagerClient implements FileManagerClient {
   ): Promise<ApplySyncPlanResult> {
     return invoke<ApplySyncPlanResult>('apply_sync_plan', {
       comparisonId,
-      request: { items: request.items.map(syncPlanItemToDto) },
+      request: {
+        items: request.items.map(syncPlanItemToDto),
+        ...(request.conflictPolicy === undefined ? {} : { conflictPolicy: request.conflictPolicy }),
+      },
     });
   }
 

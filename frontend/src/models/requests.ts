@@ -483,6 +483,10 @@ export interface StartDuplicateScanResult {
  */
 export interface GenerateSyncPlanRequest {
   mode: SyncMode;
+  /** Glob patterns a path must match; empty or omitted admits every path (task 0161). */
+  include?: readonly string[];
+  /** Glob patterns whose matches (and descendants) are never planned. */
+  exclude?: readonly string[];
 }
 
 /** A proposed sync plan, mirroring `fm_transport_dto::SyncPlanDto`. */
@@ -505,6 +509,8 @@ export function syncPlanFromDto(dto: SyncPlanDto): SyncPlan {
  */
 export interface ApplySyncPlanRequest {
   items: readonly SyncPlanItem[];
+  /** Conflict policy for copy rows whose destination exists; omitted means `overwrite`. */
+  conflictPolicy?: ConflictPolicy;
 }
 
 /** The operations started by applying a sync plan. */

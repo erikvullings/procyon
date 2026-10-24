@@ -94,6 +94,7 @@ mod snapshots;
 mod sqlite_view;
 mod ssh;
 mod structured_view;
+mod sync_profile_mapping;
 mod thumbnails;
 mod tree_walk;
 mod webdav;

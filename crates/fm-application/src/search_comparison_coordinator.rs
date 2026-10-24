@@ -3,7 +3,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use fm_comparison::{ComparisonEngine, ComparisonResultsStore, SyncAction, generate_sync_plan};
+use fm_comparison::{
+    ComparisonEngine, ComparisonResultsStore, PathFilter, SyncAction, generate_filtered_sync_plan,
+};
 use fm_domain::{EntryId, EntryKind, EntrySummary, Location, OperationId, ProviderId};
 use fm_events::{
     BackendEventPayload, ConflictPolicyPayload, EntryRefPayload, EventAudience, EventBus,
@@ -13,11 +15,11 @@ use fm_events::{
 use fm_search::{MatchMode, SearchEngine, UnevaluatedPredicate};
 use fm_transport_dto::{
     ApplySyncPlanRequestDto, ApplySyncPlanResponseDto, ComparisonPageDto,
-    GenerateSyncPlanRequestDto, SearchEntryKindDto, SearchExecutionModeDto, SearchModeDto,
-    SearchNameModeDto, SearchPredicateKindDto, SearchProviderLimitationDto, SemanticEvidenceDto,
-    SemanticSearchCoverageDto, SemanticSearchResultDto, SemanticSearchScopeDto,
-    StartComparisonRequestDto, StartComparisonResponseDto, StartSearchRequestDto,
-    StartSearchResponseDto, SyncPlanDto,
+    GenerateSyncPlanRequestDto, OperationConflictPolicyDto, SearchEntryKindDto,
+    SearchExecutionModeDto, SearchModeDto, SearchNameModeDto, SearchPredicateKindDto,
+    SearchProviderLimitationDto, SemanticEvidenceDto, SemanticSearchCoverageDto,
+    SemanticSearchResultDto, SemanticSearchScopeDto, StartComparisonRequestDto,
+    StartComparisonResponseDto, StartSearchRequestDto, StartSearchResponseDto, SyncPlanDto,
 };
 use fm_vfs::{EntryRef, ProviderRegistry};
 use futures::{StreamExt, stream};
@@ -648,7 +650,8 @@ impl SearchComparisonCoordinator {
             .comparison_store
             .all_entries(comparison_id)
             .ok_or(ApplicationError::NotFound)?;
-        let items = generate_sync_plan(&entries, sync_mode(request.mode));
+        let filter = PathFilter::new(&request.include, &request.exclude);
+        let items = generate_filtered_sync_plan(&entries, sync_mode(request.mode), &filter);
         Ok(SyncPlanDto {
             comparison_id,
             items: items.iter().map(sync_plan_item_dto).collect(),
@@ -665,15 +668,18 @@ impl SearchComparisonCoordinator {
             .comparison_store
             .roots(comparison_id)
             .ok_or(ApplicationError::NotFound)?;
+        let policy = request
+            .conflict_policy
+            .unwrap_or(OperationConflictPolicyDto::Overwrite);
         let mut operation_ids = Vec::with_capacity(request.items.len());
         for item in request.items {
             let start_request = match sync_action(item.action) {
                 SyncAction::Skip => continue,
                 SyncAction::CopyLeftToRight => {
-                    copy_request(&left_root, &right_root, &item.relative_path)?
+                    copy_request(&left_root, &right_root, &item.relative_path, policy)?
                 }
                 SyncAction::CopyRightToLeft => {
-                    copy_request(&right_root, &left_root, &item.relative_path)?
+                    copy_request(&right_root, &left_root, &item.relative_path, policy)?
                 }
                 SyncAction::DeleteLeft => delete_request(&left_root, &item.relative_path)?,
                 SyncAction::DeleteRight => delete_request(&right_root, &item.relative_path)?,

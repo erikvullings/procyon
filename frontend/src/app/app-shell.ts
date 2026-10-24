@@ -80,6 +80,7 @@ import {
   differingEntryIds,
   initialComparisonState,
 } from '../features/comparison/comparison-state';
+import { SyncPlanDialog } from '../features/comparison/sync-plan-dialog';
 import { type AppDialogsContext, renderAppDialogs } from '../features/dialogs/app-dialogs';
 import { createDialogUIController } from '../features/dialogs/dialog-ui-controller';
 import type { FinderTagsLoader } from '../features/directory-table/finder-tags-loader';
@@ -326,6 +327,16 @@ import {
   SPLIT_FILE_ACTION_ID,
 } from '../features/split/split-actions';
 import { SplitFileDialog, type SplitFileRequest } from '../features/split/split-file-dialog';
+import {
+  SYNC_PROFILES_ACTION_ID,
+  SYNC_SCHEDULE_TICK_MS,
+} from '../features/sync-profiles/sync-profile-actions';
+import {
+  createSyncProfileController,
+  type SyncProfileController,
+  type SyncProfileControllerContext,
+} from '../features/sync-profiles/sync-profile-controller';
+import { SyncProfilesDialog } from '../features/sync-profiles/sync-profiles-dialog';
 import { tauriTerminalClient } from '../features/terminal/terminal-client';
 import { TerminalDrawer } from '../features/terminal/terminal-drawer';
 import { focusOpenedTerminal, isTerminalVisible } from '../features/terminal/terminal-state';
@@ -703,6 +714,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         requiresSelection: true,
       }),
       descriptor(COMPARE_BY_CONTENT_ACTION_ID, t('fileDiff', 'compareByContentAction'), {}),
+      descriptor(SYNC_PROFILES_ACTION_ID, t('syncProfiles', 'action'), {}),
       descriptor(SPLIT_FILE_ACTION_ID, t('splitCombine', 'splitAction'), {
         requiresSelection: true,
       }),
@@ -1467,6 +1479,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       beginCompareFiles(invocation);
       return true;
     }
+    if (actionId === SYNC_PROFILES_ACTION_ID) {
+      syncProfilesDialogOpen = true;
+      return true;
+    }
     if (actionId === COMPARE_BY_CONTENT_ACTION_ID) {
       comparisonController.startComparison('content');
       return true;
@@ -2034,6 +2050,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let convertGeoRequest: ConvertGeoRequest | undefined;
   let splitFileRequest: SplitFileRequest | undefined;
   let fileDiffRequest: FileDiffRequest | undefined;
+  let syncProfilesDialogOpen = false;
   let combineFilesRequest: CombineFilesRequest | undefined;
   let minifyGeoRequest: MinifyGeoRequest | undefined;
   let imageMapState: ImageMapState = INITIAL_IMAGE_MAP_STATE;
@@ -4306,6 +4323,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let settingsController: SettingsController;
   let findFilesController: FindFilesController;
   let comparisonController: ComparisonController;
+  let syncProfileController: SyncProfileController;
+  let syncScheduleTimer: ReturnType<typeof setInterval> | undefined;
   let checksumController: ChecksumController;
   function basketFor(workspaceId: string): BasketState {
     if (appState === undefined) return emptyBasket;
@@ -5329,6 +5348,37 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     redraw: () => m.redraw(),
   };
 
+  const syncProfileControllerContext: SyncProfileControllerContext = {
+    getClient: () => attrsClient,
+    getSettings: () => currentSettings,
+    updateSettings: (update) => updateLocationSettings(attrsClient, update),
+    getRunTarget: () =>
+      workspace === undefined
+        ? undefined
+        : { workspaceId: workspace.id, paneId: workspace.activePaneId },
+    notify: (message) => toast({ html: message }),
+    redraw: () => m.redraw(),
+    newId: () => crypto.randomUUID(),
+    now: () => new Date(),
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  };
+
+  /** Folders of the first two panes, offered as roots when editing a synchronization profile. */
+  function syncProfilePaneLocations(): { left?: Location; right?: Location } {
+    const current = workspace;
+    if (current === undefined) return {};
+    const locationOf = (index: number): Location | undefined => {
+      const pane = current.panesById[current.paneOrder[index] ?? ''];
+      return pane?.tabsById[pane.activeTabId]?.location;
+    };
+    const left = locationOf(0);
+    const right = locationOf(1);
+    return {
+      ...(left === undefined ? {} : { left }),
+      ...(right === undefined ? {} : { right }),
+    };
+  }
+
   const checksumControllerContext: ChecksumControllerContext = {
     getChecksumState: () => checksumState,
     setChecksumState: (next) => {
@@ -5908,6 +5958,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         },
         findFiles: { create: () => createFindFilesController(findFilesControllerContext) },
         comparison: { create: () => createComparisonController(comparisonControllerContext) },
+        syncProfiles: {
+          create: () => {
+            const controller = createSyncProfileController(syncProfileControllerContext);
+            // Scheduled profiles only run while this window is open; each due profile prepares an
+            // inspectable plan and honours its confirmation policy (task 0161).
+            syncScheduleTimer = setInterval(() => {
+              void controller.tick();
+            }, SYNC_SCHEDULE_TICK_MS);
+            return controller;
+          },
+          dispose: () => {
+            if (syncScheduleTimer !== undefined) clearInterval(syncScheduleTimer);
+            syncScheduleTimer = undefined;
+          },
+        },
         checksum: { create: () => createChecksumController(checksumControllerContext) },
         actionCommand: {
           create: () => createActionCommandController(actionCommandControllerContext),
@@ -6110,6 +6175,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       settingsController = shellControllers.instances.settings;
       findFilesController = shellControllers.instances.findFiles;
       comparisonController = shellControllers.instances.comparison;
+      syncProfileController = shellControllers.instances.syncProfiles;
       checksumController = shellControllers.instances.checksum;
       actionCommandController = shellControllers.instances.actionCommand;
       paneContentBuilder = shellControllers.instances.paneContent;
@@ -6238,6 +6304,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     },
 
     view: ({ attrs }) => {
+      const syncReview = syncProfileController.pendingReview();
       syncNativeMenu();
       if (treeSidebarOpen) syncDirectoryTreeToActiveLocation();
       currentEntryFormatSettings = attrs.entryFormatSettings ?? loadedEntryFormatSettings;
@@ -6909,6 +6976,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                                   ...draft,
                                   multiRenamePresets: latest.multiRenamePresets,
                                   filterPresets: latest.filterPresets,
+                                  syncProfiles: latest.syncProfiles,
                                 }));
                                 applyAppearance(draft);
                                 closeSettingsDialog();
@@ -7560,6 +7628,27 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             onClose: () => {
               fileDiffRequest = undefined;
               m.redraw();
+            },
+          }),
+          m(SyncProfilesDialog, {
+            open: syncProfilesDialogOpen,
+            controller: syncProfileController,
+            paneLocations: syncProfilePaneLocations,
+            onClose: () => {
+              syncProfilesDialogOpen = false;
+              m.redraw();
+            },
+          }),
+          m(SyncPlanDialog, {
+            open: syncReview?.open === true,
+            items: syncReview?.plan.items ?? [],
+            applying: syncReview?.applying === true,
+            ...(syncReview?.error === undefined ? {} : { error: syncReview.error }),
+            onApply: (items) => {
+              void syncProfileController.confirmReview(items);
+            },
+            onCancel: () => {
+              void syncProfileController.dismissReview();
             },
           }),
           m(SplitFileDialog, {

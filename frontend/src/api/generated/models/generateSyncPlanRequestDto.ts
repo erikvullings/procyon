@@ -12,6 +12,10 @@ import type { SyncModeDto } from './syncModeDto.ts';
  * the comparison's already-computed results.
  */
 export interface GenerateSyncPlanRequestDto {
+  /** Glob patterns whose matches (and descendants) are never planned; wins over `include`. */
+  exclude?: string[];
+  /** Glob patterns a path must match to be planned; empty admits every path (task 0161). */
+  include?: string[];
   /** Which side is authoritative. */
   mode: SyncModeDto;
 }

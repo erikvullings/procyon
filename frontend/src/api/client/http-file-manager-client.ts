@@ -2440,7 +2440,11 @@ export class HttpFileManagerClient implements FileManagerClient {
   ): Promise<SyncPlan> {
     const response = await requestSyncPlanGenerate(
       comparisonId,
-      { mode: request.mode },
+      {
+        mode: request.mode,
+        include: [...(request.include ?? [])],
+        exclude: [...(request.exclude ?? [])],
+      },
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
@@ -2456,7 +2460,10 @@ export class HttpFileManagerClient implements FileManagerClient {
   ): Promise<ApplySyncPlanResult> {
     const response = await requestSyncPlanApply(
       comparisonId,
-      { items: request.items.map(syncPlanItemToDto) },
+      {
+        items: request.items.map(syncPlanItemToDto),
+        ...(request.conflictPolicy === undefined ? {} : { conflictPolicy: request.conflictPolicy }),
+      },
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201) {

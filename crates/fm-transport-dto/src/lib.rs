@@ -226,7 +226,8 @@ pub use settings::{
     FilterCriteriaDto, FilterKindDto, FilterPresetDto, FilterToggleDto, LanguageDto,
     MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto, MultiRenamePresetDto,
     MultiRenameRulesDto, MultiRenameSequenceDto, SavedSearchDto, SettingsDto, SizeFormatDto,
-    ThemeDto,
+    SyncProfileDto, SyncRunOutcomeDto, SyncRunSummaryDto, SyncRunTriggerDto,
+    SyncScheduleConfirmationDto, SyncScheduleDto, ThemeDto,
 };
 pub use snapshot::{DirectorySnapshotDto, LoadingStateDto, VolumeCapacityDto};
 pub use snapshots::{

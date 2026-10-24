@@ -288,6 +288,26 @@ available in the desktop app. The
 [Total Commander parity audit](TASKS/0128-total-commander-shortcuts-quick-wins.md) records design
 decisions and intentionally unsupported bindings.
 
+## Synchronization profiles
+
+Run the **Synchronization profiles…** action (command palette) to keep named folder pairs. A profile
+stores two provider-neutral roots (local or remote, never credentials), the direction (two-way
+newer-wins, or mirror either way), how to compare, include and exclude patterns (`*`, `**`, `?`;
+exclusions win), whether to include hidden files, and the conflict default for files that already
+exist. Create, edit, duplicate, delete, and run profiles from the dialog; "Use left/right pane
+folder" fills a root from the open panes.
+
+Running a profile always starts a fresh comparison of both roots and shows the usual sync-plan
+review first; nothing changes until you press Apply. An unreachable root or missing connection, a
+destination that became read-only, a comparison that times out, and a plan older than 15 minutes
+(or no longer held by the backend) each stop with a message that names the side and the next step.
+The last run is saved on the profile. Profiles are stored in the settings file.
+
+An optional schedule (every 5 minutes to 7 days) is off until you enable it. It only runs while
+Procyon is open, prepares an inspectable plan, and by default waits for you to review it. The
+alternative policy applies only copies of entries missing on the other side; overwrites and
+deletions always wait for you.
+
 ## Collection basket
 
 Select entries in any folder, tab, or provider and use the shopping-basket toolbar button to add

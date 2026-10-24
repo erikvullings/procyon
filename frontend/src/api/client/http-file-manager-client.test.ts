@@ -1462,7 +1462,39 @@ describe('HttpFileManagerClient', () => {
       ]);
       expect(requestGenerateSyncPlan).toHaveBeenCalledWith(
         'comparison-1',
-        { mode: 'mirrorLeftToRight' },
+        { mode: 'mirrorLeftToRight', include: [], exclude: [] },
+        undefined,
+      );
+    });
+
+    it('sends profile filters when generating and the conflict policy when applying', async () => {
+      requestGenerateSyncPlan.mockResolvedValue({
+        status: 200,
+        headers: new Headers(),
+        data: { comparisonId: 'comparison-1', items: [] },
+      });
+      requestApplySyncPlan.mockResolvedValue({
+        status: 201,
+        headers: new Headers(),
+        data: { operationIds: [] },
+      });
+      const client = new HttpFileManagerClient();
+
+      await client.generateSyncPlan('comparison-1', {
+        mode: 'twoWayUpdate',
+        include: ['*.jpg'],
+        exclude: ['cache'],
+      });
+      await client.applySyncPlan('comparison-1', { items: [], conflictPolicy: 'skip' });
+
+      expect(requestGenerateSyncPlan).toHaveBeenCalledWith(
+        'comparison-1',
+        { mode: 'twoWayUpdate', include: ['*.jpg'], exclude: ['cache'] },
+        undefined,
+      );
+      expect(requestApplySyncPlan).toHaveBeenCalledWith(
+        'comparison-1',
+        { items: [], conflictPolicy: 'skip' },
         undefined,
       );
     });

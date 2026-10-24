@@ -16,6 +16,7 @@ import type { SettingsDtoKeybindings } from './settingsDtoKeybindings.ts';
 import type { SettingsDtoPluginSettings } from './settingsDtoPluginSettings.ts';
 import type { SettingsDtoRecentLocationsByWorkspace } from './settingsDtoRecentLocationsByWorkspace.ts';
 import type { SizeFormatDto } from './sizeFormatDto.ts';
+import type { SyncProfileDto } from './syncProfileDto.ts';
 import type { ThemeDto } from './themeDto.ts';
 
 /**
@@ -98,6 +99,8 @@ export interface SettingsDto {
   showHiddenFiles: boolean;
   /** Size presentation. */
   sizeFormat: SizeFormatDto;
+  /** Saved synchronization profiles. */
+  syncProfiles?: SyncProfileDto[];
   /**
      * Optional terminal command.
      * @nullable

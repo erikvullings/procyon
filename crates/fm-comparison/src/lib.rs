@@ -11,6 +11,7 @@
 
 mod content;
 mod engine;
+mod filter;
 mod model;
 mod path;
 mod store;
@@ -18,6 +19,7 @@ mod sync;
 
 pub use content::{ByteComparison, ContentCompareError, compare_streams};
 pub use engine::{ComparisonEngine, ComparisonError, ComparisonOptions};
+pub use filter::{PathFilter, generate_filtered_sync_plan};
 pub use model::{
     ComparisonCriteria, ComparisonEntry, ComparisonEntrySide, ComparisonStatus, classify,
     classify_with_content,

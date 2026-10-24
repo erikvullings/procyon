@@ -1,0 +1,89 @@
+.fm-sync-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-sync-profile-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 4px;
+}
+
+.fm-sync-profile-summary {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fm-sync-profile-summary small {
+  color: var(--fm-text-muted, inherit);
+}
+
+.fm-sync-profile-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.fm-sync-profile-pending {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 4px;
+  background: var(--fm-surface-elevated);
+}
+
+.fm-sync-profile-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fm-sync-profile-location {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fm-sync-profile-label {
+  min-width: 6rem;
+}
+
+.fm-sync-profile-uri {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fm-sync-profile-hint {
+  margin: 0;
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.fm-sync-profile-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fm-sync-profile-schedule {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 4px;
+}

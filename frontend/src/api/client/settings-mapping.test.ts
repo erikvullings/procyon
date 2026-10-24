@@ -116,3 +116,59 @@ it('round-trips saved filter presets and tolerates older settings without them',
   };
   expect(settingsFromDto(sparse).filterPresets[0]?.criteria.minSize).toBeNull();
 });
+
+it('round-trips sync profiles with schedule and last run and tolerates older settings', async () => {
+  const settings = await new MockFileManagerClient().getSettings();
+  const profiles = [
+    {
+      id: 'p1',
+      name: 'Photos',
+      left: { providerId: 'local', uri: 'file:///photos' },
+      right: { providerId: 'sftp', uri: 'sftp://me@nas/photos' },
+      mode: 'mirrorLeftToRight' as const,
+      criteria: 'contentHash' as const,
+      showHidden: true,
+      include: ['*.jpg'],
+      exclude: ['cache'],
+      conflictPolicy: 'skip' as const,
+      schedule: {
+        enabled: true,
+        intervalMinutes: 30,
+        confirmation: 'autoApplyAdditions' as const,
+      },
+      lastRun: {
+        at: '2026-10-24T10:00:00Z',
+        trigger: 'scheduled' as const,
+        outcome: 'failed' as const,
+        plannedItems: 2,
+        appliedItems: 0,
+        message: 'Connection missing',
+      },
+    },
+    {
+      id: 'p2',
+      name: 'Bare',
+      left: { providerId: 'local', uri: 'file:///a' },
+      right: { providerId: 'local', uri: 'file:///b' },
+      mode: 'twoWayUpdate' as const,
+      criteria: 'nameOnly' as const,
+      showHidden: false,
+      include: [],
+      exclude: [],
+      conflictPolicy: 'ask' as const,
+      schedule: null,
+      lastRun: null,
+    },
+  ];
+  const dto = settingsToDto({ ...settings, syncProfiles: profiles });
+  expect(settingsFromDto(dto).syncProfiles).toEqual(profiles);
+
+  const { syncProfiles: _omitted, ...older } = dto;
+  expect(settingsFromDto(older).syncProfiles).toEqual([]);
+  // Serialised nulls and omitted optional members mean the same thing.
+  const bare = dto.syncProfiles?.[1];
+  if (bare === undefined) throw new Error('missing fixture');
+  const { schedule: _schedule, lastRun: _lastRun, ...withoutOptionals } = bare;
+  const sparse: typeof dto = { ...dto, syncProfiles: [withoutOptionals] };
+  expect(settingsFromDto(sparse).syncProfiles[0]).toMatchObject({ schedule: null, lastRun: null });
+});

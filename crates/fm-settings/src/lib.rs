@@ -13,10 +13,19 @@
 //! stores.
 
 mod map;
+mod sync_profile;
 
 pub use map::{
     DEFAULT_ATTRIBUTION, DEFAULT_MAX_ZOOM, DEFAULT_TILE_TEMPLATE, MapBasemap, MapSettings,
     MapSettingsError,
+};
+
+pub use sync_profile::{
+    MAX_SYNC_INTERVAL_MINUTES, MAX_SYNC_PATTERN_CHARS, MAX_SYNC_PATTERNS,
+    MAX_SYNC_PROFILE_ID_CHARS, MAX_SYNC_PROFILE_NAME_CHARS, MAX_SYNC_PROFILES,
+    MAX_SYNC_RUN_MESSAGE_CHARS, MIN_SYNC_INTERVAL_MINUTES, SyncProfile, SyncProfileCriteria,
+    SyncProfileMode, SyncRunOutcome, SyncRunSummary, SyncRunTrigger, SyncSchedule,
+    SyncScheduleConfirmation,
 };
 
 use std::collections::BTreeMap;
@@ -399,6 +408,9 @@ pub struct Settings {
     pub multi_rename_presets: Vec<MultiRenamePreset>,
     /// User-named reusable pane filters (task 0169); sanitized on load and save.
     pub filter_presets: Vec<FilterPreset>,
+    /// Saved synchronization profiles (task 0161); sanitized on load and save, never holding
+    /// credentials or connection tokens.
+    pub sync_profiles: Vec<SyncProfile>,
     /// Durable smart folders. Queries contain provider-neutral locations but
     /// never credentials or connection-session tokens.
     pub saved_searches: Vec<SavedSearch>,
@@ -499,6 +511,7 @@ impl Default for Settings {
             recent_locations_by_workspace: BTreeMap::new(),
             multi_rename_presets: Vec::new(),
             filter_presets: Vec::new(),
+            sync_profiles: Vec::new(),
             saved_searches: Vec::new(),
             icon_theme: GENERIC_ICON_THEME.to_owned(),
             check_for_updates_automatically: true,
@@ -581,6 +594,7 @@ impl SettingsStore {
             Ok(mut settings) => {
                 settings.normalise_folder_views();
                 sanitize_filter_presets(&mut settings.filter_presets);
+                sync_profile::sanitize_sync_profiles(&mut settings.sync_profiles);
                 Ok(LoadOutcome {
                     settings,
                     warning: None,
@@ -628,6 +642,7 @@ impl SettingsStore {
         }
         current.normalise_folder_views();
         sanitize_filter_presets(&mut current.filter_presets);
+        sync_profile::sanitize_sync_profiles(&mut current.sync_profiles);
         let bytes = serde_json::to_vec_pretty(&current)?;
         atomic_write(&self.directory, SETTINGS_FILE_NAME, &bytes)?;
         Ok(())
@@ -1248,6 +1263,134 @@ mod tests {
         assert_eq!(
             store.load().expect("reload").settings.filter_presets.len(),
             MAX_FILTER_PRESETS
+        );
+    }
+
+    fn sample_profile(id: &str, name: &str, left: &str, right: &str) -> SyncProfile {
+        SyncProfile {
+            id: id.into(),
+            name: name.into(),
+            left: Location::new(fm_domain::ProviderId::new("local"), left),
+            right: Location::new(fm_domain::ProviderId::new("sftp"), right),
+            ..SyncProfile::default()
+        }
+    }
+
+    #[test]
+    fn older_fixtures_load_with_an_empty_sync_profile_list() {
+        for version in [1, 4, 8, CURRENT_SCHEMA_VERSION] {
+            let settings = migrate(format!(r#"{{"schemaVersion":{version}}}"#).as_bytes())
+                .expect("migrate older settings");
+            assert!(settings.sync_profiles.is_empty(), "v{version}");
+        }
+    }
+
+    #[test]
+    fn sync_profiles_round_trip_and_never_persist_credentials() {
+        let directory = tempdir().expect("temp directory");
+        let store = SettingsStore::new(directory.path());
+        let mut leaky = sample_profile(
+            "p1",
+            "  Photos  ",
+            "file:///Users/erik/photos",
+            "sftp://erik:hunter2@nas.local/photos?token=abc#frag",
+        );
+        leaky.include = vec![" *.jpg ".into(), "".into(), "*.jpg".into()];
+        leaky.exclude = vec!["cache".into()];
+        leaky.schedule = Some(SyncSchedule {
+            enabled: true,
+            interval_minutes: 1,
+            confirmation: SyncScheduleConfirmation::Required,
+        });
+        leaky.last_run = Some(SyncRunSummary {
+            at: "2026-10-24T10:00:00Z".into(),
+            trigger: SyncRunTrigger::Scheduled,
+            outcome: SyncRunOutcome::Planned,
+            planned_items: 3,
+            applied_items: 0,
+            message: None,
+        });
+        store
+            .save(&Settings {
+                sync_profiles: vec![leaky],
+                ..Settings::default()
+            })
+            .expect("save");
+
+        let raw = fs::read_to_string(directory.path().join(SETTINGS_FILE_NAME)).expect("read");
+        assert!(!raw.contains("hunter2"), "password leaked: {raw}");
+        assert!(!raw.contains("token=abc"), "token leaked: {raw}");
+
+        let loaded = store.load().expect("load").settings;
+        let profile = &loaded.sync_profiles[0];
+        assert_eq!(profile.name, "Photos");
+        assert_eq!(profile.right.uri, "sftp://erik@nas.local/photos");
+        assert_eq!(profile.include, ["*.jpg"]);
+        assert_eq!(
+            profile.schedule.map(|s| s.interval_minutes),
+            Some(MIN_SYNC_INTERVAL_MINUTES)
+        );
+        assert_eq!(profile.last_run.as_ref().map(|r| r.planned_items), Some(3));
+    }
+
+    #[test]
+    fn sync_profiles_are_sanitized_on_load_and_default_to_safe_schedule_policy() {
+        let directory = tempdir().expect("temp directory");
+        fs::write(
+            directory.path().join(SETTINGS_FILE_NAME),
+            format!(
+                r#"{{"schemaVersion":{CURRENT_SCHEMA_VERSION},"syncProfiles":[
+                  {{"id":"a","name":"Ok","left":{{"provider_id":"local","uri":"file:///a"}},
+                    "right":{{"provider_id":"local","uri":"file:///b"}},"schedule":{{"enabled":true}}}},
+                  {{"id":"a","name":"Duplicate id","left":{{"provider_id":"local","uri":"file:///a"}},
+                    "right":{{"provider_id":"local","uri":"file:///b"}}}},
+                  {{"id":"","name":"No id","left":{{"provider_id":"local","uri":"file:///a"}},
+                    "right":{{"provider_id":"local","uri":"file:///b"}}}},
+                  {{"id":"c","name":"  ","left":{{"provider_id":"local","uri":"file:///a"}},
+                    "right":{{"provider_id":"local","uri":"file:///b"}}}},
+                  {{"id":"d","name":"No roots","left":{{"provider_id":"local","uri":""}},
+                    "right":{{"provider_id":"local","uri":"file:///b"}}}}
+                ]}}"#
+            ),
+        )
+        .expect("write fixture");
+        let loaded = SettingsStore::new(directory.path())
+            .load()
+            .expect("load")
+            .settings;
+        assert_eq!(loaded.sync_profiles.len(), 1);
+        let schedule = loaded.sync_profiles[0].schedule.expect("schedule");
+        assert_eq!(
+            schedule.confirmation,
+            SyncScheduleConfirmation::Required,
+            "unattended runs must default to human confirmation"
+        );
+        assert_eq!(loaded.sync_profiles[0].conflict_policy, ConflictPolicy::Ask);
+    }
+
+    #[test]
+    fn sync_profile_list_is_bounded() {
+        let directory = tempdir().expect("temp directory");
+        let store = SettingsStore::new(directory.path());
+        let profiles = (0..MAX_SYNC_PROFILES + 5)
+            .map(|index| {
+                sample_profile(
+                    &format!("p{index}"),
+                    &format!("n{index}"),
+                    "file:///a",
+                    "file:///b",
+                )
+            })
+            .collect();
+        store
+            .save(&Settings {
+                sync_profiles: profiles,
+                ..Settings::default()
+            })
+            .expect("save");
+        assert_eq!(
+            store.load().expect("load").settings.sync_profiles.len(),
+            MAX_SYNC_PROFILES
         );
     }
 

@@ -45,6 +45,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     recentLocationsByWorkspace: {},
     multiRenamePresets: [],
     filterPresets: [],
+    syncProfiles: [],
     savedSearches: [],
     iconTheme: 'generic',
     checkForUpdatesAutomatically: true,

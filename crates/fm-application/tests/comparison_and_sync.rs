@@ -142,13 +142,21 @@ async fn unknown_comparison_id_is_reported_as_not_found_everywhere() {
                 unknown,
                 GenerateSyncPlanRequestDto {
                     mode: SyncModeDto::MirrorLeftToRight,
+                    include: vec![],
+                    exclude: vec![],
                 },
             )
             .is_err()
     );
     assert!(
         service
-            .apply_sync_plan(unknown, ApplySyncPlanRequestDto { items: vec![] })
+            .apply_sync_plan(
+                unknown,
+                ApplySyncPlanRequestDto {
+                    items: vec![],
+                    conflict_policy: None,
+                }
+            )
             .is_err()
     );
 }
@@ -183,6 +191,8 @@ async fn generating_a_sync_plan_never_changes_either_fixture_until_applied() {
             response.comparison_id,
             GenerateSyncPlanRequestDto {
                 mode: SyncModeDto::MirrorLeftToRight,
+                include: vec![],
+                exclude: vec![],
             },
         )
         .expect("plan must generate");
@@ -231,6 +241,8 @@ async fn applying_a_sync_plan_runs_real_operations_that_change_the_filesystem() 
             response.comparison_id,
             GenerateSyncPlanRequestDto {
                 mode: SyncModeDto::MirrorLeftToRight,
+                include: vec![],
+                exclude: vec![],
             },
         )
         .expect("plan must generate");
@@ -238,7 +250,10 @@ async fn applying_a_sync_plan_runs_real_operations_that_change_the_filesystem() 
     let applied = service
         .apply_sync_plan(
             response.comparison_id,
-            ApplySyncPlanRequestDto { items: plan.items },
+            ApplySyncPlanRequestDto {
+                items: plan.items,
+                conflict_policy: None,
+            },
         )
         .expect("plan must apply");
     assert_eq!(applied.operation_ids.len(), 2);
@@ -285,6 +300,8 @@ async fn applying_a_skip_action_starts_no_operation() {
             response.comparison_id,
             GenerateSyncPlanRequestDto {
                 mode: SyncModeDto::MirrorLeftToRight,
+                include: vec![],
+                exclude: vec![],
             },
         )
         .unwrap();
@@ -295,7 +312,10 @@ async fn applying_a_skip_action_starts_no_operation() {
     let applied = service
         .apply_sync_plan(
             response.comparison_id,
-            ApplySyncPlanRequestDto { items: plan.items },
+            ApplySyncPlanRequestDto {
+                items: plan.items,
+                conflict_policy: None,
+            },
         )
         .unwrap();
     assert!(applied.operation_ids.is_empty());
@@ -343,4 +363,110 @@ async fn cancel_operation_falls_back_to_a_running_comparison() {
         "cancellation must stop traversal before every entry is compared, found {}",
         page.entries.len()
     );
+}
+
+#[tokio::test]
+async fn profile_filters_narrow_the_plan_and_the_applied_changes() {
+    let root = tempfile::tempdir().unwrap();
+    let left = root.path().join("left");
+    let right = root.path().join("right");
+    fs::create_dir_all(left.join("build")).unwrap();
+    fs::create_dir_all(&right).unwrap();
+    fs::write(left.join("keep.txt"), b"keep").unwrap();
+    fs::write(left.join("scratch.tmp"), b"tmp").unwrap();
+    fs::write(left.join("notes.md"), b"notes").unwrap();
+    fs::write(left.join("build").join("out.bin"), b"bin").unwrap();
+
+    let service = service(&root);
+    let response = service
+        .start_comparison(StartComparisonRequestDto {
+            workspace_id: Uuid::new_v4(),
+            left: Location::from_native_path(&left).unwrap().into(),
+            right: Location::from_native_path(&right).unwrap().into(),
+            criteria: ComparisonCriteriaDto::NameOnly,
+            show_hidden: false,
+        })
+        .expect("comparison must start");
+    wait_for_comparison(&service, response.comparison_id).await;
+
+    let plan = service
+        .generate_sync_plan(
+            response.comparison_id,
+            GenerateSyncPlanRequestDto {
+                mode: SyncModeDto::MirrorLeftToRight,
+                include: vec!["*.txt".into(), "*.md".into(), "build".into()],
+                exclude: vec!["build".into(), "*.md".into()],
+            },
+        )
+        .expect("plan must generate");
+    let paths: Vec<_> = plan
+        .items
+        .iter()
+        .map(|i| i.relative_path.as_str())
+        .collect();
+    assert_eq!(paths, ["keep.txt"]);
+
+    let applied = service
+        .apply_sync_plan(
+            response.comparison_id,
+            ApplySyncPlanRequestDto {
+                items: plan.items,
+                conflict_policy: Some(fm_transport_dto::OperationConflictPolicyDto::Skip),
+            },
+        )
+        .expect("plan must apply");
+    for operation_id in &applied.operation_ids {
+        wait_for_operation(&service, *operation_id).await;
+    }
+    assert!(right.join("keep.txt").exists());
+    assert!(!right.join("scratch.tmp").exists());
+    assert!(!right.join("notes.md").exists());
+    assert!(!right.join("build").exists());
+}
+
+#[tokio::test]
+async fn skip_conflict_policy_keeps_a_differing_destination_untouched() {
+    let root = tempfile::tempdir().unwrap();
+    let left = root.path().join("left");
+    let right = root.path().join("right");
+    fs::create_dir_all(&left).unwrap();
+    fs::create_dir_all(&right).unwrap();
+    fs::write(left.join("doc.txt"), b"new content!").unwrap();
+    fs::write(right.join("doc.txt"), b"old").unwrap();
+
+    let service = service(&root);
+    let response = service
+        .start_comparison(StartComparisonRequestDto {
+            workspace_id: Uuid::new_v4(),
+            left: Location::from_native_path(&left).unwrap().into(),
+            right: Location::from_native_path(&right).unwrap().into(),
+            criteria: ComparisonCriteriaDto::SizeAndTimestamp,
+            show_hidden: false,
+        })
+        .expect("comparison must start");
+    wait_for_comparison(&service, response.comparison_id).await;
+    let plan = service
+        .generate_sync_plan(
+            response.comparison_id,
+            GenerateSyncPlanRequestDto {
+                mode: SyncModeDto::MirrorLeftToRight,
+                include: vec![],
+                exclude: vec![],
+            },
+        )
+        .unwrap();
+    assert_eq!(plan.items.len(), 1);
+    let applied = service
+        .apply_sync_plan(
+            response.comparison_id,
+            ApplySyncPlanRequestDto {
+                items: plan.items,
+                conflict_policy: Some(fm_transport_dto::OperationConflictPolicyDto::Skip),
+            },
+        )
+        .unwrap();
+    for operation_id in &applied.operation_ids {
+        wait_for_operation(&service, *operation_id).await;
+    }
+    assert_eq!(fs::read(right.join("doc.txt")).unwrap(), b"old");
 }

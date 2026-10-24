@@ -1,8 +1,9 @@
 import { DEFAULT_MAP_SETTINGS } from '../../features/map/map-settings';
 import type { Location as FileLocation, SearchQuery, Settings } from '../../models';
-import type { FilterCriteria } from '../../models/settings';
+import type { FilterCriteria, SyncProfile } from '../../models/settings';
 import type { FilterCriteriaDto } from '../generated/models/filterCriteriaDto';
 import type { SettingsDto } from '../generated/models/settingsDto';
+import type { SyncProfileDto } from '../generated/models/syncProfileDto';
 
 export function settingsFromDto(settings: SettingsDto): Settings {
   return {
@@ -15,6 +16,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
       ...preset,
       criteria: filterCriteriaFromDto(preset.criteria),
     })),
+    syncProfiles: (settings.syncProfiles ?? []).map(syncProfileFromDto),
     savedSearches: settings.savedSearches.map((saved) => ({
       ...saved,
       query: searchQueryFromDto(saved.query),
@@ -87,6 +89,21 @@ function searchQueryFromDto(query: SettingsDto['savedSearches'][number]['query']
   };
 }
 
+function syncProfileFromDto(profile: SyncProfileDto): SyncProfile {
+  return {
+    ...profile,
+    left: { ...profile.left },
+    right: { ...profile.right },
+    include: [...profile.include],
+    exclude: [...profile.exclude],
+    schedule: profile.schedule == null ? null : { ...profile.schedule },
+    lastRun:
+      profile.lastRun == null
+        ? null
+        : { ...profile.lastRun, message: profile.lastRun.message ?? null },
+  };
+}
+
 function filterCriteriaFromDto(criteria: FilterCriteriaDto): FilterCriteria {
   return {
     name: criteria.name,
@@ -113,6 +130,15 @@ export function settingsToDto(settings: Settings): SettingsDto {
     filterPresets: settings.filterPresets.map((preset) => ({
       ...preset,
       criteria: { ...preset.criteria },
+    })),
+    syncProfiles: settings.syncProfiles.map((profile) => ({
+      ...profile,
+      left: { ...profile.left },
+      right: { ...profile.right },
+      include: [...profile.include],
+      exclude: [...profile.exclude],
+      schedule: profile.schedule === null ? null : { ...profile.schedule },
+      lastRun: profile.lastRun === null ? null : { ...profile.lastRun },
     })),
     savedSearches: settings.savedSearches.map((saved) => ({
       ...saved,

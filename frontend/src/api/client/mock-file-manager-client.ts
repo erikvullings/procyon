@@ -268,6 +268,7 @@ import {
   resolveMockKnowledgeSource,
 } from './mock-knowledge-search';
 import { MockSqliteDatabase } from './mock-sqlite-database';
+import { admitsPath } from './sync-path-filter';
 
 interface FixtureEntry {
   name: string;
@@ -1448,6 +1449,7 @@ export class MockFileManagerClient implements FileManagerClient {
     recentLocationsByWorkspace: {},
     multiRenamePresets: [],
     filterPresets: [],
+    syncProfiles: [],
     savedSearches: [],
     iconTheme: 'generic',
     checkForUpdatesAutomatically: true,
@@ -4802,6 +4804,7 @@ export class MockFileManagerClient implements FileManagerClient {
       const comparison = this.requireComparison(comparisonId);
       const items = comparison.entries
         .filter((entry) => entry.status !== 'identical')
+        .filter((entry) => admitsPath(entry.relativePath, request.include, request.exclude))
         .map((entry) => ({
           relativePath: entry.relativePath,
           status: entry.status,
@@ -4840,7 +4843,7 @@ export class MockFileManagerClient implements FileManagerClient {
           state: 'completed',
           sources: [{ id: source.uri, location: source }],
           progress: { completedItems: 1, completedBytes: 0 },
-          conflictPolicy: 'overwrite',
+          conflictPolicy: request.conflictPolicy ?? 'overwrite',
           createdAt: '2026-01-01T00:00:00.000Z',
           startedAt: '2026-01-01T00:00:00.000Z',
         });

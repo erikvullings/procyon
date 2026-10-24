@@ -9105,6 +9105,17 @@
           "items"
         ],
         "properties": {
+          "conflictPolicy": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OperationConflictPolicyDto",
+                "description": "Conflict policy for copy rows whose destination exists. Defaults to `overwrite`\n(a sync copy deliberately replaces a differing destination)."
+              }
+            ]
+          },
           "items": {
             "type": "array",
             "items": {
@@ -13019,6 +13030,20 @@
           "mode"
         ],
         "properties": {
+          "exclude": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Glob patterns whose matches (and descendants) are never planned; wins over `include`."
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Glob patterns a path must match to be planned; empty admits every path (task 0161)."
+          },
           "mode": {
             "$ref": "#/components/schemas/SyncModeDto",
             "description": "Which side is authoritative."
@@ -24013,6 +24038,13 @@
             "$ref": "#/components/schemas/SizeFormatDto",
             "description": "Size presentation."
           },
+          "syncProfiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncProfileDto"
+            },
+            "description": "Saved synchronization profiles."
+          },
           "terminalCommand": {
             "type": [
               "string",
@@ -25829,6 +25861,188 @@
           "status": {
             "$ref": "#/components/schemas/ComparisonStatusDto",
             "description": "The comparison outcome this action was proposed from."
+          }
+        }
+      },
+      "SyncProfileDto": {
+        "type": "object",
+        "description": "A named, saved synchronization pair. Never carries credentials or connection tokens.",
+        "required": [
+          "id",
+          "name",
+          "left",
+          "right",
+          "mode",
+          "criteria",
+          "showHidden",
+          "include",
+          "exclude",
+          "conflictPolicy"
+        ],
+        "properties": {
+          "conflictPolicy": {
+            "$ref": "#/components/schemas/ConflictPolicyDto",
+            "description": "Conflict default for copy rows whose destination exists."
+          },
+          "criteria": {
+            "$ref": "#/components/schemas/ComparisonCriteriaDto",
+            "description": "Comparison mode."
+          },
+          "exclude": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Glob patterns that are never planned."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable identifier."
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Glob patterns a path must match; empty admits all."
+          },
+          "lastRun": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SyncRunSummaryDto",
+                "description": "Last-run summary."
+              }
+            ]
+          },
+          "left": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Root compared as \"left\"."
+          },
+          "mode": {
+            "$ref": "#/components/schemas/SyncModeDto",
+            "description": "Direction."
+          },
+          "name": {
+            "type": "string",
+            "description": "User-visible name."
+          },
+          "right": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Root compared as \"right\"."
+          },
+          "schedule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SyncScheduleDto",
+                "description": "Optional schedule."
+              }
+            ]
+          },
+          "showHidden": {
+            "type": "boolean",
+            "description": "Include hidden entries."
+          }
+        }
+      },
+      "SyncRunOutcomeDto": {
+        "type": "string",
+        "description": "How a synchronization run ended.",
+        "enum": [
+          "planned",
+          "applied",
+          "upToDate",
+          "dismissed",
+          "failed"
+        ]
+      },
+      "SyncRunSummaryDto": {
+        "type": "object",
+        "description": "Summary of a profile's most recent run.",
+        "required": [
+          "at",
+          "trigger",
+          "outcome",
+          "plannedItems",
+          "appliedItems"
+        ],
+        "properties": {
+          "appliedItems": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows applied.",
+            "minimum": 0
+          },
+          "at": {
+            "type": "string",
+            "description": "RFC 3339 timestamp."
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Actionable failure text."
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/SyncRunOutcomeDto",
+            "description": "How it ended."
+          },
+          "plannedItems": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows in the plan.",
+            "minimum": 0
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/SyncRunTriggerDto",
+            "description": "What started the run."
+          }
+        }
+      },
+      "SyncRunTriggerDto": {
+        "type": "string",
+        "description": "What started a synchronization run.",
+        "enum": [
+          "manual",
+          "scheduled"
+        ]
+      },
+      "SyncScheduleConfirmationDto": {
+        "type": "string",
+        "description": "Whether a scheduled synchronization run needs a human before anything changes.",
+        "enum": [
+          "required",
+          "autoApplyAdditions"
+        ]
+      },
+      "SyncScheduleDto": {
+        "type": "object",
+        "description": "Opt-in schedule of a synchronization profile; fires only while the app is running.",
+        "required": [
+          "enabled",
+          "intervalMinutes",
+          "confirmation"
+        ],
+        "properties": {
+          "confirmation": {
+            "$ref": "#/components/schemas/SyncScheduleConfirmationDto",
+            "description": "Human-confirmation policy."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Explicit opt-in."
+          },
+          "intervalMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Minutes between plan preparations (5 to 10080).",
+            "minimum": 0
           }
         }
       },

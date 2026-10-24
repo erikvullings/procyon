@@ -3,6 +3,7 @@
 //! Split out of the `FileManagerService` facade (task 0119) — a self-contained pair of pure
 //! conversion functions with no dependency on the rest of the facade.
 
+use crate::sync_profile_mapping::{sync_profile_from_dto, sync_profile_to_dto};
 use fm_settings::{
     ConflictPolicy, DateFormat, DefaultPaneLayout, FilterCriteria, FilterKind, FilterPreset,
     FilterToggle, Language, MapBasemap, MapSettings, MultiRenameCaseTransform, MultiRenamePreset,
@@ -137,6 +138,11 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
                     executable: toggle_to_dto(preset.criteria.executable),
                 },
             })
+            .collect(),
+        sync_profiles: settings
+            .sync_profiles
+            .into_iter()
+            .map(sync_profile_to_dto)
             .collect(),
         saved_searches: settings
             .saved_searches
@@ -275,6 +281,11 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
                     executable: toggle_from_dto(preset.criteria.executable),
                 },
             })
+            .collect(),
+        sync_profiles: settings
+            .sync_profiles
+            .into_iter()
+            .map(sync_profile_from_dto)
             .collect(),
         saved_searches: settings
             .saved_searches

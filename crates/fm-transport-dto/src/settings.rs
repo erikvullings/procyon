@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::ToSchema;
 
-use crate::{LocationDto, SearchQueryDto};
+use crate::{ComparisonCriteriaDto, LocationDto, SearchQueryDto, SyncModeDto};
 
 /// Application colour theme.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -214,6 +214,102 @@ pub struct FilterPresetDto {
     pub criteria: FilterCriteriaDto,
 }
 
+/// Whether a scheduled synchronization run needs a human before anything changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncScheduleConfirmationDto {
+    /// A person reviews and applies every scheduled plan.
+    Required,
+    /// Only additions to a side that lacks the entry are applied unattended.
+    AutoApplyAdditions,
+}
+
+/// Opt-in schedule of a synchronization profile; fires only while the app is running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncScheduleDto {
+    /// Explicit opt-in.
+    pub enabled: bool,
+    /// Minutes between plan preparations (5 to 10080).
+    pub interval_minutes: u32,
+    /// Human-confirmation policy.
+    pub confirmation: SyncScheduleConfirmationDto,
+}
+
+/// What started a synchronization run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncRunTriggerDto {
+    /// The user ran the profile.
+    Manual,
+    /// The schedule fired.
+    Scheduled,
+}
+
+/// How a synchronization run ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncRunOutcomeDto {
+    /// A plan was prepared and awaits review.
+    Planned,
+    /// The plan was applied.
+    Applied,
+    /// Nothing differed.
+    UpToDate,
+    /// The plan was dismissed without applying.
+    Dismissed,
+    /// The run failed.
+    Failed,
+}
+
+/// Summary of a profile's most recent run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncRunSummaryDto {
+    /// RFC 3339 timestamp.
+    pub at: String,
+    /// What started the run.
+    pub trigger: SyncRunTriggerDto,
+    /// How it ended.
+    pub outcome: SyncRunOutcomeDto,
+    /// Rows in the plan.
+    pub planned_items: u32,
+    /// Rows applied.
+    pub applied_items: u32,
+    /// Actionable failure text.
+    pub message: Option<String>,
+}
+
+/// A named, saved synchronization pair. Never carries credentials or connection tokens.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncProfileDto {
+    /// Stable identifier.
+    pub id: String,
+    /// User-visible name.
+    pub name: String,
+    /// Root compared as "left".
+    pub left: LocationDto,
+    /// Root compared as "right".
+    pub right: LocationDto,
+    /// Direction.
+    pub mode: SyncModeDto,
+    /// Comparison mode.
+    pub criteria: ComparisonCriteriaDto,
+    /// Include hidden entries.
+    pub show_hidden: bool,
+    /// Glob patterns a path must match; empty admits all.
+    pub include: Vec<String>,
+    /// Glob patterns that are never planned.
+    pub exclude: Vec<String>,
+    /// Conflict default for copy rows whose destination exists.
+    pub conflict_policy: ConflictPolicyDto,
+    /// Optional schedule.
+    pub schedule: Option<SyncScheduleDto>,
+    /// Last-run summary.
+    pub last_run: Option<SyncRunSummaryDto>,
+}
+
 /// A user-named reusable structured search.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -281,6 +377,9 @@ pub struct SettingsDto {
     /// User-named reusable pane filters.
     #[serde(default)]
     pub filter_presets: Vec<FilterPresetDto>,
+    /// Saved synchronization profiles.
+    #[serde(default)]
+    pub sync_profiles: Vec<SyncProfileDto>,
     /// Durable smart folders, ordered with pinned searches first by the UI.
     pub saved_searches: Vec<SavedSearchDto>,
     /// Directory-entry icon set: `"generic"` for the built-in glyphs, or a discovered plugin's id.

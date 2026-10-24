@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::entry::EntryKindDto;
 use crate::location::LocationDto;
+use crate::operation::OperationConflictPolicyDto;
 
 /// How two directory trees are compared.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -170,11 +171,17 @@ pub struct SyncPlanItemDto {
 ///
 /// Generating a plan never touches a filesystem (spec §35): it only reads
 /// the comparison's already-computed results.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GenerateSyncPlanRequestDto {
     /// Which side is authoritative.
     pub mode: SyncModeDto,
+    /// Glob patterns a path must match to be planned; empty admits every path (task 0161).
+    #[serde(default)]
+    pub include: Vec<String>,
+    /// Glob patterns whose matches (and descendants) are never planned; wins over `include`.
+    #[serde(default)]
+    pub exclude: Vec<String>,
 }
 
 /// A proposed sync plan, ready for review and per-row edits before applying.
@@ -200,6 +207,10 @@ pub struct ApplySyncPlanRequestDto {
     /// The (possibly edited) rows to apply. Rows with action `skip` start no
     /// operation.
     pub items: Vec<SyncPlanItemDto>,
+    /// Conflict policy for copy rows whose destination exists. Defaults to `overwrite`
+    /// (a sync copy deliberately replaces a differing destination).
+    #[serde(default)]
+    pub conflict_policy: Option<OperationConflictPolicyDto>,
 }
 
 /// The operations started by applying a sync plan.

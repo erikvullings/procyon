@@ -227,7 +227,7 @@ engine, conflict handling, clipboard, drag-and-drop, comparison and checksums th
 - [x] 0077 Checksums and duplicate-file detection
 - [x] 0093 Copy filename and path actions
 - [x] 0160 Safe operation undo
-- [ ] 0161 Saved synchronization profiles *(needs 0030, 0075)*
+- [x] 0161 Saved synchronization profiles *(needs 0030, 0075)*
 - [ ] 0163 Durable transfer recovery *(needs 0035, 0047, 0108)*
 - [x] 0165 File collection basket *(needs 0035, 0048, 0108)*
 - [x] 0168 Create symbolic links and Windows shortcuts *(needs 0035, 0058)*

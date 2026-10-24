@@ -1096,7 +1096,28 @@ describe('TauriFileManagerClient', () => {
       ).resolves.toEqual(plan);
       expect(invoke).toHaveBeenCalledWith('generate_sync_plan', {
         comparisonId: 'comparison-1',
-        request: { mode: 'twoWayUpdate' },
+        request: { mode: 'twoWayUpdate', include: [], exclude: [] },
+      });
+    });
+
+    it('sends profile filters when generating and the conflict policy when applying', async () => {
+      invoke.mockResolvedValue({ comparisonId: 'comparison-1', items: [], operationIds: [] });
+      const client = new TauriFileManagerClient();
+
+      await client.generateSyncPlan('comparison-1', {
+        mode: 'mirrorLeftToRight',
+        include: ['*.jpg'],
+        exclude: ['cache'],
+      });
+      await client.applySyncPlan('comparison-1', { items: [], conflictPolicy: 'renameNew' });
+
+      expect(invoke).toHaveBeenCalledWith('generate_sync_plan', {
+        comparisonId: 'comparison-1',
+        request: { mode: 'mirrorLeftToRight', include: ['*.jpg'], exclude: ['cache'] },
+      });
+      expect(invoke).toHaveBeenCalledWith('apply_sync_plan', {
+        comparisonId: 'comparison-1',
+        request: { items: [], conflictPolicy: 'renameNew' },
       });
     });
 
