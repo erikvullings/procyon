@@ -833,6 +833,7 @@ export const pl = {
     mediaInspectSource: 'Otwórz źródło, aby obejrzeć te multimedia.',
     openMedia: 'Otwórz {type}',
     closeMedia: 'Zamknij {type}',
+    branchViewLabel: 'Widok płaski',
     unableToStart: 'Nie można rozpocząć wyszukiwania',
     startingSearch: 'Uruchamianie wyszukiwania…',
     refresh: 'Odśwież wyszukiwanie',

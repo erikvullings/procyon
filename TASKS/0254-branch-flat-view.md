@@ -1,6 +1,6 @@
 # 0254 Branch (flat) view
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, frontend
 Depends on: 0019, 0024
@@ -21,3 +21,15 @@ Total Commander's Ctrl+B "branch view" lists every file under the current folder
 
 ## Agent Notes
 - Created 2026-10-18 from the feature gap review. No work started.
+- 2026-10-24 claude: Implemented as a frontend-only composition of the existing search virtual
+  location: `core.branchView` (Cmd/Ctrl+B, command palette) runs a recursive, files-only search with
+  an empty name filter rooted at the active folder in the same pane
+  (`FindFilesController.toggleBranchView`); invoking it again from that result cancels the scan and
+  navigates back to the stored root. Search tabs already provide parent-path rendering, sorting,
+  quick filter, selection, operations on real locations, paging, cancellation (also on
+  navigate/close), symlink non-following and provider-boundary handling, in mock/HTTP/Tauri alike.
+  Verified: 3 new controller tests + 1 palette test, tsc clean, full frontend suite (3038) and
+  `fm-application` action tests pass.
+- Known gaps: result lists are not live-updated from watch deltas (same as every search tab; the
+  existing refresh control reruns it); the backend search result cap/truncation behaviour is the
+  existing search one, no branch-specific cap. No native menu-bar item (palette + shortcut only).

@@ -569,6 +569,13 @@ fn core_actions(capabilities: PlatformCapabilities) -> Vec<ActionDescriptor> {
             ActionContextRequirements::none(),
         ),
         core_action(
+            "core.branchView",
+            "Branch View",
+            "navigation",
+            vec![primary("b")],
+            ActionContextRequirements::none(),
+        ),
+        core_action(
             "core.newTab",
             "New Tab",
             "navigation",
@@ -1049,6 +1056,7 @@ mod tests {
             "core.focusLocation",
             "core.quickFilter",
             "core.findFiles",
+            "core.branchView",
             "core.newTab",
             "core.closeTab",
             "core.nextTab",

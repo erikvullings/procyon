@@ -836,6 +836,7 @@ export const es = {
     mediaInspectSource: 'Abre el archivo de origen para ver este contenido.',
     openMedia: 'Abrir {type}',
     closeMedia: 'Cerrar {type}',
+    branchViewLabel: 'Vista plana',
     unableToStart: 'No se puede iniciar la búsqueda',
     startingSearch: 'Iniciando búsqueda…',
     refresh: 'Actualizar búsqueda',

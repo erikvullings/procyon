@@ -838,6 +838,7 @@ export const fr = {
     mediaInspectSource: 'Ouvrez la source pour consulter ce média.',
     openMedia: 'Ouvrir {type}',
     closeMedia: 'Fermer {type}',
+    branchViewLabel: 'Vue aplatie',
     unableToStart: 'Impossible de démarrer la recherche',
     startingSearch: 'Lancement de la recherche…',
     refresh: 'Actualiser la recherche',

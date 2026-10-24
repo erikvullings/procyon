@@ -841,6 +841,7 @@ export const de = {
     mediaInspectSource: 'Quelle öffnen, um dieses Medium anzusehen.',
     openMedia: '{type} öffnen',
     closeMedia: '{type} schließen',
+    branchViewLabel: 'Verzweigte Ansicht',
     unableToStart: 'Suche kann nicht gestartet werden',
     startingSearch: 'Suche wird gestartet…',
     refresh: 'Suche aktualisieren',

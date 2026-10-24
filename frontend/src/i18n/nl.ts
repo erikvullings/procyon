@@ -834,6 +834,7 @@ export const nl = {
     resultsTitle: 'Zoekresultaten',
     allEnrolledFolders: 'Alle opgenomen mappen',
     folderScope: 'Map: {path}',
+    branchViewLabel: 'Vertakkingsweergave',
     unableToStart: 'Kan zoekopdracht niet starten',
     startingSearch: 'Zoekopdracht starten…',
     refresh: 'Zoekopdracht vernieuwen',

@@ -225,6 +225,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     activeTabKey: (paneId) => `${paneId}:tab`,
     actionsWithFavourites: () => ACTIONS,
     openFindFiles: vi.fn(),
+    toggleBranchView: vi.fn(),
     replaceClipboard: vi.fn(),
     resolvePasteClipboard: () => Promise.resolve({ locations: [] }),
     selectedLocations: () => [],

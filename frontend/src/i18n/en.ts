@@ -841,6 +841,7 @@ export const en = {
     resultsTitle: 'Search results',
     allEnrolledFolders: 'All enrolled folders',
     folderScope: 'Folder: {path}',
+    branchViewLabel: 'Branch view',
     unableToStart: 'Unable to start search',
     startingSearch: 'Starting search…',
     refresh: 'Refresh search',

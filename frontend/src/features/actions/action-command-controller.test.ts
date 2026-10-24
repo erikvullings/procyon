@@ -84,6 +84,7 @@ function fakeContext(
     openDiskUsage: () => {},
     openPropertiesForActivePane: () => {},
     openMultiRenameForActivePane: () => {},
+    toggleBranchView: () => {},
     openSemanticAssistant: () => {},
     openKnowledgeSearch: () => {},
     uninstallApplication: () => {},
@@ -283,6 +284,24 @@ describe('action-command-controller uninstallApplication wiring', () => {
       selectedEntryIds: ['a'],
     });
     expect(getClient).not.toHaveBeenCalled();
+  });
+
+  it('toggles the branch view from the command palette', () => {
+    const toggleBranchView = vi.fn();
+    const context = fakeContext({ toggleBranchView });
+    createActionCommandController(context).invokePaletteAction(
+      {
+        id: 'core.branchView',
+        title: 'Branch View',
+        category: 'navigation',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' as const },
+      },
+      undefined,
+      {},
+    );
+    expect(toggleBranchView).toHaveBeenCalledOnce();
   });
 
   it('opens the Multi-Rename Tool from the palette instead of the generic backend invoke', () => {

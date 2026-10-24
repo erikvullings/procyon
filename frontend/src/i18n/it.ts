@@ -833,6 +833,7 @@ export const it = {
     mediaInspectSource: 'Apri il file di origine per esaminare questo contenuto.',
     openMedia: 'Apri {type}',
     closeMedia: 'Chiudi {type}',
+    branchViewLabel: 'Vista appiattita',
     unableToStart: 'Impossibile avviare la ricerca',
     startingSearch: 'Avvio della ricerca…',
     refresh: 'Aggiorna ricerca',

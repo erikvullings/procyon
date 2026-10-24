@@ -254,6 +254,7 @@ describe('FindFilesController refresh', () => {
       getPaneLocationUri: () => locationUri,
       redraw: vi.fn(),
       openTabAt: vi.fn(),
+      navigateTo: vi.fn(),
       reportLimitations: vi.fn(),
     };
 
@@ -336,6 +337,7 @@ describe('FindFilesController refresh', () => {
         getPaneLocationUri: () => root.uri,
         redraw: vi.fn(),
         openTabAt,
+        navigateTo: vi.fn(),
         reportLimitations: vi.fn(),
       } satisfies FindFilesControllerContext;
 
@@ -347,5 +349,128 @@ describe('FindFilesController refresh', () => {
       await vi.waitFor(() => expect(openTabAt).toHaveBeenCalled());
       expect(openTabAt).toHaveBeenCalledWith('pane-1', resultLocation, root);
     });
+  });
+});
+
+describe('FindFilesController branch view', () => {
+  const root: Location = { providerId: 'local', uri: 'file:///Projects' };
+  const resultLocation: Location = { providerId: 'search', uri: 'search://local/branch-1' };
+
+  function setup(active: Location) {
+    const roots = new Map<string, Location>();
+    const queries = new Map<string, SearchQuery>();
+    const presentations = new Map();
+    const startSearch = vi.fn().mockResolvedValue({
+      searchId: 'branch-1',
+      location: resultLocation,
+      limitations: [],
+      executionMode: 'liveRecursive',
+    });
+    const cancelSearch = vi.fn().mockResolvedValue(undefined);
+    let activeLocation = active;
+    let generation = 0;
+    const navigateTo = vi.fn();
+    const context: FindFilesControllerContext = {
+      getFindFilesOpen: () => false,
+      getFindFilesRoot: () => undefined,
+      getFindFilesSearchId: () => undefined,
+      getFindFilesError: () => undefined,
+      getFindFilesGeneration: () => generation,
+      getFindFilesRootsByLocationUri: () => roots,
+      getFindFilesPresentationsByLocationUri: () => presentations,
+      getFindFilesParamsByLocationUri: () => new Map(),
+      getFindFilesQueriesByLocationUri: () => queries,
+      setFindFilesOpen: vi.fn(),
+      setFindFilesRoot: vi.fn(),
+      setFindFilesSearchId: vi.fn(),
+      setFindFilesTargetPane: vi.fn(),
+      clearFindFilesTargetPane: vi.fn(),
+      setFindFilesSearchStartPending: vi.fn(),
+      setFindFilesError: vi.fn(),
+      setFindFilesGeneration: (next) => {
+        generation = next;
+      },
+      getActiveDirectory: () => ({ paneId: 'pane-1', location: activeLocation }),
+      getWorkspace: () =>
+        ({
+          id: 'workspace-1',
+          activePaneId: 'pane-1',
+          paneOrder: ['pane-1'],
+          panesById: {
+            'pane-1': {
+              activeTabId: 'tab-1',
+              tabsById: { 'tab-1': { view: { showHidden: true } } },
+            },
+          },
+        }) as unknown as WorkspaceProjection,
+      getClient: () => ({ startSearch, cancelSearch }) as unknown as FileManagerClient,
+      getPaneLocationUri: () => activeLocation.uri,
+      redraw: vi.fn(),
+      openTabAt: vi.fn(),
+      navigateTo,
+      reportLimitations: vi.fn(),
+    };
+    return {
+      context,
+      startSearch,
+      cancelSearch,
+      navigateTo,
+      roots,
+      setActive: (location: Location) => {
+        activeLocation = location;
+      },
+    };
+  }
+
+  it('starts an empty-name recursive files-only search of the active folder in the same pane', async () => {
+    const { context, startSearch, roots } = setup(root);
+    const controller = createFindFilesController(context);
+
+    controller.toggleBranchView();
+
+    await vi.waitFor(() => expect(startSearch).toHaveBeenCalledOnce());
+    const request = startSearch.mock.calls[0]?.[0] as {
+      query: string;
+      roots: Location[];
+      structuredQuery: SearchQuery;
+    };
+    expect(request.query).toBe('');
+    expect(request.roots).toEqual([root]);
+    expect(request.structuredQuery.scope).toEqual({
+      locations: [root],
+      recurse: true,
+      showHidden: true,
+    });
+    expect(request.structuredQuery.entryKinds).toEqual(['file']);
+    expect(request.structuredQuery.name).toBeUndefined();
+    await vi.waitFor(() =>
+      expect(context.setFindFilesTargetPane).toHaveBeenCalledWith('branch-1', 'pane-1'),
+    );
+    expect(roots.get(resultLocation.uri)).toEqual(root);
+    expect(context.openTabAt).not.toHaveBeenCalled();
+  });
+
+  it('toggling again cancels the scan and restores the original folder', async () => {
+    const { context, startSearch, cancelSearch, navigateTo, setActive } = setup(root);
+    const controller = createFindFilesController(context);
+    controller.toggleBranchView();
+    await vi.waitFor(() => expect(context.setFindFilesTargetPane).toHaveBeenCalled());
+    setActive(resultLocation);
+
+    controller.toggleBranchView();
+
+    expect(cancelSearch).toHaveBeenCalledWith('branch-1');
+    expect(navigateTo).toHaveBeenCalledWith('pane-1', root);
+    expect(startSearch).toHaveBeenCalledOnce();
+  });
+
+  it('does not turn an ordinary search result into a branch view', () => {
+    const search: Location = { providerId: 'search', uri: 'search://local/other' };
+    const { context, startSearch, navigateTo } = setup(search);
+
+    createFindFilesController(context).toggleBranchView();
+
+    expect(startSearch).not.toHaveBeenCalled();
+    expect(navigateTo).not.toHaveBeenCalled();
   });
 });

@@ -4756,6 +4756,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     activeTabKey,
     actionsWithFavourites,
     openFindFiles: () => findFilesController.openFindFiles(),
+    toggleBranchView: () => findFilesController.toggleBranchView(),
     replaceClipboard,
     resolvePasteClipboard,
     selectedLocations,
@@ -5023,6 +5024,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     },
     openTabAt: (paneId, location, historyOrigin) =>
       tabController.openTabAt(paneId, location, historyOrigin),
+    navigateTo: (paneId, location) => void navigation.navigate(paneId, location),
     reportLimitations: (message) => toast({ html: t('search', 'filterLimitations', { message }) }),
     redraw: () => m.redraw(),
   };
@@ -5114,6 +5116,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     invokeClientAction,
     openPropertiesForActivePane: () => globalKeydownHandlerContext.openPropertiesForActivePane(),
     openMultiRenameForActivePane: () => globalKeydownHandlerContext.openMultiRenameForActivePane(),
+    toggleBranchView: () => findFilesController.toggleBranchView(),
     openDocumentSummary: (_paneId, entry) => {
       if (!semanticAssistantAvailable) return;
       if (workspace === undefined) return;

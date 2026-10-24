@@ -36,6 +36,8 @@ export interface FindFilesControllerContext {
   getPaneLocationUri(paneId: PaneId): string | undefined;
   redraw(): void;
   openTabAt(paneId: PaneId, location: Location, historyOrigin?: Location): void;
+  /** Navigates a pane's active tab to `location` (used to leave a branch view). */
+  navigateTo(paneId: PaneId, location: Location): void;
   reportLimitations(message: string): void;
 }
 
@@ -62,6 +64,11 @@ export interface FindFilesController {
    */
   startFindFilesSearch(params: FindFilesSearchParams): void;
   startSavedSearch(saved: SavedSearch, target: SavedSearchOpenTarget): void;
+  /**
+   * Ctrl+B: lists every file below the active folder in one flat list (a recursive search with
+   * an empty name filter, task 0254); invoked again from that list, restores the folder.
+   */
+  toggleBranchView(): void;
   /** Starts the same request again, producing a fresh indexed/live result set. */
   refreshSearch(searchLocationUri: string, paneId: PaneId): void;
 
@@ -147,6 +154,8 @@ export function createFindFilesController(
   context: FindFilesControllerContext,
 ): FindFilesController {
   const refreshGenerationBySearchId = new Map<string, number>();
+  /** Result locations that are branch views rather than user-entered searches. */
+  const branchLocationUris = new Set<string>();
 
   function runSearch(
     query: SearchQuery,
@@ -158,6 +167,7 @@ export function createFindFilesController(
       readonly locationUri: string;
     },
     presentationLabel?: string,
+    branch = false,
   ): void {
     const workspace = context.getWorkspace();
     const root = query.scope.locations[0];
@@ -232,6 +242,7 @@ export function createFindFilesController(
           );
         context.getFindFilesParamsByLocationUri().set(result.location.uri, params);
         context.getFindFilesQueriesByLocationUri().set(result.location.uri, query);
+        if (branch) branchLocationUris.add(result.location.uri);
         if (result.limitations.length > 0) {
           context.reportLimitations(
             result.limitations
@@ -323,6 +334,48 @@ export function createFindFilesController(
           : t('search', 'relatedConcept', {
               concept: params.conceptLabel,
             }),
+      );
+    },
+
+    toggleBranchView(): void {
+      const active = context.getActiveDirectory();
+      if (active === undefined) return;
+      const uri = active.location.uri;
+      if (branchLocationUris.has(uri)) {
+        const root = context.getFindFilesRootsByLocationUri().get(uri);
+        if (root === undefined) return;
+        const searchId = uri.slice('search://local/'.length);
+        context.clearFindFilesTargetPane(searchId);
+        void context
+          .getClient()
+          .cancelSearch(searchId)
+          .catch(() => undefined);
+        branchLocationUris.delete(uri);
+        context.navigateTo(active.paneId, root);
+        return;
+      }
+      // Only a real folder can be flattened; search results, the basket and the like cannot.
+      if (uri.startsWith('search://') || active.location.providerId === 'basket') return;
+      const params: FindFilesSearchParams = {
+        mode: 'name',
+        filenameQuery: '',
+        contentRegex: false,
+        contentCaseSensitive: false,
+        contentWholeWord: false,
+        recurse: true,
+        entryKinds: ['file'],
+        mimeTypes: [],
+        gitStatuses: [],
+        tags: [],
+        metadata: {},
+      };
+      runSearch(
+        searchQueryFromParams(active.location, params, this.activeShowHidden(active.paneId)),
+        params,
+        'currentPane',
+        undefined,
+        t('search', 'branchViewLabel'),
+        true,
       );
     },
 

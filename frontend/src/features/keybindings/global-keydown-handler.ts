@@ -111,6 +111,7 @@ export interface GlobalKeydownContext {
   activeTabKey(paneId: PaneId): string;
   actionsWithFavourites(): readonly ActionDescriptor[];
   openFindFiles(): void;
+  toggleBranchView(): void;
   replaceClipboard(next?: ClipboardState): void;
   /** The clipboard a paste uses: Procyon's own, or file references copied in the system file
    * manager when those are newer (task 0247). */
@@ -1122,6 +1123,17 @@ const ACTION_KEYDOWN_ROUTES = [
         return;
       }
       return false;
+    },
+  },
+  {
+    id: 'core.branchView',
+    tryHandle: (context, event, state) => {
+      if (state.dispatchedAction !== 'core.branchView') return false;
+      if (context.activeDirectory() === undefined) return;
+      event.preventDefault();
+      context.toggleBranchView();
+      context.redraw();
+      return;
     },
   },
   {
