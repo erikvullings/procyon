@@ -222,6 +222,53 @@ async fn content_hash_criteria_distinguishes_identical_content_from_a_differing_
 }
 
 #[tokio::test]
+async fn content_criteria_compares_bytes_of_equal_size_files_and_skips_the_hash() {
+    let left = tempdir().unwrap();
+    let right = tempdir().unwrap();
+
+    // Same bytes, different mtimes: identical by content.
+    fs::write(left.path().join("same-bytes.txt"), b"identical payload").unwrap();
+    fs::write(right.path().join("same-bytes.txt"), b"identical payload").unwrap();
+    set_mtime(&left.path().join("same-bytes.txt"), 1_700_000_500);
+    set_mtime(&right.path().join("same-bytes.txt"), 1_700_000_000);
+
+    // Same size and mtime (so SizeAndTimestamp says identical) but one byte differs.
+    fs::write(left.path().join("one-byte.txt"), b"abcdefgh").unwrap();
+    fs::write(right.path().join("one-byte.txt"), b"abcdXfgh").unwrap();
+    set_mtime(&left.path().join("one-byte.txt"), 1_700_000_000);
+    set_mtime(&right.path().join("one-byte.txt"), 1_700_000_000);
+
+    // Different size: different without reading.
+    fs::write(left.path().join("sizes.txt"), b"short").unwrap();
+    fs::write(right.path().join("sizes.txt"), b"much longer body").unwrap();
+    set_mtime(&left.path().join("sizes.txt"), 1_700_000_000);
+    set_mtime(&right.path().join("sizes.txt"), 1_700_000_000);
+
+    let (engine, store, _events) = engine();
+    let comparison_id = Uuid::new_v4();
+    engine
+        .start(
+            comparison_id,
+            Location::from_native_path(left.path()).unwrap(),
+            Location::from_native_path(right.path()).unwrap(),
+            base_options(ComparisonCriteria::Content),
+            EventAudience::Global,
+        )
+        .unwrap();
+
+    let entries = wait_for_completion(&store, comparison_id).await;
+    let status = status_by_path(&entries);
+    assert_eq!(status["same-bytes.txt"], ComparisonStatus::Identical);
+    assert_eq!(status["one-byte.txt"], ComparisonStatus::DifferentSize);
+    assert_eq!(status["sizes.txt"], ComparisonStatus::DifferentSize);
+    let one_byte = entries
+        .iter()
+        .find(|entry| entry.relative_path == "one-byte.txt")
+        .unwrap();
+    assert!(one_byte.left.as_ref().unwrap().content_hash.is_none());
+}
+
+#[tokio::test]
 async fn show_hidden_false_excludes_dotfiles_on_either_side() {
     let left = tempdir().unwrap();
     let right = tempdir().unwrap();

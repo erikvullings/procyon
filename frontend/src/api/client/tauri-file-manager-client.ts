@@ -61,6 +61,8 @@ import type {
   EntryMetadataRequest,
   EntrySummary,
   ExecuteKnowledgeSearchRequest,
+  FileDiffOptions,
+  FileDiffResult,
   FileRangeChunk,
   FinderTags,
   FindLinkReplacementsRequest,
@@ -986,6 +988,22 @@ export class TauriFileManagerClient implements FileManagerClient {
   ): Promise<InspectAttributesResult> {
     return invoke<InspectAttributesResult>('inspect_attributes', {
       request: { sources: locations },
+    });
+  }
+
+  diffFiles(
+    left: Location,
+    right: Location,
+    options?: FileDiffOptions,
+    _signal?: AbortSignal,
+  ): Promise<FileDiffResult> {
+    return invoke<FileDiffResult>('diff_files', {
+      request: {
+        left,
+        right,
+        ignoreWhitespace: options?.ignoreWhitespace ?? false,
+        ignoreCase: options?.ignoreCase ?? false,
+      },
     });
   }
 

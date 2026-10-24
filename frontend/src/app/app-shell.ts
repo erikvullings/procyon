@@ -119,6 +119,12 @@ import {
   createBackendEventHandler,
 } from '../features/events/backend-event-handler';
 import { recordRecentLocation } from '../features/favourites/favourites';
+import {
+  COMPARE_BY_CONTENT_ACTION_ID,
+  COMPARE_FILES_ACTION_ID,
+  resolveDiffPair,
+} from '../features/file-diff/file-diff-actions';
+import { FileDiffDialog, type FileDiffRequest } from '../features/file-diff/file-diff-dialog';
 import { CONVERT_GEO_ACTION_ID, isConvertibleGeoFile } from '../features/geo/convert-geo-actions';
 import { ConvertGeoDialog, type ConvertGeoRequest } from '../features/geo/convert-geo-dialog';
 import { MINIFY_GEO_ACTION_ID } from '../features/geo/minify-geo-actions';
@@ -688,6 +694,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         {},
         t('imageMap', 'actionDescription'),
       ),
+      descriptor(COMPARE_FILES_ACTION_ID, t('fileDiff', 'compareAction'), {
+        requiresSelection: true,
+      }),
+      descriptor(COMPARE_BY_CONTENT_ACTION_ID, t('fileDiff', 'compareByContentAction'), {}),
       descriptor(SPLIT_FILE_ACTION_ID, t('splitCombine', 'splitAction'), {
         requiresSelection: true,
       }),
@@ -928,6 +938,43 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     return other === undefined || other.providerId === 'basket'
       ? { selected }
       : { selected, otherPaneFolder: other };
+  }
+
+  /** Selected entries of a pane, in listing order. */
+  function selectedEntriesOf(
+    paneId: PaneId,
+    explicitIds?: readonly string[],
+  ): readonly EntrySummary[] {
+    const ids = new Set(
+      explicitIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
+    );
+    return (directories.get(activeTabKey(paneId))?.entries ?? []).filter((entry) =>
+      ids.has(entry.id),
+    );
+  }
+
+  /**
+   * Opens the side-by-side diff for exactly two selected files, or one selected file per pane
+   * (task 0256).
+   */
+  function beginCompareFiles(invocation: ActionInvocationContext | undefined): void {
+    const paneId = invocation?.paneId ?? workspace?.activePaneId;
+    if (paneId === undefined) return;
+    const otherPaneId = workspace?.paneOrder.find((candidate) => candidate !== paneId);
+    const pair = resolveDiffPair(
+      selectedEntriesOf(paneId, invocation?.selectedEntryIds),
+      otherPaneId === undefined ? [] : selectedEntriesOf(otherPaneId),
+      workspace?.paneOrder[0] === paneId,
+    );
+    if (pair === undefined) {
+      toast({ html: t('fileDiff', 'selectTwoFiles') });
+      return;
+    }
+    fileDiffRequest = {
+      left: { location: pair.left.location, name: pair.left.name },
+      right: { location: pair.right.location, name: pair.right.name },
+    };
+    m.redraw();
   }
 
   /** Opens "Split file…" for the selected files (task 0257). */
@@ -1409,6 +1456,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }
     if (actionId === CONVERT_GEO_ACTION_ID) {
       beginConvertGeo(invocation);
+      return true;
+    }
+    if (actionId === COMPARE_FILES_ACTION_ID) {
+      beginCompareFiles(invocation);
+      return true;
+    }
+    if (actionId === COMPARE_BY_CONTENT_ACTION_ID) {
+      comparisonController.startComparison('content');
       return true;
     }
     if (actionId === SPLIT_FILE_ACTION_ID) {
@@ -1970,6 +2025,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let changeAttributesRequest: ChangeAttributesRequest | undefined;
   let convertGeoRequest: ConvertGeoRequest | undefined;
   let splitFileRequest: SplitFileRequest | undefined;
+  let fileDiffRequest: FileDiffRequest | undefined;
   let combineFilesRequest: CombineFilesRequest | undefined;
   let minifyGeoRequest: MinifyGeoRequest | undefined;
   let imageMapState: ImageMapState = INITIAL_IMAGE_MAP_STATE;
@@ -7478,6 +7534,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             onApply: confirmMinifyGeo,
             onCancel: () => {
               minifyGeoRequest = undefined;
+              m.redraw();
+            },
+          }),
+          m(FileDiffDialog, {
+            request: fileDiffRequest,
+            client: attrs.client,
+            onClose: () => {
+              fileDiffRequest = undefined;
               m.redraw();
             },
           }),

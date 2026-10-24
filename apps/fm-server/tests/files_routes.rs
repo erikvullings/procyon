@@ -882,3 +882,63 @@ async fn inspects_a_split_set_inside_accessible_roots() {
         "{inspected}"
     );
 }
+
+#[tokio::test]
+async fn diffs_two_text_files_and_two_binary_files() {
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    std::fs::write(root.path().join("a.txt"), "one\ntwo\nthree\n").unwrap();
+    std::fs::write(root.path().join("b.txt"), "one\nTWO\nthree\n").unwrap();
+    std::fs::write(root.path().join("a.bin"), b"ab\0cd").unwrap();
+    std::fs::write(root.path().join("b.bin"), b"ab\0xd").unwrap();
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/v1/file-diff", server.base_url);
+
+    let text: Value = client
+        .post(&url)
+        .json(&json!({
+            "left": location_json(&root.path().join("a.txt")),
+            "right": location_json(&root.path().join("b.txt")),
+        }))
+        .send()
+        .await
+        .expect("request must succeed")
+        .json()
+        .await
+        .expect("body must be JSON");
+    assert_eq!(text["outcome"], "text");
+    assert_eq!(text["identical"], false);
+    assert_eq!(text["changeStarts"], json!([1]));
+    assert_eq!(text["rows"][1]["kind"], "replace");
+
+    let ignoring_case: Value = client
+        .post(&url)
+        .json(&json!({
+            "left": location_json(&root.path().join("a.txt")),
+            "right": location_json(&root.path().join("b.txt")),
+            "ignoreCase": true,
+        }))
+        .send()
+        .await
+        .expect("request must succeed")
+        .json()
+        .await
+        .expect("body must be JSON");
+    assert_eq!(ignoring_case["identical"], true);
+
+    let binary: Value = client
+        .post(&url)
+        .json(&json!({
+            "left": location_json(&root.path().join("a.bin")),
+            "right": location_json(&root.path().join("b.bin")),
+        }))
+        .send()
+        .await
+        .expect("request must succeed")
+        .json()
+        .await
+        .expect("body must be JSON");
+    assert_eq!(binary["outcome"], "binary");
+    assert_eq!(binary["firstDifferenceOffset"], 3);
+    assert_eq!(binary["rows"], json!([]));
+}

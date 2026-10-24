@@ -513,3 +513,37 @@ describe('media queue actions (task 0263)', () => {
     expect(actions).toEqual([]);
   });
 });
+
+describe('compare files action (task 0256)', () => {
+  const compare = action('client.compareFiles', { requiresSelection: true });
+
+  it('is available for one or two selected files', () => {
+    for (const selectedEntries of [
+      [archiveEntry('a.txt')],
+      [archiveEntry('a.txt'), archiveEntry('b.txt')],
+    ]) {
+      expect(evaluateActionAvailability(compare, context({ selectedEntries })).available).toBe(
+        true,
+      );
+    }
+  });
+
+  it('is unavailable for three files or a folder in the selection', () => {
+    const three = [archiveEntry('a.txt'), archiveEntry('b.txt'), archiveEntry('c.txt')];
+    expect(evaluateActionAvailability(compare, context({ selectedEntries: three })).available).toBe(
+      false,
+    );
+    expect(
+      evaluateActionAvailability(
+        compare,
+        context({ selectedEntries: [archiveEntry('a.txt'), entry('directory')] }),
+      ).available,
+    ).toBe(false);
+  });
+
+  it('is unavailable without a selection', () => {
+    expect(evaluateActionAvailability(compare, context({ selectedEntries: [] })).available).toBe(
+      false,
+    );
+  });
+});

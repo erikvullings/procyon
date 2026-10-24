@@ -70,6 +70,7 @@ use crate::document_summary_mapping::{
 };
 use crate::docx_preview::DocxPreviewService;
 use crate::error::ApplicationError;
+use crate::file_diff::FileDiffService;
 use crate::file_editor::FileEditorService;
 use crate::knowledge_release::KnowledgeReleaseAccess;
 use crate::knowledge_search::{
@@ -231,6 +232,7 @@ pub struct FileManagerService {
     remote_terminals: RemoteTerminalService,
     directories: DirectoryService,
     editor: FileEditorService,
+    file_diff: FileDiffService,
     docx_preview: DocxPreviewService,
     document_conversion: DocumentConversionService,
     document_summaries: DocumentSummaryCoordinator,
@@ -686,6 +688,7 @@ impl FileManagerService {
             remote_terminals,
             directories,
             editor: FileEditorService::new(providers.clone(), audit_log_path.clone()),
+            file_diff: FileDiffService::new(providers.clone()),
             docx_preview: DocxPreviewService::new(providers.clone()),
             document_conversion: DocumentConversionService::new(providers.clone()),
             document_summaries: DocumentSummaryCoordinator::new(Arc::new(
@@ -3464,6 +3467,15 @@ impl FileManagerService {
         request: fm_transport_dto::SqliteViewSessionRequestDto,
     ) -> Result<(), ApplicationError> {
         self.sqlite_view.close(request).await
+    }
+
+    /// Diffs two files read-only: a line diff for text, first differing offset for binary
+    /// (task 0256).
+    pub async fn diff_files(
+        &self,
+        request: fm_transport_dto::DiffFilesRequestDto,
+    ) -> Result<fm_transport_dto::DiffFilesResponseDto, ApplicationError> {
+        self.file_diff.diff(request).await
     }
 
     /// Loads a complete text file only when it fits the bounded editor budget.

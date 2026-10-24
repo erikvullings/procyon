@@ -16,6 +16,7 @@ pub mod disk_usage;
 pub mod document_summary;
 pub mod entry;
 pub mod error;
+pub mod file_diff;
 pub mod files;
 pub mod finder_tags;
 pub mod geo;
@@ -106,6 +107,10 @@ pub use entry::{
     MediaMetadataDto, OwnershipInfoDto, PermissionsInfoDto,
 };
 pub use error::{ApplicationErrorCode, ApplicationErrorDto};
+pub use file_diff::{
+    DiffFilesRequestDto, DiffFilesResponseDto, DiffRowDto, DiffRowKindDto, DiffSegmentDto,
+    FileDiffOutcomeDto,
+};
 pub use files::{
     ArchiveCredentialRequestDto, ArchiveSummaryRequestDto, ArchiveSummaryResponseDto,
     CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto, DocxPreviewResourceDto,

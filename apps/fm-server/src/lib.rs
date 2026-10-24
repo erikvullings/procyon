@@ -229,6 +229,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::comparison::cancel_comparison))
         .routes(utoipa_axum::routes!(routes::comparison::generate_sync_plan))
         .routes(utoipa_axum::routes!(routes::comparison::apply_sync_plan))
+        .routes(utoipa_axum::routes!(routes::comparison::diff_files))
         .routes(utoipa_axum::routes!(routes::checksum::start_checksums))
         .routes(utoipa_axum::routes!(routes::checksum::get_checksums))
         .routes(utoipa_axum::routes!(routes::checksum::cancel_checksums))

@@ -1383,3 +1383,36 @@ describe('MockFileManagerClient attribute editing', () => {
     expect(plain.error).toBeTruthy();
   });
 });
+
+describe('MockFileManagerClient file diff (task 0256)', () => {
+  const left = { providerId: 'local', uri: 'file:///tmp/diff-left.txt' };
+  const right = { providerId: 'local', uri: 'file:///tmp/diff-right.txt' };
+
+  it('diffs two files and honours the ignore options', async () => {
+    const client = new MockFileManagerClient();
+    const identical = await client.diffFiles(left, left);
+    expect(identical.outcome).toBe('text');
+    expect(identical.identical).toBe(true);
+    expect(identical.changeStarts).toEqual([]);
+
+    const different = await client.diffFiles(left, right);
+    expect(different.outcome).toBe('text');
+    expect(different.identical).toBe(false);
+    expect(different.changeStarts.length).toBeGreaterThan(0);
+    for (const start of different.changeStarts) {
+      expect(different.rows[start]?.kind).not.toBe('equal');
+    }
+  });
+
+  it('starts a by-content directory comparison', async () => {
+    const client = new MockFileManagerClient();
+    const started = await client.startComparison({
+      workspaceId: 'workspace-1',
+      left: { providerId: 'local', uri: 'file:///tmp/a' },
+      right: { providerId: 'local', uri: 'file:///tmp/b' },
+      criteria: 'content',
+    });
+    const page = await client.getComparison(started.comparisonId);
+    expect(page.criteria).toBe('content');
+  });
+});

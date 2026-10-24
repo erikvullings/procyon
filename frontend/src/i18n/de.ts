@@ -1882,6 +1882,26 @@ export const de = {
     failed: 'Die Attributänderung konnte nicht gestartet werden: {message}',
     noSelection: 'Wählen Sie Dateien oder Ordner aus, um deren Attribute zu ändern.',
   },
+  fileDiff: {
+    title: 'Dateien vergleichen',
+    compareAction: 'Dateien vergleichen',
+    compareByContentAction: 'Ordner nach Inhalt vergleichen',
+    loading: 'Dateien werden verglichen...',
+    failed: 'Die Dateien konnten nicht verglichen werden: {message}',
+    tooLarge:
+      'Diese Dateien sind zu gross für einen Vergleich (Limit {size} oder {lines} Zeilen pro Datei; links {left}, rechts {right}). Öffne sie in einem externen Diff-Werkzeug.',
+    binaryIdentical: 'Die Binärdateien sind identisch.',
+    binaryDifferent:
+      'Die Binärdateien unterscheiden sich. Erster Unterschied bei Byte-Offset {offset}.',
+    identical: 'Die Dateien sind identisch.',
+    changes: { 1: '1 Änderung', n: '{n} Änderungen' },
+    changePosition: 'Änderung {current} von {total}',
+    previousChange: 'Vorherige Änderung',
+    nextChange: 'Nächste Änderung',
+    ignoreWhitespace: 'Leerraum ignorieren',
+    ignoreCase: 'Gross-/Kleinschreibung ignorieren',
+    selectTwoFiles: 'Wähle zwei Dateien oder je eine Datei pro Fenster zum Vergleichen.',
+  },
   splitCombine: {
     splitAction: 'Datei teilen...',
     combineAction: 'Dateien zusammenfügen...',

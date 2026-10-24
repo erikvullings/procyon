@@ -28,8 +28,10 @@ use fm_vfs::{EntryRef, ListOptions, ProviderCapabilities, ProviderRegistry};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::content::{ByteComparison, compare_streams};
 use crate::model::{
-    ComparisonCriteria, ComparisonEntry, ComparisonEntrySide, ComparisonStatus, classify,
+    ComparisonCriteria, ComparisonEntry, ComparisonEntrySide, ComparisonStatus,
+    classify_with_content,
 };
 use crate::path::relative_join;
 use crate::store::ComparisonResultsStore;
@@ -284,9 +286,26 @@ async fn run_comparison(
                     } else {
                         (None, None)
                     };
+                    let content_equal = if options.criteria == ComparisonCriteria::Content
+                        && left.kind == EntryKind::File
+                        && right.kind == EntryKind::File
+                    {
+                        let verdict = content_equal(providers, left, right, cancellation).await;
+                        if verdict.is_none() && !cancellation.is_cancelled() {
+                            warnings_count += 1;
+                        }
+                        verdict
+                    } else {
+                        None
+                    };
                     let left_side = side_from(left, left_hash);
                     let right_side = side_from(right, right_hash);
-                    let status = classify(&left_side, &right_side, options.criteria);
+                    let status = classify_with_content(
+                        &left_side,
+                        &right_side,
+                        options.criteria,
+                        content_equal,
+                    );
                     compared_count += 1;
                     buffer.push(ComparisonEntry {
                         relative_path,
@@ -418,6 +437,46 @@ async fn hash_entry(
     .ok()?
     .get(fm_checksum::ChecksumAlgorithm::Sha256)
     .map(str::to_owned)
+}
+
+/// Streams two files against each other until the first differing byte.
+///
+/// Files with known, different sizes are different by definition and are never opened. `None`
+/// means "no verdict": a side could not be opened or read, or the comparison was cancelled.
+async fn content_equal(
+    providers: &ProviderRegistry,
+    left: &EntrySummary,
+    right: &EntrySummary,
+    cancellation: &CancellationToken,
+) -> Option<bool> {
+    if let (Some(left_size), Some(right_size)) = (left.size, right.size)
+        && left_size != right_size
+    {
+        return Some(false);
+    }
+    let left_reader = open_entry(providers, left, cancellation).await?;
+    let right_reader = open_entry(providers, right, cancellation).await?;
+    match compare_streams(left_reader, right_reader, cancellation).await {
+        Ok(ByteComparison::Identical) => Some(true),
+        Ok(ByteComparison::DiffersAt { .. }) => Some(false),
+        Err(_) => None,
+    }
+}
+
+async fn open_entry(
+    providers: &ProviderRegistry,
+    entry: &EntrySummary,
+    cancellation: &CancellationToken,
+) -> Option<fm_vfs::ProviderReadStream> {
+    let provider = providers.resolve(&entry.location).ok()?;
+    let entry_ref = EntryRef {
+        id: entry.id,
+        location: entry.location.clone(),
+    };
+    provider
+        .open_read(&entry_ref, cancellation.clone())
+        .await
+        .ok()
 }
 
 fn flush(

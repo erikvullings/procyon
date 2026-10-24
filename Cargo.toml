@@ -77,6 +77,7 @@ base64 = "0.22.1"
 bitflags = "2.13.1"
 block2 = "0.6.2"
 blake3 = "1.8.6"
+similar = "3.2.1"
 bytes = "1.12.1"
 bzip2 = "0.6"
 calamine = {version = "0.32.0", features = ["chrono", "picture"]}

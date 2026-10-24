@@ -52,6 +52,8 @@ import type {
   EntryMetadataRequest,
   EntrySummary,
   ExecuteKnowledgeSearchRequest,
+  FileDiffOptions,
+  FileDiffResult,
   Location as FileLocation,
   FileRangeChunk,
   FinderTags,
@@ -257,6 +259,7 @@ import {
   updateConnection as requestConnectionUpdate,
   convertGeoText as requestConvertGeoText,
   getDiagnostics as requestDiagnostics,
+  diffFiles as requestDiffFiles,
   listDirectory as requestDirectory,
   listDirectoryChildren as requestDirectoryChildren,
   cancelDiskUsage as requestDiskUsageCancel,
@@ -1517,6 +1520,27 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200) {
       throw new Error(`Unexpected inspectAttributes response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async diffFiles(
+    left: Location,
+    right: Location,
+    options?: FileDiffOptions,
+    signal?: AbortSignal,
+  ): Promise<FileDiffResult> {
+    const response = await requestDiffFiles(
+      {
+        left,
+        right,
+        ignoreWhitespace: options?.ignoreWhitespace ?? false,
+        ignoreCase: options?.ignoreCase ?? false,
+      },
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected diffFiles response status: ${response.status}`);
     }
     return response.data;
   }

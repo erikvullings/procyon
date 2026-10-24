@@ -56,6 +56,7 @@ const requestResolveOperationConflict = vi.fn();
 const requestStartSearch = vi.fn();
 const requestCancelSearch = vi.fn();
 const requestStartComparison = vi.fn();
+const requestDiffFiles = vi.fn();
 const requestGetComparison = vi.fn();
 const requestCancelComparison = vi.fn();
 const requestGenerateSyncPlan = vi.fn();
@@ -155,6 +156,7 @@ vi.mock('../generated/file-manager-api', () => ({
   startSearch: (...args: unknown[]) => requestStartSearch(...args),
   cancelSearch: (...args: unknown[]) => requestCancelSearch(...args),
   startComparison: (...args: unknown[]) => requestStartComparison(...args),
+  diffFiles: (...args: unknown[]) => requestDiffFiles(...args),
   getComparison: (...args: unknown[]) => requestGetComparison(...args),
   cancelComparison: (...args: unknown[]) => requestCancelComparison(...args),
   generateSyncPlan: (...args: unknown[]) => requestGenerateSyncPlan(...args),
@@ -276,6 +278,7 @@ afterEach(() => {
   requestStartSearch.mockReset();
   requestCancelSearch.mockReset();
   requestStartComparison.mockReset();
+  requestDiffFiles.mockReset();
   requestGetComparison.mockReset();
   requestCancelComparison.mockReset();
   requestGenerateSyncPlan.mockReset();
@@ -1276,6 +1279,37 @@ describe('HttpFileManagerClient', () => {
   });
 
   describe('comparison methods', () => {
+    it('diffs two files with the ignore options and rejects an unexpected status (task 0256)', async () => {
+      const result = {
+        outcome: 'text',
+        leftSize: 1,
+        rightSize: 1,
+        identical: true,
+        sizeLimitBytes: 10,
+        lineLimit: 10,
+        rows: [],
+        changeStarts: [],
+      };
+      requestDiffFiles.mockResolvedValue({ status: 200, headers: new Headers(), data: result });
+      const client = new HttpFileManagerClient();
+      const left = { providerId: 'local', uri: 'file:///a' };
+      const right = { providerId: 'local', uri: 'file:///b' };
+      const controller = new AbortController();
+
+      await expect(
+        client.diffFiles(left, right, { ignoreCase: true }, controller.signal),
+      ).resolves.toEqual(result);
+      expect(requestDiffFiles).toHaveBeenCalledWith(
+        { left, right, ignoreWhitespace: false, ignoreCase: true },
+        expect.objectContaining({ signal: controller.signal }),
+      );
+
+      requestDiffFiles.mockResolvedValue({ status: 404, headers: new Headers(), data: {} });
+      await expect(client.diffFiles(left, right)).rejects.toThrow(
+        'Unexpected diffFiles response status: 404',
+      );
+    });
+
     it('starts a comparison and returns its id', async () => {
       requestStartComparison.mockResolvedValue({
         status: 201,

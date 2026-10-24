@@ -17,6 +17,8 @@ pub enum ComparisonCriteriaDto {
     NameOnly,
     SizeAndTimestamp,
     ContentHash,
+    /// Streamed byte-for-byte comparison (task 0256).
+    Content,
 }
 
 /// Per-entry comparison outcome.

@@ -61,6 +61,8 @@ import type {
   EntryMetadataRequest,
   EntrySummary,
   ExecuteKnowledgeSearchRequest,
+  FileDiffOptions,
+  FileDiffResult,
   FileRangeChunk,
   FinderTags,
   FindLinkReplacementsRequest,
@@ -251,6 +253,7 @@ import {
   GENERATED_DIRECTORY_SIZES,
   type GeneratedDirectorySize,
 } from './mock-directory-generator';
+import { mockFileDiff } from './mock-file-diff';
 import {
   buildMockKnowledgeAnswer,
   executeMockKnowledgeSearch,
@@ -378,6 +381,7 @@ export type MockClientMethod =
   | 'readImageMetadata'
   | 'inspectAttributes'
   | 'inspectSplitSet'
+  | 'diffFiles'
   | 'previewAttributeChange'
   | 'resolveMetadataTokens'
   | 'openDocxPreview'
@@ -3220,6 +3224,17 @@ export class MockFileManagerClient implements FileManagerClient {
         attributes: { mode: 0o644, uid: 501, gid: 20 },
       })),
     }));
+  }
+
+  diffFiles(
+    left: Location,
+    right: Location,
+    options?: FileDiffOptions,
+    signal?: AbortSignal,
+  ): Promise<FileDiffResult> {
+    return this.perform('diffFiles', signal, () =>
+      mockFileDiff(this.fileContentFor(left.uri), this.fileContentFor(right.uri), options),
+    );
   }
 
   inspectSplitSet(

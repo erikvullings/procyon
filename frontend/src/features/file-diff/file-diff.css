@@ -1,0 +1,111 @@
+.modal.fm-dense-modal.fm-file-diff-modal {
+  width: min(96rem, calc(100vw - 2rem)) !important;
+  max-width: min(96rem, calc(100vw - 2rem)) !important;
+}
+
+.fm-file-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.fm-diff-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  font-weight: 600;
+}
+
+.fm-diff-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-diff-options,
+.fm-diff-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.fm-diff-option {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.fm-diff-summary,
+.fm-diff-notice {
+  color: var(--fm-text-muted);
+  font-size: 0.85rem;
+}
+
+.fm-diff-scroll {
+  height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.fm-diff-spacer {
+  position: relative;
+  min-width: max-content;
+}
+
+.fm-diff-window {
+  position: absolute;
+  inset: 0 auto auto 0;
+  min-width: 100%;
+}
+
+.fm-diff-row {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(20rem, 1fr) 3.5rem minmax(20rem, 1fr);
+  align-items: center;
+  line-height: 20px;
+}
+
+.fm-diff-line {
+  padding: 0 0.4rem;
+  text-align: right;
+  color: var(--fm-text-muted);
+  user-select: none;
+}
+
+.fm-diff-text {
+  padding: 0 0.4rem;
+  white-space: pre;
+  overflow: hidden;
+  height: 100%;
+}
+
+.fm-diff-text-right {
+  border-left: 1px solid var(--fm-border);
+}
+
+.fm-diff-delete .fm-diff-text-left,
+.fm-diff-replace .fm-diff-text-left {
+  background: color-mix(in srgb, var(--fm-error) 14%, transparent);
+}
+
+.fm-diff-insert .fm-diff-text-right,
+.fm-diff-replace .fm-diff-text-right {
+  background: color-mix(in srgb, var(--fm-success) 14%, transparent);
+}
+
+.fm-diff-mark {
+  color: inherit;
+}
+
+.fm-diff-mark-left {
+  background: color-mix(in srgb, var(--fm-error) 38%, transparent);
+}
+
+.fm-diff-mark-right {
+  background: color-mix(in srgb, var(--fm-success) 38%, transparent);
+}

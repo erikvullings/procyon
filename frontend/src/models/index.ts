@@ -9,6 +9,7 @@ export * from './disk-usage';
 export * from './document-summary';
 export * from './entry';
 export * from './events';
+export * from './file-diff';
 export * from './finder-tags';
 export * from './frontend-diagnostic';
 export * from './geo';

@@ -13,4 +13,5 @@ export const ComparisonCriteriaDto = {
   nameOnly: 'nameOnly',
   sizeAndTimestamp: 'sizeAndTimestamp',
   contentHash: 'contentHash',
+  content: 'content',
 } as const;

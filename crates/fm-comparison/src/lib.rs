@@ -9,15 +9,18 @@
 //! `Trash` operations through the existing operation engine (spec §35: no
 //! new mutation path is introduced here).
 
+mod content;
 mod engine;
 mod model;
 mod path;
 mod store;
 mod sync;
 
+pub use content::{ByteComparison, ContentCompareError, compare_streams};
 pub use engine::{ComparisonEngine, ComparisonError, ComparisonOptions};
 pub use model::{
     ComparisonCriteria, ComparisonEntry, ComparisonEntrySide, ComparisonStatus, classify,
+    classify_with_content,
 };
 pub use path::{relative_join, relative_parent, resolve_relative};
 pub use store::ComparisonResultsStore;

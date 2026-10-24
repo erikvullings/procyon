@@ -1988,6 +1988,64 @@
         }
       }
     },
+    "/api/v1/file-diff": {
+      "post": {
+        "summary": "Diffs two files read-only: a line diff for text, the first differing offset for binary files\n(task 0256).",
+        "operationId": "diffFiles",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiffFilesRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiffFilesResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A side is not a regular file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A file is outside the accessible roots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A file does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/files/docx/close": {
       "post": {
         "summary": "Cancels and releases a DOCX preview session.",
@@ -9772,7 +9830,8 @@
         "enum": [
           "nameOnly",
           "sizeAndTimestamp",
-          "contentHash"
+          "contentHash",
+          "content"
         ]
       },
       "ComparisonEntryDto": {
@@ -10970,6 +11029,194 @@
               "null"
             ],
             "description": "Tauri version if running in desktop mode"
+          }
+        }
+      },
+      "DiffFilesRequestDto": {
+        "type": "object",
+        "description": "Asks for a diff between two files (`POST /api/v1/file-diff`).",
+        "required": [
+          "left",
+          "right"
+        ],
+        "properties": {
+          "ignoreCase": {
+            "type": "boolean",
+            "description": "Treat lines that differ only in letter case as equal."
+          },
+          "ignoreWhitespace": {
+            "type": "boolean",
+            "description": "Treat lines that differ only in whitespace as equal."
+          },
+          "left": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "File shown on the left."
+          },
+          "right": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "File shown on the right."
+          }
+        }
+      },
+      "DiffFilesResponseDto": {
+        "type": "object",
+        "description": "The result of diffing two files.",
+        "required": [
+          "outcome",
+          "leftSize",
+          "rightSize",
+          "identical",
+          "sizeLimitBytes",
+          "lineLimit",
+          "rows",
+          "changeStarts"
+        ],
+        "properties": {
+          "changeStarts": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "Text diff only: index in `rows` of the first row of every change block."
+          },
+          "firstDifferenceOffset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Binary files only: zero-based offset of the first differing byte.",
+            "minimum": 0
+          },
+          "identical": {
+            "type": "boolean",
+            "description": "Whether the files are identical under the requested ignore options (always byte-exact for\nbinary files)."
+          },
+          "leftSize": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Size of the left file in bytes.",
+            "minimum": 0
+          },
+          "lineLimit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Per-file line limit of the text diff.",
+            "minimum": 0
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/FileDiffOutcomeDto",
+            "description": "How the pair was compared."
+          },
+          "rightSize": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Size of the right file in bytes.",
+            "minimum": 0
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiffRowDto"
+            },
+            "description": "Text diff only: the aligned rows, in display order."
+          },
+          "sizeLimitBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Per-file size limit of the text diff.",
+            "minimum": 0
+          }
+        }
+      },
+      "DiffRowDto": {
+        "type": "object",
+        "description": "One aligned row of the side-by-side diff.",
+        "required": [
+          "kind",
+          "leftSegments",
+          "rightSegments"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/DiffRowKindDto",
+            "description": "Role of the row."
+          },
+          "leftLine": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "One-based left line number, absent for inserted rows.",
+            "minimum": 0
+          },
+          "leftSegments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiffSegmentDto"
+            },
+            "description": "Intra-line runs of a replaced left line; empty for every other row."
+          },
+          "leftText": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Left line text without its line terminator."
+          },
+          "rightLine": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "One-based right line number, absent for deleted rows.",
+            "minimum": 0
+          },
+          "rightSegments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiffSegmentDto"
+            },
+            "description": "Intra-line runs of a replaced right line; empty for every other row."
+          },
+          "rightText": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Right line text without its line terminator."
+          }
+        }
+      },
+      "DiffRowKindDto": {
+        "type": "string",
+        "description": "Role of one aligned row of a side-by-side diff.",
+        "enum": [
+          "equal",
+          "delete",
+          "insert",
+          "replace"
+        ]
+      },
+      "DiffSegmentDto": {
+        "type": "object",
+        "description": "A run of characters inside a changed line.",
+        "required": [
+          "text",
+          "changed"
+        ],
+        "properties": {
+          "changed": {
+            "type": "boolean",
+            "description": "Whether the run differs from the other side."
+          },
+          "text": {
+            "type": "string",
+            "description": "The characters of the run."
           }
         }
       },
@@ -12291,6 +12538,15 @@
             "description": "Provider-neutral location target."
           }
         }
+      },
+      "FileDiffOutcomeDto": {
+        "type": "string",
+        "description": "How the pair was compared.",
+        "enum": [
+          "text",
+          "binary",
+          "tooLarge"
+        ]
       },
       "FindLinkReplacementsRequestDto": {
         "type": "object",

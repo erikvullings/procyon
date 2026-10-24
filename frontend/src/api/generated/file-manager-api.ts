@@ -43,6 +43,8 @@ import type {
   DeleteWorkspaceParams,
   DiagnosticErrorDto,
   DiagnosticsDto,
+  DiffFilesRequestDto,
+  DiffFilesResponseDto,
   DirectorySnapshotDto,
   DiscoverApplicationUninstallCandidatesRequestDto,
   DiscoverApplicationUninstallCandidatesResponseDto,
@@ -2630,6 +2632,74 @@ export const subscribeEvents = async ( options?: Parameters<typeof fetchMutator>
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type diffFilesResponse200 = {
+  data: DiffFilesResponseDto
+  status: 200
+}
+
+export type diffFilesResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type diffFilesResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type diffFilesResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type diffFilesResponseSuccess = (diffFilesResponse200) & {
+  headers: Headers;
+};
+export type diffFilesResponseError = (diffFilesResponse400 | diffFilesResponse403 | diffFilesResponse404) & {
+  headers: Headers;
+};
+
+export type diffFilesResponse = (diffFilesResponseSuccess | diffFilesResponseError)
+
+export const getDiffFilesUrl = () => {
+
+
+
+
+  return `/api/v1/file-diff`
+}
+
+/**
+ * @summary Diffs two files read-only: a line diff for text, the first differing offset for binary files
+(task 0256).
+ */
+export const diffFiles = async (diffFilesRequestDto: DiffFilesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<diffFilesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<diffFilesResponse>(getDiffFilesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(diffFilesRequestDto)
   }
 );}
 

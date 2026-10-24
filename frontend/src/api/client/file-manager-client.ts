@@ -55,6 +55,8 @@ import type {
   EntryMetadataRequest,
   EntrySummary,
   ExecuteKnowledgeSearchRequest,
+  FileDiffOptions,
+  FileDiffResult,
   FileRangeChunk,
   FinderTags,
   FindLinkReplacementsRequest,
@@ -770,6 +772,17 @@ export interface FileManagerClient {
   ): Promise<ComparisonPage>;
 
   cancelComparison(comparisonId: string, signal?: AbortSignal): Promise<void>;
+
+  /**
+   * Diffs two files read-only: aligned rows with intra-line highlights for text, the first
+   * differing offset for binary files, and a size notice for files over the limit (task 0256).
+   */
+  diffFiles(
+    left: Location,
+    right: Location,
+    options?: FileDiffOptions,
+    signal?: AbortSignal,
+  ): Promise<FileDiffResult>;
 
   /** Proposes a sync plan from a comparison's current results; never mutates anything. */
   generateSyncPlan(

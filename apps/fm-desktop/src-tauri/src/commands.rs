@@ -2687,6 +2687,19 @@ pub(crate) async fn start_comparison(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Diffs two files read-only (task 0256), identical to `POST /api/v1/file-diff`.
+#[tauri::command]
+pub(crate) async fn diff_files(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::DiffFilesRequestDto,
+) -> Result<fm_transport_dto::DiffFilesResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .diff_files(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Returns a bounded, optionally differences-only page of a comparison's
 /// results, identical in shape to `GET /api/v1/comparisons/{comparisonId}`.
 #[tauri::command]

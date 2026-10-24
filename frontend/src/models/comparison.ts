@@ -4,7 +4,7 @@ import type { SyncPlanItemDto } from '../api/generated/models/syncPlanItemDto';
 import type { EntryKind } from './entry';
 
 /** How two directory trees are compared (spec §16 milestone 5, task 0075). */
-export type ComparisonCriteria = 'nameOnly' | 'sizeAndTimestamp' | 'contentHash';
+export type ComparisonCriteria = 'nameOnly' | 'sizeAndTimestamp' | 'contentHash' | 'content';
 
 /** Per-entry comparison outcome. */
 export type ComparisonStatus =

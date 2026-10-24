@@ -19,6 +19,9 @@ pub enum ComparisonCriteria {
     /// A streamed content hash. Task 0077 shares this implementation once it
     /// lands (see the implementation note on the task).
     ContentHash,
+    /// A streamed byte-for-byte comparison (task 0256). Files of different sizes are reported as
+    /// different without being read; equal-size files are compared until the first difference.
+    Content,
 }
 
 /// Per-entry comparison outcome (spec §16 milestone 5).
@@ -90,6 +93,22 @@ pub fn classify(
     right: &ComparisonEntrySide,
     criteria: ComparisonCriteria,
 ) -> ComparisonStatus {
+    classify_with_content(left, right, criteria, None)
+}
+
+/// Like [`classify`], for criteria that need a byte comparison the traversal performed.
+///
+/// `content_equal` is the verdict of the streamed comparison under
+/// [`ComparisonCriteria::Content`]: `Some(true)` identical, `Some(false)` different, `None` when
+/// no verdict is available (a read failed), which falls back to size and timestamp. Other
+/// criteria ignore it.
+#[must_use]
+pub fn classify_with_content(
+    left: &ComparisonEntrySide,
+    right: &ComparisonEntrySide,
+    criteria: ComparisonCriteria,
+    content_equal: Option<bool>,
+) -> ComparisonStatus {
     if left.kind != right.kind {
         return ComparisonStatus::TypeMismatch;
     }
@@ -104,6 +123,13 @@ pub fn classify(
         ComparisonCriteria::NameOnly => ComparisonStatus::Identical,
         ComparisonCriteria::SizeAndTimestamp => classify_by_size_and_timestamp(left, right),
         ComparisonCriteria::ContentHash => classify_by_content_hash(left, right),
+        ComparisonCriteria::Content => match content_equal {
+            Some(true) => ComparisonStatus::Identical,
+            Some(false) => {
+                timestamp_direction(left, right).unwrap_or(ComparisonStatus::DifferentSize)
+            }
+            None => classify_by_size_and_timestamp(left, right),
+        },
     }
 }
 
@@ -189,6 +215,7 @@ mod tests {
             ComparisonCriteria::NameOnly,
             ComparisonCriteria::SizeAndTimestamp,
             ComparisonCriteria::ContentHash,
+            ComparisonCriteria::Content,
         ] {
             assert_eq!(
                 classify(&left, &right, criteria),
@@ -321,6 +348,30 @@ mod tests {
         assert_eq!(
             classify(&left, &right, ComparisonCriteria::ContentHash),
             ComparisonStatus::Identical
+        );
+    }
+
+    #[test]
+    fn content_criteria_follows_the_streamed_verdict() {
+        let left = side(EntryKind::File, Some(10), Some(at(100)));
+        let right = side(EntryKind::File, Some(10), Some(at(0)));
+        let classify =
+            |verdict| classify_with_content(&left, &right, ComparisonCriteria::Content, verdict);
+        // Identical bytes win over a differing timestamp.
+        assert_eq!(classify(Some(true)), ComparisonStatus::Identical);
+        // Different bytes keep the timestamp direction.
+        assert_eq!(classify(Some(false)), ComparisonStatus::Newer);
+        // No verdict falls back to size and timestamp.
+        assert_eq!(classify(None), ComparisonStatus::Newer);
+    }
+
+    #[test]
+    fn content_criteria_with_different_bytes_and_no_direction_is_different_size() {
+        let left = side(EntryKind::File, Some(10), Some(at(0)));
+        let right = side(EntryKind::File, Some(10), Some(at(0)));
+        assert_eq!(
+            classify_with_content(&left, &right, ComparisonCriteria::Content, Some(false)),
+            ComparisonStatus::DifferentSize
         );
     }
 }

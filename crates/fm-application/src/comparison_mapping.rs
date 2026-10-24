@@ -18,6 +18,7 @@ pub(crate) const fn comparison_criteria(dto: ComparisonCriteriaDto) -> Compariso
         ComparisonCriteriaDto::NameOnly => ComparisonCriteria::NameOnly,
         ComparisonCriteriaDto::SizeAndTimestamp => ComparisonCriteria::SizeAndTimestamp,
         ComparisonCriteriaDto::ContentHash => ComparisonCriteria::ContentHash,
+        ComparisonCriteriaDto::Content => ComparisonCriteria::Content,
     }
 }
 
@@ -26,6 +27,7 @@ pub(crate) const fn comparison_criteria_dto(criteria: ComparisonCriteria) -> Com
         ComparisonCriteria::NameOnly => ComparisonCriteriaDto::NameOnly,
         ComparisonCriteria::SizeAndTimestamp => ComparisonCriteriaDto::SizeAndTimestamp,
         ComparisonCriteria::ContentHash => ComparisonCriteriaDto::ContentHash,
+        ComparisonCriteria::Content => ComparisonCriteriaDto::Content,
     }
 }
 

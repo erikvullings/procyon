@@ -1,5 +1,6 @@
 import { t } from '../../i18n';
 import type { ActionDescriptor, EntrySummary, PluginDescriptor } from '../../models';
+import { COMPARE_FILES_ACTION_ID } from '../file-diff/file-diff-actions';
 import { CONVERT_GEO_ACTION_ID, isConvertibleGeoFile } from '../geo/convert-geo-actions';
 import { MINIFY_GEO_ACTION_ID } from '../geo/minify-geo-actions';
 import { isGeoCandidate } from '../image-map/gps-scan';
@@ -85,6 +86,7 @@ const SELECTION_ACTION_IDS = new Set([
   MINIFY_GEO_ACTION_ID,
   SPLIT_FILE_ACTION_ID,
   COMBINE_FILES_ACTION_ID,
+  COMPARE_FILES_ACTION_ID,
 ]);
 
 /**
@@ -118,7 +120,7 @@ const CONTEXT_MENU_SELECTION_GROUPS: readonly (readonly string[])[] = [
     CONVERT_GEO_ACTION_ID,
     MINIFY_GEO_ACTION_ID,
   ],
-  [SPLIT_FILE_ACTION_ID, COMBINE_FILES_ACTION_ID],
+  [COMPARE_FILES_ACTION_ID, SPLIT_FILE_ACTION_ID, COMBINE_FILES_ACTION_ID],
   ['core.trash', 'core.delete', 'core.uninstallApplication'],
 ];
 
@@ -252,6 +254,13 @@ export function evaluateActionAvailability(
     !context.selectedEntries.some(isConvertibleGeoFile)
   ) {
     return unavailable(action, t('availability', 'selectFiles'));
+  }
+  if (
+    action.id === COMPARE_FILES_ACTION_ID &&
+    context.selectedEntries.length > 0 &&
+    (context.selectedEntries.length > 2 || !context.selectedEntries.every(isSplittable))
+  ) {
+    return unavailable(action, t('fileDiff', 'selectTwoFiles'));
   }
   if (
     action.id === SPLIT_FILE_ACTION_ID &&

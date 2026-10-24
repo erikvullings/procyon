@@ -12,7 +12,8 @@ use axum::{
 };
 use fm_transport_dto::{
     ApplicationErrorDto, ApplySyncPlanRequestDto, ApplySyncPlanResponseDto, ComparisonPageDto,
-    GenerateSyncPlanRequestDto, StartComparisonRequestDto, StartComparisonResponseDto, SyncPlanDto,
+    DiffFilesRequestDto, DiffFilesResponseDto, GenerateSyncPlanRequestDto,
+    StartComparisonRequestDto, StartComparisonResponseDto, SyncPlanDto,
 };
 use serde::Deserialize;
 use tower_http::request_id::RequestId;
@@ -151,5 +152,36 @@ pub(crate) async fn apply_sync_plan(
         .service
         .apply_sync_plan(comparison_id, request)
         .map(|response| (StatusCode::CREATED, Json(response)))
+        .map_err(|error| ApiError::new(error, correlation_id))
+}
+
+/// Diffs two files read-only: a line diff for text, the first differing offset for binary files
+/// (task 0256).
+#[utoipa::path(
+    post,
+    path = "/api/v1/file-diff",
+    operation_id = "diffFiles",
+    request_body = DiffFilesRequestDto,
+    responses(
+        (status = 200, body = DiffFilesResponseDto),
+        (status = 400, description = "A side is not a regular file", body = ApplicationErrorDto),
+        (status = 403, description = "A file is outside the accessible roots", body = ApplicationErrorDto),
+        (status = 404, description = "A file does not exist", body = ApplicationErrorDto)
+    )
+)]
+pub(crate) async fn diff_files(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<DiffFilesRequestDto>,
+) -> Result<Json<DiffFilesResponseDto>, ApiError> {
+    let correlation_id = extract_request_id(&request_id);
+    for side in [&request.left, &request.right] {
+        crate::error::require_within_roots(side, &state.accessible_roots, correlation_id)?;
+    }
+    state
+        .service
+        .diff_files(request)
+        .await
+        .map(Json)
         .map_err(|error| ApiError::new(error, correlation_id))
 }
