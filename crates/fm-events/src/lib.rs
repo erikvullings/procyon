@@ -594,6 +594,10 @@ pub enum OperationKindPayload {
     EditImageMetadata,
     /// Change permissions, ownership or attributes in place (task 0258).
     ChangeAttributes,
+    /// Cut a file into numbered parts (task 0257).
+    SplitFile,
+    /// Join numbered parts back into one file (task 0257).
+    CombineFiles,
     /// Convert or minify geographic files into new files (tasks 0281, 0282).
     TransformGeo,
     /// Search files.

@@ -27,3 +27,36 @@ planned totals before confirmation. Read-only entries require an explicit overri
 is observed between entries, and the terminal progress and audit record contain the same completed
 item count. Audit JSON Lines records operation identity, source locations, and counts, never file
 contents.
+
+## Split and combine (task 0257)
+
+`splitFile` cuts a file into `<name>.001`, `<name>.002`, ... (three digits, growing past 999; at
+most 10,000 parts per file) and `combineFiles` joins them again. Both stream through the VFS
+provider traits in 256 KiB chunks, so size is bounded only by the target and either side may be
+any provider. Each output is written to a private `.fm-split-*.tmp` / `.fm-combine-*.tmp` sibling
+and published with `commit_copy`, which refuses an existing entry; conflicts use the shared
+conflict dialog (skip, rename to `name (copy N).ext`, or overwrite). Overwriting a split also
+removes stale higher-numbered parts of the replaced set and makes the job non-undoable. Failure or
+cancellation removes every part already published by the failing item.
+
+Combine detects the set from any selected part by listing its folder: all `<base>.NNN` files form
+the set, and a gap (including a missing `.001`) is rejected before anything is written. A
+manifest, when present, is verified while joining, before the output is published.
+
+The manifest is `<name>.blake3`, plain UTF-8 text whose hash lines are accepted by `b3sum -c`:
+
+```text
+# procyon-split 1
+# name: movie.mkv
+# size: 2500000000
+# part-size: 1000000000
+# parts: 3
+# blake3: <hex of the whole file>
+<hex>  movie.mkv.001
+<hex>  movie.mkv.002
+<hex>  movie.mkv.003
+```
+
+With a manifest, a missing trailing part, a damaged part and a wrong total are all detected. Without
+one only gaps can be detected, so a lost last part is not noticed. Undo removes exactly the files
+the job created (verified by their known BLAKE3 hashes) and leaves the source or parts untouched.

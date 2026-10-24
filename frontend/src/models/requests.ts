@@ -65,6 +65,7 @@ import type { ImageMetadataEdit } from './image-metadata';
 import type { Location } from './location';
 import type { ConflictPolicy, LinkRequest, OperationKind } from './operation';
 import type { SearchExecutionMode, SearchProviderLimitation, SearchQuery } from './search';
+import type { SplitFile } from './split';
 
 /** Open column sort descriptor shared by workspace views and directory requests. */
 export type SortDescriptor = SortDescriptorDto;
@@ -158,6 +159,8 @@ export interface StartOperationRequest {
   imageMetadataEdit?: ImageMetadataEdit;
   /** The change of a `changeAttributes` operation (task 0258). */
   attributeChange?: ChangeAttributes;
+  /** The options of a `splitFile` operation (task 0257). */
+  splitFile?: SplitFile;
   /** The conversion of a `transformGeo` operation (task 0281). */
   geoTransform?: GeoTransform;
   symlinkPolicy?: 'copyLink' | 'copyTarget';

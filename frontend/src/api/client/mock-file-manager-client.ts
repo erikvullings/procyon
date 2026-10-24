@@ -85,6 +85,7 @@ import type {
   ImageMetadata,
   ImportSemanticLocalModelRequest,
   InspectAttributesResult,
+  InspectSplitSetResult,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   KnowledgeAnswer,
@@ -376,6 +377,7 @@ export type MockClientMethod =
   | 'readImageGps'
   | 'readImageMetadata'
   | 'inspectAttributes'
+  | 'inspectSplitSet'
   | 'previewAttributeChange'
   | 'resolveMetadataTokens'
   | 'openDocxPreview'
@@ -3218,6 +3220,32 @@ export class MockFileManagerClient implements FileManagerClient {
         attributes: { mode: 0o644, uid: 501, gid: 20 },
       })),
     }));
+  }
+
+  inspectSplitSet(
+    locations: readonly Location[],
+    signal?: AbortSignal,
+  ): Promise<InspectSplitSetResult> {
+    return this.perform('inspectSplitSet', signal, () => {
+      const names = locations.map(
+        (location) => decodeURIComponent(location.uri).split('/').pop() ?? '',
+      );
+      const base = (names[0] ?? '').replace(/\.\d{3,}$/, '');
+      if (names.length === 0 || base === names[0]) {
+        return {
+          outputName: base,
+          parts: [],
+          totalSize: 0,
+          hasManifest: false,
+          error: 'Not a numbered part (.001, .002, ...)',
+        };
+      }
+      const parts = [1, 2, 3].map((index) => ({
+        name: `${base}.${String(index).padStart(3, '0')}`,
+        size: 1_048_576,
+      }));
+      return { outputName: base, parts, totalSize: 3 * 1_048_576, hasManifest: true };
+    });
   }
 
   previewAttributeChange(

@@ -74,6 +74,7 @@ fn request(
             recursive,
             scope,
         }),
+        split_file: None,
         geo_transform: None,
         symlink_policy: Default::default(),
         permanent_delete_confirmed: false,

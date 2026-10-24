@@ -501,6 +501,8 @@ pub(crate) fn operation_dto(mut operation: Operation, queue_position: Option<u64
             fm_operations::OperationKind::Undo => OperationKindDto::Undo,
             fm_operations::OperationKind::EditImageMetadata => OperationKindDto::EditImageMetadata,
             fm_operations::OperationKind::ChangeAttributes => OperationKindDto::ChangeAttributes,
+            fm_operations::OperationKind::SplitFile => OperationKindDto::SplitFile,
+            fm_operations::OperationKind::CombineFiles => OperationKindDto::CombineFiles,
             fm_operations::OperationKind::TransformGeo => OperationKindDto::TransformGeo,
         },
         state: match operation.state {

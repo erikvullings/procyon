@@ -67,6 +67,7 @@ async fn transform(
                 skip_space_check: false,
                 image_metadata_edit: None,
                 attribute_change: None,
+                split_file: None,
                 geo_transform: Some(GeoTransformDto {
                     target_format: Some(format.into()),
                     csv_wkt: false,
@@ -295,6 +296,7 @@ async fn minify(
             skip_space_check: false,
             image_metadata_edit: None,
             attribute_change: None,
+            split_file: None,
             geo_transform: Some(GeoTransformDto {
                 target_format: None,
                 csv_wkt: false,
@@ -426,6 +428,7 @@ async fn in_place_without_a_backup_cannot_be_undone_and_invalid_combinations_are
             skip_space_check: false,
             image_metadata_edit: None,
             attribute_change: None,
+            split_file: None,
             geo_transform: Some(GeoTransformDto {
                 target_format: Some("gpx".into()),
                 csv_wkt: false,

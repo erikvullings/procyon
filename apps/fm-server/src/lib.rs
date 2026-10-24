@@ -164,6 +164,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::attributes::preview_attribute_change
         ))
+        .routes(utoipa_axum::routes!(routes::split::inspect_split_set))
         .routes(utoipa_axum::routes!(routes::files::read_image_gps))
         .routes(utoipa_axum::routes!(routes::files::read_geo_file))
         .routes(utoipa_axum::routes!(routes::files::parse_geo_text))

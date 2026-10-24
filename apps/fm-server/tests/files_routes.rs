@@ -855,3 +855,30 @@ async fn inspects_and_previews_attributes_inside_accessible_roots() {
     assert_eq!(preview["files"], 1);
     assert_eq!(preview["truncated"], false);
 }
+
+#[tokio::test]
+async fn inspects_a_split_set_inside_accessible_roots() {
+    let root = tempfile::tempdir().expect("must create a temp directory");
+    for name in ["a.bin.001", "a.bin.002", "a.bin.004"] {
+        std::fs::write(root.path().join(name), b"xx").expect("must create fixture");
+    }
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+
+    let inspected: Value = client
+        .post(format!("{}/api/v1/split/inspect", server.base_url))
+        .json(&json!({"locations": [location_json(&root.path().join("a.bin.002"))]}))
+        .send()
+        .await
+        .expect("request must succeed")
+        .json()
+        .await
+        .expect("body must be JSON");
+    assert_eq!(inspected["outputName"], "a.bin");
+    assert!(
+        inspected["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("a.bin.003")),
+        "{inspected}"
+    );
+}

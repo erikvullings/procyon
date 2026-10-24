@@ -33,6 +33,7 @@ pub(crate) mod semantic_library;
 pub(crate) mod semantic_vocabulary;
 pub(crate) mod settings;
 pub(crate) mod snapshots;
+pub(crate) mod split;
 pub(crate) mod system_location;
 pub(crate) mod thumbnails;
 pub(crate) mod volume;

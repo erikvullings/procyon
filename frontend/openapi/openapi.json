@@ -8129,6 +8129,54 @@
         }
       }
     },
+    "/api/v1/split/inspect": {
+      "post": {
+        "summary": "Detects the split set a selection of part files belongs to and whether it can be joined.",
+        "operationId": "inspectSplitSet",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InspectSplitSetRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The detected set, or the reason it cannot be joined",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectSplitSetResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A part is outside the accessible roots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A part does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/spotlight-comment": {
       "get": {
         "summary": "Returns an entry's Spotlight comment, or `null` if unsupported/unset.",
@@ -13824,6 +13872,62 @@
           }
         }
       },
+      "InspectSplitSetRequestDto": {
+        "type": "object",
+        "description": "Asks which split set a selection of part files belongs to.",
+        "required": [
+          "locations"
+        ],
+        "properties": {
+          "locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "One or more selected part files (`.001`, `.002`, ...), all in one folder."
+          }
+        }
+      },
+      "InspectSplitSetResponseDto": {
+        "type": "object",
+        "description": "The split set a selection points at, and whether it can be joined.",
+        "required": [
+          "outputName",
+          "parts",
+          "totalSize",
+          "hasManifest"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the set cannot be joined (gaps, damaged manifest, mixed selection); absent when ready."
+          },
+          "hasManifest": {
+            "type": "boolean",
+            "description": "Whether a `<name>.blake3` manifest sits next to the parts and will be verified."
+          },
+          "outputName": {
+            "type": "string",
+            "description": "Name of the file the parts join into."
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SplitPartDto"
+            },
+            "description": "Parts found next to the selection, in order."
+          },
+          "totalSize": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Sum of the part sizes.",
+            "minimum": 0
+          }
+        }
+      },
       "InstallSemanticWorkerPatchRequestDto": {
         "type": "object",
         "description": "Requests the newest compatible signed worker patch.",
@@ -17430,6 +17534,8 @@
           "undo",
           "editImageMetadata",
           "changeAttributes",
+          "splitFile",
+          "combineFiles",
           "transformGeo",
           "search",
           "compare"
@@ -23962,6 +24068,45 @@
           "vertical"
         ]
       },
+      "SplitFileDto": {
+        "type": "object",
+        "description": "The options carried by a `splitFile` operation. Each source file is cut into\n`<name>.001`, `<name>.002`, ... in the destination folder (next to the source when none is\ngiven).",
+        "required": [
+          "partSizeBytes"
+        ],
+        "properties": {
+          "partSizeBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Size of every part except the last, in bytes (at least 1).",
+            "minimum": 0
+          },
+          "writeManifest": {
+            "type": "boolean",
+            "description": "Also write `<name>.blake3`, listing the BLAKE3 hash of every part and of the whole file."
+          }
+        }
+      },
+      "SplitPartDto": {
+        "type": "object",
+        "description": "One part of a detected split set.",
+        "required": [
+          "name",
+          "size"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "File name of the part."
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Size of the part in bytes.",
+            "minimum": 0
+          }
+        }
+      },
       "SpotlightCommentDto": {
         "type": "object",
         "description": "An entry's Spotlight comment (Get Info's \"Comments:\" field) - used for\nboth reading the current comment and replacing it. `None` means no\ncomment is set; setting `None` clears an existing comment.",
@@ -24669,6 +24814,17 @@
               "$ref": "#/components/schemas/LocationDto"
             },
             "description": "Provider-neutral source locations."
+          },
+          "splitFile": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SplitFileDto",
+                "description": "The options of a `splitFile` operation (task 0257)."
+              }
+            ]
           },
           "symlinkPolicy": {
             "$ref": "#/components/schemas/SymlinkPolicyDto",

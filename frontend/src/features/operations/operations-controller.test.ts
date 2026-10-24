@@ -53,6 +53,45 @@ describe('OperationsController', () => {
     );
   });
 
+  it('splitFile starts a splitFile operation with the options and optional destination', async () => {
+    const split = { partSizeBytes: 1024, writeManifest: true };
+    await controller.splitFile([src], split, dest);
+    expect(client.startOperation).toHaveBeenCalledWith(
+      {
+        type: 'splitFile',
+        sources: [src],
+        conflictPolicy: 'ask',
+        splitFile: split,
+        destination: dest,
+      },
+      undefined,
+    );
+    await controller.splitFile([src], split);
+    expect(client.startOperation).toHaveBeenLastCalledWith(
+      { type: 'splitFile', sources: [src], conflictPolicy: 'ask', splitFile: split },
+      undefined,
+    );
+  });
+
+  it('combineFiles starts a combineFiles operation with optional destination and name', async () => {
+    await controller.combineFiles([src, src2], dest, 'whole.bin');
+    expect(client.startOperation).toHaveBeenCalledWith(
+      {
+        type: 'combineFiles',
+        sources: [src, src2],
+        conflictPolicy: 'ask',
+        destination: dest,
+        name: 'whole.bin',
+      },
+      undefined,
+    );
+    await controller.combineFiles([src]);
+    expect(client.startOperation).toHaveBeenLastCalledWith(
+      { type: 'combineFiles', sources: [src], conflictPolicy: 'ask' },
+      undefined,
+    );
+  });
+
   it('trash calls startOperation with type trash and no destination', async () => {
     await controller.trash([src]);
     expect(client.startOperation).toHaveBeenCalledWith(

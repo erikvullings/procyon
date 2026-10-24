@@ -51,6 +51,9 @@ pub struct StartOperationRequestDto {
     /// The change applied by a `changeAttributes` operation (task 0258).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attribute_change: Option<crate::ChangeAttributesDto>,
+    /// The options of a `splitFile` operation (task 0257).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub split_file: Option<crate::SplitFileDto>,
     /// What a `transformGeo` operation does with each file (tasks 0281, 0282).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub geo_transform: Option<crate::GeoTransformDto>,
@@ -192,6 +195,10 @@ pub enum OperationKindDto {
     EditImageMetadata,
     /// Change permissions, ownership or attributes in place (task 0258).
     ChangeAttributes,
+    /// Cut a file into numbered parts (task 0257).
+    SplitFile,
+    /// Join numbered parts back into one file (task 0257).
+    CombineFiles,
     /// Convert or minify geographic files into new files (tasks 0281, 0282).
     TransformGeo,
     /// Search files.

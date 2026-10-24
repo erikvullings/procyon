@@ -17,6 +17,8 @@ export type OperationKind =
   | 'undo'
   | 'editImageMetadata'
   | 'changeAttributes'
+  | 'splitFile'
+  | 'combineFiles'
   | 'transformGeo'
   | 'search'
   | 'compare';

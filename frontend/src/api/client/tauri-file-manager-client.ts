@@ -85,6 +85,7 @@ import type {
   ImageMetadata,
   ImportSemanticLocalModelRequest,
   InspectAttributesResult,
+  InspectSplitSetResult,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   KnowledgeAnswer,
@@ -985,6 +986,15 @@ export class TauriFileManagerClient implements FileManagerClient {
   ): Promise<InspectAttributesResult> {
     return invoke<InspectAttributesResult>('inspect_attributes', {
       request: { sources: locations },
+    });
+  }
+
+  inspectSplitSet(
+    locations: readonly Location[],
+    _signal?: AbortSignal,
+  ): Promise<InspectSplitSetResult> {
+    return invoke<InspectSplitSetResult>('inspect_split_set', {
+      request: { locations },
     });
   }
 

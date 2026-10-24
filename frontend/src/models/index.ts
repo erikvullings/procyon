@@ -34,4 +34,5 @@ export * from './semantic-vocabulary';
 export * from './settings';
 export * from './snapshot';
 export * from './snapshots';
+export * from './split';
 export * from './workspace';

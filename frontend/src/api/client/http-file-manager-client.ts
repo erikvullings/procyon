@@ -77,6 +77,7 @@ import type {
   ImageMetadata,
   ImportSemanticLocalModelRequest,
   InspectAttributesResult,
+  InspectSplitSetResult,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   KnowledgeAnswer,
@@ -282,6 +283,7 @@ import {
   readImageGps as requestImageGps,
   readImageMetadata as requestImageMetadata,
   inspectAttributes as requestInspectAttributes,
+  inspectSplitSet as requestInspectSplitSet,
   cancelKnowledgeAnswer as requestKnowledgeAnswerCancellation,
   generateKnowledgeAnswer as requestKnowledgeAnswerGeneration,
   getKnowledgeCapabilities as requestKnowledgeCapabilities,
@@ -1515,6 +1517,20 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200) {
       throw new Error(`Unexpected inspectAttributes response status: ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async inspectSplitSet(
+    locations: readonly Location[],
+    signal?: AbortSignal,
+  ): Promise<InspectSplitSetResult> {
+    const response = await requestInspectSplitSet(
+      { locations: [...locations] },
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw new Error(`Unexpected inspectSplitSet response status: ${response.status}`);
     }
     return response.data;
   }

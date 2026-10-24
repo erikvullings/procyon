@@ -1063,6 +1063,8 @@ fn operation_payload(operation: &Operation) -> OperationPayload {
             crate::OperationKind::Undo => OperationKindPayload::Undo,
             crate::OperationKind::EditImageMetadata => OperationKindPayload::EditImageMetadata,
             crate::OperationKind::ChangeAttributes => OperationKindPayload::ChangeAttributes,
+            crate::OperationKind::SplitFile => OperationKindPayload::SplitFile,
+            crate::OperationKind::CombineFiles => OperationKindPayload::CombineFiles,
             crate::OperationKind::TransformGeo => OperationKindPayload::TransformGeo,
         },
         state: state_payload(operation.state),

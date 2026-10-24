@@ -41,6 +41,7 @@ pub mod semantic_vocabulary;
 pub mod settings;
 pub mod snapshot;
 pub mod snapshots;
+pub mod split;
 pub mod sqlite;
 pub mod system_location;
 pub mod workspace;
@@ -226,6 +227,9 @@ pub use snapshots::{
     SnapshotDiffCountsDto, SnapshotDiffEntryDto, SnapshotDiffKindDto, SnapshotJobKindDto,
     SnapshotJobPageDto, SnapshotJobPhaseDto, StartSnapshotJobRequestDto,
     StartSnapshotJobResponseDto,
+};
+pub use split::{
+    InspectSplitSetRequestDto, InspectSplitSetResponseDto, SplitFileDto, SplitPartDto,
 };
 pub use sqlite::{
     OpenSqliteViewRequestDto, OpenSqliteViewResponseDto, QuerySqliteViewRequestDto,

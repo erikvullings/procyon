@@ -3895,6 +3895,15 @@ impl FileManagerService {
         crate::attribute_change::inspect_attributes(&self.providers, request).await
     }
 
+    /// Detects the split set a selection of part files belongs to and whether it can be joined
+    /// (task 0257).
+    pub async fn inspect_split_set(
+        &self,
+        request: fm_transport_dto::InspectSplitSetRequestDto,
+    ) -> Result<fm_transport_dto::InspectSplitSetResponseDto, ApplicationError> {
+        crate::split_combine::inspect_split_set(&self.providers, request).await
+    }
+
     /// Counts the entries a `changeAttributes` operation would touch (task 0258).
     pub async fn preview_attribute_change(
         &self,
@@ -7250,6 +7259,7 @@ mod tests {
             skip_space_check: false,
             image_metadata_edit: None,
             attribute_change: None,
+            split_file: None,
             geo_transform: None,
             symlink_policy: Default::default(),
             permanent_delete_confirmed: false,
@@ -7870,6 +7880,7 @@ mod tests {
             skip_space_check: false,
             image_metadata_edit: None,
             attribute_change: None,
+            split_file: None,
             geo_transform: None,
             symlink_policy: fm_transport_dto::SymlinkPolicyDto::default(),
             permanent_delete_confirmed: false,

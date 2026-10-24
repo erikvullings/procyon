@@ -233,7 +233,7 @@ engine, conflict handling, clipboard, drag-and-drop, comparison and checksums th
 - [x] 0168 Create symbolic links and Windows shortcuts *(needs 0035, 0058)*
 - [x] 0222 File operation dialog clarity *(needs 0044, 0045, 0112)*
 - [ ] 0256 Compare by content and file diff *(needs 0075, 0099)*
-- [ ] 0257 Split and combine files *(needs 0035, 0077)*
+- [x] 0257 Split and combine files *(needs 0035, 0077)*
 - [x] 0258 Permissions and ownership (chmod/chown) editor *(needs 0140, 0035, 0058)*
 - [x] 0268 Folder snapshots and diffs *(needs 0077, 0075)*
 - [x] 0272 Disk-space guard before transfers *(needs 0096, 0035)*

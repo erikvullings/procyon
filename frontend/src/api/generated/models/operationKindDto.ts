@@ -24,6 +24,8 @@ export const OperationKindDto = {
   undo: 'undo',
   editImageMetadata: 'editImageMetadata',
   changeAttributes: 'changeAttributes',
+  splitFile: 'splitFile',
+  combineFiles: 'combineFiles',
   transformGeo: 'transformGeo',
   search: 'search',
   compare: 'compare',

@@ -2906,6 +2906,19 @@ pub(crate) async fn inspect_attributes(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Detects the split set a selection of part files belongs to (task 0257).
+#[tauri::command]
+pub(crate) async fn inspect_split_set(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::InspectSplitSetRequestDto,
+) -> Result<fm_transport_dto::InspectSplitSetResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .inspect_split_set(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Counts the entries an attribute change would touch (task 0258).
 #[tauri::command]
 pub(crate) async fn preview_attribute_change(

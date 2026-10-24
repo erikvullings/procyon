@@ -162,6 +162,10 @@ export function operationKindLabel(kind: OperationKind | null | undefined): stri
       return t('operation', 'kindUndo');
     case 'editImageMetadata':
       return t('operation', 'kindEditImageMetadata');
+    case 'splitFile':
+      return t('operation', 'kindSplitFile');
+    case 'combineFiles':
+      return t('operation', 'kindCombineFiles');
     case 'changeAttributes':
       return t('operation', 'kindChangeAttributes');
     case 'transformGeo':

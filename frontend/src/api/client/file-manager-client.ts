@@ -79,6 +79,7 @@ import type {
   ImageMetadata,
   ImportSemanticLocalModelRequest,
   InspectAttributesResult,
+  InspectSplitSetResult,
   InstallSemanticWorkerPatchRequest,
   InvokeActionRequest,
   KnowledgeAnswer,
@@ -577,6 +578,14 @@ export interface FileManagerClient {
     locations: readonly Location[],
     signal?: AbortSignal,
   ): Promise<InspectAttributesResult>;
+  /**
+   * Detects the split set (`name.001`, `name.002`, …) a selection of part files belongs to, whether
+   * a manifest sits next to it, and why it cannot be joined when it cannot (task 0257).
+   */
+  inspectSplitSet(
+    locations: readonly Location[],
+    signal?: AbortSignal,
+  ): Promise<InspectSplitSetResult>;
   /** Counts the entries a `changeAttributes` operation would touch before it is applied (task 0258). */
   previewAttributeChange(
     locations: readonly Location[],

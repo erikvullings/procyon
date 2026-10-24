@@ -6,6 +6,7 @@ import type {
   LinkRequest,
   Location,
   Operation,
+  SplitFile,
 } from '../../models';
 import { perfMark } from '../../utilities/perf';
 
@@ -65,6 +66,26 @@ export interface OperationsController {
   changeAttributes(
     sources: readonly Location[],
     change: ChangeAttributes,
+    signal?: AbortSignal,
+  ): Promise<Operation>;
+  /**
+   * Cuts each source file into numbered parts (`name.001`, …) in `destination` (next to the source
+   * when omitted), optionally with a BLAKE3 manifest; a cancellable, undoable job (task 0257).
+   */
+  splitFile(
+    sources: readonly Location[],
+    split: SplitFile,
+    destination?: Location,
+    signal?: AbortSignal,
+  ): Promise<Operation>;
+  /**
+   * Joins the numbered parts the selected files belong to into one file in `destination` (next to
+   * the parts when omitted), verifying the manifest when one exists (task 0257).
+   */
+  combineFiles(
+    parts: readonly Location[],
+    destination?: Location,
+    name?: string,
     signal?: AbortSignal,
   ): Promise<Operation>;
   /** Converts geographic files into new files next to them (task 0281). */
@@ -303,6 +324,32 @@ export function createOperationsController(rawClient: FileManagerClient): Operat
     transformGeo(sources, transform, signal) {
       return client.startOperation(
         { type: 'transformGeo', sources, conflictPolicy: 'ask', geoTransform: transform },
+        signal,
+      );
+    },
+
+    splitFile(sources, split, destination, signal) {
+      return client.startOperation(
+        {
+          type: 'splitFile',
+          sources,
+          conflictPolicy: 'ask',
+          splitFile: split,
+          ...(destination === undefined ? {} : { destination }),
+        },
+        signal,
+      );
+    },
+
+    combineFiles(parts, destination, name, signal) {
+      return client.startOperation(
+        {
+          type: 'combineFiles',
+          sources: parts,
+          conflictPolicy: 'ask',
+          ...(destination === undefined ? {} : { destination }),
+          ...(name === undefined ? {} : { name }),
+        },
         signal,
       );
     },

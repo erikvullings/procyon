@@ -185,6 +185,12 @@ impl OperationPlanner {
             OperationKindDto::ChangeAttributes => {
                 crate::attribute_change::plan_change_attributes(&self.providers, request)?
             }
+            OperationKindDto::SplitFile => {
+                crate::split_combine::plan_split_file(&self.providers, request)?
+            }
+            OperationKindDto::CombineFiles => {
+                crate::split_combine::plan_combine_files(&self.providers, request)?
+            }
             OperationKindDto::EditImageMetadata => {
                 crate::image_metadata_edit::plan_edit_image_metadata(&self.providers, request)?
             }
@@ -560,6 +566,7 @@ impl OperationPlanner {
                 skip_space_check: false,
                 image_metadata_edit: None,
                 attribute_change: None,
+                split_file: None,
                 geo_transform: None,
                 symlink_policy: SymlinkPolicyDto::default(),
                 permanent_delete_confirmed: false,
@@ -3573,6 +3580,7 @@ mod tests {
             skip_space_check: false,
             image_metadata_edit: None,
             attribute_change: None,
+            split_file: None,
             geo_transform: None,
             override_read_only: false,
             link: None,

@@ -304,6 +304,17 @@ import {
   sortEntries,
   sortEntriesResponsive,
 } from '../features/sorting/sorting';
+import {
+  CombineFilesDialog,
+  type CombineFilesRequest,
+} from '../features/split/combine-files-dialog';
+import {
+  COMBINE_FILES_ACTION_ID,
+  isCombinablePart,
+  isSplittable,
+  SPLIT_FILE_ACTION_ID,
+} from '../features/split/split-actions';
+import { SplitFileDialog, type SplitFileRequest } from '../features/split/split-file-dialog';
 import { tauriTerminalClient } from '../features/terminal/terminal-client';
 import { TerminalDrawer } from '../features/terminal/terminal-drawer';
 import { focusOpenedTerminal, isTerminalVisible } from '../features/terminal/terminal-state';
@@ -362,6 +373,7 @@ import type {
   SemanticComponentStatus,
   Settings,
   SortDescriptor,
+  SplitFile,
   SystemLocation,
   TabId,
   TabProjection,
@@ -676,6 +688,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         {},
         t('imageMap', 'actionDescription'),
       ),
+      descriptor(SPLIT_FILE_ACTION_ID, t('splitCombine', 'splitAction'), {
+        requiresSelection: true,
+      }),
+      descriptor(COMBINE_FILES_ACTION_ID, t('splitCombine', 'combineAction'), {
+        requiresSelection: true,
+      }),
       descriptor(CONVERT_GEO_ACTION_ID, t('geoConvert', 'action'), { requiresSelection: true }),
       descriptor(MINIFY_GEO_ACTION_ID, t('geoMinify', 'action'), { requiresSelection: true }),
     ];
@@ -883,6 +901,114 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       .catch((error: unknown) => {
         toast({
           html: t('geoMinify', 'failed', {
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        });
+      });
+    m.redraw();
+  }
+
+  /** The selected entries of `paneId` and the folder shown in the other pane (task 0257). */
+  function selectionWithOtherFolder(
+    invocation: ActionInvocationContext | undefined,
+  ):
+    | { readonly selected: readonly EntrySummary[]; readonly otherPaneFolder?: Location }
+    | undefined {
+    const paneId = invocation?.paneId ?? workspace?.activePaneId;
+    if (paneId === undefined) return undefined;
+    const ids = new Set(
+      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
+    );
+    const selected = (directories.get(activeTabKey(paneId))?.entries ?? []).filter((entry) =>
+      ids.has(entry.id),
+    );
+    const otherPaneId = workspace?.paneOrder.find((candidate) => candidate !== paneId);
+    const other =
+      otherPaneId === undefined ? undefined : directories.get(activeTabKey(otherPaneId))?.location;
+    return other === undefined || other.providerId === 'basket'
+      ? { selected }
+      : { selected, otherPaneFolder: other };
+  }
+
+  /** Opens "Split file…" for the selected files (task 0257). */
+  function beginSplitFile(invocation: ActionInvocationContext | undefined): void {
+    const context = selectionWithOtherFolder(invocation);
+    const files = (context?.selected ?? []).filter(isSplittable);
+    if (context === undefined || files.length === 0) {
+      toast({ html: t('splitCombine', 'noSelection') });
+      return;
+    }
+    splitFileRequest = {
+      files: files.map((entry) => ({
+        location: entry.location,
+        name: entry.name,
+        size: entry.size ?? 0,
+      })),
+      ...(context.otherPaneFolder === undefined
+        ? {}
+        : { otherPaneFolder: context.otherPaneFolder }),
+    };
+    m.redraw();
+  }
+
+  function confirmSplitFile(
+    split: SplitFile,
+    destination: Location | undefined,
+    count: number,
+  ): void {
+    const request = splitFileRequest;
+    splitFileRequest = undefined;
+    if (request === undefined) return;
+    void opsController
+      .splitFile(
+        request.files.map((file) => file.location),
+        split,
+        destination,
+      )
+      .then(() => {
+        toast({ html: t('splitCombine', 'splitStarted', count) });
+        m.redraw();
+      })
+      .catch((error: unknown) => {
+        toast({
+          html: t('splitCombine', 'failed', {
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        });
+      });
+    m.redraw();
+  }
+
+  /** Opens "Combine files…" for the selected numbered parts (task 0257). */
+  function beginCombineFiles(invocation: ActionInvocationContext | undefined): void {
+    const context = selectionWithOtherFolder(invocation);
+    const parts = (context?.selected ?? []).filter(isCombinablePart);
+    if (context === undefined || parts.length === 0) {
+      toast({ html: t('splitCombine', 'noParts') });
+      return;
+    }
+    combineFilesRequest = {
+      parts: parts.map((entry) => entry.location),
+      ...(context.otherPaneFolder === undefined
+        ? {}
+        : { otherPaneFolder: context.otherPaneFolder }),
+    };
+    m.redraw();
+  }
+
+  function confirmCombineFiles(destination: Location | undefined, name: string | undefined): void {
+    const request = combineFilesRequest;
+    combineFilesRequest = undefined;
+    if (request === undefined) return;
+    void opsController
+      .combineFiles(request.parts, destination, name)
+      .then(() => {
+        toast({ html: t('splitCombine', 'combineStarted') });
+        m.redraw();
+      })
+      .catch((error: unknown) => {
+        toast({
+          html: t('splitCombine', 'failed', {
             message: error instanceof Error ? error.message : String(error),
           }),
         });
@@ -1283,6 +1409,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }
     if (actionId === CONVERT_GEO_ACTION_ID) {
       beginConvertGeo(invocation);
+      return true;
+    }
+    if (actionId === SPLIT_FILE_ACTION_ID) {
+      beginSplitFile(invocation);
+      return true;
+    }
+    if (actionId === COMBINE_FILES_ACTION_ID) {
+      beginCombineFiles(invocation);
       return true;
     }
     if (actionId === SHOW_ON_MAP_ACTION_ID) {
@@ -1835,6 +1969,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let editImageMetadataRequest: EditImageMetadataRequest | undefined;
   let changeAttributesRequest: ChangeAttributesRequest | undefined;
   let convertGeoRequest: ConvertGeoRequest | undefined;
+  let splitFileRequest: SplitFileRequest | undefined;
+  let combineFilesRequest: CombineFilesRequest | undefined;
   let minifyGeoRequest: MinifyGeoRequest | undefined;
   let imageMapState: ImageMapState = INITIAL_IMAGE_MAP_STATE;
   let imageMapController: ImageMapController | undefined;
@@ -7342,6 +7478,23 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             onApply: confirmMinifyGeo,
             onCancel: () => {
               minifyGeoRequest = undefined;
+              m.redraw();
+            },
+          }),
+          m(SplitFileDialog, {
+            request: splitFileRequest,
+            onSplit: confirmSplitFile,
+            onCancel: () => {
+              splitFileRequest = undefined;
+              m.redraw();
+            },
+          }),
+          m(CombineFilesDialog, {
+            request: combineFilesRequest,
+            client: attrs.client,
+            onCombine: confirmCombineFiles,
+            onCancel: () => {
+              combineFilesRequest = undefined;
               m.redraw();
             },
           }),

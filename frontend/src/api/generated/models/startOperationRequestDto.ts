@@ -10,6 +10,7 @@ import type { LinkRequestDto } from './linkRequestDto.ts';
 import type { LocationDto } from './locationDto.ts';
 import type { OperationConflictPolicyDto } from './operationConflictPolicyDto.ts';
 import type { OperationKindDto } from './operationKindDto.ts';
+import type { SplitFileDto } from './splitFileDto.ts';
 import type { SymlinkPolicyDto } from './symlinkPolicyDto.ts';
 
 /**
@@ -59,6 +60,7 @@ export interface StartOperationRequestDto {
   skipSpaceCheck?: boolean;
   /** Provider-neutral source locations. */
   sources: LocationDto[];
+  splitFile?: null | SplitFileDto;
   /** Policy for symbolic links encountered during recursive copying. */
   symlinkPolicy?: SymlinkPolicyDto;
   /** Semantic operation discriminator. `type` is the stable JSON field name. */

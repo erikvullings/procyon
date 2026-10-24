@@ -16,6 +16,12 @@ import {
   MEDIA_QUEUE_ACTIONS,
   SAVE_PLAYLIST_ACTION_ID,
 } from '../player/player-actions';
+import {
+  COMBINE_FILES_ACTION_ID,
+  isCombinablePart,
+  isSplittable,
+  SPLIT_FILE_ACTION_ID,
+} from '../split/split-actions';
 
 /** Context the frontend uses to advise which registered commands can run. */
 export interface CommandAvailabilityContext {
@@ -77,6 +83,8 @@ const SELECTION_ACTION_IDS = new Set([
   SHOW_ON_MAP_ACTION_ID,
   CONVERT_GEO_ACTION_ID,
   MINIFY_GEO_ACTION_ID,
+  SPLIT_FILE_ACTION_ID,
+  COMBINE_FILES_ACTION_ID,
 ]);
 
 /**
@@ -110,6 +118,7 @@ const CONTEXT_MENU_SELECTION_GROUPS: readonly (readonly string[])[] = [
     CONVERT_GEO_ACTION_ID,
     MINIFY_GEO_ACTION_ID,
   ],
+  [SPLIT_FILE_ACTION_ID, COMBINE_FILES_ACTION_ID],
   ['core.trash', 'core.delete', 'core.uninstallApplication'],
 ];
 
@@ -243,6 +252,20 @@ export function evaluateActionAvailability(
     !context.selectedEntries.some(isConvertibleGeoFile)
   ) {
     return unavailable(action, t('availability', 'selectFiles'));
+  }
+  if (
+    action.id === SPLIT_FILE_ACTION_ID &&
+    context.selectedEntries.length > 0 &&
+    !context.selectedEntries.some(isSplittable)
+  ) {
+    return unavailable(action, t('availability', 'selectFiles'));
+  }
+  if (
+    action.id === COMBINE_FILES_ACTION_ID &&
+    context.selectedEntries.length > 0 &&
+    !context.selectedEntries.some(isCombinablePart)
+  ) {
+    return unavailable(action, t('splitCombine', 'noParts'));
   }
   if (
     action.id === EDIT_IMAGE_METADATA_ACTION_ID &&

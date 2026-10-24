@@ -1371,4 +1371,15 @@ describe('MockFileManagerClient attribute editing', () => {
     expect(recursive.files).toBe(0);
     expect(recursive.folders).toBeGreaterThan(0);
   });
+
+  it('detects a split set from a part name and rejects other files', async () => {
+    const client = new MockFileManagerClient();
+    const part = { providerId: 'local', uri: 'file:///tmp/movie.mkv.002' };
+    const set = await client.inspectSplitSet([part]);
+    expect(set.outputName).toBe('movie.mkv');
+    expect(set.parts).toHaveLength(3);
+    expect(set.error ?? null).toBeNull();
+    const plain = await client.inspectSplitSet([{ providerId: 'local', uri: 'file:///tmp/a.txt' }]);
+    expect(plain.error).toBeTruthy();
+  });
 });

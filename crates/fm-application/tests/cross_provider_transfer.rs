@@ -127,6 +127,7 @@ fn copy_request(source: Location, destination_directory: Location) -> StartOpera
         skip_space_check: false,
         image_metadata_edit: None,
         attribute_change: None,
+        split_file: None,
         geo_transform: None,
         symlink_policy: Default::default(),
         permanent_delete_confirmed: false,

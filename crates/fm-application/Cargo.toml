@@ -27,6 +27,7 @@ fm-domain.workspace = true
 fm-archive.workspace = true
 fm-auth-oauth.workspace = true
 fm-checksum.workspace = true
+blake3.workspace = true
 fm-comparison.workspace = true
 fm-connections.workspace = true
 fm-credentials.workspace = true
