@@ -28,8 +28,8 @@ Release builds reject the variable. The first build downloads model files and ta
    DOCX, ...). JSON Lines feeds (`.jsonl`/`.ndjson`, for example a news or RSS export, one record
    per line) are indexed too: one record becomes one chunk, long files are split into bounded
    windows, and there is no file size limit.
-3. Right-click the folder, **Include folder in semantic library** (or enrol it in Settings) and
-   consent. The debug host runs one bounded indexing pass immediately; watch progress in Settings.
+3. Enrol the folder: **Include folder for semantic search** in the Semantic Search dialog (or the
+   enrolment controls in Settings), then confirm **OK, index folder**. The debug host runs one bounded indexing pass immediately; watch progress in Settings.
    If it fails, fix the reported cause and repeat **Include folder**.
 4. Directory watchers keep the index current when files change; the Themes view flags a stale
    analysis and offers **Analyse again**.
@@ -39,8 +39,8 @@ Themes need a real embedding model. With the compact token-hashing fixture the v
 
 ## 3. Open Themes
 
-Command palette > **Explore themes** (shown when knowledge search is available, which it always
-is in debug builds). Themes open as a pane view in a new tab of the active pane, like Disk usage.
+Command palette > **Explore themes** (listed only when the worker reports knowledge search; debug
+builds are exempt from the release qualification gate). Themes open as a pane view in a new tab of the active pane, like Disk usage.
 
 - Scope switch: entire library or the folder shown when you opened the tab.
 - **Map**: one point per passage (a stride sample of up to 2000), coloured by theme. Hover shows the

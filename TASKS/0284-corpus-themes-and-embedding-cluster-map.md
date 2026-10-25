@@ -126,3 +126,15 @@ Cluster **chunk embeddings directly** for theme discovery; also keep a **documen
     until that activation exists; nothing was run against a real embedding model (EmbeddingGemma).
   - Canvas rendering, hover and click were not exercised in a real browser (jsdom has no canvas).
   - Host entire-library scope covers the requesting workspace tenant only.
+- 2026-10-25 claude: slice 4 (host activation + pane view). Merged origin/main (JSONL, directory
+  watch fixes). New protobuf capability `CORPUS_THEMES` and RPC `CorpusThemes` (JSON payload in a
+  protobuf envelope; vectors never cross; response thinned to the 1 MiB message budget; stream
+  deadline; cancellable), `corpus_theme_ipc` (request/response/failure mirror, backend trait),
+  `WorkerClient::corpus_themes`, `WorkerServer::with_all_backends_and_themes`/`with_corpus_theme_backend`,
+  developer/managed worker composes `CorpusThemeService`. Application: `SemanticCapability::corpus_themes`
+  (default unavailable) + `SemanticCorpusThemeCapability`, installed by `with_semantic_capability`, so
+  Tauri (developer bundle or managed) and attached fm-server answer instead of 503. UI: Themes is a pane
+  tab like Disk usage (dialog removed); click on a point opens the source, hover shows the passage;
+  SKOS concepts shown only when present. Still document-granularity theme-filtered search (chunk filter
+  would need chunk ids through the knowledge request). Guide: docs/try-themes-on-a-real-corpus.md.
+  Not verified: real model/browser run.
