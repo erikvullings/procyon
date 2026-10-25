@@ -1,6 +1,7 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { setLocale } from '../../i18n';
 import type { BackendEvent, Operation } from '../../models';
 import { OperationCentre } from './operation-centre';
 import {
@@ -608,6 +609,39 @@ describe('OperationCentre states', () => {
     expect(warningText?.textContent).toContain(
       'existing-folder: Skipped because destination already exists.',
     );
+  });
+
+  it('localises coded entry-level warnings and falls back to English for unknown codes', () => {
+    setLocale('nl');
+    const entry = {
+      id: 'existing-folder',
+      location: { providerId: 'local', uri: 'file:///home/demo/existing-folder' },
+    };
+    const withWarnings: Operation = {
+      ...operation('completedWithWarnings', 'coded-copy'),
+      errors: [
+        { entry, message: 'Permission denied.', code: 'permissionDenied' },
+        { entry, message: 'Brand new failure.', code: 'notYetTranslated' },
+      ],
+    };
+
+    m.mount(root, {
+      view: () =>
+        m(OperationCentre, {
+          state: createOperationsState([withWarnings]),
+          onCancel: vi.fn(),
+          onPause: vi.fn(),
+          onResume: vi.fn(),
+          onDismiss: vi.fn(),
+        }),
+    });
+
+    const text = root.querySelector(
+      '[data-operation-id="coded-copy"] .fm-operation-warning',
+    )?.textContent;
+    expect(text).toContain('existing-folder: Toegang geweigerd.');
+    expect(text).toContain('existing-folder: Brand new failure.');
+    setLocale('en');
   });
 
   it('offers undo only when history marks it safe and explains unavailable entries', () => {

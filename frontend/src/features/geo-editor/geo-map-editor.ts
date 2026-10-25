@@ -1,7 +1,7 @@
 import type * as MapLibre from 'maplibre-gl';
 import m, { type FactoryComponent } from 'mithril';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { t } from '../../i18n';
+import { errorText, t } from '../../i18n';
 import type { GeoTargetFormat, MapSettings } from '../../models';
 import { resolvedTheme } from '../../utilities/resolved-theme';
 import { DEFAULT_MAP_SETTINGS } from '../map/map-settings';
@@ -392,7 +392,7 @@ export const GeoMapEditor: FactoryComponent<GeoMapEditorAttrs> = (initial) => {
       })
       .catch((error: unknown) => {
         if (token !== exportToken) return;
-        exportError = error instanceof Error ? error.message : String(error);
+        exportError = errorText(error);
         m.redraw();
       });
   }
@@ -474,7 +474,7 @@ export const GeoMapEditor: FactoryComponent<GeoMapEditorAttrs> = (initial) => {
               })
               .catch((error: unknown) => {
                 exportError = t('geoConvert', 'exportFailed', {
-                  message: error instanceof Error ? error.message : String(error),
+                  message: errorText(error),
                 });
                 m.redraw();
               });

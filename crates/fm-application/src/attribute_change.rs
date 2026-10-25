@@ -360,27 +360,37 @@ struct ChangeAttributesExecutor {
     applied: Mutex<Vec<AppliedChange>>,
 }
 
-fn warning(entry: &EntryRef, message: String) -> ExecutionOutcome {
-    ExecutionOutcome::CompletedWithWarnings(vec![OperationEntryError {
-        entry: entry.clone(),
-        message,
-    }])
-}
-
-/// Explains a provider refusal in terms the user can act on.
-fn describe_failure(name: &str, error: &VfsError) -> String {
-    match error {
-        VfsError::PermissionDenied { .. } => format!(
-            "Not permitted to change {name}: the operation was refused (only the owner or an administrator may change permissions and ownership)."
+/// Explains a provider refusal in terms the user can act on, with a stable code for clients.
+fn describe_failure(entry: &EntryRef, name: &str, error: &VfsError) -> ExecutionOutcome {
+    let (code, message) = match error {
+        VfsError::PermissionDenied { .. } => (
+            fm_operations::codes::entry_error::ATTRIBUTE_NOT_PERMITTED,
+            format!(
+                "Not permitted to change {name}: the operation was refused (only the owner or an administrator may change permissions and ownership)."
+            ),
         ),
-        VfsError::UnsupportedCapability { .. } => {
+        VfsError::UnsupportedCapability { .. } => (
+            fm_operations::codes::entry_error::ATTRIBUTE_UNSUPPORTED,
             format!(
                 "{name} was not changed: symbolic links and unsupported entries are left alone."
-            )
-        }
-        VfsError::NotFound { .. } => format!("{name} no longer exists."),
-        other => format!("{name} was not changed: {other}."),
+            ),
+        ),
+        VfsError::NotFound { .. } => (
+            fm_operations::codes::entry_error::ATTRIBUTE_ENTRY_MISSING,
+            format!("{name} no longer exists."),
+        ),
+        other => (
+            fm_operations::codes::entry_error::ATTRIBUTE_FAILED,
+            format!("{name} was not changed: {other}."),
+        ),
+    };
+    let mut failure = OperationEntryError::new(entry.clone(), message)
+        .with_code(code)
+        .with_param("name", name);
+    if code == fm_operations::codes::entry_error::ATTRIBUTE_FAILED {
+        failure = failure.with_param("detail", error);
     }
+    ExecutionOutcome::CompletedWithWarnings(vec![failure])
 }
 
 #[async_trait]
@@ -432,7 +442,7 @@ impl OperationExecutor for ChangeAttributesExecutor {
         {
             Ok(previous) => previous,
             Err(VfsError::Cancelled) => return Err(VfsError::Cancelled.into()),
-            Err(error) => return Ok(warning(&item.entry, describe_failure(&name, &error))),
+            Err(error) => return Ok(describe_failure(&item.entry, &name, &error)),
         };
         if self.change.is_applied_to(&previous) {
             return Ok(ExecutionOutcome::Skipped);
@@ -452,7 +462,7 @@ impl OperationExecutor for ChangeAttributesExecutor {
                 Ok(ExecutionOutcome::Completed)
             }
             Err(VfsError::Cancelled) => Err(VfsError::Cancelled.into()),
-            Err(error) => Ok(warning(&item.entry, describe_failure(&name, &error))),
+            Err(error) => Ok(describe_failure(&item.entry, &name, &error)),
         }
     }
 

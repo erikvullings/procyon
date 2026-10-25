@@ -160,6 +160,8 @@ fn cap_entry_errors(operation: &mut Operation) {
         .errors
         .truncate(OPERATION_HISTORY_MAX_ENTRY_ERRORS);
     summary.message = format!("{omitted}{OMITTED_ERRORS_SUFFIX}");
+    summary.code = Some(fm_operations::codes::entry_error::ERRORS_OMITTED.to_owned());
+    summary.params = std::collections::BTreeMap::from([("count".to_owned(), omitted.to_string())]);
     operation.errors.push(summary);
 }
 
@@ -561,10 +563,20 @@ pub(crate) fn operation_dto(mut operation: Operation, queue_position: Option<u64
                     location: error.entry.location.into(),
                 },
                 message: error.message,
+                code: error.code,
+                params: error.params,
             })
             .collect(),
         queue_position,
-        result_summary,
+        result_summary: result_summary
+            .as_ref()
+            .map(|summary| summary.message.clone()),
+        result_summary_code: result_summary
+            .as_ref()
+            .map(|summary| summary.code.to_owned()),
+        result_summary_params: result_summary
+            .map(|summary| summary.params)
+            .unwrap_or_default(),
         undo,
         undo_of: operation.undo_of.map(Into::into),
     }
@@ -575,6 +587,7 @@ fn operation_undo_dto(operation: &Operation) -> OperationUndoDto {
         return OperationUndoDto {
             available: false,
             reason: Some("This operation has already been undone.".into()),
+            reason_code: Some(fm_operations::codes::undo::ALREADY_UNDONE.into()),
             operation_id: Some(id.into()),
         };
     }
@@ -582,6 +595,7 @@ fn operation_undo_dto(operation: &Operation) -> OperationUndoDto {
         return OperationUndoDto {
             available: false,
             reason: Some("Undo is already in progress for this operation.".into()),
+            reason_code: Some(fm_operations::codes::undo::UNDO_IN_PROGRESS.into()),
             operation_id: Some(id.into()),
         };
     }
@@ -601,29 +615,60 @@ fn operation_undo_dto(operation: &Operation) -> OperationUndoDto {
                 .clone()
                 .or_else(|| Some("This operation cannot currently be undone safely.".into()))
         },
+        reason_code: (!available && operation.undo.unavailable_reason.is_none())
+            .then(|| fm_operations::codes::undo::UNDO_UNSAFE.to_owned()),
         operation_id: None,
     }
 }
 
-fn operation_result_summary(operation: &Operation) -> Option<String> {
+/// English fallback plus the stable code and parameters clients localise.
+struct ResultSummary {
+    message: String,
+    code: &'static str,
+    params: std::collections::BTreeMap<String, String>,
+}
+
+fn operation_result_summary(operation: &Operation) -> Option<ResultSummary> {
+    let items = operation.progress.completed_items;
+    let summary = |message: String, code: &'static str, params: &[(&str, String)]| {
+        Some(ResultSummary {
+            message,
+            code,
+            params: params
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), value.clone()))
+                .collect(),
+        })
+    };
     match operation.state {
-        fm_operations::OperationState::Completed => Some(format!(
-            "Completed {} items.",
-            operation.progress.completed_items
-        )),
-        fm_operations::OperationState::CompletedWithWarnings => Some(format!(
-            "Completed with {} warnings.",
-            entry_error_count(operation)
-        )),
-        fm_operations::OperationState::Cancelled => Some(format!(
-            "Cancelled after {} items.",
-            operation.progress.completed_items
-        )),
-        fm_operations::OperationState::Failed => Some("Operation failed.".into()),
-        fm_operations::OperationState::Interrupted => Some(format!(
-            "Interrupted after {} items; it was not resumed.",
-            operation.progress.completed_items
-        )),
+        fm_operations::OperationState::Completed => summary(
+            format!("Completed {items} items."),
+            fm_operations::codes::result::COMPLETED,
+            &[("items", items.to_string())],
+        ),
+        fm_operations::OperationState::CompletedWithWarnings => {
+            let count = entry_error_count(operation);
+            summary(
+                format!("Completed with {count} warnings."),
+                fm_operations::codes::result::COMPLETED_WITH_WARNINGS,
+                &[("count", count.to_string())],
+            )
+        }
+        fm_operations::OperationState::Cancelled => summary(
+            format!("Cancelled after {items} items."),
+            fm_operations::codes::result::CANCELLED,
+            &[("items", items.to_string())],
+        ),
+        fm_operations::OperationState::Failed => summary(
+            "Operation failed.".into(),
+            fm_operations::codes::result::FAILED,
+            &[],
+        ),
+        fm_operations::OperationState::Interrupted => summary(
+            format!("Interrupted after {items} items; it was not resumed."),
+            fm_operations::codes::result::INTERRUPTED,
+            &[("items", items.to_string())],
+        ),
         _ => None,
     }
 }
@@ -671,9 +716,8 @@ mod tests {
                 .expect("local location"),
         };
         operation.errors = (0..1_000)
-            .map(|index| fm_operations::OperationEntryError {
-                entry: entry.clone(),
-                message: format!("failure {index}"),
+            .map(|index| {
+                fm_operations::OperationEntryError::new(entry.clone(), format!("failure {index}"))
             })
             .collect();
         operation
@@ -692,6 +736,54 @@ mod tests {
             Some("800 further errors are omitted from the saved history")
         );
         assert_eq!(entry_error_count(&record), 1_000);
+    }
+
+    #[test]
+    fn terminal_operations_carry_a_stable_result_code_with_params() {
+        let mut operation = planning_operation();
+        operation
+            .transition(OperationState::Cancelling)
+            .expect("planning operation can be cancelled");
+        operation
+            .transition(OperationState::Cancelled)
+            .expect("cancelling operation is cancelled");
+        operation.progress.completed_items = 7;
+
+        let dto = operation_dto(operation, None);
+
+        assert_eq!(
+            dto.result_summary.as_deref(),
+            Some("Cancelled after 7 items.")
+        );
+        assert_eq!(dto.result_summary_code.as_deref(), Some("cancelled"));
+        assert_eq!(
+            dto.result_summary_params.get("items").map(String::as_str),
+            Some("7")
+        );
+    }
+
+    #[test]
+    fn entry_errors_keep_their_code_and_params_in_the_dto() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let mut operation = planning_operation();
+        let entry = fm_vfs::EntryRef {
+            id: fm_domain::EntryId::new(),
+            location: fm_domain::Location::from_native_path(directory.path())
+                .expect("local location"),
+        };
+        operation.errors = vec![
+            fm_operations::OperationEntryError::new(entry, "x was not changed")
+                .with_code("attributeFailed")
+                .with_param("name", "x"),
+        ];
+
+        let dto = operation_dto(operation, None);
+
+        assert_eq!(dto.errors[0].code.as_deref(), Some("attributeFailed"));
+        assert_eq!(
+            dto.errors[0].params.get("name").map(String::as_str),
+            Some("x")
+        );
     }
 
     #[test]

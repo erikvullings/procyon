@@ -1,5 +1,5 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { t } from '../../i18n';
+import { errorText, t } from '../../i18n';
 import type { SnapshotDiffEntry, StartSnapshotJobRequest } from '../../models';
 import { INITIAL_SNAPSHOT_PANEL_STATE, type SnapshotPanelState } from './snapshot-state';
 
@@ -25,7 +25,7 @@ export interface SnapshotController {
 }
 
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return errorText(error);
 }
 
 export function createSnapshotController(context: SnapshotControllerContext): SnapshotController {

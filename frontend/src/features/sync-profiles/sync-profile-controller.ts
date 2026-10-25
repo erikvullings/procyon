@@ -1,5 +1,5 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { t } from '../../i18n';
+import { errorText, t } from '../../i18n';
 import type {
   PaneId,
   Settings,
@@ -71,7 +71,7 @@ export interface SyncProfileController {
 /** Actionable text for a failed run; names the side and what to do about it. */
 export function describeRunError(error: unknown): string {
   if (!(error instanceof SyncRunError)) {
-    return error instanceof Error ? error.message : String(error);
+    return errorText(error);
   }
   const side =
     error.side === undefined

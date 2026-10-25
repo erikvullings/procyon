@@ -4,6 +4,7 @@
 //! publication. Concrete filesystem mutations are added independently by
 //! tasks 0037 through 0044.
 
+pub mod codes;
 mod model;
 mod naming;
 mod pause;

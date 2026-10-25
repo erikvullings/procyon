@@ -1,5 +1,5 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { t } from '../../i18n';
+import { errorText, t } from '../../i18n';
 import type { Location, MusicDuplicateGroup, MusicDuplicatePage } from '../../models';
 import type { OperationsController } from '../operations/operations-controller';
 import {
@@ -41,7 +41,7 @@ export interface MusicDuplicatesController {
 }
 
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return errorText(error);
 }
 
 export function createMusicDuplicatesController(

@@ -230,7 +230,7 @@ import { comparisonPageFromDto, syncPlanFromDto } from '../../models/requests';
 import { directorySnapshotFromDto } from '../../models/snapshot';
 import { workspaceProjectionFromDto } from '../../models/workspace';
 import { SseEventStream } from '../events/sse-event-stream';
-import { resolveBaseUrl } from '../fetch-mutator';
+import { ApiError, resolveBaseUrl, unexpectedResponseError } from '../fetch-mutator';
 import {
   invokeAction as requestActionInvocation,
   listActions as requestActions,
@@ -445,7 +445,11 @@ export class HttpFileManagerClient implements FileManagerClient {
   readonly supportsAppDataRemoval = false;
   async openExternalUrl(url: string): Promise<void> {
     const opened = globalThis.open(url, '_blank', 'noopener,noreferrer');
-    if (opened === null) throw new Error('The browser blocked the external link.');
+    if (opened === null)
+      throw new ApiError(0, {
+        code: 'externalLinkBlocked',
+        message: 'The browser blocked the external link.',
+      });
     opened.opener = null;
   }
   private readonly eventStream = new SseEventStream({ tokenProvider: getSessionToken });
@@ -504,7 +508,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 204) {
-      throw new Error(`Unexpected cacheArchivePassword response status: ${response.status}`);
+      throw unexpectedResponseError('cacheArchivePassword', response.status);
     }
   }
   async getRuntimeCapabilities(signal?: AbortSignal): Promise<RuntimeCapabilities> {
@@ -528,7 +532,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected getSemanticComponentStatus response status: ${response.status}`);
+      throw unexpectedResponseError('getSemanticComponentStatus', response.status);
     }
     return response.data;
   }
@@ -536,9 +540,7 @@ export class HttpFileManagerClient implements FileManagerClient {
   async listSemanticComponentProfiles(signal?: AbortSignal): Promise<SemanticModelProfile[]> {
     const response = await requestSemanticProfiles(signal === undefined ? undefined : { signal });
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected listSemanticComponentProfiles response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('listSemanticComponentProfiles', response.status);
     }
     return response.data;
   }
@@ -553,7 +555,10 @@ export class HttpFileManagerClient implements FileManagerClient {
     _request: import('../../models/semantic-components').InitializeGemmaLibraryRequest,
     _signal?: AbortSignal,
   ): Promise<void> {
-    throw new Error('A Gemma library can only be initialized on the desktop host.');
+    throw new ApiError(0, {
+      code: 'desktopHostRequired',
+      message: 'A Gemma library can only be initialized on the desktop host.',
+    });
   }
 
   async createSemanticComponentInstallationOffer(
@@ -565,9 +570,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected createSemanticComponentInstallationOffer response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('createSemanticComponentInstallationOffer', response.status);
     }
     return response.data;
   }
@@ -581,9 +584,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected acceptSemanticComponentInstallationOffer response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('acceptSemanticComponentInstallationOffer', response.status);
     }
     return response.data;
   }
@@ -593,9 +594,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 204) {
-      throw new Error(
-        `Unexpected pauseSemanticComponentIndexing response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('pauseSemanticComponentIndexing', response.status);
     }
   }
 
@@ -604,9 +603,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 204) {
-      throw new Error(
-        `Unexpected resumeSemanticComponentIndexing response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('resumeSemanticComponentIndexing', response.status);
     }
   }
 
@@ -619,9 +616,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected createSemanticComponentIndexRemovalPlan response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('createSemanticComponentIndexRemovalPlan', response.status);
     }
     return response.data;
   }
@@ -635,9 +630,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected confirmSemanticComponentIndexRemoval response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('confirmSemanticComponentIndexRemoval', response.status);
     }
     return response.data;
   }
@@ -651,7 +644,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected moveSemanticComponentData response status: ${response.status}`);
+      throw unexpectedResponseError('moveSemanticComponentData', response.status);
     }
     return response.data;
   }
@@ -665,7 +658,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected uninstallSemanticComponents response status: ${response.status}`);
+      throw unexpectedResponseError('uninstallSemanticComponents', response.status);
     }
     return response.data;
   }
@@ -679,9 +672,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected installSemanticComponentWorkerPatch response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('installSemanticComponentWorkerPatch', response.status);
     }
     return response.data;
   }
@@ -695,9 +686,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected importSemanticComponentLocalModel response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('importSemanticComponentLocalModel', response.status);
     }
     return response.data;
   }
@@ -711,9 +700,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected planSemanticComponentModelMigration response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('planSemanticComponentModelMigration', response.status);
     }
     return response.data;
   }
@@ -727,9 +714,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected confirmSemanticComponentModelMigration response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('confirmSemanticComponentModelMigration', response.status);
     }
     return response.data;
   }
@@ -743,9 +728,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected checkpointSemanticComponentModelMigration response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('checkpointSemanticComponentModelMigration', response.status);
     }
     return response.data;
   }
@@ -759,9 +742,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected completeSemanticComponentModelMigration response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('completeSemanticComponentModelMigration', response.status);
     }
     return response.data;
   }
@@ -816,7 +797,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected getSemanticLibraryStatus response status: ${response.status}`);
+      throw unexpectedResponseError('getSemanticLibraryStatus', response.status);
     }
     return response.data;
   }
@@ -830,7 +811,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected updateGemmaMedia response status: ${response.status}`);
+      throw unexpectedResponseError('updateGemmaMedia', response.status);
     }
     return response.data;
   }
@@ -916,7 +897,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected getSemanticFolderStatus response status: ${response.status}`);
+      throw unexpectedResponseError('getSemanticFolderStatus', response.status);
     }
     return response.data;
   }
@@ -930,7 +911,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected previewSemanticEnrolment response status: ${response.status}`);
+      throw unexpectedResponseError('previewSemanticEnrolment', response.status);
     }
     return response.data;
   }
@@ -944,7 +925,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected confirmSemanticEnrolment response status: ${response.status}`);
+      throw unexpectedResponseError('confirmSemanticEnrolment', response.status);
     }
     return response.data;
   }
@@ -958,7 +939,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected planSemanticExclusion response status: ${response.status}`);
+      throw unexpectedResponseError('planSemanticExclusion', response.status);
     }
     return response.data;
   }
@@ -972,7 +953,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected confirmSemanticExclusion response status: ${response.status}`);
+      throw unexpectedResponseError('confirmSemanticExclusion', response.status);
     }
     return response.data;
   }
@@ -986,7 +967,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected resumeSemanticCleanup response status: ${response.status}`);
+      throw unexpectedResponseError('resumeSemanticCleanup', response.status);
     }
     return response.data;
   }
@@ -1000,7 +981,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected pauseSemanticLibrary response status: ${response.status}`);
+      throw unexpectedResponseError('pauseSemanticLibrary', response.status);
     }
     return response.data;
   }
@@ -1014,7 +995,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected resumeSemanticLibrary response status: ${response.status}`);
+      throw unexpectedResponseError('resumeSemanticLibrary', response.status);
     }
     return response.data;
   }
@@ -1028,9 +1009,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected updateSemanticEligibilityOverrides response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('updateSemanticEligibilityOverrides', response.status);
     }
     return response.data;
   }
@@ -1041,7 +1020,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 202) {
-      throw new Error(`Unexpected scanDiskUsage response status: ${response.status}`);
+      throw unexpectedResponseError('scanDiskUsage', response.status);
     }
   }
 
@@ -1051,7 +1030,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 204) {
-      throw new Error(`Unexpected cancelDiskUsage response status: ${response.status}`);
+      throw unexpectedResponseError('cancelDiskUsage', response.status);
     }
   }
 
@@ -1066,14 +1045,14 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 204) {
-      throw new Error(`Unexpected recordFrontendDiagnostic response status: ${response.status}`);
+      throw unexpectedResponseError('recordFrontendDiagnostic', response.status);
     }
   }
 
   async getSystemLocations(signal?: AbortSignal): Promise<SystemLocation[]> {
     const response = await requestSystemLocations(signal === undefined ? undefined : { signal });
     if (response.status !== 200) {
-      throw new Error(`Unexpected getSystemLocations response status: ${response.status}`);
+      throw unexpectedResponseError('getSystemLocations', response.status);
     }
     return response.data.map((item) => ({
       name: item.name,
@@ -1090,7 +1069,7 @@ export class HttpFileManagerClient implements FileManagerClient {
   async getVolumes(signal?: AbortSignal): Promise<Volume[]> {
     const response = await requestVolumes(signal === undefined ? undefined : { signal });
     if (response.status !== 200) {
-      throw new Error(`Unexpected getVolumes response status: ${response.status}`);
+      throw unexpectedResponseError('getVolumes', response.status);
     }
     return response.data.map((item) => ({ name: item.name, location: { ...item.location } }));
   }
@@ -1159,7 +1138,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected setFinderTags response status: ${response.status}`);
+      throw unexpectedResponseError('setFinderTags', response.status);
     }
     return response.data;
   }
@@ -1191,7 +1170,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected setSpotlightComment response status: ${response.status}`);
+      throw unexpectedResponseError('setSpotlightComment', response.status);
     }
     return response.data;
   }
@@ -1208,7 +1187,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected updateSettings response status: ${response.status}`);
+      throw unexpectedResponseError('updateSettings', response.status);
     }
     return settingsFromDto(response.data);
   }
@@ -1245,7 +1224,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected startWorkspace response status: ${response.status}`);
+      throw unexpectedResponseError('startWorkspace', response.status);
     }
     return workspaceProjectionFromDto(response.data, { redirectSessionOnlyTabs: true });
   }
@@ -1259,7 +1238,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201) {
-      throw new Error(`Unexpected createWorkspace response status: ${response.status}`);
+      throw unexpectedResponseError('createWorkspace', response.status);
     }
     return workspaceProjectionFromDto(response.data);
   }
@@ -1270,7 +1249,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected getWorkspace response status: ${response.status}`);
+      throw unexpectedResponseError('getWorkspace', response.status);
     }
     return workspaceProjectionFromDto(response.data, { redirectSessionOnlyTabs: true });
   }
@@ -1308,7 +1287,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected openWorkspace response status: ${response.status}`);
+      throw unexpectedResponseError('openWorkspace', response.status);
     }
     return workspaceProjectionFromDto(response.data, { redirectSessionOnlyTabs: true });
   }
@@ -1323,7 +1302,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected applyWorkspaceCommand response status: ${response.status}`);
+      throw unexpectedResponseError('applyWorkspaceCommand', response.status);
     }
     return workspaceProjectionFromDto(response.data);
   }
@@ -1334,7 +1313,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected navigatePane response status: ${response.status}`);
+      throw unexpectedResponseError('navigatePane', response.status);
     }
     return directorySnapshotFromDto(response.data);
   }
@@ -1345,16 +1324,14 @@ export class HttpFileManagerClient implements FileManagerClient {
   ): Promise<DirectorySnapshot> {
     const response = await requestDirectory(request, signal !== undefined ? { signal } : undefined);
     if (response.status !== 200) {
-      // Surface the backend's actual `ApplicationErrorDto.message` (e.g. "unsupported RAR
-      // compression method") rather than a generic status-code message - this is the archive
-      // listing path the comic (.cbz/.cbr) and EPUB viewers depend on, where the underlying
-      // cause (an archive format/feature the backend's reader can't handle) is exactly what a
-      // user needs to see to tell "this app has a bug" from "this file can't be read".
-      const message =
-        typeof response.data === 'object' && response.data !== null && 'message' in response.data
-          ? String((response.data as { message: unknown }).message)
-          : `Unexpected listDirectory response status: ${response.status}`;
-      throw new Error(message);
+      // Keep the backend's structured `ApplicationErrorDto` (code + message) so the UI shows the
+      // localised text for known codes and the backend's own reason (e.g. "unsupported RAR
+      // compression method") otherwise - the comic (.cbz/.cbr) and EPUB viewers depend on it.
+      const data: unknown = response.data;
+      if (typeof data === 'object' && data !== null && 'code' in data && 'message' in data) {
+        throw new ApiError(response.status, data as ConstructorParameters<typeof ApiError>[1]);
+      }
+      throw unexpectedResponseError('listDirectory', response.status);
     }
     return directorySnapshotFromDto(response.data);
   }
@@ -1369,7 +1346,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected listDirectoryChildren response status: ${response.status}`);
+      throw unexpectedResponseError('listDirectoryChildren', response.status);
     }
     return response.data.map(entrySummaryFromDto);
   }
@@ -1383,7 +1360,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected getEntryMetadata response status: ${response.status}`);
+      throw unexpectedResponseError('getEntryMetadata', response.status);
     }
     return entryMetadataFromDto(response.data);
   }
@@ -1394,7 +1371,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 204) {
-      throw new Error(`Unexpected setPaneActivity response status: ${response.status}`);
+      throw unexpectedResponseError('setPaneActivity', response.status);
     }
   }
 
@@ -1407,7 +1384,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected readFileRange response status: ${response.status}`);
+      throw unexpectedResponseError('readFileRange', response.status);
     }
     return response.data;
   }
@@ -1423,7 +1400,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected previewGeoConversion response status: ${response.status}`);
+      throw unexpectedResponseError('previewGeoConversion', response.status);
     }
     return response.data.reports;
   }
@@ -1438,7 +1415,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected previewGeoMinify response status: ${response.status}`);
+      throw unexpectedResponseError('previewGeoMinify', response.status);
     }
     return response.data as unknown as GeoMinifyPreview;
   }
@@ -1454,7 +1431,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected convertGeoText response status: ${response.status}`);
+      throw unexpectedResponseError('convertGeoText', response.status);
     }
     return response.data;
   }
@@ -1465,7 +1442,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected parseGeoText response status: ${response.status}`);
+      throw unexpectedResponseError('parseGeoText', response.status);
     }
     return response.data as unknown as GeoDocument;
   }
@@ -1480,7 +1457,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected readGeoFile response status: ${response.status}`);
+      throw unexpectedResponseError('readGeoFile', response.status);
     }
     return response.data as unknown as GeoDocument;
   }
@@ -1494,7 +1471,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected readImageGps response status: ${response.status}`);
+      throw unexpectedResponseError('readImageGps', response.status);
     }
     return response.data.entries;
   }
@@ -1505,7 +1482,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected readImageMetadata response status: ${response.status}`);
+      throw unexpectedResponseError('readImageMetadata', response.status);
     }
     return response.data;
   }
@@ -1519,7 +1496,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected inspectAttributes response status: ${response.status}`);
+      throw unexpectedResponseError('inspectAttributes', response.status);
     }
     return response.data;
   }
@@ -1540,7 +1517,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected diffFiles response status: ${response.status}`);
+      throw unexpectedResponseError('diffFiles', response.status);
     }
     return response.data;
   }
@@ -1554,7 +1531,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected inspectSplitSet response status: ${response.status}`);
+      throw unexpectedResponseError('inspectSplitSet', response.status);
     }
     return response.data;
   }
@@ -1570,7 +1547,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected previewAttributeChange response status: ${response.status}`);
+      throw unexpectedResponseError('previewAttributeChange', response.status);
     }
     return response.data;
   }
@@ -1584,7 +1561,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected resolveMetadataTokens response status: ${response.status}`);
+      throw unexpectedResponseError('resolveMetadataTokens', response.status);
     }
     return response.data;
   }
@@ -1609,8 +1586,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal !== undefined ? { signal } : undefined,
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected openDocxPreview response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('openDocxPreview', response.status);
     return response.data;
   }
 
@@ -1623,7 +1599,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected readDocxPreviewResource response status: ${response.status}`);
+      throw unexpectedResponseError('readDocxPreviewResource', response.status);
     return response.data;
   }
 
@@ -1632,8 +1608,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal !== undefined ? { signal } : undefined,
     );
-    if (response.status !== 204)
-      throw new Error(`Unexpected closeDocxPreview response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('closeDocxPreview', response.status);
   }
 
   async openPptxPreview(
@@ -1644,8 +1619,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal !== undefined ? { signal } : undefined,
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected openPptxPreview response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('openPptxPreview', response.status);
     return response.data;
   }
 
@@ -1658,7 +1632,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected readPptxPreviewPdf response status: ${response.status}`);
+      throw unexpectedResponseError('readPptxPreviewPdf', response.status);
     return response.data;
   }
 
@@ -1667,8 +1641,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal !== undefined ? { signal } : undefined,
     );
-    if (response.status !== 204)
-      throw new Error(`Unexpected closePptxPreview response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('closePptxPreview', response.status);
   }
 
   async openStructuredView(
@@ -1680,7 +1653,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected openStructuredView response status: ${response.status}`);
+      throw unexpectedResponseError('openStructuredView', response.status);
     return response.data;
   }
 
@@ -1693,7 +1666,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected getStructuredViewStatus response status: ${response.status}`);
+      throw unexpectedResponseError('getStructuredViewStatus', response.status);
     return response.data;
   }
 
@@ -1706,7 +1679,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected updateStructuredView response status: ${response.status}`);
+      throw unexpectedResponseError('updateStructuredView', response.status);
     return response.data;
   }
 
@@ -1719,7 +1692,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected readStructuredRows response status: ${response.status}`);
+      throw unexpectedResponseError('readStructuredRows', response.status);
     return response.data;
   }
 
@@ -1732,7 +1705,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected readStructuredJsonWindow response status: ${response.status}`);
+      throw unexpectedResponseError('readStructuredJsonWindow', response.status);
     return response.data;
   }
 
@@ -1745,7 +1718,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected searchStructuredRows response status: ${response.status}`);
+      throw unexpectedResponseError('searchStructuredRows', response.status);
     return response.data;
   }
 
@@ -1758,7 +1731,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 204)
-      throw new Error(`Unexpected closeStructuredView response status: ${response.status}`);
+      throw unexpectedResponseError('closeStructuredView', response.status);
   }
 
   async openSqliteView(request: OpenSqliteViewRequest, signal?: AbortSignal): Promise<SqliteView> {
@@ -1766,8 +1739,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal !== undefined ? { signal } : undefined,
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected openSqliteView response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('openSqliteView', response.status);
     return response.data;
   }
 
@@ -1779,8 +1751,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal !== undefined ? { signal } : undefined,
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected querySqliteView response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('querySqliteView', response.status);
     return response.data;
   }
 
@@ -1789,8 +1760,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal !== undefined ? { signal } : undefined,
     );
-    if (response.status !== 204)
-      throw new Error(`Unexpected closeSqliteView response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('closeSqliteView', response.status);
   }
 
   async loadEditableFile(
@@ -1801,8 +1771,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal !== undefined ? { signal } : undefined,
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected loadEditableFile response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('loadEditableFile', response.status);
     return response.data;
   }
 
@@ -1814,8 +1783,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal !== undefined ? { signal } : undefined,
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected saveEditableFile response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('saveEditableFile', response.status);
     return response.data;
   }
 
@@ -1828,7 +1796,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected searchInFile response status: ${response.status}`);
+      throw unexpectedResponseError('searchInFile', response.status);
     }
     return response.data;
   }
@@ -1842,7 +1810,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected calculateFolderSize response status: ${response.status}`);
+      throw unexpectedResponseError('calculateFolderSize', response.status);
     }
     return response.data;
   }
@@ -1856,7 +1824,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected archiveSummary response status: ${response.status}`);
+      throw unexpectedResponseError('archiveSummary', response.status);
     }
     return response.data;
   }
@@ -1870,9 +1838,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected discoverApplicationUninstallCandidates response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('discoverApplicationUninstallCandidates', response.status);
     }
     return response.data;
   }
@@ -1886,7 +1852,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected removeApplicationDockIcon response status: ${response.status}`);
+      throw unexpectedResponseError('removeApplicationDockIcon', response.status);
     }
     return response.data;
   }
@@ -1900,7 +1866,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal !== undefined ? { signal } : undefined,
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected gitFileHistory response status: ${response.status}`);
+      throw unexpectedResponseError('gitFileHistory', response.status);
     }
     return response.data;
   }
@@ -1917,7 +1883,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201) {
-      throw new Error(`Unexpected startOperation response status: ${response.status}`);
+      throw unexpectedResponseError('startOperation', response.status);
     }
     return operationFromDto(response.data);
   }
@@ -1928,7 +1894,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected getLinkOptions response status: ${response.status}`);
+      throw unexpectedResponseError('getLinkOptions', response.status);
     }
     return response.data;
   }
@@ -1939,7 +1905,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected resolveLinkTarget response status: ${response.status}`);
+      throw unexpectedResponseError('resolveLinkTarget', response.status);
     }
     return entrySummaryFromDto(response.data);
   }
@@ -1957,8 +1923,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       operationId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 204)
-      throw new Error(`Unexpected cancelOperation response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('cancelOperation', response.status);
   }
 
   async undoOperation(operationId: OperationId, signal?: AbortSignal): Promise<Operation> {
@@ -1966,8 +1931,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       operationId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 201)
-      throw new Error(`Unexpected undoOperation response status: ${response.status}`);
+    if (response.status !== 201) throw unexpectedResponseError('undoOperation', response.status);
     return operationFromDto(response.data);
   }
 
@@ -1976,8 +1940,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       operationId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 204)
-      throw new Error(`Unexpected pauseOperation response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('pauseOperation', response.status);
   }
 
   async resumeOperation(operationId: OperationId, signal?: AbortSignal): Promise<void> {
@@ -1985,8 +1948,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       operationId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 204)
-      throw new Error(`Unexpected resumeOperation response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('resumeOperation', response.status);
   }
 
   async resolveConflict(request: ResolveConflictRequest, signal?: AbortSignal): Promise<void> {
@@ -1995,8 +1957,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       { resolution: request.resolution, applyToAllSimilar: request.applyToAllSimilar },
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 204)
-      throw new Error(`Unexpected resolveConflict response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('resolveConflict', response.status);
   }
 
   async startSearch(request: StartSearchRequest, signal?: AbortSignal): Promise<StartSearchResult> {
@@ -2051,7 +2012,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201) {
-      throw new Error(`Unexpected startSearch response status: ${response.status}`);
+      throw unexpectedResponseError('startSearch', response.status);
     }
     return {
       searchId: response.data.searchId,
@@ -2072,8 +2033,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       searchId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 204)
-      throw new Error(`Unexpected cancelSearch response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('cancelSearch', response.status);
   }
 
   async startComparison(
@@ -2091,7 +2051,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201) {
-      throw new Error(`Unexpected startComparison response status: ${response.status}`);
+      throw unexpectedResponseError('startComparison', response.status);
     }
     return { comparisonId: response.data.comparisonId };
   }
@@ -2113,7 +2073,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected getComparison response status: ${response.status}`);
+      throw unexpectedResponseError('getComparison', response.status);
     }
     return comparisonPageFromDto(response.data);
   }
@@ -2123,8 +2083,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       comparisonId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 204)
-      throw new Error(`Unexpected cancelComparison response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('cancelComparison', response.status);
   }
 
   async startChecksums(
@@ -2140,7 +2099,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201) {
-      throw new Error(`Unexpected startChecksums response status: ${response.status}`);
+      throw unexpectedResponseError('startChecksums', response.status);
     }
     return { jobId: response.data.jobId };
   }
@@ -2159,7 +2118,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected getChecksums response status: ${response.status}`);
+      throw unexpectedResponseError('getChecksums', response.status);
     }
     return checksumPageFromDto(response.data);
   }
@@ -2169,8 +2128,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       jobId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 204)
-      throw new Error(`Unexpected cancelChecksums response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('cancelChecksums', response.status);
   }
 
   async renderChecksumFile(
@@ -2184,7 +2142,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected renderChecksumFile response status: ${response.status}`);
+      throw unexpectedResponseError('renderChecksumFile', response.status);
     }
     return { suggestedName: response.data.suggestedName, content: response.data.content };
   }
@@ -2204,7 +2162,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201) {
-      throw new Error(`Unexpected saveChecksumFile response status: ${response.status}`);
+      throw unexpectedResponseError('saveChecksumFile', response.status);
     }
     return { location: response.data.location, bytesWritten: response.data.bytesWritten };
   }
@@ -2220,7 +2178,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected verifyChecksumFile response status: ${response.status}`);
+      throw unexpectedResponseError('verifyChecksumFile', response.status);
     }
     return verificationReportFromDto(response.data);
   }
@@ -2241,7 +2199,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201) {
-      throw new Error(`Unexpected startDuplicateScan response status: ${response.status}`);
+      throw unexpectedResponseError('startDuplicateScan', response.status);
     }
     return { scanId: response.data.scanId };
   }
@@ -2260,7 +2218,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected getDuplicateScan response status: ${response.status}`);
+      throw unexpectedResponseError('getDuplicateScan', response.status);
     }
     return duplicatePageFromDto(response.data);
   }
@@ -2271,7 +2229,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 204)
-      throw new Error(`Unexpected cancelDuplicateScan response status: ${response.status}`);
+      throw unexpectedResponseError('cancelDuplicateScan', response.status);
   }
 
   async startMusicDuplicateScan(
@@ -2286,7 +2244,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201) {
-      throw new Error(`Unexpected startMusicDuplicateScan response status: ${response.status}`);
+      throw unexpectedResponseError('startMusicDuplicateScan', response.status);
     }
     return { scanId: response.data.scanId };
   }
@@ -2305,7 +2263,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected getMusicDuplicateScan response status: ${response.status}`);
+      throw unexpectedResponseError('getMusicDuplicateScan', response.status);
     }
     return response.data;
   }
@@ -2316,7 +2274,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 204) {
-      throw new Error(`Unexpected cancelMusicDuplicateScan response status: ${response.status}`);
+      throw unexpectedResponseError('cancelMusicDuplicateScan', response.status);
     }
   }
 
@@ -2326,7 +2284,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 204) {
-      throw new Error(`Unexpected forgetFolderView response status: ${response.status}`);
+      throw unexpectedResponseError('forgetFolderView', response.status);
     }
   }
 
@@ -2339,7 +2297,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201) {
-      throw new Error(`Unexpected startSnapshotJob response status: ${response.status}`);
+      throw unexpectedResponseError('startSnapshotJob', response.status);
     }
     return { jobId: response.data.jobId };
   }
@@ -2358,7 +2316,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected getSnapshotJob response status: ${response.status}`);
+      throw unexpectedResponseError('getSnapshotJob', response.status);
     }
     return response.data;
   }
@@ -2369,7 +2327,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 204) {
-      throw new Error(`Unexpected cancelSnapshotJob response status: ${response.status}`);
+      throw unexpectedResponseError('cancelSnapshotJob', response.status);
     }
   }
 
@@ -2385,7 +2343,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201) {
-      throw new Error(`Unexpected startLinkDoctorScan response status: ${response.status}`);
+      throw unexpectedResponseError('startLinkDoctorScan', response.status);
     }
     return { scanId: response.data.scanId };
   }
@@ -2404,7 +2362,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected getLinkDoctorScan response status: ${response.status}`);
+      throw unexpectedResponseError('getLinkDoctorScan', response.status);
     }
     return response.data;
   }
@@ -2415,7 +2373,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 204) {
-      throw new Error(`Unexpected cancelLinkDoctorScan response status: ${response.status}`);
+      throw unexpectedResponseError('cancelLinkDoctorScan', response.status);
     }
   }
 
@@ -2428,7 +2386,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected findLinkReplacements response status: ${response.status}`);
+      throw unexpectedResponseError('findLinkReplacements', response.status);
     }
     return response.data;
   }
@@ -2448,7 +2406,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected generateSyncPlan response status: ${response.status}`);
+      throw unexpectedResponseError('generateSyncPlan', response.status);
     }
     return syncPlanFromDto(response.data);
   }
@@ -2467,7 +2425,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201) {
-      throw new Error(`Unexpected applySyncPlan response status: ${response.status}`);
+      throw unexpectedResponseError('applySyncPlan', response.status);
     }
     return { operationIds: response.data.operationIds as OperationId[] };
   }
@@ -2514,7 +2472,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected invokeAction response status: ${response.status}`);
+      throw unexpectedResponseError('invokeAction', response.status);
     }
     return {
       actionId: response.data.actionId,
@@ -2525,8 +2483,7 @@ export class HttpFileManagerClient implements FileManagerClient {
 
   async listPlugins(signal?: AbortSignal): Promise<PluginDescriptor[]> {
     const response = await requestPlugins(signal === undefined ? undefined : { signal });
-    if (response.status !== 200)
-      throw new Error(`Unexpected listPlugins response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('listPlugins', response.status);
     return response.data.map((plugin) => ({
       id: plugin.id,
       name: plugin.name,
@@ -2563,8 +2520,7 @@ export class HttpFileManagerClient implements FileManagerClient {
     const response = enabled
       ? await requestPluginEnable(pluginId, options)
       : await requestPluginDisable(pluginId, options);
-    if (response.status !== 204)
-      throw new Error(`Unexpected setPluginEnabled response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('setPluginEnabled', response.status);
   }
 
   async getPluginLogs(pluginId: PluginId, signal?: AbortSignal): Promise<PluginLogEntry[]> {
@@ -2572,8 +2528,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       pluginId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected getPluginLogs response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('getPluginLogs', response.status);
     return response.data.map((entry) => ({ message: entry.message }));
   }
 
@@ -2588,7 +2543,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected renderPluginPreview response status: ${response.status}`);
+      throw unexpectedResponseError('renderPluginPreview', response.status);
     return response.data;
   }
 
@@ -2603,7 +2558,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected getPluginIconThemeAsset response status: ${response.status}`);
+      throw unexpectedResponseError('getPluginIconThemeAsset', response.status);
     return response.data;
   }
 
@@ -2624,14 +2579,13 @@ export class HttpFileManagerClient implements FileManagerClient {
   async listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]> {
     const response = await requestLlmProfilePresets(signal === undefined ? undefined : { signal });
     if (response.status !== 200)
-      throw new Error(`Unexpected listLlmProfilePresets response status: ${response.status}`);
+      throw unexpectedResponseError('listLlmProfilePresets', response.status);
     return response.data;
   }
 
   async listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
     const response = await requestLlmProfiles(signal === undefined ? undefined : { signal });
-    if (response.status !== 200)
-      throw new Error(`Unexpected listLlmProfiles response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('listLlmProfiles', response.status);
     return response.data;
   }
 
@@ -2643,8 +2597,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 201)
-      throw new Error(`Unexpected createLlmProfile response status: ${response.status}`);
+    if (response.status !== 201) throw unexpectedResponseError('createLlmProfile', response.status);
     return response.data;
   }
 
@@ -2658,8 +2611,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected updateLlmProfile response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('updateLlmProfile', response.status);
     return response.data;
   }
 
@@ -2673,8 +2625,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 204)
-      throw new Error(`Unexpected deleteLlmProfile response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('deleteLlmProfile', response.status);
   }
 
   async cloneLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfile> {
@@ -2682,8 +2633,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       profileId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 201)
-      throw new Error(`Unexpected cloneLlmProfile response status: ${response.status}`);
+    if (response.status !== 201) throw unexpectedResponseError('cloneLlmProfile', response.status);
     return response.data;
   }
 
@@ -2692,8 +2642,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       profileId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected exportLlmProfile response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('exportLlmProfile', response.status);
     return response.data;
   }
 
@@ -2708,7 +2657,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected activateLlmProfile response status: ${response.status}`);
+      throw unexpectedResponseError('activateLlmProfile', response.status);
     return response.data;
   }
 
@@ -2717,8 +2666,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       profileId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected testLlmProfile response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('testLlmProfile', response.status);
     return response.data;
   }
 
@@ -2728,7 +2676,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected discoverLlmProfileModels response status: ${response.status}`);
+      throw unexpectedResponseError('discoverLlmProfileModels', response.status);
     return response.data;
   }
 
@@ -2741,9 +2689,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(
-        `Unexpected discoverLlmProfileDraftModels response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('discoverLlmProfileDraftModels', response.status);
     return response.data;
   }
 
@@ -2756,9 +2702,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(
-        `Unexpected discoverLlmProfileDraftModelLimits response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('discoverLlmProfileDraftModelLimits', response.status);
     return response.data;
   }
 
@@ -2771,7 +2715,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected previewDocumentSummary response status: ${response.status}`);
+      throw unexpectedResponseError('previewDocumentSummary', response.status);
     return response.data;
   }
 
@@ -2784,7 +2728,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected generateDocumentSummary response status: ${response.status}`);
+      throw unexpectedResponseError('generateDocumentSummary', response.status);
     return response.data;
   }
 
@@ -2797,7 +2741,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected getDocumentSummary response status: ${response.status}`);
+      throw unexpectedResponseError('getDocumentSummary', response.status);
     return response.data;
   }
 
@@ -2806,8 +2750,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected previewRag response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('previewRag', response.status);
     return response.data;
   }
 
@@ -2820,7 +2763,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected generateRagAnswer response status: ${response.status}`);
+      throw unexpectedResponseError('generateRagAnswer', response.status);
     return response.data;
   }
 
@@ -2833,7 +2776,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected saveRagConversation response status: ${response.status}`);
+      throw unexpectedResponseError('saveRagConversation', response.status);
     return response.data;
   }
 
@@ -2846,7 +2789,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected listSavedRagConversations response status: ${response.status}`);
+      throw unexpectedResponseError('listSavedRagConversations', response.status);
     return response.data;
   }
 
@@ -2859,7 +2802,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 204)
-      throw new Error(`Unexpected deleteRagConversation response status: ${response.status}`);
+      throw unexpectedResponseError('deleteRagConversation', response.status);
   }
 
   async resolveRagCitation(
@@ -2871,7 +2814,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected resolveRagCitation response status: ${response.status}`);
+      throw unexpectedResponseError('resolveRagCitation', response.status);
     return response.data;
   }
 
@@ -2880,7 +2823,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected getKnowledgeCapabilities response status: ${response.status}`);
+      throw unexpectedResponseError('getKnowledgeCapabilities', response.status);
     return response.data;
   }
 
@@ -2893,7 +2836,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected listKnowledgeRoots response status: ${response.status}`);
+      throw unexpectedResponseError('listKnowledgeRoots', response.status);
     return response.data;
   }
 
@@ -2906,7 +2849,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected parseKnowledgeQuery response status: ${response.status}`);
+      throw unexpectedResponseError('parseKnowledgeQuery', response.status);
     return response.data;
   }
 
@@ -2919,7 +2862,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected planKnowledgeSearch response status: ${response.status}`);
+      throw unexpectedResponseError('planKnowledgeSearch', response.status);
     return response.data;
   }
 
@@ -2950,7 +2893,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       if (signal?.aborted === true)
         throw new DOMException('Knowledge search was cancelled', 'AbortError');
       if (response.status !== 200)
-        throw new Error(`Unexpected executeKnowledgeSearch response status: ${response.status}`);
+        throw unexpectedResponseError('executeKnowledgeSearch', response.status);
       return response.data;
     } finally {
       signal?.removeEventListener('abort', cancel);
@@ -2966,7 +2909,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 204)
-      throw new Error(`Unexpected cancelKnowledgeSearch response status: ${response.status}`);
+      throw unexpectedResponseError('cancelKnowledgeSearch', response.status);
   }
 
   async resolveKnowledgeSource(
@@ -2978,7 +2921,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected resolveKnowledgeSource response status: ${response.status}`);
+      throw unexpectedResponseError('resolveKnowledgeSource', response.status);
     return response.data;
   }
 
@@ -3011,7 +2954,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       if (signal?.aborted === true)
         throw new DOMException('Knowledge answer generation was cancelled', 'AbortError');
       if (response.status !== 200)
-        throw new Error(`Unexpected generateKnowledgeAnswer response status: ${response.status}`);
+        throw unexpectedResponseError('generateKnowledgeAnswer', response.status);
       return response.data;
     } finally {
       signal?.removeEventListener('abort', cancel);
@@ -3027,13 +2970,12 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 204)
-      throw new Error(`Unexpected cancelKnowledgeAnswer response status: ${response.status}`);
+      throw unexpectedResponseError('cancelKnowledgeAnswer', response.status);
   }
 
   async listConnections(signal?: AbortSignal): Promise<Connection[]> {
     const response = await requestConnections(signal === undefined ? undefined : { signal });
-    if (response.status !== 200)
-      throw new Error(`Unexpected listConnections response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('listConnections', response.status);
     return response.data;
   }
 
@@ -3045,8 +2987,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 201)
-      throw new Error(`Unexpected createConnection response status: ${response.status}`);
+    if (response.status !== 201) throw unexpectedResponseError('createConnection', response.status);
     return response.data;
   }
 
@@ -3055,8 +2996,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       connectionId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected getConnection response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('getConnection', response.status);
     return response.data;
   }
 
@@ -3070,8 +3010,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       request,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected updateConnection response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('updateConnection', response.status);
     return response.data;
   }
 
@@ -3080,8 +3019,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       connectionId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 204)
-      throw new Error(`Unexpected deleteConnection response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('deleteConnection', response.status);
   }
 
   async connectConnection(connectionId: ConnectionId, signal?: AbortSignal): Promise<Connection> {
@@ -3090,7 +3028,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected connectConnection response status: ${response.status}`);
+      throw unexpectedResponseError('connectConnection', response.status);
     return response.data;
   }
 
@@ -3103,7 +3041,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected disconnectConnection response status: ${response.status}`);
+      throw unexpectedResponseError('disconnectConnection', response.status);
     return response.data;
   }
 
@@ -3112,8 +3050,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       connectionId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected testConnection response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('testConnection', response.status);
     return response.data;
   }
 
@@ -3132,9 +3069,7 @@ export class HttpFileManagerClient implements FileManagerClient {
         signal === undefined ? undefined : { signal },
       );
       if (response.status !== 201) {
-        throw new Error(
-          `Unexpected beginOneDriveAuthorization response status: ${response.status}`,
-        );
+        throw unexpectedResponseError('beginOneDriveAuthorization', response.status);
       }
       authorizationWindow.location.href = trustedOneDriveAuthorizationUrl(
         response.data.authorizationUrl,
@@ -3155,9 +3090,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(
-        `Unexpected getOneDriveAuthorizationAttempt response status: ${response.status}`,
-      );
+      throw unexpectedResponseError('getOneDriveAuthorizationAttempt', response.status);
     }
     return response.data;
   }
@@ -3171,7 +3104,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) {
-      throw new Error(`Unexpected cancelOneDriveAuthorization response status: ${response.status}`);
+      throw unexpectedResponseError('cancelOneDriveAuthorization', response.status);
     }
     return response.data;
   }
@@ -3181,8 +3114,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       connectionId,
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 200)
-      throw new Error(`Unexpected probeSshHostKey response status: ${response.status}`);
+    if (response.status !== 200) throw unexpectedResponseError('probeSshHostKey', response.status);
     return response.data;
   }
 
@@ -3196,8 +3128,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       { fingerprint },
       signal === undefined ? undefined : { signal },
     );
-    if (response.status !== 204)
-      throw new Error(`Unexpected acceptSshHostKey response status: ${response.status}`);
+    if (response.status !== 204) throw unexpectedResponseError('acceptSshHostKey', response.status);
   }
 }
 

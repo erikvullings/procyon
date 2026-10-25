@@ -17843,6 +17843,23 @@
             ],
             "description": "Concise terminal outcome retained with the operation history."
           },
+          "resultSummaryCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable code for `result_summary`; clients localise it and fall back to the English text."
+          },
+          "resultSummaryParams": {
+            "type": "object",
+            "description": "Interpolation values (item and warning counts) for `result_summary_code`.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
           "sources": {
             "type": "array",
             "items": {
@@ -17888,13 +17905,30 @@
           "message"
         ],
         "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable code clients map to localised text."
+          },
           "entry": {
             "$ref": "#/components/schemas/EntryRefDto",
             "description": "Entry that could not be processed."
           },
           "message": {
             "type": "string",
-            "description": "Sanitized error message."
+            "description": "Sanitized English error message (fallback when `code` is absent or unknown)."
+          },
+          "params": {
+            "type": "object",
+            "description": "Interpolation values (names, sizes, counts) for `code`.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           }
         }
       },
@@ -18105,6 +18139,13 @@
               "null"
             ],
             "description": "Explanation when undo is unavailable."
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable code for `reason` when the backend has one; clients fall back to `reason`."
           }
         }
       },

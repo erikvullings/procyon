@@ -1,7 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { t } from '../../i18n';
+import { errorText, t } from '../../i18n';
 import type { DiffRow, DiffSegment, FileDiffResult, Location } from '../../models';
 import { calculateVisibleWindow, scrollOffsetForIndex } from '../directory-table/windowing';
 import { adjacentChange, changeBlockAt } from './file-diff-actions';
@@ -106,7 +106,7 @@ export const FileDiffDialog: FactoryComponent<FileDiffDialogAttrs> = () => {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        failure = error instanceof Error ? error.message : String(error);
+        failure = errorText(error);
         m.redraw();
       });
   }

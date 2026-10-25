@@ -2222,6 +2222,116 @@ export const nl = {
       'De onderzochte zoekresultaten zijn niet meer beschikbaar. Voer de zoekopdracht opnieuw uit.',
     internal: 'Er is een interne fout opgetreden.',
     networkUnavailable: 'Server niet bereikbaar. Controleer je verbinding.',
+    unexpectedResponse: 'De server gaf een onverwacht antwoord.',
+    externalLinkBlocked: 'De browser heeft de externe link geblokkeerd.',
+    desktopHostRequired: 'Deze actie is alleen beschikbaar in de desktop-app.',
+    unknownFailure: 'Er is een onbekende fout opgetreden.',
+  },
+  /** Localised copy for stable semantic component and library error codes; keys are the camelCase codes. */
+  semanticError: {
+    unavailable: 'De semantische functie is niet beschikbaar.',
+    authorityDenied: 'Deze host staat die semantische actie niet toe.',
+    consentRequired: 'Installatie vereist uw uitdrukkelijke toestemming voor het huidige aanbod.',
+    invalidLocalModelMetadata: 'De metadata van het lokale model is onvolledig of ongeldig.',
+    invalidLifecycle:
+      'Die actie is niet geldig in de huidige toestand van de semantische componenten.',
+    invalidEnrolment: 'De mapidentificatie is ongeldig.',
+    invalidMigrationPlan: 'Het migratieplan voor het model is verouderd. Controleer het opnieuw.',
+    invalidMigrationProgress: 'De gemelde migratievoortgang is ongeldig.',
+    executableDownloadProhibited:
+      'Deze distributie staat het downloaden van uitvoerbare componenten niet toe.',
+    catalog: 'De componentencatalogus is niet beschikbaar of niet compatibel. ({detail})',
+    insufficientSpace:
+      'Onvoldoende vrije schijfruimte: {required} nodig inclusief reserve, {available} beschikbaar.',
+    downloadInterrupted: 'De download is onderbroken. Probeer het opnieuw. ({detail})',
+    artifactVerificationFailed:
+      'Een gedownloade component heeft de integriteitscontrole niet doorstaan en is geweigerd.',
+    activationFailed: 'Een gedownloade component kon niet worden geactiveerd. ({detail})',
+    freeSpaceProbe: 'De beschikbare schijfruimte kon niet worden bepaald. ({detail})',
+    state:
+      'De status van de semantische componenten kon niet worden gelezen of opgeslagen. ({detail})',
+    filesystem: 'Een bestandsbewerking voor de semantische componenten is mislukt. ({detail})',
+    indexing: 'Het semantisch indexeren is mislukt. ({detail})',
+    indexRemoval: 'De semantische indexgegevens konden niet worden verwijderd. ({detail})',
+    dataMigration: 'De semantische gegevensmigratie is mislukt. ({detail})',
+    blockingTaskFailed:
+      'Een achtergrondtaak voor de semantische componenten is mislukt. ({detail})',
+    diskUseOverflow: 'Het semantische schijfgebruik kon niet worden berekend.',
+    accessDenied: 'Toegang tot de semantische bibliotheek is geweigerd.',
+    incompatibleLibraryIdentity:
+      'De semantische bibliotheek komt niet overeen met het actieve model. Probeer de modelmigratie opnieuw of herstel de componentconfiguratie waarmee de bibliotheek is gemaakt.',
+    workspaceRequired: 'Een actieve werkruimte en root zijn vereist.',
+    notEnrolled: 'Deze map maakt geen deel uit van de semantische bibliotheek.',
+    alreadyExcluded: 'Deze map is al uitgesloten van de semantische bibliotheek.',
+    unsafeEligibilityOverride: 'Deze geschiktheidsreden kan niet worden overschreven.',
+    staleRevision:
+      'De instellingen van de semantische bibliotheek zijn gewijzigd. Vernieuw en probeer het opnieuw.',
+    staleConfirmation: 'De bevestiging is verouderd of ongeldig. Controleer het plan opnieuw.',
+    persistence: 'De status van de semantische bibliotheek kon niet worden opgeslagen.',
+    cleanup: 'Het verwijderen van de semantische gegevens is mislukt.',
+    stateUnavailable: 'De status van de semantische bibliotheek is tijdelijk niet beschikbaar.',
+    revisionOverflow: 'De revisieteller van de semantische bibliotheek is overgelopen.',
+  },
+  /** Localised copy for per-entry operation failures; keys are the stable codes the backend attaches. */
+  operationEntryError: {
+    notFound: 'Niet gevonden.',
+    permissionDenied: 'Toegang geweigerd.',
+    locked: 'In gebruik door een ander programma.',
+    alreadyExists: 'De bestemming bestaat al.',
+    emptyName: 'De naam is leeg.',
+    invalidNameCharacters: 'De naam bevat ongeldige tekens.',
+    reservedName: 'De naam is gereserveerd.',
+    pathTraversalName: 'De naam moet uit één padcomponent bestaan.',
+    notADirectory: 'Geen map.',
+    isADirectory: 'Dit is een map.',
+    unsupportedCapability: 'Niet ondersteund door deze locatie.',
+    unsafeArchiveEntry: 'Het archief bevat een onveilig invoerpad.',
+    archiveResourceLimit: 'Het archief overschrijdt een veiligheidslimiet.',
+    credentialRequired: 'Een wachtwoord is vereist.',
+    invalidCredential: 'Het wachtwoord is onjuist.',
+    authenticationFailed: 'Verificatie mislukt. {detail}',
+    insufficientSpace: 'Onvoldoende vrije ruimte.',
+    privilegeRequired: 'Verhoogde rechten zijn vereist.',
+    linkCycle: 'De koppeling zou een kringverwijzing veroorzaken.',
+    cancelled: 'Geannuleerd.',
+    io: 'In-/uitvoerfout: {detail}',
+    invalidLocation: 'Ongeldige locatie.',
+    unknownProvider: 'Onbekende locatieprovider.',
+    platformFailed: 'De systeembewerking is mislukt: {detail}',
+    entryFailed: 'Kon niet worden verwerkt: {detail}',
+    sourceMissing: 'De bron bestaat niet meer; overgeslagen.',
+    diskSpaceCheckSkipped:
+      'Controle op schijfruimte overgeslagen op uw verzoek: {required} nodig, {available} als vrij gemeld.',
+    attributeNotPermitted:
+      'Geen toestemming om {name} te wijzigen: alleen de eigenaar of een beheerder mag rechten en eigenaarschap wijzigen.',
+    attributeUnsupported:
+      '{name} is niet gewijzigd: symbolische koppelingen en niet-ondersteunde items blijven ongemoeid.',
+    attributeEntryMissing: '{name} bestaat niet meer.',
+    attributeFailed: '{name} is niet gewijzigd: {detail}',
+    imageFormatUnsupported:
+      'Niet gewijzigd: het bewerken van metadata wordt voor dit bestandsformaat niet ondersteund.',
+    imageFieldUnsupported: 'Niet gewijzigd: dit formaat kan {field} niet opslaan.',
+    geoWrittenWithLoss: 'Geschreven als {name}. Niet weergegeven of verwijderd: {notes}.',
+    partChangedWhileJoining: '{name} is gewijzigd tijdens het samenvoegen.',
+    partDamaged:
+      '{name} komt niet overeen met het manifest; het is beschadigd of gewijzigd. Er is niets geschreven.',
+    joinedFileMismatch:
+      'Het samengevoegde bestand komt niet overeen met het manifest. Er is niets geschreven.',
+    errorsOmitted: '{count} verdere fouten zijn weggelaten uit de opgeslagen geschiedenis.',
+  },
+  /** Localised copy for operation outcome summaries; keys are the stable backend codes. */
+  operationResult: {
+    completed: '{items} items voltooid.',
+    completedWithWarnings: 'Voltooid met {count} waarschuwingen.',
+    cancelled: 'Geannuleerd na {items} items.',
+    failed: 'Bewerking mislukt.',
+    interrupted: 'Onderbroken na {items} items; niet hervat.',
+  },
+  /** Localised reasons an operation cannot be undone; keys are the stable backend codes. */
+  operationUndoReason: {
+    alreadyUndone: 'Deze bewerking is al ongedaan gemaakt.',
+    undoInProgress: 'Het ongedaan maken van deze bewerking is al bezig.',
+    undoUnsafe: 'Deze bewerking kan momenteel niet veilig ongedaan worden gemaakt.',
   },
   commandCategory: {
     recent: 'Recent gebruikt',

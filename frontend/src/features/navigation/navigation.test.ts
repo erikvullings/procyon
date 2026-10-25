@@ -637,7 +637,7 @@ describe('navigation controller', () => {
     );
     expect(context.getWorkspace()).toBe(failed);
     expect(context.views.at(-1)).toMatchObject({
-      state: { type: 'error', message: 'permission denied' },
+      state: { type: 'error', message: 'Permission denied.' },
       location: downloads,
     });
 

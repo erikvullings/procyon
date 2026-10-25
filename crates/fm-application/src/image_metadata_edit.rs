@@ -325,12 +325,19 @@ impl OperationExecutor for EditImageMetadataExecutor {
                 error @ (ImageEditError::UnsupportedFormat | ImageEditError::UnsupportedField(_)),
             ) => {
                 progress.report_bytes(size);
-                return Ok(ExecutionOutcome::CompletedWithWarnings(vec![
-                    OperationEntryError {
-                        entry: item.entry.clone(),
-                        message: format!("Not changed: {error}."),
-                    },
-                ]));
+                return Ok(ExecutionOutcome::CompletedWithWarnings(vec![{
+                    let failure = OperationEntryError::new(
+                        item.entry.clone(),
+                        format!("Not changed: {error}."),
+                    );
+                    match &error {
+                        ImageEditError::UnsupportedField(field) => failure
+                            .with_code(fm_operations::codes::entry_error::IMAGE_FIELD_UNSUPPORTED)
+                            .with_param("field", field),
+                        _ => failure
+                            .with_code(fm_operations::codes::entry_error::IMAGE_FORMAT_UNSUPPORTED),
+                    }
+                }]));
             }
             Err(error) => return Err(ExecutionError::Failed(error.to_string())),
         };

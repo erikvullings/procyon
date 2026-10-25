@@ -5,6 +5,7 @@
 import type { EntryRefDto } from './entryRefDto.ts';
 import type { LocationDto } from './locationDto.ts';
 import type { OperationConflictPolicyDto } from './operationConflictPolicyDto.ts';
+import type { OperationDtoResultSummaryParams } from './operationDtoResultSummaryParams.ts';
 import type { OperationEntryErrorDto } from './operationEntryErrorDto.ts';
 import type { OperationKindDto } from './operationKindDto.ts';
 import type { OperationProgressDto } from './operationProgressDto.ts';
@@ -42,6 +43,13 @@ export interface OperationDto {
      * @nullable
      */
   resultSummary?: string | null;
+  /**
+     * Stable code for `result_summary`; clients localise it and fall back to the English text.
+     * @nullable
+     */
+  resultSummaryCode?: string | null;
+  /** Interpolation values (item and warning counts) for `result_summary_code`. */
+  resultSummaryParams?: OperationDtoResultSummaryParams;
   /** Stable source references. */
   sources: EntryRefDto[];
   /**

@@ -1,7 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { t } from '../../i18n';
+import { errorText, t } from '../../i18n';
 import type { GeoConversionReport, GeoTargetFormat, GeoTransform, Location } from '../../models';
 
 /** The files to convert, with the names shown to the user. */
@@ -61,7 +61,7 @@ export const ConvertGeoDialog: FactoryComponent<ConvertGeoDialogAttrs> = () => {
       })
       .catch((error: unknown) => {
         if (current !== token) return;
-        failure = error instanceof Error ? error.message : String(error);
+        failure = errorText(error);
         m.redraw();
       });
   }

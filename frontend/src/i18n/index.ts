@@ -220,23 +220,129 @@ export function actionTitle(actionId: string, fallback: string): string {
   return t('action', key as keyof EnglishCatalogue['action']);
 }
 
+const IEC_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB'] as const;
+
+/** Formats a byte count carried as a decimal string; non-numeric input is returned unchanged. */
+function byteCount(value: unknown): string {
+  const bytes = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(bytes)) return typeof value === 'string' ? value : '';
+  let scaled = bytes;
+  let unit = 0;
+  while (scaled >= 1_024 && unit < IEC_UNITS.length - 1) {
+    scaled /= 1_024;
+    unit += 1;
+  }
+  const formatted = new Intl.NumberFormat(currentLocale, { maximumFractionDigits: 1 }).format(
+    scaled,
+  );
+  return `${formatted} ${IEC_UNITS[unit]}`;
+}
+
+function recordOf(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+/** Interpolation values for coded messages; missing placeholders render empty, never as `{x}`. */
+function messageParams(params: Readonly<Record<string, unknown>> | null | undefined): Params {
+  const source = params ?? {};
+  const text = (value: unknown): string =>
+    typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '';
+  return {
+    actionId: text(source.actionId),
+    fingerprint: text(source.fingerprint),
+    expectedFingerprint: text(source.expectedFingerprint),
+    name: text(source.name),
+    detail: text(source.detail),
+    field: text(source.field),
+    notes: text(source.notes),
+    count: text(source.count),
+    items: text(source.items),
+    required: byteCount(source.required),
+    available: byteCount(source.available),
+  };
+}
+
 /**
- * Localised text for a stable backend `ApplicationErrorCode`, or undefined for codes without a
- * dedicated entry (e.g. `invalidRequest`, whose backend message carries the specifics).
+ * Localised text for a stable backend error code, or undefined for codes without a dedicated
+ * entry (e.g. `invalidRequest`, whose backend message carries the specifics). Looks through the
+ * `ApplicationErrorCode` catalogue first, then the semantic component/library catalogue.
+ * `fallback` is the backend's English text, offered to entries as `{detail}`.
  */
-export function apiErrorMessage(code: string, details?: unknown): string | undefined {
-  if (!Object.hasOwn(en.apiError, code)) return undefined;
-  const record =
-    typeof details === 'object' && details !== null ? (details as Record<string, unknown>) : {};
-  const text = (value: unknown): string => (typeof value === 'string' ? value : '');
-  return t('apiError', code as keyof EnglishCatalogue['apiError'], {
-    actionId: text(record.actionId),
-    fingerprint: text(record.fingerprint),
-    expectedFingerprint: text(record.expectedFingerprint),
-  });
+export function apiErrorMessage(
+  code: string,
+  details?: unknown,
+  fallback?: string,
+): string | undefined {
+  const record = recordOf(details);
+  if (Object.hasOwn(en.apiError, code)) {
+    return t('apiError', code as keyof EnglishCatalogue['apiError'], messageParams(record));
+  }
+  if (Object.hasOwn(en.semanticError, code)) {
+    return t('semanticError', code as keyof EnglishCatalogue['semanticError'], {
+      ...messageParams(record),
+      required: byteCount(record.requiredBytes),
+      available: byteCount(record.availableBytes),
+      detail: fallback ?? '',
+    });
+  }
+  return undefined;
 }
 
 setErrorMessageLocaliser(apiErrorMessage);
+
+/** A backend message with an optional stable code and structured parameters. */
+export interface CodedMessage {
+  readonly code?: string | null | undefined;
+  readonly params?: Readonly<Record<string, string>> | null | undefined;
+  readonly message: string;
+}
+
+/** Localised per-entry operation failure; unknown or absent codes keep the English message. */
+export function operationEntryErrorText(error: CodedMessage): string {
+  const { code } = error;
+  if (code == null || !Object.hasOwn(en.operationEntryError, code)) return error.message;
+  return t(
+    'operationEntryError',
+    code as keyof EnglishCatalogue['operationEntryError'],
+    messageParams(error.params),
+  );
+}
+
+/** Localised operation outcome summary; unknown or absent codes keep the English message. */
+export function operationResultText(result: CodedMessage): string {
+  const { code } = result;
+  if (code == null || !Object.hasOwn(en.operationResult, code)) return result.message;
+  return t(
+    'operationResult',
+    code as keyof EnglishCatalogue['operationResult'],
+    messageParams(result.params),
+  );
+}
+
+/** Localised reason an undo is unavailable; unknown or absent codes keep the English reason. */
+export function operationUndoReasonText(reason: string, code: string | null | undefined): string {
+  if (code == null || !Object.hasOwn(en.operationUndoReason, code)) return reason;
+  return t('operationUndoReason', code as keyof EnglishCatalogue['operationUndoReason']);
+}
+
+/**
+ * Text for any caught value. Errors (including `ApiError`/`TauriCommandError`, whose `message`
+ * is already localised) keep their message; plain `{ code, message }` rejections are localised
+ * by code; anything else gets a generic localised line instead of `[object Object]`.
+ */
+export function errorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string' && error.length > 0) return error;
+  const record = recordOf(error);
+  const message =
+    typeof record.message === 'string' && record.message.length > 0 ? record.message : undefined;
+  const code = typeof record.code === 'string' ? record.code : undefined;
+  if (code !== undefined) {
+    const localised = apiErrorMessage(code, record.details, message);
+    if (localised !== undefined) return localised;
+  }
+  return message ?? t('apiError', 'unknownFailure');
+}
 
 /** Labels core command categories; plugin categories are humanised from their camelCase id. */
 export function actionCategoryLabel(category: string): string {

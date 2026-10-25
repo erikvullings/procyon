@@ -3,13 +3,21 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type { EntryRefDto } from './entryRefDto.ts';
+import type { OperationEntryErrorDtoParams } from './operationEntryErrorDtoParams.ts';
 
 /**
  * One non-fatal failure associated with a planned entry.
  */
 export interface OperationEntryErrorDto {
+  /**
+     * Stable code clients map to localised text.
+     * @nullable
+     */
+  code?: string | null;
   /** Entry that could not be processed. */
   entry: EntryRefDto;
-  /** Sanitized error message. */
+  /** Sanitized English error message (fallback when `code` is absent or unknown). */
   message: string;
+  /** Interpolation values (names, sizes, counts) for `code`. */
+  params?: OperationEntryErrorDtoParams;
 }

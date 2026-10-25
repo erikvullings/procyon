@@ -1,7 +1,12 @@
 import m, { type Component } from 'mithril';
 
 import { closeIcon } from '../../components/tabler-icons';
-import { t } from '../../i18n';
+import {
+  operationEntryErrorText,
+  operationResultText,
+  operationUndoReasonText,
+  t,
+} from '../../i18n';
 import type { Operation, OperationId, OperationKind, OperationState } from '../../models';
 import {
   DEFAULT_ENTRY_FORMAT_SETTINGS,
@@ -95,19 +100,30 @@ function compareProgressSummary(operation: Operation): string {
   return t('operation', 'entriesComparedRunning', operation.progress.completedItems);
 }
 
+function operationResult(operation: Operation): string | undefined {
+  return operation.result === undefined ? undefined : operationResultText(operation.result);
+}
+
+function operationUndoReason(operation: Operation): string | undefined {
+  const { undo } = operation;
+  return undo?.reason === undefined
+    ? undefined
+    : operationUndoReasonText(undo.reason, undo.reasonCode);
+}
+
 function cancelledResult(operation: Operation, formatSettings: EntryFormatSettings): string {
   const { completedItems, totalItems, completedBytes, totalBytes } = operation.progress;
   const items = `${completedItems}${hasValue(totalItems) ? ` / ${totalItems}` : ''}`;
   if (operation.kind === 'search') {
-    return operation.result?.message ?? t('operation', 'cancelledSearch', { items });
+    return operationResult(operation) ?? t('operation', 'cancelledSearch', { items });
   }
   if (operation.kind === 'compare') {
-    return operation.result?.message ?? t('operation', 'cancelledCompare', { items });
+    return operationResult(operation) ?? t('operation', 'cancelledCompare', { items });
   }
   const bytes = `${formatBytes(completedBytes, formatSettings)}${
     hasValue(totalBytes) ? ` / ${formatBytes(totalBytes, formatSettings)}` : ''
   }`;
-  return operation.result?.message ?? t('operation', 'cancelledItems', { items, bytes });
+  return operationResult(operation) ?? t('operation', 'cancelledItems', { items, bytes });
 }
 
 function operationStateSymbol(state: OperationState): string {
@@ -405,7 +421,7 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                             warnings.map((warning) =>
                               m(
                                 'li',
-                                `${entryNameFromUri(warning.entry.location.uri)}: ${warning.message}`,
+                                `${entryNameFromUri(warning.entry.location.uri)}: ${operationEntryErrorText(warning)}`,
                               ),
                             ),
                           ),
@@ -456,7 +472,7 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                             t('button', 'undo'),
                             'undo',
                             undefined,
-                            operation.undo?.reason ?? t('operation', 'undoUnavailable'),
+                            operationUndoReason(operation) ?? t('operation', 'undoUnavailable'),
                           )
                       : undefined,
                     operation.state === 'queued' ||

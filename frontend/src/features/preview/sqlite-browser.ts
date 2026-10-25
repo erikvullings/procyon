@@ -1,4 +1,5 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
+import { errorText } from '../../i18n';
 import type {
   OpenSqliteViewRequest,
   SqliteColumnFilter,
@@ -116,7 +117,7 @@ export function sqliteBrowseSource(
 }
 
 function failureMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return errorText(error);
 }
 
 async function fetchPage(

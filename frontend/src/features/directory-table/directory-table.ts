@@ -3,7 +3,7 @@ import { toast } from 'mithril-materialized';
 import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import { chevronDownIcon, copyIcon, eyeOffIcon, linkIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
-import { t } from '../../i18n';
+import { errorText, t } from '../../i18n';
 import type {
   EntryId,
   EntrySummary,
@@ -1105,8 +1105,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                               void writeSystemClipboardText(displayRow.path).catch(
                                 (error: unknown) => {
                                   const message = document.createElement('span');
-                                  message.textContent =
-                                    error instanceof Error ? error.message : String(error);
+                                  message.textContent = errorText(error);
                                   toast({ html: message.outerHTML, className: 'fm-toast-warning' });
                                 },
                               );

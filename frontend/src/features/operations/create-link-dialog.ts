@@ -1,6 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
-import { t } from '../../i18n';
+import { errorText, t } from '../../i18n';
 import type {
   LinkKind,
   LinkKindOption,
@@ -142,7 +142,7 @@ export const CreateLinkDialog: FactoryComponent<CreateLinkDialogAttrs> = () => {
       },
       (error: unknown) => {
         if (activeRequest !== request) return;
-        loadError = error instanceof Error ? error.message : String(error);
+        loadError = errorText(error);
         options = [];
         m.redraw();
       },

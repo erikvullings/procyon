@@ -1,5 +1,7 @@
 //! Shared wire types for semantic file operations (specification §7, §8).
 
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -298,6 +300,12 @@ pub struct OperationDto {
     /// Concise terminal outcome retained with the operation history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result_summary: Option<String>,
+    /// Stable code for `result_summary`; clients localise it and fall back to the English text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_summary_code: Option<String>,
+    /// Interpolation values (item and warning counts) for `result_summary_code`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub result_summary_params: BTreeMap<String, String>,
     /// Whether this completed operation can currently be undone and, if not, why.
     pub undo: OperationUndoDto,
     /// Original operation reversed by this undo job.
@@ -314,6 +322,9 @@ pub struct OperationUndoDto {
     /// Explanation when undo is unavailable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// Stable code for `reason` when the backend has one; clients fall back to `reason`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
     /// Undo job already running or completed for this operation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation_id: Option<Uuid>,
@@ -339,8 +350,14 @@ pub struct OperationPageDto {
 pub struct OperationEntryErrorDto {
     /// Entry that could not be processed.
     pub entry: EntryRefDto,
-    /// Sanitized error message.
+    /// Sanitized English error message (fallback when `code` is absent or unknown).
     pub message: String,
+    /// Stable code clients map to localised text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    /// Interpolation values (names, sizes, counts) for `code`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub params: BTreeMap<String, String>,
 }
 
 /// Stable provider-neutral reference included in operation snapshots.

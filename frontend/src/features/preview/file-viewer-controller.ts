@@ -1,5 +1,5 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { t } from '../../i18n';
+import { errorText, t } from '../../i18n';
 import type {
   CsvGeoOptions,
   EntrySummary,
@@ -2729,7 +2729,7 @@ export function createFileViewerController(
         pdfSearch: {
           ...pagedSearch,
           searching: false,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorText(error),
         },
       });
       return;
@@ -2830,7 +2830,7 @@ export function createFileViewerController(
           matches: [],
           currentMatchIndex: undefined,
           searching: false,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorText(error),
         },
       });
     }
@@ -2938,7 +2938,7 @@ export function createFileViewerController(
         epubSearch: {
           ...pagedSearch,
           searching: false,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorText(error),
         },
       });
       return;

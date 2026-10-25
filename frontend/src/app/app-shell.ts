@@ -360,7 +360,7 @@ import {
 } from '../features/workspace/workspace-layout';
 import { sortWorkspaceSummaries } from '../features/workspace/workspace-manager';
 import { WorkspaceSwitcher } from '../features/workspace/workspace-switcher';
-import { actionTitle, t } from '../i18n';
+import { actionTitle, errorText, t } from '../i18n';
 import {
   type FunctionKeyModifiers,
   footerFunctionKeyBindings,
@@ -894,7 +894,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         m.redraw();
       })
       .catch((error: unknown) => {
-        toast({ html: error instanceof Error ? error.message : String(error) });
+        toast({ html: errorText(error) });
       });
   }
 
@@ -934,7 +934,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       .catch((error: unknown) => {
         toast({
           html: t('geoMinify', 'failed', {
-            message: error instanceof Error ? error.message : String(error),
+            message: errorText(error),
           }),
         });
       });
@@ -1042,7 +1042,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       .catch((error: unknown) => {
         toast({
           html: t('splitCombine', 'failed', {
-            message: error instanceof Error ? error.message : String(error),
+            message: errorText(error),
           }),
         });
       });
@@ -1079,7 +1079,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       .catch((error: unknown) => {
         toast({
           html: t('splitCombine', 'failed', {
-            message: error instanceof Error ? error.message : String(error),
+            message: errorText(error),
           }),
         });
       });
@@ -1122,7 +1122,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       .catch((error: unknown) => {
         toast({
           html: t('geoConvert', 'failed', {
-            message: error instanceof Error ? error.message : String(error),
+            message: errorText(error),
           }),
         });
       });
@@ -1341,7 +1341,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       .catch((error: unknown) => {
         toast({
           html: t('attributes', 'failed', {
-            message: error instanceof Error ? error.message : String(error),
+            message: errorText(error),
           }),
         });
       });
@@ -1382,7 +1382,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       .catch((error: unknown) => {
         toast({
           html: t('imageEdit', 'failed', {
-            message: error instanceof Error ? error.message : String(error),
+            message: errorText(error),
           }),
         });
       });
@@ -1409,7 +1409,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       .catch((error: unknown) => {
         toast({
           html: t('playlistExport', 'failed', {
-            message: error instanceof Error ? error.message : String(error),
+            message: errorText(error),
           }),
         });
       });
@@ -1461,7 +1461,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         m.redraw();
       })
       .catch((error: unknown) => {
-        toast({ html: error instanceof Error ? error.message : String(error) });
+        toast({ html: errorText(error) });
       });
   }
 
@@ -2420,7 +2420,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         toast({
           html: t('shell', 'folderSizeError', {
             name: entry.name,
-            error: error instanceof Error ? error.message : String(error),
+            error: errorText(error),
           }),
         });
       });
@@ -2449,7 +2449,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         toast({
           html: t('applicationUninstall', 'discoveryError', {
             name: entry.name,
-            error: error instanceof Error ? error.message : String(error),
+            error: errorText(error),
           }),
         });
       });
@@ -2648,7 +2648,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       },
     ).catch((error: unknown) => {
       console.error('openViewerInPane failed', error);
-      toast({ html: error instanceof Error ? error.message : String(error) });
+      toast({ html: errorText(error) });
     });
   }
 
@@ -2734,7 +2734,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             context: { paneId, selectedEntryIds: [link.entry.id] },
           })
           .catch((error: unknown) => {
-            toast({ html: error instanceof Error ? error.message : String(error) });
+            toast({ html: errorText(error) });
           });
       },
       editAt: (link) => {
@@ -7597,7 +7597,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   m.redraw();
                 })
                 .catch((error: unknown) => {
-                  toast({ html: error instanceof Error ? error.message : String(error) });
+                  toast({ html: errorText(error) });
                 });
             },
           }),

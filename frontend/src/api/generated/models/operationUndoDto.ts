@@ -19,4 +19,9 @@ export interface OperationUndoDto {
      * @nullable
      */
   reason?: string | null;
+  /**
+     * Stable code for `reason` when the backend has one; clients fall back to `reason`.
+     * @nullable
+     */
+  reasonCode?: string | null;
 }

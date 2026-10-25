@@ -14,8 +14,8 @@ use async_trait::async_trait;
 use fm_domain::{EntryKind, EntrySummary, Location};
 use fm_operations::{
     ConflictResolution, EntryFingerprint, ExecutionError, ExecutionOutcome, Operation,
-    OperationExecutor, OperationPlan, OperationProgressReporter, OperationUndo, PauseToken,
-    PlanItem, UndoAction, UndoPlan,
+    OperationEntryError, OperationExecutor, OperationPlan, OperationProgressReporter,
+    OperationUndo, PauseToken, PlanItem, UndoAction, UndoPlan,
 };
 use fm_transport_dto::{
     InspectSplitSetRequestDto, InspectSplitSetResponseDto, SplitFileDto, SplitPartDto,
@@ -50,11 +50,12 @@ fn cancelled() -> ExecutionError {
 }
 
 /// A failure whose reason the user must see; the engine reports it as an entry error.
-fn warn(entry: &EntryRef, message: String) -> ExecutionError {
-    ExecutionError::Warning {
-        entry: entry.clone(),
-        message,
+fn warn(entry: &EntryRef, message: String, code: &str, name: Option<&str>) -> ExecutionError {
+    let mut error = OperationEntryError::new(entry.clone(), message).with_code(code);
+    if let Some(name) = name {
+        error = error.with_param("name", name);
     }
+    ExecutionError::warning(error)
 }
 
 fn folder_of(location: &Location) -> Result<Location, ApplicationError> {
@@ -975,6 +976,8 @@ impl CombineExecutor {
                 return Err(warn(
                     entry,
                     format!("{} changed while it was being joined", summary.name),
+                    fm_operations::codes::entry_error::PART_CHANGED_WHILE_JOINING,
+                    Some(&summary.name),
                 ));
             }
             total += copied;
@@ -987,6 +990,8 @@ impl CombineExecutor {
                         "{} does not match the manifest; it is damaged or was changed. Nothing was written.",
                         summary.name
                     ),
+                    fm_operations::codes::entry_error::PART_DAMAGED,
+                    Some(&summary.name),
                 ));
             }
         }
@@ -998,6 +1003,8 @@ impl CombineExecutor {
             return Err(warn(
                 entry,
                 "The joined file does not match the manifest. Nothing was written.".into(),
+                fm_operations::codes::entry_error::JOINED_FILE_MISMATCH,
+                None,
             ));
         }
         Ok(hash)

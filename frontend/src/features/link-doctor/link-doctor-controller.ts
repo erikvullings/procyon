@@ -1,5 +1,5 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { t } from '../../i18n';
+import { errorText, t } from '../../i18n';
 import type { LinkProblem, LinkReplacementCandidate, Location, Operation } from '../../models';
 import { parentLocation } from '../navigation/navigation';
 import type { OperationsController } from '../operations/operations-controller';
@@ -49,7 +49,7 @@ export interface LinkDoctorController {
 }
 
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return errorText(error);
 }
 
 const TERMINAL_STATES: ReadonlySet<Operation['state']> = new Set([

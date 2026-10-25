@@ -84,16 +84,24 @@ pub enum ExecutionError {
     #[error(transparent)]
     Provider(#[from] fm_vfs::VfsError),
     /// An entry failed but independent plan items may continue.
-    #[error("{message}")]
+    #[error("{}", error.message)]
     Warning {
-        /// Entry that failed.
-        entry: EntryRef,
-        /// Sanitized failure text.
-        message: String,
+        /// Failure reported for the entry.
+        error: Box<crate::OperationEntryError>,
     },
     /// This item needs an explicit user decision before it can be retried.
     #[error("operation item has a destination conflict")]
     Conflict(OperationConflict),
+}
+
+impl ExecutionError {
+    /// A per-entry failure the engine records and continues past.
+    #[must_use]
+    pub fn warning(error: crate::OperationEntryError) -> Self {
+        Self::Warning {
+            error: Box::new(error),
+        }
+    }
 }
 
 /// Result of executing one plan item.
@@ -738,12 +746,9 @@ impl Scheduler {
                     }
                     Ok(ExecutionOutcome::Skipped) => {}
                     Err(error) => match error {
-                        ExecutionError::Warning { entry, message } => {
+                        ExecutionError::Warning { error } => {
                             reporter.rollback();
-                            job.lock()
-                                .operation
-                                .errors
-                                .push(crate::OperationEntryError { entry, message });
+                            job.lock().operation.errors.push(*error);
                         }
                         ExecutionError::Conflict(conflict) => {
                             reporter.rollback();

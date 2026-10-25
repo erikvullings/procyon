@@ -23,18 +23,29 @@ export function operationFromDto(dto: OperationDto): Operation {
     ...(dto.startedAt == null ? {} : { startedAt: dto.startedAt }),
     ...(dto.completedAt == null ? {} : { completedAt: dto.completedAt }),
     ...(dto.queuePosition == null ? {} : { queuePosition: dto.queuePosition }),
-    ...(dto.resultSummary == null ? {} : { result: { message: dto.resultSummary } }),
+    ...(dto.resultSummary == null
+      ? {}
+      : {
+          result: {
+            message: dto.resultSummary,
+            ...(dto.resultSummaryCode == null ? {} : { code: dto.resultSummaryCode }),
+            ...(dto.resultSummaryParams == null ? {} : { params: dto.resultSummaryParams }),
+          },
+        }),
     ...(dto.errors.length === 0
       ? {}
       : {
           errors: dto.errors.map((error) => ({
             entry: error.entry,
             message: error.message,
+            ...(error.code == null ? {} : { code: error.code }),
+            ...(error.params == null ? {} : { params: error.params }),
           })),
         }),
     undo: {
       available: dto.undo.available,
       ...(dto.undo.reason == null ? {} : { reason: dto.undo.reason }),
+      ...(dto.undo.reasonCode == null ? {} : { reasonCode: dto.undo.reasonCode }),
       ...(dto.undo.operationId == null ? {} : { operationId: dto.undo.operationId }),
     },
     ...(dto.undoOf == null ? {} : { undoOf: dto.undoOf }),

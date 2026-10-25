@@ -112,11 +112,17 @@ export interface Operation {
 export interface OperationUndo {
   available: boolean;
   reason?: string;
+  /** Stable code for `reason`; the UI localises it and falls back to the English `reason`. */
+  reasonCode?: string;
   operationId?: OperationId;
 }
 
 export interface OperationResult {
   message: string;
+  /** Stable code for `message`; the UI localises it and falls back to the English `message`. */
+  code?: string;
+  /** Interpolation values (counts) for `code`. */
+  params?: Readonly<Record<string, string>>;
   details?: Readonly<Record<string, unknown>>;
 }
 
@@ -129,4 +135,8 @@ export interface OperationFailure {
 export interface OperationEntryError {
   entry: EntryRef;
   message: string;
+  /** Stable code for `message`; the UI localises it and falls back to the English `message`. */
+  code?: string;
+  /** Interpolation values (names, sizes, counts) for `code`. */
+  params?: Readonly<Record<string, string>>;
 }

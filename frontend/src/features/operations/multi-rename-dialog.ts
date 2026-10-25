@@ -1,7 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { InputCheckbox, ModalPanel, NumberInput, Select, TextInput } from 'mithril-materialized';
 
-import { t } from '../../i18n';
+import { errorText, t } from '../../i18n';
 import type { MultiRenamePreset } from '../../models';
 import {
   type CaseTransform,
@@ -117,7 +117,7 @@ export const MultiRenameDialog: FactoryComponent<MultiRenameDialogAttrs> = () =>
           if (metadataKey !== key) return;
           metadata = new Map();
           metadataError = t('metadataRename', 'readFailed', {
-            message: error instanceof Error ? error.message : String(error),
+            message: errorText(error),
           });
         })
         .finally(() => m.redraw());

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Utc};
 use fm_domain::{EntryKind, Location, OperationId};
 use fm_vfs::{AttributeChange, EntryRef};
@@ -222,8 +224,54 @@ impl OperationUndo {
 pub struct OperationEntryError {
     /// Entry that could not be processed.
     pub entry: EntryRef,
-    /// Sanitized provider/application error.
+    /// Sanitized provider/application error (English fallback for clients without `code`).
     pub message: String,
+    /// Stable machine-readable code clients map to localised text; `None` for uncoded failures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    /// Structured values the localised text interpolates (names, counts, byte sizes).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub params: BTreeMap<String, String>,
+}
+
+impl OperationEntryError {
+    /// An uncoded failure carrying only its English message.
+    #[must_use]
+    pub fn new(entry: EntryRef, message: impl Into<String>) -> Self {
+        Self {
+            entry,
+            message: message.into(),
+            code: None,
+            params: BTreeMap::new(),
+        }
+    }
+
+    /// Attaches the stable code clients localise.
+    #[must_use]
+    pub fn with_code(mut self, code: impl Into<String>) -> Self {
+        self.code = Some(code.into());
+        self
+    }
+
+    /// A provider failure, coded with the provider-neutral [`fm_vfs::VfsError::code`].
+    #[must_use]
+    pub fn from_vfs(entry: EntryRef, error: &fm_vfs::VfsError) -> Self {
+        let failure = Self::new(entry, error.to_string()).with_code(error.code());
+        match error {
+            fm_vfs::VfsError::Io { message }
+            | fm_vfs::VfsError::AuthenticationFailed { message } => {
+                failure.with_param("detail", message)
+            }
+            _ => failure,
+        }
+    }
+
+    /// Adds one structured interpolation value.
+    #[must_use]
+    pub fn with_param(mut self, key: &str, value: impl ToString) -> Self {
+        self.params.insert(key.to_owned(), value.to_string());
+        self
+    }
 }
 
 /// Operation lifecycle states from specification §17.
@@ -415,4 +463,25 @@ pub struct TransitionError {
     pub from: OperationState,
     /// Requested state.
     pub to: OperationState,
+}
+
+#[cfg(test)]
+mod entry_error_tests {
+    use super::OperationEntryError;
+
+    #[test]
+    fn history_written_before_codes_existed_still_loads() {
+        let legacy = serde_json::json!({
+            "entry": {
+                "id": "00000000-0000-0000-0000-000000000001",
+                "location": {"provider_id": "local", "uri": "file:///tmp/x"}
+            },
+            "message": "boom"
+        });
+        let parsed: Result<OperationEntryError, _> = serde_json::from_value(legacy);
+        let error = parsed.expect("legacy entry error deserialises");
+        assert_eq!(error.message, "boom");
+        assert_eq!(error.code, None);
+        assert!(error.params.is_empty());
+    }
 }

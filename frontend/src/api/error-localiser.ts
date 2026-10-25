@@ -4,7 +4,11 @@
  * their `message` through here, so every consumer of `error.message` gets the same localised
  * text in browser and desktop hosts. Unknown codes keep the backend's own message.
  */
-export type ErrorMessageLocaliser = (code: string, details: unknown) => string | undefined;
+export type ErrorMessageLocaliser = (
+  code: string,
+  details: unknown,
+  fallback: string,
+) => string | undefined;
 
 let localiser: ErrorMessageLocaliser | undefined;
 
@@ -20,7 +24,7 @@ export function localiseErrorMessage(
   fallback: string,
 ): string {
   if (code === undefined || localiser === undefined) return fallback;
-  return localiser(code, details) ?? fallback;
+  return localiser(code, details, fallback) ?? fallback;
 }
 
 /** Makes `error.message` resolve through the localiser at read time (so locale switches apply). */

@@ -41,6 +41,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Error for a successful-but-unexpected response status. Non-2xx responses already throw an
+ * {@link ApiError}; this covers the remaining 2xx shapes a generated client does not model.
+ */
+export function unexpectedResponseError(operation: string, status: number): ApiError {
+  return new ApiError(status, {
+    code: 'unexpectedResponse',
+    message: `Unexpected ${operation} response status: ${status}`,
+  });
+}
+
 /** An additional header to attach to every request, e.g. for auth/session tokens. */
 export interface SessionHeader {
   readonly name: string;

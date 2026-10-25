@@ -1620,6 +1620,119 @@ export const de = {
       'Die geprüften Suchergebnisse sind nicht mehr verfügbar. Suche erneut ausführen.',
     internal: 'Ein interner Fehler ist aufgetreten.',
     networkUnavailable: 'Server nicht erreichbar. Überprüfen Sie Ihre Verbindung.',
+    unexpectedResponse: 'Der Server hat eine unerwartete Antwort geliefert.',
+    externalLinkBlocked: 'Der Browser hat den externen Link blockiert.',
+    desktopHostRequired: 'Diese Aktion ist nur in der Desktop-App verfügbar.',
+    unknownFailure: 'Ein unbekannter Fehler ist aufgetreten.',
+  },
+  /** Localised copy for stable semantic component and library error codes; keys are the camelCase codes. */
+  semanticError: {
+    unavailable: 'Die semantische Funktion ist nicht verfügbar.',
+    authorityDenied: 'Dieser Host erlaubt diese semantische Aktion nicht.',
+    consentRequired:
+      'Die Installation erfordert Ihre ausdrückliche Zustimmung zum aktuellen Angebot.',
+    invalidLocalModelMetadata:
+      'Die Metadaten des lokalen Modells sind unvollständig oder ungültig.',
+    invalidLifecycle:
+      'Diese Aktion ist im aktuellen Zustand der semantischen Komponenten nicht zulässig.',
+    invalidEnrolment: 'Die Ordnerkennung ist ungültig.',
+    invalidMigrationPlan: 'Der Migrationsplan für das Modell ist veraltet. Prüfen Sie ihn erneut.',
+    invalidMigrationProgress: 'Der gemeldete Migrationsfortschritt ist ungültig.',
+    executableDownloadProhibited:
+      'Diese Distribution erlaubt das Herunterladen ausführbarer Komponenten nicht.',
+    catalog: 'Der Komponentenkatalog ist nicht verfügbar oder nicht kompatibel. ({detail})',
+    insufficientSpace:
+      'Nicht genügend freier Speicherplatz: {required} erforderlich einschließlich Reserve, {available} verfügbar.',
+    downloadInterrupted: 'Der Download wurde unterbrochen. Versuchen Sie es erneut. ({detail})',
+    artifactVerificationFailed:
+      'Eine heruntergeladene Komponente hat die Integritätsprüfung nicht bestanden und wurde abgelehnt.',
+    activationFailed: 'Eine heruntergeladene Komponente konnte nicht aktiviert werden. ({detail})',
+    freeSpaceProbe: 'Der verfügbare Speicherplatz konnte nicht ermittelt werden. ({detail})',
+    state:
+      'Der Zustand der semantischen Komponenten konnte nicht gelesen oder gespeichert werden. ({detail})',
+    filesystem:
+      'Eine Dateioperation für die semantischen Komponenten ist fehlgeschlagen. ({detail})',
+    indexing: 'Die semantische Indizierung ist fehlgeschlagen. ({detail})',
+    indexRemoval: 'Die semantischen Indexdaten konnten nicht entfernt werden. ({detail})',
+    dataMigration: 'Die semantische Datenmigration ist fehlgeschlagen. ({detail})',
+    blockingTaskFailed:
+      'Eine Hintergrundaufgabe der semantischen Komponenten ist fehlgeschlagen. ({detail})',
+    diskUseOverflow: 'Der semantische Speicherbedarf konnte nicht berechnet werden.',
+    accessDenied: 'Der Zugriff auf die semantische Bibliothek wurde verweigert.',
+    incompatibleLibraryIdentity:
+      'Die semantische Bibliothek passt nicht zum aktiven Modell. Wiederholen Sie die Modellmigration oder stellen Sie die Komponenteneinrichtung wieder her, mit der die Bibliothek erstellt wurde.',
+    workspaceRequired: 'Ein aktiver Arbeitsbereich und Stamm sind erforderlich.',
+    notEnrolled: 'Dieser Ordner gehört nicht zur semantischen Bibliothek.',
+    alreadyExcluded: 'Dieser Ordner ist bereits von der semantischen Bibliothek ausgeschlossen.',
+    unsafeEligibilityOverride: 'Dieser Eignungsgrund kann nicht überschrieben werden.',
+    staleRevision:
+      'Die Einstellungen der semantischen Bibliothek haben sich geändert. Aktualisieren Sie und versuchen Sie es erneut.',
+    staleConfirmation: 'Die Bestätigung ist veraltet oder ungültig. Prüfen Sie den Plan erneut.',
+    persistence: 'Der Zustand der semantischen Bibliothek konnte nicht gespeichert werden.',
+    cleanup: 'Das Entfernen der semantischen Daten ist fehlgeschlagen.',
+    stateUnavailable: 'Der Zustand der semantischen Bibliothek ist vorübergehend nicht verfügbar.',
+    revisionOverflow: 'Der Revisionszähler der semantischen Bibliothek ist übergelaufen.',
+  },
+  /** Localised copy for per-entry operation failures; keys are the stable codes the backend attaches. */
+  operationEntryError: {
+    notFound: 'Nicht gefunden.',
+    permissionDenied: 'Zugriff verweigert.',
+    locked: 'Wird von einem anderen Programm verwendet.',
+    alreadyExists: 'Das Ziel existiert bereits.',
+    emptyName: 'Der Name ist leer.',
+    invalidNameCharacters: 'Der Name enthält ungültige Zeichen.',
+    reservedName: 'Der Name ist reserviert.',
+    pathTraversalName: 'Der Name muss aus genau einer Pfadkomponente bestehen.',
+    notADirectory: 'Kein Ordner.',
+    isADirectory: 'Dies ist ein Ordner.',
+    unsupportedCapability: 'Von diesem Speicherort nicht unterstützt.',
+    unsafeArchiveEntry: 'Das Archiv enthält einen unsicheren Eintragspfad.',
+    archiveResourceLimit: 'Das Archiv überschreitet ein Sicherheitslimit.',
+    credentialRequired: 'Ein Passwort ist erforderlich.',
+    invalidCredential: 'Das Passwort ist falsch.',
+    authenticationFailed: 'Authentifizierung fehlgeschlagen. {detail}',
+    insufficientSpace: 'Nicht genügend freier Speicherplatz.',
+    privilegeRequired: 'Erhöhte Rechte sind erforderlich.',
+    linkCycle: 'Der Link würde einen Zyklus erzeugen.',
+    cancelled: 'Abgebrochen.',
+    io: 'Ein-/Ausgabefehler: {detail}',
+    invalidLocation: 'Ungültiger Speicherort.',
+    unknownProvider: 'Unbekannter Speicherort-Anbieter.',
+    platformFailed: 'Der Systemvorgang ist fehlgeschlagen: {detail}',
+    entryFailed: 'Konnte nicht verarbeitet werden: {detail}',
+    sourceMissing: 'Die Quelle existiert nicht mehr; übersprungen.',
+    diskSpaceCheckSkipped:
+      'Speicherplatzprüfung auf Ihren Wunsch übersprungen: {required} erforderlich, {available} als frei gemeldet.',
+    attributeNotPermitted:
+      'Keine Berechtigung, {name} zu ändern: Nur der Eigentümer oder ein Administrator darf Berechtigungen und Eigentümer ändern.',
+    attributeUnsupported:
+      '{name} wurde nicht geändert: Symbolische Links und nicht unterstützte Einträge bleiben unverändert.',
+    attributeEntryMissing: '{name} existiert nicht mehr.',
+    attributeFailed: '{name} wurde nicht geändert: {detail}',
+    imageFormatUnsupported:
+      'Nicht geändert: Das Bearbeiten von Metadaten wird für dieses Dateiformat nicht unterstützt.',
+    imageFieldUnsupported: 'Nicht geändert: Dieses Format kann {field} nicht speichern.',
+    geoWrittenWithLoss: 'Als {name} geschrieben. Nicht abgebildet oder entfernt: {notes}.',
+    partChangedWhileJoining: '{name} hat sich beim Zusammenfügen geändert.',
+    partDamaged:
+      '{name} stimmt nicht mit dem Manifest überein; es ist beschädigt oder wurde geändert. Es wurde nichts geschrieben.',
+    joinedFileMismatch:
+      'Die zusammengefügte Datei stimmt nicht mit dem Manifest überein. Es wurde nichts geschrieben.',
+    errorsOmitted: '{count} weitere Fehler wurden aus dem gespeicherten Verlauf ausgelassen.',
+  },
+  /** Localised copy for operation outcome summaries; keys are the stable backend codes. */
+  operationResult: {
+    completed: '{items} Elemente abgeschlossen.',
+    completedWithWarnings: 'Mit {count} Warnungen abgeschlossen.',
+    cancelled: 'Nach {items} Elementen abgebrochen.',
+    failed: 'Vorgang fehlgeschlagen.',
+    interrupted: 'Nach {items} Elementen unterbrochen; nicht fortgesetzt.',
+  },
+  /** Localised reasons an operation cannot be undone; keys are the stable backend codes. */
+  operationUndoReason: {
+    alreadyUndone: 'Dieser Vorgang wurde bereits rückgängig gemacht.',
+    undoInProgress: 'Das Rückgängigmachen dieses Vorgangs läuft bereits.',
+    undoUnsafe: 'Dieser Vorgang kann derzeit nicht sicher rückgängig gemacht werden.',
   },
   commandCategory: {
     recent: 'Zuletzt verwendet',

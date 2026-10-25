@@ -1,4 +1,5 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
+import { errorText } from '../../i18n';
 import type { Location, PaneId, SyncPlanItem, SyncProfile } from '../../models';
 import { isPlanStale, operationConflictPolicy } from './sync-profile';
 
@@ -48,10 +49,6 @@ export interface RunContext {
 
 const DEFAULT_POLL_MS = 100;
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 function errorCode(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;

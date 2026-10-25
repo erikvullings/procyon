@@ -4016,7 +4016,11 @@ export class MockFileManagerClient implements FileManagerClient {
         conflictPolicy: 'ask',
         createdAt: '2026-01-01T00:00:00.000Z',
         startedAt: '2026-01-01T00:00:00.000Z',
-        undo: { available: false, reason: 'Undo operations cannot themselves be undone.' },
+        undo: {
+          available: false,
+          reason: 'Undo operations cannot themselves be undone.',
+          reasonCode: 'undoUnsafe',
+        },
         undoOf: operationId,
       };
       this.operations.set(operationId, {
@@ -4024,6 +4028,7 @@ export class MockFileManagerClient implements FileManagerClient {
         undo: {
           available: false,
           reason: 'Undo is already in progress for this operation.',
+          reasonCode: 'undoInProgress',
           operationId: undo.id,
         },
       });

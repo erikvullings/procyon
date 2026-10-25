@@ -1,7 +1,7 @@
 import './map-view.css';
 import type * as MapLibre from 'maplibre-gl';
 import m, { type FactoryComponent } from 'mithril';
-import { t } from '../../i18n';
+import { errorText, t } from '../../i18n';
 import type { Location, MapSettings } from '../../models';
 import { type BasemapSources, buildBasemapStyle } from './basemap-style';
 import { type MapOverlay, overlayCorners } from './map-overlays';
@@ -733,7 +733,7 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
     } catch (error) {
       console.error('map failed to start', error);
       if (!destroyed) {
-        failure = error instanceof Error ? error.message : String(error);
+        failure = errorText(error);
         status = 'failed';
         m.redraw();
       }

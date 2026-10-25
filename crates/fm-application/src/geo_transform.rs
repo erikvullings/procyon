@@ -634,13 +634,18 @@ impl TransformGeoExecutor {
         if notes.is_empty() {
             ExecutionOutcome::Completed
         } else {
-            ExecutionOutcome::CompletedWithWarnings(vec![OperationEntryError {
-                entry: item.entry.clone(),
-                message: format!(
-                    "Written as {name}. Not represented or removed: {}.",
-                    notes.join("; ")
-                ),
-            }])
+            ExecutionOutcome::CompletedWithWarnings(vec![
+                OperationEntryError::new(
+                    item.entry.clone(),
+                    format!(
+                        "Written as {name}. Not represented or removed: {}.",
+                        notes.join("; ")
+                    ),
+                )
+                .with_code(fm_operations::codes::entry_error::GEO_WRITTEN_WITH_LOSS)
+                .with_param("name", name)
+                .with_param("notes", notes.join("; ")),
+            ])
         }
     }
 }

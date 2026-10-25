@@ -1,4 +1,5 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
+import { errorText, t } from '../../i18n';
 import type {
   DirectorySnapshot,
   EntrySummary,
@@ -136,9 +137,9 @@ function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'object' && error !== null) {
     const { message } = error as { readonly message?: unknown };
-    if (typeof message === 'string' && message.length > 0) return message;
+    if (typeof message === 'string' && message.length > 0) return errorText(error);
   }
-  return 'Unable to load directory';
+  return t('tree', 'unableToLoad');
 }
 
 export function applicationErrorCode(error: unknown): string | undefined {

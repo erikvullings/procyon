@@ -67,7 +67,7 @@ impl OperationPlanner {
         let destination = request.destination.clone().map(Into::into);
         // Shared by every copy executor of this request: where the "space check skipped"
         // warning waits for the first completed item (task 0272).
-        let space_note: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let space_note: Arc<Mutex<Option<(u64, u64)>>> = Arc::new(Mutex::new(None));
         Ok(match kind {
             OperationKindDto::CreateArchive | OperationKindDto::MoveToArchive => {
                 if request.sources.is_empty() {
@@ -746,7 +746,7 @@ struct CopyExecutor {
     skip_space_check: bool,
     /// Warning recorded in the operation when `skip_space_check` actually overrode a shortfall;
     /// attached to the first item that completes.
-    space_note: Arc<Mutex<Option<String>>>,
+    space_note: Arc<Mutex<Option<(u64, u64)>>>,
 }
 
 struct CopyGroupExecutor {
@@ -1522,7 +1522,11 @@ impl OperationExecutor for DeleteExecutor {
                 report
                     .failures
                     .into_iter()
-                    .map(|(entry, message)| fm_operations::OperationEntryError { entry, message })
+                    .map(|(entry, message)| {
+                        fm_operations::OperationEntryError::new(entry, message.clone())
+                            .with_code(fm_operations::codes::entry_error::ENTRY_FAILED)
+                            .with_param("detail", message)
+                    })
                     .collect(),
             ));
         }
@@ -1541,10 +1545,9 @@ impl OperationExecutor for DeleteExecutor {
                 self.deleted.fetch_add(1, Ordering::Relaxed);
                 Ok(ExecutionOutcome::Completed)
             }
-            Err(error) => Err(ExecutionError::Warning {
-                entry: item.entry.clone(),
-                message: error.to_string(),
-            }),
+            Err(error) => Err(ExecutionError::warning(
+                fm_operations::OperationEntryError::from_vfs(item.entry.clone(), &error),
+            )),
         }
     }
 
@@ -1616,9 +1619,8 @@ impl OperationExecutor for TrashExecutor {
         let restore_location =
             self.platform
                 .trash_with_restore_location(&path)
-                .map_err(|error| ExecutionError::Warning {
-                    entry: item.entry.clone(),
-                    message: error.to_string(),
+                .map_err(|error| {
+                    ExecutionError::warning(platform_entry_error(item.entry.clone(), &error))
                 })?;
         if let Some(restore_path) = restore_location {
             let restore_location = Location::from_native_path(&restore_path)
@@ -1720,10 +1722,13 @@ impl OperationExecutor for CopyGroupExecutor {
             .unwrap_or_else(|e| e.into_inner())
             .contains_key(&item.entry.location.uri)
         {
-            return Err(ExecutionError::Warning {
-                entry: item.entry.clone(),
-                message: "Source no longer exists; skipped.".into(),
-            });
+            return Err(ExecutionError::warning(
+                fm_operations::OperationEntryError::new(
+                    item.entry.clone(),
+                    "Source no longer exists; skipped.",
+                )
+                .with_code(fm_operations::codes::entry_error::SOURCE_MISSING),
+            ));
         }
         for executor in &self.copies {
             if executor
@@ -1847,10 +1852,13 @@ impl OperationExecutor for MoveGroupExecutor {
             .unwrap_or_else(|e| e.into_inner())
             .contains_key(&item.entry.location.uri)
         {
-            return Err(ExecutionError::Warning {
-                entry: item.entry.clone(),
-                message: "Source no longer exists; skipped.".into(),
-            });
+            return Err(ExecutionError::warning(
+                fm_operations::OperationEntryError::new(
+                    item.entry.clone(),
+                    "Source no longer exists; skipped.",
+                )
+                .with_code(fm_operations::codes::entry_error::SOURCE_MISSING),
+            ));
         }
         for executor in &self.moves {
             if item.entry.location == executor.source
@@ -2717,10 +2725,7 @@ async fn verify_capacity(
         return Ok(());
     }
     if executors.iter().any(|executor| executor.skip_space_check) {
-        *first.space_note.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!(
-            "Disk-space check skipped at your request: {required} bytes were needed but only \
-             {available} bytes were reported free."
-        ));
+        *first.space_note.lock().unwrap_or_else(|e| e.into_inner()) = Some((required, available));
         return Ok(());
     }
     Err(fm_vfs::VfsError::InsufficientSpace {
@@ -2802,12 +2807,18 @@ impl CopyExecutor {
             .unwrap_or_else(|e| e.into_inner())
             .take();
         match note {
-            Some(message) => {
-                ExecutionOutcome::CompletedWithWarnings(vec![fm_operations::OperationEntryError {
-                    entry: item.entry.clone(),
-                    message,
-                }])
-            }
+            Some((required, available)) => ExecutionOutcome::CompletedWithWarnings(vec![
+                fm_operations::OperationEntryError::new(
+                    item.entry.clone(),
+                    format!(
+                        "Disk-space check skipped at your request: {required} bytes were needed but only \
+                         {available} bytes were reported free."
+                    ),
+                )
+                .with_code(fm_operations::codes::entry_error::DISK_SPACE_CHECK_SKIPPED)
+                .with_param("required", required)
+                .with_param("available", available),
+            ]),
             None => outcome,
         }
     }
@@ -2918,12 +2929,9 @@ impl CopyExecutor {
             .await
         };
         let outcome = match result {
-            Err(error) if self.continue_on_error && !planned.is_root => {
-                Err(ExecutionError::Warning {
-                    entry: item.entry.clone(),
-                    message: error.to_string(),
-                })
-            }
+            Err(error) if self.continue_on_error && !planned.is_root => Err(
+                ExecutionError::warning(execution_entry_error(item.entry.clone(), &error)),
+            ),
             other => other,
         };
         if matches!(&outcome, Ok(ExecutionOutcome::Completed)) && !reuse_destination_directory {
@@ -3537,6 +3545,36 @@ fn copy_stream_error(error: std::io::Error) -> ExecutionError {
 /* -------------------------------------------------------------------------- */
 /*  Tests                                                                     */
 /* -------------------------------------------------------------------------- */
+
+/// Codes a platform (trash) failure for the entry.
+fn platform_entry_error(
+    entry: fm_vfs::EntryRef,
+    error: &fm_platform::PlatformError,
+) -> fm_operations::OperationEntryError {
+    use fm_platform::PlatformError;
+    let failure = fm_operations::OperationEntryError::new(entry, error.to_string());
+    match error {
+        PlatformError::Unsupported { .. } => failure.with_code("unsupportedCapability"),
+        PlatformError::NotFound { .. } => failure.with_code("notFound"),
+        PlatformError::AlreadyExists { .. } => failure.with_code("alreadyExists"),
+        PlatformError::Io { message } => failure
+            .with_code(fm_operations::codes::entry_error::PLATFORM_FAILED)
+            .with_param("detail", message),
+    }
+}
+
+/// Codes an item failure demoted to a per-entry warning; only provider failures carry a code.
+fn execution_entry_error(
+    entry: fm_vfs::EntryRef,
+    error: &ExecutionError,
+) -> fm_operations::OperationEntryError {
+    match error {
+        ExecutionError::Provider(error) => {
+            fm_operations::OperationEntryError::from_vfs(entry, error)
+        }
+        other => fm_operations::OperationEntryError::new(entry, other.to_string()),
+    }
+}
 
 #[cfg(test)]
 mod tests {
