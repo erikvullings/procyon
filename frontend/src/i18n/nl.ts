@@ -1,10 +1,9 @@
-import { type EnglishCatalogue, en } from './en';
+import type { EnglishCatalogue } from './en';
 import type { LocalisedCatalogue } from './types';
 
 /** Dutch catalogue (task 0098). Keep the key set identical to `en`. */
 export const nl = {
   walkthroughs: {
-    ...en.walkthroughs,
     title: 'Rondleidingen',
     close: 'Rondleidingen sluiten',
     chooseGuide: 'Kies een gids',
@@ -16,7 +15,24 @@ export const nl = {
     clipCaption: 'macOS-voorbeeld · Engelse ondertitels · 18 seconden',
   },
   basket: {
-    ...en.basket,
+    count: { 1: '1 item', n: '{n} items' },
+    list: 'Verzamelde bestanden',
+    empty: 'Selecteer bestanden in het andere paneel en druk op F5 of gebruik Aan mand toevoegen.',
+    select: '{name} selecteren',
+    remove: '{name} uit mand verwijderen',
+    moved: 'Verplaatst',
+    noDestination: 'Open in het andere paneel een beschrijfbare doelmap.',
+    noAvailable: 'Geen beschikbare geselecteerde mand-items om te verwerken.',
+    restoreFailed: 'De verzamelmand kon niet worden hersteld.',
+    saveFailed: 'De verzamelmand kon niet worden opgeslagen.',
+    collectFailed: 'De selectie kon niet worden verzameld.',
+    openFailed: 'De verzamelmand kon niet worden geopend.',
+    checkFailed: 'De items in de mand konden niet worden gecontroleerd.',
+    actionFailed: 'De mandactie is mislukt.',
+    checksumFiles: 'Selecteer bestanden om controlesommen te berekenen.',
+    credentials: 'Locaties met inloggegevens of URL-parameters kunnen niet worden verzameld.',
+    invalidSaved: 'Ongeldige opgeslagen verzamelmand.',
+    invalidEntry: 'Ongeldig item in opgeslagen verzamelmand.',
     title: 'Verzamelmand',
     add: 'Selectie aan mand toevoegen',
     addShort: 'Aan mand toevoegen',
@@ -2817,7 +2833,6 @@ export const nl = {
     deleteSelectedDuplicateCount: '{count} geselecteerde duplicaten verwijderen…',
   },
   playlist: {
-    ...en.playlist,
     format: 'Indeling',
     trackCount: { 1: '1 nummer', n: '{n} nummers' },
     missingCount: { 1: '1 ontbreekt', n: '{n} ontbreken' },
@@ -2836,7 +2851,6 @@ export const nl = {
     editAsText: 'Druk op F4 om de ruwe tekst te bewerken.',
   },
   player: {
-    ...en.player,
     region: 'Audiospeler',
     togglePlay: 'Audio afspelen of pauzeren',
     previous: 'Vorig nummer',
@@ -2881,7 +2895,6 @@ export const nl = {
     playlistNetworkSkipped: 'Netwerkstreams zijn niet aan de wachtrij toegevoegd.',
   },
   playlistExport: {
-    ...en.playlistExport,
     action: 'Opslaan als afspeellijst…',
     title: 'Opslaan als afspeellijst',
     nameLabel: 'Naam van afspeellijst',
@@ -2901,7 +2914,6 @@ export const nl = {
     failed: 'De afspeellijst kon niet worden opgeslagen: {message}',
   },
   musicDuplicates: {
-    ...en.musicDuplicates,
     action: 'Dubbele muziek zoeken…',
     title: 'Dubbele muziek',
     close: 'Overzicht dubbele muziek sluiten',
@@ -2930,11 +2942,10 @@ export const nl = {
     },
     removeFailed: 'De geselecteerde bestanden konden niet worden verwijderd: {message}',
     startFailed: 'De scan naar dubbele muziek kon niet worden gestart: {message}',
-    lossless: 'lossless',
+    lossless: 'verliesvrij',
     noFolder: 'Open een map om te scannen.',
   },
   linkDoctor: {
-    ...en.linkDoctor,
     action: 'Verbroken koppelingen zoeken…',
     title: 'Verbroken koppelingen',
     close: 'Overzicht verbroken koppelingen sluiten',
@@ -2970,7 +2981,6 @@ export const nl = {
       'De oude koppeling kon niet naar de prullenbak worden verplaatst (status: {state}).',
   },
   metadataRename: {
-    ...en.metadataRename,
     tokensHelp:
       'Metadatatokens: {artist} {album} {albumartist} {title} {track} {disc} {year} {genre} {exif:date-taken:yyyy-MM-dd} {exif:camera} {exif:width} {exif:height} {exif:dimensions}',
     missingFields: 'Ontbrekende metadata: {fields}',
@@ -2979,7 +2989,6 @@ export const nl = {
     unknownTokens: 'Onbekende tokens: {tokens}',
   },
   snapshots: {
-    ...en.snapshots,
     saveAction: 'Momentopname opslaan…',
     compareAction: 'Vergelijken met momentopname…',
     title: 'Mapmomentopname',
@@ -3013,7 +3022,6 @@ export const nl = {
     extension: 'procyon-snapshot',
   },
   editorLinks: {
-    ...en.editorLinks,
     openUrl: 'URL openen',
     openInPane: 'Openen in paneel',
     reveal: 'Tonen in bestandsbeheer',
@@ -3029,7 +3037,6 @@ export const nl = {
     menuLabel: 'Acties voor pad of URL',
   },
   spaceGuard: {
-    ...en.spaceGuard,
     title: 'Onvoldoende vrije ruimte',
     message:
       '{name} heeft {required} nodig, maar er is slechts {available} vrij op de bestemming, een tekort van {shortfall}.',
@@ -3040,7 +3047,6 @@ export const nl = {
     skippedWarning: 'Controle van schijfruimte op jouw verzoek overgeslagen.',
   },
   imageMetadata: {
-    ...en.imageMetadata,
     title: 'Alle metadata',
     search: 'Tags filteren',
     loading: 'Metadata lezen...',
@@ -3179,7 +3185,6 @@ export const nl = {
     noParts: 'Selecteer de genummerde delen (.001, .002, ...) om samen te voegen.',
   },
   imageEdit: {
-    ...en.imageEdit,
     action: 'Afbeeldingsmetadata bewerken...',
     title: 'Afbeeldingsmetadata bewerken',
     files: {
@@ -3215,7 +3220,6 @@ export const nl = {
     failed: 'De metadatabewerking kon niet worden gestart: {message}',
   },
   map: {
-    ...en.map,
     sectionTitle: 'Kaart',
     onlineTiles: 'Online kaarttegels toestaan',
     preset: 'Gratis kaartservice',
@@ -3252,7 +3256,6 @@ export const nl = {
     cluster: 'Groep van {n} items. Klik om in te zoomen.',
   },
   imageMap: {
-    ...en.imageMap,
     action: 'Foto’s op kaart tonen',
     actionDescription:
       'Toont op een kaart in het andere paneel waar de geselecteerde foto’s, of die van de hele map, zijn genomen.',
@@ -3286,7 +3289,6 @@ export const nl = {
     taken: 'Genomen op {date}',
   },
   geo: {
-    ...en.geo,
     showCsvOnMap: 'Op kaart tonen…',
     showRaw: 'Als tekst tonen',
     showMap: 'Op kaart tonen',
@@ -3309,7 +3311,6 @@ export const nl = {
     mapLabel: 'Kaart van {name}',
   },
   geoCsv: {
-    ...en.geoCsv,
     summary: 'Kolommen: {columns} - coördinatenstelsel: {crs}',
     summaryWkt: 'Geometriekolom: {column} - coördinatenstelsel: {crs}',
     guessed: '(geraden)',
@@ -3327,7 +3328,6 @@ export const nl = {
     rowsSkipped: '{n} rijen hebben geen bruikbare coördinaten.',
   },
   geoEdit: {
-    ...en.geoEdit,
     edit: 'Bewerken',
     exportFormat: 'Exportformaat',
     mapMode: 'Kaarteditor',
@@ -3390,7 +3390,6 @@ export const nl = {
     nothingToImport: 'Er is niets om in te importeren.',
   },
   geoTrack: {
-    ...en.geoTrack,
     title: 'Track',
     distance: 'Afstand',
     elapsed: 'Verstreken tijd',
@@ -3416,7 +3415,6 @@ export const nl = {
     unnamed: 'Naamloze track',
   },
   geoLayers: {
-    ...en.geoLayers,
     title: 'Lagen',
     show: '{name} tonen',
     description: 'Beschrijving',
@@ -3424,7 +3422,6 @@ export const nl = {
     icons: 'Eigen pictogrammen worden alleen getekend als ze in de KMZ zijn opgeslagen.',
   },
   geoConvert: {
-    ...en.geoConvert,
     action: 'Geografisch bestand converteren...',
     title: 'Geografische bestanden converteren',
     files: { 1: '1 bestand', n: '{n} bestanden' },
@@ -3456,7 +3453,6 @@ export const nl = {
     viewerButton: 'Converteren...',
   },
   geoMinify: {
-    ...en.geoMinify,
     action: 'Geografisch bestand verkleinen...',
     title: 'Geografische bestanden verkleinen',
     viewerButton: 'Verkleinen...',
