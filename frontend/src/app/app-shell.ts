@@ -343,6 +343,7 @@ import { TerminalDrawer } from '../features/terminal/terminal-drawer';
 import { focusOpenedTerminal, isTerminalVisible } from '../features/terminal/terminal-state';
 import { WalkthroughPanel } from '../features/walkthroughs/walkthrough-panel';
 import type { WalkthroughId } from '../features/walkthroughs/walkthroughs';
+import { formatWindowTitle } from '../features/window-title/window-title';
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
 import {
   createPaneContentBuilder,
@@ -421,6 +422,7 @@ import {
 import { perfEndAfterPaint, perfStart } from '../utilities/perf';
 import { resolvedTheme } from '../utilities/resolved-theme';
 import type { RuntimeKind } from '../utilities/runtime';
+import { createWindowTitleSink, dedupeWindowTitleSink } from '../utilities/window-title-sink';
 import { buildControllers } from './controller-registry';
 
 /** Attributes of the application shell. */
@@ -1746,6 +1748,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    * actions/settings/favourites/workspace tabs are each reassigned from several different
    * closures across this file) - safe and cheap because of the diff above, and it can never miss
    * a state change that affects the menu. */
+  /** Re-derives the native window title (the Dock menu entry) from the workspace each render;
+   * the sink only fires when the formatted title changes. */
+  let windowTitleSink = dedupeWindowTitleSink(createWindowTitleSink('http'));
+  function syncWindowTitle(): void {
+    windowTitleSink(formatWindowTitle({ workspace }));
+  }
+
   function syncNativeMenu(): void {
     if (runtimeKind !== 'tauri') return;
     const spec: NativeMenuSpec = buildNativeMenuSpec({
@@ -6193,6 +6202,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       disposeShellControllers = shellControllers.dispose;
       keybindingRuntime = attrs.runtime === 'http' ? 'browser' : 'desktop';
       runtimeKind = attrs.runtime;
+      windowTitleSink = dedupeWindowTitleSink(createWindowTitleSink(runtimeKind));
       systemThemeQuery?.addEventListener('change', handleSystemThemeChange);
       window.addEventListener('focus', handleWindowFocus);
       document.addEventListener('keydown', updateFunctionKeyModifiers);
@@ -6312,6 +6322,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     view: ({ attrs }) => {
       const syncReview = syncProfileController.pendingReview();
       syncNativeMenu();
+      syncWindowTitle();
       if (treeSidebarOpen) syncDirectoryTreeToActiveLocation();
       currentEntryFormatSettings = attrs.entryFormatSettings ?? loadedEntryFormatSettings;
       const pendingDelete = Object.values(operations.byId).find(
