@@ -602,6 +602,150 @@ fn index_revision_tracks_the_visible_documents() {
     );
 }
 
+fn ids_by_word(themes: &CorpusThemes) -> Vec<u32> {
+    TOPIC_WORDS.map(|word| theme_for(themes, word)).to_vec()
+}
+
+#[test]
+fn small_changes_keep_the_fit_and_the_theme_ids_stable() {
+    let catalog = open_catalog();
+    stage_corpus(&catalog, &ALL_DOCS);
+    let service = CorpusThemeService::new(catalog.clone(), identity());
+    let scope = scope_of(&ALL_DOCS);
+    let first = analyze(&service, &scope);
+    assert!(!first.incremental);
+
+    // doc-g (4 of 40 chunks) is rewritten with the same topics.
+    stage_document(&catalog, "doc-g", 2, &[spec(0), spec(0), spec(1), spec(1)]);
+    let second = analyze(&service, &scope);
+    assert!(second.incremental, "a 10% change keeps the fitted themes");
+    assert!(!second.from_cache);
+    assert_ne!(second.index_revision, first.index_revision);
+    assert_eq!(ids_by_word(&second), ids_by_word(&first));
+    assert_eq!(second.fitted_chunks, first.fitted_chunks);
+    assert_eq!(second.centroids_recomputed, 1);
+    assert_eq!(second.centroids_reused, 7);
+    assert_eq!(second.chunk_count, first.chunk_count);
+    // The new generation is what the labels and mixtures describe.
+    assert!(
+        second
+            .themes
+            .iter()
+            .flat_map(|theme| &theme.passages)
+            .all(|passage| !passage.chunk_id.starts_with("doc-g-g1"))
+    );
+}
+
+#[test]
+fn large_changes_or_a_different_configuration_refit_from_scratch() {
+    let catalog = open_catalog();
+    stage_corpus(&catalog, &ALL_DOCS);
+    let service = CorpusThemeService::new(catalog.clone(), identity());
+    let scope = scope_of(&ALL_DOCS);
+    analyze(&service, &scope);
+
+    for document in ["doc-a", "doc-b", "doc-c", "doc-d", "doc-e"] {
+        stage_document(&catalog, document, 2, &[spec(0), spec(1), spec(2), spec(3)]);
+    }
+    let refit = analyze(&service, &scope);
+    assert!(!refit.incremental, "most chunks changed");
+
+    stage_document(&catalog, "doc-g", 2, &[spec(0), spec(0), spec(1), spec(1)]);
+    let reseeded = CorpusThemeConfig {
+        seed: 3,
+        ..CorpusThemeConfig::default()
+    };
+    let other = service
+        .analyze(&scope, &reseeded, &CancellationToken::new())
+        .unwrap();
+    assert!(!other.incremental, "another configuration is another fit");
+}
+
+#[test]
+fn theme_sources_feed_search_with_the_contributing_sources_only() {
+    let catalog = open_catalog();
+    stage_corpus(&catalog, &ALL_DOCS);
+    let service = CorpusThemeService::new(catalog.clone(), identity());
+    let scope = scope_of(&ALL_DOCS);
+    let themes = analyze(&service, &scope);
+    let token = CancellationToken::new();
+    let harbour = theme_for(&themes, "harbour");
+
+    let sources = service
+        .theme_sources(&scope, Some(harbour), &themes.fingerprint, 50, &token)
+        .unwrap();
+    // doc-a (4 chunks) leads; the mixed docs follow by their harbour share.
+    assert_eq!(sources.source_ids[0], "source-doc-a");
+    let found = sources
+        .source_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        found,
+        ["source-doc-a", "source-doc-e", "source-doc-g"]
+            .into_iter()
+            .collect()
+    );
+    assert!(!sources.truncated);
+
+    let limited = service
+        .theme_sources(&scope, Some(harbour), &themes.fingerprint, 2, &token)
+        .unwrap();
+    assert_eq!(limited.source_ids.len(), 2);
+    assert!(limited.truncated);
+
+    let none = service
+        .theme_sources(&scope, None, &themes.fingerprint, 50, &token)
+        .unwrap();
+    assert!(none.source_ids.is_empty());
+}
+
+#[test]
+fn theme_sources_refuse_stale_or_foreign_analyses_and_revoked_sources() {
+    let catalog = open_catalog();
+    stage_corpus(&catalog, &ALL_DOCS);
+    let service = CorpusThemeService::new(catalog.clone(), identity());
+    let scope = scope_of(&ALL_DOCS);
+    let themes = analyze(&service, &scope);
+    let token = CancellationToken::new();
+    assert!(matches!(
+        service.theme_sources(&scope, Some(0), "someone-elses-fingerprint", 10, &token),
+        Err(CorpusThemeError::ThemesStale)
+    ));
+    // A narrower scope has no analysis of its own.
+    assert!(matches!(
+        service.theme_sources(
+            &scope_of(&["doc-a"]),
+            Some(0),
+            &themes.fingerprint,
+            10,
+            &token
+        ),
+        Err(CorpusThemeError::ThemesStale)
+    ));
+    // The index moved on after the analysis.
+    stage_document(&catalog, "doc-a", 2, &[spec(0), spec(0)]);
+    assert!(matches!(
+        service.theme_sources(&scope, Some(0), &themes.fingerprint, 10, &token),
+        Err(CorpusThemeError::ThemesStale)
+    ));
+    // Revocation drops the cached run altogether.
+    let fresh = analyze(&service, &scope);
+    catalog.delete_occurrence("occurrence-doc-b").unwrap();
+    assert!(matches!(
+        service.theme_sources(&scope, Some(0), &fresh.fingerprint, 10, &token),
+        Err(CorpusThemeError::ThemesStale)
+    ));
+    let cancelled = CancellationToken::new();
+    cancelled.cancel();
+    let again = analyze(&service, &scope);
+    assert!(matches!(
+        service.theme_sources(&scope, Some(0), &again.fingerprint, 10, &cancelled),
+        Err(CorpusThemeError::Cancelled)
+    ));
+}
+
 fn mean_point(themes: &CorpusThemes, theme: u32) -> (f32, f32) {
     let points = themes
         .map_points

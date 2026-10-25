@@ -603,6 +603,10 @@ export function renderAppDialogs(
       client,
       scopes: ds.themesDialog?.scopes ?? [],
       onOpenPassage: (passage) => ds.themesDialog?.onOpenPassage(passage),
+      onSearchSources: (sourceIds, subject) => {
+        ds.themesDialog?.onSearchSources(sourceIds, subject);
+        dialogs.cancelThemesDialog();
+      },
       onClose: () => dialogs.cancelThemesDialog(),
     }),
     m(FinderTagsDialog, {

@@ -38,6 +38,7 @@ import type {
   ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
+  CorpusThemeSources,
   CorpusThemeStatus,
   CorpusThemesResponse,
   CreateConnectionRequest,
@@ -82,6 +83,7 @@ import type {
   GeoMinify,
   GeoMinifyPreview,
   GeoTargetFormat,
+  GetCorpusThemeSourcesRequest,
   GetCorpusThemeStatusRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
@@ -1687,6 +1689,13 @@ export class TauriFileManagerClient implements FileManagerClient {
     _signal?: AbortSignal,
   ): Promise<CorpusThemesResponse> {
     return invoke<CorpusThemesResponse>('analyze_corpus_themes', { request });
+  }
+
+  getCorpusThemeSources(
+    request: GetCorpusThemeSourcesRequest,
+    _signal?: AbortSignal,
+  ): Promise<CorpusThemeSources> {
+    return invoke<CorpusThemeSources>('get_corpus_theme_sources', { request });
   }
 
   previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview> {

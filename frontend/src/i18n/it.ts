@@ -1706,6 +1706,8 @@ export const it = {
     selectTheme: 'Seleziona questo tema',
     unavailable: 'I temi non sono disponibili in questa configurazione.',
     scopeLabel: 'Ambito',
+    searchInTheme: 'Cerca in questo tema',
+    searchFailed: 'Impossibile preparare la ricerca.',
   },
   documentSummary: {
     title: 'Riepilogo · {name}',
@@ -2589,6 +2591,7 @@ export const it = {
     summaryTokenBudget: 'La dimensione di input del riepilogo è fuori dall’intervallo supportato.',
     corpusThemeProfileMismatch:
       'L’indice è stato creato con un altro modello di embedding. Ricostruisci l’indice per vedere i temi.',
+    corpusThemesStale: 'Questi temi sono obsoleti. Analizza di nuovo per continuare.',
     conversationImmutable:
       'Profilo, ambito e modalità di conoscenza di una conversazione non possono cambiare.',
     scopeInvalid: 'I file selezionati non sono un ambito valido.',

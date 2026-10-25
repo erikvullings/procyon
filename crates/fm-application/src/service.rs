@@ -2021,6 +2021,25 @@ impl FileManagerService {
         self.corpus_themes.status(scope).await
     }
 
+    /// Lists the authorized sources contributing to one theme, for a theme-filtered search.
+    pub async fn get_corpus_theme_sources(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::GetCorpusThemeSourcesRequestDto,
+    ) -> Result<fm_transport_dto::CorpusThemeSourcesDto, ApplicationError> {
+        let (scope, _titles) = self
+            .resolve_corpus_theme_scope(access, &request.scope)
+            .await?;
+        self.corpus_themes
+            .sources(
+                scope,
+                request.theme,
+                request.fingerprint,
+                &tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+    }
+
     /// Discovers labelled themes across the authorized chunks of a scope.
     pub async fn analyze_corpus_themes(
         &self,

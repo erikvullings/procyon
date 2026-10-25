@@ -3237,6 +3237,28 @@ impl fm_application::corpus_themes::CorpusThemeCapability for RecordingThemes {
     > {
         (self.outcome)()
     }
+
+    async fn theme_sources(
+        &self,
+        scope: fm_semantic_worker::corpus_theme_storage::CorpusScope,
+        _theme: Option<u32>,
+        fingerprint: String,
+        _limit: usize,
+        _cancellation: &CancellationToken,
+    ) -> Result<
+        fm_semantic_worker::corpus_themes::ThemeSources,
+        fm_application::corpus_themes::CorpusThemeCapabilityError,
+    > {
+        if fingerprint != "current" {
+            return Err(fm_semantic_worker::corpus_themes::CorpusThemeError::ThemesStale.into());
+        }
+        let source_ids = scope.source_ids.clone();
+        self.scopes.lock().unwrap().push(scope);
+        Ok(fm_semantic_worker::corpus_themes::ThemeSources {
+            source_ids,
+            truncated: false,
+        })
+    }
 }
 
 fn weak_profile() -> Result<
@@ -3359,6 +3381,70 @@ async fn corpus_themes_receive_only_the_reauthorized_sources_of_the_scope() {
             .await
             .is_err()
     );
+}
+
+#[tokio::test]
+async fn theme_sources_are_limited_to_the_reauthorized_scope_and_stale_themes_are_rejected() {
+    let source_root = project_temp_dir("theme-sources-source-");
+    std::fs::write(source_root.path().join("one.txt"), "First document.").unwrap();
+    let state = project_temp_dir("theme-sources-state-");
+    let library = library(&state);
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1910));
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(source_root.path()).unwrap(),
+    );
+    let recorder = Arc::new(RecordingThemes {
+        scopes: Mutex::new(Vec::new()),
+        outcome: weak_profile,
+    });
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(FakeSemanticCapability::new()))
+    .with_corpus_theme_capability(recorder.clone());
+    service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+
+    let sources = service
+        .get_corpus_theme_sources(
+            &HOST,
+            fm_transport_dto::GetCorpusThemeSourcesRequestDto {
+                scope: entire_library_scope(workspace_id.into()),
+                theme: Some(0),
+                fingerprint: "current".into(),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(sources.source_ids.len(), 1, "only the enrolled file");
+    assert_eq!(
+        recorder.scopes.lock().unwrap()[0].source_ids,
+        sources.source_ids
+    );
+
+    let stale = service
+        .get_corpus_theme_sources(
+            &HOST,
+            fm_transport_dto::GetCorpusThemeSourcesRequestDto {
+                scope: entire_library_scope(workspace_id.into()),
+                theme: None,
+                fingerprint: "old".into(),
+            },
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        stale,
+        fm_application::ApplicationError::Rejected(ref rejection)
+            if rejection.reason == "corpusThemesStale"
+    ));
 }
 
 #[tokio::test]

@@ -39,6 +39,7 @@ import type {
   ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
+  CorpusThemeSources,
   CorpusThemeStatus,
   CorpusThemesResponse,
   CreateConnectionRequest,
@@ -83,6 +84,7 @@ import type {
   GeoMinify,
   GeoMinifyPreview,
   GeoTargetFormat,
+  GetCorpusThemeSourcesRequest,
   GetCorpusThemeStatusRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
@@ -466,6 +468,7 @@ export type MockClientMethod =
   | 'getDocumentSummary'
   | 'getCorpusThemeStatus'
   | 'analyzeCorpusThemes'
+  | 'getCorpusThemeSources'
   | 'previewRag'
   | 'generateRagAnswer'
   | 'saveRagConversation'
@@ -5297,6 +5300,26 @@ export class MockFileManagerClient implements FileManagerClient {
       modelId: 'mock-embedding-model',
       themes: mockCorpusThemes(),
     }));
+  }
+
+  getCorpusThemeSources(
+    request: GetCorpusThemeSourcesRequest,
+    signal?: AbortSignal,
+  ): Promise<CorpusThemeSources> {
+    return this.perform('getCorpusThemeSources', signal, () => {
+      const themes = mockCorpusThemes();
+      if (request.fingerprint !== themes.fingerprint) {
+        throw new MockClientError('invalidRequest', 'the corpus themes are out of date', {
+          reason: 'corpusThemesStale',
+        });
+      }
+      const sourceIds = themes.documentMixtures
+        .filter((mixture) =>
+          mixture.shares.some((share) => (share.theme ?? null) === (request.theme ?? null)),
+        )
+        .map((mixture) => mixture.sourceId);
+      return { sourceIds, truncated: false };
+    });
   }
 
   previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview> {

@@ -11,12 +11,12 @@ use async_trait::async_trait;
 use fm_semantic_worker::corpus_theme_storage::CorpusScope;
 use fm_semantic_worker::corpus_themes::{
     CorpusThemeConfig, CorpusThemeError, CorpusThemeService, CorpusThemeStatus, CorpusThemes,
-    DocumentThemeMixture, NoTheme, Theme, ThemePassage,
+    DocumentThemeMixture, NoTheme, Theme, ThemePassage, ThemeSources,
 };
 use fm_transport_dto::{
-    CorpusThemeDto, CorpusThemeOutcomeDto, CorpusThemeStatusDto, CorpusThemesDto,
-    CorpusThemesResponseDto, DocumentThemeMixtureDto, NoThemeDto, ThemeConceptDto, ThemeKeywordDto,
-    ThemeMapPointDto, ThemePassageDto, ThemeShareDto,
+    CorpusThemeDto, CorpusThemeOutcomeDto, CorpusThemeSourcesDto, CorpusThemeStatusDto,
+    CorpusThemesDto, CorpusThemesResponseDto, DocumentThemeMixtureDto, NoThemeDto, ThemeConceptDto,
+    ThemeKeywordDto, ThemeMapPointDto, ThemePassageDto, ThemeShareDto,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -50,6 +50,16 @@ pub trait CorpusThemeCapability: Send + Sync {
         config: CorpusThemeConfig,
         cancellation: &CancellationToken,
     ) -> Result<CorpusThemes, CorpusThemeCapabilityError>;
+
+    /// Lists the sources contributing to one theme of the analysis `fingerprint`.
+    async fn theme_sources(
+        &self,
+        scope: CorpusScope,
+        theme: Option<u32>,
+        fingerprint: String,
+        limit: usize,
+        cancellation: &CancellationToken,
+    ) -> Result<ThemeSources, CorpusThemeCapabilityError>;
 }
 
 /// Inert capability used until a host configures a semantic worker.
@@ -70,6 +80,17 @@ impl CorpusThemeCapability for UnavailableCorpusThemeCapability {
         _config: CorpusThemeConfig,
         _cancellation: &CancellationToken,
     ) -> Result<CorpusThemes, CorpusThemeCapabilityError> {
+        Err(CorpusThemeCapabilityError::Unavailable)
+    }
+
+    async fn theme_sources(
+        &self,
+        _scope: CorpusScope,
+        _theme: Option<u32>,
+        _fingerprint: String,
+        _limit: usize,
+        _cancellation: &CancellationToken,
+    ) -> Result<ThemeSources, CorpusThemeCapabilityError> {
         Err(CorpusThemeCapabilityError::Unavailable)
     }
 }
@@ -102,7 +123,29 @@ impl CorpusThemeCapability for CorpusThemeService {
             .map_err(|_| CorpusThemeError::Cancelled)?
             .map_err(CorpusThemeCapabilityError::from)
     }
+
+    async fn theme_sources(
+        &self,
+        scope: CorpusScope,
+        theme: Option<u32>,
+        fingerprint: String,
+        limit: usize,
+        cancellation: &CancellationToken,
+    ) -> Result<ThemeSources, CorpusThemeCapabilityError> {
+        let service = self.clone();
+        let token = cancellation.child_token();
+        let _guard = token.clone().drop_guard();
+        tokio::task::spawn_blocking(move || {
+            service.theme_sources(&scope, theme, &fingerprint, limit, &token)
+        })
+        .await
+        .map_err(|_| CorpusThemeError::Cancelled)?
+        .map_err(CorpusThemeCapabilityError::from)
+    }
 }
+
+/// Largest number of sources handed to a theme-filtered search.
+const THEME_SEARCH_SOURCE_LIMIT: usize = 1_024;
 
 /// Coordinates theme requests over one worker capability.
 pub struct CorpusThemeCoordinator {
@@ -125,6 +168,30 @@ impl CorpusThemeCoordinator {
             .status(scope)
             .await
             .map(status_to_dto)
+            .map_err(theme_error_to_application)
+    }
+
+    /// Sources contributing to one theme, to scope a follow-up search.
+    pub(crate) async fn sources(
+        &self,
+        scope: CorpusScope,
+        theme: Option<u32>,
+        fingerprint: String,
+        cancellation: &CancellationToken,
+    ) -> Result<CorpusThemeSourcesDto, ApplicationError> {
+        self.capability
+            .theme_sources(
+                scope,
+                theme,
+                fingerprint,
+                THEME_SEARCH_SOURCE_LIMIT,
+                cancellation,
+            )
+            .await
+            .map(|sources| CorpusThemeSourcesDto {
+                source_ids: sources.source_ids,
+                truncated: sources.truncated,
+            })
             .map_err(theme_error_to_application)
     }
 
@@ -195,6 +262,10 @@ pub(crate) fn theme_error_to_application(error: CorpusThemeCapabilityError) -> A
                 reason::CORPUS_THEME_PROFILE_MISMATCH,
                 "the indexed vectors belong to a different embedding model; rebuild the index",
             )),
+            CorpusThemeError::ThemesStale => ApplicationError::from(Rejection::new(
+                reason::CORPUS_THEMES_STALE,
+                "the corpus themes are out of date; analyse again",
+            )),
             CorpusThemeError::InvalidConfiguration => {
                 ApplicationError::InvalidRequest(error.to_string())
             }
@@ -218,6 +289,7 @@ fn themes_to_dto(themes: CorpusThemes, titles: &HashMap<String, String>) -> Corp
         chunk_count: themes.chunk_count,
         document_count: themes.document_count,
         sampled: themes.sampled,
+        incremental: themes.incremental,
         themes: themes
             .themes
             .into_iter()
@@ -376,6 +448,7 @@ mod tests {
             centroids_recomputed: 0,
             centroids_reused: 0,
             from_cache: false,
+            incremental: false,
         }
     }
 

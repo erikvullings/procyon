@@ -3397,6 +3397,19 @@ pub(crate) async fn get_corpus_theme_status(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Lists the authorized sources contributing to one theme.
+#[tauri::command]
+pub(crate) async fn get_corpus_theme_sources(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::GetCorpusThemeSourcesRequestDto,
+) -> Result<fm_transport_dto::CorpusThemeSourcesDto, ApplicationErrorDto> {
+    state
+        .service
+        .get_corpus_theme_sources(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Discovers labelled themes across the authorized chunks of a scope.
 #[tauri::command]
 pub(crate) async fn analyze_corpus_themes(

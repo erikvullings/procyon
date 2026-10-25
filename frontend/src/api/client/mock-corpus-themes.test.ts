@@ -50,4 +50,17 @@ describe('mock corpus themes', () => {
     expect(response.themes?.indexRevision).toBe(status.indexRevision);
     expect(status.profileTooWeak).toBe(false);
   });
+
+  it('lists the sources of a theme and rejects a stale fingerprint like the backend', async () => {
+    const client = new MockFileManagerClient();
+    const { themes } = await client.analyzeCorpusThemes({ scope: SCOPE });
+    const fingerprint = themes?.fingerprint ?? '';
+    const sources = await client.getCorpusThemeSources({ scope: SCOPE, theme: 1, fingerprint });
+    expect(sources.sourceIds).toEqual(['mock-source-b']);
+    const none = await client.getCorpusThemeSources({ scope: SCOPE, theme: null, fingerprint });
+    expect(none.sourceIds).toEqual(['mock-source-a']);
+    await expect(
+      client.getCorpusThemeSources({ scope: SCOPE, theme: 1, fingerprint: 'old' }),
+    ).rejects.toMatchObject({ details: { reason: 'corpusThemesStale' } });
+  });
 });

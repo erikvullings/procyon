@@ -27,6 +27,8 @@ export interface CorpusThemesDto {
   documentMixtures: DocumentThemeMixtureDto[];
   /** Digest of everything that determines this result. */
   fingerprint: string;
+  /** Whether the previous fit was kept because few chunks changed (stable theme ids). */
+  incremental: boolean;
   /**
      * Digest of the indexed documents these themes describe; compare with the
      * status revision to detect a stale analysis.

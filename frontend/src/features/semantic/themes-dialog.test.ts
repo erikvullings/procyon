@@ -32,8 +32,13 @@ afterEach(() => {
 function mount(
   client: MockFileManagerClient,
   overrides: Partial<Parameters<typeof ThemesDialog>[0]['attrs']> = {},
-): { onOpenPassage: ReturnType<typeof vi.fn>; onClose: ReturnType<typeof vi.fn> } {
+): {
+  onOpenPassage: ReturnType<typeof vi.fn>;
+  onSearchSources: ReturnType<typeof vi.fn>;
+  onClose: ReturnType<typeof vi.fn>;
+} {
   const onOpenPassage = vi.fn();
+  const onSearchSources = vi.fn();
   const onClose = vi.fn();
   m.mount(root, {
     view: () =>
@@ -42,11 +47,12 @@ function mount(
         client,
         scopes: [scope('entireLibrary', 'Entire library')],
         onOpenPassage,
+        onSearchSources,
         onClose,
         ...overrides,
       }),
   });
-  return { onOpenPassage, onClose };
+  return { onOpenPassage, onSearchSources, onClose };
 }
 
 describe('ThemesDialog', () => {
@@ -174,5 +180,55 @@ describe('ThemesDialog', () => {
     buttons[1]?.click();
     await vi.waitFor(() => expect(analyze).toHaveBeenCalledTimes(2));
     expect(analyze.mock.calls[1]?.[0].scope.kind).toBe('currentFolder');
+  });
+
+  it('hands the sources of the selected theme to a scoped search', async () => {
+    const client = new MockFileManagerClient();
+    const sources = vi.spyOn(client, 'getCorpusThemeSources');
+    const { onSearchSources } = mount(client);
+    await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+    (root.querySelector('.fm-themes-row') as HTMLButtonElement).click();
+    m.redraw.sync();
+
+    (root.querySelector('.fm-themes-search') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(onSearchSources).toHaveBeenCalledOnce());
+    expect(sources).toHaveBeenCalledWith(
+      expect.objectContaining({ theme: 0, fingerprint: 'mock-fingerprint' }),
+    );
+    expect(onSearchSources).toHaveBeenCalledWith(
+      ['mock-source-a', 'mock-source-b'],
+      'harbour, shipping',
+    );
+  });
+
+  it('re-analyses instead of searching when the themes went stale', async () => {
+    const client = new MockFileManagerClient();
+    const analyze = vi.spyOn(client, 'analyzeCorpusThemes');
+    const { onSearchSources } = mount(client);
+    await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+    (root.querySelector('.fm-themes-row') as HTMLButtonElement).click();
+    m.redraw.sync();
+
+    vi.spyOn(client, 'getCorpusThemeSources').mockRejectedValue(
+      Object.assign(new Error('stale'), { details: { reason: 'corpusThemesStale' } }),
+    );
+    (root.querySelector('.fm-themes-search') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(analyze).toHaveBeenCalledTimes(2));
+    expect(onSearchSources).not.toHaveBeenCalled();
+  });
+
+  it('shows other failures of the search preparation', async () => {
+    const client = new MockFileManagerClient();
+    const { onSearchSources } = mount(client);
+    await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+    (root.querySelector('.fm-themes-row') as HTMLButtonElement).click();
+    m.redraw.sync();
+    vi.spyOn(client, 'getCorpusThemeSources').mockRejectedValue(new Error('denied'));
+    (root.querySelector('.fm-themes-search') as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      m.redraw.sync();
+      expect(root.querySelector('.fm-themes-error')?.textContent).toBe('denied');
+    });
+    expect(onSearchSources).not.toHaveBeenCalled();
   });
 });

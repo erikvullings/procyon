@@ -98,3 +98,31 @@ Cluster **chunk embeddings directly** for theme discovery; also keep a **documen
   fm-semantic-worker/fm-application/fm-transport-dto/fm-server all pass. Not verified: the canvas
   rendering in a real browser (jsdom has no canvas), and nothing runs against a real embedding
   model because hosts do not wire the worker capability yet.
+- 2026-10-25 claude: slice 3 (theme-filtered search + incremental recluster). Worker: a run now
+  stores a `fit_key` (algorithm, model, scope, fit parameters); when it matches and at most
+  `incremental_max_change` (20%) of the chunks live in new/changed/removed documents the fitted
+  centroids are kept (no refit, theme ids stay stable, `incremental: true`), otherwise it refits;
+  `theme_sources` streams only the authorized scope and lists the sources whose chunks fall in a
+  theme (or "no theme"), strongest first, bounded to 1024 sources, refusing a stale or foreign
+  fingerprint, an index that moved on, or revoked data (`ThemesStale`, cancellable). API:
+  `POST /api/v1/semantic/themes/sources`, Tauri `get_corpus_theme_sources`, mock/http/tauri parity,
+  rejection `corpusThemesStale` in all locales. UI: "Search within this theme" hands the sources to a
+  new Knowledge Search tab scoped as semantic results with the theme keywords as subject; a stale
+  rejection re-analyses instead. Verified: 4 new worker tests (incremental/refit, sources, stale and
+  revocation), 1 application integration test, 4 dialog tests, model and mock tests; full vitest
+  (3302), tsc, biome, workspace clippy -D warnings, nextest for fm-semantic-worker/fm-application/
+  fm-transport-dto/fm-server/fm-test-support all pass.
+
+  Honest status, task kept `in_progress`; these acceptance lines are NOT literally satisfied:
+  - SKOS matches (0242): the worker counts `records.concept_id`, which the 0242 annotation
+    pipeline (separate `concept_annotations` table) does not fill, so `concepts` is normally empty;
+    the UI does not show concepts yet. Needs a join onto active annotations and a label lookup.
+  - "Hover/click opens the source at the chunk": hover shows the passage, click selects it, and a
+    separate "Open source" button opens it (editor at the JSONL/text line, viewer at the PDF page).
+  - Theme filter feeds search at document granularity (sources contributing to the theme), not
+    chunk granularity.
+  - Hosts do not inject a worker capability yet (same as summaries/Ask/knowledge search), so
+    fm-server/Tauri answer 503 and the dialog is only usable end to end with the mock runtime
+    until that activation exists; nothing was run against a real embedding model (EmbeddingGemma).
+  - Canvas rendering, hover and click were not exercised in a real browser (jsdom has no canvas).
+  - Host entire-library scope covers the requesting workspace tenant only.

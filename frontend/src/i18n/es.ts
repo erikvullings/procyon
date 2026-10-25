@@ -1708,6 +1708,8 @@ export const es = {
     selectTheme: 'Seleccionar este tema',
     unavailable: 'Los temas no están disponibles en esta configuración.',
     scopeLabel: 'Ámbito',
+    searchInTheme: 'Buscar dentro de este tema',
+    searchFailed: 'No se pudo preparar la búsqueda.',
   },
   documentSummary: {
     title: 'Resumen · {name}',
@@ -2599,6 +2601,7 @@ export const es = {
     summaryTokenBudget: 'El tamaño de entrada del resumen está fuera del rango admitido.',
     corpusThemeProfileMismatch:
       'El índice se creó con otro modelo de embeddings. Reconstruya el índice para ver los temas.',
+    corpusThemesStale: 'Estos temas están desactualizados. Analice de nuevo para continuar.',
     conversationImmutable:
       'El perfil, el alcance y el modo de conocimiento de una conversación no pueden cambiar.',
     scopeInvalid: 'Los archivos seleccionados no son un alcance válido.',

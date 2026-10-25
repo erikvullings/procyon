@@ -32,6 +32,7 @@ import type {
   ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
+  CorpusThemeSources,
   CorpusThemeStatus,
   CorpusThemesResponse,
   CreateConnectionRequest,
@@ -76,6 +77,7 @@ import type {
   GeoMinify,
   GeoMinifyPreview,
   GeoTargetFormat,
+  GetCorpusThemeSourcesRequest,
   GetCorpusThemeStatusRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
@@ -1035,6 +1037,11 @@ export interface FileManagerClient {
     request: AnalyzeCorpusThemesRequest,
     signal?: AbortSignal,
   ): Promise<CorpusThemesResponse>;
+  /** Lists the authorized sources contributing to one theme, to scope a follow-up search. */
+  getCorpusThemeSources(
+    request: GetCorpusThemeSourcesRequest,
+    signal?: AbortSignal,
+  ): Promise<CorpusThemeSources>;
   previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview>;
   generateRagAnswer(
     request: GenerateRagAnswerRequest,

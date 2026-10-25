@@ -7807,6 +7807,63 @@
         }
       }
     },
+    "/api/v1/semantic/themes/sources": {
+      "post": {
+        "operationId": "getCorpusThemeSources",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetCorpusThemeSourcesRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorpusThemeSourcesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/semantic/themes/status": {
       "post": {
         "operationId": "getCorpusThemeStatus",
@@ -10881,6 +10938,27 @@
           "noContent"
         ]
       },
+      "CorpusThemeSourcesDto": {
+        "type": "object",
+        "description": "Authorized sources contributing to one theme, strongest first.",
+        "required": [
+          "sourceIds",
+          "truncated"
+        ],
+        "properties": {
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Opaque authorized source identities, usable as a semantic-result search scope."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether weaker sources were left out to respect the limit."
+          }
+        }
+      },
       "CorpusThemeStatusDto": {
         "type": "object",
         "description": "Current facts about a scope, without computing themes.",
@@ -10929,6 +11007,7 @@
           "chunkCount",
           "documentCount",
           "sampled",
+          "incremental",
           "themes",
           "noTheme",
           "documentMixtures",
@@ -10963,6 +11042,10 @@
           "fingerprint": {
             "type": "string",
             "description": "Digest of everything that determines this result."
+          },
+          "incremental": {
+            "type": "boolean",
+            "description": "Whether the previous fit was kept because few chunks changed (stable theme ids)."
           },
           "indexRevision": {
             "type": "string",
@@ -14007,6 +14090,33 @@
               "null"
             ],
             "description": "Output format: `geojson`, `gpx`, `kml`, `kmz` or `csv`; absent keeps each file's format."
+          }
+        }
+      },
+      "GetCorpusThemeSourcesRequestDto": {
+        "type": "object",
+        "description": "Asks which sources contribute to one theme of an analysis the caller is viewing.",
+        "required": [
+          "scope",
+          "fingerprint"
+        ],
+        "properties": {
+          "fingerprint": {
+            "type": "string",
+            "description": "Fingerprint of the analysis being viewed; a mismatch means it is stale."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RagScopeDto",
+            "description": "Visible authorized scope; re-authorized on every request."
+          },
+          "theme": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Theme id, or absent for the \"no theme\" bucket.",
+            "minimum": 0
           }
         }
       },

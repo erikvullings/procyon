@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { mockCorpusThemes } from '../../api/client/mock-corpus-themes';
 import {
+  isThemesStale as isStaleRejection,
   NO_THEME_COLOUR,
   percentText,
   pickPoint,
@@ -88,5 +89,12 @@ describe('themes model', () => {
     expect(percentText(0.4167)).toBe('42%');
     expect(percentText(0.004)).toBe('<1%');
     expect(percentText(0)).toBe('0%');
+  });
+
+  it('recognises the stale-themes rejection and nothing else', () => {
+    expect(isStaleRejection({ details: { reason: 'corpusThemesStale' } })).toBe(true);
+    expect(isStaleRejection({ details: { reason: 'scopeEmpty' } })).toBe(false);
+    expect(isStaleRejection(new Error('x'))).toBe(false);
+    expect(isStaleRejection(null)).toBe(false);
   });
 });

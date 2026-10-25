@@ -1005,6 +1005,8 @@ export const en = {
     selectTheme: 'Select this theme',
     unavailable: 'Themes are not available in this configuration.',
     scopeLabel: 'Scope',
+    searchInTheme: 'Search within this theme',
+    searchFailed: 'The search could not be prepared.',
   },
   documentSummary: {
     title: 'Summary · {name}',
@@ -2541,6 +2543,7 @@ export const en = {
     summaryTokenBudget: 'The summary input size is outside the supported range.',
     corpusThemeProfileMismatch:
       'The index was built with a different embedding model. Rebuild the index to see themes.',
+    corpusThemesStale: 'These themes are out of date. Analyse again to continue.',
     conversationImmutable: 'The profile, scope and knowledge mode of a conversation cannot change.',
     scopeInvalid: 'The selected files are not a valid scope.',
     conceptUriRequired: 'A concept URI is required.',

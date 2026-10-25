@@ -483,5 +483,5 @@ content streaming, and mapping concerns live in dedicated modules with interface
 - [x] 0283 Semantic indexing for large JSONL files *(streamed converter; whole-line windows fed to the
   worker as sub-documents with absolute line/byte provenance, no file-size limit; skipped-line counts
   are in the host report/log only, not the UI, see task notes)*
-- [ ] 0284 Corpus themes and 2D embedding cluster map *(in_progress — slices 1-2 done;
+- [ ] 0284 Corpus themes and 2D embedding cluster map *(in_progress — slices 1-3 built, gaps listed in task notes;
   needs 0185, 0283)*

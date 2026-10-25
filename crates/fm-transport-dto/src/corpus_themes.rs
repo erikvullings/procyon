@@ -19,6 +19,29 @@ pub struct AnalyzeCorpusThemesRequestDto {
     pub max_themes: Option<u32>,
 }
 
+/// Asks which sources contribute to one theme of an analysis the caller is viewing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCorpusThemeSourcesRequestDto {
+    /// Visible authorized scope; re-authorized on every request.
+    pub scope: RagScopeDto,
+    /// Theme id, or absent for the "no theme" bucket.
+    #[serde(default)]
+    pub theme: Option<u32>,
+    /// Fingerprint of the analysis being viewed; a mismatch means it is stale.
+    pub fingerprint: String,
+}
+
+/// Authorized sources contributing to one theme, strongest first.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CorpusThemeSourcesDto {
+    /// Opaque authorized source identities, usable as a semantic-result search scope.
+    pub source_ids: Vec<String>,
+    /// Whether weaker sources were left out to respect the limit.
+    pub truncated: bool,
+}
+
 /// Asks whether the themes of a scope are available and current.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -190,6 +213,8 @@ pub struct CorpusThemesDto {
     pub document_count: u32,
     /// Whether the clustering used a sample of the chunks.
     pub sampled: bool,
+    /// Whether the previous fit was kept because few chunks changed (stable theme ids).
+    pub incremental: bool,
     /// Themes, largest first.
     pub themes: Vec<CorpusThemeDto>,
     /// Chunks that fit no theme.

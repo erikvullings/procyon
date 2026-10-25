@@ -1712,6 +1712,8 @@ export const pt = {
     selectTheme: 'Selecionar este tema',
     unavailable: 'Os temas não estão disponíveis nesta configuração.',
     scopeLabel: 'Âmbito',
+    searchInTheme: 'Pesquisar neste tema',
+    searchFailed: 'Não foi possível preparar a pesquisa.',
   },
   documentSummary: {
     title: 'Resumo · {name}',
@@ -2607,6 +2609,7 @@ export const pt = {
     summaryTokenBudget: 'O tamanho de entrada do resumo está fora do intervalo suportado.',
     corpusThemeProfileMismatch:
       'O índice foi criado com outro modelo de embeddings. Recrie o índice para ver os temas.',
+    corpusThemesStale: 'Estes temas estão desatualizados. Analise novamente para continuar.',
     conversationImmutable:
       'O perfil, o âmbito e o modo de conhecimento de uma conversa não podem mudar.',
     scopeInvalid: 'Os ficheiros selecionados não são um âmbito válido.',

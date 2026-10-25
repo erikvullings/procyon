@@ -13,6 +13,7 @@ import type {
 } from '../../models';
 import { knowledgeProvenanceLabel } from './knowledge-search-dialog';
 import {
+  isThemesStale,
   NO_THEME_COLOUR,
   percentText,
   pickPoint,
@@ -32,6 +33,8 @@ export interface ThemesDialogAttrs {
   readonly scopes: readonly RagScope[];
   /** Opens the source of a passage, at its line when the provenance has one. */
   readonly onOpenPassage: (passage: ThemePassage) => void | Promise<void>;
+  /** Starts a search limited to the given authorized sources, about the given subject. */
+  readonly onSearchSources: (sourceIds: readonly string[], subject: string) => void;
   readonly onClose: () => void;
 }
 
@@ -261,6 +264,32 @@ export const ThemesDialog: FactoryComponent<ThemesDialogAttrs> = () => {
     selectedPoint = undefined;
   }
 
+  async function searchWithinTheme(
+    attrs: ThemesDialogAttrs,
+    themes: CorpusThemes,
+    theme: number | null,
+  ): Promise<void> {
+    const scope = activeScope(attrs);
+    if (scope === undefined) return;
+    try {
+      const { sourceIds } = await attrs.client.getCorpusThemeSources({
+        scope,
+        theme,
+        fingerprint: themes.fingerprint,
+      });
+      error = undefined;
+      attrs.onSearchSources(sourceIds, theme === null ? '' : themeLabel(theme, themes));
+    } catch (cause) {
+      if (isThemesStale(cause)) {
+        // The index moved on: show current themes instead of searching a stale set.
+        void load(attrs);
+        return;
+      }
+      error = errorMessage(cause, t('themes', 'searchFailed'));
+    }
+    m.redraw();
+  }
+
   function themeDetails(themes: CorpusThemes, attrs: ThemesDialogAttrs): Vnode | undefined {
     if (selected === undefined) return undefined;
     const theme =
@@ -273,6 +302,15 @@ export const ThemesDialog: FactoryComponent<ThemesDialogAttrs> = () => {
     };
     return m('section.fm-themes-details', { 'aria-live': 'polite' }, [
       m('h4', selected === null ? t('themes', 'noTheme') : themeLabel(selected, themes)),
+      m(
+        'button.btn.fm-themes-search',
+        {
+          type: 'button',
+          disabled: busy,
+          onclick: () => void searchWithinTheme(attrs, themes, selected ?? null),
+        },
+        t('themes', 'searchInTheme'),
+      ),
       theme === undefined
         ? m('p.fm-themes-muted', t('themes', 'noThemeHint'))
         : m('.fm-themes-keywords', [

@@ -1707,6 +1707,8 @@ export const pl = {
     selectTheme: 'Wybierz ten temat',
     unavailable: 'Tematy nie są dostępne w tej konfiguracji.',
     scopeLabel: 'Zakres',
+    searchInTheme: 'Szukaj w tym temacie',
+    searchFailed: 'Nie udało się przygotować wyszukiwania.',
   },
   documentSummary: {
     title: 'Podsumowanie · {name}',
@@ -2587,6 +2589,7 @@ export const pl = {
     summaryTokenBudget: 'Rozmiar danych wejściowych podsumowania jest poza obsługiwanym zakresem.',
     corpusThemeProfileMismatch:
       'Indeks utworzono innym modelem osadzeń. Odbuduj indeks, aby zobaczyć tematy.',
+    corpusThemesStale: 'Te tematy są nieaktualne. Przeanalizuj ponownie, aby kontynuować.',
     conversationImmutable: 'Profil, zakres i tryb wiedzy rozmowy nie mogą się zmienić.',
     scopeInvalid: 'Zaznaczone pliki nie tworzą prawidłowego zakresu.',
     conceptUriRequired: 'Wymagany jest identyfikator URI pojęcia.',

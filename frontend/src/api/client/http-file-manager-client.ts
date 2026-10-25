@@ -29,6 +29,7 @@ import type {
   ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
+  CorpusThemeSources,
   CorpusThemeStatus,
   CorpusThemesResponse,
   CreateConnectionRequest,
@@ -74,6 +75,7 @@ import type {
   GeoMinify,
   GeoMinifyPreview,
   GeoTargetFormat,
+  GetCorpusThemeSourcesRequest,
   GetCorpusThemeStatusRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
@@ -268,6 +270,7 @@ import {
   testConnection as requestConnectionTest,
   updateConnection as requestConnectionUpdate,
   convertGeoText as requestConvertGeoText,
+  getCorpusThemeSources as requestCorpusThemeSources,
   getCorpusThemeStatus as requestCorpusThemeStatus,
   analyzeCorpusThemes as requestCorpusThemesAnalysis,
   getDiagnostics as requestDiagnostics,
@@ -2774,6 +2777,19 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200)
       throw unexpectedResponseError('analyzeCorpusThemes', response.status);
+    return response.data;
+  }
+
+  async getCorpusThemeSources(
+    request: GetCorpusThemeSourcesRequest,
+    signal?: AbortSignal,
+  ): Promise<CorpusThemeSources> {
+    const response = await requestCorpusThemeSources(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw unexpectedResponseError('getCorpusThemeSources', response.status);
     return response.data;
   }
 

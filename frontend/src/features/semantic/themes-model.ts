@@ -158,3 +158,14 @@ export function percentText(share: number): string {
   const percent = share * 100;
   return percent < 1 ? '<1%' : `${Math.round(percent)}%`;
 }
+
+/** True when the backend rejected a request because the analysis no longer matches the index. */
+export function isThemesStale(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const details = (error as { readonly details?: unknown }).details;
+  return (
+    typeof details === 'object' &&
+    details !== null &&
+    (details as { readonly reason?: unknown }).reason === 'corpusThemesStale'
+  );
+}

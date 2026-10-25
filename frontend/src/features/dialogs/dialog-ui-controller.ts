@@ -34,6 +34,7 @@ export interface SpotlightCommentDialogRequest {
 export interface ThemesDialogRequest {
   readonly scopes: readonly RagScope[];
   readonly onOpenPassage: (passage: ThemePassage) => void | Promise<void>;
+  readonly onSearchSources: (sourceIds: readonly string[], subject: string) => void;
 }
 
 export interface DocumentSummaryDialogRequest {

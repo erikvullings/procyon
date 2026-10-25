@@ -67,6 +67,9 @@ pub struct CorpusThemeConfig {
     pub max_document_mixtures: usize,
     /// Chunks projected onto the 2D map (stride sample above this bound).
     pub max_map_points: usize,
+    /// Largest fraction of chunks that may have changed since the previous run for
+    /// its fitted themes to be kept (stable theme ids, no refit).
+    pub incremental_max_change: f32,
 }
 
 impl Default for CorpusThemeConfig {
@@ -84,6 +87,7 @@ impl Default for CorpusThemeConfig {
             passages_per_theme: 3,
             max_document_mixtures: 5_000,
             max_map_points: 2_000,
+            incremental_max_change: 0.2,
         }
     }
 }
@@ -106,6 +110,8 @@ impl CorpusThemeConfig {
             || self.passages_per_theme > 16
             || self.max_map_points == 0
             || self.max_map_points > 10_000
+            || !self.incremental_max_change.is_finite()
+            || !(0.0..=1.0).contains(&self.incremental_max_change)
         {
             return Err(CorpusThemeError::InvalidConfiguration);
         }
@@ -155,7 +161,8 @@ pub struct ThemeConcept {
 /// One discovered theme.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Theme {
-    /// Stable id: themes are ordered by size, largest first.
+    /// Id within the analysis. A fresh fit numbers themes by size, largest first; a kept
+    /// (incremental) fit keeps every theme's id while the list stays ordered by size.
     pub id: u32,
     /// Chunks assigned to the theme.
     pub chunk_count: u64,
@@ -258,6 +265,17 @@ pub struct CorpusThemes {
     pub centroids_reused: u32,
     /// Whether the result was served from the persisted run.
     pub from_cache: bool,
+    /// Whether the previous fit was kept because few chunks changed (stable theme ids).
+    pub incremental: bool,
+}
+
+/// Sources contributing to one theme.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ThemeSources {
+    /// Authorized source identities, strongest contribution first.
+    pub source_ids: Vec<String>,
+    /// Whether weaker sources were left out to respect the limit.
+    pub truncated: bool,
 }
 
 /// Cheap, vector-free facts about a scope, used for the stale-index indicator.
@@ -305,6 +323,9 @@ pub enum CorpusThemeError {
     /// Cancellation was requested.
     #[error("corpus theme analysis was cancelled")]
     Cancelled,
+    /// The themes the caller holds no longer describe the current index.
+    #[error("the corpus themes are stale; analyse again")]
+    ThemesStale,
     /// A persisted run could not be decoded.
     #[error("persisted theme run is corrupt")]
     CorruptRun,
@@ -330,6 +351,13 @@ pub(crate) struct ThemeModel {
 }
 
 impl ThemeModel {
+    /// Final theme id of one vector, or `None` for "no theme".
+    fn theme_of(&self, vector: &[f32]) -> Option<u32> {
+        self.cluster_of(vector)
+            .0
+            .and_then(|cluster| self.cluster_theme[cluster])
+    }
+
     /// Bucket of one vector: `Some(cluster)` or `None` for "no theme".
     fn cluster_of(&self, vector: &[f32]) -> (Option<usize>, f32) {
         let (cluster, distance) = kmeans::nearest_centroid(vector, &self.centroids);
@@ -341,6 +369,8 @@ impl ThemeModel {
 /// Everything persisted for an idempotent re-request.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct StoredThemeRun {
+    /// Digest of everything that determines the fitted clusters (not the index revision).
+    pub(crate) fit_key: String,
     pub(crate) themes: CorpusThemes,
     pub(crate) model: ThemeModel,
     pub(crate) documents: Vec<CorpusDocument>,
@@ -472,21 +502,45 @@ impl CorpusThemeService {
         }
         let index_revision = revision_of(&documents);
         let fingerprint = self.fingerprint(scope, config, &index_revision);
-        if let Some((stored, json)) = self.catalog.corpus_theme_run(scope)?
-            && stored == fingerprint
-            && let Ok(run) = serde_json::from_str::<StoredThemeRun>(&json)
+        let fit_key = self.fit_key(scope, config);
+        let previous = self
+            .catalog
+            .corpus_theme_run(scope)?
+            .and_then(|(stored, json)| {
+                serde_json::from_str::<StoredThemeRun>(&json)
+                    .ok()
+                    .map(|run| (stored, run))
+            });
+        if let Some((stored, run)) = &previous
+            && *stored == fingerprint
         {
-            let mut themes = run.themes;
+            let mut themes = run.themes.clone();
             themes.from_cache = true;
             return Ok(themes);
         }
 
-        let stride = sample_stride(total_chunks, config.max_fit_chunks);
-        let sampled = stride > 1;
-        let fit_points = self.collect_fit_points(scope, stride, cancellation)?;
-        let model = fit_model(&fit_points, config, cancellation)?;
-        let fitted_chunks = u32::try_from(fit_points.len()).unwrap_or(u32::MAX);
-        drop(fit_points);
+        // Few changed chunks keep the fitted themes, so ids stay stable and the
+        // expensive fit is skipped; many changes refit from scratch.
+        let kept = previous.as_ref().filter(|(_, run)| {
+            run.fit_key == fit_key
+                && !run.themes.themes.is_empty()
+                && changed_fraction(&run.documents, &documents)
+                    <= f64::from(config.incremental_max_change)
+        });
+        let (model, sampled, fitted_chunks, incremental) = if let Some((_, run)) = kept {
+            (
+                run.model.clone(),
+                run.themes.sampled,
+                run.themes.fitted_chunks,
+                true,
+            )
+        } else {
+            let stride = sample_stride(total_chunks, config.max_fit_chunks);
+            let fit_points = self.collect_fit_points(scope, stride, cancellation)?;
+            let model = fit_model(&fit_points, config, cancellation)?;
+            let fitted = u32::try_from(fit_points.len()).unwrap_or(u32::MAX);
+            (model, stride > 1, fitted, false)
+        };
 
         let mut accumulator = ThemeAccumulator::new(
             config.clone(),
@@ -529,19 +583,21 @@ impl CorpusThemeService {
         if let Some(totals) = last {
             self.persist_centroid(scope, &totals, &mut recomputed, &mut reused)?;
         }
-        let (mut themes, model) = accumulator.finish(
-            ALGORITHM_VERSION,
-            self.model_tag(),
+        let (mut themes, model) = accumulator.finish(RunFacts {
+            algorithm_version: ALGORITHM_VERSION,
+            model_tag: self.model_tag(),
             index_revision,
-            fingerprint.clone(),
-            total_chunks,
-            u32::try_from(documents.len()).unwrap_or(u32::MAX),
+            fingerprint: fingerprint.clone(),
+            chunk_count: total_chunks,
+            document_count: u32::try_from(documents.len()).unwrap_or(u32::MAX),
             sampled,
             fitted_chunks,
-        );
+            incremental,
+        });
         themes.centroids_recomputed = recomputed;
         themes.centroids_reused = reused;
         let run = StoredThemeRun {
+            fit_key,
             themes: themes.clone(),
             model,
             documents,
@@ -632,6 +688,97 @@ impl CorpusThemeService {
             && stored.vector.len() == self.identity.dimensions
     }
 
+    /// Digest of the inputs that determine the fitted clusters.
+    fn fit_key(&self, scope: &CorpusScope, config: &CorpusThemeConfig) -> String {
+        let mut digest = Sha256::new();
+        digest.update(ALGORITHM_VERSION.as_bytes());
+        digest.update([0]);
+        digest.update(self.model_tag().as_bytes());
+        digest.update([0]);
+        digest.update(scope.scope_key().as_bytes());
+        digest.update([0]);
+        digest.update(
+            serde_json::to_vec(&(
+                config.seed,
+                config.min_themes,
+                config.max_themes,
+                config.max_iterations,
+                config.min_chunks,
+                config.max_fit_chunks,
+                config.min_theme_chunks,
+                config.outlier_sigma.to_bits(),
+            ))
+            .unwrap_or_default(),
+        );
+        hex(&digest.finalize())
+    }
+
+    /// Lists the sources contributing chunks to one theme, strongest first.
+    ///
+    /// `fingerprint` must be the one of the analysis the caller is looking at,
+    /// and the index must not have changed since; otherwise the themes are
+    /// stale and the caller has to analyse again. Only chunks of the
+    /// authorized `scope` are assigned, so revoked sources never appear.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CorpusThemeError::ThemesStale`] for a mismatching analysis,
+    /// plus cancellation and storage failures.
+    pub fn theme_sources(
+        &self,
+        scope: &CorpusScope,
+        theme: Option<u32>,
+        fingerprint: &str,
+        limit: usize,
+        cancellation: &CancellationToken,
+    ) -> Result<ThemeSources, CorpusThemeError> {
+        if cancellation.is_cancelled() {
+            return Err(CorpusThemeError::Cancelled);
+        }
+        let run = self
+            .catalog
+            .corpus_theme_run(scope)?
+            .filter(|(stored, _)| stored == fingerprint)
+            .and_then(|(_, json)| serde_json::from_str::<StoredThemeRun>(&json).ok())
+            .ok_or(CorpusThemeError::ThemesStale)?;
+        let current = revision_of(&self.catalog.corpus_documents(scope)?);
+        if current != run.themes.index_revision {
+            return Err(CorpusThemeError::ThemesStale);
+        }
+        let mut counts = std::collections::BTreeMap::<String, u64>::new();
+        let mut failure = None;
+        let mut seen = 0u64;
+        self.catalog.visit_corpus_chunks(scope, |chunk| {
+            seen += 1;
+            if seen.is_multiple_of(256) && cancellation.is_cancelled() {
+                failure = Some(CorpusThemeError::Cancelled);
+                return false;
+            }
+            if chunk.vector.len() != self.identity.dimensions {
+                failure = Some(CorpusThemeError::InvalidEmbeddings);
+                return false;
+            }
+            if run.model.theme_of(&chunk.vector) == theme {
+                *counts.entry(chunk.source_id).or_default() += 1;
+            }
+            true
+        })?;
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        if cancellation.is_cancelled() {
+            return Err(CorpusThemeError::Cancelled);
+        }
+        let mut ranked = counts.into_iter().collect::<Vec<_>>();
+        ranked.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
+        let truncated = ranked.len() > limit;
+        ranked.truncate(limit);
+        Ok(ThemeSources {
+            source_ids: ranked.into_iter().map(|(source_id, _)| source_id).collect(),
+            truncated,
+        })
+    }
+
     fn fingerprint(
         &self,
         scope: &CorpusScope,
@@ -649,6 +796,52 @@ impl CorpusThemeService {
         digest.update(serde_json::to_vec(config).unwrap_or_default());
         hex(&digest.finalize())
     }
+}
+
+/// Fraction of the current chunks living in new or changed documents, counting
+/// removed documents against the larger of the two corpora.
+fn changed_fraction(previous: &[CorpusDocument], current: &[CorpusDocument]) -> f64 {
+    let before = previous
+        .iter()
+        .map(|document| (document.document_id.as_str(), document))
+        .collect::<HashMap<_, _>>();
+    let mut changed = 0u64;
+    let mut total = 0u64;
+    for document in current {
+        total += u64::from(document.chunk_count);
+        let unchanged = before
+            .get(document.document_id.as_str())
+            .is_some_and(|old| {
+                old.generation == document.generation && old.content_hash == document.content_hash
+            });
+        if !unchanged {
+            changed += u64::from(document.chunk_count);
+        }
+    }
+    let kept = current
+        .iter()
+        .map(|document| document.document_id.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    let removed = previous
+        .iter()
+        .filter(|document| !kept.contains(document.document_id.as_str()))
+        .map(|document| u64::from(document.chunk_count))
+        .sum::<u64>();
+    let base = total.max(removed + changed).max(1);
+    (changed + removed) as f64 / base as f64
+}
+
+/// Facts about one finished run, recorded in the result.
+pub(crate) struct RunFacts {
+    pub(crate) algorithm_version: &'static str,
+    pub(crate) model_tag: String,
+    pub(crate) index_revision: String,
+    pub(crate) fingerprint: String,
+    pub(crate) chunk_count: u64,
+    pub(crate) document_count: u32,
+    pub(crate) sampled: bool,
+    pub(crate) fitted_chunks: u32,
+    pub(crate) incremental: bool,
 }
 
 fn model_tag(identity: &EmbeddingModelIdentity) -> String {
@@ -959,18 +1152,18 @@ impl ThemeAccumulator {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn finish(
-        mut self,
-        algorithm_version: &str,
-        model_tag: String,
-        index_revision: String,
-        fingerprint: String,
-        chunk_count: u64,
-        document_count: u32,
-        sampled: bool,
-        fitted_chunks: u32,
-    ) -> (CorpusThemes, ThemeModel) {
+    pub(crate) fn finish(mut self, facts: RunFacts) -> (CorpusThemes, ThemeModel) {
+        let RunFacts {
+            algorithm_version,
+            model_tag,
+            index_revision,
+            fingerprint,
+            chunk_count,
+            document_count,
+            sampled,
+            fitted_chunks,
+            incremental,
+        } = facts;
         let outlier_bucket = self.model.centroids.len();
         let mut order = (0..outlier_bucket)
             .filter(|bucket| self.classes[*bucket].chunks > 0)
@@ -981,20 +1174,24 @@ impl ThemeAccumulator {
                 .cmp(&self.classes[*left].chunks)
                 .then_with(|| left.cmp(right))
         });
+        // A kept fit keeps its theme ids; a fresh fit numbers themes by size.
         let mut cluster_theme = vec![None; outlier_bucket];
-        for (id, bucket) in order.iter().enumerate() {
-            cluster_theme[*bucket] = Some(u32::try_from(id).unwrap_or(u32::MAX));
+        for (position, bucket) in order.iter().enumerate() {
+            cluster_theme[*bucket] = if incremental {
+                self.model.cluster_theme[*bucket]
+            } else {
+                Some(u32::try_from(position).unwrap_or(u32::MAX))
+            };
         }
         let keywords = label_keywords(&self.classes, &order, self.config.keywords_per_theme);
         let total = chunk_count.max(1) as f32;
         let themes = order
             .iter()
             .zip(keywords)
-            .enumerate()
-            .map(|(id, (bucket, keywords))| {
+            .map(|(bucket, keywords)| {
                 let class = std::mem::take(&mut self.classes[*bucket]);
                 Theme {
-                    id: u32::try_from(id).unwrap_or(u32::MAX),
+                    id: cluster_theme[*bucket].unwrap_or(u32::MAX),
                     chunk_count: class.chunks,
                     document_count: class.documents,
                     share: class.chunks as f32 / total,
@@ -1081,6 +1278,7 @@ impl ThemeAccumulator {
                 centroids_recomputed: 0,
                 centroids_reused: 0,
                 from_cache: false,
+                incremental,
             },
             model,
         )

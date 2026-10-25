@@ -3636,6 +3636,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             ]),
       ],
       onOpenPassage: openThemePassage,
+      onSearchSources: (sourceIds, subject) =>
+        openKnowledgeSearchTab({ semanticSourceIds: sourceIds, initialSubject: subject }),
     });
   }
 
@@ -3681,12 +3683,23 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   /** Focuses the existing Knowledge tab or opens a search-first session tab. */
   function openKnowledgeSearch(): void {
+    openKnowledgeSearchTab();
+  }
+
+  function openKnowledgeSearchTab(scoped?: {
+    readonly semanticSourceIds: readonly string[];
+    readonly initialSubject: string;
+  }): void {
     const active = activeDirectory();
     const currentWorkspace = workspace;
     if (currentWorkspace === undefined) return;
-    const existing = [...knowledgeSearchByTab.values()].find(
-      (entry) => entry.workspaceId === currentWorkspace.id,
-    );
+    // A theme-scoped search always opens its own tab: an open session keeps the scope it started with.
+    const existing =
+      scoped === undefined
+        ? [...knowledgeSearchByTab.values()].find(
+            (entry) => entry.workspaceId === currentWorkspace.id,
+          )
+        : undefined;
     if (existing !== undefined) {
       if (currentWorkspace.panesById[existing.paneId]?.activeTabId !== existing.tabId) {
         tabController.activateTab(existing.paneId, existing.tabId);
@@ -3704,7 +3717,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       active === undefined
         ? undefined
         : findFilesPresentationsByLocationUri.get(active.location.uri);
-    const semanticSourceIds = [
+    const semanticSourceIds = scoped?.semanticSourceIds ?? [
       ...new Set(
         (presentation?.semanticResults ?? []).flatMap((result) => [
           result.bestEvidence.sourceId,
@@ -3739,9 +3752,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           currentFolder: active?.location,
           semanticSourceIds,
           initialSubject:
-            presentation?.kind === 'semantic' || presentation?.kind === 'content'
-              ? presentation.term
-              : undefined,
+            scoped !== undefined
+              ? scoped.initialSubject
+              : presentation?.kind === 'semantic' || presentation?.kind === 'content'
+                ? presentation.term
+                : undefined,
         });
         m.redraw();
       },

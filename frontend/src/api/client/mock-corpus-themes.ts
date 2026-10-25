@@ -70,6 +70,7 @@ export const mockCorpusThemes = (): CorpusThemes => ({
   chunkCount: 24,
   documentCount: 2,
   sampled: false,
+  incremental: false,
   themes: [
     {
       id: 0,

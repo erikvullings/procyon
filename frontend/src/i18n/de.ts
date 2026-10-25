@@ -1725,6 +1725,8 @@ export const de = {
     selectTheme: 'Dieses Thema auswählen',
     unavailable: 'Themen sind in dieser Konfiguration nicht verfügbar.',
     scopeLabel: 'Bereich',
+    searchInTheme: 'In diesem Thema suchen',
+    searchFailed: 'Die Suche konnte nicht vorbereitet werden.',
   },
   documentSummary: {
     title: 'Zusammenfassung · {name}',
@@ -2634,6 +2636,7 @@ export const de = {
       'Die Eingabegröße der Zusammenfassung liegt außerhalb des unterstützten Bereichs.',
     corpusThemeProfileMismatch:
       'Der Index wurde mit einem anderen Embedding-Modell erstellt. Erstellen Sie den Index neu, um Themen zu sehen.',
+    corpusThemesStale: 'Diese Themen sind veraltet. Analysieren Sie erneut, um fortzufahren.',
     conversationImmutable:
       'Profil, Umfang und Wissensmodus einer Unterhaltung können nicht geändert werden.',
     scopeInvalid: 'Die ausgewählten Dateien sind kein gültiger Umfang.',

@@ -1016,6 +1016,8 @@ export const nl = {
     selectTheme: 'Dit thema selecteren',
     unavailable: 'Thema’s zijn in deze configuratie niet beschikbaar.',
     scopeLabel: 'Bereik',
+    searchInTheme: 'Zoeken binnen dit thema',
+    searchFailed: 'De zoekopdracht kon niet worden voorbereid.',
   },
   documentSummary: {
     title: 'Samenvatting · {name}',
@@ -2600,6 +2602,7 @@ export const nl = {
     summaryTokenBudget: 'De invoergrootte van de samenvatting valt buiten het ondersteunde bereik.',
     corpusThemeProfileMismatch:
       'De index is met een ander embeddingmodel opgebouwd. Bouw de index opnieuw op om thema’s te zien.',
+    corpusThemesStale: 'Deze thema’s zijn verouderd. Analyseer opnieuw om verder te gaan.',
     conversationImmutable:
       'Het profiel, het bereik en de kennismodus van een gesprek kunnen niet wijzigen.',
     scopeInvalid: 'De geselecteerde bestanden vormen geen geldig bereik.',
