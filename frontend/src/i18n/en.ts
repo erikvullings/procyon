@@ -2502,6 +2502,8 @@ export const en = {
     scopeRootInvalid: 'The chosen folder identifier is not valid.',
     scopeFolderRequired: 'The current-folder scope needs a folder.',
     summaryTokenBudget: 'The summary input size is outside the supported range.',
+    corpusThemeProfileMismatch:
+      'The index was built with a different embedding model. Rebuild the index to see themes.',
     conversationImmutable: 'The profile, scope and knowledge mode of a conversation cannot change.',
     scopeInvalid: 'The selected files are not a valid scope.',
     conceptUriRequired: 'A concept URI is required.',

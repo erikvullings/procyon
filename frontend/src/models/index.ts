@@ -5,6 +5,7 @@ export * from './checksum';
 export * from './clipboard';
 export * from './comparison';
 export * from './connection';
+export * from './corpus-themes';
 export * from './disk-usage';
 export * from './document-summary';
 export * from './entry';

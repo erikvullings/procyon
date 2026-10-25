@@ -2594,6 +2594,8 @@ export const de = {
     scopeFolderRequired: 'Der Umfang „aktueller Ordner“ benötigt einen Ordner.',
     summaryTokenBudget:
       'Die Eingabegröße der Zusammenfassung liegt außerhalb des unterstützten Bereichs.',
+    corpusThemeProfileMismatch:
+      'Der Index wurde mit einem anderen Embedding-Modell erstellt. Erstellen Sie den Index neu, um Themen zu sehen.',
     conversationImmutable:
       'Profil, Umfang und Wissensmodus einer Unterhaltung können nicht geändert werden.',
     scopeInvalid: 'Die ausgewählten Dateien sind kein gültiger Umfang.',

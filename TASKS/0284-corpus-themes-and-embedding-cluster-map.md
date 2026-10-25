@@ -1,6 +1,6 @@
 # 0284 Corpus themes and 2D embedding cluster map
 
-Status: open
+Status: in_progress
 Priority: medium
 Subsystem: backend, frontend
 Depends on: 0185, 0283
@@ -59,3 +59,24 @@ Cluster **chunk embeddings directly** for theme discovery; also keep a **documen
 ## Agent Notes
 - 2026-10-25 claude: task created from user question; not started. Decision recorded: cluster
   chunks directly, centroids per document for map/similarity/large-corpus bootstrap.
+- 2026-10-25 claude: slice 1 (centroids + corpus clustering + labels, worker + API) built on branch
+  `feat/0284-corpus-themes`. Worker: `corpus_themes` (deterministic k-means with automatic k by
+  silhouette over a bounded sample, stride-sampled fit above `max_fit_chunks` then nearest-centroid
+  assignment of every chunk, per-cluster radius -> "no theme" bucket and dissolved tiny clusters,
+  c-TF-IDF keywords, nearest-to-centroid passages with provenance, SKOS concept counts from
+  `records.concept_id`, per-document mixtures, typed `ProfileTooWeak`/`ProfileMismatch`/`EmptyScope`/
+  `InsufficientContent`, cancellation, idempotent persisted run keyed by a fingerprint of model +
+  config + index revision), `corpus_theme_storage` (scope-bound chunk streaming over complete
+  generations of available occurrences only, `document_centroids` + `corpus_theme_runs` tables,
+  centroid tagged with model/normalization/algorithm/generation/content hash, discarded on
+  `delete_occurrence`/reclaim) and a shared `kmeans` module that `representative_selection` now
+  reuses (its tests unchanged). Application: `CorpusThemeCapability` seam (inert by default, like the
+  summary/RAG seams: hosts do not inject a worker yet, so HTTP/Tauri answer 503 until the worker
+  activation wiring exists), scope re-authorized through `resolve_knowledge_scope`, empty authorized
+  set never widens. API: `POST /api/v1/semantic/themes/{status,analyze}`, Tauri commands, mock/http/
+  tauri client parity, OpenAPI regenerated. Vectors never leave the worker; DTOs carry keywords,
+  passages, mixtures only. Verified: 13 worker tests (`cargo nextest run -p fm-semantic-worker
+  corpus_`), 2 application integration tests (`--test semantic_indexing corpus_themes`), 3 mock
+  client tests; workspace clippy -D warnings, biome, tsc clean. Known limits: host entire-library
+  scope covers the requesting workspace tenant only (like knowledge search); projection, Themes view,
+  theme-filtered search and incremental recluster are slices 2-3 (not started).

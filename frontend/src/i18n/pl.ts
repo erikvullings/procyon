@@ -2547,6 +2547,8 @@ export const pl = {
     scopeRootInvalid: 'Wybrany identyfikator folderu jest nieprawidłowy.',
     scopeFolderRequired: 'Zakres „bieżący folder” wymaga folderu.',
     summaryTokenBudget: 'Rozmiar danych wejściowych podsumowania jest poza obsługiwanym zakresem.',
+    corpusThemeProfileMismatch:
+      'Indeks utworzono innym modelem osadzeń. Odbuduj indeks, aby zobaczyć tematy.',
     conversationImmutable: 'Profil, zakres i tryb wiedzy rozmowy nie mogą się zmienić.',
     scopeInvalid: 'Zaznaczone pliki nie tworzą prawidłowego zakresu.',
     conceptUriRequired: 'Wymagany jest identyfikator URI pojęcia.',

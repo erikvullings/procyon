@@ -7,6 +7,7 @@ import type {
   AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
   ActionResult,
+  AnalyzeCorpusThemesRequest,
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
   ArchiveCredentialRequest,
@@ -38,6 +39,8 @@ import type {
   ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
+  CorpusThemeStatus,
+  CorpusThemesResponse,
   CreateConnectionRequest,
   CreateSemanticIndexRemovalPlanRequest,
   CreateSemanticInstallationOfferRequest,
@@ -80,6 +83,7 @@ import type {
   GeoMinify,
   GeoMinifyPreview,
   GeoTargetFormat,
+  GetCorpusThemeStatusRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
@@ -252,6 +256,7 @@ import { bindLocalisedMessage } from '../error-localiser';
 import { EventStreamSignalRegistry, MutableEventStreamStatus } from '../events/event-stream';
 import { ApiError, desktopHostRequiredError } from '../fetch-mutator';
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
+import { mockCorpusThemeStatus, mockCorpusThemes } from './mock-corpus-themes';
 import {
   createGeneratedDirectory,
   GENERATED_DIRECTORY_SIZES,
@@ -459,6 +464,8 @@ export type MockClientMethod =
   | 'previewDocumentSummary'
   | 'generateDocumentSummary'
   | 'getDocumentSummary'
+  | 'getCorpusThemeStatus'
+  | 'analyzeCorpusThemes'
   | 'previewRag'
   | 'generateRagAnswer'
   | 'saveRagConversation'
@@ -5272,6 +5279,24 @@ export class MockFileManagerClient implements FileManagerClient {
       const summary = this.documentSummaries.get(request.target.entryId);
       return summary === undefined ? null : structuredClone(summary);
     });
+  }
+
+  getCorpusThemeStatus(
+    _request: GetCorpusThemeStatusRequest,
+    signal?: AbortSignal,
+  ): Promise<CorpusThemeStatus> {
+    return this.perform('getCorpusThemeStatus', signal, () => mockCorpusThemeStatus());
+  }
+
+  analyzeCorpusThemes(
+    _request: AnalyzeCorpusThemesRequest,
+    signal?: AbortSignal,
+  ): Promise<CorpusThemesResponse> {
+    return this.perform('analyzeCorpusThemes', signal, () => ({
+      outcome: 'ready',
+      modelId: 'mock-embedding-model',
+      themes: mockCorpusThemes(),
+    }));
   }
 
   previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview> {

@@ -2550,6 +2550,8 @@ export const it = {
     scopeRootInvalid: 'L’identificatore della cartella scelta non è valido.',
     scopeFolderRequired: 'L’ambito «cartella corrente» richiede una cartella.',
     summaryTokenBudget: 'La dimensione di input del riepilogo è fuori dall’intervallo supportato.',
+    corpusThemeProfileMismatch:
+      'L’indice è stato creato con un altro modello di embedding. Ricostruisci l’indice per vedere i temi.',
     conversationImmutable:
       'Profilo, ambito e modalità di conoscenza di una conversazione non possono cambiare.',
     scopeInvalid: 'I file selezionati non sono un ambito valido.',

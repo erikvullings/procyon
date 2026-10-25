@@ -2560,6 +2560,8 @@ export const nl = {
     scopeRootInvalid: 'De gekozen mapidentificatie is niet geldig.',
     scopeFolderRequired: 'Het bereik huidige map heeft een map nodig.',
     summaryTokenBudget: 'De invoergrootte van de samenvatting valt buiten het ondersteunde bereik.',
+    corpusThemeProfileMismatch:
+      'De index is met een ander embeddingmodel opgebouwd. Bouw de index opnieuw op om thema’s te zien.',
     conversationImmutable:
       'Het profiel, het bereik en de kennismodus van een gesprek kunnen niet wijzigen.',
     scopeInvalid: 'De geselecteerde bestanden vormen geen geldig bereik.',

@@ -2572,6 +2572,8 @@ export const fr = {
     scopeRootInvalid: 'L’identifiant de dossier choisi n’est pas valide.',
     scopeFolderRequired: 'La portée « dossier actuel » nécessite un dossier.',
     summaryTokenBudget: 'La taille d’entrée du résumé est hors de la plage prise en charge.',
+    corpusThemeProfileMismatch:
+      'L’index a été créé avec un autre modèle d’embedding. Reconstruisez l’index pour voir les thèmes.',
     conversationImmutable:
       'Le profil, la portée et le mode de connaissances d’une conversation ne peuvent pas changer.',
     scopeInvalid: 'Les fichiers sélectionnés ne constituent pas une portée valide.',

@@ -928,7 +928,7 @@ fn location_label(uri: &str) -> String {
         .to_owned()
 }
 
-fn library_error(error: SemanticLibraryError) -> ApplicationError {
+pub(crate) fn library_error(error: SemanticLibraryError) -> ApplicationError {
     match error {
         SemanticLibraryError::Unavailable => ApplicationError::ProviderUnavailable,
         SemanticLibraryError::AuthorityDenied { .. } => ApplicationError::PermissionDenied,

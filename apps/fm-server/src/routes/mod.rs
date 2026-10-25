@@ -7,6 +7,7 @@ pub(crate) mod attributes;
 pub(crate) mod checksum;
 pub(crate) mod comparison;
 pub(crate) mod connection;
+pub(crate) mod corpus_themes;
 pub(crate) mod diagnostics;
 pub(crate) mod directory;
 pub(crate) mod document_summary;

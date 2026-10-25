@@ -2560,6 +2560,8 @@ export const es = {
     scopeRootInvalid: 'El identificador de carpeta elegido no es válido.',
     scopeFolderRequired: 'El alcance «carpeta actual» necesita una carpeta.',
     summaryTokenBudget: 'El tamaño de entrada del resumen está fuera del rango admitido.',
+    corpusThemeProfileMismatch:
+      'El índice se creó con otro modelo de embeddings. Reconstruya el índice para ver los temas.',
     conversationImmutable:
       'El perfil, el alcance y el modo de conocimiento de una conversación no pueden cambiar.',
     scopeInvalid: 'Los archivos seleccionados no son un alcance válido.',

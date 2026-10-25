@@ -116,7 +116,7 @@ pub const DEVELOPMENT_MAX_INPUT_TOKENS: usize = 8_192;
 /// Fixed maximum UTF-8 byte length accepted per input.
 pub const DEVELOPMENT_MAX_INPUT_BYTES: usize = 256 * 1024;
 
-const DEVELOPMENT_MODEL_ID: &str = "procyon.dev.hashing-embedding";
+const DEVELOPMENT_MODEL_ID: &str = crate::corpus_themes::TOKEN_HASHING_MODEL_ID;
 const DEVELOPMENT_MODEL_REVISION: &str = "sha256-token-hashing-v1";
 const DEVELOPMENT_TOKENIZER: &str = "unicode-words-v1";
 const MAX_TOKEN_BYTES: usize = 64;

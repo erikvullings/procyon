@@ -4,6 +4,8 @@
 //! boundary. The worker has no file-provider or network-facing dependency.
 
 pub mod advanced;
+pub mod corpus_theme_storage;
+pub mod corpus_themes;
 #[cfg(feature = "semantic-runtime")]
 pub mod developer_bundle;
 #[cfg(feature = "semantic-runtime")]
@@ -35,6 +37,7 @@ pub mod gemma_vision;
 #[cfg(feature = "gemma-probe")]
 pub mod gemma_visual;
 pub mod ingestion;
+mod kmeans;
 pub mod knowledge_ipc;
 pub mod knowledge_retrieval;
 #[cfg(feature = "experimental-pdf-render")]

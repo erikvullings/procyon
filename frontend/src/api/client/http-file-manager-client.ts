@@ -2,6 +2,7 @@ import type {
   AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
   ActionResult,
+  AnalyzeCorpusThemesRequest,
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
   ArchiveCredentialRequest,
@@ -28,6 +29,8 @@ import type {
   ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
+  CorpusThemeStatus,
+  CorpusThemesResponse,
   CreateConnectionRequest,
   CreateSemanticIndexRemovalPlanRequest,
   CreateSemanticInstallationOfferRequest,
@@ -71,6 +74,7 @@ import type {
   GeoMinify,
   GeoMinifyPreview,
   GeoTargetFormat,
+  GetCorpusThemeStatusRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
@@ -264,6 +268,8 @@ import {
   testConnection as requestConnectionTest,
   updateConnection as requestConnectionUpdate,
   convertGeoText as requestConvertGeoText,
+  getCorpusThemeStatus as requestCorpusThemeStatus,
+  analyzeCorpusThemes as requestCorpusThemesAnalysis,
   getDiagnostics as requestDiagnostics,
   diffFiles as requestDiffFiles,
   listDirectory as requestDirectory,
@@ -2742,6 +2748,32 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200)
       throw unexpectedResponseError('getDocumentSummary', response.status);
+    return response.data;
+  }
+
+  async getCorpusThemeStatus(
+    request: GetCorpusThemeStatusRequest,
+    signal?: AbortSignal,
+  ): Promise<CorpusThemeStatus> {
+    const response = await requestCorpusThemeStatus(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw unexpectedResponseError('getCorpusThemeStatus', response.status);
+    return response.data;
+  }
+
+  async analyzeCorpusThemes(
+    request: AnalyzeCorpusThemesRequest,
+    signal?: AbortSignal,
+  ): Promise<CorpusThemesResponse> {
+    const response = await requestCorpusThemesAnalysis(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw unexpectedResponseError('analyzeCorpusThemes', response.status);
     return response.data;
   }
 

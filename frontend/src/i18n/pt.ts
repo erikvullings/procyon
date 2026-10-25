@@ -2567,6 +2567,8 @@ export const pt = {
     scopeRootInvalid: 'O identificador da pasta escolhida não é válido.',
     scopeFolderRequired: 'O âmbito «pasta atual» precisa de uma pasta.',
     summaryTokenBudget: 'O tamanho de entrada do resumo está fora do intervalo suportado.',
+    corpusThemeProfileMismatch:
+      'O índice foi criado com outro modelo de embeddings. Recrie o índice para ver os temas.',
     conversationImmutable:
       'O perfil, o âmbito e o modo de conhecimento de uma conversa não podem mudar.',
     scopeInvalid: 'Os ficheiros selecionados não são um âmbito válido.',
