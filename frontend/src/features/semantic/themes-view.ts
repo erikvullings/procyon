@@ -1,5 +1,5 @@
 import m, { type FactoryComponent, type Vnode } from 'mithril';
-import { ModalPanel, Skeleton } from 'mithril-materialized';
+import { Skeleton } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
@@ -26,12 +26,12 @@ import {
   toScreen,
 } from './themes-model';
 
-export interface ThemesDialogAttrs {
-  readonly open: boolean;
+export interface ThemesViewAttrs {
   readonly client: FileManagerClient;
   /** Scopes offered to analyse, widest first; the backend re-authorizes each request. */
   readonly scopes: readonly RagScope[];
-  /** Opens the source of a passage, at its line when the provenance has one. */
+  /** Opens the source of a passage, at its line when the provenance has one. A click on a
+   * map point calls this directly; hovering only shows the passage. */
   readonly onOpenPassage: (passage: ThemePassage) => void | Promise<void>;
   /** Starts a search limited to the given authorized sources, about the given subject. */
   readonly onSearchSources: (sourceIds: readonly string[], subject: string) => void;
@@ -42,7 +42,7 @@ export interface ThemesDialogAttrs {
 type Selection = number | null | undefined;
 
 const STATUS_POLL_MS = 15_000;
-const MAP_HEIGHT = 300;
+const MAP_HEIGHT = 420;
 const MAP_PADDING = 14;
 const HIT_RADIUS = 9;
 const TOP_DOCUMENTS = 5;
@@ -171,9 +171,21 @@ const Scatter: FactoryComponent<ScatterAttrs> = () => {
   };
 };
 
+/** Readable tail of a SKOS concept identifier (`…/concept/wind-energy` -> `wind energy`). */
+function conceptLabel(conceptId: string): string {
+  const tail = conceptId.split(/[/#]/).filter(Boolean).at(-1) ?? conceptId;
+  let decoded = tail;
+  try {
+    decoded = decodeURIComponent(tail);
+  } catch {
+    // Keep the raw segment when it is not URI encoded.
+  }
+  return decoded.replace(/[_-]+/g, ' ').trim() || conceptId;
+}
+
 function passageRow(
   passage: ThemePassage,
-  attrs: ThemesDialogAttrs,
+  attrs: ThemesViewAttrs,
   failed: (message: string) => void,
 ): Vnode {
   const location = knowledgeProvenanceLabel(passage.provenance);
@@ -198,8 +210,8 @@ function passageRow(
   ]);
 }
 
-export const ThemesDialog: FactoryComponent<ThemesDialogAttrs> = () => {
-  let wasOpen = false;
+/** Corpus themes as a full pane view (map, theme list, details), like disk usage. */
+export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
   let busy = false;
   let error: string | undefined;
   let response: CorpusThemesResponse | undefined;
@@ -211,7 +223,7 @@ export const ThemesDialog: FactoryComponent<ThemesDialogAttrs> = () => {
   let generation = 0;
   let scopeIndex = 0;
 
-  function activeScope(attrs: ThemesDialogAttrs): RagScope | undefined {
+  function activeScope(attrs: ThemesViewAttrs): RagScope | undefined {
     return attrs.scopes[Math.min(scopeIndex, attrs.scopes.length - 1)];
   }
 
@@ -220,7 +232,7 @@ export const ThemesDialog: FactoryComponent<ThemesDialogAttrs> = () => {
     poll = undefined;
   }
 
-  async function refreshStatus(attrs: ThemesDialogAttrs, ticket: number): Promise<void> {
+  async function refreshStatus(attrs: ThemesViewAttrs, ticket: number): Promise<void> {
     const scope = activeScope(attrs);
     if (scope === undefined) return;
     try {
@@ -232,7 +244,7 @@ export const ThemesDialog: FactoryComponent<ThemesDialogAttrs> = () => {
     m.redraw();
   }
 
-  async function load(attrs: ThemesDialogAttrs): Promise<void> {
+  async function load(attrs: ThemesViewAttrs): Promise<void> {
     const scope = activeScope(attrs);
     if (scope === undefined) return;
     generation += 1;
@@ -265,7 +277,7 @@ export const ThemesDialog: FactoryComponent<ThemesDialogAttrs> = () => {
   }
 
   async function searchWithinTheme(
-    attrs: ThemesDialogAttrs,
+    attrs: ThemesViewAttrs,
     themes: CorpusThemes,
     theme: number | null,
   ): Promise<void> {
@@ -290,7 +302,7 @@ export const ThemesDialog: FactoryComponent<ThemesDialogAttrs> = () => {
     m.redraw();
   }
 
-  function themeDetails(themes: CorpusThemes, attrs: ThemesDialogAttrs): Vnode | undefined {
+  function themeDetails(themes: CorpusThemes, attrs: ThemesViewAttrs): Vnode | undefined {
     if (selected === undefined) return undefined;
     const theme =
       selected === null ? undefined : themes.themes.find((item) => item.id === selected);
@@ -318,6 +330,21 @@ export const ThemesDialog: FactoryComponent<ThemesDialogAttrs> = () => {
             m(
               'ul.fm-themes-chips',
               theme.keywords.map((keyword) => m('li', { key: keyword.term }, keyword.term)),
+            ),
+          ]),
+      theme === undefined || theme.concepts.length === 0
+        ? undefined
+        : m('.fm-themes-concepts', [
+            m('h5', t('themes', 'concepts')),
+            m(
+              'ul.fm-themes-chips',
+              theme.concepts.map((concept) =>
+                m(
+                  'li',
+                  { key: concept.conceptId, title: concept.conceptId },
+                  `${conceptLabel(concept.conceptId)} (${concept.chunkCount})`,
+                ),
+              ),
             ),
           ]),
       selectedPoint === undefined
@@ -404,28 +431,17 @@ export const ThemesDialog: FactoryComponent<ThemesDialogAttrs> = () => {
     }
   }
 
-  function synchronise(attrs: ThemesDialogAttrs): void {
-    if (attrs.open && !wasOpen) {
-      scopeIndex = 0;
-      void load(attrs);
-      stopPolling();
-      poll = setInterval(() => {
-        if (!busy) void refreshStatus(attrs, generation);
-      }, STATUS_POLL_MS);
-    }
-    if (!attrs.open && wasOpen) {
-      generation += 1;
-      stopPolling();
-      response = undefined;
-      status = undefined;
-      error = undefined;
-    }
-    wasOpen = attrs.open;
+  function start(attrs: ThemesViewAttrs): void {
+    scopeIndex = 0;
+    void load(attrs);
+    stopPolling();
+    poll = setInterval(() => {
+      if (!busy) void refreshStatus(attrs, generation);
+    }, STATUS_POLL_MS);
   }
 
   return {
-    oncreate: ({ attrs }) => synchronise(attrs),
-    onupdate: ({ attrs }) => synchronise(attrs),
+    oncreate: ({ attrs }) => start(attrs),
     onremove: () => {
       generation += 1;
       stopPolling();
@@ -434,15 +450,12 @@ export const ThemesDialog: FactoryComponent<ThemesDialogAttrs> = () => {
       const themes = response?.themes ?? undefined;
       const message = response === undefined ? undefined : outcomeMessage(response);
       const stale = themes !== undefined && themesAreStale(themes, status);
-      return m(ModalPanel, {
-        title: t('themes', 'title'),
-        className: 'fm-dense-modal fm-themes-modal',
-        isOpen: attrs.open,
-        closeOnEsc: true,
-        onToggle: (open: boolean) => {
-          if (!open) attrs.onClose();
-        },
-        description: m('.fm-themes', [
+      return m('.fm-themes.fm-themes-view', [
+        m('.fm-themes-header', [
+          m('h3', t('themes', 'title')),
+          m('button.btn-flat', { type: 'button', onclick: attrs.onClose }, t('button', 'close')),
+        ]),
+        m('.fm-themes-content', [
           attrs.scopes.length > 1
             ? m(
                 '.fm-themes-scopes',
@@ -507,9 +520,16 @@ export const ThemesDialog: FactoryComponent<ThemesDialogAttrs> = () => {
                       onPick: (point) => {
                         selected = point.theme ?? null;
                         selectedPoint = point;
+                        void Promise.resolve(attrs.onOpenPassage(point.passage)).catch(
+                          (cause: unknown) => {
+                            error = errorMessage(cause, t('themes', 'openSourceFailed'));
+                            m.redraw();
+                          },
+                        );
                       },
                     }),
                     m('p.fm-themes-muted', t('themes', 'mapLabel')),
+                    m('p.fm-themes-muted', t('themes', 'mapHint')),
                     hovered === undefined
                       ? undefined
                       : m('p.fm-themes-hover', { role: 'status' }, [
@@ -531,8 +551,7 @@ export const ThemesDialog: FactoryComponent<ThemesDialogAttrs> = () => {
                 themeDetails(themes, attrs),
               ]),
         ]),
-        buttons: [{ label: t('button', 'close'), onclick: attrs.onClose }],
-      });
+      ]);
     },
   };
 };

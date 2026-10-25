@@ -997,6 +997,8 @@ export const en = {
     outcomeInsufficient: 'There is not enough indexed text to form themes yet.',
     outcomeNoContent: 'No indexed documents are available in this scope.',
     selectedPassage: 'Selected passage',
+    concepts: 'Concepts',
+    mapHint: 'Hover a point to read its passage. Click it to open the source.',
     untitled: 'Untitled source',
     themeNumber: 'Theme {number}',
     model: 'Embedding model: {model}',

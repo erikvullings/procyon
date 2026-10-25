@@ -1008,6 +1008,8 @@ export const nl = {
     outcomeInsufficient: 'Er is nog niet genoeg geïndexeerde tekst om thema’s te vormen.',
     outcomeNoContent: 'Er zijn geen geïndexeerde documenten beschikbaar in dit bereik.',
     selectedPassage: 'Geselecteerde passage',
+    concepts: 'Concepten',
+    mapHint: 'Beweeg over een punt om de passage te lezen. Klik om de bron te openen.',
     untitled: 'Naamloze bron',
     themeNumber: 'Thema {number}',
     model: 'Embeddingmodel: {model}',

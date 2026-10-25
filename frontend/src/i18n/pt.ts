@@ -1704,6 +1704,8 @@ export const pt = {
     outcomeInsufficient: 'Ainda não há texto indexado suficiente para formar temas.',
     outcomeNoContent: 'Não há documentos indexados disponíveis neste âmbito.',
     selectedPassage: 'Passagem selecionada',
+    concepts: 'Conceitos',
+    mapHint: 'Passe o cursor sobre um ponto para ler a passagem. Clique para abrir a fonte.',
     untitled: 'Origem sem título',
     themeNumber: 'Tema {number}',
     model: 'Modelo de embeddings: {model}',

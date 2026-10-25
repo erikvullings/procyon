@@ -3,8 +3,6 @@ import type {
   EntrySummary,
   FinderTag,
   Location,
-  RagScope,
-  ThemePassage,
 } from '../../models';
 import type { CreateLinkDialogRequest } from '../operations/create-link-dialog';
 
@@ -28,13 +26,6 @@ export interface FinderTagsDialogRequest {
 export interface SpotlightCommentDialogRequest {
   readonly entry: EntrySummary;
   readonly comment: string;
-}
-
-/** Backs the corpus themes dialog: the scopes it may analyse and how a passage opens its source. */
-export interface ThemesDialogRequest {
-  readonly scopes: readonly RagScope[];
-  readonly onOpenPassage: (passage: ThemePassage) => void | Promise<void>;
-  readonly onSearchSources: (sourceIds: readonly string[], subject: string) => void;
 }
 
 export interface DocumentSummaryDialogRequest {
@@ -69,7 +60,6 @@ export interface DialogUIState {
   finderTagsDialog: FinderTagsDialogRequest | undefined;
   spotlightCommentDialog: SpotlightCommentDialogRequest | undefined;
   documentSummaryDialog: DocumentSummaryDialogRequest | undefined;
-  themesDialog: ThemesDialogRequest | undefined;
   applicationUninstallDialog: ApplicationUninstallDialogRequest | undefined;
 }
 
@@ -116,8 +106,6 @@ export interface DialogUIController {
   cancelSpotlightCommentDialog(): void;
   openDocumentSummaryDialog(request: DocumentSummaryDialogRequest): void;
   cancelDocumentSummaryDialog(): void;
-  openThemesDialog(request: ThemesDialogRequest): void;
-  cancelThemesDialog(): void;
   openApplicationUninstallDialog(request: ApplicationUninstallDialogRequest): void;
   cancelApplicationUninstallDialog(): void;
 }
@@ -142,7 +130,6 @@ export function createDialogUIController(): DialogUIController {
     finderTagsDialog: undefined,
     spotlightCommentDialog: undefined,
     documentSummaryDialog: undefined,
-    themesDialog: undefined,
     applicationUninstallDialog: undefined,
   };
 
@@ -278,14 +265,6 @@ export function createDialogUIController(): DialogUIController {
 
     cancelDocumentSummaryDialog(): void {
       state.documentSummaryDialog = undefined;
-    },
-
-    openThemesDialog(request): void {
-      state.themesDialog = request;
-    },
-
-    cancelThemesDialog(): void {
-      state.themesDialog = undefined;
     },
 
     openApplicationUninstallDialog(request): void {

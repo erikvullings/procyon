@@ -95,6 +95,7 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   'diagnostics.uptime': ['nl'],
   'documentSummary.sourcePage': ['fr'],
   'themes.analysed': ['fr'],
+  'themes.concepts': ['fr'],
   'editor.no': ['es', 'it'],
   'entryMetadata.colorOrange': ['de', 'fr'],
   'entryMetadata.tagsTitle': ['de'],

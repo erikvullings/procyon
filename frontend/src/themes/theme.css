@@ -5530,9 +5530,30 @@ button.fm-activity-count {
   background: var(--fm-accent);
 }
 
-/* Corpus themes dialog (task 0284). */
-.modal.fm-themes-modal {
-  max-width: min(60rem, calc(100vw - 2rem)) !important;
+/* Corpus themes pane view (task 0284). */
+.fm-themes-view {
+  box-sizing: border-box;
+  height: 100%;
+  overflow: auto;
+  padding: 1rem;
+  align-content: start;
+}
+
+.fm-themes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.fm-themes-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.fm-themes-content {
+  display: grid;
+  gap: 0.75rem;
 }
 
 .fm-themes {

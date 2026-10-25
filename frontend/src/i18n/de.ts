@@ -1717,6 +1717,9 @@ export const de = {
     outcomeInsufficient: 'Es ist noch nicht genug indizierter Text vorhanden, um Themen zu bilden.',
     outcomeNoContent: 'In diesem Bereich sind keine indizierten Dokumente verfügbar.',
     selectedPassage: 'Ausgewählte Passage',
+    concepts: 'Konzepte',
+    mapHint:
+      'Mit der Maus über einen Punkt fahren, um die Passage zu lesen. Klicken öffnet die Quelle.',
     untitled: 'Unbenannte Quelle',
     themeNumber: 'Thema {number}',
     model: 'Embedding-Modell: {model}',

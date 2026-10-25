@@ -393,6 +393,7 @@ import type {
   PluginDescriptor,
   PluginId,
   PluginLogEntry,
+  RagScope,
   ScanDiskUsageResult,
   SearchExecutionMode,
   SearchQuery,
@@ -459,6 +460,13 @@ interface KnowledgeSearchTabEntry {
   readonly currentFolder: Location | undefined;
   readonly semanticSourceIds: readonly string[];
   readonly initialSubject: string | undefined;
+}
+
+interface ThemesTabEntry {
+  key: string;
+  paneId: PaneId;
+  readonly tabId: TabId;
+  readonly scopes: readonly RagScope[];
 }
 
 export { knowledgeEvidencePage } from '../features/semantic/evidence-provenance';
@@ -2022,6 +2030,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   >();
   const diskUsageByTab = new Map<string, DiskUsageTabEntry>();
   const knowledgeSearchByTab = new Map<string, KnowledgeSearchTabEntry>();
+  const themesByTab = new Map<string, ThemesTabEntry>();
+  let themesOpening = false;
   let knowledgeSearchOpening = false;
   const editorByPane = new Map<
     PaneId,
@@ -3214,6 +3224,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       imageMapController?.close();
     }
     knowledgeSearchByTab.delete(key);
+    themesByTab.delete(key);
     navigation.abort(paneId, tabId);
     directories.delete(key);
     selections.delete(key);
@@ -3270,6 +3281,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       knowledgeSearch.key = targetKey;
       knowledgeSearch.paneId = targetPaneId;
       knowledgeSearchByTab.set(targetKey, knowledgeSearch);
+    }
+    const themesTab = themesByTab.get(sourceKey);
+    if (themesTab !== undefined) {
+      themesByTab.delete(sourceKey);
+      themesTab.key = targetKey;
+      themesTab.paneId = targetPaneId;
+      themesByTab.set(targetKey, themesTab);
     }
     navigation.moveTab(sourcePaneId, targetPaneId, tabId);
     const quickFilterDraft = appState?.quickFilterDrafts.byTabKey[sourceKey];
@@ -3631,10 +3649,23 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openKnowledgeSearch();
   }
 
-  /** Opens the corpus themes dialog over the whole library and, when a folder is shown, that folder. */
+  /** Opens (or focuses) the Themes pane view over the whole library and, when a folder is shown, that folder. */
   function openThemes(): void {
     const currentWorkspace = workspace;
-    if (currentWorkspace === undefined) return;
+    if (currentWorkspace === undefined || themesOpening) return;
+    const existing = [...themesByTab.values()].find(
+      (entry) => currentWorkspace.panesById[entry.paneId] !== undefined,
+    );
+    if (existing !== undefined) {
+      if (currentWorkspace.panesById[existing.paneId]?.activeTabId !== existing.tabId) {
+        tabController.activateTab(existing.paneId, existing.tabId);
+      } else if (currentWorkspace.activePaneId !== existing.paneId) {
+        void activatePane(attrsClient, existing.paneId).catch((error: unknown) => {
+          toast({ html: error instanceof Error ? error.message : t('themes', 'loadFailed') });
+        });
+      }
+      return;
+    }
     const base = {
       workspaceId: currentWorkspace.id,
       selectedFiles: [],
@@ -3642,24 +3673,50 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       enrolledRootIds: [],
     };
     const active = activeDirectory();
-    dialogs.openThemesDialog({
-      scopes: [
-        { ...base, kind: 'entireLibrary', label: t('themes', 'scopeLibrary') },
-        ...(active === undefined
-          ? []
-          : [
-              {
-                ...base,
-                kind: 'currentFolder' as const,
-                label: t('themes', 'scopeFolder'),
-                folder: active.location,
-              },
-            ]),
-      ],
-      onOpenPassage: openThemePassage,
-      onSearchSources: (sourceIds, subject) =>
-        openKnowledgeSearchTab({ semanticSourceIds: sourceIds, initialSubject: subject }),
-    });
+    const scopes: RagScope[] = [
+      { ...base, kind: 'entireLibrary', label: t('themes', 'scopeLibrary') },
+      ...(active === undefined
+        ? []
+        : [
+            {
+              ...base,
+              kind: 'currentFolder' as const,
+              label: t('themes', 'scopeFolder'),
+              folder: active.location,
+            },
+          ]),
+    ];
+    const paneId = currentWorkspace.activePaneId;
+    const activeTab =
+      currentWorkspace.panesById[paneId]?.tabsById[
+        currentWorkspace.panesById[paneId]?.activeTabId ?? ''
+      ];
+    if (activeTab === undefined) return;
+    themesOpening = true;
+    void dispatchWorkspaceCommand(
+      attrsClient,
+      {
+        type: 'addTransientTab',
+        workspaceId: currentWorkspace.id,
+        paneId,
+        location: activeTab.location,
+        expectedRevision: currentWorkspace.revision,
+      },
+      (next) => {
+        replaceWorkspace(next);
+        const tabId = next.panesById[paneId]?.activeTabId;
+        if (tabId === undefined) return;
+        const key = tabKey(paneId, tabId);
+        themesByTab.set(key, { key, paneId, tabId, scopes });
+        m.redraw();
+      },
+    )
+      .catch((error: unknown) => {
+        toast({ html: error instanceof Error ? error.message : t('themes', 'loadFailed') });
+      })
+      .finally(() => {
+        themesOpening = false;
+      });
   }
 
   /** Opens the source of a theme passage, at its line for text and JSONL, at its page otherwise. */
@@ -5319,6 +5376,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         }
       }
       for (const [key, entry] of movedKnowledgeSearch) knowledgeSearchByTab.set(key, entry);
+      const movedThemes = new Map<string, ThemesTabEntry>();
+      for (const [paneId, otherPaneId, tabs] of [
+        [paneAId, paneBId, paneA.tabOrder],
+        [paneBId, paneAId, paneB.tabOrder],
+      ] as const) {
+        for (const tabId of tabs) {
+          const entry = themesByTab.get(tabKey(paneId, tabId));
+          if (entry === undefined) continue;
+          themesByTab.delete(entry.key);
+          entry.key = tabKey(otherPaneId, tabId);
+          entry.paneId = otherPaneId;
+          movedThemes.set(entry.key, entry);
+        }
+      }
+      for (const [key, entry] of movedThemes) themesByTab.set(key, entry);
       // No backend command swaps a whole tab set atomically (task 0128 Agent Notes) - this
       // mutates the local projection directly, the same optimistic-update pattern
       // `activateTab` uses, rather than round-tripping through `dispatchWorkspaceCommand`.
@@ -5660,6 +5732,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     getDiskUsageByTab: () => diskUsageByTab,
     getImageMapPane: imageMapPane,
     getKnowledgeSearchByTab: () => knowledgeSearchByTab,
+    getThemesByTab: () => themesByTab,
     getKnowledgeAnswerRevision: () => knowledgeAnswerRevision,
     setConnections: (conns) => {
       connections = conns;
@@ -5754,6 +5827,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openKnowledgeSearch,
     openKnowledgeAnswerSettings: () => openSettingsDialog('semantic'),
     closeKnowledgeSearch: (paneId, tabId) => tabController.performCloseTab(paneId, tabId),
+    closeThemes: (paneId, tabId) => tabController.performCloseTab(paneId, tabId),
+    openThemePassage,
+    searchThemeSources: (sourceIds, subject) =>
+      openKnowledgeSearchTab({ semanticSourceIds: sourceIds, initialSubject: subject }),
     openKnowledgeSource,
     isKnowledgeSourceOpen: (evidence) =>
       [...viewerByTab.values()].some(

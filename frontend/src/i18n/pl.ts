@@ -1699,6 +1699,8 @@ export const pl = {
     outcomeInsufficient: 'Nie ma jeszcze dość zindeksowanego tekstu, aby utworzyć tematy.',
     outcomeNoContent: 'W tym zakresie nie ma zindeksowanych dokumentów.',
     selectedPassage: 'Wybrany fragment',
+    concepts: 'Pojęcia',
+    mapHint: 'Najedź na punkt, aby przeczytać fragment. Kliknij, aby otworzyć źródło.',
     untitled: 'Źródło bez tytułu',
     themeNumber: 'Temat {number}',
     model: 'Model osadzeń: {model}',

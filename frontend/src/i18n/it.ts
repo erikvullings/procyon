@@ -1698,6 +1698,8 @@ export const it = {
     outcomeInsufficient: 'Non c’è ancora abbastanza testo indicizzato per formare dei temi.',
     outcomeNoContent: 'Nessun documento indicizzato è disponibile in questo ambito.',
     selectedPassage: 'Passaggio selezionato',
+    concepts: 'Concetti',
+    mapHint: 'Passa sopra un punto per leggere il passaggio. Fai clic per aprire la fonte.',
     untitled: 'Origine senza titolo',
     themeNumber: 'Tema {number}',
     model: 'Modello di embedding: {model}',

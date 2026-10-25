@@ -5,7 +5,7 @@ import { mockCorpusThemes } from '../../api/client/mock-corpus-themes';
 import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import { setLocale } from '../../i18n';
 import type { RagScope } from '../../models';
-import { ThemesDialog } from './themes-dialog';
+import { ThemesView } from './themes-view';
 
 let root: HTMLElement;
 
@@ -31,7 +31,7 @@ afterEach(() => {
 
 function mount(
   client: MockFileManagerClient,
-  overrides: Partial<Parameters<typeof ThemesDialog>[0]['attrs']> = {},
+  overrides: Partial<Parameters<typeof ThemesView>[0]['attrs']> = {},
 ): {
   onOpenPassage: ReturnType<typeof vi.fn>;
   onSearchSources: ReturnType<typeof vi.fn>;
@@ -42,8 +42,7 @@ function mount(
   const onClose = vi.fn();
   m.mount(root, {
     view: () =>
-      m(ThemesDialog, {
-        open: true,
+      m(ThemesView, {
         client,
         scopes: [scope('entireLibrary', 'Entire library')],
         onOpenPassage,
@@ -55,7 +54,7 @@ function mount(
   return { onOpenPassage, onSearchSources, onClose };
 }
 
-describe('ThemesDialog', () => {
+describe('ThemesView', () => {
   it('shows a busy skeleton, then an accessible theme list with keywords and shares', async () => {
     const client = new MockFileManagerClient();
     const analyze = vi.spyOn(client, 'analyzeCorpusThemes');
@@ -97,6 +96,41 @@ describe('ThemesDialog', () => {
     (root.querySelector('.fm-themes-row') as HTMLButtonElement).click();
     m.redraw.sync();
     expect(root.querySelector('.fm-themes-details')).toBeNull();
+  });
+
+  it('shows SKOS concepts only when the analysis carries them', async () => {
+    const client = new MockFileManagerClient();
+    mount(client);
+    await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+    (root.querySelector('.fm-themes-row') as HTMLButtonElement).click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-themes-concepts')).toBeNull();
+    m.mount(root, null);
+
+    const labelled = new MockFileManagerClient();
+    const original = await labelled.analyzeCorpusThemes({ scope: scope('entireLibrary', 'x') });
+    const themes = original.themes;
+    if (themes === undefined || themes === null) throw new Error('mock themes expected');
+    const first = themes.themes[0];
+    if (first === undefined) throw new Error('mock theme expected');
+    vi.spyOn(labelled, 'analyzeCorpusThemes').mockResolvedValue({
+      ...original,
+      themes: {
+        ...themes,
+        themes: [
+          {
+            ...first,
+            concepts: [{ conceptId: 'https://example.org/concept/wind-energy', chunkCount: 4 }],
+          },
+          ...themes.themes.slice(1),
+        ],
+      },
+    });
+    mount(labelled);
+    await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+    (root.querySelector('.fm-themes-row') as HTMLButtonElement).click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-themes-concepts')?.textContent).toContain('wind energy (4)');
   });
 
   it('opens a passage source through the host and reports a failure', async () => {

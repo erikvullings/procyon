@@ -14,6 +14,7 @@ import type {
   Operation,
   PaneId,
   PluginDescriptor,
+  RagScope,
   SavedSearch,
   SearchQuery,
   Settings,
@@ -21,6 +22,7 @@ import type {
   SystemLocation,
   TabId,
   TabProjection,
+  ThemePassage,
   Volume,
   WorkspaceProjection,
 } from '../../models';
@@ -75,6 +77,7 @@ import {
   type SelectionState,
 } from '../selection/selection';
 import { KnowledgeSearchPane } from '../semantic/knowledge-search-dialog';
+import { ThemesView } from '../semantic/themes-view';
 import { type SortModel, sortEntriesResponsive } from '../sorting/sorting';
 import { dispatchWorkspaceCommand } from './dispatch-workspace-command';
 import type { WorkspaceController } from './workspace-controller';
@@ -86,6 +89,12 @@ type InitialSearch = {
   readonly caseSensitive: boolean;
   readonly wholeWord: boolean;
 };
+
+/** A corpus themes tab: the scopes it may analyse (task 0284). */
+export interface ThemesTabState {
+  readonly tabId: TabId;
+  readonly scopes: readonly RagScope[];
+}
 
 export interface KnowledgeSearchTabState {
   readonly tabId: TabId;
@@ -170,6 +179,7 @@ export interface PaneContentContext {
   /** The "Show photos on map" panel when it is open in `paneId`. */
   getImageMapPane?(paneId: PaneId): { tabId: TabId; content: m.Children } | undefined;
   getKnowledgeSearchByTab(): Map<string, KnowledgeSearchTabState>;
+  getThemesByTab(): Map<string, ThemesTabState>;
 
   // Scalar state setters
   setConnections(conns: readonly Connection[]): void;
@@ -243,6 +253,9 @@ export interface PaneContentContext {
   openKnowledgeSearch?(): void;
   openKnowledgeAnswerSettings?(): void;
   closeKnowledgeSearch(paneId: PaneId, tabId: TabId): void;
+  closeThemes(paneId: PaneId, tabId: TabId): void;
+  openThemePassage(passage: ThemePassage): Promise<void>;
+  searchThemeSources(sourceIds: readonly string[], subject: string): void;
   openKnowledgeSource(paneId: PaneId, evidence: KnowledgeEvidence): Promise<void>;
   isKnowledgeSourceOpen(evidence: KnowledgeEvidence): boolean;
   closeEditor(paneId: PaneId): void;
@@ -423,6 +436,7 @@ export function createPaneContentBuilder(
     const imageMapContent = imageMapPane?.tabId === tab?.id ? imageMapPane?.content : undefined;
     const knowledgeSearch =
       key === undefined ? undefined : context.getKnowledgeSearchByTab().get(key);
+    const themes = key === undefined ? undefined : context.getThemesByTab().get(key);
     const viewerTitles = new Map(
       (pane?.tabOrder ?? []).flatMap((tabId) => {
         const title = context.getViewerByTab().get(context.tabKey(paneId, tabId))?.state.entry.name;
@@ -435,6 +449,9 @@ export function createPaneContentBuilder(
       }
       if (context.getKnowledgeSearchByTab().has(context.tabKey(paneId, tabId))) {
         viewerTitles.set(tabId, t('knowledgeSearch', 'title'));
+      }
+      if (context.getThemesByTab().has(context.tabKey(paneId, tabId))) {
+        viewerTitles.set(tabId, t('themes', 'title'));
       }
     }
     if (pluginPanel !== undefined) viewerTitles.set(pluginPanel.tabId, pluginPanel.title);
@@ -1078,9 +1095,20 @@ export function createPaneContentBuilder(
               })(),
             }
           : key !== undefined &&
-              (knowledgeSearch !== undefined || context.getViewerByTab().has(key))
+              (knowledgeSearch !== undefined ||
+                themes !== undefined ||
+                context.getViewerByTab().has(key))
             ? {
                 viewerContent: (() => {
+                  if (themes !== undefined) {
+                    return m(ThemesView, {
+                      client,
+                      scopes: themes.scopes,
+                      onOpenPassage: context.openThemePassage,
+                      onSearchSources: context.searchThemeSources,
+                      onClose: () => context.closeThemes(paneId, themes.tabId),
+                    });
+                  }
                   if (knowledgeSearch !== undefined) {
                     return m(KnowledgeSearchPane, {
                       open: true,
