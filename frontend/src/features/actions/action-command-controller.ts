@@ -116,6 +116,7 @@ export interface ActionCommandControllerContext {
   openSemanticAssistant(): void;
   /** Opens search-only Structured Knowledge Search (task 0206). */
   openKnowledgeSearch(): void;
+  openThemes(): void;
   /** Scans `entry`'s well-known related-file locations and opens the review checklist before
    * anything is deleted (task 0148's macOS application uninstaller). */
   uninstallApplication(paneId: PaneId, entry: EntrySummary): void;
@@ -486,6 +487,10 @@ export function createActionCommandController(
     }
     if (action.id === 'client.searchKnowledge') {
       context.openKnowledgeSearch();
+      return;
+    }
+    if (action.id === 'client.exploreThemes') {
+      context.openThemes();
       return;
     }
     if (

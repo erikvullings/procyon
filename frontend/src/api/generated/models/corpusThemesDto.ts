@@ -5,6 +5,7 @@
 import type { CorpusThemeDto } from './corpusThemeDto.ts';
 import type { DocumentThemeMixtureDto } from './documentThemeMixtureDto.ts';
 import type { NoThemeDto } from './noThemeDto.ts';
+import type { ThemeMapPointDto } from './themeMapPointDto.ts';
 
 /**
  * Complete themes of one scope.
@@ -31,6 +32,10 @@ export interface CorpusThemesDto {
      * status revision to detect a stale analysis.
      */
   indexRevision: string;
+  /** Deterministic 2D projection of a bounded sample of chunks. */
+  mapPoints: ThemeMapPointDto[];
+  /** Whether the map shows a sample rather than every chunk. */
+  mapSampled: boolean;
   /** Whether further document mixtures were left out. */
   mixturesTruncated: boolean;
   /** Embedding model that produced the clustered vectors. */

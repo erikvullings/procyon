@@ -16,7 +16,7 @@ use fm_semantic_worker::corpus_themes::{
 use fm_transport_dto::{
     CorpusThemeDto, CorpusThemeOutcomeDto, CorpusThemeStatusDto, CorpusThemesDto,
     CorpusThemesResponseDto, DocumentThemeMixtureDto, NoThemeDto, ThemeConceptDto, ThemeKeywordDto,
-    ThemePassageDto, ThemeShareDto,
+    ThemeMapPointDto, ThemePassageDto, ThemeShareDto,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -230,6 +230,17 @@ fn themes_to_dto(themes: CorpusThemes, titles: &HashMap<String, String>) -> Corp
             .map(|mixture| mixture_to_dto(mixture, &title))
             .collect(),
         mixtures_truncated: themes.mixtures_truncated,
+        map_points: themes
+            .map_points
+            .into_iter()
+            .map(|point| ThemeMapPointDto {
+                x: point.x,
+                y: point.y,
+                theme: point.theme,
+                passage: passage_to_dto(point.passage, &title),
+            })
+            .collect(),
+        map_sampled: themes.map_sampled,
     }
 }
 
@@ -305,5 +316,87 @@ fn mixture_to_dto(
                 share: share.share,
             })
             .collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fm_semantic_worker::corpus_themes::{MapPoint, ThemeShare};
+
+    use super::*;
+
+    fn passage(source: &str) -> ThemePassage {
+        ThemePassage {
+            chunk_id: "chunk-1".into(),
+            document_id: "document-1".into(),
+            source_id: source.into(),
+            source_position: 4,
+            section_path: vec![],
+            provenance: "{\"kind\":\"jsonlRecord\",\"line\":42}".into(),
+            excerpt: "text".into(),
+            distance: 0.0,
+        }
+    }
+
+    fn themes() -> CorpusThemes {
+        CorpusThemes {
+            algorithm_version: "v".into(),
+            model_tag: "m".into(),
+            index_revision: "rev".into(),
+            fingerprint: "fp".into(),
+            chunk_count: 1,
+            document_count: 1,
+            sampled: false,
+            fitted_chunks: 1,
+            themes: vec![],
+            no_theme: NoTheme {
+                chunk_count: 1,
+                document_count: 1,
+                share: 1.0,
+                passages: vec![passage("source-a")],
+            },
+            document_mixtures: vec![DocumentThemeMixture {
+                document_id: "document-1".into(),
+                source_id: "source-a".into(),
+                chunk_count: 1,
+                shares: vec![ThemeShare {
+                    theme: None,
+                    chunk_count: 1,
+                    share: 1.0,
+                }],
+            }],
+            mixtures_truncated: false,
+            map_points: vec![MapPoint {
+                x: 0.5,
+                y: -0.5,
+                theme: None,
+                passage: passage("source-a"),
+            }],
+            map_sampled: true,
+            centroids_recomputed: 0,
+            centroids_reused: 0,
+            from_cache: false,
+        }
+    }
+
+    #[test]
+    fn dto_carries_host_titles_line_provenance_and_no_worker_identities() {
+        let titles = HashMap::from([("source-a".to_owned(), "feed.jsonl".to_owned())]);
+        let dto = themes_to_dto(themes(), &titles);
+        assert_eq!(dto.map_points[0].passage.title, "feed.jsonl");
+        assert!(dto.map_points[0].passage.provenance.contains("\"line\":42"));
+        assert!(dto.map_sampled);
+        assert_eq!(dto.document_mixtures[0].title, "feed.jsonl");
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(
+            !json.contains("document-1"),
+            "opaque worker document ids stay internal"
+        );
+    }
+
+    #[test]
+    fn unknown_titles_stay_empty_rather_than_exposing_source_ids_as_names() {
+        let dto = themes_to_dto(themes(), &HashMap::new());
+        assert_eq!(dto.map_points[0].passage.title, "");
     }
 }

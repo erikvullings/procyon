@@ -10,6 +10,7 @@ export type {
   NoThemeDto as NoTheme,
   ThemeConceptDto as ThemeConcept,
   ThemeKeywordDto as ThemeKeyword,
+  ThemeMapPointDto as ThemeMapPoint,
   ThemePassageDto as ThemePassage,
   ThemeShareDto as ThemeShare,
 } from '../api/generated/models';

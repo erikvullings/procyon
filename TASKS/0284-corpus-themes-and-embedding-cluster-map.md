@@ -80,3 +80,21 @@ Cluster **chunk embeddings directly** for theme discovery; also keep a **documen
   client tests; workspace clippy -D warnings, biome, tsc clean. Known limits: host entire-library
   scope covers the requesting workspace tenant only (like knowledge search); projection, Themes view,
   theme-filtered search and incremental recluster are slices 2-3 (not started).
+- 2026-10-25 claude: slice 2 (2D projection + Themes view). Worker: `corpus_projection` (deterministic
+  PCA by power iteration with deflation and a fixed sign convention, scaled to [-1, 1]), map points
+  collected during the streaming pass by stride (`max_map_points`, default 2000, so memory stays
+  bounded) and returned as `{x, y, theme, passage}`; the vectors never leave the worker. DTO
+  `mapPoints`/`mapSampled` regenerated through the pnpm scripts. Frontend: `ThemesDialog` (canvas
+  scatter coloured by theme, hover tooltip, click selects the point and its theme; accessible list of
+  themes with keywords/size/share as the alternative, details with example passages, strongest
+  documents and a per-passage "Open source" that opens text/JSONL files in the editor at the
+  provenance line and PDFs/slides at their page), scope switch (entire library / current folder),
+  stale-index banner (status poll every 15 s compared with the analysis index revision) with
+  "Analyse again", typed outcome messages (profile too weak, too little content, no content), command
+  `client.exploreThemes` shown when knowledge search is available, i18n `themes` namespace in all 8
+  locales, theme-sheet palette custom properties (Okabe-Ito). Verified: 3 projection tests + 2 map
+  tests in the worker, 2 mapping tests in fm-application, 8 model tests, 6 dialog tests, 1 action
+  dispatch test; full vitest (3297), tsc, biome, workspace clippy -D warnings, nextest for
+  fm-semantic-worker/fm-application/fm-transport-dto/fm-server all pass. Not verified: the canvas
+  rendering in a real browser (jsdom has no canvas), and nothing runs against a real embedding
+  model because hosts do not wire the worker capability yet.

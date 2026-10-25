@@ -4,6 +4,7 @@
 //! boundary. The worker has no file-provider or network-facing dependency.
 
 pub mod advanced;
+mod corpus_projection;
 pub mod corpus_theme_storage;
 pub mod corpus_themes;
 #[cfg(feature = "semantic-runtime")]

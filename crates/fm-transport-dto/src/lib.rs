@@ -91,8 +91,8 @@ pub use connection::{
 pub use corpus_themes::{
     AnalyzeCorpusThemesRequestDto, CorpusThemeDto, CorpusThemeOutcomeDto, CorpusThemeStatusDto,
     CorpusThemesDto, CorpusThemesResponseDto, DocumentThemeMixtureDto,
-    GetCorpusThemeStatusRequestDto, NoThemeDto, ThemeConceptDto, ThemeKeywordDto, ThemePassageDto,
-    ThemeShareDto,
+    GetCorpusThemeStatusRequestDto, NoThemeDto, ThemeConceptDto, ThemeKeywordDto, ThemeMapPointDto,
+    ThemePassageDto, ThemeShareDto,
 };
 pub use diagnostics::{
     ConnectionStateDto, DiagnosticErrorDto, DiagnosticsDto, OperationQueueStatusDto,

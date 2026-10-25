@@ -288,6 +288,7 @@ import {
   pdfImageProvenance,
   pdfPageRenderProvenance,
 } from '../features/semantic/evidence-provenance';
+import { provenanceLine } from '../features/semantic/themes-model';
 import { AppUpdateDialog } from '../features/settings/app-update-dialog';
 import { SemanticFolderEnrolmentPrompt } from '../features/settings/semantic-library-management';
 import {
@@ -402,6 +403,7 @@ import type {
   SystemLocation,
   TabId,
   TabProjection,
+  ThemePassage,
   Volume,
   WorkspaceId,
   WorkspaceLayout,
@@ -1682,6 +1684,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               description: t('knowledgeSearch', 'openDescription'),
               category: 'tools',
               defaultShortcuts: [{ key: 'k', ctrl: true, shift: true }],
+              contextRequirements: {},
+              source: { kind: 'core' as const },
+            },
+            {
+              id: 'client.exploreThemes',
+              title: t('themes', 'openTitle'),
+              description: t('themes', 'openDescription'),
+              category: 'tools',
+              defaultShortcuts: [],
               contextRequirements: {},
               source: { kind: 'core' as const },
             },
@@ -3599,6 +3610,75 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openKnowledgeSearch();
   }
 
+  /** Opens the corpus themes dialog over the whole library and, when a folder is shown, that folder. */
+  function openThemes(): void {
+    const currentWorkspace = workspace;
+    if (currentWorkspace === undefined) return;
+    const base = {
+      workspaceId: currentWorkspace.id,
+      selectedFiles: [],
+      semanticSourceIds: [],
+      enrolledRootIds: [],
+    };
+    const active = activeDirectory();
+    dialogs.openThemesDialog({
+      scopes: [
+        { ...base, kind: 'entireLibrary', label: t('themes', 'scopeLibrary') },
+        ...(active === undefined
+          ? []
+          : [
+              {
+                ...base,
+                kind: 'currentFolder' as const,
+                label: t('themes', 'scopeFolder'),
+                folder: active.location,
+              },
+            ]),
+      ],
+      onOpenPassage: openThemePassage,
+    });
+  }
+
+  /** Opens the source of a theme passage, at its line for text and JSONL, at its page otherwise. */
+  async function openThemePassage(passage: ThemePassage): Promise<void> {
+    const currentWorkspace = workspace;
+    if (currentWorkspace === undefined) throw new Error(t('themes', 'openSourceFailed'));
+    const targetPaneId =
+      currentWorkspace.paneOrder.find((candidate) => candidate !== currentWorkspace.activePaneId) ??
+      currentWorkspace.activePaneId;
+    const source = await attrsClient.resolveKnowledgeSource({
+      workspaceId: currentWorkspace.id,
+      sourceId: passage.sourceId,
+    });
+    if (!source.available) throw new Error(t('themes', 'openSourceFailed'));
+    const rawName =
+      pathFromUri(source.location.uri).split(/[\\/]/).filter(Boolean).at(-1) ?? passage.title;
+    let name = rawName;
+    try {
+      name = decodeURIComponent(rawName);
+    } catch {
+      // Keep the provider's original path segment when it is not URI encoded.
+    }
+    const dot = name.lastIndexOf('.');
+    const entry: EntrySummary = {
+      id: source.entryId,
+      location: source.location,
+      name,
+      kind: 'file',
+      hidden: false,
+      readOnly: false,
+      ...(dot > 0 ? { extension: name.slice(dot + 1).toLowerCase() } : {}),
+      metadataRevision: 0,
+    };
+    const page = knowledgeEvidencePage(passage.provenance);
+    const line = provenanceLine(passage.provenance);
+    if (page === undefined && line !== undefined) {
+      openEditor(attrsClient, targetPaneId, entry, line);
+      return;
+    }
+    openViewer(attrsClient, targetPaneId, entry, undefined, false, page, passage.sourceId);
+  }
+
   /** Focuses the existing Knowledge tab or opens a search-first session tab. */
   function openKnowledgeSearch(): void {
     const active = activeDirectory();
@@ -5482,6 +5562,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     },
     openSemanticAssistant,
     openKnowledgeSearch,
+    openThemes,
     uninstallApplication: (paneId, entry) =>
       globalKeydownHandlerContext.uninstallApplication(paneId, entry),
     requestRename: (paneId, entryIds) => {

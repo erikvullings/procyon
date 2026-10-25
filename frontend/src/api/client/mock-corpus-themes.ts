@@ -1,4 +1,4 @@
-import type { CorpusThemeStatus, CorpusThemes, ThemePassage } from '../../models';
+import type { CorpusThemeStatus, CorpusThemes, ThemeMapPoint, ThemePassage } from '../../models';
 
 /** Index revision of the in-process fixture library. */
 export const MOCK_THEME_INDEX_REVISION = 'mock-revision-1';
@@ -22,6 +22,44 @@ const passage = (
   }),
   excerpt,
 });
+
+const CLUSTER_CENTRES: readonly (readonly [number, number])[] = [
+  [-0.6, 0.4],
+  [0.6, 0.3],
+  [0.0, -0.7],
+];
+
+/** Deterministic points around each theme centre, plus one stray "no theme" point. */
+const mockMapPoints = (): ThemeMapPoint[] => {
+  const counts = [10, 8, 5];
+  const points: ThemeMapPoint[] = [];
+  counts.forEach((count, theme) => {
+    const [cx, cy] = CLUSTER_CENTRES[theme] ?? [0, 0];
+    for (let index = 0; index < count; index += 1) {
+      const angle = (index / count) * Math.PI * 2;
+      const radius = 0.08 + 0.02 * (index % 3);
+      points.push({
+        x: cx + Math.cos(angle) * radius,
+        y: cy + Math.sin(angle) * radius,
+        theme,
+        passage: passage(
+          `chunk-${theme}-${index}`,
+          theme === 1 ? 'mock-source-b' : 'mock-source-a',
+          theme === 1 ? 'Finance notes.txt' : 'Port report.txt',
+          index,
+          `Passage ${index + 1} about theme ${theme + 1}.`,
+        ),
+      });
+    }
+  });
+  points.push({
+    x: 0.85,
+    y: -0.85,
+    theme: null,
+    passage: passage('chunk-d', 'mock-source-a', 'Port report.txt', 9, 'An unrelated remark.'),
+  });
+  return points;
+};
 
 /** Deterministic fixture themes: three topics, one outlier chunk, two documents. */
 export const mockCorpusThemes = (): CorpusThemes => ({
@@ -100,6 +138,8 @@ export const mockCorpusThemes = (): CorpusThemes => ({
     },
   ],
   mixturesTruncated: false,
+  mapPoints: mockMapPoints(),
+  mapSampled: false,
 });
 
 export const mockCorpusThemeStatus = (): CorpusThemeStatus => ({

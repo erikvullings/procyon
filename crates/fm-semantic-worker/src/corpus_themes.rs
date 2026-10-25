@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
+use crate::corpus_projection;
 use crate::corpus_theme_storage::{
     CorpusChunk, CorpusDocument, CorpusScope, StoredDocumentCentroid,
 };
@@ -31,6 +32,7 @@ pub const CENTROID_ALGORITHM_VERSION: &str = "document-centroid-mean/1";
 pub const TOKEN_HASHING_MODEL_ID: &str = "procyon.dev.hashing-embedding";
 
 const MAX_EXCERPT_CHARS: usize = 240;
+const MAP_EXCERPT_CHARS: usize = 120;
 const MAX_TERMS_PER_CLASS: usize = 50_000;
 const MAX_CONCEPTS_PER_CLASS: usize = 1_024;
 const SILHOUETTE_SAMPLE: usize = 300;
@@ -63,6 +65,8 @@ pub struct CorpusThemeConfig {
     pub passages_per_theme: usize,
     /// Document mixtures retained in the result.
     pub max_document_mixtures: usize,
+    /// Chunks projected onto the 2D map (stride sample above this bound).
+    pub max_map_points: usize,
 }
 
 impl Default for CorpusThemeConfig {
@@ -79,6 +83,7 @@ impl Default for CorpusThemeConfig {
             keywords_per_theme: 6,
             passages_per_theme: 3,
             max_document_mixtures: 5_000,
+            max_map_points: 2_000,
         }
     }
 }
@@ -99,6 +104,8 @@ impl CorpusThemeConfig {
             || self.keywords_per_theme > 32
             || self.passages_per_theme == 0
             || self.passages_per_theme > 16
+            || self.max_map_points == 0
+            || self.max_map_points > 10_000
         {
             return Err(CorpusThemeError::InvalidConfiguration);
         }
@@ -201,6 +208,19 @@ pub struct DocumentThemeMixture {
     pub shares: Vec<ThemeShare>,
 }
 
+/// One chunk on the 2D theme map. Only projected coordinates are exposed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MapPoint {
+    /// Horizontal coordinate in `[-1, 1]`.
+    pub x: f32,
+    /// Vertical coordinate in `[-1, 1]`.
+    pub y: f32,
+    /// Theme id, or `None` for the "no theme" bucket.
+    pub theme: Option<u32>,
+    /// Chunk identity, source and provenance so the point can open its source.
+    pub passage: ThemePassage,
+}
+
 /// Complete analysis of one scope.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CorpusThemes {
@@ -228,6 +248,10 @@ pub struct CorpusThemes {
     pub document_mixtures: Vec<DocumentThemeMixture>,
     /// Whether mixtures beyond the bound were left out.
     pub mixtures_truncated: bool,
+    /// Deterministic PCA projection of a bounded sample of chunks.
+    pub map_points: Vec<MapPoint>,
+    /// Whether the map shows a sample rather than every chunk.
+    pub map_sampled: bool,
     /// Centroids recomputed during this run.
     pub centroids_recomputed: u32,
     /// Centroids reused unchanged during this run.
@@ -464,8 +488,12 @@ impl CorpusThemeService {
         let fitted_chunks = u32::try_from(fit_points.len()).unwrap_or(u32::MAX);
         drop(fit_points);
 
-        let mut accumulator =
-            ThemeAccumulator::new(config.clone(), model, self.identity.dimensions);
+        let mut accumulator = ThemeAccumulator::new(
+            config.clone(),
+            model,
+            self.identity.dimensions,
+            total_chunks,
+        );
         let mut failure: Option<CorpusThemeError> = None;
         let mut recomputed = 0u32;
         let mut reused = 0u32;
@@ -802,12 +830,31 @@ pub(crate) struct ThemeAccumulator {
     current: Option<DocumentState>,
     next_ordinal: u32,
     dimensions: usize,
+    map_stride: u64,
+    chunk_index: u64,
+    map_candidates: Vec<MapCandidate>,
+}
+
+/// A chunk kept for the map, before theme ids are final.
+struct MapCandidate {
+    vector: Vec<f32>,
+    bucket: usize,
+    passage: ThemePassage,
 }
 
 impl ThemeAccumulator {
-    pub(crate) fn new(config: CorpusThemeConfig, model: ThemeModel, dimensions: usize) -> Self {
+    pub(crate) fn new(
+        config: CorpusThemeConfig,
+        model: ThemeModel,
+        dimensions: usize,
+        total_chunks: u64,
+    ) -> Self {
         let buckets = model.centroids.len() + 1;
+        let map_stride = total_chunks.div_ceil(config.max_map_points as u64).max(1);
         Self {
+            map_stride,
+            chunk_index: 0,
+            map_candidates: Vec::new(),
             config,
             model,
             classes: (0..buckets).map(|_| ClassStats::default()).collect(),
@@ -871,6 +918,17 @@ impl ThemeAccumulator {
             }
         }
         let passage = passage_of(chunk, if outlier { 0.0 } else { distance });
+        if self.chunk_index.is_multiple_of(self.map_stride) {
+            self.map_candidates.push(MapCandidate {
+                vector: chunk.vector.clone(),
+                bucket,
+                passage: ThemePassage {
+                    excerpt: passage.excerpt.chars().take(MAP_EXCERPT_CHARS).collect(),
+                    ..passage.clone()
+                },
+            });
+        }
+        self.chunk_index += 1;
         if outlier {
             if class.passages.len() < self.config.passages_per_theme {
                 class.passages.push(passage);
@@ -983,6 +1041,25 @@ impl ThemeAccumulator {
                 }
             })
             .collect();
+        let coordinates = corpus_projection::project_2d(
+            &self
+                .map_candidates
+                .iter()
+                .map(|candidate| candidate.vector.as_slice())
+                .collect::<Vec<_>>(),
+        );
+        let map_sampled = (self.map_candidates.len() as u64) < chunk_count;
+        let map_points = self
+            .map_candidates
+            .into_iter()
+            .zip(coordinates)
+            .map(|(candidate, (x, y))| MapPoint {
+                x,
+                y,
+                theme: cluster_theme.get(candidate.bucket).copied().flatten(),
+                passage: candidate.passage,
+            })
+            .collect();
         let mut model = self.model;
         model.cluster_theme = cluster_theme;
         (
@@ -999,6 +1076,8 @@ impl ThemeAccumulator {
                 no_theme,
                 document_mixtures,
                 mixtures_truncated,
+                map_points,
+                map_sampled,
                 centroids_recomputed: 0,
                 centroids_reused: 0,
                 from_cache: false,

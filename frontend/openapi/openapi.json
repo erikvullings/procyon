@@ -10932,7 +10932,9 @@
           "themes",
           "noTheme",
           "documentMixtures",
-          "mixturesTruncated"
+          "mixturesTruncated",
+          "mapPoints",
+          "mapSampled"
         ],
         "properties": {
           "algorithmVersion": {
@@ -10965,6 +10967,17 @@
           "indexRevision": {
             "type": "string",
             "description": "Digest of the indexed documents these themes describe; compare with the\nstatus revision to detect a stale analysis."
+          },
+          "mapPoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThemeMapPointDto"
+            },
+            "description": "Deterministic 2D projection of a bounded sample of chunks."
+          },
+          "mapSampled": {
+            "type": "boolean",
+            "description": "Whether the map shows a sample rather than every chunk."
           },
           "mixturesTruncated": {
             "type": "boolean",
@@ -26855,6 +26868,40 @@
           "term": {
             "type": "string",
             "description": "Lower-cased term."
+          }
+        }
+      },
+      "ThemeMapPointDto": {
+        "type": "object",
+        "description": "One chunk on the 2D theme map; only projected coordinates are exposed.",
+        "required": [
+          "x",
+          "y",
+          "passage"
+        ],
+        "properties": {
+          "passage": {
+            "$ref": "#/components/schemas/ThemePassageDto",
+            "description": "The chunk this point stands for, with provenance to open its source."
+          },
+          "theme": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Theme id, or absent for the \"no theme\" bucket.",
+            "minimum": 0
+          },
+          "x": {
+            "type": "number",
+            "format": "float",
+            "description": "Horizontal coordinate in -1 to 1."
+          },
+          "y": {
+            "type": "number",
+            "format": "float",
+            "description": "Vertical coordinate in -1 to 1."
           }
         }
       },

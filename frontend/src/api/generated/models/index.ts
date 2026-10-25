@@ -595,6 +595,7 @@ export * from './tabStateDto.ts';
 export * from './themeConceptDto.ts';
 export * from './themeDto.ts';
 export * from './themeKeywordDto.ts';
+export * from './themeMapPointDto.ts';
 export * from './themePassageDto.ts';
 export * from './themeShareDto.ts';
 export * from './uninstallSemanticComponentsRequestDto.ts';

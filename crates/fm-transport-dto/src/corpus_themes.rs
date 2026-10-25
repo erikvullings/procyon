@@ -157,6 +157,20 @@ pub struct DocumentThemeMixtureDto {
     pub shares: Vec<ThemeShareDto>,
 }
 
+/// One chunk on the 2D theme map; only projected coordinates are exposed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeMapPointDto {
+    /// Horizontal coordinate in -1 to 1.
+    pub x: f32,
+    /// Vertical coordinate in -1 to 1.
+    pub y: f32,
+    /// Theme id, or absent for the "no theme" bucket.
+    pub theme: Option<u32>,
+    /// The chunk this point stands for, with provenance to open its source.
+    pub passage: ThemePassageDto,
+}
+
 /// Complete themes of one scope.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -184,6 +198,10 @@ pub struct CorpusThemesDto {
     pub document_mixtures: Vec<DocumentThemeMixtureDto>,
     /// Whether further document mixtures were left out.
     pub mixtures_truncated: bool,
+    /// Deterministic 2D projection of a bounded sample of chunks.
+    pub map_points: Vec<ThemeMapPointDto>,
+    /// Whether the map shows a sample rather than every chunk.
+    pub map_sampled: bool,
 }
 
 /// Themes of a scope, or the typed reason there are none.

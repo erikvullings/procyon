@@ -602,6 +602,91 @@ fn index_revision_tracks_the_visible_documents() {
     );
 }
 
+fn mean_point(themes: &CorpusThemes, theme: u32) -> (f32, f32) {
+    let points = themes
+        .map_points
+        .iter()
+        .filter(|point| point.theme == Some(theme))
+        .collect::<Vec<_>>();
+    assert!(!points.is_empty(), "theme {theme} has no map points");
+    (
+        points.iter().map(|point| point.x).sum::<f32>() / points.len() as f32,
+        points.iter().map(|point| point.y).sum::<f32>() / points.len() as f32,
+    )
+}
+
+#[test]
+fn map_projects_every_chunk_within_bounds_and_separates_themes() {
+    let catalog = open_catalog();
+    stage_corpus(&catalog, &ALL_DOCS);
+    let service = CorpusThemeService::new(catalog, identity());
+    let themes = analyze(&service, &scope_of(&ALL_DOCS));
+    assert_eq!(themes.map_points.len() as u64, themes.chunk_count);
+    assert!(!themes.map_sampled);
+    assert!(
+        themes
+            .map_points
+            .iter()
+            .all(|point| point.x.abs() <= 1.0 && point.y.abs() <= 1.0)
+    );
+    assert!(themes.map_points.iter().all(|point| {
+        point.passage.provenance.contains("start_line")
+            && point.passage.excerpt.chars().count() <= 120
+    }));
+    for left in &themes.themes {
+        for right in &themes.themes {
+            if left.id < right.id {
+                let a = mean_point(&themes, left.id);
+                let b = mean_point(&themes, right.id);
+                let distance = ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt();
+                assert!(
+                    distance > 0.2,
+                    "themes {} and {} overlap",
+                    left.id,
+                    right.id
+                );
+            }
+        }
+    }
+    assert_eq!(
+        themes.map_points,
+        analyze(&service, &scope_of(&ALL_DOCS)).map_points
+    );
+}
+
+#[test]
+fn map_is_bounded_by_a_stride_sample_that_still_covers_every_theme() {
+    let catalog = open_catalog();
+    stage_corpus(&catalog, &ALL_DOCS);
+    let service = CorpusThemeService::new(catalog, identity());
+    let config = CorpusThemeConfig {
+        max_map_points: 12,
+        ..CorpusThemeConfig::default()
+    };
+    let themes = service
+        .analyze(&scope_of(&ALL_DOCS), &config, &CancellationToken::new())
+        .unwrap();
+    assert!(themes.map_sampled);
+    assert!(themes.map_points.len() <= 12, "{}", themes.map_points.len());
+    assert!(themes.map_points.len() >= 6);
+    // Counts still describe all chunks, only the map is thinned.
+    assert_eq!(themes.chunk_count, 4 * 4 + 6 + 6 + 4 + 4);
+    let covered = themes
+        .map_points
+        .iter()
+        .filter_map(|point| point.theme)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(covered.len(), themes.themes.len());
+    let invalid = CorpusThemeConfig {
+        max_map_points: 0,
+        ..CorpusThemeConfig::default()
+    };
+    assert!(matches!(
+        service.analyze(&scope_of(&ALL_DOCS), &invalid, &CancellationToken::new()),
+        Err(CorpusThemeError::InvalidConfiguration)
+    ));
+}
+
 #[test]
 fn labels_ignore_stopwords_and_rank_distinctive_terms() {
     let catalog = open_catalog();

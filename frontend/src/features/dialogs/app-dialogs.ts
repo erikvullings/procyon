@@ -71,6 +71,7 @@ import type { FindFilesSearchParams } from '../search/find-files-dialog';
 import { FindFilesDialog } from '../search/find-files-dialog';
 import { deleteSavedSearch, saveSearch, toggleSavedSearchPin } from '../search/saved-searches';
 import { DocumentSummaryDialog } from '../semantic/document-summary-dialog';
+import { ThemesDialog } from '../semantic/themes-dialog';
 import { pathFromUri } from '../workspace/workspace-layout';
 
 export interface AppDialogsContext {
@@ -596,6 +597,13 @@ export function renderAppDialogs(
       entry: ds.documentSummaryDialog?.entry,
       client,
       onClose: () => dialogs.cancelDocumentSummaryDialog(),
+    }),
+    m(ThemesDialog, {
+      open: ds.themesDialog !== undefined,
+      client,
+      scopes: ds.themesDialog?.scopes ?? [],
+      onOpenPassage: (passage) => ds.themesDialog?.onOpenPassage(passage),
+      onClose: () => dialogs.cancelThemesDialog(),
     }),
     m(FinderTagsDialog, {
       open: ds.finderTagsDialog !== undefined,
