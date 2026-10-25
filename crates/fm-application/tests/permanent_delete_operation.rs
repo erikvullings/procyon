@@ -307,8 +307,18 @@ async fn cancellation_reports_and_audits_the_exact_deleted_count() {
 
     let remaining = fs::read_dir(&source).unwrap().count() as u64;
     assert_eq!(cancelled.progress.completed_items, 2_000 - remaining);
-    let audit = fs::read_to_string(root.path().join("settings/audit.jsonl")).unwrap();
-    let record: serde_json::Value = serde_json::from_str(audit.lines().last().unwrap()).unwrap();
+    // The audit record is written after the operation state flips to cancelled.
+    let audit_path = root.path().join("settings/audit.jsonl");
+    let last_line = loop {
+        if let Some(line) = fs::read_to_string(&audit_path)
+            .ok()
+            .and_then(|audit| audit.lines().last().map(str::to_owned))
+        {
+            break line;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    };
+    let record: serde_json::Value = serde_json::from_str(&last_line).unwrap();
     assert_eq!(
         record["deletedItems"].as_u64(),
         Some(cancelled.progress.completed_items)

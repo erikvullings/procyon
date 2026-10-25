@@ -570,13 +570,15 @@ impl russh_sftp::server::Handler for FixtureSftpHandler {
                     .map_err(|error| map_io_error(&error))?;
             }
         }
+        #[cfg(unix)]
+        {
+            Ok(ok_status(id))
+        }
         #[cfg(not(unix))]
         {
-            let _ = (&target, &attrs);
-            return Err(StatusCode::OpUnsupported);
+            let _ = (id, &target, &attrs);
+            Err(StatusCode::OpUnsupported)
         }
-        #[cfg(unix)]
-        Ok(ok_status(id))
     }
 
     async fn remove(&mut self, id: u32, filename: String) -> Result<Status, Self::Error> {
