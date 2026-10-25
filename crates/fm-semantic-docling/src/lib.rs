@@ -2266,28 +2266,41 @@ mod tests {
     #[test]
     fn successful_version_probe_does_not_leave_background_descendants() {
         let directory = tempfile::tempdir().expect("descendant fixture");
-        let marker = directory.path().join("descendant-survived");
+        let pid_file = directory.path().join("descendant.pid");
+        // The TERM-ignoring descendant sleeps far longer than any plausible scheduling delay, so
+        // the assertion depends on the probe killing it, never on a wall-clock race.
         let executable = fake_version_executable(
             directory.path(),
             &format!(
-                "(trap '' TERM; /bin/sleep 1; /usr/bin/touch '{}') &\nprintf '16.10.4\\n'",
-                marker.display()
+                "(trap '' TERM; exec /bin/sleep 60) &\necho $! > '{}'\nprintf '16.10.4\\n'",
+                pid_file.display()
             ),
         );
-        let started = Instant::now();
 
         let availability = discover_ocrmypdf_from_candidates(
             vec![executable],
-            Duration::from_secs(3),
+            Duration::from_secs(30),
             OCRMYPDF_VERSION_OUTPUT_LIMIT,
         );
         assert!(
             matches!(availability, OcrMyPdfAvailability::Available { .. }),
             "{availability:?}"
         );
-        assert!(started.elapsed() < Duration::from_secs(3));
-        thread::sleep(Duration::from_millis(1_100));
-        assert!(!marker.exists(), "version-probe descendants must be killed");
+        let pid = fs::read_to_string(&pid_file)
+            .expect("descendant pid recorded before the probe returned")
+            .trim()
+            .parse::<i32>()
+            .expect("numeric pid");
+        let pid = rustix::process::Pid::from_raw(pid).expect("positive pid");
+        // SIGKILL delivery is asynchronous; poll until the descendant is gone.
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while rustix::process::test_kill_process(pid).is_ok() {
+            assert!(
+                Instant::now() < deadline,
+                "version-probe descendants must be killed"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
     }
 
     #[cfg(unix)]
