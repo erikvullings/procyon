@@ -124,6 +124,22 @@
   word-break: break-word;
 }
 
+.fm-image-metadata-tag {
+  display: grid;
+  grid-template-columns: minmax(6rem, 35%) 1fr;
+  gap: 0.5rem;
+}
+
+.fm-image-metadata-tag dt {
+  color: var(--fm-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.fm-image-metadata-tag dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .fm-file-viewer-metadata-row .fm-file-viewer-metadata-field {
   display: flex;
   align-items: baseline;
@@ -1726,22 +1742,6 @@ textarea.fm-sqlite-sql.browser-default {
   font-size: 0.8em;
   font-weight: 600;
   color: var(--fm-text-muted);
-}
-
-.fm-image-metadata-tag {
-  display: grid;
-  grid-template-columns: minmax(6rem, 35%) 1fr;
-  gap: 0.5rem;
-}
-
-.fm-image-metadata-tag dt {
-  color: var(--fm-text-muted);
-  overflow-wrap: anywhere;
-}
-
-.fm-image-metadata-tag dd {
-  margin: 0;
-  overflow-wrap: anywhere;
 }
 
 .fm-image-metadata-raw {

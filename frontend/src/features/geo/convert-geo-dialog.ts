@@ -26,7 +26,7 @@ const FORMATS: readonly { readonly id: GeoTargetFormat; readonly label: string }
 
 /** Whether the user may continue: at least one file converts. */
 export function canConvert(reports: readonly GeoConversionReport[] | undefined): boolean {
-  return reports !== undefined && reports.some((report) => report.error == null);
+  return reports?.some((report) => report.error == null) ?? false;
 }
 
 /**

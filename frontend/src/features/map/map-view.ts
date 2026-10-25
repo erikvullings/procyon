@@ -244,7 +244,7 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
     popup = undefined;
   }
 
-  function fit(): void {
+  function fitMap(): void {
     if (map === undefined || lib === undefined) return;
     const bounds = boundsOf(latest.markers) ?? latest.dataBounds;
     if (bounds === undefined) return;
@@ -724,7 +724,7 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
         appliedFitKey = latest.fitKey;
         if (!hasFitted) {
           hasFitted = true;
-          fit();
+          fitMap();
         }
         m.redraw();
       };
@@ -755,7 +755,7 @@ export const MapView: FactoryComponent<MapViewAttrs> = (initial) => {
       applySelection();
       if (attrs.fitKey !== appliedFitKey) {
         appliedFitKey = attrs.fitKey;
-        fit();
+        fitMap();
       }
     },
     onremove: () => {

@@ -19,15 +19,20 @@ const archive = (outer: string, inner: string): Location => ({
   uri: `archive://${outer}!/${inner}`,
 });
 
+function defined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('expected a defined value');
+  return value;
+}
+
 describe('location path helpers', () => {
   it('splits and joins file, remote and archive locations on segments', () => {
-    const file = locationPath(local('/a/My%20Dir/b'));
-    expect(file?.segments).toEqual(['a', 'My Dir', 'b']);
-    expect(joinLocation(file!, ['a', 'My Dir']).uri).toBe('file:///a/My%20Dir');
+    const file = defined(locationPath(local('/a/My%20Dir/b')));
+    expect(file.segments).toEqual(['a', 'My Dir', 'b']);
+    expect(joinLocation(file, ['a', 'My Dir']).uri).toBe('file:///a/My%20Dir');
     expect(locationPath(remote('/x/y'))?.segments).toEqual(['x', 'y']);
-    const arc = locationPath(archive('/tmp/z.zip', 'in/ner'));
-    expect(arc?.segments).toEqual(['in', 'ner']);
-    expect(joinLocation(arc!, ['in']).uri).toBe('archive:///tmp/z.zip!/in');
+    const arc = defined(locationPath(archive('/tmp/z.zip', 'in/ner')));
+    expect(arc.segments).toEqual(['in', 'ner']);
+    expect(joinLocation(arc, ['in']).uri).toBe('archive:///tmp/z.zip!/in');
   });
 
   it('has no path for search results and the basket', () => {
@@ -127,7 +132,7 @@ function harness(options: {
       const key = `${parentPath.providerId}:${wanted.join('/')}`.toLowerCase();
       if (!known.includes(key)) return Promise.resolve(undefined);
       const actual = options.dirs.find((d) => d.toLowerCase() === key) as string;
-      return Promise.resolve(joinLocation(parentPath, actual.split(':')[1]!.split('/')));
+      return Promise.resolve(joinLocation(parentPath, (actual.split(':')[1] ?? '').split('/')));
     },
   });
   return { sync, locations, store, navigate, onChange };

@@ -195,7 +195,7 @@ describe('GeoMapEditor', () => {
     content = '{';
     mount();
     expect(root.querySelector('[role="alert"]')?.textContent).toContain('not valid GeoJSON');
-    content = '{"type":"FeatureCollection","features":[],"pad":"' + 'x'.repeat(1_600_000) + '"}';
+    content = `{"type":"FeatureCollection","features":[],"pad":"${'x'.repeat(1_600_000)}"}`;
     m.redraw.sync();
     expect(root.querySelector('[role="alert"]')?.textContent).toContain('too large');
   });
