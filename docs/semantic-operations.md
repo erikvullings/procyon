@@ -258,6 +258,22 @@ catalog/signature hashes. After that lock is reviewed and committed as
 artifacts from the named qualification run, verifies every payload against the signed catalogs and
 lock, and creates the component release without rebuilding.
 
+#### Re-signing the risk-accepted Gemma worker candidate
+
+Desktop releases refuse a risk-accepted Gemma manifest whose `sourceRevision` predates any change
+to the worker build inputs (`verifySemanticWorkerSource`). To ship such changes:
+
+1. Land the worker changes on `main` (this commit is the new `sourceRevision`).
+2. Dispatch `release-semantic-components.yml` on `main` with a new immutable `release_tag`
+   (for example `semantic-v0.7.1`), `qualify_gemma=true`, and no `qualification_run_id`. Note the run ID.
+3. Download the `semantic-component-candidate-<sha>` artifact and run
+   `node scripts/prepare-risk-accepted-gemma-manifest.mjs <semantic-component-release.json>
+   <model-revision> <approver> <UTC-time> docs/evaluations/semantic-gemma-risk-accepted-v1.json`.
+4. Commit that manifest to `main`, touching no worker build inputs.
+5. Dispatch the same workflow on `main` with the same `release_tag`, `qualification_run_id=<run>`,
+   and `approve_risk_accepted_gemma=true` (needs `SEMANTIC_GEMMA_RISK_ACCEPTED=true`).
+6. Tag the desktop release on a descendant of the new `sourceRevision`.
+
 `SEMANTIC_COMPONENTS_RELEASE_QUALIFIED` gates that publication path.
 `SEMANTIC_RELEASE_QUALIFIED` separately controls whether a tagged desktop build fetches and embeds
 the already-published locked catalog. Desktop release jobs never build, sign, qualify, or publish
