@@ -243,6 +243,8 @@ export const en = {
     openFavourite: 'Open favourite: {name}',
     showSavedLocations: 'Show saved locations in the command palette',
     refresh: 'Refresh',
+    branchView: 'Branch View',
+    syncBrowsing: 'Synchronized Browsing',
     rename: 'Rename',
     copy: 'Copy',
     pack: 'Pack to Archive',

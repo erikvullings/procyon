@@ -41,8 +41,13 @@ Directory comparison (0075) exists, but there is no byte/content comparison mode
     file_diff` 13; `fm-server --test files_routes diff` 1; frontend `file-diff-actions` 5, `file-diff-dialog` 7, `mock-file-diff` 4,
     availability +3, mock client +2, http client +1; `pnpm run lint` clean; full `cargo nextest` for comparison/dto/application/server/
     test-support (1586) and `vitest run` (3113) pass; `tsc --noEmit` clean.
-  - **Known gaps**: no dedicated shortcut for Compare files (command palette / context menu only); no in-dialog UI to pick comparison
+  - **Known gaps**: no Shift+F2 for Compare files (taken by `core.compareDirectories`, TC's own); default is now Alt+Shift+F2 (`COMPARE_FILES_SHORTCUT`, shown in palette/shortcut help); no in-dialog UI to pick comparison
     criteria (the by-content comparison is its own action); the diff is request/response (cancelled when the request is dropped), not an
     operation-centre job; no 403 REST test (the test server has no accessible-roots restriction; the guard is the shared helper used by
     other routes); merge/apply-hunk remains the follow-up; the display is a custom virtualized view, not CodeMirror merge.
 
+- 2026-10-25 Claude: Added default shortcut Alt+Shift+F2 for `client.compareFiles` (Shift+F2 = compare directories; Ctrl+F1..F7
+  view/sort; Alt+F2 reserved). Tests: keydown handler dispatch, Rust guard that no core action claims the chord. i18n audit of tasks
+  0254-0258/0161/0169/0256: hardcoded UI strings none found; added missing `action.branchView`/`action.syncBrowsing` titles in all 8 locales
+  (they fell back to English). Known remaining gap: ~22 older core actions (e.g. swapPanes, calculateChecksum, showProperties) still
+  lack `action.*` keys and show backend English titles; backend error text surfaced in toasts is English.

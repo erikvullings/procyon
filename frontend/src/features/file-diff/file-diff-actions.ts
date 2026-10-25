@@ -1,7 +1,12 @@
-import type { EntrySummary } from '../../models';
+import type { EntrySummary, KeyChord } from '../../models';
 
 /** Opens the side-by-side diff of two files (task 0256). */
 export const COMPARE_FILES_ACTION_ID = 'client.compareFiles';
+/**
+ * Default shortcut for "Compare files". Shift+F2 belongs to `core.compareDirectories` (Total
+ * Commander's own binding) and Ctrl+F1..F7 to view/sort, so Alt+Shift+F2 is the closest free chord.
+ */
+export const COMPARE_FILES_SHORTCUT: KeyChord = { key: 'F2', alt: true, shift: true };
 /** Compares the two panes' folders byte for byte (task 0256). */
 export const COMPARE_BY_CONTENT_ACTION_ID = 'client.compareByContent';
 

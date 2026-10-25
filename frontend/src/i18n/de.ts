@@ -231,6 +231,8 @@ export const de = {
     openFavourite: 'Favorit öffnen: {name}',
     showSavedLocations: 'Gespeicherte Orte in der Befehlspalette anzeigen',
     refresh: 'Aktualisieren',
+    branchView: 'Verzweigungsansicht',
+    syncBrowsing: 'Synchronisiertes Navigieren',
     rename: 'Umbenennen',
     copy: 'Kopieren',
     pack: 'In Archiv packen',

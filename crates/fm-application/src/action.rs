@@ -1749,6 +1749,24 @@ mod tests {
     }
 
     #[test]
+    fn alt_shift_f2_stays_free_for_the_client_compare_files_action() {
+        let registry = ActionRegistry::with_core_actions(PlatformCapabilities::empty());
+        let chord = KeyChord {
+            key: "F2".to_owned(),
+            alt: true,
+            shift: true,
+            ..KeyChord::default()
+        };
+        assert!(
+            registry
+                .list()
+                .iter()
+                .all(|action| !action.default_shortcuts.contains(&chord)),
+            "Alt+Shift+F2 is the frontend `client.compareFiles` default"
+        );
+    }
+
+    #[test]
     fn compare_directories_uses_shift_f2_and_needs_no_selection() {
         let registry = ActionRegistry::with_core_actions(PlatformCapabilities::empty());
         let action = registry

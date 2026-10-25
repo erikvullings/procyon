@@ -228,6 +228,8 @@ export const nl = {
     openFavourite: 'Favoriet openen: {name}',
     showSavedLocations: 'Opgeslagen locaties in het commandopalet tonen',
     refresh: 'Vernieuwen',
+    branchView: 'Vertakkingsweergave',
+    syncBrowsing: 'Gesynchroniseerd bladeren',
     rename: 'Hernoemen',
     copy: 'Kopiëren',
     pack: 'Inpakken in archief',

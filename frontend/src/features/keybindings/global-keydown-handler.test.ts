@@ -6,6 +6,7 @@ import type {
   PaneId,
   WorkspaceProjection,
 } from '../../models';
+import { COMPARE_FILES_SHORTCUT } from '../file-diff/file-diff-actions';
 import type { NavigationController, PaneDirectoryView } from '../navigation/navigation';
 import type { OperationsController } from '../operations/operations-controller';
 import type { TabController } from '../panes/tab-controller';
@@ -71,6 +72,11 @@ const ACTIONS: readonly ActionDescriptor[] = [
     id: 'client.semanticAssistant',
     title: 'Ask your files',
     defaultShortcuts: [{ key: 'f', ctrl: true, shift: true }],
+  },
+  {
+    id: 'client.compareFiles',
+    title: 'Compare files',
+    defaultShortcuts: [COMPARE_FILES_SHORTCUT],
   },
   {
     id: 'client.searchKnowledge',
@@ -739,6 +745,15 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     const context = makeContext({ startComparison });
     createGlobalKeydownHandler(context)(keydown('F2', { shiftKey: true }));
     expect(startComparison).toHaveBeenCalled();
+  });
+
+  it('Alt+Shift+F2 runs Compare files, leaving Shift+F2 on Compare directories', () => {
+    const startComparison = vi.fn();
+    const invokeClientAction = vi.fn(() => true);
+    const context = makeContext({ startComparison, invokeClientAction });
+    createGlobalKeydownHandler(context)(keydown('F2', { shiftKey: true, altKey: true }));
+    expect(invokeClientAction).toHaveBeenCalledWith('client.compareFiles');
+    expect(startComparison).not.toHaveBeenCalled();
   });
 
   it('does not compare directories when the active pane has no directory', () => {

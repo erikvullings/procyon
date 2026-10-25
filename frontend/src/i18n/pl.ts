@@ -225,6 +225,8 @@ export const pl = {
     openFavourite: 'Otwórz ulubione: {name}',
     showSavedLocations: 'Pokaż zapisane lokalizacje w palecie poleceń',
     refresh: 'Odśwież',
+    branchView: 'Widok gałęzi',
+    syncBrowsing: 'Synchronizowane przeglądanie',
     rename: 'Zmień nazwę',
     copy: 'Kopiuj',
     pack: 'Spakuj do archiwum',

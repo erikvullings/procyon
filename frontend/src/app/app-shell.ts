@@ -123,6 +123,7 @@ import { recordRecentLocation } from '../features/favourites/favourites';
 import {
   COMPARE_BY_CONTENT_ACTION_ID,
   COMPARE_FILES_ACTION_ID,
+  COMPARE_FILES_SHORTCUT,
   resolveDiffPair,
 } from '../features/file-diff/file-diff-actions';
 import { FileDiffDialog, type FileDiffRequest } from '../features/file-diff/file-diff-dialog';
@@ -710,9 +711,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         {},
         t('imageMap', 'actionDescription'),
       ),
-      descriptor(COMPARE_FILES_ACTION_ID, t('fileDiff', 'compareAction'), {
-        requiresSelection: true,
-      }),
+      {
+        // Shift+F2 is taken by core.compareDirectories (Total Commander's own binding) and
+        // Ctrl+F1..F7 by view/sort; Alt+Shift+F2 is the closest free Shift+F2-family chord.
+        ...descriptor(COMPARE_FILES_ACTION_ID, t('fileDiff', 'compareAction'), {
+          requiresSelection: true,
+        }),
+        defaultShortcuts: [COMPARE_FILES_SHORTCUT],
+      },
       descriptor(COMPARE_BY_CONTENT_ACTION_ID, t('fileDiff', 'compareByContentAction'), {}),
       descriptor(SYNC_PROFILES_ACTION_ID, t('syncProfiles', 'action'), {}),
       descriptor(SPLIT_FILE_ACTION_ID, t('splitCombine', 'splitAction'), {

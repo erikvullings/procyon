@@ -227,6 +227,8 @@ export const pt = {
     openFavourite: 'Abrir favorito: {name}',
     showSavedLocations: 'Mostrar localizações guardadas na paleta de comandos',
     refresh: 'Atualizar',
+    branchView: 'Vista de ramos',
+    syncBrowsing: 'Navegação sincronizada',
     rename: 'Renomear',
     copy: 'Copiar',
     pack: 'Compactar num arquivo',

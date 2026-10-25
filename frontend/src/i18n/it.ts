@@ -225,6 +225,8 @@ export const it = {
     openFavourite: 'Apri preferito: {name}',
     showSavedLocations: 'Mostra posizioni salvate nella tavolozza dei comandi',
     refresh: 'Aggiorna',
+    branchView: 'Vista ramificata',
+    syncBrowsing: 'Navigazione sincronizzata',
     rename: 'Rinomina',
     copy: 'Copia',
     pack: 'Comprimi in archivio',

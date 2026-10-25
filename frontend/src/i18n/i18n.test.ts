@@ -56,6 +56,17 @@ describe('i18n', () => {
       }
     });
 
+    it.each(LOCALES.filter((locale) => locale !== 'en'))(
+      'localises the branch view and synchronized browsing action titles in %s',
+      (locale) => {
+        setLocale(locale);
+        expect(actionTitle('core.branchView', 'Branch View')).not.toBe('Branch View');
+        expect(actionTitle('core.syncBrowsing', 'Synchronized Browsing')).not.toBe(
+          'Synchronized Browsing',
+        );
+      },
+    );
+
     it.each(LOCALES)('localises both basket clipboard tooltips in %s', (locale) => {
       setLocale(locale);
       const basketTooltipKeys = [
