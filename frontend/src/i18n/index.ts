@@ -1,6 +1,7 @@
 import m from 'mithril';
 import type { Messages } from 'translate.js';
 import translate from 'translate.js';
+import { setErrorMessageLocaliser } from '../api/error-localiser';
 import { de } from './de';
 import type { EnglishCatalogue } from './en';
 import { en } from './en';
@@ -218,6 +219,24 @@ export function actionTitle(actionId: string, fallback: string): string {
   if (key === undefined || !Object.hasOwn(en.action, key)) return fallback;
   return t('action', key as keyof EnglishCatalogue['action']);
 }
+
+/**
+ * Localised text for a stable backend `ApplicationErrorCode`, or undefined for codes without a
+ * dedicated entry (e.g. `invalidRequest`, whose backend message carries the specifics).
+ */
+export function apiErrorMessage(code: string, details?: unknown): string | undefined {
+  if (!Object.hasOwn(en.apiError, code)) return undefined;
+  const record =
+    typeof details === 'object' && details !== null ? (details as Record<string, unknown>) : {};
+  const text = (value: unknown): string => (typeof value === 'string' ? value : '');
+  return t('apiError', code as keyof EnglishCatalogue['apiError'], {
+    actionId: text(record.actionId),
+    fingerprint: text(record.fingerprint),
+    expectedFingerprint: text(record.expectedFingerprint),
+  });
+}
+
+setErrorMessageLocaliser(apiErrorMessage);
 
 /** Labels core command categories; plugin categories are humanised from their camelCase id. */
 export function actionCategoryLabel(category: string): string {

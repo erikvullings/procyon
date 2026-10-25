@@ -9,6 +9,8 @@
  * Kept free of Mithril imports so it stays testable in isolation.
  */
 
+import { bindLocalisedMessage } from './error-localiser';
+
 /** Machine-readable error details, per the structured error shape in spec §8. */
 export interface ApiErrorDetails {
   readonly [key: string]: unknown;
@@ -31,6 +33,7 @@ export class ApiError extends Error {
   constructor(status: number, payload: ApiErrorPayload) {
     super(payload.message);
     this.name = 'ApiError';
+    bindLocalisedMessage(this, payload.code, payload.details, payload.message);
     this.status = status;
     this.code = payload.code;
     this.requestId = payload.requestId;
@@ -137,10 +140,19 @@ export async function fetchMutator<T>(url: string, options: RequestInit = {}): P
     headers.set(sessionHeader.name, sessionHeader.value);
   }
 
-  const response = await fetch(`${resolveBaseUrl()}${url}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${resolveBaseUrl()}${url}`, {
+      ...options,
+      headers,
+    });
+  } catch (error) {
+    // `fetch` rejects with a TypeError when the server cannot be reached at all.
+    if (error instanceof TypeError && options.signal?.aborted !== true) {
+      throw new ApiError(0, { code: 'networkUnavailable', message: error.message });
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     if (response.status === 401) {

@@ -1,3 +1,5 @@
+import { bindLocalisedMessage } from '../error-localiser';
+
 /**
  * A rejected Tauri command. `invoke` rejects with whatever the Rust command returned as `Err`:
  * a plain `{ code, message, requestId, details }` object for application errors, or a bare
@@ -24,6 +26,7 @@ export class TauriCommandError extends Error {
     this.code = fields.code;
     this.requestId = fields.requestId;
     this.details = fields.details;
+    bindLocalisedMessage(this, fields.code, fields.details, message);
   }
 }
 

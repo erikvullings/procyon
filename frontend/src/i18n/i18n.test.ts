@@ -1,6 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TauriCommandError } from '../api/client/tauri-command-error';
+import { ApiError } from '../api/fetch-mutator';
 import type { EnglishCatalogue } from './en';
+import { en } from './en';
 import { actionTitle, catalogues, DEFAULT_LOCALE, getLocale, LOCALES, setLocale, t } from './index';
 import { nl } from './nl';
 import type { Locale, LocalisedCatalogue } from './types';
@@ -369,5 +375,74 @@ describe('i18n', () => {
 
       setLocale('en');
     });
+  });
+});
+
+describe('core action titles', () => {
+  const source = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../../../crates/fm-application/src/action.rs'),
+    'utf8',
+  );
+  const coreIds = [
+    ...new Set([...source.matchAll(/"core\.([A-Za-z0-9]+)"/gu)].map((match) => match[1] as string)),
+  ];
+
+  it('finds the Rust core action registry ids', () => {
+    expect(coreIds.length).toBeGreaterThan(40);
+  });
+
+  it.each(LOCALES)('localises every core action id in %s', (locale) => {
+    const missing = coreIds.filter((id) => {
+      const title = (catalogues[locale].action as Record<string, string | undefined>)[id];
+      return title === undefined || title.trim().length === 0;
+    });
+    expect(missing, `core actions without an action.* title in ${locale}`).toEqual([]);
+  });
+});
+
+describe('backend error localisation', () => {
+  afterEach(() => setLocale(DEFAULT_LOCALE));
+
+  it('localises ApiError and TauriCommandError messages by stable code', () => {
+    setLocale('nl');
+    const http = new ApiError(404, { code: 'notFound', message: 'resource not found' });
+    const tauri = new TauriCommandError('cmd', 'permission denied', { code: 'permissionDenied' });
+    expect(http.message).toBe(catalogues.nl.apiError.notFound);
+    expect(tauri.message).toBe(catalogues.nl.apiError.permissionDenied);
+    setLocale('de');
+    expect(http.message).toBe(catalogues.de.apiError.notFound);
+  });
+
+  it('interpolates details and falls back to the backend message for unknown codes', () => {
+    setLocale('fr');
+    const mismatch = new ApiError(409, {
+      code: 'hostKeyUnverified',
+      message: 'host key SHA256:abc has not been verified yet',
+      details: { fingerprint: 'SHA256:abc' },
+    });
+    expect(mismatch.message).toContain('SHA256:abc');
+    const unknown = new ApiError(400, { code: 'invalidRequest', message: 'bad name' });
+    expect(unknown.message).toBe('bad name');
+    expect(new ApiError(500, { code: 'brandNewCode', message: 'raw' }).message).toBe('raw');
+  });
+
+  it('has an apiError entry for every ApplicationErrorCode except those carrying specifics', () => {
+    const source = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        '../../../crates/fm-transport-dto/src/error.rs',
+      ),
+      'utf8',
+    );
+    const enumBody = /pub enum ApplicationErrorCode \{([\s\S]*?)\n\}/u.exec(source)?.[1] ?? '';
+    const codes = [...enumBody.matchAll(/^ {4}([A-Z][A-Za-z]+),/gmu)].map((match) =>
+      (match[1] as string).replace(/^./u, (c) => c.toLowerCase()),
+    );
+    expect(codes.length).toBeGreaterThan(10);
+    const intentionallyBackendText = new Set(['invalidRequest', 'platformOperationFailed']);
+    const missing = codes.filter(
+      (code) => !intentionallyBackendText.has(code) && !Object.hasOwn(en.apiError, code),
+    );
+    expect(missing).toEqual([]);
   });
 });
