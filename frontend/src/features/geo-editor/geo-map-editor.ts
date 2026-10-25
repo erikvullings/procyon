@@ -1,8 +1,8 @@
 import type * as MapLibre from 'maplibre-gl';
 import m, { type FactoryComponent } from 'mithril';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { errorText, t } from '../../i18n';
-import type { GeoTargetFormat, MapSettings } from '../../models';
+import { errorText, geoMessageText, t } from '../../i18n';
+import type { GeoMessage, GeoTargetFormat, MapSettings } from '../../models';
 import { resolvedTheme } from '../../utilities/resolved-theme';
 import { DEFAULT_MAP_SETTINGS } from '../map/map-settings';
 import { MapView } from '../map/map-view';
@@ -93,7 +93,7 @@ export const GeoMapEditor: FactoryComponent<GeoMapEditorAttrs> = (initial) => {
   let exportFormat: GeoTargetFormat = 'gpx';
   let exportWkt = false;
   let exportName = '';
-  let exportNotes: readonly string[] = [];
+  let exportNotes: readonly GeoMessage[] = [];
   let exportContent: string | undefined;
   let exportError: string | undefined;
   let exportToken = 0;
@@ -352,17 +352,22 @@ export const GeoMapEditor: FactoryComponent<GeoMapEditorAttrs> = (initial) => {
               ? t('geoEdit', 'jsonErrorAt', {
                   line: error.line,
                   column: error.column,
-                  message: error.message,
+                  message: geoMessageText(error),
                 })
               : error.path != null && error.path !== ''
-                ? t('geoEdit', 'jsonErrorPath', { path: error.path, message: error.message })
-                : error.message,
+                ? t('geoEdit', 'jsonErrorPath', {
+                    path: error.path,
+                    message: geoMessageText(error),
+                  })
+                : geoMessageText(error),
           ),
       state.warnings.length === 0
         ? undefined
         : m(
             'ul.fm-geo-warning',
-            state.warnings.map((warning, index) => m('li', { key: index }, warning.message)),
+            state.warnings.map((warning, index) =>
+              m('li', { key: index }, geoMessageText(warning)),
+            ),
           ),
     ]);
   }
@@ -452,7 +457,7 @@ export const GeoMapEditor: FactoryComponent<GeoMapEditorAttrs> = (initial) => {
               m('p.fm-geo-warning', t('geoConvert', 'lossHeading')),
               m(
                 'ul',
-                exportNotes.map((note, index) => m('li', { key: index }, note)),
+                exportNotes.map((note, index) => m('li', { key: index }, geoMessageText(note))),
               ),
             ]
         : m('p.fm-field-error', { role: 'alert' }, exportError),

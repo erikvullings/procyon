@@ -50,9 +50,11 @@ fn empty(format: &str, error: GeoErrorDto) -> GeoDocumentDto {
     }
 }
 
-fn plain_error(message: String) -> GeoErrorDto {
+fn plain_error(message: fm_geo::GeoMessage) -> GeoErrorDto {
     GeoErrorDto {
-        message,
+        message: message.text,
+        code: Some(message.code.to_owned()),
+        params: message.params,
         line: None,
         column: None,
         path: None,
@@ -104,6 +106,8 @@ fn document_dto(document: GeoDocument) -> GeoDocumentDto {
             .map(|issue| GeoIssueDto {
                 path: issue.path,
                 message: issue.message,
+                code: Some(issue.code.to_owned()),
+                params: issue.params,
             })
             .collect(),
         skipped: document.skipped,
@@ -168,7 +172,7 @@ fn parse_csv(bytes: &[u8], options: CsvOptions) -> GeoDocumentDto {
             dto
         }
         Err(error) => {
-            let mut dto = empty("csv", plain_error(error.to_string()));
+            let mut dto = empty("csv", plain_error(error.message()));
             if let CsvError::NoCoordinates { headers, .. } = error {
                 dto.csv = Some(CsvGeoInfoDto {
                     headers,
@@ -203,9 +207,16 @@ pub(crate) async fn read_geo_file(
     if size > MAX_GEO_FILE_BYTES {
         return Ok(empty(
             "",
-            plain_error(format!(
-                "the file is {size} bytes; files above {MAX_GEO_FILE_BYTES} bytes are not opened on the map"
-            )),
+            plain_error(
+                fm_geo::GeoMessage::new(
+                    fm_geo::codes::FILE_TOO_LARGE,
+                    format!(
+                        "the file is {size} bytes; files above {MAX_GEO_FILE_BYTES} bytes are not opened on the map"
+                    ),
+                )
+                .with("sizeBytes", size)
+ .with("maxBytes", MAX_GEO_FILE_BYTES),
+            ),
         ));
     }
     let mut bytes = Vec::new();
@@ -254,7 +265,9 @@ fn parse_bytes(extension: &str, bytes: &[u8]) -> Result<GeoDocumentDto, (String,
                     .map(|format| format.id().to_owned())
                     .unwrap_or_default(),
                 GeoErrorDto {
-                    message: failure.message,
+                    message: failure.message.text,
+                    code: Some(failure.message.code.to_owned()),
+                    params: failure.message.params,
                     line: failure.line.and_then(|line| u32::try_from(line).ok()),
                     column: failure.column.and_then(|column| u32::try_from(column).ok()),
                     path: failure.path,

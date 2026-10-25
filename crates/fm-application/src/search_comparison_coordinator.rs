@@ -1,5 +1,6 @@
 //! Search and directory-comparison coordination (task 0119).
 
+use crate::rejection::{Rejection, reason};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -81,9 +82,10 @@ impl SearchComparisonCoordinator {
             !(1..=fm_transport_dto::search::SEARCH_QUERY_SCHEMA_VERSION)
                 .contains(&query.schema_version)
         }) {
-            return Err(ApplicationError::InvalidRequest(
-                "unsupported search query schema version".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::UNSUPPORTED_QUERY_SCHEMA,
+                "unsupported search query schema version",
+            )));
         }
         let roots: Vec<Location> = structured.map_or_else(
             || request.roots.iter().cloned().map(Into::into).collect(),
@@ -242,20 +244,23 @@ impl SearchComparisonCoordinator {
         semantic_library: Option<&crate::semantic_library::SemanticLibraryService>,
     ) -> Result<StartSearchResponseDto, ApplicationError> {
         let semantic = query.semantic.as_ref().ok_or_else(|| {
-            ApplicationError::InvalidRequest(
-                "semantic mode requires a semantic predicate".to_owned(),
-            )
+            ApplicationError::from(Rejection::new(
+                reason::SEMANTIC_PREDICATE_REQUIRED,
+                "semantic mode requires a semantic predicate",
+            ))
         })?;
         if semantic.query.trim().is_empty() {
-            return Err(ApplicationError::InvalidRequest(
-                "semantic query must not be empty".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::SEMANTIC_QUERY_EMPTY,
+                "semantic query must not be empty",
+            )));
         }
 
         if query.name.is_some() || query.content.is_some() {
-            return Err(ApplicationError::InvalidRequest(
-                "semantic mode cannot be combined with name or content predicates".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::SEMANTIC_EXCLUSIVE,
+                "semantic mode cannot be combined with name or content predicates",
+            )));
         }
         let search_id = Uuid::new_v4();
         let results = self
@@ -419,7 +424,10 @@ impl SearchComparisonCoordinator {
         vocabulary_store: Option<&crate::semantic_vocabulary::VocabularyStore>,
     ) -> Result<StartSearchResponseDto, ApplicationError> {
         let concept = query.concept.as_ref().ok_or_else(|| {
-            ApplicationError::InvalidRequest("concept mode requires a concept predicate".into())
+            ApplicationError::from(Rejection::new(
+                reason::CONCEPT_PREDICATE_REQUIRED,
+                "concept mode requires a concept predicate",
+            ))
         })?;
         let vocabulary = vocabulary_store
             .ok_or(ApplicationError::ProviderUnavailable)?
@@ -1298,6 +1306,9 @@ mod tests {
             .await
             .expect_err("invalid regex must be rejected");
 
-        assert!(matches!(error, ApplicationError::InvalidRequest(_)));
+        assert!(matches!(
+            error,
+            ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_)
+        ));
     }
 }

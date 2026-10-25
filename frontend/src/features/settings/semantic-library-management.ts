@@ -1,7 +1,7 @@
 import m, { type FactoryComponent, type Vnode } from 'mithril';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { t } from '../../i18n';
+import { semanticUnavailableText, t } from '../../i18n';
 import type {
   KnowledgeRoot,
   Location,
@@ -640,7 +640,9 @@ function rootStatusView(
                   m('li', { key: category.category }, [
                     deletionCategoryLabel(category.category),
                     `: ${category.completedItems}/${category.totalItems}`,
-                    category.lastError == null ? undefined : ` — ${category.lastError}`,
+                    category.lastError == null
+                      ? undefined
+                      : ` — ${t('semanticLibrary', 'cleanupFailedDetail', { detail: category.lastError })}`,
                   ]),
                 ),
               ),
@@ -1158,7 +1160,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
                         m('strong', t('semanticLibrary', 'sourceUnavailable')),
                         folder.unavailableReason == null
                           ? undefined
-                          : ` — ${folder.unavailableReason}`,
+                          : ` — ${semanticUnavailableText(folder.unavailableReasonCode, folder.unavailableReason)}`,
                       ]),
                   (folder.consent === 'notIncluded' || !folder.workspaceReferenced) &&
                   folder.consent !== 'excluded' &&

@@ -1,6 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
 
-import { t } from '../../i18n';
+import { operationEntryErrorText, t } from '../../i18n';
 import {
   type ChecksumAlgorithm,
   type ChecksumEntry,
@@ -214,7 +214,10 @@ export const ChecksumResultsView: FactoryComponent<ChecksumResultsViewAttrs> = (
                 m(
                   'td.checksum-results__digest',
                   entry.error !== undefined
-                    ? m('span.checksum-results__entry-error', entry.error)
+                    ? m(
+                        'span.checksum-results__entry-error',
+                        operationEntryErrorText({ code: entry.errorCode, message: entry.error }),
+                      )
                     : m(
                         'code',
                         {

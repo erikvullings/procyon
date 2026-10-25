@@ -49,7 +49,7 @@ pub(crate) async fn write(
     tokio::task::spawn_blocking(move || platform.write_clipboard_file_references(&paths))
         .await
         .map_err(|_| ApplicationError::Internal)?
-        .map_err(|error| ApplicationError::PlatformOperationFailed(error.to_string()))?;
+        .map_err(crate::platform_mapping::platform_failure)?;
     Ok(true)
 }
 
@@ -66,7 +66,7 @@ pub(crate) async fn read(
     let paths = tokio::task::spawn_blocking(move || platform.read_clipboard_file_references())
         .await
         .map_err(|_| ApplicationError::Internal)?
-        .map_err(|error| ApplicationError::PlatformOperationFailed(error.to_string()))?;
+        .map_err(crate::platform_mapping::platform_failure)?;
     let mut seen = HashSet::new();
     Ok(paths
         .iter()
@@ -230,7 +230,7 @@ mod tests {
             .unwrap_err();
 
         assert!(
-            matches!(error, ApplicationError::PlatformOperationFailed(message) if message.contains("busy"))
+            matches!(error, ApplicationError::PlatformFailed(ref rejection) if rejection.message.contains("busy"))
         );
     }
 }

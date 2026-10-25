@@ -821,7 +821,10 @@ export const ConnectionsManager: FactoryComponent<ConnectionsManagerAttrs> = () 
                   }),
                 ]),
                 connection.status === 'failed' && connection.lastError != null
-                  ? m('.fm-field-error.fm-connections-row-error', connection.lastError)
+                  ? m(
+                      '.fm-field-error.fm-connections-row-error',
+                      t('connections', 'lastErrorDetail', { detail: connection.lastError }),
+                    )
                   : undefined,
                 connection.kind === 'oneDrive' &&
                 oneDriveAuthorizationMessage(oneDriveAuthorization.get(connection.id)) !== undefined

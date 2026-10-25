@@ -34,8 +34,25 @@ impl GeoFormat {
 pub struct GeoIssue {
     /// Where in the document the issue was found, for example `/features/3/geometry`.
     pub path: String,
-    /// What is wrong or was left out.
+    /// What is wrong or was left out (English fallback).
     pub message: String,
+    /// Stable code clients localise (see [`crate::codes`]).
+    pub code: &'static str,
+    /// Values the localised sentence interpolates.
+    pub params: std::collections::BTreeMap<String, String>,
+}
+
+impl GeoIssue {
+    /// An issue at `path` described by `message`.
+    #[must_use]
+    pub fn new(path: impl Into<String>, message: crate::GeoMessage) -> Self {
+        Self {
+            path: path.into(),
+            message: message.text,
+            code: message.code,
+            params: message.params,
+        }
+    }
 }
 
 /// West, south, east, north in degrees.

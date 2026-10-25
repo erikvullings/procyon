@@ -327,9 +327,9 @@ describe('LlmProfileManagement', () => {
       baseUrl: 'https://llm.example.test:8443/second',
     });
     expect(changed.consentedHost).toBeNull();
-    await expect(client.activateLlmProfile(profile.id, false)).rejects.toThrow(
-      'Cloud consent is required',
-    );
+    await expect(client.activateLlmProfile(profile.id, false)).rejects.toMatchObject({
+      code: 'invalidRequest',
+    });
   });
 
   it('integrates models discovered by a saved provider into the model field', async () => {

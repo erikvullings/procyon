@@ -1,3 +1,4 @@
+use crate::rejection::{Rejection, reason};
 use fm_archive::ArchiveFileSystemProvider;
 use fm_domain::Location;
 use fm_transport_dto::ArchiveSummaryResponseDto;
@@ -13,9 +14,10 @@ pub(crate) async fn calculate_archive_summary(
     archive_file: Location,
 ) -> Result<ArchiveSummaryResponseDto, ApplicationError> {
     if archive_file.provider_id.as_str() != "local" || !archive_file.uri.starts_with("file://") {
-        return Err(ApplicationError::InvalidRequest(
-            "archive summary requires a local archive file".to_owned(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::LOCAL_ARCHIVE_REQUIRED,
+            "archive summary requires a local archive file",
+        )));
     }
     let location = Location::parse(&format!(
         "archive://{}!/",

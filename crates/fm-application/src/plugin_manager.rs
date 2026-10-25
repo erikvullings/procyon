@@ -3,6 +3,7 @@
 //! Manages plugin discovery, enable/disable lifecycle, icon asset serving,
 //! log access, and action invocation.
 
+use crate::rejection::{Rejection, reason};
 use std::sync::{Arc, Mutex};
 
 use std::path::PathBuf;
@@ -24,7 +25,6 @@ use fm_transport_dto::{
     ActionResultDto, PluginDescriptorDto, PluginLogEntryDto, PluginPermissionsDto,
     PluginPreviewDto, PluginPreviewKindDto, PluginPreviewResultDto, PluginSpaPanelDto,
 };
-use uuid::Uuid;
 
 use crate::error::ApplicationError;
 
@@ -175,8 +175,12 @@ impl PluginManager {
             )));
         }
         if !manifest.permissions.selected_entry_content_read {
-            return Err(ApplicationError::InvalidRequest(
-                "plugin permission denied: selected_entry_content_read".to_owned(),
+            return Err(ApplicationError::from(
+                Rejection::new(
+                    reason::PLUGIN_PERMISSION_DENIED,
+                    "plugin permission denied: selected_entry_content_read",
+                )
+                .with("permission", "selected_entry_content_read"),
             ));
         }
         if !panel_native_clipboard_granted(&manifest) {
@@ -283,11 +287,11 @@ impl PluginManager {
                     self.events.publish(
                         EventAudience::Global,
                         BackendEventPayload::NotificationCreated {
-                            notification: NotificationPayload {
-                                id: Uuid::new_v4().to_string(),
-                                level: NotificationLevelPayload::Info,
-                                message: "Copied to clipboard.".to_owned(),
-                            },
+                            notification: NotificationPayload::new(
+                                NotificationLevelPayload::Info,
+                                "Copied to clipboard.",
+                            )
+                            .with_code(fm_events::notification_codes::CLIPBOARD_COPIED),
                         },
                     );
                 }
@@ -298,9 +302,14 @@ impl PluginManager {
                     clipboard_text: outcome.clipboard_text,
                 })
             }
-            Err(error) => Err(ApplicationError::InvalidRequest(format!(
-                "plugin action {action_id:?} failed: {error}"
-            ))),
+            Err(error) => Err(ApplicationError::from(
+                Rejection::new(
+                    reason::PLUGIN_ACTION_FAILED,
+                    format!("plugin action {action_id:?} failed: {error}"),
+                )
+                .with("action", action_id.as_str())
+                .with("detail", &error),
+            )),
         }
     }
 
@@ -322,11 +331,13 @@ impl PluginManager {
                     self.events.publish(
                         EventAudience::Global,
                         BackendEventPayload::NotificationCreated {
-                            notification: NotificationPayload {
-                                id: Uuid::new_v4().to_string(),
-                                level: NotificationLevelPayload::Warning,
-                                message: format!("Plugin {} was isolated: {error}", manifest.id),
-                            },
+                            notification: NotificationPayload::new(
+                                NotificationLevelPayload::Warning,
+                                format!("Plugin {} was isolated: {error}", manifest.id),
+                            )
+                            .with_code(fm_events::notification_codes::PLUGIN_ISOLATED)
+                            .with_param("plugin", &manifest.id)
+                            .with_param("detail", &error),
                         },
                     );
                 }
@@ -374,11 +385,13 @@ impl PluginManager {
                                 self.events.publish(
                                     EventAudience::Global,
                                     BackendEventPayload::NotificationCreated {
-                                        notification: NotificationPayload {
-                                            id: Uuid::new_v4().to_string(),
-                                            level: NotificationLevelPayload::Warning,
-                                            message: format!("Plugin {id} was isolated: {error}"),
-                                        },
+                                        notification: NotificationPayload::new(
+                                            NotificationLevelPayload::Warning,
+                                            format!("Plugin {id} was isolated: {error}"),
+                                        )
+                                        .with_code(fm_events::notification_codes::PLUGIN_ISOLATED)
+                                        .with_param("plugin", &id)
+                                        .with_param("detail", &error),
                                     },
                                 );
                                 Vec::new()
@@ -452,9 +465,14 @@ impl PluginManager {
             .as_ref()
             .is_some_and(|preview| preview.extensions.iter().any(|ext| ext == extension));
         claims.then_some(()).ok_or_else(|| {
-            ApplicationError::InvalidRequest(format!(
-                "plugin {plugin_id} does not preview .{extension} files"
-            ))
+            ApplicationError::from(
+                Rejection::new(
+                    reason::PLUGIN_NO_PREVIEW,
+                    format!("plugin {plugin_id} does not preview .{extension} files"),
+                )
+                .with("plugin", plugin_id)
+                .with("extension", extension),
+            )
         })
     }
 
@@ -488,7 +506,13 @@ impl PluginManager {
                 &PluginCancellation::default(),
             )
             .map_err(|error| {
-                ApplicationError::InvalidRequest(format!("plugin preview failed: {error}"))
+                ApplicationError::from(
+                    Rejection::new(
+                        reason::PLUGIN_PREVIEW_FAILED,
+                        format!("plugin preview failed: {error}"),
+                    )
+                    .with("detail", &error),
+                )
             })?;
         Ok(PluginPreviewResultDto {
             kind: match output.kind {
@@ -771,16 +795,16 @@ mod tests {
             .expect("enable");
         assert!(matches!(
             manager.render_plugin_preview("test.preview", "a.demo", "demo", b"x", false),
-            Err(ApplicationError::InvalidRequest(message)) if message.contains("boom")
+            Err(ApplicationError::Rejected(rejection)) if rejection.message.contains("boom")
         ));
         assert!(matches!(
             manager.render_plugin_preview("test.preview", "a.other", "other", b"x", false),
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
         assert!(manager.check_preview_claim("test.preview", "demo").is_ok());
         assert!(matches!(
             manager.check_preview_claim("test.preview", "other"),
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
         assert!(matches!(
             manager.check_preview_claim("missing", "demo"),
@@ -954,7 +978,7 @@ mod tests {
             .expect("enable");
         assert!(matches!(
             manager.plugin_panel("example.svg", "example.svg.edit", "logo.svg"),
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
     }
 

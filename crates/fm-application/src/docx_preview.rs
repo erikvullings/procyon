@@ -1,5 +1,6 @@
 //! Bounded, provider-neutral DOCX conversion for the F3 content viewer.
 
+use crate::rejection::{Rejection, reason, resource_key};
 use std::collections::HashMap;
 use std::io::{BufReader, Read};
 use std::sync::Arc;
@@ -105,9 +106,7 @@ impl DocxPreviewService {
             .clone()
             .try_acquire_owned()
             .map_err(|_| {
-                ApplicationError::InvalidRequest(format!(
-                    "at most {MAX_DOCX_SESSIONS} DOCX previews may be open; close another preview first"
-                ))
+                ApplicationError::from(Rejection::new(reason::TOO_MANY_PREVIEWS, format!("at most {MAX_DOCX_SESSIONS} DOCX previews may be open; close another preview first")).with("max", MAX_DOCX_SESSIONS))
             })?;
         let location: Location = request.location.into();
         let provider = self
@@ -130,9 +129,10 @@ impl DocxPreviewService {
             .await
             .map_err(ApplicationError::from)?;
         if summary.kind != EntryKind::File {
-            return Err(ApplicationError::InvalidRequest(
-                "DOCX preview requires a regular file".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::NOT_REGULAR_FILE,
+                "DOCX preview requires a regular file",
+            )));
         }
         let source_bytes = provider
             .file_size(&entry, cancellation.child_token())
@@ -360,21 +360,26 @@ fn parse_docx(
 }
 
 fn invalid_docx(detail: impl AsRef<str>) -> ApplicationError {
-    ApplicationError::InvalidRequest(format!(
-        "DOCX preview is unavailable because the package is malformed: {}",
-        detail.as_ref()
-    ))
+    ApplicationError::from(
+        Rejection::new(
+            reason::PREVIEW_MALFORMED,
+            format!(
+                "DOCX preview is unavailable because the package is malformed: {}",
+                detail.as_ref()
+            ),
+        )
+        .with("detail", detail.as_ref()),
+    )
 }
 
 fn budget_error(resource: &str, limit: u64) -> ApplicationError {
+    let numeric_limit = limit;
     let limit = if limit.is_multiple_of(1024 * 1024) {
         format!("{} MiB", limit / (1024 * 1024))
     } else {
         format!("{limit} bytes")
     };
-    ApplicationError::InvalidRequest(format!(
-        "DOCX preview cannot open this file because it exceeds the {resource} limit of {limit}. Open it externally."
-    ))
+    ApplicationError::from(Rejection::new(reason::PREVIEW_BUDGET, format!("DOCX preview cannot open this file because it exceeds the {resource} limit of {limit}. Open it externally.")).with("resource", resource_key(resource)).with("limit", numeric_limit))
 }
 
 fn preflight_package(
@@ -392,9 +397,7 @@ fn preflight_package_with_expanded_limit(
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
         .map_err(|error| invalid_docx(error.to_string()))?;
     if archive.len() > MAX_DOCX_ZIP_ENTRIES {
-        return Err(ApplicationError::InvalidRequest(format!(
-            "DOCX preview exceeds the ZIP entry-count budget ({MAX_DOCX_ZIP_ENTRIES}); open it in an external application"
-        )));
+        return Err(ApplicationError::from(Rejection::new(reason::PREVIEW_BUDGET, format!("DOCX preview exceeds the ZIP entry-count budget ({MAX_DOCX_ZIP_ENTRIES}); open it in an external application")).with("resource", "zipEntries").with("limit", MAX_DOCX_ZIP_ENTRIES)));
     }
     let mut expanded_bytes = 0_u64;
     let mut image_count = 0_usize;
@@ -416,9 +419,7 @@ fn preflight_package_with_expanded_limit(
         if image_media_type(&name).is_some() && !file.is_dir() {
             image_count += 1;
             if image_count > MAX_DOCX_IMAGES {
-                return Err(ApplicationError::InvalidRequest(format!(
-                    "DOCX preview exceeds the image-count budget ({MAX_DOCX_IMAGES}); open it in an external application"
-                )));
+                return Err(ApplicationError::from(Rejection::new(reason::PREVIEW_BUDGET, format!("DOCX preview exceeds the image-count budget ({MAX_DOCX_IMAGES}); open it in an external application")).with("resource", "imageCount").with("limit", MAX_DOCX_IMAGES)));
             }
             if file.size() > MAX_DOCX_IMAGE_BYTES as u64 {
                 return Err(budget_error("per-image bytes", MAX_DOCX_IMAGE_BYTES as u64));
@@ -456,9 +457,7 @@ fn validate_xml_depth(
             Ok(Event::Start(_)) => {
                 depth += 1;
                 if depth > MAX_DOCX_XML_DEPTH {
-                    return Err(ApplicationError::InvalidRequest(format!(
-                        "DOCX preview exceeds the XML depth budget ({MAX_DOCX_XML_DEPTH}); open it in an external application"
-                    )));
+                    return Err(ApplicationError::from(Rejection::new(reason::PREVIEW_BUDGET, format!("DOCX preview exceeds the XML depth budget ({MAX_DOCX_XML_DEPTH}); open it in an external application")).with("resource", "xmlDepth").with("limit", MAX_DOCX_XML_DEPTH)));
                 }
             }
             Ok(Event::End(_)) => depth = depth.saturating_sub(1),
@@ -618,7 +617,10 @@ mod tests {
     fn rejects_malformed_ooxml() {
         let error = parse_docx(b"not a ZIP package", &CancellationToken::new())
             .expect_err("malformed input must fail");
-        assert!(matches!(error, ApplicationError::InvalidRequest(_)));
+        assert!(matches!(
+            error,
+            ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_)
+        ));
     }
 
     #[test]

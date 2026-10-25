@@ -6,6 +6,7 @@
 //! the operation/directory-refresh observer, and operation-DTO conversion) was self-contained and
 //! had no dependency on the rest of the facade beyond `DirectoryService`.
 
+use crate::rejection::Rejection;
 use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
@@ -254,6 +255,8 @@ impl OperationHistory {
                     "The previous undo was interrupted, so its remaining effects cannot be reversed safely."
                         .into(),
                 );
+                operation.undo.unavailable_code =
+                    Some(fm_operations::codes::undo::UNDO_INTERRUPTED.into());
             } else if !known_ids.contains(&pending_id) {
                 operation.undo.pending_operation = None;
             }
@@ -301,7 +304,8 @@ impl OperationHistory {
         &self,
         id: OperationId,
         undo_id: OperationId,
-    ) -> Result<(Operation, UndoPlan), String> {
+    ) -> Result<(Operation, UndoPlan), Rejection> {
+        use fm_operations::codes::undo;
         let result = {
             let mut operations = self
                 .operations
@@ -310,19 +314,31 @@ impl OperationHistory {
             let operation = operations
                 .iter_mut()
                 .find(|operation| operation.id == id && operation.state.is_terminal())
-                .ok_or_else(|| "Operation history entry was not found.".to_owned())?;
+                .ok_or_else(|| {
+                    Rejection::new(undo::NOT_FOUND, "Operation history entry was not found.")
+                })?;
             if operation.undo.undone_by.is_some() {
-                return Err("This operation has already been undone.".into());
+                return Err(Rejection::new(
+                    undo::ALREADY_UNDONE,
+                    "This operation has already been undone.",
+                ));
             }
             if operation.undo.pending_operation.is_some() {
-                return Err("Undo is already in progress for this operation.".into());
+                return Err(Rejection::new(
+                    undo::UNDO_IN_PROGRESS,
+                    "Undo is already in progress for this operation.",
+                ));
             }
             let plan = operation.undo.plan.clone().ok_or_else(|| {
-                operation
-                    .undo
-                    .unavailable_reason
-                    .clone()
-                    .unwrap_or_else(|| "This operation cannot be undone safely.".into())
+                let status = operation.undo_status();
+                Rejection::new(
+                    status
+                        .reason_code
+                        .unwrap_or_else(|| undo::UNDO_UNSAFE.to_owned()),
+                    status
+                        .reason
+                        .unwrap_or_else(|| "This operation cannot be undone safely.".into()),
+                )
             })?;
             operation.undo.pending_operation = Some(undo_id);
             Ok((operation.clone(), plan))
@@ -422,6 +438,8 @@ impl OperationSnapshotObserver for OperationHistory {
                         "The previous undo completed only partially, so it cannot be retried safely."
                             .into(),
                     );
+                    original.undo.unavailable_code =
+                        Some(fm_operations::codes::undo::UNDO_PARTIAL.into());
                 }
             }
         }
@@ -583,41 +601,12 @@ pub(crate) fn operation_dto(mut operation: Operation, queue_position: Option<u64
 }
 
 fn operation_undo_dto(operation: &Operation) -> OperationUndoDto {
-    if let Some(id) = operation.undo.undone_by {
-        return OperationUndoDto {
-            available: false,
-            reason: Some("This operation has already been undone.".into()),
-            reason_code: Some(fm_operations::codes::undo::ALREADY_UNDONE.into()),
-            operation_id: Some(id.into()),
-        };
-    }
-    if let Some(id) = operation.undo.pending_operation {
-        return OperationUndoDto {
-            available: false,
-            reason: Some("Undo is already in progress for this operation.".into()),
-            reason_code: Some(fm_operations::codes::undo::UNDO_IN_PROGRESS.into()),
-            operation_id: Some(id.into()),
-        };
-    }
-    let available = operation.undo.plan.is_some()
-        && matches!(
-            operation.state,
-            OperationState::Completed | OperationState::CompletedWithWarnings
-        );
+    let status = operation.undo_status();
     OperationUndoDto {
-        available,
-        reason: if available {
-            None
-        } else {
-            operation
-                .undo
-                .unavailable_reason
-                .clone()
-                .or_else(|| Some("This operation cannot currently be undone safely.".into()))
-        },
-        reason_code: (!available && operation.undo.unavailable_reason.is_none())
-            .then(|| fm_operations::codes::undo::UNDO_UNSAFE.to_owned()),
-        operation_id: None,
+        available: status.available,
+        reason: status.reason,
+        reason_code: status.reason_code,
+        operation_id: status.operation_id.map(Into::into),
     }
 }
 

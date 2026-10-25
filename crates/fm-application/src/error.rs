@@ -8,6 +8,7 @@ use fm_vfs::VfsError;
 use uuid::Uuid;
 
 use crate::llm_profiles::LlmProfileError;
+use crate::rejection::{Rejection, reason};
 use crate::workspace::WorkspaceError;
 
 /// Failure modes the application service layer can report to a host.
@@ -30,6 +31,13 @@ pub enum ApplicationError {
     /// The request failed validation.
     #[error("invalid request: {0}")]
     InvalidRequest(String),
+    /// The request was rejected for a stable, localisable reason (see [`crate::rejection`]).
+    #[error("{}", .0.message)]
+    Rejected(Rejection),
+    /// A native platform or provider call failed for a stable, localisable reason (see
+    /// [`crate::rejection`]); reported with the `platformOperationFailed` code.
+    #[error("{}", .0.message)]
+    PlatformFailed(Rejection),
     /// The operation's destination already exists.
     #[error("destination already exists")]
     DestinationAlreadyExists,
@@ -117,7 +125,7 @@ impl ApplicationError {
             Self::NotFound => ApplicationErrorCode::NotFound,
             Self::PermissionDenied => ApplicationErrorCode::PermissionDenied,
             Self::FileLocked => ApplicationErrorCode::FileLocked,
-            Self::InvalidRequest(_) => ApplicationErrorCode::InvalidRequest,
+            Self::InvalidRequest(_) | Self::Rejected(_) => ApplicationErrorCode::InvalidRequest,
             Self::DestinationAlreadyExists => ApplicationErrorCode::DestinationAlreadyExists,
             Self::ProviderUnavailable => ApplicationErrorCode::ProviderUnavailable,
             Self::OperationCancelled => ApplicationErrorCode::OperationCancelled,
@@ -129,7 +137,9 @@ impl ApplicationError {
             Self::FileRevisionConflict { .. } => ApplicationErrorCode::FileRevisionConflict,
             Self::ActionNotFound(_) => ApplicationErrorCode::ActionNotFound,
             Self::ActionUnavailable(_) => ApplicationErrorCode::ActionUnavailable,
-            Self::PlatformOperationFailed(_) => ApplicationErrorCode::PlatformOperationFailed,
+            Self::PlatformOperationFailed(_) | Self::PlatformFailed(_) => {
+                ApplicationErrorCode::PlatformOperationFailed
+            }
             Self::HostKeyUnverified { .. } => ApplicationErrorCode::HostKeyUnverified,
             Self::HostKeyMismatch { .. } => ApplicationErrorCode::HostKeyMismatch,
             Self::KnowledgeEvidenceRefreshRequired { .. } => {
@@ -177,6 +187,14 @@ impl ApplicationError {
             } => Some(serde_json::json!({
                 "evidenceFingerprint": evidence_fingerprint,
             })),
+            Self::Rejected(rejection) | Self::PlatformFailed(rejection) => {
+                let mut details = serde_json::Map::new();
+                details.insert("reason".into(), rejection.reason.clone().into());
+                for (key, value) in &rejection.params {
+                    details.insert(key.clone(), value.clone().into());
+                }
+                Some(serde_json::Value::Object(details))
+            }
             _ => None,
         };
         ApplicationErrorDto {
@@ -201,29 +219,40 @@ impl From<WorkspaceError> for ApplicationError {
                 expected_revision: expected.unwrap_or(0),
                 actual_revision: actual,
             },
-            WorkspaceError::Invalid(details) => {
-                Self::InvalidRequest(format!("workspace failed validation: {details:?}"))
-            }
+            WorkspaceError::Invalid(details) => Rejection::new(
+                reason::WORKSPACE_INVALID,
+                format!("workspace failed validation: {details:?}"),
+            )
+            .into(),
             WorkspaceError::UnsupportedSchemaVersion { .. } => Self::Internal,
             WorkspaceError::Corrupt { .. } => Self::Internal,
             WorkspaceError::Io(_) => Self::Internal,
             WorkspaceError::Serialization(_) => Self::Internal,
-            WorkspaceError::PaneNotFound { .. } => {
-                Self::InvalidRequest("pane does not exist in this workspace".to_owned())
-            }
+            WorkspaceError::PaneNotFound { .. } => Rejection::new(
+                reason::PANE_NOT_FOUND,
+                "pane does not exist in this workspace",
+            )
+            .into(),
             WorkspaceError::TabNotFound { .. } => {
-                Self::InvalidRequest("tab does not exist in this pane".to_owned())
+                Rejection::new(reason::TAB_NOT_FOUND, "tab does not exist in this pane").into()
             }
             WorkspaceError::InvalidCommand(message) => Self::InvalidRequest(message),
-            WorkspaceError::DuplicateName { name } => {
-                Self::InvalidRequest(format!("a workspace named {name:?} already exists"))
-            }
-            WorkspaceError::NotEphemeral { id } => {
-                Self::InvalidRequest(format!("workspace {id} is not an ephemeral workspace"))
-            }
-            WorkspaceError::TargetIsEphemeral { id } => Self::InvalidRequest(format!(
-                "workspace {id} is ephemeral and cannot be a resync target"
-            )),
+            WorkspaceError::DuplicateName { name } => Rejection::new(
+                reason::WORKSPACE_NAME_EXISTS,
+                format!("a workspace named {name:?} already exists"),
+            )
+            .with("name", &name)
+            .into(),
+            WorkspaceError::NotEphemeral { id } => Rejection::new(
+                reason::WORKSPACE_NOT_EPHEMERAL,
+                format!("workspace {id} is not an ephemeral workspace"),
+            )
+            .into(),
+            WorkspaceError::TargetIsEphemeral { id } => Rejection::new(
+                reason::WORKSPACE_TARGET_EPHEMERAL,
+                format!("workspace {id} is ephemeral and cannot be a resync target"),
+            )
+            .into(),
         }
     }
 }
@@ -232,9 +261,11 @@ impl From<ConnectionError> for ApplicationError {
     fn from(error: ConnectionError) -> Self {
         match error {
             ConnectionError::NotFound { .. } => Self::NotFound,
-            ConnectionError::Invalid(details) => {
-                Self::InvalidRequest(format!("connection failed validation: {details:?}"))
-            }
+            ConnectionError::Invalid(details) => Rejection::new(
+                reason::CONNECTION_INVALID,
+                format!("connection failed validation: {details:?}"),
+            )
+            .into(),
 
             ConnectionError::Io(_)
             | ConnectionError::Serialization(_)
@@ -242,7 +273,9 @@ impl From<ConnectionError> for ApplicationError {
             ConnectionError::Credential(credential_error) => match credential_error {
                 CredentialError::NotFound { .. } => Self::CredentialRequired,
                 CredentialError::Unavailable(message) | CredentialError::Backend(message) => {
-                    Self::PlatformOperationFailed(message)
+                    Rejection::new(reason::CREDENTIAL_STORE_FAILED, message.clone())
+                        .with("detail", message)
+                        .into_platform()
                 }
             },
             ConnectionError::HostKeyUnverified { fingerprint } => {
@@ -259,7 +292,11 @@ impl From<ConnectionError> for ApplicationError {
             // into `Ok(ConnectionStatus::Failed)` plus a stored
             // `last_error` message rather than letting it propagate as an
             // `Err` - this arm exists only for match exhaustiveness.
-            ConnectionError::DialFailed(message) => Self::PlatformOperationFailed(message),
+            ConnectionError::DialFailed(message) => {
+                Rejection::new(reason::CONNECTION_FAILED, message.clone())
+                    .with("detail", message)
+                    .into_platform()
+            }
         }
     }
 }
@@ -269,22 +306,35 @@ impl From<LlmProfileError> for ApplicationError {
         match error {
             LlmProfileError::NotFound => Self::NotFound,
             LlmProfileError::InvalidConfiguration => {
-                Self::InvalidRequest("LLM profile failed validation".to_owned())
+                Rejection::new(reason::LLM_PROFILE_INVALID, "LLM profile failed validation").into()
             }
             LlmProfileError::PolicyDenied => Self::PermissionDenied,
-            LlmProfileError::ConsentRequired(host) => {
-                Self::InvalidRequest(format!("cloud consent is required before using {host}"))
-            }
+            LlmProfileError::ConsentRequired(host) => Rejection::new(
+                reason::CLOUD_CONSENT_REQUIRED,
+                format!("cloud consent is required before using {host}"),
+            )
+            .with("host", host)
+            .into(),
             LlmProfileError::Authentication => Self::InvalidCredential,
             LlmProfileError::Cancelled => Self::OperationCancelled,
             LlmProfileError::Credential => Self::CredentialRequired,
-            LlmProfileError::ModelUnavailable => {
-                Self::InvalidRequest("the configured LLM model is unavailable".to_owned())
+            LlmProfileError::ModelUnavailable => Rejection::new(
+                reason::LLM_MODEL_UNAVAILABLE,
+                "the configured LLM model is unavailable",
+            )
+            .into(),
+            LlmProfileError::Timeout => {
+                Rejection::new(reason::LLM_TIMEOUT, error.to_string()).into_platform()
             }
-            LlmProfileError::Timeout
-            | LlmProfileError::Tls
-            | LlmProfileError::MalformedResponse
-            | LlmProfileError::Transport => Self::PlatformOperationFailed(error.to_string()),
+            LlmProfileError::Tls => {
+                Rejection::new(reason::LLM_TLS, error.to_string()).into_platform()
+            }
+            LlmProfileError::MalformedResponse => {
+                Rejection::new(reason::LLM_MALFORMED_RESPONSE, error.to_string()).into_platform()
+            }
+            LlmProfileError::Transport => {
+                Rejection::new(reason::LLM_TRANSPORT, error.to_string()).into_platform()
+            }
             LlmProfileError::Persistence => Self::Internal,
         }
     }
@@ -292,6 +342,7 @@ impl From<LlmProfileError> for ApplicationError {
 
 impl From<VfsError> for ApplicationError {
     fn from(error: VfsError) -> Self {
+        let code = error.code();
         match error {
             VfsError::NotFound { .. } => Self::NotFound,
             VfsError::PermissionDenied { .. } | VfsError::PrivilegeRequired { .. } => {
@@ -310,14 +361,17 @@ impl From<VfsError> for ApplicationError {
             | VfsError::IsADirectory { .. }
             | VfsError::LinkCycle { .. }
             | VfsError::UnsupportedCapability { .. } => {
-                Self::InvalidRequest("the requested filesystem operation is not valid".to_owned())
+                Rejection::new(code, "the requested filesystem operation is not valid").into()
             }
             VfsError::CredentialRequired => Self::CredentialRequired,
             VfsError::InvalidCredential => Self::InvalidCredential,
-            VfsError::AuthenticationFailed { message } => Self::PlatformOperationFailed(message),
-            VfsError::InsufficientSpace { .. } => Self::PlatformOperationFailed(
-                "the destination does not have enough available space".to_owned(),
-            ),
+            VfsError::AuthenticationFailed { message } => Rejection::new(code, message.clone())
+                .with("detail", message)
+                .into_platform(),
+            VfsError::InsufficientSpace { .. } => {
+                Rejection::new(code, "the destination does not have enough available space")
+                    .into_platform()
+            }
             VfsError::Io { .. }
             | VfsError::UnsafeArchiveEntry
             | VfsError::ArchiveResourceLimit { .. } => Self::Internal,

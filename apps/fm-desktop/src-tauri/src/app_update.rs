@@ -6,6 +6,7 @@
 //! The check keeps the offered update here so the install step downloads exactly what the
 //! user was shown, whichever channel offered it.
 
+use crate::command_failure::CommandFailure;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -50,15 +51,15 @@ pub(crate) enum AppUpdateDownloadEvent {
 fn updater_builder<R: Runtime>(
     app: &AppHandle<R>,
     include_beta: bool,
-) -> Result<UpdaterBuilder, String> {
+) -> Result<UpdaterBuilder, CommandFailure> {
     let mut builder = app.updater_builder().timeout(CHECK_TIMEOUT);
     if include_beta {
         let endpoint = BETA_ENDPOINT
             .parse::<tauri::Url>()
-            .map_err(|error| error.to_string())?;
+            .map_err(CommandFailure::platform)?;
         builder = builder
             .endpoints(vec![endpoint])
-            .map_err(|error| error.to_string())?;
+            .map_err(CommandFailure::platform)?;
     }
     Ok(builder)
 }
@@ -69,13 +70,13 @@ pub(crate) async fn check_app_update<R: Runtime>(
     app: AppHandle<R>,
     pending: State<'_, PendingAppUpdate>,
     include_beta: bool,
-) -> Result<Option<AppUpdateMetadata>, String> {
+) -> Result<Option<AppUpdateMetadata>, CommandFailure> {
     let update = updater_builder(&app, include_beta)?
         .build()
-        .map_err(|error| error.to_string())?
+        .map_err(CommandFailure::platform)?
         .check()
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(CommandFailure::platform)?;
     let metadata = update.as_ref().map(|update| AppUpdateMetadata {
         current_version: update.current_version.clone(),
         version: update.version.clone(),
@@ -90,13 +91,18 @@ pub(crate) async fn check_app_update<R: Runtime>(
 pub(crate) async fn install_app_update(
     pending: State<'_, PendingAppUpdate>,
     on_event: Channel<AppUpdateDownloadEvent>,
-) -> Result<(), String> {
+) -> Result<(), CommandFailure> {
     let mut update = pending
         .0
         .lock()
         .map_err(|_| poisoned())?
         .take()
-        .ok_or_else(|| "The selected application update is no longer available.".to_owned())?;
+        .ok_or_else(|| {
+            CommandFailure::new(
+                "appUpdateUnavailable",
+                "The selected application update is no longer available.",
+            )
+        })?;
     // The check's short timeout must not cut off a long download.
     update.timeout = None;
     let mut first_chunk = true;
@@ -114,7 +120,7 @@ pub(crate) async fn install_app_update(
             },
         )
         .await
-        .map_err(|error| error.to_string())
+        .map_err(CommandFailure::platform)
 }
 
 /// Returns the version offered by the channel, newer than this build or not.
@@ -122,7 +128,7 @@ pub(crate) async fn install_app_update(
 pub(crate) async fn get_app_update_channel_version<R: Runtime>(
     app: AppHandle<R>,
     include_beta: bool,
-) -> Result<String, String> {
+) -> Result<String, CommandFailure> {
     use std::sync::Arc;
     let offered = Arc::new(Mutex::new(None::<String>));
     let captured = Arc::clone(&offered);
@@ -136,14 +142,22 @@ pub(crate) async fn get_app_update_channel_version<R: Runtime>(
     });
     builder
         .build()
-        .map_err(|error| error.to_string())?
+        .map_err(CommandFailure::platform)?
         .check()
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(CommandFailure::platform)?;
     let version = offered.lock().map_err(|_| poisoned())?.clone();
-    version.ok_or_else(|| "the update channel did not report a version".to_owned())
+    version.ok_or_else(|| {
+        CommandFailure::new(
+            "appUpdateChannelSilent",
+            "the update channel did not report a version",
+        )
+    })
 }
 
-fn poisoned() -> String {
-    "application update state is unavailable".to_owned()
+fn poisoned() -> CommandFailure {
+    CommandFailure::new(
+        "appUpdateStateUnavailable",
+        "application update state is unavailable",
+    )
 }

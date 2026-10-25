@@ -764,6 +764,15 @@ pub enum SemanticComponentErrorDetailsDto {
     Artifact {
         /// Signed artifact identity.
         artifact_id: String,
+        /// Underlying diagnostic (raw platform or network text), when there is one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        detail: Option<String>,
+    },
+    /// A failure whose only specific is the underlying diagnostic text.
+    #[schema(rename_all = "camelCase")]
+    Diagnostic {
+        /// Underlying diagnostic (raw platform or catalog text).
+        detail: String,
     },
 }
 
@@ -952,6 +961,10 @@ mod tests {
                 },
                 SemanticComponentErrorDetailsDto::Artifact {
                     artifact_id: "artifact-1".to_owned(),
+                    detail: Some("connection reset".to_owned()),
+                },
+                SemanticComponentErrorDetailsDto::Diagnostic {
+                    detail: "disk full".to_owned(),
                 },
             ]),
             expected_keys([
@@ -966,6 +979,7 @@ mod tests {
                 "requiredBytes",
                 "reserveBytes",
                 "artifactId",
+                "detail",
             ])
         );
     }
@@ -1006,6 +1020,7 @@ mod tests {
                 "requiredBytes",
                 "reserveBytes",
                 "artifactId",
+                "detail",
             ])
         );
     }

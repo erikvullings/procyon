@@ -929,7 +929,7 @@ export function createPaneContentBuilder(
               context.setNativeDragSourceInternal(true);
               return client.startNativeDrag(locations).catch((error: unknown) => {
                 context.setClipboardMessage(
-                  context.workspaceErrorMessage(error, 'Unable to start native drag'),
+                  context.workspaceErrorMessage(error, t('shell', 'nativeDragFailed')),
                 );
                 m.redraw();
               });

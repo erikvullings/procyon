@@ -207,7 +207,7 @@ describe('createBackendEventHandler', () => {
             {
               type: 'diskUsage.failed',
               scanId: 'scan-1',
-              code: 'internal',
+              code: 'brandNewCode',
               message: 'Scanner worker stopped unexpectedly',
             },
             WS_ID,

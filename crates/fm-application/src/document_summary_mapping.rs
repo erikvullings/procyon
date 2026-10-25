@@ -1,3 +1,4 @@
+use crate::rejection::{Rejection, reason};
 use fm_semantic_worker::representative_selection::RepresentativeSelectionMode;
 use fm_semantic_worker::semantic_storage::{
     StoredDocumentSummary, SummaryAttribution, SummaryAttributionSource,
@@ -95,9 +96,10 @@ pub(crate) fn summary_error_to_application(error: DocumentSummaryError) -> Appli
         }
         DocumentSummaryError::Cancelled => ApplicationError::OperationCancelled,
         DocumentSummaryError::ConsentRequired => ApplicationError::PermissionDenied,
-        DocumentSummaryError::StaleConfirmation => {
-            ApplicationError::InvalidRequest("document summary confirmation is stale".into())
-        }
+        DocumentSummaryError::StaleConfirmation => ApplicationError::from(Rejection::new(
+            reason::SUMMARY_CONFIRMATION_STALE,
+            "document summary confirmation is stale",
+        )),
         DocumentSummaryError::InvalidRequest
         | DocumentSummaryError::ContextUnavailable
         | DocumentSummaryError::SourceBudgetExceeded

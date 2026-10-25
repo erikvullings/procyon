@@ -10,6 +10,7 @@
 //! re-resolved immediately before evidence is projected, and always wins over
 //! whatever the worker index believes.
 
+use crate::rejection::{Rejection, reason};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
@@ -608,10 +609,16 @@ fn partition_scope(
         let mut tenant_ids = BTreeSet::from([resolved.filters.tenant_id.clone()]);
         tenant_ids.extend(resolved.additional_tenant_ids.iter().cloned());
         if tenant_ids.len() > crate::knowledge_search::MAX_SCOPE_PARTITIONS {
-            return Err(ApplicationError::InvalidRequest(format!(
-                "entire-library knowledge search spans more than {} workspace partitions",
-                crate::knowledge_search::MAX_SCOPE_PARTITIONS
-            )));
+            return Err(ApplicationError::from(
+                Rejection::new(
+                    reason::KNOWLEDGE_SCOPE_TOO_BROAD,
+                    format!(
+                        "entire-library knowledge search spans more than {} workspace partitions",
+                        crate::knowledge_search::MAX_SCOPE_PARTITIONS
+                    ),
+                )
+                .with("max", crate::knowledge_search::MAX_SCOPE_PARTITIONS),
+            ));
         }
         return Ok((
             tenant_ids
@@ -752,10 +759,10 @@ fn scope_selection(
             KnowledgeScopeSelector::Root { root_id } => dsl_roots.push(root_id.clone()),
             KnowledgeScopeSelector::Workspace { workspace_id } => {
                 if !workspace_id.eq_ignore_ascii_case(&scope.workspace_id.to_string()) {
-                    return Err(ApplicationError::InvalidRequest(
-                        "workspace knowledge scope selector must name the requested workspace"
-                            .into(),
-                    ));
+                    return Err(ApplicationError::from(Rejection::new(
+                        reason::KNOWLEDGE_SCOPE_WORKSPACE,
+                        "workspace knowledge scope selector must name the requested workspace",
+                    )));
                 }
             }
             KnowledgeScopeSelector::WholeLibrary => {}
@@ -777,9 +784,10 @@ fn scope_selection(
         fm_transport_dto::KnowledgeScopeKindDto::EntireLibrary
         | fm_transport_dto::KnowledgeScopeKindDto::EnrolledRoots => {
             if root_ids.is_empty() {
-                return Err(ApplicationError::InvalidRequest(
-                    "enrolled-root knowledge scope is empty".into(),
-                ));
+                return Err(ApplicationError::from(Rejection::new(
+                    reason::SCOPE_EMPTY,
+                    "enrolled-root knowledge scope is empty",
+                )));
             }
             Ok(RagScopeSelection::EnrolledRoots(
                 root_ids
@@ -787,7 +795,10 @@ fn scope_selection(
                     .map(|value| parse_semantic_root_id(value))
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(|_| {
-                        ApplicationError::InvalidRequest("invalid knowledge root id".into())
+                        ApplicationError::from(Rejection::new(
+                            reason::SCOPE_ROOT_INVALID,
+                            "invalid knowledge root id",
+                        ))
                     })?,
             ))
         }
@@ -797,18 +808,20 @@ fn scope_selection(
                     .folder
                     .clone()
                     .ok_or_else(|| {
-                        ApplicationError::InvalidRequest(
-                            "current-folder knowledge scope requires a folder".into(),
-                        )
+                        ApplicationError::from(Rejection::new(
+                            reason::SCOPE_FOLDER_REQUIRED,
+                            "current-folder knowledge scope requires a folder",
+                        ))
                     })?
                     .into(),
             ))
         }
         fm_transport_dto::KnowledgeScopeKindDto::SemanticResults => {
             if scope.semantic_source_ids.is_empty() {
-                return Err(ApplicationError::InvalidRequest(
-                    "semantic-result knowledge scope is empty".into(),
-                ));
+                return Err(ApplicationError::from(Rejection::new(
+                    reason::SCOPE_EMPTY,
+                    "semantic-result knowledge scope is empty",
+                )));
             }
             Ok(RagScopeSelection::SemanticResults(
                 scope.semantic_source_ids.clone(),
@@ -1485,7 +1498,10 @@ mod tests {
             .await
             .expect_err("a root outside the workspace must be denied");
 
-        assert!(matches!(error, ApplicationError::InvalidRequest(_)));
+        assert!(matches!(
+            error,
+            ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_)
+        ));
         assert!(
             capability
                 .requests
@@ -1997,6 +2013,7 @@ mod resolved_scope_tests {
         assert!(matches!(
             error,
             crate::error::ApplicationError::InvalidRequest(_)
+                | crate::error::ApplicationError::Rejected(_)
         ));
         assert!(capability.requests().is_empty());
     }
@@ -2039,6 +2056,7 @@ mod resolved_scope_tests {
         assert!(matches!(
             error,
             crate::error::ApplicationError::InvalidRequest(_)
+                | crate::error::ApplicationError::Rejected(_)
         ));
         assert!(capability.requests().is_empty());
     }
@@ -2081,6 +2099,7 @@ mod resolved_scope_tests {
         assert!(matches!(
             error,
             crate::error::ApplicationError::InvalidRequest(_)
+                | crate::error::ApplicationError::Rejected(_)
         ));
         assert!(capability.requests().is_empty());
     }
@@ -2454,7 +2473,10 @@ mod partition_tests {
 
         let error = partition_scope(&resolved, true).expect_err("scope must remain bounded");
 
-        assert!(matches!(error, ApplicationError::InvalidRequest(_)));
+        assert!(matches!(
+            error,
+            ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_)
+        ));
     }
 }
 

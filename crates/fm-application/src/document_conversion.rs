@@ -10,6 +10,7 @@
 //! is converted, when, and where the chunks are stored - belongs to task 0182;
 //! this task only has to make one document convertible from any provider.
 
+use crate::rejection::{Rejection, reason};
 use std::sync::Arc;
 
 use fm_domain::{EntryId, EntryKind, Location};
@@ -102,9 +103,10 @@ impl DocumentConversionService {
             .await
             .map_err(ApplicationError::from)?;
         if summary.kind != EntryKind::File {
-            return Err(ApplicationError::InvalidRequest(
-                "semantic conversion requires a regular file".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::NOT_REGULAR_FILE,
+                "semantic conversion requires a regular file",
+            )));
         }
         let max_source_bytes = self.budgets.max_source_bytes;
         if summary.size.is_some_and(|size| size > max_source_bytes) {
@@ -542,7 +544,10 @@ mod tests {
             .convert(location, CancellationToken::new())
             .await
             .expect_err("directories are not documents");
-        assert!(matches!(error, ApplicationError::InvalidRequest(_)));
+        assert!(matches!(
+            error,
+            ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_)
+        ));
     }
 
     #[tokio::test]

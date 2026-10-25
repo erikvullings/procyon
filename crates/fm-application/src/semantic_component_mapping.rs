@@ -180,7 +180,10 @@ pub fn semantic_component_error_to_dto(
             SemanticComponentErrorCodeDto::ExecutableDownloadProhibited,
             None,
         ),
-        SemanticComponentError::Catalog { .. } => (SemanticComponentErrorCodeDto::Catalog, None),
+        SemanticComponentError::Catalog { message } => (
+            SemanticComponentErrorCodeDto::Catalog,
+            Some(SemanticComponentErrorDetailsDto::Diagnostic { detail: message }),
+        ),
         SemanticComponentError::InsufficientSpace {
             available_bytes,
             required_bytes,
@@ -193,35 +196,61 @@ pub fn semantic_component_error_to_dto(
                 reserve_bytes,
             }),
         ),
-        SemanticComponentError::DownloadInterrupted { artifact_id, .. } => (
+        SemanticComponentError::DownloadInterrupted {
+            artifact_id,
+            message,
+        } => (
             SemanticComponentErrorCodeDto::DownloadInterrupted,
-            Some(SemanticComponentErrorDetailsDto::Artifact { artifact_id }),
+            Some(SemanticComponentErrorDetailsDto::Artifact {
+                artifact_id,
+                detail: Some(message),
+            }),
         ),
         SemanticComponentError::ArtifactVerificationFailed { artifact_id } => (
             SemanticComponentErrorCodeDto::ArtifactVerificationFailed,
-            Some(SemanticComponentErrorDetailsDto::Artifact { artifact_id }),
+            Some(SemanticComponentErrorDetailsDto::Artifact {
+                artifact_id,
+                detail: None,
+            }),
         ),
-        SemanticComponentError::ActivationFailed { artifact_id, .. } => (
+        SemanticComponentError::ActivationFailed {
+            artifact_id,
+            message,
+        } => (
             SemanticComponentErrorCodeDto::ActivationFailed,
-            Some(SemanticComponentErrorDetailsDto::Artifact { artifact_id }),
+            Some(SemanticComponentErrorDetailsDto::Artifact {
+                artifact_id,
+                detail: Some(message),
+            }),
         ),
-        SemanticComponentError::FreeSpaceProbe { .. } => {
-            (SemanticComponentErrorCodeDto::FreeSpaceProbe, None)
-        }
-        SemanticComponentError::State { .. } => (SemanticComponentErrorCodeDto::State, None),
-        SemanticComponentError::Filesystem { .. } => {
-            (SemanticComponentErrorCodeDto::Filesystem, None)
-        }
-        SemanticComponentError::Indexing { .. } => (SemanticComponentErrorCodeDto::Indexing, None),
-        SemanticComponentError::IndexRemoval { .. } => {
-            (SemanticComponentErrorCodeDto::IndexRemoval, None)
-        }
-        SemanticComponentError::DataMigration { .. } => {
-            (SemanticComponentErrorCodeDto::DataMigration, None)
-        }
-        SemanticComponentError::BlockingTaskFailed { .. } => {
-            (SemanticComponentErrorCodeDto::BlockingTaskFailed, None)
-        }
+        SemanticComponentError::FreeSpaceProbe { message } => (
+            SemanticComponentErrorCodeDto::FreeSpaceProbe,
+            Some(SemanticComponentErrorDetailsDto::Diagnostic { detail: message }),
+        ),
+        SemanticComponentError::State { message } => (
+            SemanticComponentErrorCodeDto::State,
+            Some(SemanticComponentErrorDetailsDto::Diagnostic { detail: message }),
+        ),
+        SemanticComponentError::Filesystem { message } => (
+            SemanticComponentErrorCodeDto::Filesystem,
+            Some(SemanticComponentErrorDetailsDto::Diagnostic { detail: message }),
+        ),
+        SemanticComponentError::Indexing { message } => (
+            SemanticComponentErrorCodeDto::Indexing,
+            Some(SemanticComponentErrorDetailsDto::Diagnostic { detail: message }),
+        ),
+        SemanticComponentError::IndexRemoval { message } => (
+            SemanticComponentErrorCodeDto::IndexRemoval,
+            Some(SemanticComponentErrorDetailsDto::Diagnostic { detail: message }),
+        ),
+        SemanticComponentError::DataMigration { message } => (
+            SemanticComponentErrorCodeDto::DataMigration,
+            Some(SemanticComponentErrorDetailsDto::Diagnostic { detail: message }),
+        ),
+        SemanticComponentError::BlockingTaskFailed { message } => (
+            SemanticComponentErrorCodeDto::BlockingTaskFailed,
+            Some(SemanticComponentErrorDetailsDto::Diagnostic { detail: message }),
+        ),
         SemanticComponentError::DiskUseOverflow => {
             (SemanticComponentErrorCodeDto::DiskUseOverflow, None)
         }

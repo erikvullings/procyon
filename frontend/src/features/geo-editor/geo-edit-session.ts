@@ -1,4 +1,5 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
+import { byteCount, geoMessageText, t } from '../../i18n';
 import type { GeoError, GeoIssue } from '../../models';
 import { GeoEditHistory } from './geo-edit-history';
 import {
@@ -109,7 +110,7 @@ export function createGeoEditSession(context: GeoEditSessionContext): GeoEditSes
     lastWritten = text;
     if (text.length > MAX_EDIT_BYTES) {
       status = 'tooLarge';
-      reason = `The file is larger than ${MAX_EDIT_BYTES} bytes; use the text view.`;
+      reason = t('geoEdit', 'tooLargeBytes', { max: byteCount(MAX_EDIT_BYTES) });
       history = undefined;
       rawText = '';
       return;
@@ -124,7 +125,7 @@ export function createGeoEditSession(context: GeoEditSessionContext): GeoEditSes
     }
     if (parsed.document.features.length > MAX_EDIT_FEATURES) {
       status = 'tooLarge';
-      reason = `The file has more than ${MAX_EDIT_FEATURES} features; use the text view.`;
+      reason = t('geoEdit', 'tooManyFeatures', { max: MAX_EDIT_FEATURES });
       history = undefined;
       return;
     }
@@ -285,9 +286,9 @@ export function createGeoEditSession(context: GeoEditSessionContext): GeoEditSes
       }, VALIDATE_DELAY_MS);
     },
     async importText(text) {
-      if (history === undefined) return 'Nothing to import into.';
+      if (history === undefined) return t('geoEdit', 'nothingToImport');
       const result = await context.client.parseGeoText(text);
-      if (result.error != null) return result.error.message;
+      if (result.error != null) return geoMessageText(result.error);
       const parsed = parseEditDocument(text);
       if (!parsed.ok) return parsed.message;
       apply(importFeatures(history.document, parsed.document));

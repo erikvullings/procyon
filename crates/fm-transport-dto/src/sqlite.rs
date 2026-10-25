@@ -65,9 +65,12 @@ pub struct OpenSqliteViewResponseDto {
     pub sqlite_version: String,
     /// Tables and views, sorted by name; internal `sqlite_*` tables are omitted.
     pub objects: Vec<SqliteObjectDto>,
-    /// A user-facing caveat, e.g. a WAL file whose recent writes are not shown.
+    /// A user-facing caveat, e.g. a WAL file whose recent writes are not shown (English fallback).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+    /// Stable code of `warning` that clients localise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning_code: Option<String>,
 }
 
 /// Request addressing an existing viewer session.

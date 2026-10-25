@@ -7,6 +7,7 @@
 //! cancellable background jobs polled by the frontend; symbolic links are never followed or
 //! recorded.
 
+use crate::rejection::{Rejection, reason};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -252,12 +253,17 @@ async fn read_snapshot_text(
         .await
         .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
     if bytes.len() as u64 > MAX_SNAPSHOT_BYTES {
-        return Err(ApplicationError::InvalidRequest(
-            "the snapshot file is too large".to_owned(),
+        return Err(ApplicationError::from(
+            Rejection::new(reason::SNAPSHOT_TOO_LARGE, "the snapshot file is too large")
+                .with("limitBytes", MAX_SNAPSHOT_BYTES),
         ));
     }
-    String::from_utf8(bytes)
-        .map_err(|_| ApplicationError::InvalidRequest("the snapshot is not valid UTF-8".to_owned()))
+    String::from_utf8(bytes).map_err(|_| {
+        ApplicationError::from(Rejection::new(
+            reason::SNAPSHOT_NOT_UTF8,
+            "the snapshot is not valid UTF-8",
+        ))
+    })
 }
 
 fn diff_entry(

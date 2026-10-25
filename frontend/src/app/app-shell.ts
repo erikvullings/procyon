@@ -6,6 +6,7 @@ import { IconButton, ModalPanel, type Theme, ThemeManager, toast } from 'mithril
 import packageJson from '../../package.json' with { type: 'json' };
 
 import type { FileManagerClient } from '../api/client/file-manager-client';
+import { ApiError } from '../api/fetch-mutator';
 import {
   activityIcon,
   arrowLeftIcon,
@@ -5705,7 +5706,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   ): Promise<void> {
     const pending = settingsUpdateQueue.then(async () => {
       if (currentSettings === undefined) {
-        throw new Error('Cannot update settings: settings have not loaded yet.');
+        throw new ApiError(0, {
+          code: 'settingsNotLoaded',
+          message: 'Cannot update settings: settings have not loaded yet.',
+        });
       }
       currentSettings = await client.updateSettings(update(currentSettings));
     });
@@ -7162,7 +7166,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                                 nativeDragSourceInternal = false;
                                 clipboardMessage = workspaceErrorMessage(
                                   error,
-                                  'Unable to start native drag',
+                                  t('shell', 'nativeDragFailed'),
                                 );
                                 m.redraw();
                               });

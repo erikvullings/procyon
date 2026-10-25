@@ -57,5 +57,14 @@ export type SemanticComponentErrorDetailsDto = {
 } | {
   /** Signed artifact identity. */
   artifactId: string;
+  /**
+     * Underlying diagnostic (raw platform or network text), when there is one.
+     * @nullable
+     */
+  detail?: string | null;
   kind: 'artifact';
+} | {
+  /** Underlying diagnostic (raw platform or catalog text). */
+  detail: string;
+  kind: 'diagnostic';
 };

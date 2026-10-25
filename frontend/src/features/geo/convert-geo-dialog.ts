@@ -1,7 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { errorText, t } from '../../i18n';
+import { errorText, geoMessageText, t } from '../../i18n';
 import type { GeoConversionReport, GeoTargetFormat, GeoTransform, Location } from '../../models';
 
 /** The files to convert, with the names shown to the user. */
@@ -145,7 +145,7 @@ export const ConvertGeoDialog: FactoryComponent<ConvertGeoDialogAttrs> = () => {
                           'p.fm-field-error',
                           t('geoConvert', 'unreadable', {
                             source: nameOf(attrs, report),
-                            message: report.error,
+                            message: geoMessageText(report.error),
                           }),
                         )
                       : [
@@ -165,7 +165,9 @@ export const ConvertGeoDialog: FactoryComponent<ConvertGeoDialogAttrs> = () => {
                                 m('p.fm-geo-warning', t('geoConvert', 'lossHeading')),
                                 m(
                                   'ul',
-                                  report.notes.map((note, index) => m('li', { key: index }, note)),
+                                  report.notes.map((note, index) =>
+                                    m('li', { key: index }, geoMessageText(note)),
+                                  ),
                                 ),
                               ],
                         ],

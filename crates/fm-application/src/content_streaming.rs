@@ -4,6 +4,7 @@
 //!
 //! Split out of the `FileManagerService` facade (task 0119).
 
+use crate::rejection::{Rejection, reason};
 use fm_domain::{EntryId, Location};
 use fm_transport_dto::{
     ReadFileRangeRequestDto, ReadFileRangeResponseDto, SearchInFileMatchDto,
@@ -53,9 +54,13 @@ pub(crate) async fn read_file_range(
     request: ReadFileRangeRequestDto,
 ) -> Result<ReadFileRangeResponseDto, ApplicationError> {
     if request.length == 0 || request.length > MAX_RANGE_LENGTH {
-        return Err(ApplicationError::InvalidRequest(format!(
-            "length must be between 1 and {MAX_RANGE_LENGTH} bytes"
-        )));
+        return Err(ApplicationError::from(
+            Rejection::new(
+                reason::INVALID_RANGE_LENGTH,
+                format!("length must be between 1 and {MAX_RANGE_LENGTH} bytes"),
+            )
+            .with("maxBytes", MAX_RANGE_LENGTH),
+        ));
     }
     let location: Location = request.location.into();
     let provider = providers

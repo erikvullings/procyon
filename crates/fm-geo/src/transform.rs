@@ -4,6 +4,7 @@
 use crate::GeoFormat;
 use crate::convert::{Target, convert};
 use crate::kmz::repack_kmz;
+use crate::message::{GeoMessage, codes};
 use crate::minify::{MinifyOptions, MinifyStats, compact_json, compact_xml, minify_document};
 use crate::model::GeoDocument;
 use crate::read::{conversion_limits, read_document};
@@ -23,7 +24,7 @@ pub struct Transformed {
     /// The new file content.
     pub bytes: Vec<u8>,
     /// What the output cannot represent or what was removed.
-    pub notes: Vec<String>,
+    pub notes: Vec<GeoMessage>,
     /// Effect of a model-level minification.
     pub stats: Option<MinifyStats>,
     /// The features that were written, when the model path was used (for previews).
@@ -49,19 +50,30 @@ pub fn transform(
     extension: &str,
     bytes: &[u8],
     spec: &TransformSpec,
-) -> Result<Transformed, String> {
+) -> Result<Transformed, GeoMessage> {
     if let Some(options) = &spec.minify
         && options.is_whitespace_only()
         && spec.target.is_none()
     {
         // Lossless text path: nothing but whitespace (and XML comments) changes.
-        let format = crate::detect_format(extension, bytes)
-            .ok_or_else(|| "this is not a recognised geographic file".to_owned())?;
+        let format = crate::detect_format(extension, bytes).ok_or_else(|| {
+            GeoMessage::new(
+                codes::UNRECOGNISED_FILE,
+                "this is not a recognised geographic file",
+            )
+        })?;
         let compact = match format {
             GeoFormat::GeoJson => compact_json(bytes),
-            GeoFormat::Gpx | GeoFormat::Kml => compact_xml(bytes)?,
-            GeoFormat::Kmz => repack_kmz(bytes).map_err(|error| error.to_string())?,
-            GeoFormat::Csv => return Err("CSV files cannot be minified".into()),
+            GeoFormat::Gpx | GeoFormat::Kml => compact_xml(bytes).map_err(|detail| {
+                GeoMessage::new(codes::MINIFY_FAILED, detail.clone()).with("detail", detail)
+            })?,
+            GeoFormat::Kmz => repack_kmz(bytes).map_err(|error| error.message())?,
+            GeoFormat::Csv => {
+                return Err(GeoMessage::new(
+                    codes::CSV_CANNOT_MINIFY,
+                    "CSV files cannot be minified",
+                ));
+            }
         };
         return Ok(Transformed {
             bytes: compact,
@@ -81,14 +93,18 @@ pub fn transform(
     };
     let target = match spec.target {
         Some(target) => target,
-        None => same_format(extension, spec.minify.is_some())
-            .ok_or_else(|| "this file has no output format of its own".to_owned())?,
+        None => same_format(extension, spec.minify.is_some()).ok_or_else(|| {
+            GeoMessage::new(
+                codes::NO_OUTPUT_FORMAT,
+                "this file has no output format of its own",
+            )
+        })?,
     };
     let target = match (target, spec.minify.is_some()) {
         (Target::GeoJson { .. }, true) => Target::GeoJson { pretty: false },
         (other, _) => other,
     };
-    let converted = convert(&document, target).map_err(|error| error.to_string())?;
+    let converted = convert(&document, target).map_err(|error| error.message())?;
     notes.extend(converted.notes);
     Ok(Transformed {
         bytes: converted.bytes,

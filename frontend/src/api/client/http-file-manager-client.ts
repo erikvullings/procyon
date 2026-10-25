@@ -67,6 +67,7 @@ import type {
   GenerateSyncPlanRequest,
   GeoConversionReport,
   GeoDocument,
+  GeoMessage,
   GeoMinify,
   GeoMinifyPreview,
   GeoTargetFormat,
@@ -230,7 +231,12 @@ import { comparisonPageFromDto, syncPlanFromDto } from '../../models/requests';
 import { directorySnapshotFromDto } from '../../models/snapshot';
 import { workspaceProjectionFromDto } from '../../models/workspace';
 import { SseEventStream } from '../events/sse-event-stream';
-import { ApiError, resolveBaseUrl, unexpectedResponseError } from '../fetch-mutator';
+import {
+  ApiError,
+  desktopHostRequiredError,
+  resolveBaseUrl,
+  unexpectedResponseError,
+} from '../fetch-mutator';
 import {
   invokeAction as requestActionInvocation,
   listActions as requestActions,
@@ -456,7 +462,7 @@ export class HttpFileManagerClient implements FileManagerClient {
   readonly connection = this.eventStream.status;
 
   startNativeDrag(_locations: readonly FileLocation[], _signal?: AbortSignal): Promise<void> {
-    return Promise.reject(new Error('Native drag is available only in the desktop application'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   /** A browser page cannot place file references on the OS clipboard (the server's files are
@@ -476,23 +482,21 @@ export class HttpFileManagerClient implements FileManagerClient {
     _locations: readonly FileLocation[],
     _signal?: AbortSignal,
   ): Promise<void> {
-    return Promise.reject(
-      new Error('Platform context menus are available only in the desktop application'),
-    );
+    return Promise.reject(desktopHostRequiredError());
   }
 
   listOpenWithApplications(
     _location: FileLocation,
   ): Promise<import('./file-manager-client').OpenWithApplication[]> {
-    return Promise.reject(new Error('Open With applications are available only on macOS desktop'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   openWithApplication(_location: FileLocation, _applicationPath: string): Promise<void> {
-    return Promise.reject(new Error('Open With applications are available only on macOS desktop'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   openWithAnyApplication(_location: FileLocation): Promise<void> {
-    return Promise.reject(new Error('Open With applications are available only on macOS desktop'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   subscribeNativeFileDrops(_listener: (drop: NativeFileDrop) => void): Promise<Unsubscribe> {
@@ -763,9 +767,7 @@ export class HttpFileManagerClient implements FileManagerClient {
 
   setSemanticOcrConsent(_enabled: boolean, signal?: AbortSignal): Promise<SemanticOcrStatus> {
     signal?.throwIfAborted();
-    return Promise.reject(
-      new Error('OCR remediation is available only in the desktop application'),
-    );
+    return Promise.reject(desktopHostRequiredError());
   }
 
   startSemanticOcrRemediation(
@@ -773,16 +775,12 @@ export class HttpFileManagerClient implements FileManagerClient {
     signal?: AbortSignal,
   ): Promise<SemanticOcrJob> {
     signal?.throwIfAborted();
-    return Promise.reject(
-      new Error('OCR remediation is available only in the desktop application'),
-    );
+    return Promise.reject(desktopHostRequiredError());
   }
 
   cancelSemanticOcrRemediation(_jobId: string, signal?: AbortSignal): Promise<SemanticOcrJob> {
     signal?.throwIfAborted();
-    return Promise.reject(
-      new Error('OCR remediation is available only in the desktop application'),
-    );
+    return Promise.reject(desktopHostRequiredError());
   }
 
   async getSemanticLibraryCapabilities(signal?: AbortSignal): Promise<SemanticLibraryCapabilities> {
@@ -821,7 +819,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+      throw unexpectedResponseError('semanticVocabulary', response.status);
     return response.data;
   }
 
@@ -834,7 +832,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201)
-      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+      throw unexpectedResponseError('semanticVocabulary', response.status);
     return response.data;
   }
 
@@ -844,7 +842,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+      throw unexpectedResponseError('semanticVocabulary', response.status);
     return response.data.skosJson;
   }
 
@@ -857,7 +855,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+      throw unexpectedResponseError('semanticVocabulary', response.status);
     return response.data;
   }
 
@@ -870,7 +868,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+      throw unexpectedResponseError('semanticVocabulary', response.status);
     return response.data;
   }
 
@@ -884,7 +882,7 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200)
-      throw new Error(`Unexpected vocabulary status: ${response.status}`);
+      throw unexpectedResponseError('semanticVocabulary', response.status);
     return response.data;
   }
 
@@ -1197,17 +1195,15 @@ export class HttpFileManagerClient implements FileManagerClient {
   }
 
   checkForAppUpdate(_signal?: AbortSignal): Promise<never> {
-    return Promise.reject(new Error('Application updates are available only in the desktop app.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   removeApplicationData(): Promise<void> {
-    return Promise.reject(
-      new Error('Removing application data is available only in the desktop app.'),
-    );
+    return Promise.reject(desktopHostRequiredError());
   }
 
   installAppUpdate(): Promise<void> {
-    return Promise.reject(new Error('Application updates are available only in the desktop app.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   async listWorkspaces(signal?: AbortSignal): Promise<WorkspaceSummary[]> {
@@ -1425,7 +1421,7 @@ export class HttpFileManagerClient implements FileManagerClient {
     format: GeoTargetFormat,
     csvWkt: boolean,
     signal?: AbortSignal,
-  ): Promise<{ content: string; extension: string; notes: string[] }> {
+  ): Promise<{ content: string; extension: string; notes: GeoMessage[] }> {
     const response = await requestConvertGeoText(
       { text, targetFormat: format, csvWkt },
       signal !== undefined ? { signal } : undefined,
@@ -2443,23 +2439,23 @@ export class HttpFileManagerClient implements FileManagerClient {
     _bounds: import('./file-manager-client').PluginPanelBounds,
     _theme: 'light' | 'dark',
   ): Promise<string> {
-    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   updatePluginPanelBounds(): Promise<void> {
-    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   setPluginPanelVisible(): Promise<void> {
-    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   setPluginPanelTheme(): Promise<void> {
-    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   closePluginPanel(): Promise<void> {
-    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   async invokeAction(request: InvokeActionRequest, signal?: AbortSignal): Promise<ActionResult> {
@@ -3060,7 +3056,10 @@ export class HttpFileManagerClient implements FileManagerClient {
   ): Promise<BeginOneDriveAuthorizationResponse> {
     const authorizationWindow = globalThis.open('', '_blank');
     if (authorizationWindow === null) {
-      throw new Error('The browser blocked the Microsoft sign-in window.');
+      throw new ApiError(0, {
+        code: 'externalLinkBlocked',
+        message: 'The browser blocked the Microsoft sign-in window.',
+      });
     }
     authorizationWindow.opener = null;
     try {

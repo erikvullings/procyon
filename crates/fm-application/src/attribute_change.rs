@@ -5,6 +5,7 @@
 //! set. Symbolic links are never followed or changed, and a refusal (for example `EPERM` on
 //! `chown`) is a per-entry warning that does not stop the remaining entries.
 
+use crate::rejection::{Rejection, reason};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -95,9 +96,13 @@ fn locations(
     what: &str,
 ) -> Result<Vec<Location>, ApplicationError> {
     if sources.is_empty() || sources.len() > MAX_SOURCES {
-        return Err(ApplicationError::InvalidRequest(format!(
-            "{what} needs between 1 and {MAX_SOURCES} entries"
-        )));
+        return Err(ApplicationError::from(
+            Rejection::new(
+                reason::SELECTION_SIZE,
+                format!("{what} needs between 1 and {MAX_SOURCES} entries"),
+            )
+            .with("max", MAX_SOURCES),
+        ));
     }
     Ok(sources.iter().cloned().map(Into::into).collect())
 }
@@ -311,9 +316,10 @@ pub(crate) fn plan_change_attributes(
     })?;
     let change = change_from_dto(dto.change);
     if change.is_empty() {
-        return Err(ApplicationError::InvalidRequest(
-            "changeAttributes needs at least one attribute to change".into(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::NO_ATTRIBUTE_SELECTED,
+            "changeAttributes needs at least one attribute to change",
+        )));
     }
     if change
         .mode
@@ -321,9 +327,10 @@ pub(crate) fn plan_change_attributes(
         .chain(change.mode_mask)
         .any(|bits| bits > EDITABLE_MODE_MASK)
     {
-        return Err(ApplicationError::InvalidRequest(
-            "permission bits must be between 0 and 0o7777".into(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::PERMISSION_BITS_RANGE,
+            "permission bits must be between 0 and 0o7777",
+        )));
     }
     let sources = locations(&request.sources, "changeAttributes")?;
     for source in &sources {
@@ -410,9 +417,15 @@ impl OperationExecutor for ChangeAttributesExecutor {
         )
         .await?;
         if found.truncated {
-            return Err(ExecutionError::Failed(format!(
-                "too many entries (more than {MAX_PLAN_ENTRIES}); select a smaller tree"
-            )));
+            return Err(ExecutionError::from(
+                fm_operations::CodedFailure::new(
+                    fm_operations::codes::failure::TOO_MANY_ENTRIES,
+                    format!(
+                        "too many entries (more than {MAX_PLAN_ENTRIES}); select a smaller tree"
+                    ),
+                )
+                .with_param("limit", MAX_PLAN_ENTRIES),
+            ));
         }
         // Deepest first: a folder must not lose its search permission before its children change.
         Ok(OperationPlan::new(
@@ -480,7 +493,10 @@ impl OperationExecutor for ChangeAttributesExecutor {
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         if applied.is_empty() {
-            return Ok(OperationUndo::unavailable("No entry was changed."));
+            return Ok(OperationUndo::unavailable(
+                fm_operations::codes::undo::NOTHING_TO_UNDO,
+                "No entry was changed.",
+            ));
         }
         let actions = applied
             .iter()
@@ -508,9 +524,10 @@ pub(crate) async fn restore_attributes(
         .read_attributes(entry, cancellation.clone())
         .await
         .map_err(|error| match error {
-            VfsError::NotFound { .. } => ExecutionError::Failed(
-                "The entry is missing, so its attributes cannot be restored.".into(),
-            ),
+            VfsError::NotFound { .. } => ExecutionError::from(fm_operations::CodedFailure::new(
+                fm_operations::codes::failure::UNDO_ENTRY_MISSING,
+                "The entry is missing, so its attributes cannot be restored.",
+            )),
             error => error.into(),
         })?;
     // Only fields this entry's own restore touches are compared.
@@ -524,9 +541,10 @@ pub(crate) async fn restore_attributes(
         archive: restore.archive.and(applied.archive),
     };
     if !expected.is_applied_to(&current) {
-        return Err(ExecutionError::Failed(
-            "The attributes changed after the operation, so they cannot be restored safely.".into(),
-        ));
+        return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+            fm_operations::codes::failure::UNDO_ATTRIBUTES_CHANGED,
+            "The attributes changed after the operation, so they cannot be restored safely.",
+        )));
     }
     provider
         .change_attributes(entry, restore, cancellation.clone())

@@ -1,14 +1,25 @@
 import type { Location } from './location';
 
+/** A backend message clients localise by `code`; `message` is the English fallback. */
+export interface GeoMessage {
+  readonly code: string;
+  readonly message: string;
+  readonly params?: Readonly<Record<string, string>> | undefined;
+}
+
 /** A warning about data that is not represented faithfully (tasks 0277-0280). */
 export interface GeoIssue {
   readonly path: string;
   readonly message: string;
+  readonly code?: string | null | undefined;
+  readonly params?: Readonly<Record<string, string>> | undefined;
 }
 
 /** Why a geographic file could not be read. */
 export interface GeoError {
   readonly message: string;
+  readonly code?: string | null | undefined;
+  readonly params?: Readonly<Record<string, string>> | undefined;
   readonly line?: number | null;
   readonly column?: number | null;
   /** Location of a validation error inside the document, for example `/features/3/geometry`. */
@@ -60,8 +71,8 @@ export interface GeoOverlay {
 export interface GeoConversionReport {
   readonly location: Location;
   readonly outputName?: string | null;
-  readonly notes: readonly string[];
-  readonly error?: string | null;
+  readonly notes: readonly GeoMessage[];
+  readonly error?: GeoMessage | null;
 }
 
 export type GeoTargetFormat = 'geojson' | 'gpx' | 'kml' | 'kmz' | 'csv';
@@ -98,9 +109,9 @@ export interface GeoMinifyPreview {
   readonly positionsAfter: number;
   readonly distanceBeforeMeters: number;
   readonly distanceAfterMeters: number;
-  readonly notes: readonly string[];
+  readonly notes: readonly GeoMessage[];
   readonly collection?: GeoJSON.FeatureCollection<GeoJSON.Geometry | null> | null;
-  readonly error?: string | null;
+  readonly error?: GeoMessage | null;
 }
 
 /** A geographic file as GeoJSON features, parsed by the backend. */

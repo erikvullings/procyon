@@ -1,5 +1,6 @@
 /** Diagnostics model and types (spec §30). */
 
+import { t } from '../../i18n';
 import type { RuntimeCapabilities } from '../../models/runtime-capabilities';
 
 /** Diagnostics information for troubleshooting and bug reports. */
@@ -73,7 +74,7 @@ export function diagnosticsFromDto(input: unknown): DiagnosticsView {
     frontendVersion: dto.frontendVersion ?? '',
     backendVersion: dto.backendVersion ?? '',
     ...(dto.tauriVersion === undefined ? {} : { tauriVersion: dto.tauriVersion }),
-    platform: dto.platform ?? 'Unknown',
+    platform: dto.platform ?? t('diagnostics', 'unknown'),
     runtimeCapabilities: dto.runtimeCapabilities ?? {
       runtime: 'browserServer',
       freshInstall: false,
@@ -103,7 +104,7 @@ export function diagnosticsFromDto(input: unknown): DiagnosticsView {
         : { lastEventReceived: dto.connectionState.lastEventReceived }),
       uptimeSeconds: dto.connectionState?.uptimeSeconds ?? 0,
       eventsReceived: dto.connectionState?.eventsReceived ?? 0,
-      statusMessage: dto.connectionState?.statusMessage ?? 'Unknown',
+      statusMessage: dto.connectionState?.statusMessage ?? t('diagnostics', 'unknown'),
     },
     loadedPlugins: (dto.loadedPlugins ?? []).map((p) => ({
       pluginId: p.pluginId,

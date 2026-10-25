@@ -44,6 +44,7 @@ pub(crate) fn checksum_entry_dto(entry: &ChecksumEntryResult) -> ChecksumEntryDt
             .map(|(algorithm, digest)| (algorithm.to_string(), digest.to_owned()))
             .collect(),
         error: entry.error.clone(),
+        error_code: entry.error_code.clone(),
     }
 }
 

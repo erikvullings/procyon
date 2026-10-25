@@ -75,6 +75,7 @@ import type {
   GenerateSyncPlanRequest,
   GeoConversionReport,
   GeoDocument,
+  GeoMessage,
   GeoMinify,
   GeoMinifyPreview,
   GeoTargetFormat,
@@ -954,7 +955,7 @@ export class TauriFileManagerClient implements FileManagerClient {
     format: GeoTargetFormat,
     csvWkt: boolean,
     _signal?: AbortSignal,
-  ): Promise<{ content: string; extension: string; notes: string[] }> {
+  ): Promise<{ content: string; extension: string; notes: GeoMessage[] }> {
     return invoke('convert_geo_text', { request: { text, targetFormat: format, csvWkt } });
   }
 

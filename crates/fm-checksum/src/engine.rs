@@ -300,6 +300,7 @@ async fn run_checksum_job(
                     size: checksums.bytes_hashed(),
                     checksums,
                     error: None,
+                    error_code: None,
                 }
             }
             Err(crate::ChecksumError::Cancelled) => {
@@ -312,6 +313,7 @@ async fn run_checksum_job(
                 size: target.size,
                 checksums: crate::ChecksumSet::default(),
                 error: Some(error.to_string()),
+                error_code: Some(error.code().to_owned()),
             },
         };
         buffer.push(entry);
@@ -432,6 +434,7 @@ fn checksum_payload(entry: &ChecksumEntryResult) -> ChecksumEntryPayload {
             .map(|(algorithm, digest)| (algorithm.to_string(), digest.to_owned()))
             .collect(),
         error: entry.error.clone(),
+        error_code: entry.error_code.clone(),
     }
 }
 

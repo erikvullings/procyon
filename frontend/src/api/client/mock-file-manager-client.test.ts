@@ -244,7 +244,7 @@ describe('MockFileManagerClient directories', () => {
 
     expect(unreadable.loadingState).toEqual({
       type: 'error',
-      message: 'Directory is not readable',
+      message: 'Permission denied.',
     });
     expect(loading.loadingState).toEqual({ type: 'loading' });
   });
@@ -717,7 +717,7 @@ describe('MockFileManagerClient semantic library lifecycle', () => {
         video: false,
         confirmRemoval: false,
       }),
-    ).rejects.toMatchObject({ code: 'invalidRequest' });
+    ).rejects.toMatchObject({ code: 'unavailable' });
 
     const plan = await client.planSemanticExclusion({
       policyRevision: resumed.revision,
@@ -998,7 +998,7 @@ describe('MockFileManagerClient search methods', () => {
     const client = new MockFileManagerClient();
 
     await expect(client.cancelSearch('nonexistent')).rejects.toMatchObject({
-      code: 'searchNotFound',
+      code: 'notFound',
     });
   });
 });
@@ -1075,14 +1075,14 @@ describe('MockFileManagerClient comparison methods', () => {
     const client = new MockFileManagerClient();
 
     await expect(client.getComparison('nonexistent')).rejects.toMatchObject({
-      code: 'comparisonNotFound',
+      code: 'notFound',
     });
     await expect(client.cancelComparison('nonexistent')).rejects.toMatchObject({
-      code: 'comparisonNotFound',
+      code: 'notFound',
     });
     await expect(
       client.generateSyncPlan('nonexistent', { mode: 'mirrorLeftToRight' }),
-    ).rejects.toMatchObject({ code: 'comparisonNotFound' });
+    ).rejects.toMatchObject({ code: 'notFound' });
   });
 
   it('generates a mirror-left-to-right sync plan and applies it as real mock operations', async () => {
@@ -1305,7 +1305,7 @@ describe('MockFileManagerClient file range and content search methods', () => {
       client.calculateFolderSize({
         location: { providerId: 'file', uri: 'mock:///does-not-exist' },
       }),
-    ).rejects.toMatchObject({ code: 'directoryNotFound' });
+    ).rejects.toMatchObject({ code: 'notFound' });
   });
 
   it('discovers a mock application bundle by its .app-suffixed name', async () => {

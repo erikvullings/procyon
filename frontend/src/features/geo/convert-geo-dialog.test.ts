@@ -20,9 +20,23 @@ const reports: GeoConversionReport[] = [
   {
     location: request.files[0]?.location as never,
     outputName: 'run.kml',
-    notes: ['per-point timestamps are not stored in plain KML'],
+    notes: [
+      {
+        code: 'timestampsNotInKml',
+        message: 'per-point timestamps are not stored in plain KML',
+        params: { count: '1' },
+      },
+    ],
   },
-  { location: request.files[1]?.location as never, notes: [], error: 'invalid XML' },
+  {
+    location: request.files[1]?.location as never,
+    notes: [],
+    error: {
+      code: 'xmlSyntax',
+      message: 'invalid XML',
+      params: { line: '1', column: '2', detail: 'x' },
+    },
+  },
 ];
 
 function attrs(patch: Partial<ConvertGeoDialogAttrs> = {}): ConvertGeoDialogAttrs {
@@ -51,9 +65,11 @@ afterEach(() => {
 describe('canConvert', () => {
   it('needs at least one file that can be converted', () => {
     expect(canConvert(undefined)).toBe(false);
-    expect(canConvert([{ location: reports[0]?.location as never, notes: [], error: 'x' }])).toBe(
-      false,
-    );
+    expect(
+      canConvert([
+        { location: reports[0]?.location as never, notes: [], error: { code: 'x', message: 'x' } },
+      ]),
+    ).toBe(false);
     expect(canConvert(reports)).toBe(true);
   });
 });
@@ -83,8 +99,12 @@ describe('ConvertGeoDialog', () => {
       'geojson',
       false,
     );
-    expect(root.textContent).toContain('per-point timestamps are not stored in plain KML');
-    expect(root.textContent).toContain('bad.kml cannot be converted: invalid XML');
+    expect(root.textContent).toContain(
+      'Per-point timestamps and heart rates of 1 track(s) are not stored in plain KML.',
+    );
+    expect(root.textContent).toContain(
+      'bad.kml cannot be converted: Invalid XML at line 1, column 2: x',
+    );
     const convert = [...root.querySelectorAll('button')].find((b) => b.textContent === 'Convert');
     convert?.click();
     expect(dialog.onConvert).toHaveBeenCalledWith({ targetFormat: 'geojson', csvWkt: false });

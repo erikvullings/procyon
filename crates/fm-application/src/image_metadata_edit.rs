@@ -5,6 +5,7 @@
 //! the provider's commit primitive, the same way the text editor saves. An optional `.orig`
 //! backup makes the edit undoable by putting the content back.
 
+use crate::rejection::{Rejection, reason};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -64,7 +65,13 @@ pub(crate) fn image_edit_from_dto(
             .copied()
             .find(|field| field.id() == id)
             .ok_or_else(|| {
-                ApplicationError::InvalidRequest(format!("unknown metadata field '{id}'"))
+                ApplicationError::from(
+                    Rejection::new(
+                        reason::UNKNOWN_METADATA_FIELD,
+                        format!("unknown metadata field '{id}'"),
+                    )
+                    .with("name", id),
+                )
             })?;
         cleared.push(field);
     }
@@ -112,9 +119,13 @@ pub(crate) fn plan_edit_image_metadata(
         ApplicationError::InvalidRequest("editImageMetadata requires imageMetadataEdit".into())
     })?;
     if request.sources.is_empty() || request.sources.len() > MAX_SOURCES {
-        return Err(ApplicationError::InvalidRequest(format!(
-            "editImageMetadata needs between 1 and {MAX_SOURCES} files"
-        )));
+        return Err(ApplicationError::from(
+            Rejection::new(
+                reason::SELECTION_SIZE,
+                format!("editImageMetadata needs between 1 and {MAX_SOURCES} files"),
+            )
+            .with("max", MAX_SOURCES),
+        ));
     }
     let edit = image_edit_from_dto(dto)?;
     let mut sources = Vec::with_capacity(request.sources.len());
@@ -261,9 +272,10 @@ pub(crate) async fn write_backup(
             Err(error) => return Err(error),
         }
     }
-    Err(ExecutionError::Failed(
-        "too many backup copies already exist next to this file".into(),
-    ))
+    Err(ExecutionError::from(fm_operations::CodedFailure::new(
+        fm_operations::codes::failure::NAME_COLLISION_LIMIT,
+        "too many backup copies already exist next to this file",
+    )))
 }
 
 #[async_trait]
@@ -279,10 +291,13 @@ impl OperationExecutor for EditImageMetadataExecutor {
             let entry = entry_of(location);
             let summary = provider.inspect(&entry, cancellation.clone()).await?;
             if summary.kind != EntryKind::File {
-                return Err(ExecutionError::Failed(format!(
-                    "{} is not a regular file",
-                    summary.name
-                )));
+                return Err(ExecutionError::from(
+                    fm_operations::CodedFailure::new(
+                        fm_operations::codes::failure::NOT_REGULAR_FILE,
+                        format!("{} is not a regular file", summary.name),
+                    )
+                    .with_param("name", &summary.name),
+                ));
             }
             items.push(PlanItem::new(
                 EntryRef {
@@ -309,9 +324,8 @@ impl OperationExecutor for EditImageMetadataExecutor {
             .file_size(&item.entry, cancellation.clone())
             .await?;
         if size > MAX_EDITABLE_IMAGE_BYTES {
-            return Err(ExecutionError::Failed(format!(
-                "the image is too large to edit ({size} bytes; limit {MAX_EDITABLE_IMAGE_BYTES})"
-            )));
+            return Err(ExecutionError::from(fm_operations::CodedFailure::new(fm_operations::codes::failure::IMAGE_TOO_LARGE, format!("the image is too large to edit ({size} bytes; limit {MAX_EDITABLE_IMAGE_BYTES})")).with_param("sizeBytes", size)
+ .with_param("limitBytes", MAX_EDITABLE_IMAGE_BYTES)));
         }
         let original = read_all(&provider, &item.entry, cancellation).await?;
         let edit = self.edit.clone();
@@ -414,12 +428,16 @@ impl OperationExecutor for EditImageMetadataExecutor {
             .map(|file| (file.location.clone(), file.backup.clone()))
             .collect();
         if edited.is_empty() {
-            return Ok(OperationUndo::unavailable("No file was changed."));
+            return Ok(OperationUndo::unavailable(
+                fm_operations::codes::undo::NOTHING_TO_UNDO,
+                "No file was changed.",
+            ));
         }
         let mut actions = Vec::with_capacity(edited.len());
         for (location, backup) in edited {
             let Some(backup) = backup else {
                 return Ok(OperationUndo::unavailable(
+                    fm_operations::codes::undo::BACKUP_REQUIRED,
                     "Undo needs the backup copy; run the edit with \"keep original\" enabled.",
                 ));
             };
@@ -445,26 +463,33 @@ pub(crate) async fn verify_restorable(
         .inspect(&current.entry, cancellation.clone())
         .await
         .map_err(|error| match error {
-            fm_vfs::VfsError::NotFound { .. } => ExecutionError::Failed(
-                "The edited file is missing, so it cannot be restored safely.".into(),
-            ),
+            fm_vfs::VfsError::NotFound { .. } => {
+                ExecutionError::from(fm_operations::CodedFailure::new(
+                    fm_operations::codes::failure::UNDO_OUTPUT_MISSING,
+                    "The edited file is missing, so it cannot be restored safely.",
+                ))
+            }
             error => error.into(),
         })?;
     if actual.kind != current.kind
         || actual.size != current.size
         || actual.modified_at != current.modified_at
     {
-        return Err(ExecutionError::Failed(
-            "The file changed after it was edited, so it cannot be restored safely.".into(),
-        ));
+        return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+            fm_operations::codes::failure::UNDO_OUTPUT_CHANGED,
+            "The file changed after it was edited, so it cannot be restored safely.",
+        )));
     }
     provider
         .inspect(&entry_of(backup), cancellation.clone())
         .await
         .map_err(|error| match error {
-            fm_vfs::VfsError::NotFound { .. } => ExecutionError::Failed(
-                "The backup copy is missing, so undo is not possible.".into(),
-            ),
+            fm_vfs::VfsError::NotFound { .. } => {
+                ExecutionError::from(fm_operations::CodedFailure::new(
+                    fm_operations::codes::failure::UNDO_BACKUP_MISSING,
+                    "The backup copy is missing, so undo is not possible.",
+                ))
+            }
             error => error.into(),
         })?;
     Ok(())

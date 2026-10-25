@@ -114,8 +114,9 @@ async fn rename_undo_restores_the_original_location_once() {
     );
     assert!(matches!(
         service.undo_operation(rename.id.into()),
-        Err(ApplicationError::InvalidRequest(message))
-            if message == "This operation has already been undone."
+        Err(ApplicationError::Rejected(rejection))
+            if rejection.message == "This operation has already been undone."
+                && rejection.reason == "alreadyUndone"
     ));
 }
 

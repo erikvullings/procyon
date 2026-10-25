@@ -524,13 +524,24 @@ impl Default for Settings {
     }
 }
 
+/// A recovery warning with a stable code a frontend localises.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadWarning {
+    /// Stable code, one of the `fm_events::notification_codes` settings codes.
+    pub code: &'static str,
+    /// English fallback text.
+    pub message: String,
+    /// Path of the backup holding the unreadable original, when there is one.
+    pub backup_path: Option<String>,
+}
+
 /// Successful load plus a user-visible recovery warning when defaults were used.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LoadOutcome {
     /// Loaded or default settings.
     pub settings: Settings,
     /// Recovery warning suitable for a frontend notification.
-    pub warning: Option<String>,
+    pub warning: Option<LoadWarning>,
 }
 
 /// Settings storage failure.
@@ -608,10 +619,14 @@ impl SettingsStore {
                 fs::rename(&path, &backup)?;
                 Ok(LoadOutcome {
                     settings: Settings::default(),
-                    warning: Some(format!(
-                        "Settings could not be read. Defaults were loaded and the original was backed up to {}.",
-                        backup.display()
-                    )),
+                    warning: Some(LoadWarning {
+                        code: "settingsCorrupt",
+                        message: format!(
+                            "Settings could not be read. Defaults were loaded and the original was backed up to {}.",
+                            backup.display()
+                        ),
+                        backup_path: Some(backup.display().to_string()),
+                    }),
                 })
             }
         }

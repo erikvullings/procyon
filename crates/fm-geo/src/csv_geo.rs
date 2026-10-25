@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use serde_json::{Map, Number, Value};
 
 use crate::crs::{Crs, CrsError, guess_crs};
+use crate::message::{GeoMessage, codes};
 use crate::model::{Bounds, GeoDocument, GeoFormat, GeoIssue, Limits};
 
 /// What the caller chose; everything left out is detected.
@@ -59,16 +60,30 @@ pub enum CsvError {
     #[error("{0}")]
     Syntax(String),
     /// No column pair or WKT column was found, or a chosen column does not exist.
-    #[error("{message}")]
+    #[error("{}", message.text)]
     NoCoordinates {
         /// What was missing.
-        message: String,
+        message: GeoMessage,
         /// The columns the file has, so a caller can offer them.
         headers: Vec<String>,
     },
     /// The coordinate system is unknown or unusable.
     #[error(transparent)]
     Crs(#[from] CrsError),
+}
+
+impl CsvError {
+    /// The localisable description of the failure.
+    #[must_use]
+    pub fn message(&self) -> GeoMessage {
+        match self {
+            Self::Syntax(detail) => {
+                GeoMessage::new(codes::CSV_SYNTAX, detail.clone()).with("detail", detail)
+            }
+            Self::NoCoordinates { message, .. } => message.clone(),
+            Self::Crs(error) => error.message(),
+        }
+    }
 }
 
 /// Header names, compared case-insensitively with everything but letters and digits removed.
@@ -477,7 +492,7 @@ pub fn read_csv(
         .iter()
         .map(|header| header.trim().to_owned())
         .collect();
-    let no_coordinates = |message: String| CsvError::NoCoordinates {
+    let no_coordinates = |message: GeoMessage| CsvError::NoCoordinates {
         message,
         headers: headers.clone(),
     };
@@ -488,7 +503,15 @@ pub fn read_csv(
                 .iter()
                 .position(|header| header == name)
                 .map(Some)
-                .ok_or_else(|| no_coordinates(format!("the file has no column named '{name}'"))),
+                .ok_or_else(|| {
+                    no_coordinates(
+                        GeoMessage::new(
+                            codes::CSV_NO_COLUMN,
+                            format!("the file has no column named '{name}'"),
+                        )
+                        .with("name", name),
+                    )
+                }),
         }
     };
 
@@ -514,9 +537,10 @@ pub fn read_csv(
         }
     }
     if wkt_index.is_none() && (x_index.is_none() || y_index.is_none()) {
-        return Err(no_coordinates(
-            "no latitude/longitude, x/y or WKT geometry column was found".into(),
-        ));
+        return Err(no_coordinates(GeoMessage::new(
+            codes::CSV_NO_COORDINATES,
+            "no latitude/longitude, x/y or WKT geometry column was found",
+        )));
     }
 
     let records: Vec<csv::StringRecord> = reader
@@ -553,10 +577,10 @@ pub fn read_csv(
             Some(label) => (Crs::parse(label)?, true),
             None if strong_names => (Crs::wgs84(), true),
             None => {
-                return Err(no_coordinates(
-                    "the columns look like x/y values in an unknown coordinate system: choose one"
-                        .into(),
-                ));
+                return Err(no_coordinates(GeoMessage::new(
+                    codes::CSV_UNKNOWN_SYSTEM,
+                    "the columns look like x/y values in an unknown coordinate system: choose one",
+                )));
             }
         },
     };
@@ -626,19 +650,29 @@ pub fn read_csv(
 
     let mut warnings = Vec::new();
     if !system.is_wgs84() {
-        warnings.push(GeoIssue {
-            path: String::new(),
-            message: format!(
-                "coordinates were converted from {} ({}) to WGS84{}",
-                system.label(),
-                system.name(),
+        warnings.push(GeoIssue::new(
+            String::new(),
+            GeoMessage::new(
                 if guessed {
-                    " (guessed from the values)"
+                    codes::CRS_GUESSED
                 } else {
-                    ""
-                }
-            ),
-        });
+                    codes::CRS_CONVERTED
+                },
+                format!(
+                    "coordinates were converted from {} ({}) to WGS84{}",
+                    system.label(),
+                    system.name(),
+                    if guessed {
+                        " (guessed from the values)"
+                    } else {
+                        ""
+                    }
+                ),
+            )
+            .with("label", system.label())
+            .with("name", system.name())
+            .with("failed", 0),
+        ));
     }
     if skipped_rows > 0 {
         let rows = skipped_notes
@@ -646,18 +680,27 @@ pub fn read_csv(
             .map(usize::to_string)
             .collect::<Vec<_>>()
             .join(", ");
-        warnings.push(GeoIssue {
-            path: String::new(),
-            message: format!(
-                "{skipped_rows} row(s) without usable coordinates were left out (first: {rows})"
-            ),
-        });
+        warnings.push(GeoIssue::new(
+            String::new(),
+            GeoMessage::new(
+                codes::ROWS_SKIPPED,
+                format!(
+                    "{skipped_rows} row(s) without usable coordinates were left out (first: {rows})"
+                ),
+            )
+            .with("count", skipped_rows)
+            .with("first", &rows),
+        ));
     }
     if unconverted > 0 {
-        warnings.push(GeoIssue {
-            path: String::new(),
-            message: format!("{unconverted} row(s) could not be converted to WGS84"),
-        });
+        warnings.push(GeoIssue::new(
+            String::new(),
+            GeoMessage::new(
+                codes::ROWS_UNCONVERTED,
+                format!("{unconverted} row(s) could not be converted to WGS84"),
+            )
+            .with("count", unconverted),
+        ));
     }
     if system.is_wgs84() {
         let outside = samples
@@ -665,13 +708,17 @@ pub fn read_csv(
             .filter(|(x, y)| x.abs() > 180.0 || y.abs() > 90.0)
             .count();
         if outside > 0 {
-            warnings.push(GeoIssue {
-                path: String::new(),
-                message: format!(
-                    "{outside} position(s) lie outside longitude -180..180 / latitude -90..90: \
-                     choose the coordinate system of this file, or swap the columns"
-                ),
-            });
+            warnings.push(GeoIssue::new(
+                String::new(),
+                GeoMessage::new(
+                    codes::CSV_OUT_OF_RANGE,
+                    format!(
+                        "{outside} position(s) lie outside longitude -180..180 / latitude -90..90: \
+                         choose the coordinate system of this file, or swap the columns"
+                    ),
+                )
+                .with("count", outside),
+            ));
         }
     }
 

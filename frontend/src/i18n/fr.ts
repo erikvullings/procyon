@@ -12,6 +12,8 @@ export const fr = {
     invitation: 'Vous découvrez Procyon ? Consultez le guide rapide.',
     watch: 'Voir le guide',
     dismiss: "Fermer l'invitation",
+    clipFailed: 'Le clip n’a pas pu être lu. Suivez les étapes écrites ci-dessous.',
+    clipCaption: 'Exemple macOS · sous-titres en anglais · 18 secondes',
   },
   basket: {
     ...en.basket,
@@ -115,6 +117,7 @@ export const fr = {
     minimize: 'Réduire',
     maximize: 'Agrandir',
     unableToRecoverWorkspace: "Impossible de récupérer l'espace de travail",
+    nativeDragFailed: 'Le glisser-déposer hors de l’application n’a pas pu démarrer.',
   },
   menu: {
     app: 'Procyon',
@@ -408,6 +411,10 @@ export const fr = {
     rowHeightRange: 'La hauteur de ligne doit être comprise entre 16 et 64 pixels.',
     operationConcurrencyRange:
       "La concurrence des opérations doit être un nombre entier d'au moins 1.",
+    saveFailed: 'Les paramètres n’ont pas pu être enregistrés.',
+    hiddenFilesHidden: 'Masqués',
+    hiddenFilesShown: 'Affichés',
+    shortcutNone: 'Aucun',
   },
   clipboard: {
     empty: 'Le presse-papiers est vide.',
@@ -714,6 +721,10 @@ export const fr = {
     structuredFormulaValue: 'Formule : ={formula}\nValeur en cache : {value}',
     previousWindow: 'Fenêtre précédente',
     nextWindow: 'Fenêtre suivante',
+    openExternalSpreadsheet: 'Ouvrez ce fichier dans un tableur externe.',
+    pageRenderFailed: 'La page {page} n’a pas pu être affichée : {error}',
+    pageAlt: 'Page {page} de {name}',
+    pageWord: 'Page',
   },
   state: {
     empty: 'Ce répertoire est vide.',
@@ -746,6 +757,11 @@ export const fr = {
     sortOldestFirst: 'Trier du plus ancien au plus récent',
     age: 'Ancienneté',
     tagged: 'Étiqueté',
+    gitClean: 'Propre',
+    gitModified: 'Modifié',
+    gitStaged: 'Indexé',
+    gitUntracked: 'Non suivi',
+    gitIgnored: 'Ignoré',
   },
   tree: {
     directoryTree: 'Arborescence des répertoires',
@@ -776,7 +792,6 @@ export const fr = {
     deleteTitle: 'Supprimer cet espace de travail ?',
     deleteMessage:
       'Cela supprimera définitivement « {name} » et sa disposition enregistrée. Cette action est irréversible.',
-    defaultName: 'cet espace de travail',
     unableToDiscoverCloudLocations: 'Impossible de découvrir les emplacements cloud',
     unableToDiscoverVolumes: 'Impossible de découvrir les volumes',
     dropFilesOntoPaneOrTab: 'Déposez des fichiers sur un panneau ou un onglet de répertoire',
@@ -789,6 +804,7 @@ export const fr = {
       'Cet espace de travail a été modifié ailleurs ; actualisez et réessayez de le renommer.',
     deleteConflict:
       'Cet espace de travail a été modifié ailleurs ; actualisez et réessayez de le supprimer.',
+    defaultName: 'Par défaut',
   },
   workspaceSwitcher: {
     empty: 'Aucun espace de travail pour le moment.',
@@ -826,6 +842,7 @@ export const fr = {
     permissionProcessSpawn: 'Lancement de processus',
     permissionNotifications: 'Notifications',
     permissionSettingsStorage: 'Stockage des paramètres',
+    diagnosticDetail: 'Cette extension n’est pas active : {detail}',
   },
   multiRename: {
     title: 'Renommer {count} éléments',
@@ -856,6 +873,7 @@ export const fr = {
     overwritePresetPrompt: "Un préréglage nommé « {name} » existe déjà. L'écraser ?",
     savePresetFailed: "Échec de l'enregistrement des préréglages de renommage.",
     rename: 'Renommer',
+    invalidPattern: 'Ce motif de recherche n’est pas une expression régulière valide.',
   },
   search: {
     ...en.search,
@@ -1025,6 +1043,7 @@ export const fr = {
     statusHostKeyUnverified: "Clé d'hôte non vérifiée",
     statusHostKeyMismatch: "Clé d'hôte modifiée",
     statusFailed: 'Échoué',
+    lastErrorDetail: 'La connexion a échoué : {detail}',
   },
   photoGrouping: {
     unknownDate: 'Date inconnue',
@@ -1116,6 +1135,7 @@ export const fr = {
       'La suppression des médias indexés efface définitivement de cette bibliothèque les vecteurs de ce type de média.',
     gemmaMediaAddingHelp:
       'Les nouveaux médias activés seront indexés lors de la prochaine analyse de la bibliothèque.',
+    cleanupFailedDetail: 'Le nettoyage a échoué : {detail}',
   },
   semanticOcr: {
     ...en.semanticOcr,
@@ -1422,6 +1442,7 @@ export const fr = {
     actionDeleteLeft: 'Supprimer à gauche',
     actionDeleteRight: 'Supprimer à droite',
     unableToStart: 'Impossible de démarrer la comparaison',
+    needsTwoPanes: 'La comparaison de dossiers nécessite deux panneaux ouverts.',
   },
   diskUsage: {
     tabTitle: 'Utilisation du disque',
@@ -1619,6 +1640,19 @@ export const fr = {
     externalLinkBlocked: 'Le navigateur a bloqué le lien externe.',
     desktopHostRequired: 'Cette action n’est disponible que dans l’application de bureau.',
     unknownFailure: 'Une erreur inconnue s’est produite.',
+    invalidRequest: 'La requête n’était pas valide : {detail}',
+    platformOperationFailed: 'L’opération système a échoué : {detail}',
+    appUpdateUnavailable: 'La mise à jour sélectionnée de l’application n’est plus disponible.',
+    appUpdateChannelSilent: 'Le canal de mise à jour n’a signalé aucune version.',
+    appUpdateStateUnavailable: 'L’état de la mise à jour de l’application est indisponible.',
+    unsupportedPlatform: 'Cela n’est pas disponible sur cette plateforme.',
+    invalidViewerRequest: 'La demande pour la visionneuse n’est pas valide.',
+    connectionValidationFailed: 'La connexion n’est pas valide.',
+    connectionNotBrowsable: 'Cette connexion ne peut pas être parcourue.',
+    httpError: 'Le serveur a répondu par une erreur (statut {status}).',
+    oneDriveAuthorizationUrlInvalid: 'L’adresse de connexion Microsoft n’est pas valide.',
+    oneDriveAuthorizationUrlUntrusted: 'L’adresse de connexion Microsoft n’est pas approuvée.',
+    settingsNotLoaded: 'Les paramètres ne sont pas encore chargés.',
   },
   /** Localised copy for stable semantic component and library error codes; keys are the camelCase codes. */
   semanticError: {
@@ -1662,6 +1696,14 @@ export const fr = {
     cleanup: 'La suppression des données sémantiques a échoué.',
     stateUnavailable: 'L’état de la bibliothèque sémantique est temporairement indisponible.',
     revisionOverflow: 'Le compteur de révision de la bibliothèque sémantique a débordé.',
+    disabled: 'La reconnaissance de texte est désactivée. Activez-la d’abord.',
+    nothingToRemediate: 'Aucun fichier n’a actuellement besoin de reconnaissance de texte.',
+    unreportedTarget:
+      'Le fichier demandé n’est pas signalé actuellement comme nécessitant une reconnaissance de texte.',
+    queueFull: 'La file de reconnaissance de texte est pleine. Réessayez plus tard.',
+    tooManyTargets: 'Trop de fichiers ont été sélectionnés pour la reconnaissance de texte.',
+    persist: 'L’état de la reconnaissance de texte n’a pas pu être enregistré.',
+    workerRestart: 'Le worker sémantique n’a pas pu être redémarré.',
   },
   /** Localised copy for per-entry operation failures; keys are the stable codes the backend attaches. */
   operationEntryError: {
@@ -1689,7 +1731,6 @@ export const fr = {
     invalidLocation: 'Emplacement non valide.',
     unknownProvider: 'Fournisseur d’emplacement inconnu.',
     platformFailed: 'L’opération système a échoué : {detail}',
-    entryFailed: 'Traitement impossible : {detail}',
     sourceMissing: 'La source n’existe plus ; ignoré.',
     diskSpaceCheckSkipped:
       'Vérification de l’espace disque ignorée à votre demande : {required} nécessaires, {available} signalés libres.',
@@ -1708,6 +1749,10 @@ export const fr = {
       '{name} ne correspond pas au manifeste ; il est endommagé ou a été modifié. Rien n’a été écrit.',
     joinedFileMismatch: 'Le fichier assemblé ne correspond pas au manifeste. Rien n’a été écrit.',
     errorsOmitted: '{count} autres erreurs sont omises de l’historique enregistré.',
+    entryReadOnly: '{path} : élément en lecture seule ; il nécessite une dérogation explicite.',
+    entryFailed: '{path} : n’a pas pu être supprimé ({detail}).',
+    readFailed: 'Le fichier n’a pas pu être lu.',
+    noAlgorithmRequested: 'Aucun algorithme de somme de contrôle n’a été demandé.',
   },
   /** Localised copy for operation outcome summaries; keys are the stable backend codes. */
   operationResult: {
@@ -1722,6 +1767,389 @@ export const fr = {
     alreadyUndone: 'Cette opération a déjà été annulée.',
     undoInProgress: 'L’annulation de cette opération est déjà en cours.',
     undoUnsafe: 'Cette opération ne peut pas être annulée en toute sécurité pour le moment.',
+    notYetAvailable: 'L’annulation n’est disponible qu’une fois l’opération terminée.',
+    noEvidence:
+      'Cette opération ne conserve pas assez d’informations pour être annulée en toute sécurité.',
+    undoInterrupted:
+      'L’annulation précédente a été interrompue ; ses effets restants ne peuvent pas être inversés en toute sécurité.',
+    undoPartial:
+      'L’annulation précédente n’a été que partiellement terminée et ne peut pas être retentée en toute sécurité.',
+    replacedExisting:
+      'Des éléments existants ont été remplacés ou fusionnés et ne peuvent pas être récupérés.',
+    backupRequired:
+      'L’annulation nécessite la copie de sauvegarde ; exécutez l’opération avec « conserver l’original » activé.',
+    nothingToUndo: 'Rien n’a été modifié ni créé ; il n’y a rien à annuler.',
+    undoOfUndo: 'Une annulation ne peut pas elle-même être annulée.',
+    trashNotRestorable:
+      'Le système n’a pas fourni d’emplacement à partir duquel restaurer les éléments.',
+    moveEvidenceMissing:
+      'Le déplacement n’a pas conservé l’empreinte d’origine de la source ; il ne peut pas être annulé en toute sécurité.',
+    collisionRenamed:
+      'Un conflit de nom a modifié le nom de l’élément déplacé ; l’annulation est indisponible entre types d’emplacements différents.',
+    historyEntryNotFound: 'Cette opération ne figure plus dans l’historique.',
+    noEffects: 'Cette opération n’a aucun effet à annuler.',
+  },
+  mapPreset: {
+    osm: 'Raster, monde entier. Serveurs publics : usage léger uniquement.',
+    osmDe: 'Raster, monde entier, étiquettes locales.',
+    opentopomap: 'Raster, courbes de niveau et relief.',
+    cyclosm: 'Raster, itinéraires cyclables et infrastructures.',
+    pdokBrt: 'Raster, Pays-Bas, carte topographique officielle.',
+    pdokBrtGrey: 'Raster, Pays-Bas, tons de gris pour les surcouches.',
+    pdokAerial: 'Raster, Pays-Bas, imagerie aérienne actuelle.',
+    pdokBrtVector: 'Style vectoriel, Pays-Bas. Net à chaque niveau de zoom.',
+    openfreemapLiberty: 'Style vectoriel, monde entier, sans limites ni clé.',
+    openfreemapPositron: 'Style vectoriel, monde entier, clair.',
+    versatiles: 'Style vectoriel, monde entier, serveur communautaire.',
+  },
+  rejectionReason: {
+    workspaceInvalid: 'L’espace de travail n’est pas valide.',
+    paneNotFound: 'Ce panneau n’existe plus dans cet espace de travail.',
+    tabNotFound: 'Cet onglet n’existe plus dans ce panneau.',
+    workspaceNameExists: 'Un espace de travail nommé « {name} » existe déjà.',
+    workspaceNotEphemeral: 'Ce n’est pas un espace de travail temporaire.',
+    workspaceTargetEphemeral:
+      'Un espace de travail temporaire ne peut pas être la cible d’une resynchronisation.',
+    connectionInvalid: 'Les paramètres de connexion ne sont pas valides.',
+    credentialStoreFailed: 'Le magasin d’identifiants a échoué : {detail}',
+    connectionFailed: 'La connexion a échoué : {detail}',
+    llmProfileInvalid: 'Les paramètres du profil d’IA ne sont pas valides.',
+    cloudConsentRequired: 'Votre consentement est requis avant d’utiliser le service cloud {host}.',
+    llmModelUnavailable: 'Le modèle d’IA configuré n’est pas disponible.',
+    llmTimeout: 'La requête d’IA a expiré.',
+    llmTls: 'La connexion sécurisée au service d’IA a été refusée.',
+    llmMalformedResponse: 'Le service d’IA a envoyé une réponse illisible.',
+    llmTransport: 'Le service d’IA est injoignable.',
+    platformUnsupported: 'Cela n’est pas pris en charge sur ce système.',
+    pathNotFound: 'Introuvable : {path}',
+    pathAlreadyExists: 'Existe déjà : {path}',
+    platformFailed: 'L’opération système a échoué : {detail}',
+    cannotEditRoot: 'La racine d’un système de fichiers ne peut pas être modifiée.',
+    notRegularFile: 'Seuls les fichiers ordinaires sont pris en charge ici.',
+    editorFileTooLarge:
+      'Le fichier est trop volumineux pour l’éditeur ({sizeBytes} ; limite {limitBytes}). Utilisez la visionneuse de gros fichiers ou un éditeur externe.',
+    editorBinaryFile:
+      'Les fichiers binaires ne peuvent pas être modifiés ici. Utilisez un éditeur externe.',
+    editorNotUtf8: 'Le fichier n’est pas de l’UTF-8 valide. Utilisez un éditeur externe.',
+    editorCannotReplace:
+      'Les liens symboliques et autres éléments qui ne sont pas des fichiers ne peuvent pas être remplacés par l’éditeur.',
+    editorContentTooLarge: 'Le contenu modifié dépasse la limite de {limitBytes}.',
+    invalidRangeLength: 'La longueur demandée doit être comprise entre 1 octet et {maxBytes}.',
+    tooManyPreviews:
+      'Au plus {max} aperçus peuvent être ouverts en même temps. Fermez-en un d’abord.',
+    previewMalformed:
+      'L’aperçu est indisponible car le fichier est endommagé ou mal formé : {detail}',
+    previewBudget:
+      'Ce fichier dépasse la limite d’aperçu pour {resource} ({limit}). Ouvrez-le dans une application externe.',
+    previewRenderFailed:
+      'L’aperçu n’a pas pu être généré : {detail}. Ouvrez le fichier dans une application externe.',
+    notSqlite: 'Ce n’est pas une base de données SQLite.',
+    remoteDatabaseTooLarge:
+      'La base de données dépasse la limite de {limitBytes} pour les fichiers distants. Copiez-la en local pour la consulter.',
+    unknownTable: 'Table « {name} » inconnue.',
+    tooManyFilters: 'Au plus {max} filtres de colonne sont pris en charge.',
+    unknownColumn: 'Colonne « {name} » inconnue.',
+    sqlEmpty: 'Saisissez une instruction SQL.',
+    sqlTooLong: 'L’instruction SQL est trop longue.',
+    sqlReadOnly: 'Seules les instructions en lecture seule sont autorisées.',
+    sheetRequired: 'Choisissez une feuille de calcul.',
+    workbookFallback:
+      'Ce classeur ne peut pas être affiché dans l’application. Ouvrez-le dans une application externe.',
+    sheetNotFound: 'La feuille « {name} » n’existe pas.',
+    delimiterOptionsOnly:
+      'Les options de séparateur et d’en-tête ne s’appliquent qu’aux fichiers CSV et TSV.',
+    rowCountRange: 'Le nombre de lignes doit être compris entre 1 et {max}.',
+    noTableRows: 'Cette vue n’affiche pas de lignes de tableau.',
+    noJsonText: 'Cette vue n’affiche pas de texte JSON.',
+    jsonWindowRange: 'La fenêtre JSON doit faire entre 1 octet et {maxBytes}.',
+    jsonWindowNotIndexed: 'Cette partie du fichier JSON n’a pas encore été indexée.',
+    searchQueryInvalid:
+      'Saisissez un terme de recherche et une limite de résultats comprise entre 1 et 200.',
+    delimiterInvalid:
+      'Le séparateur doit être une virgule, un point-virgule, une tabulation ou une barre verticale.',
+    delimitedMalformed:
+      'Le fichier délimité contient de l’UTF-8 non valide ou des guillemets mal formés.',
+    csvMalformedRecord: 'L’indexation du CSV s’est arrêtée sur un enregistrement mal formé.',
+    sequentialOnlyRows:
+      'Il n’est pas possible d’aller à une ligne arbitraire à cet emplacement. Ouvrez le fichier en externe pour un accès aléatoire.',
+    sequentialOnlyJson:
+      'Il n’est pas possible d’aller à une fenêtre JSON arbitraire à cet emplacement. Ouvrez le fichier en externe pour un accès aléatoire.',
+    selectionSize: 'Sélectionnez entre 1 et {max} éléments.',
+    noAttributeSelected: 'Choisissez au moins un attribut à modifier.',
+    permissionBitsRange: 'Les bits de permission doivent être compris entre 0 et 0o7777.',
+    tokensInvalid: 'Il y a trop de jetons, ou certains sont trop longs.',
+    unknownMetadataField: 'Champ de métadonnées « {name} » inconnu.',
+    geoUnknownFormat:
+      'Format de sortie « {name} » inconnu. Utilisez GeoJSON, GPX, KML, KMZ ou CSV.',
+    geoTextTooLarge: 'Le texte est trop volumineux pour être converti (limite {limitBytes}).',
+    geoKmzBinary:
+      'KMZ est un format binaire. Enregistrez le fichier et convertissez-le depuis le menu des fichiers.',
+    geoNothingToDo: 'Choisissez un format de sortie ou au moins une réduction.',
+    geoInPlaceFormat:
+      'Un fichier ne peut être remplacé sur place que par une réduction qui conserve son format.',
+    fileNeedsFolder: 'Un fichier a besoin d’un dossier parent.',
+    partSizeTooSmall: 'La taille des parties doit être d’au moins 1 octet.',
+    invalidOutputName: 'Le nom de sortie n’est pas un nom de fichier valide.',
+    selectPartFiles: 'Sélectionnez un ou plusieurs fichiers de parties.',
+    hostKeyChanged:
+      'La clé d’hôte a encore changé depuis sa vérification. Vérifiez-la de nouveau avant de l’accepter.',
+    knownHostRequired:
+      'Cette connexion exige une clé d’hôte déjà approuvée et n’accepte pas d’approuver une nouvelle clé.',
+    notSshConnection: 'Cette connexion n’est pas une connexion SSH.',
+    notOnedriveConnection: 'Cette connexion n’est pas une connexion OneDrive.',
+    authorizationInProgress: 'Une connexion à ce compte est déjà en cours.',
+    pluginPermissionDenied: 'L’extension n’a pas l’autorisation « {permission} ».',
+    pluginNoPreview: 'L’extension {plugin} ne prévisualise pas les fichiers .{extension}.',
+    pluginPreviewFailed: 'L’aperçu de l’extension a échoué : {detail}',
+    pluginActionFailed: 'L’action {action} de l’extension a échoué : {detail}',
+    snapshotTooLarge: 'Le fichier d’instantané est trop volumineux (limite {limitBytes}).',
+    snapshotNotUtf8: 'L’instantané n’est pas un texte UTF-8 valide.',
+    unsupportedQuerySchema: 'Cette version de requête de recherche n’est pas prise en charge.',
+    semanticPredicateRequired: 'La recherche sémantique nécessite une condition sémantique.',
+    semanticQueryEmpty: 'La requête sémantique ne doit pas être vide.',
+    semanticExclusive:
+      'La recherche sémantique ne peut pas être combinée avec des conditions de nom ou de contenu.',
+    conceptPredicateRequired: 'La recherche par concept nécessite une condition de concept.',
+    continuationOutOfRange: 'La position de page est hors limites. Rechargez le dossier.',
+    entryIdentityChanged:
+      'L’élément à cet emplacement n’est plus celui qui était listé. Rechargez le dossier.',
+    entryMetadataChanged: 'L’élément a changé depuis son affichage. Rechargez le dossier.',
+    localLocationRequired: 'L’analyse de l’espace disque nécessite actuellement un dossier local.',
+    directoryRequired: 'L’analyse de l’espace disque nécessite un dossier.',
+    scanAlreadyRunning: 'Cette analyse est déjà en cours.',
+    basemapNotRaster: 'Le fond de carte configuré n’est pas une source de tuiles raster.',
+    tileZoomRange: 'Le niveau de zoom est hors de la plage de ce fournisseur de cartes.',
+    tileOutsideWorld: 'Les coordonnées de la tuile sont hors du monde.',
+    rootRequired: 'Choisissez au moins un dossier.',
+    rootAndTargetRequired: 'Choisissez les dossiers et saisissez un nom cible.',
+    localArchiveRequired: 'Le résumé nécessite un fichier d’archive local.',
+    diffFailed: 'La comparaison a échoué : {detail}',
+    summaryConfirmationStale: 'La confirmation du résumé est obsolète. Vérifiez-la de nouveau.',
+    knowledgeScopeTooBroad:
+      'Une recherche dans toute la bibliothèque couvre plus de {max} partitions d’espace de travail. Réduisez la portée.',
+    knowledgeScopeWorkspace:
+      'Le sélecteur d’espace de travail doit désigner l’espace de travail demandé.',
+    scopeEmpty: 'La portée choisie est vide.',
+    scopeRootInvalid: 'L’identifiant de dossier choisi n’est pas valide.',
+    scopeFolderRequired: 'La portée « dossier actuel » nécessite un dossier.',
+    summaryTokenBudget: 'La taille d’entrée du résumé est hors de la plage prise en charge.',
+    conversationImmutable:
+      'Le profil, la portée et le mode de connaissances d’une conversation ne peuvent pas changer.',
+    scopeInvalid: 'Les fichiers sélectionnés ne constituent pas une portée valide.',
+    conceptUriRequired: 'Un URI de concept est requis.',
+    preferredLabelRequired: 'Un libellé préféré est requis.',
+    keepNewerUnsupported:
+      'La règle de conflit « conserver le plus récent » n’est pas encore prise en charge. Choisissez demander, ignorer, écraser ou renommer.',
+    pathBusy: 'Une autre suppression, copie ou un autre déplacement est déjà actif pour ce chemin.',
+    archiveDestinationExtension: 'Le nom de l’archive doit se terminer par .zip ou .7z.',
+    archiveFormatMismatch: 'Le format d’archive doit correspondre à l’extension du fichier.',
+    archiveLevelRange: 'Le niveau de compression doit être compris entre 0 et 9.',
+    sevenZipLevelUnsupported:
+      'Ce niveau de compression n’est pas pris en charge pour les archives 7z.',
+    cannotDuplicateRoot: 'La racine d’un système de fichiers ne peut pas être dupliquée.',
+    renameAcrossProviders:
+      'Un renommage ne peut pas déplacer un élément vers un autre type d’emplacement.',
+    crossProviderUndoCombined:
+      'L’annulation d’un déplacement entre types d’emplacements ne peut pas être combinée avec d’autres annulations.',
+    providerRootNotRestorable:
+      'La racine d’un emplacement ne peut pas être restaurée en annulant un déplacement.',
+    linkProviderMismatch: 'Un lien et sa cible doivent se trouver dans le même type d’emplacement.',
+    signInListenerFailed: 'L’écouteur de connexion n’a pas pu démarrer : {detail}',
+    splitMissingParts: 'Parties manquantes : {parts}.',
+    splitMissingPartsMore: 'Parties manquantes : {parts} et {more} autres.',
+    splitMixed: 'Les fichiers sélectionnés appartiennent à des ensembles fractionnés différents.',
+    splitNotAPart: '{name} n’est pas une partie numérotée (.001, .002, …).',
+    splitManifestDamaged: 'Le manifeste {name} est endommagé ou n’est pas un manifeste Procyon.',
+    splitNoPartSelected: 'Aucune partie n’est sélectionnée.',
+    splitDifferentFolders: 'Les parties sélectionnées se trouvent dans des dossiers différents.',
+    splitPartNotFile: '{name} n’est pas un fichier.',
+    splitManifestCount: 'Le manifeste répertorie {listed} parties, mais {found} ont été trouvées.',
+    splitManifestName: 'Le manifeste attend {expected} alors que {found} a été trouvé.',
+  },
+  geoMessage: {
+    kmzImagesDropped: '{count} image(s) intégrée(s) du KMZ ne sont pas reprise(s).',
+    overlaysDropped: '{count} superposition(s) au sol n’est/ne sont pas reprise(s).',
+    elementsNeverRead:
+      '{count} élément(s) de la source n’ont jamais été lus (liens réseau, modèles 3D, visites).',
+    iconUrlsKept: 'Les URL d’icônes ne sont conservées que dans la propriété icon-href.',
+    polygonsNotInGpx:
+      'Les polygones ne peuvent pas être stockés dans GPX (il n’a pas de surfaces) et ont été omis.',
+    stylesNotInGpx:
+      'Les couleurs, largeurs de ligne et icônes de {count} objet(s) ne sont pas stockées dans GPX.',
+    propertiesNotInGpx:
+      '{count} valeur(s) de propriété personnalisée ne sont pas stockées dans GPX (seuls le nom, la description, le type, le symbole, le lien, l’altitude et l’heure le sont).',
+    htmlAsText: 'Les descriptions HTML sont écrites sous forme de texte avec leur balisage.',
+    foldersNotInGpx: 'La structure de dossiers n’est pas stockée dans GPX.',
+    structuredNotInKml:
+      'Les valeurs de propriété structurées (objets, listes) ne sont pas stockées dans KML.',
+    timestampsNotInKml:
+      'Les horodatages et fréquences cardiaques par point de {count} trace(s) ne sont pas stockés dans un KML simple.',
+    featuresWithoutGeometry: '{count} objet(s) sans géométrie ont été omis.',
+    nonPointsLeftOut:
+      '{count} objet(s) linéaire(s) ou surfacique(s) ont été omis : les lignes CSV contiennent des points (choisissez l’option WKT pour conserver toutes les géométries).',
+    structuredNotInCsv:
+      'Les valeurs de propriété structurées (objets, listes) ne sont pas stockées dans CSV.',
+    formulaCellsPrefixed:
+      '{count} cellule(s) de texte commençant par = + - ou @ ont reçu une apostrophe en préfixe pour que les tableurs ne les exécutent pas comme des formules.',
+    timestampsNotInCsv:
+      'Les horodatages et fréquences cardiaques par point ne sont pas stockés dans CSV.',
+    propertiesRemoved: '{count} valeur(s) de propriété personnalisée ont été supprimée(s).',
+    ringsKept:
+      '{count} anneau(x) de surface ont été conservé(s) tels quels car leur simplification les aurait fait se croiser.',
+    notSmaller: 'Le résultat ({afterBytes}) n’est pas plus petit que l’original ({beforeBytes}).',
+    unrecognisedFile: 'Ce n’est pas un fichier géographique reconnu.',
+    emptyDocument: 'Le document est vide.',
+    rootNotKml: 'L’élément racine est <{name}> et non <kml>.',
+    rootNotGpx: 'L’élément racine est <{name}> et non <gpx>.',
+    entitiesNotAllowed: 'Les déclarations DOCTYPE avec des entités ne sont pas autorisées.',
+    jsonSyntax: 'JSON non valide à la ligne {line}, colonne {column} : {detail}',
+    xmlSyntax: 'XML non valide à la ligne {line}, colonne {column} : {detail}',
+    positionNotArray: 'Une position doit être un tableau de nombres.',
+    positionTooShort: 'Une position nécessite au moins la longitude et la latitude.',
+    coordinatesNotFinite: 'Les coordonnées doivent être des nombres finis.',
+    tooFewPositions: 'Il faut au moins {minimum} positions, mais {found} ont été trouvées.',
+    unknownGeometryType: 'Type de géométrie « {type} » inconnu.',
+    expectedFeature: 'Le type doit être « Feature ».',
+    propertiesNotObject: 'Les propriétés doivent être un objet ou null.',
+    coordinatesNotArray: 'Les coordonnées doivent être un tableau.',
+    geometryNotObject: 'Une géométrie doit être un objet ou null.',
+    geometryNeedsType: 'Une géométrie nécessite un type.',
+    geometryTooDeep: 'Les collections de géométries sont imbriquées trop profondément.',
+    geometriesMissing: 'Une collection de géométries nécessite un tableau « geometries ».',
+    coordinatesMissing: 'La géométrie nécessite des coordonnées.',
+    featureNotObject: 'Une entité (feature) doit être un objet.',
+    notJsonObject: 'Un document GeoJSON doit être un objet JSON.',
+    typeMissing: 'Un objet GeoJSON nécessite un type.',
+    featuresMissing: 'Une FeatureCollection nécessite un tableau « features ».',
+    unknownType: 'Type GeoJSON « {type} » inconnu.',
+    ringNotClosed: 'L’anneau n’est pas fermé (la première et la dernière position diffèrent).',
+    positionsOutOfRange:
+      '{count} position(s) sont en dehors de la longitude -180..180 / latitude -90..90 (la première est affichée) ; les coordonnées doivent être longitude, latitude.',
+    crsUnusable:
+      'Le membre crs hérité déclare « {name} », qui n’est pas un système de coordonnées convertible : la RFC 7946 exige la longitude/latitude WGS84, donc les données peuvent être dessinées au mauvais endroit.',
+    crsLegacy:
+      'Le membre crs hérité a été supprimé dans la RFC 7946 ; les coordonnées sont en longitude/latitude WGS84.',
+    crsConverted: 'Les coordonnées ont été converties de {label} ({name}) vers WGS84.',
+    crsConvertedFailures: ' {failed} position(s) n’ont pas pu être converties.',
+    crsGuessed:
+      'Les coordonnées ont été converties de {label} ({name}) vers WGS84 ; le système de coordonnées a été deviné d’après les valeurs.',
+    rowsSkipped:
+      '{count} ligne(s) sans coordonnées exploitables ont été omises (première : {first}).',
+    rowsUnconverted: '{count} ligne(s) n’ont pas pu être converties en WGS84.',
+    csvOutOfRange:
+      '{count} position(s) sont en dehors de la longitude -180..180 / latitude -90..90 : choisissez le système de coordonnées de ce fichier ou permutez les colonnes.',
+    externalIcons:
+      '{count} repère(s) utilisent des icônes externes, qui ne sont pas récupérées ; un point coloré est dessiné à la place.',
+    imagesMissing:
+      '{count} image(s) référencée(s) sont manquante(s), trop volumineuse(s) ou non prise(s) en charge.',
+    invalidPositions: '{count} coordonnée(s) étaient non valides et ont été omises.',
+    shortSegments: '{count} segment(s) de moins de deux points ont été omis.',
+    trackThinned:
+      'La trace a plus de points que ceux dessinés ; la ligne est simplifiée à l’affichage et les statistiques utilisent chaque point.',
+    timestampsMissing:
+      'Certains horodatages sont absents ou sans fuseau horaire ; les durées et vitesses ne sont donc pas affichées.',
+    pointsDropped: '{count} point(s) aux coordonnées manquantes ou non valides ont été omis.',
+    csvSyntax: 'Le fichier n’est pas un texte délimité valide : {detail}',
+    csvNoColumn: 'Le fichier n’a pas de colonne nommée « {name} ».',
+    csvNoCoordinates:
+      'Aucune colonne de latitude/longitude, x/y ou de géométrie WKT n’a été trouvée.',
+    csvUnknownSystem:
+      'Les colonnes ressemblent à des valeurs x/y dans un système de coordonnées inconnu : choisissez-en un.',
+    crsUnrecognised: '« {text} » n’est ni un code EPSG ni une définition PROJ.',
+    crsUnknownCode: 'EPSG:{code} n’est pas un système de référence de coordonnées connu.',
+    crsUnsupported: '{name} ne peut pas être converti en longitude/latitude.',
+    kmzArchive: 'Le fichier KMZ n’est pas une archive zip valide : {detail}',
+    kmzNoKml: 'L’archive KMZ ne contient aucun fichier .kml.',
+    kmzTooManyEntries: 'L’archive KMZ comporte plus de {max} entrées.',
+    kmzKmlTooLarge: 'Le KML contenu dans le KMZ dépasse {maxBytes}.',
+    kmzKmlExpands: 'Le KML contenu dans le KMZ dépasse la limite de taille une fois décompressé.',
+    kmzTooLargeToRepack: 'L’archive KMZ est trop volumineuse pour être reconditionnée.',
+    gpxNothingToWrite:
+      'GPX ne peut contenir que des points et des lignes, et ce document n’en a aucun.',
+    csvNothingToWrite:
+      'Ce document n’a aucun point à écrire ; choisissez l’option WKT pour conserver les lignes et les surfaces.',
+    writeFailed: 'L’écriture de la sortie a échoué : {detail}',
+    csvCannotMinify: 'Les fichiers CSV ne peuvent pas être minifiés.',
+    noOutputFormat: 'Ce fichier n’a pas de format de sortie propre.',
+    fileTooLarge:
+      'Le fichier fait {sizeBytes} ; les fichiers de plus de {maxBytes} ne sont ni ouverts ni convertis.',
+    readFailed: 'Le fichier n’a pas pu être lu : {detail}',
+    minifyFailed: 'La réduction du fichier a échoué : {detail}',
+  },
+  operationFailure: {
+    operationFailed: 'L’opération a échoué : {detail}',
+    operationFailedPlain: 'L’opération a échoué.',
+    undoPathOccupied:
+      'L’emplacement d’origine est occupé ; l’annulation écraserait une modification ultérieure.',
+    undoOutputMissing:
+      'Le résultat de l’opération a disparu ; elle ne peut pas être annulée en toute sécurité.',
+    undoOutputChanged:
+      'Le résultat de l’opération a été modifié depuis ; elle ne peut pas être annulée en toute sécurité.',
+    undoBackupMissing: 'La copie de sauvegarde est introuvable ; l’annulation est impossible.',
+    undoEntryMissing: 'L’élément a disparu ; son état précédent ne peut pas être restauré.',
+    undoAttributesChanged:
+      'Les attributs ont changé après l’opération et ne peuvent pas être restaurés en toute sécurité.',
+    readOnlyNeedsOverride:
+      'L’élément en lecture seule {location} nécessite une dérogation explicite.',
+    kindMismatch: 'Un fichier et un dossier ne peuvent pas se remplacer l’un l’autre.',
+    pathComponentNotDirectory: 'Un élément du chemin n’est pas un dossier.',
+    notRegularFile: '{name} n’est pas un fichier ordinaire.',
+    nameCollisionLimit: 'Aucun nom libre n’a été trouvé : trop d’éléments portent déjà ce nom.',
+    folderReplaceBlocked: 'Un dossier ne peut pas être remplacé par un fichier.',
+    sourceChangedWhileSplitting: 'Le fichier source a changé pendant son fractionnement.',
+    tooManyParts:
+      '{name} nécessiterait plus de {max} parties. Choisissez une taille de partie plus grande.',
+    imageTooLarge:
+      'L’image est trop volumineuse pour être modifiée ({sizeBytes} ; limite {limitBytes}).',
+    tooManyEntries:
+      'La sélection contient trop d’éléments (plus de {limit}). Sélectionnez une arborescence plus petite.',
+    relativeLinkAcrossVolumes:
+      'Une cible relative est impossible entre volumes. Choisissez une cible absolue.',
+    linkTargetNotUnicode: 'La cible du lien n’est pas de l’Unicode valide.',
+    noPendingConflict: 'Cette opération n’a aucun conflit en attente de décision.',
+  },
+  previewResource: {
+    sourceFileSize: 'taille du fichier',
+    expandedZip: 'taille décompressée de l’archive',
+    perImageBytes: 'taille d’une seule image',
+    totalImageBytes: 'taille totale des images',
+    renderedOutput: 'taille du rendu',
+    perMediaBytes: 'taille d’un seul élément multimédia',
+    totalMediaBytes: 'taille totale des médias',
+    perImagePixels: 'pixels d’une seule image',
+    totalImagePixels: 'pixels de toutes les images',
+    text: 'taille du texte extrait',
+    zipEntries: 'nombre d’entrées du paquet',
+    imageCount: 'nombre d’images',
+    mediaCount: 'nombre d’éléments multimédias',
+    slideCount: 'nombre de diapositives',
+    xmlDepth: 'profondeur d’imbrication XML',
+  },
+  viewerWarning: {
+    walNotShown:
+      'Un journal d’écriture anticipée (-wal) existe à côté de cette base de données ; les écritures non encore validées ne sont pas affichées.',
+    sequentialOnly:
+      'Cet emplacement ne prend en charge que la lecture séquentielle ; les premières lignes et l’indexation vers l’avant fonctionnent, mais les sauts vers des positions arbitraires sont désactivés. Ouvrez le fichier en externe si un accès aléatoire est nécessaire.',
+    spreadsheetFallback:
+      'Ce tableur ne peut pas être affiché ici ({detail}). Ouvrez-le dans un tableur externe.',
+    indexingFailed: 'L’indexation s’est arrêtée prématurément : {detail}',
+  },
+  notification: {
+    settingsCorrupt:
+      'Les paramètres n’ont pas pu être lus. Les valeurs par défaut ont été chargées et l’original a été sauvegardé dans {path}.',
+    settingsNewerSchema:
+      'Le fichier de paramètres a été écrit par une version plus récente de Procyon et n’a pas été modifié. Fermez cette ancienne version avant de modifier les paramètres.',
+    settingsUnreadable:
+      'Les paramètres n’ont pas pu être lus. Les valeurs par défaut de l’application ont été chargées.',
+    llmProfilesUnreadable:
+      'Les profils d’IA n’ont pas pu être lus. Aucun profil de génération n’a été chargé.',
+    clipboardCopied: 'Copié dans le presse-papiers.',
+    pluginIsolated: 'L’extension {plugin} a été isolée : {detail}',
+  },
+  semanticUnavailable: {
+    sourceUnavailable: 'La source est actuellement indisponible.',
+    noRecursiveEstimate:
+      'Aucune estimation récursive de la taille n’est disponible pour cette source.',
   },
   commandCategory: {
     recent: 'Utilisés récemment',
@@ -1935,6 +2363,7 @@ export const fr = {
       "L'ancien lien a été mis à la corbeille et le nouveau lien peut être annulé depuis l'historique des opérations.",
     textFixHint:
       "Modifiez le fichier pour corriger ce lien ; l'éditeur conserve son propre historique d'annulation.",
+    trashFailed: 'L’ancien lien n’a pas pu être placé dans la corbeille (état : {state}).',
   },
   metadataRename: {
     ...en.metadataRename,
@@ -2353,6 +2782,15 @@ export const fr = {
       "La carte n'est pas accessible aux lecteurs d'écran. Utilisez la liste des objets, le tableau des propriétés et l'onglet JSON ; avec un objet sélectionné, les touches Alt+flèches le déplacent d'environ un mètre (Maj : dix mètres).",
     dropFailed: "Le texte déposé n'a pas pu être importé : {message}",
     mapUnavailable: "La carte n'a pas pu être chargée.",
+    parseNotObject: 'Un document GeoJSON doit être un objet avec un « type ».',
+    parseNeedsFeatures: 'Une FeatureCollection nécessite un tableau « features ».',
+    parseNotFeature: 'features[{index}] n’est pas une Feature.',
+    enterNumber: 'Saisissez un nombre.',
+    enterBoolean: 'Saisissez true ou false.',
+    enterJson: 'Saisissez du JSON valide.',
+    tooLargeBytes: 'Le fichier dépasse {max} ; utilisez la vue texte.',
+    tooManyFeatures: 'Le fichier compte plus de {max} entités ; utilisez la vue texte.',
+    nothingToImport: 'Il n’y a rien dans quoi importer.',
   },
   geoTrack: {
     ...en.geoTrack,

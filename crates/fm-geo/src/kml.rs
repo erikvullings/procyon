@@ -13,6 +13,7 @@ use quick_xml::events::Event;
 use serde_json::{Map, Value, json};
 use thiserror::Error;
 
+use crate::message::{GeoMessage, codes};
 use crate::model::{Bounds, GeoDocument, GeoFormat, GeoIssue, GroundOverlay, Limits};
 
 const MAX_RESOURCES: usize = 64;
@@ -50,11 +51,30 @@ pub enum KmlError {
         column: usize,
     },
     /// The XML is not a KML document.
-    #[error("{0}")]
-    NotKml(String),
+    #[error("{}", .0.text)]
+    NotKml(GeoMessage),
     /// The document declares entities.
     #[error("DOCTYPE declarations with entities are not allowed")]
     Entities,
+}
+
+impl KmlError {
+    /// The localisable description of the failure.
+    #[must_use]
+    pub fn message(&self) -> GeoMessage {
+        match self {
+            Self::Syntax {
+                message,
+                line,
+                column,
+            } => GeoMessage::new(codes::XML_SYNTAX, self.to_string())
+                .with("line", line)
+                .with("column", column)
+                .with("detail", message),
+            Self::NotKml(message) => message.clone(),
+            Self::Entities => GeoMessage::new(codes::ENTITIES_NOT_ALLOWED, self.to_string()),
+        }
+    }
 }
 
 fn line_column(bytes: &[u8], offset: usize) -> (usize, usize) {
@@ -331,9 +351,13 @@ pub fn parse_kml(
                 let name = local(start.name().as_ref());
                 if !seen_root {
                     if name != "kml" {
-                        return Err(KmlError::NotKml(format!(
-                            "the root element is <{name}>, not <kml>"
-                        )));
+                        return Err(KmlError::NotKml(
+                            GeoMessage::new(
+                                codes::ROOT_NOT_KML,
+                                format!("the root element is <{name}>, not <kml>"),
+                            )
+                            .with("name", &name),
+                        ));
                     }
                     seen_root = true;
                 }
@@ -663,7 +687,10 @@ pub fn parse_kml(
         }
     }
     if !seen_root {
-        return Err(KmlError::NotKml("the document is empty".into()));
+        return Err(KmlError::NotKml(GeoMessage::new(
+            codes::EMPTY_DOCUMENT,
+            "the document is empty",
+        )));
     }
 
     // Resolve styles, then images, now that every definition has been read.
@@ -862,22 +889,34 @@ pub fn parse_kml(
         }
     }
     if external_icons > 0 {
-        warnings.push(GeoIssue {
-            path: String::new(),
-            message: format!("{external_icons} placemark(s) use external icons, which are not fetched; a coloured dot is drawn instead"),
-        });
+        warnings.push(GeoIssue::new(
+            String::new(),
+            GeoMessage::new(
+                codes::EXTERNAL_ICONS,
+                format!("{external_icons} placemark(s) use external icons, which are not fetched; a coloured dot is drawn instead"),
+            )
+            .with("count", external_icons),
+        ));
     }
     if missing_images > 0 {
-        warnings.push(GeoIssue {
-            path: String::new(),
-            message: format!("{missing_images} referenced image(s) are missing, too large or not a supported image"),
-        });
+        warnings.push(GeoIssue::new(
+            String::new(),
+            GeoMessage::new(
+                codes::IMAGES_MISSING,
+                format!("{missing_images} referenced image(s) are missing, too large or not a supported image"),
+            )
+            .with("count", missing_images),
+        ));
     }
     if invalid_positions > 0 {
-        warnings.push(GeoIssue {
-            path: String::new(),
-            message: format!("{invalid_positions} coordinate(s) were invalid and left out"),
-        });
+        warnings.push(GeoIssue::new(
+            String::new(),
+            GeoMessage::new(
+                codes::INVALID_POSITIONS,
+                format!("{invalid_positions} coordinate(s) were invalid and left out"),
+            )
+            .with("count", invalid_positions),
+        ));
     }
     let truncated = total_features > limits.max_features && total_features > features.len();
     Ok(GeoDocument {

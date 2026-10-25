@@ -144,7 +144,7 @@ export function createWorkspaceController(
   async function recoverActiveWorkspace(summaries: readonly WorkspaceSummary[]): Promise<void> {
     const nextId = firstAvailableWorkspaceId(summaries);
     if (nextId === undefined) {
-      const created = await client.createWorkspace({ name: 'Default' });
+      const created = await client.createWorkspace({ name: t('workspace', 'defaultName') });
       activateWorkspace(created);
       context.setWorkspaceSummaries(await client.listWorkspaces());
       return;

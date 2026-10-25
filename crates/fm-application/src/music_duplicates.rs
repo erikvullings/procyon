@@ -7,6 +7,7 @@
 //!
 //! The pure grouping lives in [`group_music`] so it can be tested without a filesystem.
 
+use crate::rejection::{Rejection, reason};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -361,9 +362,10 @@ impl MusicDuplicateCoordinator {
         request: StartMusicDuplicateScanRequestDto,
     ) -> Result<StartMusicDuplicateScanResponseDto, ApplicationError> {
         if request.roots.is_empty() {
-            return Err(ApplicationError::InvalidRequest(
-                "at least one root must be supplied".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::ROOT_REQUIRED,
+                "at least one root must be supplied",
+            )));
         }
         let scan_id = Uuid::new_v4();
         let handle = Arc::new(ScanHandle {

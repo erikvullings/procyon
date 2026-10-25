@@ -26,8 +26,18 @@ export interface StructuredViewStatusDto {
      */
   totalRows?: number | null;
   /**
-     * Explicit provider or format limitation shown to the user.
+     * Explicit provider or format limitation shown to the user (English fallback).
      * @nullable
      */
   warning?: string | null;
+  /**
+     * Stable code of `warning` that clients localise.
+     * @nullable
+     */
+  warningCode?: string | null;
+  /**
+     * Raw diagnostic text the localised warning appends.
+     * @nullable
+     */
+  warningDetail?: string | null;
 }

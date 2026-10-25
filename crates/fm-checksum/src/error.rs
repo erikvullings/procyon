@@ -30,6 +30,18 @@ pub enum ChecksumError {
 }
 
 impl ChecksumError {
+    /// Stable code clients localise: the provider code for open failures, `readFailed` for
+    /// stream errors.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Cancelled => "cancelled",
+            Self::NoAlgorithmRequested => "noAlgorithmRequested",
+            Self::Read(_) => "readFailed",
+            Self::Open { source, .. } => source.code(),
+        }
+    }
+
     /// Wraps a provider failure that occurred while opening `location`.
     #[must_use]
     pub fn open(location: &Location, source: fm_vfs::VfsError) -> Self {

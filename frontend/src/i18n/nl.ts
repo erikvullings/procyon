@@ -12,6 +12,8 @@ export const nl = {
     invitation: 'Nieuw bij Procyon? Bekijk een korte rondleiding.',
     watch: 'Bekijk rondleiding',
     dismiss: 'Uitnodiging sluiten',
+    clipFailed: 'De clip kon niet worden afgespeeld. Volg de stappen hieronder.',
+    clipCaption: 'macOS-voorbeeld · Engelse ondertitels · 18 seconden',
   },
   basket: {
     ...en.basket,
@@ -117,6 +119,7 @@ export const nl = {
     minimize: 'Minimaliseren',
     maximize: 'Maximaliseren',
     unableToRecoverWorkspace: 'Kan werkruimte niet herstellen',
+    nativeDragFailed: 'Slepen uit de app kon niet worden gestart.',
   },
   menu: {
     app: 'Procyon',
@@ -413,6 +416,10 @@ export const nl = {
     rowHeightRange: 'De rijhoogte moet tussen 16 en 64 pixels liggen.',
     operationConcurrencyRange:
       'Het aantal gelijktijdige bewerkingen moet een geheel getal van minstens 1 zijn.',
+    saveFailed: 'De instellingen konden niet worden opgeslagen.',
+    hiddenFilesHidden: 'Verborgen',
+    hiddenFilesShown: 'Getoond',
+    shortcutNone: 'Geen',
   },
   clipboard: {
     empty: 'Het klembord is leeg.',
@@ -719,6 +726,10 @@ export const nl = {
     structuredFormulaValue: 'Formule: ={formula}\nOpgeslagen waarde: {value}',
     previousWindow: 'Vorig venster',
     nextWindow: 'Volgend venster',
+    openExternalSpreadsheet: 'Open dit bestand in een externe spreadsheettoepassing.',
+    pageRenderFailed: 'Pagina {page} kon niet worden weergegeven: {error}',
+    pageAlt: 'Pagina {page} van {name}',
+    pageWord: 'Pagina',
   },
   state: {
     empty: 'Deze map is leeg.',
@@ -751,6 +762,11 @@ export const nl = {
     sortOldestFirst: 'Oudste eerst sorteren',
     age: 'Leeftijd',
     tagged: 'Gelabeld',
+    gitClean: 'Ongewijzigd',
+    gitModified: 'Gewijzigd',
+    gitStaged: 'Voorbereid',
+    gitUntracked: 'Niet gevolgd',
+    gitIgnored: 'Genegeerd',
   },
   tree: {
     directoryTree: 'Mappenstructuur',
@@ -781,7 +797,6 @@ export const nl = {
     deleteTitle: 'Deze werkruimte verwijderen?',
     deleteMessage:
       'Dit verwijdert "{name}" en de opgeslagen indeling permanent. Dit kan niet ongedaan worden gemaakt.',
-    defaultName: 'deze werkruimte',
     unableToDiscoverCloudLocations: 'Kan cloudlocaties niet vinden',
     unableToDiscoverVolumes: 'Kan volumes niet vinden',
     dropFilesOntoPaneOrTab: 'Zet bestanden neer op een mapvenster of tabblad',
@@ -793,6 +808,7 @@ export const nl = {
     renameConflict: 'Deze werkruimte is elders gewijzigd; ververs en probeer opnieuw te hernoemen.',
     deleteConflict:
       'Deze werkruimte is elders gewijzigd; ververs en probeer opnieuw te verwijderen.',
+    defaultName: 'Standaard',
   },
   workspaceSwitcher: {
     empty: 'Nog geen werkruimtes.',
@@ -830,6 +846,7 @@ export const nl = {
     permissionProcessSpawn: 'Proces starten',
     permissionNotifications: 'Meldingen',
     permissionSettingsStorage: 'Instellingenopslag',
+    diagnosticDetail: 'Deze plug-in is niet actief: {detail}',
   },
   multiRename: {
     title: '{count} items hernoemen',
@@ -860,6 +877,7 @@ export const nl = {
     overwritePresetPrompt: 'Een preset met de naam "{name}" bestaat al. Overschrijven?',
     savePresetFailed: 'Opslaan van hernoempresets is mislukt.',
     rename: 'Hernoemen',
+    invalidPattern: 'Dat zoekpatroon is geen geldige reguliere expressie.',
   },
   search: {
     resultsTitle: 'Zoekresultaten',
@@ -1383,6 +1401,7 @@ export const nl = {
     statusHostKeyUnverified: 'Hostsleutel niet geverifieerd',
     statusHostKeyMismatch: 'Hostsleutel gewijzigd',
     statusFailed: 'Mislukt',
+    lastErrorDetail: 'Verbinden is mislukt: {detail}',
   },
   photoGrouping: {
     unknownDate: 'Onbekende datum',
@@ -1820,6 +1839,7 @@ export const nl = {
     cleanupComplete: 'Opschoning voltooid',
     resumeCleanup: 'Opschoning hervatten',
     working: 'Bezig…',
+    cleanupFailedDetail: 'Opruimen is mislukt: {detail}',
   },
   semanticOcr: {
     title: 'Gescande PDF’s doorzoekbaar maken',
@@ -2031,6 +2051,7 @@ export const nl = {
     actionDeleteLeft: 'Links verwijderen',
     actionDeleteRight: 'Rechts verwijderen',
     unableToStart: 'Kan vergelijking niet starten',
+    needsTwoPanes: 'Mappen vergelijken vereist twee geopende panelen.',
   },
   diskUsage: {
     tabTitle: 'Schijfgebruik',
@@ -2226,6 +2247,19 @@ export const nl = {
     externalLinkBlocked: 'De browser heeft de externe link geblokkeerd.',
     desktopHostRequired: 'Deze actie is alleen beschikbaar in de desktop-app.',
     unknownFailure: 'Er is een onbekende fout opgetreden.',
+    invalidRequest: 'Het verzoek was niet geldig: {detail}',
+    platformOperationFailed: 'De systeembewerking is mislukt: {detail}',
+    appUpdateUnavailable: 'De gekozen app-update is niet meer beschikbaar.',
+    appUpdateChannelSilent: 'Het updatekanaal heeft geen versie gemeld.',
+    appUpdateStateUnavailable: 'De updatestatus van de app is niet beschikbaar.',
+    unsupportedPlatform: 'Dit is op dit platform niet beschikbaar.',
+    invalidViewerRequest: 'Het verzoek voor de viewer is niet geldig.',
+    connectionValidationFailed: 'De verbinding is niet geldig.',
+    connectionNotBrowsable: 'Deze verbinding kan niet worden doorbladerd.',
+    httpError: 'De server antwoordde met een fout (status {status}).',
+    oneDriveAuthorizationUrlInvalid: 'Het Microsoft-aanmeldadres is niet geldig.',
+    oneDriveAuthorizationUrlUntrusted: 'Het Microsoft-aanmeldadres is niet vertrouwd.',
+    settingsNotLoaded: 'De instellingen zijn nog niet geladen.',
   },
   /** Localised copy for stable semantic component and library error codes; keys are the camelCase codes. */
   semanticError: {
@@ -2271,6 +2305,14 @@ export const nl = {
     cleanup: 'Het verwijderen van de semantische gegevens is mislukt.',
     stateUnavailable: 'De status van de semantische bibliotheek is tijdelijk niet beschikbaar.',
     revisionOverflow: 'De revisieteller van de semantische bibliotheek is overgelopen.',
+    disabled: 'Tekstherkenning staat uit. Zet haar eerst aan.',
+    nothingToRemediate: 'Er hebben momenteel geen bestanden tekstherkenning nodig.',
+    unreportedTarget:
+      'Het gevraagde bestand wordt momenteel niet gemeld als bestand dat tekstherkenning nodig heeft.',
+    queueFull: 'De wachtrij voor tekstherkenning is vol. Probeer het later opnieuw.',
+    tooManyTargets: 'Er zijn te veel bestanden geselecteerd voor tekstherkenning.',
+    persist: 'De status van de tekstherkenning kon niet worden opgeslagen.',
+    workerRestart: 'De semantische worker kon niet opnieuw worden gestart.',
   },
   /** Localised copy for per-entry operation failures; keys are the stable codes the backend attaches. */
   operationEntryError: {
@@ -2298,7 +2340,6 @@ export const nl = {
     invalidLocation: 'Ongeldige locatie.',
     unknownProvider: 'Onbekende locatieprovider.',
     platformFailed: 'De systeembewerking is mislukt: {detail}',
-    entryFailed: 'Kon niet worden verwerkt: {detail}',
     sourceMissing: 'De bron bestaat niet meer; overgeslagen.',
     diskSpaceCheckSkipped:
       'Controle op schijfruimte overgeslagen op uw verzoek: {required} nodig, {available} als vrij gemeld.',
@@ -2318,6 +2359,11 @@ export const nl = {
     joinedFileMismatch:
       'Het samengevoegde bestand komt niet overeen met het manifest. Er is niets geschreven.',
     errorsOmitted: '{count} verdere fouten zijn weggelaten uit de opgeslagen geschiedenis.',
+    entryReadOnly:
+      '{path}: alleen-lezen item; het vereist een expliciete overschrijving van de beveiliging.',
+    entryFailed: '{path}: kon niet worden verwijderd ({detail}).',
+    readFailed: 'Het bestand kon niet worden gelezen.',
+    noAlgorithmRequested: 'Er is geen controlesomalgoritme opgegeven.',
   },
   /** Localised copy for operation outcome summaries; keys are the stable backend codes. */
   operationResult: {
@@ -2332,6 +2378,383 @@ export const nl = {
     alreadyUndone: 'Deze bewerking is al ongedaan gemaakt.',
     undoInProgress: 'Het ongedaan maken van deze bewerking is al bezig.',
     undoUnsafe: 'Deze bewerking kan momenteel niet veilig ongedaan worden gemaakt.',
+    notYetAvailable: 'Ongedaan maken is pas beschikbaar nadat de bewerking is voltooid.',
+    noEvidence:
+      'Deze bewerking bewaart onvoldoende informatie om veilig ongedaan te kunnen worden gemaakt.',
+    undoInterrupted:
+      'Het vorige ongedaan maken is onderbroken, dus de resterende effecten kunnen niet veilig worden teruggedraaid.',
+    undoPartial:
+      'Het vorige ongedaan maken is maar gedeeltelijk voltooid en kan niet veilig opnieuw worden geprobeerd.',
+    replacedExisting:
+      'Bestaande items zijn vervangen of samengevoegd en kunnen niet worden teruggehaald.',
+    backupRequired:
+      'Ongedaan maken heeft de reservekopie nodig; voer de bewerking uit met "origineel behouden" ingeschakeld.',
+    nothingToUndo: 'Er is niets gewijzigd of aangemaakt, dus er valt niets ongedaan te maken.',
+    undoOfUndo: 'Een ongedaanmaking kan zelf niet ongedaan worden gemaakt.',
+    trashNotRestorable:
+      'Het systeem heeft geen locatie opgegeven waarvandaan de items kunnen worden hersteld.',
+    moveEvidenceMissing:
+      'De verplaatsing heeft de oorspronkelijke vingerafdruk van de bron niet bewaard en kan niet veilig ongedaan worden gemaakt.',
+    collisionRenamed:
+      'Een naamconflict heeft de naam van het verplaatste item gewijzigd, dus ongedaan maken is niet beschikbaar tussen verschillende soorten locaties.',
+    historyEntryNotFound: 'Deze bewerking staat niet meer in de geschiedenis.',
+    noEffects: 'Deze bewerking heeft geen effecten om ongedaan te maken.',
+  },
+  mapPreset: {
+    osm: 'Raster, wereldwijd. Openbare servers: alleen licht gebruik.',
+    osmDe: 'Raster, wereldwijd, lokale labels.',
+    opentopomap: 'Raster, hoogtelijnen en terrein.',
+    cyclosm: 'Raster, fietsroutes en infrastructuur.',
+    pdokBrt: 'Raster, Nederland, officiële topografische kaart.',
+    pdokBrtGrey: 'Raster, Nederland, grijstinten voor overlays.',
+    pdokAerial: 'Raster, Nederland, actuele luchtfoto’s.',
+    pdokBrtVector: 'Vectorstijl, Nederland. Scherp op elk zoomniveau.',
+    openfreemapLiberty: 'Vectorstijl, wereldwijd, zonder limieten of sleutel.',
+    openfreemapPositron: 'Vectorstijl, wereldwijd, licht.',
+    versatiles: 'Vectorstijl, wereldwijd, communityserver.',
+  },
+  rejectionReason: {
+    workspaceInvalid: 'De werkruimte is niet geldig.',
+    paneNotFound: 'Dat paneel bestaat niet meer in deze werkruimte.',
+    tabNotFound: 'Dat tabblad bestaat niet meer in dit paneel.',
+    workspaceNameExists: 'Er bestaat al een werkruimte met de naam "{name}".',
+    workspaceNotEphemeral: 'Dit is geen tijdelijke werkruimte.',
+    workspaceTargetEphemeral:
+      'Een tijdelijke werkruimte kan niet het doel van een hersynchronisatie zijn.',
+    connectionInvalid: 'De verbindingsinstellingen zijn niet geldig.',
+    credentialStoreFailed: 'De opslag voor inloggegevens is mislukt: {detail}',
+    connectionFailed: 'Verbinden is mislukt: {detail}',
+    llmProfileInvalid: 'De instellingen van het AI-profiel zijn niet geldig.',
+    cloudConsentRequired:
+      'Je toestemming is vereist voordat de cloudservice {host} wordt gebruikt.',
+    llmModelUnavailable: 'Het ingestelde AI-model is niet beschikbaar.',
+    llmTimeout: 'Het AI-verzoek is verlopen.',
+    llmTls: 'De beveiligde verbinding met de AI-service is geweigerd.',
+    llmMalformedResponse: 'De AI-service stuurde een antwoord dat niet kon worden gelezen.',
+    llmTransport: 'De AI-service is niet bereikbaar.',
+    platformUnsupported: 'Dit wordt op dit systeem niet ondersteund.',
+    pathNotFound: 'Niet gevonden: {path}',
+    pathAlreadyExists: 'Bestaat al: {path}',
+    platformFailed: 'De systeembewerking is mislukt: {detail}',
+    cannotEditRoot: 'Een hoofdmap van het bestandssysteem kan niet worden bewerkt.',
+    notRegularFile: 'Hier worden alleen gewone bestanden ondersteund.',
+    editorFileTooLarge:
+      'Het bestand is te groot voor de editor ({sizeBytes}; limiet {limitBytes}). Gebruik de viewer voor grote bestanden of een externe editor.',
+    editorBinaryFile:
+      'Binaire bestanden kunnen hier niet worden bewerkt. Gebruik een externe editor.',
+    editorNotUtf8: 'Het bestand is geen geldige UTF-8. Gebruik een externe editor.',
+    editorCannotReplace:
+      'Symbolische koppelingen en andere niet-bestanden kunnen niet door de editor worden vervangen.',
+    editorContentTooLarge: 'De bewerkte inhoud overschrijdt de limiet van {limitBytes}.',
+    invalidRangeLength: 'De gevraagde lengte moet tussen 1 byte en {maxBytes} liggen.',
+    tooManyPreviews:
+      'Er kunnen maximaal {max} voorvertoningen tegelijk openstaan. Sluit er eerst een.',
+    previewMalformed:
+      'De voorvertoning is niet beschikbaar omdat het bestand beschadigd of onjuist opgebouwd is: {detail}',
+    previewBudget:
+      'Dit bestand overschrijdt de voorvertoningslimiet voor {resource} ({limit}). Open het in een externe toepassing.',
+    previewRenderFailed:
+      'De voorvertoning kon niet worden weergegeven: {detail}. Open het in een externe toepassing.',
+    notSqlite: 'Dit is geen SQLite-database.',
+    remoteDatabaseTooLarge:
+      'De database is groter dan de limiet van {limitBytes} voor externe bestanden. Kopieer hem lokaal om hem te bekijken.',
+    unknownTable: 'Onbekende tabel "{name}".',
+    tooManyFilters: 'Er worden maximaal {max} kolomfilters ondersteund.',
+    unknownColumn: 'Onbekende kolom "{name}".',
+    sqlEmpty: 'Voer een SQL-instructie in.',
+    sqlTooLong: 'De SQL-instructie is te lang.',
+    sqlReadOnly: 'Alleen instructies die niet schrijven zijn toegestaan.',
+    sheetRequired: 'Kies een werkblad.',
+    workbookFallback:
+      'Deze werkmap kan niet in de app worden getoond. Open hem in een externe toepassing.',
+    sheetNotFound: 'Het werkblad "{name}" bestaat niet.',
+    delimiterOptionsOnly:
+      'Scheidingsteken- en koptekstopties gelden alleen voor CSV- en TSV-bestanden.',
+    rowCountRange: 'Het aantal rijen moet tussen 1 en {max} liggen.',
+    noTableRows: 'Deze weergave toont geen tabelrijen.',
+    noJsonText: 'Deze weergave toont geen JSON-tekst.',
+    jsonWindowRange: 'Het JSON-venster moet tussen 1 byte en {maxBytes} groot zijn.',
+    jsonWindowNotIndexed: 'Dat deel van het JSON-bestand is nog niet geïndexeerd.',
+    searchQueryInvalid: 'Voer een zoekterm in en gebruik een resultaatlimiet tussen 1 en 200.',
+    delimiterInvalid:
+      'Het scheidingsteken moet een komma, puntkomma, tab of verticale streep zijn.',
+    delimitedMalformed:
+      'Het bestand met scheidingstekens bevat ongeldige UTF-8 of onjuiste aanhalingstekens.',
+    csvMalformedRecord: 'Het indexeren van het CSV-bestand stopte bij een onjuist record.',
+    sequentialOnlyRows:
+      'Naar een willekeurige rij springen is op deze locatie niet mogelijk. Open het bestand extern voor willekeurige toegang.',
+    sequentialOnlyJson:
+      'Naar een willekeurig JSON-venster springen is op deze locatie niet mogelijk. Open het bestand extern voor willekeurige toegang.',
+    selectionSize: 'Selecteer tussen 1 en {max} items.',
+    noAttributeSelected: 'Kies ten minste één kenmerk om te wijzigen.',
+    permissionBitsRange: 'Rechtenbits moeten tussen 0 en 0o7777 liggen.',
+    tokensInvalid: 'Er zijn te veel tokens, of sommige zijn te lang.',
+    unknownMetadataField: 'Onbekend metadataveld "{name}".',
+    geoUnknownFormat: 'Onbekend uitvoerformaat "{name}". Gebruik GeoJSON, GPX, KML, KMZ of CSV.',
+    geoTextTooLarge: 'De tekst is te groot om te converteren (limiet {limitBytes}).',
+    geoKmzBinary:
+      'KMZ is een binair formaat. Sla het bestand op en converteer het via het bestandsmenu.',
+    geoNothingToDo: 'Kies een uitvoerformaat of ten minste één verkleining.',
+    geoInPlaceFormat:
+      'Een bestand kan alleen ter plekke worden vervangen door een verkleining die het formaat behoudt.',
+    fileNeedsFolder: 'Een bestand heeft een map nodig waarin het staat.',
+    partSizeTooSmall: 'De deelgrootte moet minstens 1 byte zijn.',
+    invalidOutputName: 'De uitvoernaam is geen geldige bestandsnaam.',
+    selectPartFiles: 'Selecteer een of meer deelbestanden.',
+    hostKeyChanged:
+      'De hostsleutel is opnieuw gewijzigd sinds de controle. Controleer hem opnieuw voordat je hem accepteert.',
+    knownHostRequired:
+      'Deze verbinding vereist een reeds vertrouwde hostsleutel en accepteert geen nieuwe sleutel.',
+    notSshConnection: 'Deze verbinding is geen SSH-verbinding.',
+    notOnedriveConnection: 'Deze verbinding is geen OneDrive-verbinding.',
+    authorizationInProgress: 'Er loopt al een aanmelding voor deze verbinding.',
+    pluginPermissionDenied: 'De plug-in heeft de machtiging "{permission}" niet.',
+    pluginNoPreview: 'De plug-in {plugin} toont geen voorvertoning van .{extension}-bestanden.',
+    pluginPreviewFailed: 'De voorvertoning van de plug-in is mislukt: {detail}',
+    pluginActionFailed: 'De plug-inactie {action} is mislukt: {detail}',
+    snapshotTooLarge: 'Het momentopnamebestand is te groot (limiet {limitBytes}).',
+    snapshotNotUtf8: 'De momentopname is geen geldige UTF-8-tekst.',
+    unsupportedQuerySchema: 'Deze versie van de zoekopdracht wordt niet ondersteund.',
+    semanticPredicateRequired: 'Semantisch zoeken heeft een semantische voorwaarde nodig.',
+    semanticQueryEmpty: 'De semantische zoekopdracht mag niet leeg zijn.',
+    semanticExclusive:
+      'Semantisch zoeken kan niet worden gecombineerd met naam- of inhoudsvoorwaarden.',
+    conceptPredicateRequired: 'Zoeken op concept heeft een conceptvoorwaarde nodig.',
+    continuationOutOfRange: 'De pagina-positie ligt buiten het bereik. Laad de map opnieuw.',
+    entryIdentityChanged:
+      'Het item op deze locatie is niet meer hetzelfde als in de lijst. Laad de map opnieuw.',
+    entryMetadataChanged: 'Het item is gewijzigd sinds het in de lijst stond. Laad de map opnieuw.',
+    localLocationRequired: 'Schijfgebruiksanalyse werkt momenteel alleen voor een lokale map.',
+    directoryRequired: 'Schijfgebruiksanalyse heeft een map nodig.',
+    scanAlreadyRunning: 'Deze scan loopt al.',
+    basemapNotRaster: 'De ingestelde basiskaart is geen bron van rastertegels.',
+    tileZoomRange: 'Het zoomniveau valt buiten het bereik van deze kaartaanbieder.',
+    tileOutsideWorld: 'De tegelcoördinaten liggen buiten de wereld.',
+    rootRequired: 'Kies ten minste één map.',
+    rootAndTargetRequired: 'Kies de mappen en voer een doelnaam in.',
+    localArchiveRequired: 'De samenvatting heeft een lokaal archiefbestand nodig.',
+    diffFailed: 'De vergelijking is mislukt: {detail}',
+    summaryConfirmationStale:
+      'De bevestiging van de samenvatting is verouderd. Bekijk haar opnieuw.',
+    knowledgeScopeTooBroad:
+      'Een zoekopdracht in de hele bibliotheek omvat meer dan {max} werkruimtepartities. Beperk het bereik.',
+    knowledgeScopeWorkspace: 'De werkruimteselector moet de gevraagde werkruimte noemen.',
+    scopeEmpty: 'Het gekozen bereik is leeg.',
+    scopeRootInvalid: 'De gekozen mapidentificatie is niet geldig.',
+    scopeFolderRequired: 'Het bereik huidige map heeft een map nodig.',
+    summaryTokenBudget: 'De invoergrootte van de samenvatting valt buiten het ondersteunde bereik.',
+    conversationImmutable:
+      'Het profiel, het bereik en de kennismodus van een gesprek kunnen niet wijzigen.',
+    scopeInvalid: 'De geselecteerde bestanden vormen geen geldig bereik.',
+    conceptUriRequired: 'Een concept-URI is vereist.',
+    preferredLabelRequired: 'Een voorkeurslabel is vereist.',
+    keepNewerUnsupported:
+      'Het conflictbeleid "nieuwste behouden" wordt nog niet ondersteund. Kies vragen, overslaan, overschrijven of hernoemen.',
+    pathBusy: 'Er is al een andere verwijder-, kopieer- of verplaatsbewerking actief voor dit pad.',
+    archiveDestinationExtension: 'De archiefnaam moet eindigen op .zip of .7z.',
+    archiveFormatMismatch: 'Het archiefformaat moet overeenkomen met de bestandsextensie.',
+    archiveLevelRange: 'Het compressieniveau moet tussen 0 en 9 liggen.',
+    sevenZipLevelUnsupported: 'Dit compressieniveau wordt voor 7z-archieven niet ondersteund.',
+    cannotDuplicateRoot: 'Een hoofdmap van het bestandssysteem kan niet worden gedupliceerd.',
+    renameAcrossProviders:
+      'Een hernoeming kan een item niet naar een ander soort locatie verplaatsen.',
+    crossProviderUndoCombined:
+      'Het ongedaan maken van een verplaatsing tussen soorten locaties kan niet worden gecombineerd met andere ongedaanmakingsacties.',
+    providerRootNotRestorable:
+      'De hoofdmap van een locatie kan niet worden hersteld door een verplaatsing ongedaan te maken.',
+    linkProviderMismatch: 'Een koppeling en haar doel moeten op hetzelfde soort locatie staan.',
+    signInListenerFailed: 'De aanmeldluisteraar kon niet worden gestart: {detail}',
+    splitMissingParts: 'Ontbrekende delen: {parts}.',
+    splitMissingPartsMore: 'Ontbrekende delen: {parts} en nog {more}.',
+    splitMixed: 'De geselecteerde bestanden horen bij verschillende gesplitste sets.',
+    splitNotAPart: '{name} is geen genummerd deel (.001, .002, …).',
+    splitManifestDamaged: 'Het manifest {name} is beschadigd of geen Procyon-manifest.',
+    splitNoPartSelected: 'Er is geen deel geselecteerd.',
+    splitDifferentFolders: 'De geselecteerde delen staan in verschillende mappen.',
+    splitPartNotFile: '{name} is geen bestand.',
+    splitManifestCount: 'Het manifest vermeldt {listed} delen, maar er zijn er {found} gevonden.',
+    splitManifestName: 'Het manifest verwacht {expected} waar {found} is gevonden.',
+  },
+  geoMessage: {
+    kmzImagesDropped: '{count} ingesloten afbeelding(en) van de KMZ worden niet overgenomen.',
+    overlaysDropped: '{count} grondoverlay(s) worden niet overgenomen.',
+    elementsNeverRead:
+      '{count} element(en) van de bron zijn nooit gelezen (netwerkkoppelingen, 3D-modellen, tours).',
+    iconUrlsKept: 'Pictogram-URL’s worden alleen bewaard als de eigenschap icon-href.',
+    polygonsNotInGpx:
+      'Polygonen kunnen niet in GPX worden opgeslagen (er zijn geen vlakken) en zijn weggelaten.',
+    stylesNotInGpx:
+      'Kleuren, lijnbreedtes en pictogrammen van {count} object(en) worden niet in GPX opgeslagen.',
+    propertiesNotInGpx:
+      '{count} aangepaste eigenschapswaarde(n) worden niet in GPX opgeslagen (alleen naam, beschrijving, type, symbool, koppeling, hoogte en tijd wel).',
+    htmlAsText: 'HTML-beschrijvingen worden als tekst met hun opmaakcode weggeschreven.',
+    foldersNotInGpx: 'De mapstructuur wordt niet in GPX opgeslagen.',
+    structuredNotInKml:
+      'Gestructureerde eigenschapswaarden (objecten, lijsten) worden niet in KML opgeslagen.',
+    timestampsNotInKml:
+      'Tijdstempels en hartslagen per punt van {count} track(s) worden niet in gewone KML opgeslagen.',
+    featuresWithoutGeometry: '{count} object(en) zonder geometrie zijn weggelaten.',
+    nonPointsLeftOut:
+      '{count} lijn- of vlakobject(en) zijn weggelaten: CSV-rijen bevatten punten (kies de WKT-optie om elke geometrie te behouden).',
+    structuredNotInCsv:
+      'Gestructureerde eigenschapswaarden (objecten, lijsten) worden niet in CSV opgeslagen.',
+    formulaCellsPrefixed:
+      '{count} tekstcel(len) die beginnen met = + - of @ kregen een apostrof ervoor, zodat spreadsheets ze niet als formule uitvoeren.',
+    timestampsNotInCsv: 'Tijdstempels en hartslagen per punt worden niet in CSV opgeslagen.',
+    propertiesRemoved: '{count} aangepaste eigenschapswaarde(n) zijn verwijderd.',
+    ringsKept:
+      '{count} vlakring(en) zijn ongewijzigd gelaten omdat vereenvoudigen ze zichzelf zou laten kruisen.',
+    notSmaller: 'Het resultaat ({afterBytes}) is niet kleiner dan het origineel ({beforeBytes}).',
+    unrecognisedFile: 'Dit is geen herkend geografisch bestand.',
+    emptyDocument: 'Het document is leeg.',
+    rootNotKml: 'Het hoofdelement is <{name}>, niet <kml>.',
+    rootNotGpx: 'Het hoofdelement is <{name}>, niet <gpx>.',
+    entitiesNotAllowed: 'DOCTYPE-declaraties met entiteiten zijn niet toegestaan.',
+    jsonSyntax: 'Ongeldige JSON op regel {line}, kolom {column}: {detail}',
+    xmlSyntax: 'Ongeldige XML op regel {line}, kolom {column}: {detail}',
+    positionNotArray: 'Een positie moet een reeks getallen zijn.',
+    positionTooShort: 'Een positie heeft minstens lengte- en breedtegraad nodig.',
+    coordinatesNotFinite: 'Coördinaten moeten eindige getallen zijn.',
+    tooFewPositions:
+      'Hiervoor zijn minstens {minimum} posities nodig, maar er zijn er {found} gevonden.',
+    unknownGeometryType: 'Onbekend geometrietype "{type}".',
+    expectedFeature: 'Het type moet "Feature" zijn.',
+    propertiesNotObject: 'De eigenschappen moeten een object of null zijn.',
+    coordinatesNotArray: 'Coördinaten moeten een reeks zijn.',
+    geometryNotObject: 'Een geometrie moet een object of null zijn.',
+    geometryNeedsType: 'Een geometrie heeft een type nodig.',
+    geometryTooDeep: 'Geometrieverzamelingen zijn te diep genest.',
+    geometriesMissing: 'Een geometrieverzameling heeft een reeks geometrieën nodig.',
+    coordinatesMissing: 'De geometrie heeft coördinaten nodig.',
+    featureNotObject: 'Een object (feature) moet een object zijn.',
+    notJsonObject: 'Een GeoJSON-document moet een JSON-object zijn.',
+    typeMissing: 'Een GeoJSON-object heeft een type nodig.',
+    featuresMissing: 'Een FeatureCollection heeft een features-reeks nodig.',
+    unknownType: 'Onbekend GeoJSON-type "{type}".',
+    ringNotClosed: 'De ring is niet gesloten (eerste en laatste positie verschillen).',
+    positionsOutOfRange:
+      '{count} positie(s) liggen buiten lengtegraad -180..180 / breedtegraad -90..90 (de eerste wordt getoond); coördinaten moeten lengtegraad, breedtegraad zijn.',
+    crsUnusable:
+      'Het verouderde crs-lid geeft "{name}" op, wat geen omzetbaar coördinatenstelsel is: RFC 7946 vereist WGS84-lengte/breedte, dus de gegevens kunnen op de verkeerde plek getekend worden.',
+    crsLegacy:
+      'Het verouderde crs-lid is in RFC 7946 verwijderd; coördinaten zijn WGS84-lengte/breedte.',
+    crsConverted: 'Coördinaten zijn omgezet van {label} ({name}) naar WGS84.',
+    crsConvertedFailures: ' {failed} positie(s) konden niet worden omgezet.',
+    crsGuessed:
+      'Coördinaten zijn omgezet van {label} ({name}) naar WGS84; het coördinatenstelsel is afgeleid uit de waarden.',
+    rowsSkipped: '{count} rij(en) zonder bruikbare coördinaten zijn weggelaten (eerste: {first}).',
+    rowsUnconverted: '{count} rij(en) konden niet naar WGS84 worden omgezet.',
+    csvOutOfRange:
+      '{count} positie(s) liggen buiten lengtegraad -180..180 / breedtegraad -90..90: kies het coördinatenstelsel van dit bestand of wissel de kolommen om.',
+    externalIcons:
+      '{count} plaatsmarkering(en) gebruiken externe pictogrammen, die niet worden opgehaald; in plaats daarvan wordt een gekleurde stip getekend.',
+    imagesMissing:
+      '{count} gerefereerde afbeelding(en) ontbreken, zijn te groot of zijn geen ondersteunde afbeelding.',
+    invalidPositions: '{count} coördinaat/coördinaten waren ongeldig en zijn weggelaten.',
+    shortSegments: '{count} segment(en) met minder dan twee punten zijn weggelaten.',
+    trackThinned:
+      'De track heeft meer punten dan getekend worden; de lijn is voor weergave uitgedund en de statistieken gebruiken elk punt.',
+    timestampsMissing:
+      'Sommige tijdstempels ontbreken of hebben geen tijdzone, dus duur en snelheden worden niet getoond.',
+    pointsDropped: '{count} punt(en) met ontbrekende of ongeldige coördinaten zijn weggelaten.',
+    csvSyntax: 'Het bestand is geen geldige tekst met scheidingstekens: {detail}',
+    csvNoColumn: 'Het bestand heeft geen kolom met de naam "{name}".',
+    csvNoCoordinates: 'Er is geen kolom met breedte/lengte, x/y of WKT-geometrie gevonden.',
+    csvUnknownSystem:
+      'De kolommen lijken x/y-waarden in een onbekend coördinatenstelsel: kies er een.',
+    crsUnrecognised: '"{text}" is geen EPSG-code of PROJ-definitie.',
+    crsUnknownCode: 'EPSG:{code} is geen bekend coördinatenreferentiesysteem.',
+    crsUnsupported: '{name} kan niet naar lengte/breedte worden omgezet.',
+    kmzArchive: 'Het KMZ-bestand is geen geldig zip-archief: {detail}',
+    kmzNoKml: 'Het KMZ-archief bevat geen .kml-bestand.',
+    kmzTooManyEntries: 'Het KMZ-archief heeft meer dan {max} items.',
+    kmzKmlTooLarge: 'De KML in de KMZ is groter dan {maxBytes}.',
+    kmzKmlExpands: 'De KML in de KMZ wordt uitgepakt tot boven de groottelimiet.',
+    kmzTooLargeToRepack: 'Het KMZ-archief is te groot om opnieuw te verpakken.',
+    gpxNothingToWrite: 'GPX kan alleen punten en lijnen bevatten, en dit document heeft er geen.',
+    csvNothingToWrite:
+      'Dit document heeft geen punten om weg te schrijven; kies de WKT-optie om lijnen en vlakken te behouden.',
+    writeFailed: 'Het wegschrijven van de uitvoer is mislukt: {detail}',
+    csvCannotMinify: 'CSV-bestanden kunnen niet worden verkleind.',
+    noOutputFormat: 'Dit bestand heeft geen eigen uitvoerformaat.',
+    fileTooLarge:
+      'Het bestand is {sizeBytes}; bestanden boven {maxBytes} worden niet geopend of geconverteerd.',
+    readFailed: 'Het bestand kon niet worden gelezen: {detail}',
+    minifyFailed: 'Het verkleinen van het bestand is mislukt: {detail}',
+  },
+  operationFailure: {
+    operationFailed: 'De bewerking is mislukt: {detail}',
+    operationFailedPlain: 'De bewerking is mislukt.',
+    undoPathOccupied:
+      'De oorspronkelijke locatie is bezet, dus ongedaan maken zou een latere wijziging overschrijven.',
+    undoOutputMissing:
+      'Het resultaat van de bewerking bestaat niet meer, dus ongedaan maken is niet veilig mogelijk.',
+    undoOutputChanged:
+      'Het resultaat van de bewerking is daarna gewijzigd, dus ongedaan maken is niet veilig mogelijk.',
+    undoBackupMissing: 'De reservekopie ontbreekt, dus ongedaan maken is niet mogelijk.',
+    undoEntryMissing:
+      'Het item bestaat niet meer, dus de vorige toestand kan niet worden hersteld.',
+    undoAttributesChanged:
+      'De kenmerken zijn na de bewerking gewijzigd en kunnen niet veilig worden hersteld.',
+    readOnlyNeedsOverride:
+      'Het alleen-lezen item {location} vereist een expliciete overschrijving van de beveiliging.',
+    kindMismatch: 'Een bestand en een map kunnen elkaar niet vervangen.',
+    pathComponentNotDirectory: 'Een onderdeel van het pad is geen map.',
+    notRegularFile: '{name} is geen gewoon bestand.',
+    nameCollisionLimit:
+      'Er is geen vrije naam gevonden: er bestaan al te veel items met deze naam.',
+    folderReplaceBlocked: 'Een map kan niet door een bestand worden vervangen.',
+    sourceChangedWhileSplitting: 'Het bronbestand is gewijzigd terwijl het werd gesplitst.',
+    tooManyParts: '{name} zou meer dan {max} delen nodig hebben. Kies een grotere deelgrootte.',
+    imageTooLarge: 'De afbeelding is te groot om te bewerken ({sizeBytes}; limiet {limitBytes}).',
+    tooManyEntries:
+      'De selectie bevat te veel items (meer dan {limit}). Selecteer een kleinere boomstructuur.',
+    relativeLinkAcrossVolumes:
+      'Een relatief doel is niet mogelijk tussen verschillende volumes. Kies een absoluut doel.',
+    linkTargetNotUnicode: 'Het doel van de koppeling is geen geldige Unicode.',
+    noPendingConflict: 'Deze bewerking heeft geen conflict dat op een beslissing wacht.',
+  },
+  previewResource: {
+    sourceFileSize: 'bestandsgrootte',
+    expandedZip: 'uitgepakte archiefgrootte',
+    perImageBytes: 'grootte van één afbeelding',
+    totalImageBytes: 'totale grootte van afbeeldingen',
+    renderedOutput: 'grootte van de weergegeven uitvoer',
+    perMediaBytes: 'grootte van één mediabestand',
+    totalMediaBytes: 'totale grootte van media',
+    perImagePixels: 'pixels in één afbeelding',
+    totalImagePixels: 'pixels in alle afbeeldingen',
+    text: 'grootte van de uitgelezen tekst',
+    zipEntries: 'aantal pakketitems',
+    imageCount: 'aantal afbeeldingen',
+    mediaCount: 'aantal mediabestanden',
+    slideCount: 'aantal dia’s',
+    xmlDepth: 'XML-nestingsdiepte',
+  },
+  viewerWarning: {
+    walNotShown:
+      'Naast deze database staat een write-ahead-log (-wal); schrijfacties die nog niet zijn doorgevoerd, worden niet getoond.',
+    sequentialOnly:
+      'Deze locatie ondersteunt alleen sequentieel lezen; de eerste rijen en vooruit indexeren werken, maar naar willekeurige posities springen is uitgeschakeld. Open het bestand extern als willekeurige toegang nodig is.',
+    spreadsheetFallback:
+      'Dit spreadsheet kan hier niet worden getoond ({detail}). Open het in een externe spreadsheettoepassing.',
+    indexingFailed: 'Het indexeren is voortijdig gestopt: {detail}',
+  },
+  notification: {
+    settingsCorrupt:
+      'De instellingen konden niet worden gelezen. De standaardwaarden zijn geladen en het origineel is opgeslagen als back-up in {path}.',
+    settingsNewerSchema:
+      'Het instellingenbestand is geschreven door een nieuwere versie van Procyon en is ongewijzigd gelaten. Sluit deze oudere versie voordat je instellingen wijzigt.',
+    settingsUnreadable:
+      'De instellingen konden niet worden gelezen. De standaardwaarden van de toepassing zijn geladen.',
+    llmProfilesUnreadable:
+      'AI-profielen konden niet worden gelezen. Er zijn geen generatieprofielen geladen.',
+    clipboardCopied: 'Naar het klembord gekopieerd.',
+    pluginIsolated: 'De plug-in {plugin} is geïsoleerd: {detail}',
+  },
+  semanticUnavailable: {
+    sourceUnavailable: 'De bron is momenteel niet beschikbaar.',
+    noRecursiveEstimate: 'Voor deze bron is geen recursieve groottebepaling beschikbaar.',
   },
   commandCategory: {
     recent: 'Recent gebruikt',
@@ -2543,6 +2966,8 @@ export const nl = {
       'De oude koppeling is naar de prullenbak verplaatst en de nieuwe koppeling kan ongedaan worden gemaakt via de bewerkingsgeschiedenis.',
     textFixHint:
       'Bewerk het bestand om deze koppeling te herstellen; de editor houdt zijn eigen geschiedenis voor ongedaan maken bij.',
+    trashFailed:
+      'De oude koppeling kon niet naar de prullenbak worden verplaatst (status: {state}).',
   },
   metadataRename: {
     ...en.metadataRename,
@@ -2954,6 +3379,15 @@ export const nl = {
       'De kaart is niet beschikbaar voor schermlezers. Gebruik de objectenlijst, de eigenschappentabel en het tabblad JSON; met een geselecteerd object verplaatsen Alt+pijltoetsen het ongeveer één meter (Shift: tien meter).',
     dropFailed: 'De neergezette tekst kon niet worden geïmporteerd: {message}',
     mapUnavailable: 'De kaart kon niet worden geladen.',
+    parseNotObject: 'Een GeoJSON-document moet een object met een "type" zijn.',
+    parseNeedsFeatures: 'Een FeatureCollection heeft een "features"-reeks nodig.',
+    parseNotFeature: 'features[{index}] is geen Feature.',
+    enterNumber: 'Voer een getal in.',
+    enterBoolean: 'Voer true of false in.',
+    enterJson: 'Voer geldige JSON in.',
+    tooLargeBytes: 'Het bestand is groter dan {max}; gebruik de tekstweergave.',
+    tooManyFeatures: 'Het bestand heeft meer dan {max} objecten; gebruik de tekstweergave.',
+    nothingToImport: 'Er is niets om in te importeren.',
   },
   geoTrack: {
     ...en.geoTrack,

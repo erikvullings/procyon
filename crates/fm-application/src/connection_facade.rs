@@ -4,6 +4,7 @@
 //! assembled [`ConnectionDto`] values rather than raw profile/status/error
 //! tuples.
 
+use crate::rejection::{Rejection, reason};
 use std::sync::Arc;
 
 use fm_connections::{
@@ -161,10 +162,10 @@ impl ConnectionFacade {
             .map_err(|error| ApplicationError::PlatformOperationFailed(error.to_string()))?;
         let presented = host_key_verification_fingerprint(&verification);
         if presented != fingerprint {
-            return Err(ApplicationError::InvalidRequest(
-                "the host key changed again since it was probed; re-probe before accepting"
-                    .to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::HOST_KEY_CHANGED,
+                "the host key changed again since it was probed; re-probe before accepting",
+            )));
         }
         if matches!(verification, HostKeyVerification::Unverified { .. })
             && matches!(
@@ -172,11 +173,10 @@ impl ConnectionFacade {
                 HostKeyPolicy::RequireKnownHost
             )
         {
-            return Err(ApplicationError::InvalidRequest(
-                "this connection requires a pre-established known host key and does not accept \
-                 first-time trust"
-                    .to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::KNOWN_HOST_REQUIRED,
+                "this connection requires a pre-established known host key and does not accept first-time trust",
+            )));
         }
         self.ssh_connections
             .known_hosts()
@@ -220,9 +220,10 @@ fn ssh_configuration_of(
 ) -> Result<&SshConnectionConfiguration, ApplicationError> {
     match &profile.configuration {
         ConnectionConfiguration::Ssh(configuration) => Ok(configuration),
-        _ => Err(ApplicationError::InvalidRequest(
-            "connection is not an SSH connection".to_owned(),
-        )),
+        _ => Err(ApplicationError::from(Rejection::new(
+            reason::NOT_SSH_CONNECTION,
+            "connection is not an SSH connection",
+        ))),
     }
 }
 

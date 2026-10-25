@@ -49,9 +49,7 @@ export function createComparisonController(
       if (workspace === undefined) return;
       const [leftPaneId, rightPaneId] = workspace.paneOrder;
       if (leftPaneId === undefined || rightPaneId === undefined) {
-        context.setState(
-          withComparisonError(context.getState(), 'Comparing directories needs two open panes.'),
-        );
+        context.setState(withComparisonError(context.getState(), t('comparison', 'needsTwoPanes')));
         context.redraw();
         return;
       }

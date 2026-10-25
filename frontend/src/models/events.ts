@@ -40,6 +40,9 @@ export interface BackendNotification {
   id: string;
   level: 'info' | 'warning' | 'error';
   message: string;
+  /** Stable code clients localise with `notificationText`. */
+  code?: string;
+  params?: Readonly<Record<string, string>>;
 }
 
 /** Typed payloads named by specification §10. */
@@ -141,6 +144,7 @@ export type BackendEventPayload =
       scanId: string;
       code: string;
       message: string;
+      details?: unknown;
     }
   | {
       type: 'diskUsage.finalizing';

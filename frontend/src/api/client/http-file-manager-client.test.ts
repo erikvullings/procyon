@@ -363,9 +363,9 @@ describe('HttpFileManagerClient', () => {
       reportedFiles: [],
       jobs: [],
     });
-    await expect(client.setSemanticOcrConsent(true)).rejects.toThrow(
-      'available only in the desktop application',
-    );
+    await expect(client.setSemanticOcrConsent(true)).rejects.toMatchObject({
+      code: 'desktopHostRequired',
+    });
   });
 
   describe('OneDrive authorization', () => {

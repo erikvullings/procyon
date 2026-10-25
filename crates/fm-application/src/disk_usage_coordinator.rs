@@ -10,6 +10,7 @@
 //! `ChecksumCoordinator`'s job-engine delegation, since disk-usage scanning has no separate engine
 //! crate of its own.
 
+use crate::rejection::{Rejection, reason};
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
@@ -60,8 +61,9 @@ impl DiskUsageCoordinator {
                 return Err(ApplicationError::OperationCancelled);
             }
             if registry.active.contains_key(&scan_id) {
-                return Err(ApplicationError::InvalidRequest(format!(
-                    "disk-usage scan {scan_id} is already running"
+                return Err(ApplicationError::from(Rejection::new(
+                    reason::SCAN_ALREADY_RUNNING,
+                    format!("disk-usage scan {scan_id} is already running"),
                 )));
             }
             registry.active.insert(scan_id, cancellation.clone());

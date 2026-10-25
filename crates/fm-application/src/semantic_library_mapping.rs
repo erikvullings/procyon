@@ -19,7 +19,7 @@ use fm_transport_dto::{
     SemanticLibraryOperationDto, SemanticLibraryResourceBudgetsDto,
     SemanticLibraryResourceProfileDto, SemanticLibraryResourceProfileKindDto,
     SemanticLibraryRevisionRequestDto, SemanticLibraryStatusDto, SemanticRootAvailabilityDto,
-    SemanticRootStatusDto, UpdateGemmaMediaRequestDto,
+    SemanticRootStatusDto, SemanticUnavailableReasonDto, UpdateGemmaMediaRequestDto,
     UpdateSemanticEligibilityOverridesRequestDto,
 };
 use uuid::Uuid;
@@ -34,7 +34,7 @@ use crate::semantic_library::{
     SemanticLibraryCapabilities, SemanticLibraryError, SemanticLibraryIdentity,
     SemanticLibraryModelIdentity, SemanticLibraryOperation, SemanticLibraryStatus,
     SemanticResourceProfile, SemanticRootAvailability, SemanticRootStatus,
-    parse_semantic_deletion_plan_id, parse_semantic_root_id,
+    SemanticUnavailableReason, parse_semantic_deletion_plan_id, parse_semantic_root_id,
 };
 
 /// Maps semantic-library authority to its wire discriminator.
@@ -556,7 +556,10 @@ fn semantic_folder_status_to_dto(status: SemanticFolderStatus) -> SemanticFolder
         exclusion_id: status.exclusion_id,
         workspace_referenced: status.workspace_referenced,
         source_available: status.source_available,
-        unavailable_reason: status.unavailable_reason,
+        unavailable_reason: status
+            .unavailable_reason
+            .map(|reason| reason.message().to_owned()),
+        unavailable_reason_code: status.unavailable_reason.map(unavailable_reason_to_dto),
     }
 }
 
@@ -607,7 +610,21 @@ fn semantic_estimate_to_dto(
                 SemanticBudgetKind::VectorBytes => SemanticBudgetKindDto::VectorBytes,
             })
             .collect(),
-        unavailable_reason: estimate.unavailable_reason,
+        unavailable_reason: estimate
+            .unavailable_reason
+            .map(|reason| reason.message().to_owned()),
+        unavailable_reason_code: estimate.unavailable_reason.map(unavailable_reason_to_dto),
+    }
+}
+
+fn unavailable_reason_to_dto(reason: SemanticUnavailableReason) -> SemanticUnavailableReasonDto {
+    match reason {
+        SemanticUnavailableReason::SourceUnavailable => {
+            SemanticUnavailableReasonDto::SourceUnavailable
+        }
+        SemanticUnavailableReason::NoRecursiveEstimate => {
+            SemanticUnavailableReasonDto::NoRecursiveEstimate
+        }
     }
 }
 

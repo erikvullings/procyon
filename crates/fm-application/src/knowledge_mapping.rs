@@ -3,6 +3,7 @@
 //! Retrieval fields and answer-only fields are mapped separately: nothing from
 //! the answer half of a draft can reach a planned search.
 
+use crate::rejection::{Rejection, reason};
 use std::collections::HashMap;
 
 use fm_semantic_worker::knowledge_retrieval::{
@@ -228,12 +229,16 @@ pub(crate) fn selector_from_dto(
                 workspace_id: workspace_id.to_owned(),
             })
         }
-        (KnowledgeScopeSelectorKindDto::Root, None) => Err(ApplicationError::InvalidRequest(
-            "root knowledge scope selector requires a root id".into(),
-        )),
-        (KnowledgeScopeSelectorKindDto::Workspace, None) => Err(ApplicationError::InvalidRequest(
-            "workspace knowledge scope selector requires a workspace id".into(),
-        )),
+        (KnowledgeScopeSelectorKindDto::Root, None) => Err(ApplicationError::from(Rejection::new(
+            reason::SCOPE_ROOT_INVALID,
+            "root knowledge scope selector requires a root id",
+        ))),
+        (KnowledgeScopeSelectorKindDto::Workspace, None) => {
+            Err(ApplicationError::from(Rejection::new(
+                reason::KNOWLEDGE_SCOPE_WORKSPACE,
+                "workspace knowledge scope selector requires a workspace id",
+            )))
+        }
     }
 }
 

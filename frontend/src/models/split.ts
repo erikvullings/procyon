@@ -22,4 +22,7 @@ export interface InspectSplitSetResult {
   hasManifest: boolean;
   /** Why the set cannot be joined; absent when it is ready. */
   error?: string | null;
+  /** Stable code of `error` that the UI localises. */
+  errorCode?: string | null;
+  errorParams?: Readonly<Record<string, string>> | undefined;
 }

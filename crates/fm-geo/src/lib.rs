@@ -11,6 +11,7 @@ mod geojson;
 mod gpx;
 mod kml;
 mod kmz;
+mod message;
 mod minify;
 mod model;
 mod read;
@@ -25,6 +26,7 @@ pub use geojson::{GeoJsonError, parse_geojson};
 pub use gpx::{GpxError, parse_gpx};
 pub use kml::{KmlError, NoResources, ResourceSource, parse_kml};
 pub use kmz::{KmzError, parse_kmz, repack_kmz};
+pub use message::{GeoMessage, codes};
 pub use minify::{MinifyOptions, MinifyStats, compact_json, compact_xml, minify_document};
 pub use model::{
     Bounds, GeoDocument, GeoFormat, GeoIssue, GroundOverlay, Limits, ProfilePoint, TrackSummary,

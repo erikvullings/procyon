@@ -573,7 +573,10 @@ describe('navigation controller', () => {
     expect(context.client.dispatchWorkspaceCommand).not.toHaveBeenCalled();
     expect(context.getWorkspace()).toBe(original);
     expect(context.views.at(-1)).toMatchObject({
-      state: { type: 'error', message: 'RAR archive browsing is not supported' },
+      state: {
+        type: 'error',
+        message: expect.stringContaining('RAR archive browsing is not supported'),
+      },
       location: original.panesById.left?.tabsById.tab?.location,
     });
   });

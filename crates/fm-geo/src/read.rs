@@ -5,6 +5,7 @@ use crate::geojson::{GeoJsonError, parse_geojson};
 use crate::gpx::{GpxError, parse_gpx};
 use crate::kml::{KmlError, NoResources, parse_kml};
 use crate::kmz::{KmzError, parse_kmz};
+use crate::message::{GeoMessage, codes};
 use crate::model::{GeoDocument, GeoFormat, Limits};
 
 /// Why a file could not be read, in a form independent of the format.
@@ -13,7 +14,7 @@ pub struct ReadFailure {
     /// The detected format, if any.
     pub format: Option<GeoFormat>,
     /// What went wrong.
-    pub message: String,
+    pub message: GeoMessage,
     /// One-based line of a syntax error.
     pub line: Option<usize>,
     /// One-based column of a syntax error.
@@ -23,7 +24,7 @@ pub struct ReadFailure {
 }
 
 impl ReadFailure {
-    fn plain(format: Option<GeoFormat>, message: String) -> Self {
+    fn plain(format: Option<GeoFormat>, message: GeoMessage) -> Self {
         Self {
             format,
             message,
@@ -33,7 +34,7 @@ impl ReadFailure {
         }
     }
 
-    fn syntax(format: GeoFormat, message: String, line: usize, column: usize) -> Self {
+    fn syntax(format: GeoFormat, message: GeoMessage, line: usize, column: usize) -> Self {
         Self {
             format: Some(format),
             message,
@@ -46,13 +47,11 @@ impl ReadFailure {
 
 impl From<KmlError> for ReadFailure {
     fn from(error: KmlError) -> Self {
-        match error {
-            KmlError::Syntax {
-                message,
-                line,
-                column,
-            } => Self::syntax(GeoFormat::Kml, message, line, column),
-            other => Self::plain(Some(GeoFormat::Kml), other.to_string()),
+        match &error {
+            KmlError::Syntax { line, column, .. } => {
+                Self::syntax(GeoFormat::Kml, error.message(), *line, *column)
+            }
+            _ => Self::plain(Some(GeoFormat::Kml), error.message()),
         }
     }
 }
@@ -70,41 +69,40 @@ pub fn read_document(
     let Some(format) = crate::detect_format(extension, bytes) else {
         return Err(ReadFailure::plain(
             None,
-            "this is not a recognised geographic file".into(),
+            GeoMessage::new(
+                codes::UNRECOGNISED_FILE,
+                "this is not a recognised geographic file",
+            ),
         ));
     };
     match format {
-        GeoFormat::GeoJson => parse_geojson(bytes, limits).map_err(|error| match error {
-            GeoJsonError::Syntax {
-                message,
-                line,
-                column,
-            } => ReadFailure::syntax(format, message, line, column),
+        GeoFormat::GeoJson => parse_geojson(bytes, limits).map_err(|error| match &error {
+            GeoJsonError::Syntax { line, column, .. } => {
+                ReadFailure::syntax(format, error.message(), *line, *column)
+            }
             GeoJsonError::Invalid(issue) => ReadFailure {
                 format: Some(format),
-                message: issue.message,
+                message: error.message(),
                 line: None,
                 column: None,
-                path: Some(issue.path),
+                path: Some(issue.path.clone()),
             },
         }),
-        GeoFormat::Gpx => parse_gpx(bytes, limits).map_err(|error| match error {
-            GpxError::Syntax {
-                message,
-                line,
-                column,
-            } => ReadFailure::syntax(format, message, line, column),
-            other => ReadFailure::plain(Some(format), other.to_string()),
+        GeoFormat::Gpx => parse_gpx(bytes, limits).map_err(|error| match &error {
+            GpxError::Syntax { line, column, .. } => {
+                ReadFailure::syntax(format, error.message(), *line, *column)
+            }
+            _ => ReadFailure::plain(Some(format), error.message()),
         }),
         GeoFormat::Kml => {
             parse_kml(bytes, limits, &NoResources, GeoFormat::Kml).map_err(Into::into)
         }
         GeoFormat::Csv => read_csv(bytes, limits, &CsvOptions::default())
             .map(|(document, _)| document)
-            .map_err(|error| ReadFailure::plain(Some(format), error.to_string())),
+            .map_err(|error| ReadFailure::plain(Some(format), error.message())),
         GeoFormat::Kmz => parse_kmz(bytes, limits).map_err(|error| match error {
             KmzError::Kml(inner) => ReadFailure::from(inner),
-            other => ReadFailure::plain(Some(format), other.to_string()),
+            other => ReadFailure::plain(Some(format), other.message()),
         }),
     }
 }

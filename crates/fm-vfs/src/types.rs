@@ -56,13 +56,33 @@ pub struct RemoveOptions {
     pub use_trash: bool,
 }
 
+/// Why one entry of a recursive removal was left in place.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RemoveFailureKind {
+    /// The entry is read-only and the caller did not override that protection.
+    ReadOnly,
+    /// The platform reported an I/O error (raw text, safe to show as detail).
+    Io(String),
+}
+
+/// One entry a recursive removal could not process.
+#[derive(Debug)]
+pub struct RemoveFailure {
+    /// Entry that was left in place.
+    pub entry: EntryRef,
+    /// Display path of the entry.
+    pub path: String,
+    /// What went wrong.
+    pub kind: RemoveFailureKind,
+}
+
 /// Outcome of a single-pass recursive removal.
 #[derive(Debug)]
 pub struct RemoveReport {
     /// Entries successfully removed, including directories.
     pub removed_items: u64,
     /// Entries that could not be removed without stopping unrelated siblings.
-    pub failures: Vec<(EntryRef, String)>,
+    pub failures: Vec<RemoveFailure>,
     /// Cancellation observed between filesystem entries.
     pub cancelled: bool,
 }

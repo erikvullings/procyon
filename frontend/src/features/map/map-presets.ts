@@ -1,3 +1,4 @@
+import type { EnglishCatalogue } from '../../i18n';
 import type { MapSettings } from '../../models';
 import { DEFAULT_MAP_SETTINGS } from './map-settings';
 
@@ -11,6 +12,13 @@ export interface MapPreset {
     MapSettings,
     'basemapKind' | 'urlTemplate' | 'styleUrl' | 'attribution' | 'maxZoom'
   >;
+}
+
+/** Catalogue key (`mapPreset` group) of a preset's note: its id in camelCase. */
+export function presetNoteKey(id: string): keyof EnglishCatalogue['mapPreset'] {
+  return id.replaceAll(/-(\w)/gu, (_match, letter: string) =>
+    letter.toUpperCase(),
+  ) as keyof EnglishCatalogue['mapPreset'];
 }
 
 const PDOK_ATTRIBUTION = '© Kadaster / PDOK';

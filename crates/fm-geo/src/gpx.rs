@@ -10,6 +10,7 @@ use quick_xml::events::{BytesStart, Event};
 use serde_json::{Map, Value, json};
 use thiserror::Error;
 
+use crate::message::{GeoMessage, codes};
 use crate::model::{Bounds, GeoDocument, GeoFormat, GeoIssue, Limits};
 use crate::time::parse_timestamp;
 use crate::track_stats::{TrackPoint, summarize};
@@ -31,11 +32,30 @@ pub enum GpxError {
         column: usize,
     },
     /// The XML is not a GPX document.
-    #[error("{0}")]
-    NotGpx(String),
+    #[error("{}", .0.text)]
+    NotGpx(GeoMessage),
     /// The document declares entities.
     #[error("DOCTYPE declarations with entities are not allowed")]
     Entities,
+}
+
+impl GpxError {
+    /// The localisable description of the failure.
+    #[must_use]
+    pub fn message(&self) -> GeoMessage {
+        match self {
+            Self::Syntax {
+                message,
+                line,
+                column,
+            } => GeoMessage::new(codes::XML_SYNTAX, self.to_string())
+                .with("line", line)
+                .with("column", column)
+                .with("detail", message),
+            Self::NotGpx(message) => message.clone(),
+            Self::Entities => GeoMessage::new(codes::ENTITIES_NOT_ALLOWED, self.to_string()),
+        }
+    }
 }
 
 fn line_column(bytes: &[u8], offset: usize) -> (usize, usize) {
@@ -143,9 +163,13 @@ pub fn parse_gpx(bytes: &[u8], limits: Limits) -> Result<GeoDocument, GpxError> 
                 let name = local(start.name().as_ref());
                 if !seen_root {
                     if name != "gpx" {
-                        return Err(GpxError::NotGpx(format!(
-                            "the root element is <{name}>, not <gpx>"
-                        )));
+                        return Err(GpxError::NotGpx(
+                            GeoMessage::new(
+                                codes::ROOT_NOT_GPX,
+                                format!("the root element is <{name}>, not <gpx>"),
+                            )
+                            .with("name", &name),
+                        ));
                     }
                     seen_root = true;
                 }
@@ -300,7 +324,10 @@ pub fn parse_gpx(bytes: &[u8], limits: Limits) -> Result<GeoDocument, GpxError> 
         }
     }
     if !seen_root {
-        return Err(GpxError::NotGpx("the document is empty".into()));
+        return Err(GpxError::NotGpx(GeoMessage::new(
+            codes::EMPTY_DOCUMENT,
+            "the document is empty",
+        )));
     }
     Ok(build_document(
         &waypoints,
@@ -468,12 +495,14 @@ fn build_document(
             continue;
         }
         if short_segments > 0 {
-            warnings.push(GeoIssue {
-                path: format!("/trk/{index}"),
-                message: format!(
-                    "{short_segments} segment(s) with fewer than two points were left out"
-                ),
-            });
+            warnings.push(GeoIssue::new(
+                format!("/trk/{index}"),
+                GeoMessage::new(
+                    codes::SHORT_SEGMENTS,
+                    format!("{short_segments} segment(s) with fewer than two points were left out"),
+                )
+                .with("count", short_segments),
+            ));
         }
         if features.len() >= limits.max_features || positions >= limits.max_positions {
             truncated = true;
@@ -504,10 +533,13 @@ fn build_document(
             })
             .collect();
         if decimated {
-            warnings.push(GeoIssue {
-                path: format!("/trk/{index}"),
-                message: "the track has more points than are drawn; the line is thinned for display and the statistics use every point".into(),
-            });
+            warnings.push(GeoIssue::new(
+                format!("/trk/{index}"),
+                GeoMessage::new(
+                    codes::TRACK_THINNED,
+                    "the track has more points than are drawn; the line is thinned for display and the statistics use every point",
+                ),
+            ));
         }
         let geometry = if lines.len() == 1 {
             json!({ "type": "LineString", "coordinates": lines[0] })
@@ -583,20 +615,27 @@ fn build_document(
             .any(|p| p.time_text.is_some());
         let has_usable_times = track_points.iter().flatten().all(|p| p.time.is_some());
         if has_text_times && !has_usable_times {
-            warnings.push(GeoIssue {
-                path: format!("/trk/{index}"),
-                message: "some timestamps are missing or have no time zone, so durations and speeds are not shown".into(),
-            });
+            warnings.push(GeoIssue::new(
+                format!("/trk/{index}"),
+                GeoMessage::new(
+                    codes::TIMESTAMPS_MISSING,
+                    "some timestamps are missing or have no time zone, so durations and speeds are not shown",
+                ),
+            ));
         }
         summaries.push(summarize(name, feature_index, &track_points));
     }
     if dropped_points > 0 {
-        warnings.push(GeoIssue {
-            path: String::new(),
-            message: format!(
-                "{dropped_points} point(s) with missing or invalid coordinates were left out"
-            ),
-        });
+        warnings.push(GeoIssue::new(
+            String::new(),
+            GeoMessage::new(
+                codes::POINTS_DROPPED,
+                format!(
+                    "{dropped_points} point(s) with missing or invalid coordinates were left out"
+                ),
+            )
+            .with("count", dropped_points),
+        ));
     }
     GeoDocument {
         format: GeoFormat::Gpx,

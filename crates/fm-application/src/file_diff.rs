@@ -5,6 +5,7 @@
 //! only identical/different plus the first differing offset. Oversized text files are reported
 //! as such instead of being diffed. Nothing is written.
 
+use crate::rejection::{Rejection, reason};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -84,7 +85,13 @@ impl FileDiffService {
             })
             .await
             .map_err(|error| {
-                ApplicationError::InvalidRequest(format!("the diff task failed: {error}"))
+                ApplicationError::from(
+                    Rejection::new(
+                        reason::DIFF_FAILED,
+                        format!("the diff task failed: {error}"),
+                    )
+                    .with("detail", &error),
+                )
             })?;
         }
 
@@ -133,9 +140,10 @@ impl FileDiffService {
         };
         let summary = provider.inspect(&entry, cancellation.clone()).await?;
         if summary.kind != EntryKind::File {
-            return Err(ApplicationError::InvalidRequest(
-                "only regular files can be compared".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::NOT_REGULAR_FILE,
+                "only regular files can be compared",
+            )));
         }
         let size = provider.file_size(&entry, cancellation.clone()).await?;
         Ok(Side {
@@ -703,7 +711,10 @@ mod tests {
         let mut req = request(&dir, b"a", b"b", false, false);
         req.left = Location::from_native_path(dir.path()).unwrap().into();
         let error = service().diff(req).await.unwrap_err();
-        assert!(matches!(error, ApplicationError::InvalidRequest(_)));
+        assert!(matches!(
+            error,
+            ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_)
+        ));
     }
 
     #[tokio::test]

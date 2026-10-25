@@ -67,9 +67,12 @@ fn spawn_removal_helper(pid: u32, paths: &[PathBuf]) -> std::io::Result<()> {
 
 /// Schedules deletion of settings, workspaces, the semantic index, logs and caches, then quits.
 #[tauri::command]
-pub(crate) fn remove_application_data<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+pub(crate) fn remove_application_data<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<(), crate::command_failure::CommandFailure> {
     let paths = uninstall_paths(&DataBases::platform());
-    spawn_removal_helper(std::process::id(), &paths).map_err(|error| error.to_string())?;
+    spawn_removal_helper(std::process::id(), &paths)
+        .map_err(crate::command_failure::CommandFailure::platform)?;
     app.exit(0);
     Ok(())
 }

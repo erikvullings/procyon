@@ -1,6 +1,8 @@
 //! Wire types for geographic files (tasks 0277-0282).
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
 use serde_json::Value;
 use utoipa::ToSchema;
 
@@ -77,22 +79,47 @@ pub struct ParseGeoTextRequestDto {
     pub text: String,
 }
 
+/// A message clients localise by `code`; `message` is the English fallback.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoMessageDto {
+    /// Stable machine-readable code.
+    pub code: String,
+    /// English text for clients that do not know the code.
+    pub message: String,
+    /// Values the localised sentence interpolates (counts, names).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub params: BTreeMap<String, String>,
+}
+
 /// A warning about data that is not represented faithfully.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GeoIssueDto {
     /// Where in the document, for example `/features/3/geometry`.
     pub path: String,
-    /// What is wrong or left out.
+    /// What is wrong or left out (English fallback).
     pub message: String,
+    /// Stable code clients localise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    /// Values the localised sentence interpolates.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub params: BTreeMap<String, String>,
 }
 
 /// Why a file could not be read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GeoErrorDto {
-    /// Human-readable message.
+    /// Human-readable message (English fallback).
     pub message: String,
+    /// Stable code clients localise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    /// Values the localised sentence interpolates.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub params: BTreeMap<String, String>,
     /// One-based line of a syntax error.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<u32>,
@@ -309,7 +336,7 @@ pub struct PreviewGeoMinifyResponseDto {
     /// Summed length of all lines after, metres.
     pub distance_after_meters: f64,
     /// What was removed or could not be represented.
-    pub notes: Vec<String>,
+    pub notes: Vec<GeoMessageDto>,
     /// The minified features as a GeoJSON `FeatureCollection`, for the before/after overlay; absent
     /// when the result is too large to show or only whitespace changes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -317,7 +344,7 @@ pub struct PreviewGeoMinifyResponseDto {
     pub collection: Option<serde_json::Value>,
     /// Set when the file cannot be read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
+    pub error: Option<GeoMessageDto>,
 }
 
 /// Previews a conversion (`POST /api/v1/geo/convert/preview`): what would be lost, per file.
@@ -343,10 +370,10 @@ pub struct GeoConversionReportDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_name: Option<String>,
     /// What the target format cannot represent.
-    pub notes: Vec<String>,
+    pub notes: Vec<GeoMessageDto>,
     /// Set when this file cannot be converted at all.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
+    pub error: Option<GeoMessageDto>,
 }
 
 /// Reports for all requested files, in request order.
@@ -379,5 +406,5 @@ pub struct ConvertGeoTextResponseDto {
     /// File extension of the format, without a dot.
     pub extension: String,
     /// What the target format cannot represent.
-    pub notes: Vec<String>,
+    pub notes: Vec<GeoMessageDto>,
 }

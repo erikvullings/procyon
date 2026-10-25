@@ -4,7 +4,7 @@
 //! so the caller can show the list and let the user continue or cancel before anything is written.
 //! The notes are plain English sentences with counts; they are deduplicated and bounded.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::io::{Cursor, Write};
 
@@ -12,6 +12,7 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 use zip::write::SimpleFileOptions;
 
+use crate::message::{GeoMessage, codes};
 use crate::model::GeoDocument;
 use crate::time::parse_timestamp;
 
@@ -63,21 +64,34 @@ impl Target {
     }
 }
 
+impl ConvertError {
+    /// The localisable description of the failure.
+    #[must_use]
+    pub fn message(&self) -> GeoMessage {
+        match self {
+            Self::NothingToWrite(message) => message.clone(),
+            Self::Output(detail) => {
+                GeoMessage::new(codes::WRITE_FAILED, self.to_string()).with("detail", detail)
+            }
+        }
+    }
+}
+
 /// A converted file and what was lost on the way.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Converted {
     /// The file content.
     pub bytes: Vec<u8>,
     /// What the target format could not represent.
-    pub notes: Vec<String>,
+    pub notes: Vec<GeoMessage>,
 }
 
 /// Why a document could not be written.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ConvertError {
     /// Nothing in the document fits the target format.
-    #[error("{0}")]
-    NothingToWrite(String),
+    #[error("{}", .0.text)]
+    NothingToWrite(GeoMessage),
     /// Building the output failed.
     #[error("writing the output failed: {0}")]
     Output(String),
@@ -100,18 +114,18 @@ const MAX_NOTES: usize = 20;
 
 #[derive(Default)]
 struct Notes {
-    items: BTreeSet<String>,
+    items: BTreeMap<String, GeoMessage>,
 }
 
 impl Notes {
-    fn add(&mut self, note: impl Into<String>) {
+    fn add(&mut self, note: GeoMessage) {
         if self.items.len() < MAX_NOTES {
-            self.items.insert(note.into());
+            self.items.insert(note.text.clone(), note);
         }
     }
 
-    fn finish(self) -> Vec<String> {
-        self.items.into_iter().collect()
+    fn finish(self) -> Vec<GeoMessage> {
+        self.items.into_values().collect()
     }
 }
 
@@ -182,22 +196,40 @@ fn has_style(properties: &Map<String, Value>) -> bool {
 pub fn convert(document: &GeoDocument, target: Target) -> Result<Converted, ConvertError> {
     let mut notes = Notes::default();
     if !document.resources.is_empty() {
-        notes.add(format!(
-            "{} embedded image(s) of the KMZ are not carried over",
-            document.resources.len()
-        ));
+        notes.add(
+            GeoMessage::new(
+                codes::KMZ_IMAGES_DROPPED,
+                format!(
+                    "{} embedded image(s) of the KMZ are not carried over",
+                    document.resources.len()
+                ),
+            )
+            .with("count", document.resources.len()),
+        );
     }
     if !document.overlays.is_empty() {
-        notes.add(format!(
-            "{} ground overlay(s) are not carried over",
-            document.overlays.len()
-        ));
+        notes.add(
+            GeoMessage::new(
+                codes::OVERLAYS_DROPPED,
+                format!(
+                    "{} ground overlay(s) are not carried over",
+                    document.overlays.len()
+                ),
+            )
+            .with("count", document.overlays.len()),
+        );
     }
     if !document.skipped.is_empty() {
-        notes.add(format!(
-            "{} element(s) of the source were never read (network links, 3D models, tours)",
-            document.skipped.len()
-        ));
+        notes.add(
+            GeoMessage::new(
+                codes::ELEMENTS_NEVER_READ,
+                format!(
+                    "{} element(s) of the source were never read (network links, 3D models, tours)",
+                    document.skipped.len()
+                ),
+            )
+            .with("count", document.skipped.len()),
+        );
     }
     let bytes = match target {
         Target::GeoJson { pretty } => write_geojson(document, pretty, &mut notes),
@@ -235,7 +267,10 @@ fn write_geojson(document: &GeoDocument, pretty: bool, notes: &mut Notes) -> Vec
         .iter()
         .any(|f| properties_of(f).contains_key("icon-href"))
     {
-        notes.add("icon URLs are kept only as the icon-href property");
+        notes.add(GeoMessage::new(
+            codes::ICON_URLS_KEPT,
+            "icon URLs are kept only as the icon-href property",
+        ));
     }
     let collection = serde_json::json!({ "type": "FeatureCollection", "features": features });
     let text = if pretty {
@@ -426,7 +461,10 @@ fn gpx_geometry(
                 gpx_geometry(member, properties, out, notes);
             }
         }
-        _ => notes.add("polygons cannot be stored in GPX (it has no areas) and were left out"),
+        _ => notes.add(GeoMessage::new(
+            codes::POLYGONS_NOT_IN_GPX,
+            "polygons cannot be stored in GPX (it has no areas) and were left out",
+        )),
     }
 }
 
@@ -474,29 +512,46 @@ fn write_gpx(document: &GeoDocument, notes: &mut Notes) -> Result<Vec<u8>, Conve
         gpx_geometry(geometry, &properties, &mut out, notes);
     }
     if styled > 0 {
-        notes.add(format!(
-            "colours, line widths and icons of {styled} feature(s) are not stored in GPX"
-        ));
+        notes.add(
+            GeoMessage::new(
+                codes::STYLES_NOT_IN_GPX,
+                format!(
+                    "colours, line widths and icons of {styled} feature(s) are not stored in GPX"
+                ),
+            )
+            .with("count", styled),
+        );
     }
     if dropped_properties > 0 {
-        notes.add(format!(
-            "{dropped_properties} custom property value(s) are not stored in GPX (only name, description, type, symbol, link, elevation and time are)"
-        ));
+        notes.add(
+            GeoMessage::new(
+                codes::PROPERTIES_NOT_IN_GPX,
+                format!("{dropped_properties} custom property value(s) are not stored in GPX (only name, description, type, symbol, link, elevation and time are)"),
+            )
+            .with("count", dropped_properties),
+        );
     }
     if descriptions_with_markup {
-        notes.add("HTML descriptions are written as text with their markup");
+        notes.add(GeoMessage::new(
+            codes::HTML_AS_TEXT,
+            "HTML descriptions are written as text with their markup",
+        ));
     }
     if document
         .features
         .iter()
         .any(|f| properties_of(f).contains_key("folder"))
     {
-        notes.add("folder structure is not stored in GPX");
+        notes.add(GeoMessage::new(
+            codes::FOLDERS_NOT_IN_GPX,
+            "folder structure is not stored in GPX",
+        ));
     }
     if out.written == 0 {
-        return Err(ConvertError::NothingToWrite(
-            "GPX can only hold points and lines, and this document has none".into(),
-        ));
+        return Err(ConvertError::NothingToWrite(GeoMessage::new(
+            codes::GPX_NOTHING_TO_WRITE,
+            "GPX can only hold points and lines, and this document has none",
+        )));
     }
     let mut gpx = String::from(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gpx version=\"1.1\" creator=\"Procyon\" xmlns=\"http://www.topografix.com/GPX/1/1\" xmlns:gpxtpx=\"http://www.garmin.com/xmlschemas/TrackPointExtension/v1\">\n",
@@ -791,7 +846,10 @@ fn write_kml(document: &GeoDocument, notes: &mut Notes) -> String {
                     escape_xml(&text)
                 );
             } else if !value.is_null() {
-                notes.add("structured property values (objects, lists) are not stored in KML");
+                notes.add(GeoMessage::new(
+                    codes::STRUCTURED_NOT_IN_KML,
+                    "structured property values (objects, lists) are not stored in KML",
+                ));
             }
         }
         if !extended.is_empty() {
@@ -814,14 +872,22 @@ fn write_kml(document: &GeoDocument, notes: &mut Notes) -> String {
         root.descend(&path).items.push(Item::Placemark(placemark));
     }
     if timed_tracks > 0 {
-        notes.add(format!(
-            "per-point timestamps and heart rates of {timed_tracks} track(s) are not stored in plain KML"
-        ));
+        notes.add(
+            GeoMessage::new(
+                codes::TIMESTAMPS_NOT_IN_KML,
+                format!("per-point timestamps and heart rates of {timed_tracks} track(s) are not stored in plain KML"),
+            )
+            .with("count", timed_tracks),
+        );
     }
     if skipped_polygon_free > 0 {
-        notes.add(format!(
-            "{skipped_polygon_free} feature(s) without geometry were left out"
-        ));
+        notes.add(
+            GeoMessage::new(
+                codes::FEATURES_WITHOUT_GEOMETRY,
+                format!("{skipped_polygon_free} feature(s) without geometry were left out"),
+            )
+            .with("count", skipped_polygon_free),
+        );
     }
     let mut kml = String::from(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<kml xmlns=\"http://www.opengis.net/kml/2.2\"><Document>",
@@ -1044,30 +1110,44 @@ fn write_csv(
         }
     }
     if non_points > 0 {
-        notes.add(format!(
-            "{non_points} line or area feature(s) were left out: CSV rows hold points (choose the WKT option to keep every geometry)"
-        ));
+        notes.add(
+            GeoMessage::new(
+                codes::NON_POINTS_LEFT_OUT,
+                format!("{non_points} line or area feature(s) were left out: CSV rows hold points (choose the WKT option to keep every geometry)"),
+            )
+            .with("count", non_points),
+        );
     }
     if structured > 0 {
-        notes.add("structured property values (objects, lists) are not stored in CSV");
+        notes.add(GeoMessage::new(
+            codes::STRUCTURED_NOT_IN_CSV,
+            "structured property values (objects, lists) are not stored in CSV",
+        ));
     }
     if formulas > 0 {
-        notes.add(format!(
-            "{formulas} text cell(s) starting with = + - or @ were prefixed with an apostrophe so spreadsheets do not run them as formulas"
-        ));
+        notes.add(
+            GeoMessage::new(
+                codes::FORMULA_CELLS_PREFIXED,
+                format!("{formulas} text cell(s) starting with = + - or @ were prefixed with an apostrophe so spreadsheets do not run them as formulas"),
+            )
+            .with("count", formulas),
+        );
     }
     if document
         .features
         .iter()
         .any(|f| properties_of(f).contains_key("coordinateProperties"))
     {
-        notes.add("per-point timestamps and heart rates are not stored in CSV");
+        notes.add(GeoMessage::new(
+            codes::TIMESTAMPS_NOT_IN_CSV,
+            "per-point timestamps and heart rates are not stored in CSV",
+        ));
     }
     if rows == 0 {
-        return Err(ConvertError::NothingToWrite(
-            "this document has no points to write; choose the WKT option to keep lines and areas"
-                .into(),
-        ));
+        return Err(ConvertError::NothingToWrite(GeoMessage::new(
+            codes::CSV_NOTHING_TO_WRITE,
+            "this document has no points to write; choose the WKT option to keep lines and areas",
+        )));
     }
     Ok(csv.into_bytes())
 }
@@ -1241,7 +1321,12 @@ mod tests {
         let text = String::from_utf8(converted.bytes).expect("utf-8");
         let parsed = parse_gpx(text.as_bytes(), conversion_limits()).expect("parses");
         assert_eq!(parsed.features.len(), 2, "the polygon is not written");
-        let notes = converted.notes.join(" | ");
+        let notes = converted
+            .notes
+            .iter()
+            .map(|note| note.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" | ");
         assert!(
             notes.contains("polygons cannot be stored in GPX"),
             "{notes}"

@@ -50,6 +50,7 @@ mod graph;
 mod test_support;
 mod token;
 
+use crate::rejection::{Rejection, reason};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -430,9 +431,10 @@ where
         let connection_id: ConnectionId = connection_id.into();
         let profile = self.shared.connections.get(connection_id).await?;
         if !matches!(profile.configuration, ConnectionConfiguration::OneDrive(_)) {
-            return Err(ApplicationError::InvalidRequest(
-                "connection is not a OneDrive connection".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::NOT_ONEDRIVE_CONNECTION,
+                "connection is not a OneDrive connection",
+            )));
         }
 
         {
@@ -443,10 +445,10 @@ where
                 .unwrap_or_else(|error| error.into_inner());
             sweep(&mut registry);
             if !registry.active_connections.insert(connection_id) {
-                return Err(ApplicationError::InvalidRequest(
-                    "an authorization attempt is already in progress for this connection"
-                        .to_owned(),
-                ));
+                return Err(ApplicationError::from(Rejection::new(
+                    reason::AUTHORIZATION_IN_PROGRESS,
+                    "an authorization attempt is already in progress for this connection",
+                )));
             }
         }
 
@@ -467,9 +469,12 @@ where
         connection_id: ConnectionId,
     ) -> Result<BeginOneDriveAuthorizationResponseDto, ApplicationError> {
         let listener = CallbackListener::bind().await.map_err(|error| {
-            ApplicationError::PlatformOperationFailed(format!(
-                "failed to start the sign-in listener: {error}"
-            ))
+            Rejection::new(
+                reason::SIGN_IN_LISTENER_FAILED,
+                format!("failed to start the sign-in listener: {error}"),
+            )
+            .with("detail", &error)
+            .into_platform()
         })?;
         let redirect_uri = listener.redirect_uri().clone();
         let pkce = generate_pkce_pair();
@@ -1602,7 +1607,7 @@ mod tests {
 
         let second = harness.service.begin_authorization(connection_id).await;
 
-        assert!(matches!(second, Err(ApplicationError::InvalidRequest(_))));
+        assert!(matches!(second, Err(ApplicationError::Rejected(_))));
     }
 
     #[tokio::test]
@@ -1652,7 +1657,7 @@ mod tests {
             .unwrap_err();
 
         assert!(
-            matches!(error, ApplicationError::InvalidRequest(message) if message.contains("not a OneDrive connection"))
+            matches!(error, ApplicationError::Rejected(ref rejection) if rejection.reason == reason::NOT_ONEDRIVE_CONNECTION)
         );
     }
 

@@ -61,6 +61,33 @@ pub(crate) fn platform_action_kind(id: &ActionId) -> Option<PlatformActionKind> 
     }
 }
 
+/// Maps a platform adapter failure to a coded, localisable application error. The adapter's
+/// sanitized text is kept as the English fallback and, for generic failures, as `detail`.
+pub(crate) fn platform_failure(error: fm_platform::PlatformError) -> ApplicationError {
+    use crate::rejection::{Rejection, reason};
+    let message = error.to_string();
+    match error {
+        fm_platform::PlatformError::Unsupported { .. } => {
+            Rejection::new(reason::PLATFORM_UNSUPPORTED, message).into_platform()
+        }
+        fm_platform::PlatformError::NotFound { path } => {
+            Rejection::new(reason::PATH_NOT_FOUND, message)
+                .with("path", path)
+                .into_platform()
+        }
+        fm_platform::PlatformError::AlreadyExists { path } => {
+            Rejection::new(reason::PATH_ALREADY_EXISTS, message)
+                .with("path", path)
+                .into_platform()
+        }
+        fm_platform::PlatformError::Io { message: detail } => {
+            Rejection::new(reason::PLATFORM_FAILED, message)
+                .with("detail", detail)
+                .into_platform()
+        }
+    }
+}
+
 /// Maps a platform adapter failure to a user-readable application error
 /// (task 0061). An adapter reporting [`fm_platform::PlatformError::Unsupported`]
 /// despite the registry's capability check (e.g. a race between capability
@@ -75,7 +102,7 @@ pub(crate) fn map_platform_error(
         fm_platform::PlatformError::Unsupported { .. } => {
             ApplicationError::ActionUnavailable(action_id.clone())
         }
-        other => ApplicationError::PlatformOperationFailed(other.to_string()),
+        other => platform_failure(other),
     }
 }
 
@@ -84,7 +111,7 @@ pub(crate) fn map_platform_error(
 pub(crate) fn map_file_icon_error(error: fm_platform::PlatformError) -> ApplicationError {
     match error {
         fm_platform::PlatformError::Unsupported { .. } => ApplicationError::NotFound,
-        other => ApplicationError::PlatformOperationFailed(other.to_string()),
+        other => platform_failure(other),
     }
 }
 
@@ -100,7 +127,7 @@ pub(crate) fn map_extended_attribute_read_error(
     match error {
         fm_platform::PlatformError::Unsupported { .. }
         | fm_platform::PlatformError::NotFound { .. } => ApplicationError::NotFound,
-        other => ApplicationError::PlatformOperationFailed(other.to_string()),
+        other => platform_failure(other),
     }
 }
 
@@ -114,7 +141,7 @@ pub(crate) fn map_extended_attribute_write_error(
 ) -> ApplicationError {
     match error {
         fm_platform::PlatformError::NotFound { .. } => ApplicationError::NotFound,
-        other => ApplicationError::PlatformOperationFailed(other.to_string()),
+        other => platform_failure(other),
     }
 }
 
@@ -166,7 +193,7 @@ fn finder_tag_color_from_dto(color: FinderTagColorDto) -> FinderTagColor {
 /// after checking `runtimeCapabilities().nativeMenus`, so seeing it anyway
 /// is a genuine, surfaceable failure rather than an expected gap.
 pub(crate) fn map_native_menu_error(error: fm_platform::PlatformError) -> ApplicationError {
-    ApplicationError::PlatformOperationFailed(error.to_string())
+    platform_failure(error)
 }
 
 /// Detects the host operating system from the compiled target (spec §21).
@@ -186,7 +213,7 @@ pub(crate) async fn discover_system_locations(
     let discovered = tokio::task::spawn_blocking(move || platform.system_locations())
         .await
         .map_err(|_| ApplicationError::Internal)?
-        .map_err(|error| ApplicationError::PlatformOperationFailed(error.to_string()))?;
+        .map_err(platform_failure)?;
     discovered
         .into_iter()
         .map(|location| {
@@ -229,7 +256,7 @@ pub(crate) async fn discover_volumes(
     let discovered = tokio::task::spawn_blocking(move || platform.mounted_volumes())
         .await
         .map_err(|_| ApplicationError::Internal)?
-        .map_err(|error| ApplicationError::PlatformOperationFailed(error.to_string()))?;
+        .map_err(platform_failure)?;
     discovered
         .into_iter()
         .map(|volume| {
@@ -476,7 +503,13 @@ mod tests {
             map_extended_attribute_read_error(fm_platform::PlatformError::Io {
                 message: "boom".to_owned(),
             }),
-            ApplicationError::PlatformOperationFailed("platform operation failed: boom".to_owned())
+            ApplicationError::PlatformFailed(
+                crate::rejection::Rejection::new(
+                    crate::rejection::reason::PLATFORM_FAILED,
+                    "platform operation failed: boom"
+                )
+                .with("detail", "boom")
+            )
         );
     }
 
@@ -486,7 +519,7 @@ mod tests {
             map_extended_attribute_write_error(fm_platform::PlatformError::Unsupported {
                 capability: PlatformCapabilities::FINDER_TAGS,
             }),
-            ApplicationError::PlatformOperationFailed(_)
+            ApplicationError::PlatformOperationFailed(_) | ApplicationError::PlatformFailed(_)
         ));
         assert_eq!(
             map_extended_attribute_write_error(fm_platform::PlatformError::NotFound {
@@ -562,7 +595,7 @@ mod tests {
     fn native_path_for_rejects_an_unparsable_uri() {
         assert!(matches!(
             native_path_for("not a valid uri"),
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
     }
 
@@ -588,7 +621,7 @@ mod tests {
                 "file:///tmp/example.txt",
                 FinderTagsDto { tags: Vec::new() },
             ),
-            Err(ApplicationError::PlatformOperationFailed(_))
+            Err(ApplicationError::PlatformOperationFailed(_) | ApplicationError::PlatformFailed(_))
         ));
     }
 
@@ -605,7 +638,7 @@ mod tests {
                 "file:///tmp/example.txt",
                 SpotlightCommentDto { comment: None },
             ),
-            Err(ApplicationError::PlatformOperationFailed(_))
+            Err(ApplicationError::PlatformOperationFailed(_) | ApplicationError::PlatformFailed(_))
         ));
     }
 
@@ -614,11 +647,11 @@ mod tests {
         let platform = fallback_platform();
         assert!(matches!(
             read_finder_tags(&platform, "not a valid uri"),
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
         assert!(matches!(
             read_spotlight_comment(&platform, "not a valid uri"),
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
     }
 
@@ -628,7 +661,7 @@ mod tests {
         let spec = fm_domain::NativeMenuSpec { menus: Vec::new() };
         assert!(matches!(
             install_native_menu(&platform, &spec, Arc::new(|_| {})),
-            Err(ApplicationError::PlatformOperationFailed(_))
+            Err(ApplicationError::PlatformOperationFailed(_) | ApplicationError::PlatformFailed(_))
         ));
     }
 }

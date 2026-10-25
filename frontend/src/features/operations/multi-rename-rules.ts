@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import type { MultiRenameCaseTransform, MultiRenameRules, MultiRenameSequence } from '../../models';
 import { validateEntryName } from './create-directory-dialog';
 
@@ -55,7 +56,7 @@ export function validateSearchPattern(pattern: string, useRegex: boolean): strin
     new RegExp(pattern);
     return undefined;
   } catch {
-    return 'That search pattern is not a valid regular expression.';
+    return t('multiRename', 'invalidPattern');
   }
 }
 

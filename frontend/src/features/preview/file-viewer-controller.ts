@@ -1,5 +1,6 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { errorText, t } from '../../i18n';
+import { ApiError } from '../../api/fetch-mutator';
+import { errorText, t, viewerWarningText } from '../../i18n';
 import type {
   CsvGeoOptions,
   EntrySummary,
@@ -798,7 +799,9 @@ export function createFileViewerController(
               sourceIndexedRows: status.indexedRows,
               sourceTotalRows: status.totalRows ?? undefined,
               indexingComplete: status.indexingComplete,
-              warning: status.warning ?? current.content.warning,
+              warning:
+                viewerWarningText(status.warning, status.warningCode, status.warningDetail) ??
+                current.content.warning,
             },
           });
           if (!status.indexingComplete) scheduleStructuredStatusPoll();
@@ -825,7 +828,9 @@ export function createFileViewerController(
         entry,
         content: {
           kind: 'structuredFallback',
-          message: opened.warning ?? 'Open this file in an external spreadsheet application.',
+          message:
+            viewerWarningText(opened.warning, opened.warningCode, opened.warningDetail) ??
+            t('viewer', 'openExternalSpreadsheet'),
         },
       });
       return;
@@ -849,7 +854,7 @@ export function createFileViewerController(
           atStart: true,
           atEnd: window.eof,
           loadingWindow: false,
-          warning: opened.warning ?? undefined,
+          warning: viewerWarningText(opened.warning, opened.warningCode, opened.warningDetail),
         },
       });
       return;
@@ -872,7 +877,7 @@ export function createFileViewerController(
         sourceTotalRows: opened.totalRows ?? undefined,
         indexingComplete: opened.indexingComplete,
         loadingRows: false,
-        warning: opened.warning ?? undefined,
+        warning: viewerWarningText(opened.warning, opened.warningCode, opened.warningDetail),
         sheets: opened.sheets ?? [],
         ...(opened.selectedSheet == null ? {} : { selectedSheet: opened.selectedSheet }),
         searchQuery: '',
@@ -1359,7 +1364,10 @@ export function createFileViewerController(
         );
         if (!isCurrent(controller)) return;
         if (chunk.offset !== offset || chunk.length !== chunk.data.length || chunk.length === 0) {
-          throw new Error(`Invalid PowerPoint PDF range response at byte ${offset}`);
+          throw new ApiError(0, {
+            code: 'unexpectedResponse',
+            message: `Invalid PowerPoint PDF range response at byte ${offset}`,
+          });
         }
         chunks.push(chunk.data);
         offset += chunk.length;
@@ -1901,7 +1909,7 @@ export function createFileViewerController(
           sourceTotalRows: updated.totalRows ?? undefined,
           indexingComplete: updated.indexingComplete,
           loadingRows: false,
-          warning: updated.warning ?? undefined,
+          warning: viewerWarningText(updated.warning, updated.warningCode, updated.warningDetail),
           sheets: updated.sheets ?? current.content.sheets ?? [],
           selectedSheet: updated.selectedSheet ?? sheetName,
           searchQuery: '',

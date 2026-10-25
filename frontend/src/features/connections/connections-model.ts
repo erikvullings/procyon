@@ -1,4 +1,5 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
+import { ApiError } from '../../api/fetch-mutator';
 import { t } from '../../i18n';
 import type {
   BeginOneDriveAuthorizationResponse,
@@ -86,7 +87,10 @@ export function remoteRootLocation(connection: Connection): Location {
   ) {
     return { providerId: 'onedrive', uri: connection.rootLocation };
   }
-  throw new Error('connection is not browsable');
+  throw new ApiError(0, {
+    code: 'connectionNotBrowsable',
+    message: 'connection is not browsable',
+  });
 }
 
 /** Finds the saved profile whose opaque id is the authority of a remote VFS location. */
@@ -280,7 +284,11 @@ export async function saveConnection(
 ): Promise<ConnectionSaveResult> {
   const errors = validateConnectionDraft(draft);
   if (errors.length > 0) {
-    return { ok: false, errors, message: errors[0]?.message ?? 'Validation failed.' };
+    return {
+      ok: false,
+      errors,
+      message: errors[0]?.message ?? t('apiError', 'connectionValidationFailed'),
+    };
   }
   const request: CreateConnectionRequest = {
     name: draft.name,

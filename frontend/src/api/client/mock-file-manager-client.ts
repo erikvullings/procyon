@@ -2,6 +2,7 @@ import actionFixtures from '../../../../fixtures/mock-responses/actions.json';
 import directoryFixtures from '../../../../fixtures/mock-responses/directories.json';
 import pluginFixtures from '../../../../fixtures/mock-responses/plugins.json';
 import { DEFAULT_MAP_SETTINGS } from '../../features/map/map-settings';
+import { apiErrorMessage, errorText } from '../../i18n';
 import type {
   AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
@@ -75,6 +76,7 @@ import type {
   GenerateSyncPlanRequest,
   GeoConversionReport,
   GeoDocument,
+  GeoMessage,
   GeoMinify,
   GeoMinifyPreview,
   GeoTargetFormat,
@@ -246,7 +248,9 @@ import {
   encodeDiskUsageTree,
   sanitizeFrontendDiagnostic,
 } from '../../models';
+import { bindLocalisedMessage } from '../error-localiser';
 import { EventStreamSignalRegistry, MutableEventStreamStatus } from '../events/event-stream';
+import { ApiError, desktopHostRequiredError } from '../fetch-mutator';
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
 import {
   createGeneratedDirectory,
@@ -1360,7 +1364,12 @@ export class MockFileManagerClient implements FileManagerClient {
 
   async openExternalUrl(url: string): Promise<void> {
     const opened = globalThis.open(url, '_blank', 'noopener,noreferrer');
-    if (opened === null) throw new Error('The browser blocked the external link.');
+    if (opened === null) {
+      throw new ApiError(0, {
+        code: 'externalLinkBlocked',
+        message: 'The browser blocked the external link.',
+      });
+    }
     opened.opener = null;
   }
 
@@ -2076,14 +2085,14 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('updateGemmaMedia', signal, () => {
       this.requireSemanticLibraryRevision(request.policyRevision);
       const previous = this.semanticLibrary.gemmaMedia;
-      if (!previous) throw new MockClientError('invalidRequest', 'A Gemma library is required');
+      if (!previous) throw new MockClientError('unavailable', 'A Gemma library is required');
       if (
         !request.confirmRemoval &&
         ((previous.images && !request.images) ||
           (previous.audio && !request.audio) ||
           (previous.video && !request.video))
       ) {
-        throw new MockClientError('invalidRequest', 'Removing media requires confirmation');
+        throw new MockClientError('staleConfirmation', 'Removing media requires confirmation');
       }
       this.semanticLibrary.gemmaMedia = {
         images: request.images,
@@ -2125,7 +2134,7 @@ export class MockFileManagerClient implements FileManagerClient {
   exportSemanticVocabulary(vocabularyId: string, signal?: AbortSignal): Promise<string> {
     return this.perform('exportSemanticVocabulary', signal, () => {
       const vocabulary = this.semanticVocabularies.find(({ id }) => id === vocabularyId);
-      if (!vocabulary) throw new Error('Vocabulary not found');
+      if (!vocabulary) throw new MockClientError('notFound', 'Vocabulary not found');
       return JSON.stringify({ format: 'procyon-skos-1', ...vocabulary });
     });
   }
@@ -2137,7 +2146,7 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('attachSemanticVocabulary', signal, () => {
       const index = this.semanticVocabularies.findIndex(({ id }) => id === request.vocabularyId);
       const current = this.semanticVocabularies[index];
-      if (!current) throw new Error('Vocabulary not found');
+      if (!current) throw new MockClientError('notFound', 'Vocabulary not found');
       const updated: SemanticVocabulary = {
         ...current,
         workspaceIds: request.workspaceId
@@ -2160,7 +2169,7 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('reviewSemanticConceptCandidate', signal, () => {
       const index = this.semanticVocabularies.findIndex(({ id }) => id === request.vocabularyId);
       const current = this.semanticVocabularies[index];
-      if (!current) throw new Error('Vocabulary not found');
+      if (!current) throw new MockClientError('notFound', 'Vocabulary not found');
       const updated: SemanticVocabulary = {
         ...current,
         reviewQueue: current.reviewQueue.map((candidate) =>
@@ -2182,7 +2191,7 @@ export class MockFileManagerClient implements FileManagerClient {
   ): Promise<DeleteSemanticVocabularyImpact> {
     return this.perform('deleteSemanticVocabulary', signal, () => {
       const vocabulary = this.semanticVocabularies.find(({ id }) => id === vocabularyId);
-      if (!vocabulary) throw new Error('Vocabulary not found');
+      if (!vocabulary) throw new MockClientError('notFound', 'Vocabulary not found');
       const requiresConfirmation =
         vocabulary.workspaceIds.length > 0 || vocabulary.rootIds.length > 0;
       const deleted = confirmAffected || !requiresConfirmation;
@@ -2598,15 +2607,15 @@ export class MockFileManagerClient implements FileManagerClient {
   listOpenWithApplications(
     _location: Location,
   ): Promise<import('./file-manager-client').OpenWithApplication[]> {
-    return Promise.reject(new Error('Open With applications are available only on macOS desktop'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   openWithApplication(_location: Location, _applicationPath: string): Promise<void> {
-    return Promise.reject(new Error('Open With applications are available only on macOS desktop'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   openWithAnyApplication(_location: Location): Promise<void> {
-    return Promise.reject(new Error('Open With applications are available only on macOS desktop'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   subscribeNativeFileDrops(_listener: (drop: NativeFileDrop) => void): Promise<Unsubscribe> {
@@ -2697,15 +2706,15 @@ export class MockFileManagerClient implements FileManagerClient {
   }
 
   checkForAppUpdate(_signal?: AbortSignal): Promise<never> {
-    return Promise.reject(new Error('Application updates are unavailable in the mock host.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   removeApplicationData(): Promise<void> {
-    return Promise.reject(new Error('Removing application data is unavailable in the mock host.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   installAppUpdate(): Promise<void> {
-    return Promise.reject(new Error('Application updates are unavailable in the mock host.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   listWorkspaces(signal?: AbortSignal): Promise<WorkspaceSummary[]> {
@@ -3079,14 +3088,18 @@ export class MockFileManagerClient implements FileManagerClient {
           .find((entry) => entry.location.uri === request.location.uri);
         if (actual === undefined) throw new MockClientError('notFound', 'Entry no longer exists.');
         if (actual.id !== request.entryId) {
-          throw new MockClientError('invalidRequest', 'Entry identity changed.');
+          throw new MockClientError('invalidRequest', 'Entry identity changed.', {
+            reason: 'entryIdentityChanged',
+          });
         }
         if (
           (request.expectedSize !== undefined && actual.size !== request.expectedSize) ||
           (request.expectedModifiedAt !== undefined &&
             actual.modifiedAt !== request.expectedModifiedAt)
         ) {
-          throw new MockClientError('invalidRequest', 'Entry metadata changed.');
+          throw new MockClientError('invalidRequest', 'Entry metadata changed.', {
+            reason: 'entryMetadataChanged',
+          });
         }
       }
       return {
@@ -3114,7 +3127,10 @@ export class MockFileManagerClient implements FileManagerClient {
       locations.map((location) => ({
         location,
         outputName: `converted.${format}`,
-        notes: format === 'gpx' ? ['polygons cannot be stored in GPX'] : [],
+        notes:
+          format === 'gpx'
+            ? [{ code: 'polygonsNotInGpx', message: 'Polygons cannot be stored in GPX.' }]
+            : [],
       })),
     );
   }
@@ -3142,7 +3158,7 @@ export class MockFileManagerClient implements FileManagerClient {
     format: GeoTargetFormat,
     _csvWkt: boolean,
     signal?: AbortSignal,
-  ): Promise<{ content: string; extension: string; notes: string[] }> {
+  ): Promise<{ content: string; extension: string; notes: GeoMessage[] }> {
     return this.perform('convertGeoText', signal, () => ({
       content: text,
       extension: format,
@@ -3176,7 +3192,11 @@ export class MockFileManagerClient implements FileManagerClient {
           truncated: false,
           warnings: [],
           skipped: [],
-          error: { message: error instanceof Error ? error.message : String(error) },
+          error: {
+            code: 'jsonSyntax',
+            message: errorText(error),
+            params: { line: '1', column: '1', detail: errorText(error) },
+          },
         };
       }
     });
@@ -3255,7 +3275,9 @@ export class MockFileManagerClient implements FileManagerClient {
           parts: [],
           totalSize: 0,
           hasManifest: false,
-          error: 'Not a numbered part (.001, .002, ...)',
+          error: `${names[0] ?? ''} is not a numbered part (.001, .002, ...)`,
+          errorCode: 'splitNotAPart',
+          errorParams: { name: names[0] ?? '' },
         };
       }
       const parts = [1, 2, 3].map((index) => ({
@@ -3354,7 +3376,10 @@ export class MockFileManagerClient implements FileManagerClient {
   readFileRange(request: ReadFileRangeRequest, signal?: AbortSignal): Promise<FileRangeChunk> {
     return this.perform('readFileRange', signal, () => {
       if (request.length <= 0) {
-        throw new MockClientError('invalidRequest', 'length must be a positive number of bytes');
+        throw new MockClientError('invalidRequest', 'length must be a positive number of bytes', {
+          reason: 'invalidRangeLength',
+          maxBytes: 1_048_576,
+        });
       }
       const bytes = this.fileContentFor(request.location.uri);
       const end = Math.min(bytes.length, request.offset + request.length);
@@ -3449,7 +3474,10 @@ export class MockFileManagerClient implements FileManagerClient {
   ): Promise<FileRangeChunk> {
     return this.perform('readPptxPreviewPdf', signal, () => {
       if (request.length <= 0) {
-        throw new MockClientError('invalidRequest', 'length must be a positive number of bytes');
+        throw new MockClientError('invalidRequest', 'length must be a positive number of bytes', {
+          reason: 'invalidRangeLength',
+          maxBytes: 1_048_576,
+        });
       }
       const pdf = this.pptxSessions.get(request.sessionId);
       if (pdf === undefined) {
@@ -3657,7 +3685,9 @@ export class MockFileManagerClient implements FileManagerClient {
   searchInFile(request: SearchInFileRequest, signal?: AbortSignal): Promise<SearchInFileResult> {
     return this.perform('searchInFile', signal, () => {
       if (request.query.length === 0) {
-        throw new MockClientError('invalidRequest', 'search query must not be empty');
+        throw new MockClientError('invalidRequest', 'search query must not be empty', {
+          reason: 'searchQueryInvalid',
+        });
       }
       const matchesOnLine = this.buildLineMatcher(request);
       const text = new TextDecoder().decode(this.fileContentFor(request.location.uri));
@@ -3690,10 +3720,7 @@ export class MockFileManagerClient implements FileManagerClient {
   ): Promise<CalculateFolderSizeResult> {
     return this.perform('calculateFolderSize', signal, () => {
       if (directories[request.location.uri] === undefined) {
-        throw new MockClientError(
-          'directoryNotFound',
-          `No mock directory at ${request.location.uri}`,
-        );
+        throw new MockClientError('notFound', `No mock directory at ${request.location.uri}`);
       }
 
       let totalBytes = 0;
@@ -3725,10 +3752,7 @@ export class MockFileManagerClient implements FileManagerClient {
         : request.location.uri;
       const rootEntries = directories[archiveRootUri];
       if (rootEntries === undefined) {
-        throw new MockClientError(
-          'directoryNotFound',
-          `No mock archive at ${request.location.uri}`,
-        );
+        throw new MockClientError('notFound', `No mock archive at ${request.location.uri}`);
       }
       let uncompressedSize = 0;
       let fileCount = 0;
@@ -3779,10 +3803,7 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('scanDiskUsage', signal, () => {
       const fixtures = directories[request.location.uri];
       if (fixtures === undefined) {
-        throw new MockClientError(
-          'directoryNotFound',
-          `No mock directory at ${request.location.uri}`,
-        );
+        throw new MockClientError('notFound', `No mock directory at ${request.location.uri}`);
       }
       const collapsedNames = new Set(['.git', '.hg', '.svn', 'node_modules']);
       const build = (uri: string, name: string, isRoot = false): ScanDiskUsageResult['root'] => {
@@ -4004,7 +4025,11 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('undoOperation', signal, () => {
       const original = this.requireOperation(operationId);
       if (original.undo?.available !== true) {
-        throw new Error(original.undo?.reason ?? 'This operation cannot be undone.');
+        throw new MockClientError(
+          original.undo?.reasonCode ?? 'undoUnsafe',
+          original.undo?.reason ?? 'This operation cannot be undone.',
+          { reason: original.undo?.reasonCode ?? 'undoUnsafe' },
+        );
       }
       this.operationSequence += 1;
       const undo: Operation = {
@@ -4019,7 +4044,7 @@ export class MockFileManagerClient implements FileManagerClient {
         undo: {
           available: false,
           reason: 'Undo operations cannot themselves be undone.',
-          reasonCode: 'undoUnsafe',
+          reasonCode: 'undoOfUndo',
         },
         undoOf: operationId,
       };
@@ -4076,23 +4101,23 @@ export class MockFileManagerClient implements FileManagerClient {
     _bounds: import('./file-manager-client').PluginPanelBounds,
     _theme: 'light' | 'dark',
   ): Promise<string> {
-    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   updatePluginPanelBounds(): Promise<void> {
-    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   setPluginPanelVisible(): Promise<void> {
-    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   setPluginPanelTheme(): Promise<void> {
-    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   closePluginPanel(): Promise<void> {
-    return Promise.reject(new Error('Plugin panels are available only in the desktop app.'));
+    return Promise.reject(desktopHostRequiredError());
   }
 
   invokeAction(request: InvokeActionRequest, signal?: AbortSignal): Promise<ActionResult> {
@@ -4111,7 +4136,7 @@ export class MockFileManagerClient implements FileManagerClient {
   setPluginEnabled(pluginId: PluginId, enabled: boolean, signal?: AbortSignal): Promise<void> {
     return this.perform('setPluginEnabled', signal, () => {
       if (!this.pluginState.some((plugin) => plugin.id === pluginId)) {
-        throw new MockClientError('pluginNotFound', `No mock plugin with id ${pluginId}`);
+        throw new MockClientError('notFound', `No mock plugin with id ${pluginId}`);
       }
       this.pluginState = this.pluginState.map((plugin) =>
         plugin.id === pluginId ? { ...plugin, enabled } : plugin,
@@ -4127,7 +4152,7 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('renderPluginPreview', signal, () => {
       const plugin = this.pluginState.find((candidate) => candidate.id === pluginId);
       if (plugin?.enabled !== true || plugin.preview === undefined) {
-        throw new MockClientError('pluginNotFound', `No enabled mock preview plugin ${pluginId}`);
+        throw new MockClientError('notFound', `No enabled mock preview plugin ${pluginId}`);
       }
       return {
         kind: 'text' as const,
@@ -4140,7 +4165,7 @@ export class MockFileManagerClient implements FileManagerClient {
   getPluginLogs(pluginId: PluginId, signal?: AbortSignal): Promise<PluginLogEntry[]> {
     return this.perform('getPluginLogs', signal, () => {
       if (!this.pluginState.some((plugin) => plugin.id === pluginId)) {
-        throw new MockClientError('pluginNotFound', `No mock plugin with id ${pluginId}`);
+        throw new MockClientError('notFound', `No mock plugin with id ${pluginId}`);
       }
       return [];
     });
@@ -4158,7 +4183,7 @@ export class MockFileManagerClient implements FileManagerClient {
       );
       if (!isDeclared) {
         throw new MockClientError(
-          'pluginNotFound',
+          'notFound',
           `No icon theme asset ${assetPath} for plugin ${pluginId}`,
         );
       }
@@ -4275,7 +4300,7 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('cancelSearch', signal, () => {
       const search = this.searches.get(searchId);
       if (search === undefined) {
-        throw new MockClientError('searchNotFound', `No mock search with id ${searchId}`);
+        throw new MockClientError('notFound', `No mock search with id ${searchId}`);
       }
       search.cancelled = true;
     });
@@ -5086,7 +5111,10 @@ export class MockFileManagerClient implements FileManagerClient {
       const profile = this.requireLlmProfile(profileId);
       const endpoint = new URL(profile.baseUrl).href.replace(/\/$/u, '');
       if (profile.locality === 'cloud' && !consent && profile.consentedHost !== endpoint) {
-        throw new MockClientError('invalidRequest', 'Cloud consent is required');
+        throw new MockClientError('invalidRequest', 'Cloud consent is required', {
+          reason: 'cloudConsentRequired',
+          host: new URL(profile.baseUrl).host,
+        });
       }
       const activated: LlmProfile = {
         ...profile,
@@ -5211,7 +5239,9 @@ export class MockFileManagerClient implements FileManagerClient {
       const profile = this.requireLlmProfile(request.profileId);
       const expected = `mock-summary-${request.target.entryId}`;
       if (request.expectedSelectionFingerprint !== expected) {
-        throw new MockClientError('invalidRequest', 'Document summary confirmation is stale');
+        throw new MockClientError('invalidRequest', 'Document summary confirmation is stale', {
+          reason: 'summaryConfirmationStale',
+        });
       }
       const summary: DocumentSummary = {
         recordId: `mock-generated-${request.target.entryId}`,
@@ -5300,7 +5330,10 @@ export class MockFileManagerClient implements FileManagerClient {
       const requestedStrategy = request.retrievalStrategy ?? 'singleQuery';
       const expectedFingerprint = `mock-rag-${request.profileId}-${requestedStrategy}-${request.question}`;
       if (request.expectedRetrievalFingerprint !== expectedFingerprint) {
-        throw new MockClientError('invalidRequest', 'Ask evidence confirmation is stale');
+        throw new MockClientError(
+          'knowledgeEvidenceRefreshRequired',
+          'Ask evidence confirmation is stale',
+        );
       }
       const preview: RagPreview = {
         appliedStrategy: requestedStrategy,
@@ -5374,6 +5407,7 @@ export class MockFileManagerClient implements FileManagerClient {
         throw new MockClientError(
           'invalidRequest',
           'Conversation profile, scope, and knowledge mode cannot change',
+          { reason: 'conversationImmutable' },
         );
       }
       this.ephemeralRagConversations.set(conversationId, {
@@ -5646,7 +5680,9 @@ export class MockFileManagerClient implements FileManagerClient {
     request: PlanKnowledgeSearchRequest | ExecuteKnowledgeSearchRequest,
   ): KnowledgeSearchPlan {
     if ((request.draft.about ?? []).filter((subject) => subject.trim().length > 0).length === 0) {
-      throw new MockClientError('invalidRequest', 'A knowledge search needs at least one subject');
+      throw new MockClientError('invalidRequest', 'A knowledge search needs at least one subject', {
+        reason: 'semanticQueryEmpty',
+      });
     }
     return planMockKnowledgeSearch(
       request.draft,
@@ -5768,7 +5804,9 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('beginOneDriveAuthorization', signal, () => {
       const connection = this.requireConnection(connectionId);
       if (connection.configuration.kind !== 'oneDrive') {
-        throw new MockClientError('invalidRequest', 'Only OneDrive connections can be authorized');
+        throw new MockClientError('invalidRequest', 'Only OneDrive connections can be authorized', {
+          reason: 'notOnedriveConnection',
+        });
       }
       this.oneDriveAuthorizationSequence += 1;
       const attemptId = `mock-onedrive-authorization-${this.oneDriveAuthorizationSequence}`;
@@ -5798,6 +5836,7 @@ export class MockFileManagerClient implements FileManagerClient {
           throw new MockClientError(
             'invalidRequest',
             'Connection kind changed during authorization',
+            { reason: 'notOnedriveConnection' },
           );
         }
         const email = connection.configuration.accountHint ?? 'mock.user@example.test';
@@ -5986,7 +6025,7 @@ export class MockFileManagerClient implements FileManagerClient {
     const searchEntries = searchId === undefined ? undefined : this.searches.get(searchId)?.entries;
     if (fixtures === undefined && generatedSize === undefined && searchEntries === undefined) {
       return Promise.reject(
-        new MockClientError('directoryNotFound', `No mock directory at ${request.location.uri}`),
+        new MockClientError('notFound', `No mock directory at ${request.location.uri}`),
       );
     }
 
@@ -6005,7 +6044,10 @@ export class MockFileManagerClient implements FileManagerClient {
     const nextOffset = offset + entries.length;
     const isUnreadable = request.location.uri === 'mock:///Unreadable';
     const loadingState = isUnreadable
-      ? ({ type: 'error', message: 'Directory is not readable' } as const)
+      ? ({
+          type: 'error',
+          message: apiErrorMessage('permissionDenied') ?? 'Permission denied.',
+        } as const)
       : this.loadingLocations.has(request.location.uri)
         ? ({ type: 'loading' } as const)
         : ({ type: 'loaded' } as const);
@@ -6070,7 +6112,7 @@ export class MockFileManagerClient implements FileManagerClient {
   private requireOperation(operationId: OperationId): Operation {
     const operation = this.operations.get(operationId);
     if (operation === undefined) {
-      throw new MockClientError('operationNotFound', `No mock operation with id ${operationId}`);
+      throw new MockClientError('notFound', `No mock operation with id ${operationId}`);
     }
     return operation;
   }
@@ -6082,7 +6124,7 @@ export class MockFileManagerClient implements FileManagerClient {
   } {
     const job = this.checksumJobs.get(jobId);
     if (job === undefined) {
-      throw new MockClientError('checksumJobNotFound', `No mock checksum job with id ${jobId}`);
+      throw new MockClientError('notFound', `No mock checksum job with id ${jobId}`);
     }
     return job;
   }
@@ -6094,10 +6136,7 @@ export class MockFileManagerClient implements FileManagerClient {
   } {
     const scan = this.duplicateScans.get(scanId);
     if (scan === undefined) {
-      throw new MockClientError(
-        'duplicateScanNotFound',
-        `No mock duplicate scan with id ${scanId}`,
-      );
+      throw new MockClientError('notFound', `No mock duplicate scan with id ${scanId}`);
     }
     return scan;
   }
@@ -6111,7 +6150,7 @@ export class MockFileManagerClient implements FileManagerClient {
   } {
     const comparison = this.comparisons.get(comparisonId);
     if (comparison === undefined) {
-      throw new MockClientError('comparisonNotFound', `No mock comparison with id ${comparisonId}`);
+      throw new MockClientError('notFound', `No mock comparison with id ${comparisonId}`);
     }
     return comparison;
   }
@@ -6137,6 +6176,7 @@ export class MockFileManagerClient implements FileManagerClient {
         throw new MockClientError(
           'invalidRequest',
           `invalid regular expression: ${(error as Error).message}`,
+          { detail: (error as Error).message },
         );
       }
       return (line) => {
@@ -6387,8 +6427,10 @@ export class MockClientError extends Error {
   constructor(
     readonly code: string,
     message: string,
+    readonly details?: Readonly<Record<string, unknown>>,
   ) {
     super(message);
     this.name = 'MockClientError';
+    bindLocalisedMessage(this, code, details, message);
   }
 }

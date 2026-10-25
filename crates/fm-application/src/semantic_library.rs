@@ -133,7 +133,29 @@ pub struct SemanticFolderStatus {
     /// Whether the source root is currently reachable.
     pub source_available: bool,
     /// Sanitized unavailability explanation.
-    pub unavailable_reason: Option<String>,
+    pub unavailable_reason: Option<SemanticUnavailableReason>,
+}
+
+/// Why a source or an estimate is unavailable; clients localise it by variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SemanticUnavailableReason {
+    /// The source root is temporarily unreachable.
+    SourceUnavailable,
+    /// No provider-neutral recursive estimate exists for this source.
+    NoRecursiveEstimate,
+}
+
+impl SemanticUnavailableReason {
+    /// English fallback text.
+    #[must_use]
+    pub const fn message(self) -> &'static str {
+        match self {
+            Self::SourceUnavailable => "The source is currently unavailable.",
+            Self::NoRecursiveEstimate => {
+                "A provider-neutral recursive estimate is not available for this source."
+            }
+        }
+    }
 }
 
 /// Completeness of a provider-owned estimate.
@@ -183,8 +205,8 @@ pub struct SemanticEnrolmentEstimate {
     pub skipped_reason_counts: core::EligibilityReasonCounts,
     /// Model bytes still missing, absent when not knowable.
     pub missing_model_download_bytes: Option<u64>,
-    /// Sanitized reason an estimate is unavailable.
-    pub unavailable_reason: Option<String>,
+    /// Reason an estimate is unavailable.
+    pub unavailable_reason: Option<SemanticUnavailableReason>,
     /// Provider identity retained only for consent tracking.
     pub filesystem_identity: Option<SemanticRootIdentity>,
 }
@@ -192,7 +214,7 @@ pub struct SemanticEnrolmentEstimate {
 impl SemanticEnrolmentEstimate {
     /// Creates an explicit unavailable result without invented numeric values.
     #[must_use]
-    pub fn unavailable(reason: impl Into<String>) -> Self {
+    pub fn unavailable(reason: SemanticUnavailableReason) -> Self {
         Self {
             completeness: SemanticEstimateCompleteness::Unavailable,
             estimated_files: None,
@@ -201,7 +223,7 @@ impl SemanticEnrolmentEstimate {
             estimated_vector_bytes: None,
             skipped_reason_counts: core::EligibilityReasonCounts::default(),
             missing_model_download_bytes: None,
-            unavailable_reason: Some(reason.into()),
+            unavailable_reason: Some(reason),
             filesystem_identity: None,
         }
     }
@@ -221,9 +243,7 @@ pub struct UnavailableSemanticEnrolmentEstimator;
 
 impl SemanticEnrolmentEstimator for UnavailableSemanticEnrolmentEstimator {
     fn estimate(&self, _location: &Location, _recursive: bool) -> SemanticEnrolmentEstimate {
-        SemanticEnrolmentEstimate::unavailable(
-            "A provider-neutral recursive estimate is not available for this source.",
-        )
+        SemanticEnrolmentEstimate::unavailable(SemanticUnavailableReason::NoRecursiveEstimate)
     }
 }
 
@@ -233,9 +253,8 @@ pub struct LocalSemanticEnrolmentEstimator;
 
 impl SemanticEnrolmentEstimator for LocalSemanticEnrolmentEstimator {
     fn estimate(&self, location: &Location, _recursive: bool) -> SemanticEnrolmentEstimate {
-        let mut estimate = SemanticEnrolmentEstimate::unavailable(
-            "A provider-neutral recursive estimate is not available for this source.",
-        );
+        let mut estimate =
+            SemanticEnrolmentEstimate::unavailable(SemanticUnavailableReason::NoRecursiveEstimate);
         estimate.filesystem_identity = fm_vfs_local::stable_filesystem_identity(location)
             .map(|(volume, file)| SemanticRootIdentity::new(volume, file));
         estimate
@@ -304,8 +323,8 @@ pub struct SemanticEnrolmentEstimateStatus {
     pub skipped_reason_counts: Vec<SemanticEligibilityReasonCount>,
     /// Hard budgets the estimate appears to exceed.
     pub exceeded_budgets: Vec<SemanticBudgetKind>,
-    /// Sanitized unavailability reason.
-    pub unavailable_reason: Option<String>,
+    /// Unavailability reason.
+    pub unavailable_reason: Option<SemanticUnavailableReason>,
 }
 
 /// Confirmation-gated enrolment disclosure.
@@ -3588,7 +3607,7 @@ fn project_estimate(
         missing_model_download_bytes: estimate.missing_model_download_bytes,
         skipped_reason_counts: reason_counts(&estimate.skipped_reason_counts),
         exceeded_budgets,
-        unavailable_reason: estimate.unavailable_reason.clone(),
+        unavailable_reason: estimate.unavailable_reason,
     }
 }
 
@@ -3774,10 +3793,9 @@ fn project_folder_status(
         .is_some_and(|root| root.workspace_references().contains(&workspace_id));
     let (source_available, unavailable_reason) = match availability {
         core::RootAvailability::Available => (true, None),
-        core::RootAvailability::TemporarilyUnavailable { .. } => (
-            false,
-            Some("The source is currently unavailable.".to_owned()),
-        ),
+        core::RootAvailability::TemporarilyUnavailable { .. } => {
+            (false, Some(SemanticUnavailableReason::SourceUnavailable))
+        }
     };
     SemanticFolderStatus {
         consent,

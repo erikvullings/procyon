@@ -4,6 +4,7 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 
 use crate::crs::{Crs, reproject_geojson};
+use crate::message::{GeoMessage, codes};
 use crate::model::{Bounds, GeoDocument, GeoFormat, GeoIssue, Limits};
 
 const MAX_GEOMETRY_DEPTH: usize = 8;
@@ -26,11 +27,30 @@ pub enum GeoJsonError {
     Invalid(GeoIssue),
 }
 
-fn invalid(path: &str, message: impl Into<String>) -> GeoJsonError {
-    GeoJsonError::Invalid(GeoIssue {
-        path: path.to_owned(),
-        message: message.into(),
-    })
+impl GeoJsonError {
+    /// The localisable description of the failure.
+    #[must_use]
+    pub fn message(&self) -> GeoMessage {
+        match self {
+            Self::Syntax {
+                message,
+                line,
+                column,
+            } => GeoMessage::new(codes::JSON_SYNTAX, self.to_string())
+                .with("line", line)
+                .with("column", column)
+                .with("detail", message),
+            Self::Invalid(issue) => {
+                let mut message = GeoMessage::new(issue.code, issue.message.clone());
+                message.params = issue.params.clone();
+                message
+            }
+        }
+    }
+}
+
+fn invalid(path: &str, message: GeoMessage) -> GeoJsonError {
+    GeoJsonError::Invalid(GeoIssue::new(path, message))
 }
 
 #[derive(Default)]
@@ -61,22 +81,28 @@ impl Scan {
         });
     }
 
-    fn warn(&mut self, path: &str, message: impl Into<String>) {
-        self.warnings.push(GeoIssue {
-            path: path.to_owned(),
-            message: message.into(),
-        });
+    fn warn(&mut self, path: &str, message: GeoMessage) {
+        self.warnings.push(GeoIssue::new(path, message));
     }
 }
 
 fn position(value: &Value, path: &str, scan: &mut Scan) -> Result<(), GeoJsonError> {
-    let parts = value
-        .as_array()
-        .ok_or_else(|| invalid(path, "a position must be an array of numbers"))?;
+    let parts = value.as_array().ok_or_else(|| {
+        invalid(
+            path,
+            GeoMessage::new(
+                codes::POSITION_NOT_ARRAY,
+                "a position must be an array of numbers",
+            ),
+        )
+    })?;
     if parts.len() < 2 {
         return Err(invalid(
             path,
-            "a position needs at least longitude and latitude",
+            GeoMessage::new(
+                codes::POSITION_TOO_SHORT,
+                "a position needs at least longitude and latitude",
+            ),
         ));
     }
     let number = |index: usize| {
@@ -86,7 +112,10 @@ fn position(value: &Value, path: &str, scan: &mut Scan) -> Result<(), GeoJsonErr
             .ok_or_else(|| {
                 invalid(
                     &format!("{path}/{index}"),
-                    "coordinates must be finite numbers",
+                    GeoMessage::new(
+                        codes::COORDINATES_NOT_FINITE,
+                        "coordinates must be finite numbers",
+                    ),
                 )
             })
     };
@@ -99,9 +128,12 @@ fn position(value: &Value, path: &str, scan: &mut Scan) -> Result<(), GeoJsonErr
 }
 
 fn positions<'a>(value: &'a Value, path: &str) -> Result<&'a Vec<Value>, GeoJsonError> {
-    value
-        .as_array()
-        .ok_or_else(|| invalid(path, "coordinates must be an array"))
+    value.as_array().ok_or_else(|| {
+        invalid(
+            path,
+            GeoMessage::new(codes::COORDINATES_NOT_ARRAY, "coordinates must be an array"),
+        )
+    })
 }
 
 fn line(value: &Value, path: &str, scan: &mut Scan, minimum: usize) -> Result<(), GeoJsonError> {
@@ -109,7 +141,12 @@ fn line(value: &Value, path: &str, scan: &mut Scan, minimum: usize) -> Result<()
     if items.len() < minimum {
         return Err(invalid(
             path,
-            format!("needs at least {minimum} positions, found {}", items.len()),
+            GeoMessage::new(
+                codes::TOO_FEW_POSITIONS,
+                format!("needs at least {minimum} positions, found {}", items.len()),
+            )
+            .with("minimum", minimum)
+            .with("found", items.len()),
         ));
     }
     for (index, item) in items.iter().enumerate() {
@@ -126,7 +163,10 @@ fn polygon(value: &Value, path: &str, scan: &mut Scan) -> Result<(), GeoJsonErro
         if items.first() != items.last() {
             scan.warn(
                 &ring_path,
-                "the ring is not closed (first and last position differ)",
+                GeoMessage::new(
+                    codes::RING_NOT_CLOSED,
+                    "the ring is not closed (first and last position differ)",
+                ),
             );
         }
     }
@@ -134,21 +174,40 @@ fn polygon(value: &Value, path: &str, scan: &mut Scan) -> Result<(), GeoJsonErro
 }
 
 fn geometry(value: &Value, path: &str, scan: &mut Scan, depth: usize) -> Result<(), GeoJsonError> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| invalid(path, "a geometry must be an object or null"))?;
-    let kind = object
-        .get("type")
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid(&format!("{path}/type"), "a geometry needs a type"))?;
+    let object = value.as_object().ok_or_else(|| {
+        invalid(
+            path,
+            GeoMessage::new(
+                codes::GEOMETRY_NOT_OBJECT,
+                "a geometry must be an object or null",
+            ),
+        )
+    })?;
+    let kind = object.get("type").and_then(Value::as_str).ok_or_else(|| {
+        invalid(
+            &format!("{path}/type"),
+            GeoMessage::new(codes::GEOMETRY_NEEDS_TYPE, "a geometry needs a type"),
+        )
+    })?;
     if kind == "GeometryCollection" {
         if depth >= MAX_GEOMETRY_DEPTH {
-            return Err(invalid(path, "geometry collections are nested too deeply"));
+            return Err(invalid(
+                path,
+                GeoMessage::new(
+                    codes::GEOMETRY_TOO_DEEP,
+                    "geometry collections are nested too deeply",
+                ),
+            ));
         }
         let members = object
             .get("geometries")
             .and_then(Value::as_array)
-            .ok_or_else(|| invalid(&format!("{path}/geometries"), "needs a geometries array"))?;
+            .ok_or_else(|| {
+                invalid(
+                    &format!("{path}/geometries"),
+                    GeoMessage::new(codes::GEOMETRIES_MISSING, "needs a geometries array"),
+                )
+            })?;
         for (index, member) in members.iter().enumerate() {
             geometry(
                 member,
@@ -160,9 +219,12 @@ fn geometry(value: &Value, path: &str, scan: &mut Scan, depth: usize) -> Result<
         return Ok(());
     }
     let coordinates_path = format!("{path}/coordinates");
-    let coordinates = object
-        .get("coordinates")
-        .ok_or_else(|| invalid(&coordinates_path, "the geometry needs coordinates"))?;
+    let coordinates = object.get("coordinates").ok_or_else(|| {
+        invalid(
+            &coordinates_path,
+            GeoMessage::new(codes::COORDINATES_MISSING, "the geometry needs coordinates"),
+        )
+    })?;
     match kind {
         // An empty array is the RFC's way of writing an empty geometry.
         "Point" => {
@@ -203,7 +265,11 @@ fn geometry(value: &Value, path: &str, scan: &mut Scan, depth: usize) -> Result<
         other => {
             return Err(invalid(
                 &format!("{path}/type"),
-                format!("unknown geometry type '{other}'"),
+                GeoMessage::new(
+                    codes::UNKNOWN_GEOMETRY_TYPE,
+                    format!("unknown geometry type '{other}'"),
+                )
+                .with("type", other),
             ));
         }
     }
@@ -212,13 +278,16 @@ fn geometry(value: &Value, path: &str, scan: &mut Scan, depth: usize) -> Result<
 
 /// Checks one `Feature` and returns it with `properties` defaulted to an object.
 fn feature(value: &Value, path: &str, scan: &mut Scan) -> Result<Value, GeoJsonError> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| invalid(path, "a feature must be an object"))?;
+    let object = value.as_object().ok_or_else(|| {
+        invalid(
+            path,
+            GeoMessage::new(codes::FEATURE_NOT_OBJECT, "a feature must be an object"),
+        )
+    })?;
     if object.get("type").and_then(Value::as_str) != Some("Feature") {
         return Err(invalid(
             &format!("{path}/type"),
-            "expected type \"Feature\"",
+            GeoMessage::new(codes::EXPECTED_FEATURE, "expected type \"Feature\""),
         ));
     }
     let geometry_value = object.get("geometry").unwrap_or(&Value::Null);
@@ -231,7 +300,10 @@ fn feature(value: &Value, path: &str, scan: &mut Scan) -> Result<Value, GeoJsonE
         Some(_) => {
             return Err(invalid(
                 &format!("{path}/properties"),
-                "properties must be an object or null",
+                GeoMessage::new(
+                    codes::PROPERTIES_NOT_OBJECT,
+                    "properties must be an object or null",
+                ),
             ));
         }
     };
@@ -259,18 +331,25 @@ fn apply_crs(root: &mut Value, scan: &mut Scan) {
     let Ok(system) = Crs::parse(&name) else {
         scan.warn(
             "/crs",
-            format!(
-                "the legacy crs member declares '{name}', which is not a coordinate system that can \
-                 be converted: RFC 7946 requires WGS84 longitude/latitude, so the data may be drawn \
-                 in the wrong place"
-            ),
+            GeoMessage::new(
+                codes::CRS_UNUSABLE,
+                format!(
+                    "the legacy crs member declares '{name}', which is not a coordinate system that can \
+                     be converted: RFC 7946 requires WGS84 longitude/latitude, so the data may be drawn \
+                     in the wrong place"
+                ),
+            )
+            .with("name", &name),
         );
         return;
     };
     if system.is_wgs84() {
         scan.warn(
             "/crs",
-            "the legacy crs member was removed in RFC 7946; coordinates are WGS84 longitude/latitude",
+            GeoMessage::new(
+                codes::CRS_LEGACY,
+                "the legacy crs member was removed in RFC 7946; coordinates are WGS84 longitude/latitude",
+            ),
         );
         return;
     }
@@ -283,7 +362,13 @@ fn apply_crs(root: &mut Value, scan: &mut Scan) {
     if failed > 0 {
         message.push_str(&format!("; {failed} position(s) could not be converted"));
     }
-    scan.warn("/crs", message);
+    scan.warn(
+        "/crs",
+        GeoMessage::new(codes::CRS_CONVERTED, message)
+            .with("label", system.label())
+            .with("name", system.name())
+            .with("failed", failed),
+    );
 }
 
 /// Reads GeoJSON bytes: a `FeatureCollection`, a `Feature` or a bare geometry.
@@ -302,13 +387,21 @@ pub fn parse_geojson(bytes: &[u8], limits: Limits) -> Result<GeoDocument, GeoJso
     if root.is_object() {
         apply_crs(&mut root, &mut scan);
     }
-    let object = root
-        .as_object()
-        .ok_or_else(|| invalid("", "a GeoJSON document must be a JSON object"))?;
-    let kind = object
-        .get("type")
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid("/type", "a GeoJSON object needs a type"))?;
+    let object = root.as_object().ok_or_else(|| {
+        invalid(
+            "",
+            GeoMessage::new(
+                codes::NOT_JSON_OBJECT,
+                "a GeoJSON document must be a JSON object",
+            ),
+        )
+    })?;
+    let kind = object.get("type").and_then(Value::as_str).ok_or_else(|| {
+        invalid(
+            "/type",
+            GeoMessage::new(codes::TYPE_MISSING, "a GeoJSON object needs a type"),
+        )
+    })?;
     let mut features = Vec::new();
     let total_features;
     let mut truncated = false;
@@ -318,7 +411,13 @@ pub fn parse_geojson(bytes: &[u8], limits: Limits) -> Result<GeoDocument, GeoJso
                 .get("features")
                 .and_then(Value::as_array)
                 .ok_or_else(|| {
-                    invalid("/features", "a FeatureCollection needs a features array")
+                    invalid(
+                        "/features",
+                        GeoMessage::new(
+                            codes::FEATURES_MISSING,
+                            "a FeatureCollection needs a features array",
+                        ),
+                    )
                 })?;
             total_features = items.len();
             for (index, item) in items.iter().enumerate() {
@@ -347,7 +446,14 @@ pub fn parse_geojson(bytes: &[u8], limits: Limits) -> Result<GeoDocument, GeoJso
             features.push(Value::Object(bare));
         }
         other => {
-            return Err(invalid("/type", format!("unknown GeoJSON type '{other}'")));
+            return Err(invalid(
+                "/type",
+                GeoMessage::new(
+                    codes::UNKNOWN_TYPE,
+                    format!("unknown GeoJSON type '{other}'"),
+                )
+                .with("type", other),
+            ));
         }
     }
     if scan.out_of_range > 0 {
@@ -355,10 +461,14 @@ pub fn parse_geojson(bytes: &[u8], limits: Limits) -> Result<GeoDocument, GeoJso
         let count = scan.out_of_range;
         scan.warn(
             &first,
-            format!(
-                "{count} position(s) lie outside longitude -180..180 / latitude -90..90 \
-                 (the first is shown); coordinates must be longitude, latitude"
-            ),
+            GeoMessage::new(
+                codes::POSITIONS_OUT_OF_RANGE,
+                format!(
+                    "{count} position(s) lie outside longitude -180..180 / latitude -90..90 \
+                     (the first is shown); coordinates must be longitude, latitude"
+                ),
+            )
+            .with("count", count),
         );
     }
     Ok(GeoDocument {

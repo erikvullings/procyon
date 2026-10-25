@@ -52,6 +52,14 @@ export function unexpectedResponseError(operation: string, status: number): ApiE
   });
 }
 
+/** Error for a feature only the desktop host provides; the browser/server adapter cannot offer it. */
+export function desktopHostRequiredError(): ApiError {
+  return new ApiError(0, {
+    code: 'desktopHostRequired',
+    message: 'This action is only available in the desktop app.',
+  });
+}
+
 /** An additional header to attach to every request, e.g. for auth/session tokens. */
 export interface SessionHeader {
   readonly name: string;
@@ -131,8 +139,9 @@ async function toApiError(response: Response): Promise<ApiError> {
     return new ApiError(response.status, body);
   }
   return new ApiError(response.status, {
-    code: 'unknownError',
+    code: 'httpError',
     message: response.statusText || `Request failed with status ${response.status}`,
+    details: { status: response.status },
   });
 }
 

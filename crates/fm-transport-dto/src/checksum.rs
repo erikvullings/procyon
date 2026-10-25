@@ -61,6 +61,9 @@ pub struct ChecksumEntryDto {
     pub checksums: BTreeMap<String, String>,
     /// Why this entry could not be hashed, when it could not be.
     pub error: Option<String>,
+    /// Stable code of `error` that clients localise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
 }
 
 /// A bounded page of a checksum job's results

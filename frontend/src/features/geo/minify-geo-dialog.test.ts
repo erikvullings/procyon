@@ -32,7 +32,9 @@ const preview: GeoMinifyPreview = {
   positionsAfter: 100,
   distanceBeforeMeters: 5000,
   distanceAfterMeters: 4950,
-  notes: ['3 area ring(s) were kept unchanged'],
+  notes: [
+    { code: 'ringsKept', message: '3 area ring(s) were kept unchanged', params: { count: '3' } },
+  ],
   collection: { type: 'FeatureCollection', features: [] },
 };
 
@@ -97,7 +99,7 @@ describe('MinifyGeoDialog', () => {
     expect(root.textContent).toContain('97.7 KB -> 24.4 KB (75% smaller)');
     expect(root.textContent).toContain('1000 -> 100 points');
     expect(root.textContent).toContain('Length 5.00 km -> 4.95 km (-1.0%)');
-    expect(root.textContent).toContain('3 area ring(s) were kept unchanged');
+    expect(root.textContent).toContain('3 area ring(s) were kept unchanged because');
     await vi.waitFor(() => {
       render(dialog);
       expect(captured.attrs?.comparison).toBe(original.collection);
@@ -156,14 +158,21 @@ describe('MinifyGeoDialog', () => {
     const dialog = attrs({
       client: {
         ...attrs().client,
-        previewGeoMinify: vi.fn().mockResolvedValue({ ...preview, error: 'invalid XML' }),
+        previewGeoMinify: vi.fn().mockResolvedValue({
+          ...preview,
+          error: {
+            code: 'xmlSyntax',
+            message: 'invalid XML',
+            params: { line: '1', column: '1', detail: 'x' },
+          },
+        }),
       },
     });
     render(dialog);
     render(dialog);
     await vi.waitFor(() => {
       render(dialog);
-      expect(root.textContent).toContain('Cannot estimate: invalid XML');
+      expect(root.textContent).toContain('Invalid XML at line 1, column 1: x');
     });
     const apply = [...root.querySelectorAll('button')].find((b) => b.textContent === 'Minify');
     expect(apply?.disabled).toBe(true);

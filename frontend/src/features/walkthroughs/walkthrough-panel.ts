@@ -70,10 +70,7 @@ export const WalkthroughPanel: FactoryComponent<WalkthroughPanelAttrs> = () => {
             attrs.selected === 'basics'
               ? m('figure.fm-walkthrough-media', [
                   mediaFailed
-                    ? m(
-                        'p.fm-walkthrough-media-fallback',
-                        'The clip could not be played. Follow the written steps below.',
-                      )
+                    ? m('p.fm-walkthrough-media-fallback', t('walkthroughs', 'clipFailed'))
                     : m(
                         'video',
                         {
@@ -101,7 +98,7 @@ export const WalkthroughPanel: FactoryComponent<WalkthroughPanelAttrs> = () => {
                           }),
                         ],
                       ),
-                  m('figcaption', 'macOS example · English captions · 18 seconds'),
+                  m('figcaption', t('walkthroughs', 'clipCaption')),
                 ])
               : undefined,
             m(

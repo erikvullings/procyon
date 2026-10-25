@@ -40,6 +40,8 @@ export interface ChecksumEntry {
   /** Digests keyed by lower-case algorithm name. */
   checksums: Readonly<Record<string, string>>;
   error?: string;
+  /** Stable code of `error` that the UI localises. */
+  errorCode?: string;
 }
 
 /** Converts the wire DTO into the frontend model, normalizing `null` to omitted. */
@@ -50,6 +52,7 @@ export function checksumEntryFromDto(dto: ChecksumEntryDto): ChecksumEntry {
     size: dto.size,
     checksums: dto.checksums ?? {},
     ...(dto.error == null ? {} : { error: dto.error }),
+    ...(dto.errorCode == null ? {} : { errorCode: dto.errorCode }),
   };
 }
 

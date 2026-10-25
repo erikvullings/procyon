@@ -7,6 +7,7 @@
 //! conflicts use the shared conflict dialog. A split can write a BLAKE3 manifest that a later
 //! combine verifies before publishing anything.
 
+use crate::rejection::{Rejection, reason};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -45,6 +46,13 @@ const IO_CHUNK: usize = 256 * 1024;
 const LIST_PAGE_SIZE: usize = 1_000;
 const MAX_RENAME_ATTEMPTS: u32 = 999;
 
+/// A set problem as an operation failure that keeps the reason code and parameters.
+fn rejection_failure(rejection: Rejection) -> fm_operations::CodedFailure {
+    let mut failure = fm_operations::CodedFailure::new(rejection.reason, rejection.message);
+    failure.params = rejection.params;
+    failure
+}
+
 fn cancelled() -> ExecutionError {
     fm_vfs::VfsError::Cancelled.into()
 }
@@ -59,11 +67,12 @@ fn warn(entry: &EntryRef, message: String, code: &str, name: Option<&str>) -> Ex
 }
 
 fn folder_of(location: &Location) -> Result<Location, ApplicationError> {
-    location
-        .parent()
-        .ok()
-        .flatten()
-        .ok_or_else(|| ApplicationError::InvalidRequest("a file needs a folder".into()))
+    location.parent().ok().flatten().ok_or_else(|| {
+        ApplicationError::from(Rejection::new(
+            reason::FILE_NEEDS_FOLDER,
+            "a file needs a folder",
+        ))
+    })
 }
 
 fn require_write(providers: &ProviderRegistry, folder: &Location) -> Result<(), ApplicationError> {
@@ -83,14 +92,19 @@ pub(crate) fn plan_split_file(
         .split_file
         .ok_or_else(|| ApplicationError::InvalidRequest("splitFile requires splitFile".into()))?;
     if split.part_size_bytes == 0 {
-        return Err(ApplicationError::InvalidRequest(
-            "the part size must be at least 1 byte".into(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::PART_SIZE_TOO_SMALL,
+            "the part size must be at least 1 byte",
+        )));
     }
     if request.sources.is_empty() || request.sources.len() > MAX_SPLIT_SOURCES {
-        return Err(ApplicationError::InvalidRequest(format!(
-            "splitFile needs between 1 and {MAX_SPLIT_SOURCES} files"
-        )));
+        return Err(ApplicationError::from(
+            Rejection::new(
+                reason::SELECTION_SIZE,
+                format!("splitFile needs between 1 and {MAX_SPLIT_SOURCES} files"),
+            )
+            .with("max", MAX_SPLIT_SOURCES),
+        ));
     }
     let destination: Option<Location> = request.destination.clone().map(Into::into);
     let mut sources = Vec::with_capacity(request.sources.len());
@@ -119,9 +133,13 @@ pub(crate) fn plan_combine_files(
     request: &StartOperationRequestDto,
 ) -> Result<Arc<dyn OperationExecutor>, ApplicationError> {
     if request.sources.is_empty() || request.sources.len() > MAX_COMBINE_SOURCES {
-        return Err(ApplicationError::InvalidRequest(format!(
-            "combineFiles needs between 1 and {MAX_COMBINE_SOURCES} part files"
-        )));
+        return Err(ApplicationError::from(
+            Rejection::new(
+                reason::SELECTION_SIZE,
+                format!("combineFiles needs between 1 and {MAX_COMBINE_SOURCES} part files"),
+            )
+            .with("max", MAX_COMBINE_SOURCES),
+        ));
     }
     let selected: Vec<Location> = request.sources.iter().cloned().map(Into::into).collect();
     for location in &selected {
@@ -136,9 +154,10 @@ pub(crate) fn plan_combine_files(
     if let Some(name) = &request.name
         && folder.join(name).is_err()
     {
-        return Err(ApplicationError::InvalidRequest(
-            "the output name is not a valid file name".into(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::INVALID_OUTPUT_NAME,
+            "the output name is not a valid file name",
+        )));
     }
     Ok(Arc::new(CombineExecutor {
         providers: providers.clone(),
@@ -342,9 +361,10 @@ where
         Some(ConflictResolution::Skip) => Ok(None),
         Some(ConflictResolution::Overwrite) => {
             if collision.existing.kind != EntryKind::File {
-                return Err(ExecutionError::Failed(
-                    "a folder cannot be replaced by a file".into(),
-                ));
+                return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                    fm_operations::codes::failure::FOLDER_REPLACE_BLOCKED,
+                    "a folder cannot be replaced by a file",
+                )));
             }
             Ok(Some((base.to_owned(), true)))
         }
@@ -358,9 +378,10 @@ where
                     return Ok(Some((candidate, false)));
                 }
             }
-            Err(ExecutionError::Failed(
-                "too many files with this name already exist".into(),
-            ))
+            Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                fm_operations::codes::failure::NAME_COLLISION_LIMIT,
+                "too many files with this name already exist",
+            )))
         }
     }
 }
@@ -469,9 +490,10 @@ impl SplitExecutor {
                 written += chunk.len() as u64;
             }
             if written != want {
-                return Err(ExecutionError::Failed(
-                    "the source file changed while it was being split".into(),
-                ));
+                return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                    fm_operations::codes::failure::SOURCE_CHANGED_WHILE_SPLITTING,
+                    "the source file changed while it was being split",
+                )));
             }
             writer.shutdown().await.map_err(io_failure)?;
             drop(writer);
@@ -582,17 +604,27 @@ impl OperationExecutor for SplitExecutor {
                 .inspect(&entry_of(location), cancellation.clone())
                 .await?;
             if summary.kind != EntryKind::File {
-                return Err(ExecutionError::Failed(format!(
-                    "{} is not a regular file",
-                    summary.name
-                )));
+                return Err(ExecutionError::from(
+                    fm_operations::CodedFailure::new(
+                        fm_operations::codes::failure::NOT_REGULAR_FILE,
+                        format!("{} is not a regular file", summary.name),
+                    )
+                    .with_param("name", &summary.name),
+                ));
             }
             let size = summary.size.unwrap_or(0);
             if part_count(size, self.part_size) > MAX_PARTS {
-                return Err(ExecutionError::Failed(format!(
-                    "{} would need more than {MAX_PARTS} parts; choose a larger part size",
-                    summary.name
-                )));
+                return Err(ExecutionError::from(
+                    fm_operations::CodedFailure::new(
+                        fm_operations::codes::failure::TOO_MANY_PARTS,
+                        format!(
+                            "{} would need more than {MAX_PARTS} parts; choose a larger part size",
+                            summary.name
+                        ),
+                    )
+                    .with_param("name", &summary.name)
+                    .with_param("max", MAX_PARTS),
+                ));
             }
             items.push(PlanItem::new(
                 EntryRef {
@@ -684,11 +716,15 @@ impl OperationExecutor for SplitExecutor {
         };
         if replaced {
             return Ok(OperationUndo::unavailable(
+                fm_operations::codes::undo::REPLACED_EXISTING,
                 "Existing files were replaced, which cannot be brought back.",
             ));
         }
         if created.is_empty() {
-            return Ok(OperationUndo::unavailable("No file was created."));
+            return Ok(OperationUndo::unavailable(
+                fm_operations::codes::undo::NOTHING_TO_UNDO,
+                "No file was created.",
+            ));
         }
         let mut entries = Vec::with_capacity(created.len());
         for (location, hash) in created {
@@ -752,21 +788,25 @@ async fn read_manifest(
     provider: &Arc<dyn FileSystemProvider>,
     summary: &EntrySummary,
     cancellation: &CancellationToken,
-) -> Result<Manifest, String> {
+) -> Result<Manifest, Rejection> {
+    let damaged = |detail: String| {
+        Rejection::new(reason::SPLIT_MANIFEST_DAMAGED, detail).with("name", &summary.name)
+    };
     if summary.size.unwrap_or(0) > MAX_MANIFEST_BYTES {
-        return Err("the manifest is too large".into());
+        return Err(damaged("the manifest is too large".into()));
     }
     let mut reader = provider
         .open_read(&entry_of(&summary.location), cancellation.clone())
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| damaged(error.to_string()))?;
     let mut bytes = Vec::new();
     reader
         .read_to_end(&mut bytes)
         .await
-        .map_err(|error| error.to_string())?;
-    let text = String::from_utf8(bytes).map_err(|_| "the manifest is not text".to_owned())?;
-    Manifest::parse(&text)
+        .map_err(|error| damaged(error.to_string()))?;
+    let text =
+        String::from_utf8(bytes).map_err(|_| damaged("the manifest is not text".to_owned()))?;
+    Manifest::parse(&text).map_err(damaged)
 }
 
 /// The set the selection belongs to, or the reason it cannot be joined. `Err(ApplicationError)`
@@ -775,16 +815,20 @@ async fn load_set(
     providers: &ProviderRegistry,
     selected: &[Location],
     cancellation: &CancellationToken,
-) -> Result<Result<LoadedSet, (String, Option<DetectedSet>)>, ApplicationError> {
+) -> Result<Result<LoadedSet, (Rejection, Option<DetectedSet>)>, ApplicationError> {
+    let no_part = || Rejection::new(reason::SPLIT_NO_PART_SELECTED, "no part selected");
     let Some(first) = selected.first() else {
-        return Ok(Err(("no part selected".into(), None)));
+        return Ok(Err((no_part(), None)));
     };
     let folder = folder_of(first)?;
     let mut names = Vec::with_capacity(selected.len());
     for location in selected {
         if folder_of(location)? != folder {
             return Ok(Err((
-                "the selected parts are in different folders".into(),
+                Rejection::new(
+                    reason::SPLIT_DIFFERENT_FOLDERS,
+                    "the selected parts are in different folders",
+                ),
                 None,
             )));
         }
@@ -796,7 +840,7 @@ async fn load_set(
         names.iter().map(String::as_str),
         entries.iter().map(|entry| entry.name.as_str()),
     ) else {
-        return Ok(Err(("no part selected".into(), None)));
+        return Ok(Err((no_part(), None)));
     };
     if let Some(problem) = &set.problem {
         return Ok(Err((problem.describe(&set.base), Some(set))));
@@ -818,8 +862,10 @@ async fn load_set(
     let mut parts = Vec::with_capacity(by_index.len());
     for index in &set.present {
         let Some(entry) = by_index.get(index) else {
+            let name = part_name(&set.base, *index);
             return Ok(Err((
-                format!("{} is not a file", part_name(&set.base, *index)),
+                Rejection::new(reason::SPLIT_PART_NOT_FILE, format!("{name} is not a file"))
+                    .with("name", name),
                 Some(set),
             )));
         };
@@ -832,11 +878,8 @@ async fn load_set(
         None => None,
         Some(summary) => match read_manifest(&provider, summary, cancellation).await {
             Ok(manifest) => Some(manifest),
-            Err(message) => {
-                return Ok(Err((
-                    format!("{}: {message}", manifest_name(&set.base)),
-                    Some(set),
-                )));
+            Err(rejection) => {
+                return Ok(Err((rejection, Some(set))));
             }
         },
     };
@@ -852,21 +895,35 @@ async fn load_set(
 }
 
 /// Compares the parts found with what the manifest promises (names and count).
-fn manifest_mismatch(set: &LoadedSet) -> Option<String> {
+fn manifest_mismatch(set: &LoadedSet) -> Option<Rejection> {
     let manifest = set.manifest.as_ref()?;
     if manifest.parts.len() != set.parts.len() {
-        return Some(format!(
-            "the manifest lists {} parts but {} were found",
-            manifest.parts.len(),
-            set.parts.len()
-        ));
+        return Some(
+            Rejection::new(
+                reason::SPLIT_MANIFEST_COUNT,
+                format!(
+                    "the manifest lists {} parts but {} were found",
+                    manifest.parts.len(),
+                    set.parts.len()
+                ),
+            )
+            .with("listed", manifest.parts.len())
+            .with("found", set.parts.len()),
+        );
     }
     for ((_, summary), listed) in set.parts.iter().zip(&manifest.parts) {
         if summary.name != listed.name {
-            return Some(format!(
-                "the manifest expects {} where {} was found",
-                listed.name, summary.name
-            ));
+            return Some(
+                Rejection::new(
+                    reason::SPLIT_MANIFEST_NAME,
+                    format!(
+                        "the manifest expects {} where {} was found",
+                        listed.name, summary.name
+                    ),
+                )
+                .with("expected", &listed.name)
+                .with("found", &summary.name),
+            );
         }
     }
     None
@@ -878,9 +935,10 @@ pub(crate) async fn inspect_split_set(
     request: InspectSplitSetRequestDto,
 ) -> Result<InspectSplitSetResponseDto, ApplicationError> {
     if request.locations.is_empty() || request.locations.len() > MAX_COMBINE_SOURCES {
-        return Err(ApplicationError::InvalidRequest(
-            "select one or more part files".into(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::SELECT_PART_FILES,
+            "select one or more part files",
+        )));
     }
     let selected: Vec<Location> = request.locations.into_iter().map(Into::into).collect();
     let cancellation = CancellationToken::new();
@@ -898,13 +956,17 @@ pub(crate) async fn inspect_split_set(
                 })
                 .collect(),
             error: None,
+            error_code: None,
+            error_params: std::collections::BTreeMap::new(),
         },
-        Err((message, detected)) => InspectSplitSetResponseDto {
+        Err((rejection, detected)) => InspectSplitSetResponseDto {
             output_name: detected.map(|set| set.base).unwrap_or_default(),
             parts: Vec::new(),
             total_size: 0,
             has_manifest: false,
-            error: Some(message),
+            error: Some(rejection.message),
+            error_code: Some(rejection.reason),
+            error_params: rejection.params,
         },
     })
 }
@@ -934,7 +996,7 @@ impl CombineExecutor {
         load_set(&self.providers, &self.selected, cancellation)
             .await
             .map_err(|error| ExecutionError::Failed(error.to_string()))?
-            .map_err(|(message, _)| ExecutionError::Failed(message))
+            .map_err(|(rejection, _)| ExecutionError::from(rejection_failure(rejection)))
     }
 
     /// Streams every part into a temporary file, verifying against the manifest as it goes.
@@ -1117,11 +1179,15 @@ impl OperationExecutor for CombineExecutor {
         };
         if replaced {
             return Ok(OperationUndo::unavailable(
+                fm_operations::codes::undo::REPLACED_EXISTING,
                 "An existing file was replaced, which cannot be brought back.",
             ));
         }
         let Some((location, hash)) = created else {
-            return Ok(OperationUndo::unavailable("No file was created."));
+            return Ok(OperationUndo::unavailable(
+                fm_operations::codes::undo::NOTHING_TO_UNDO,
+                "No file was created.",
+            ));
         };
         let provider = self.providers.resolve(&location)?;
         let entry = known_fingerprint(&provider, &location, &hash, cancellation).await?;

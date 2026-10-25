@@ -17,7 +17,7 @@ use std::{
 };
 
 use fm_domain::{EntryId, Location};
-use fm_vfs::{EntryRef, RemoveReport};
+use fm_vfs::{EntryRef, RemoveFailure, RemoveFailureKind, RemoveReport};
 use tokio_util::sync::CancellationToken;
 
 use crate::is_directory_link;
@@ -83,11 +83,19 @@ struct Shared<'a> {
     wake: Condvar,
     /// Every directory found, parents before children, so that reverse order empties them.
     found: Mutex<Vec<PathBuf>>,
-    failures: Mutex<Vec<(EntryRef, String)>>,
+    failures: Mutex<Vec<RemoveFailure>>,
 }
 
 impl Shared<'_> {
     fn fail(&self, path: &Path, error: impl std::fmt::Display) {
+        self.record(path, RemoveFailureKind::Io(error.to_string()));
+    }
+
+    fn fail_read_only(&self, path: &Path) {
+        self.record(path, RemoveFailureKind::ReadOnly);
+    }
+
+    fn record(&self, path: &Path, kind: RemoveFailureKind) {
         let location =
             Location::from_native_path(path).unwrap_or_else(|_| self.root_entry.location.clone());
         let entry = EntryRef {
@@ -97,7 +105,11 @@ impl Shared<'_> {
         self.failures
             .lock()
             .expect("failures lock")
-            .push((entry, format!("{}: {error}", path.display())));
+            .push(RemoveFailure {
+                entry,
+                path: path.display().to_string(),
+                kind,
+            });
     }
 
     fn count_removed(&self) {
@@ -145,7 +157,7 @@ impl Shared<'_> {
                 None
             };
             if self.denied_by_read_only(metadata.as_ref()) {
-                self.fail(&path, "read-only entry requires explicit override");
+                self.fail_read_only(&path);
                 continue;
             }
             let directory_link = metadata.as_ref().is_some_and(is_directory_link);
@@ -253,7 +265,7 @@ pub(crate) fn remove_tree(
         }
     };
     if shared.denied_by_read_only(Some(&metadata)) {
-        shared.fail(&root, "read-only entry requires explicit override");
+        shared.fail_read_only(&root);
         return finish(shared, report);
     }
     let directory_link = is_directory_link(&metadata);

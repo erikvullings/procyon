@@ -5,6 +5,7 @@
 import type { SemanticBudgetKindDto } from './semanticBudgetKindDto.ts';
 import type { SemanticEligibilityReasonCountDto } from './semanticEligibilityReasonCountDto.ts';
 import type { SemanticEstimateCompletenessDto } from './semanticEstimateCompletenessDto.ts';
+import type { SemanticUnavailableReasonDto } from './semanticUnavailableReasonDto.ts';
 
 /**
  * Bounded estimate shown before consent.
@@ -53,8 +54,9 @@ export interface SemanticEnrolmentEstimateDto {
   /** Unsupported/skipped entries by fixed reason. */
   skippedReasonCounts: SemanticEligibilityReasonCountDto[];
   /**
-     * Sanitized reason no estimate is available.
+     * English reason no estimate is available (fallback for clients without a code).
      * @nullable
      */
   unavailableReason?: string | null;
+  unavailableReasonCode?: null | SemanticUnavailableReasonDto;
 }

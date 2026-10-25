@@ -422,11 +422,20 @@ describe('backend error localisation', () => {
     });
     expect(mismatch.message).toContain('SHA256:abc');
     const unknown = new ApiError(400, { code: 'invalidRequest', message: 'bad name' });
-    expect(unknown.message).toBe('bad name');
+    // `invalidRequest` without a rejection reason wraps the backend text in a translated sentence.
+    expect(unknown.message).toBe(
+      catalogues.fr.apiError.invalidRequest.replace('{detail}', 'bad name'),
+    );
+    const reasoned = new ApiError(400, {
+      code: 'invalidRequest',
+      message: 'cannot edit a filesystem root',
+      details: { reason: 'cannotEditRoot' },
+    });
+    expect(reasoned.message).toBe(catalogues.fr.rejectionReason.cannotEditRoot);
     expect(new ApiError(500, { code: 'brandNewCode', message: 'raw' }).message).toBe('raw');
   });
 
-  it('has an apiError entry for every ApplicationErrorCode except those carrying specifics', () => {
+  it('has an apiError entry for every ApplicationErrorCode', () => {
     const source = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -439,10 +448,7 @@ describe('backend error localisation', () => {
       (match[1] as string).replace(/^./u, (c) => c.toLowerCase()),
     );
     expect(codes.length).toBeGreaterThan(10);
-    const intentionallyBackendText = new Set(['invalidRequest', 'platformOperationFailed']);
-    const missing = codes.filter(
-      (code) => !intentionallyBackendText.has(code) && !Object.hasOwn(en.apiError, code),
-    );
+    const missing = codes.filter((code) => !Object.hasOwn(en.apiError, code));
     expect(missing).toEqual([]);
   });
 });

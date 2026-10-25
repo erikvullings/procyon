@@ -1,5 +1,5 @@
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { errorText } from '../../i18n';
+import { errorText, viewerWarningText } from '../../i18n';
 import type {
   OpenSqliteViewRequest,
   SqliteColumnFilter,
@@ -81,7 +81,7 @@ export function sqliteContentFromOpen(opened: SqliteView): FileViewerSqliteConte
     sessionId: opened.sessionId,
     sourceBytes: opened.sourceBytes,
     sqliteVersion: opened.sqliteVersion,
-    warning: opened.warning ?? undefined,
+    warning: viewerWarningText(opened.warning, opened.warningCode),
     objects: opened.objects,
     tab: 'data',
     selected: first,

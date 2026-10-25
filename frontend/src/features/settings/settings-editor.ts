@@ -191,7 +191,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
       }
       await current.onSave(draft);
     } catch (error: unknown) {
-      saveError = errorMessage(error, 'Failed to save settings.');
+      saveError = errorMessage(error, t('settings', 'saveFailed'));
     } finally {
       saving = false;
       m.redraw();
@@ -374,8 +374,8 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         className: 'col s12 m6',
                         label: t('settings', 'showHiddenFiles'),
                         checked: activeDraft.showHiddenFiles,
-                        left: 'Hidden',
-                        right: 'Shown',
+                        left: t('settings', 'hiddenFilesHidden'),
+                        right: t('settings', 'hiddenFilesShown'),
                         onchange: (checked: boolean) =>
                           update(current, { showHiddenFiles: checked }),
                       }),
@@ -590,7 +590,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                               className: 'fm-settings-keybinding-input',
                               // label: 'Shortcut',
                               value: activeDraft.keybindings[action.id] ?? '',
-                              placeholder: shortcut?.shortcut ?? 'None',
+                              placeholder: shortcut?.shortcut ?? t('settings', 'shortcutNone'),
                               oninput: (value: string) =>
                                 update(current, {
                                   keybindings: setKeybindingOverride(

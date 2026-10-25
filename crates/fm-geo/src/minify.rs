@@ -7,6 +7,7 @@
 
 use serde_json::{Map, Value};
 
+use crate::message::{GeoMessage, codes};
 use crate::model::GeoDocument;
 use crate::track_stats::{TrackPoint, haversine};
 
@@ -275,7 +276,7 @@ fn simplify_ring(ring: &[Position], tolerance: f64) -> Option<Vec<Position>> {
 struct Pass<'a> {
     options: &'a MinifyOptions,
     stats: MinifyStats,
-    notes: Vec<String>,
+    notes: Vec<GeoMessage>,
 }
 
 impl Pass<'_> {
@@ -524,7 +525,7 @@ fn filter_properties(
 pub fn minify_document(
     document: &GeoDocument,
     options: &MinifyOptions,
-) -> (GeoDocument, MinifyStats, Vec<String>) {
+) -> (GeoDocument, MinifyStats, Vec<GeoMessage>) {
     let mut pass = Pass {
         options,
         stats: MinifyStats {
@@ -562,15 +563,22 @@ pub fn minify_document(
     }
     pass.stats.features_after = features.len();
     if dropped_properties > 0 {
-        pass.notes.push(format!(
-            "{dropped_properties} custom property value(s) were removed"
-        ));
+        pass.notes.push(
+            GeoMessage::new(
+                codes::PROPERTIES_REMOVED,
+                format!("{dropped_properties} custom property value(s) were removed"),
+            )
+            .with("count", dropped_properties),
+        );
     }
     if pass.stats.rings_kept > 0 {
-        pass.notes.push(format!(
-            "{} area ring(s) were kept unchanged because simplifying them would have made them cross themselves",
-            pass.stats.rings_kept
-        ));
+        pass.notes.push(
+            GeoMessage::new(
+                codes::RINGS_KEPT,
+                format!("{} area ring(s) were kept unchanged because simplifying them would have made them cross themselves", pass.stats.rings_kept),
+            )
+            .with("count", pass.stats.rings_kept),
+        );
     }
     let mut result = document.clone();
     result.features = features;

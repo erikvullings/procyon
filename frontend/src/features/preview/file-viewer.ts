@@ -1207,7 +1207,10 @@ const PdfPageCanvas: FactoryComponent<{
   return {
     view: ({ attrs }) =>
       error !== undefined
-        ? m('.fm-file-viewer-pdf-page-error', `Couldn't render page ${attrs.pageNumber}: ${error}`)
+        ? m(
+            '.fm-file-viewer-pdf-page-error',
+            t('viewer', 'pageRenderFailed', { page: attrs.pageNumber, error }),
+          )
         : m(
             '.fm-file-viewer-pdf-page',
             {
@@ -1377,7 +1380,7 @@ function renderComicBody(state: Extract<FileViewerState, { status: 'ready' }>): 
       ? m('span', t('viewer', 'loadingPage'))
       : m('img.fm-file-viewer-image-fit', {
           src: content.currentPageDataUri,
-          alt: `Page ${content.currentPage + 1} of ${state.entry.name}`,
+          alt: t('viewer', 'pageAlt', { page: content.currentPage + 1, name: state.entry.name }),
         }),
   );
 }
@@ -2023,7 +2026,7 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
               ? renderPagedSearchBar(
                   state.pdfSearch,
                   t('viewer', 'searchPdfPlaceholder'),
-                  'Page',
+                  t('viewer', 'pageWord'),
                   attrs.onPdfSearchQueryChange,
                   attrs.onPreviousPdfMatch,
                   attrs.onNextPdfMatch,

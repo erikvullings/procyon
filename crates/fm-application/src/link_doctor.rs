@@ -6,6 +6,7 @@
 //! roots), and checks cancellation between every entry. Applying a fix is a separate, explicit
 //! operation owned by the operation engine.
 
+use crate::rejection::{Rejection, reason};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -331,9 +332,10 @@ impl LinkDoctorCoordinator {
         request: StartLinkDoctorScanRequestDto,
     ) -> Result<StartLinkDoctorScanResponseDto, ApplicationError> {
         if request.roots.is_empty() {
-            return Err(ApplicationError::InvalidRequest(
-                "at least one root must be supplied".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::ROOT_REQUIRED,
+                "at least one root must be supplied",
+            )));
         }
         let scan_id = Uuid::new_v4();
         let handle = Arc::new(ScanHandle {
@@ -406,9 +408,10 @@ pub(crate) async fn find_replacements(
     request: FindLinkReplacementsRequestDto,
 ) -> Result<FindLinkReplacementsResponseDto, ApplicationError> {
     if request.roots.is_empty() || request.target_name.trim().is_empty() {
-        return Err(ApplicationError::InvalidRequest(
-            "roots and a target name are required".to_owned(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::ROOT_AND_TARGET_REQUIRED,
+            "roots and a target name are required",
+        )));
     }
     let roots: Vec<Location> = request.roots.into_iter().map(Into::into).collect();
     let wanted = request.target_name.to_lowercase();

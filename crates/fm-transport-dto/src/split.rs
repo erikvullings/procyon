@@ -51,4 +51,10 @@ pub struct InspectSplitSetResponseDto {
     /// Why the set cannot be joined (gaps, damaged manifest, mixed selection); absent when ready.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Stable code of `error` that clients localise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+    /// Values the localised `error` interpolates.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub error_params: std::collections::BTreeMap<String, String>,
 }

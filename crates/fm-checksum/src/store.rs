@@ -30,6 +30,9 @@ pub struct ChecksumEntryResult {
     pub checksums: ChecksumSet,
     /// Why this entry could not be hashed, when it could not be.
     pub error: Option<String>,
+    /// Stable code of `error` that clients localise (a provider code such as `notFound`, or
+    /// `readFailed`).
+    pub error_code: Option<String>,
 }
 
 struct ChecksumJobState {
@@ -315,6 +318,7 @@ mod tests {
             size: 1,
             checksums: ChecksumSet::default(),
             error: None,
+            error_code: None,
         }
     }
 

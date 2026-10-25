@@ -1,6 +1,7 @@
 //! Tauri commands: thin wrappers over `FileManagerService`, mirroring the
 //! semantic REST API rather than reproducing HTTP concepts (spec §11).
 //!
+use crate::command_failure::CommandFailure;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -236,10 +237,10 @@ pub(crate) struct OpenWithApplication {
 #[tauri::command]
 pub(crate) async fn list_open_with_applications(
     location: LocationDto,
-) -> Result<Vec<OpenWithApplication>, String> {
+) -> Result<Vec<OpenWithApplication>, CommandFailure> {
     let path = fm_domain::Location::from(location)
         .to_native_path()
-        .map_err(|error| error.to_string())?;
+        .map_err(CommandFailure::platform)?;
     #[cfg(target_os = "macos")]
     {
         tauri::async_runtime::spawn_blocking(move || {
@@ -249,15 +250,18 @@ pub(crate) async fn list_open_with_applications(
                         .map(|(name, path)| OpenWithApplication { name, path })
                         .collect()
                 })
-                .map_err(|error| error.to_string())
+                .map_err(CommandFailure::platform)
         })
         .await
-        .map_err(|error| error.to_string())?
+        .map_err(CommandFailure::platform)?
     }
     #[cfg(not(target_os = "macos"))]
     {
         let _ = path;
-        Err("Open With applications are unavailable on this platform".to_owned())
+        Err(CommandFailure::new(
+            "unsupportedPlatform",
+            "Open With applications are unavailable on this platform",
+        ))
     }
 }
 
@@ -265,43 +269,49 @@ pub(crate) async fn list_open_with_applications(
 pub(crate) async fn open_with_application(
     location: LocationDto,
     application_path: PathBuf,
-) -> Result<(), String> {
+) -> Result<(), CommandFailure> {
     let path = fm_domain::Location::from(location)
         .to_native_path()
-        .map_err(|error| error.to_string())?;
+        .map_err(CommandFailure::platform)?;
     #[cfg(target_os = "macos")]
     {
         tauri::async_runtime::spawn_blocking(move || {
             fm_platform_macos::open_with_application(&path, &application_path)
-                .map_err(|error| error.to_string())
+                .map_err(CommandFailure::platform)
         })
         .await
-        .map_err(|error| error.to_string())?
+        .map_err(CommandFailure::platform)?
     }
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (path, application_path);
-        Err("Open With applications are unavailable on this platform".to_owned())
+        Err(CommandFailure::new(
+            "unsupportedPlatform",
+            "Open With applications are unavailable on this platform",
+        ))
     }
 }
 
 #[tauri::command]
-pub(crate) async fn open_with_any_application(location: LocationDto) -> Result<(), String> {
+pub(crate) async fn open_with_any_application(location: LocationDto) -> Result<(), CommandFailure> {
     let path = fm_domain::Location::from(location)
         .to_native_path()
-        .map_err(|error| error.to_string())?;
+        .map_err(CommandFailure::platform)?;
     #[cfg(target_os = "macos")]
     {
         tauri::async_runtime::spawn_blocking(move || {
-            fm_platform_macos::open_with_any_application(&path).map_err(|error| error.to_string())
+            fm_platform_macos::open_with_any_application(&path).map_err(CommandFailure::platform)
         })
         .await
-        .map_err(|error| error.to_string())?
+        .map_err(CommandFailure::platform)?
     }
     #[cfg(not(target_os = "macos"))]
     {
         let _ = path;
-        Err("Open With applications are unavailable on this platform".to_owned())
+        Err(CommandFailure::new(
+            "unsupportedPlatform",
+            "Open With applications are unavailable on this platform",
+        ))
     }
 }
 
@@ -2273,15 +2283,21 @@ const VIEWER_TITLE_MAX_CHARS: usize = 200;
 /// A viewer request is a base64url-encoded entry description built by the frontend. Only that
 /// alphabet is allowed so the payload can be placed in the app URL's query without any escaping
 /// or URL-injection concerns.
-fn validate_viewer_payload(payload: &str) -> Result<(), String> {
+fn validate_viewer_payload(payload: &str) -> Result<(), CommandFailure> {
     if payload.is_empty() || payload.len() > VIEWER_PAYLOAD_MAX_BYTES {
-        return Err("invalid viewer request size".to_owned());
+        return Err(CommandFailure::new(
+            "invalidViewerRequest",
+            "invalid viewer request size",
+        ));
     }
     if !payload
         .bytes()
         .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
     {
-        return Err("invalid viewer request encoding".to_owned());
+        return Err(CommandFailure::new(
+            "invalidViewerRequest",
+            "invalid viewer request encoding",
+        ));
     }
     Ok(())
 }
@@ -2295,7 +2311,7 @@ pub(crate) async fn open_viewer_window(
     app: AppHandle,
     payload: String,
     title: String,
-) -> Result<(), String> {
+) -> Result<(), CommandFailure> {
     validate_viewer_payload(&payload)?;
     let title: String = title.chars().take(VIEWER_TITLE_MAX_CHARS).collect();
     tauri::WebviewWindowBuilder::new(
@@ -2308,7 +2324,7 @@ pub(crate) async fn open_viewer_window(
     .min_inner_size(480.0, 320.0)
     .zoom_hotkeys_enabled(true)
     .build()
-    .map_err(|error| error.to_string())?;
+    .map_err(CommandFailure::platform)?;
     Ok(())
 }
 

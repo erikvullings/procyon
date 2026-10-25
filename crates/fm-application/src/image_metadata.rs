@@ -3,6 +3,7 @@
 //! Reads only the leading bytes through the VFS provider, so local, archive and remote images are
 //! all handled the same way and a huge file is never loaded whole.
 
+use crate::rejection::{Rejection, reason};
 use fm_domain::{EntryId, Location};
 use fm_metadata::{ImageTags, read_image_tags};
 use fm_transport_dto::{
@@ -98,9 +99,13 @@ pub(crate) async fn read_image_gps(
     request: ReadImageGpsRequestDto,
 ) -> Result<ReadImageGpsResponseDto, ApplicationError> {
     if request.locations.len() > MAX_GPS_LOCATIONS {
-        return Err(ApplicationError::InvalidRequest(format!(
-            "at most {MAX_GPS_LOCATIONS} images can be read at once"
-        )));
+        return Err(ApplicationError::from(
+            Rejection::new(
+                reason::SELECTION_SIZE,
+                format!("at most {MAX_GPS_LOCATIONS} images can be read at once"),
+            )
+            .with("max", MAX_GPS_LOCATIONS),
+        ));
     }
     let mut entries = Vec::with_capacity(request.locations.len());
     for dto in request.locations {

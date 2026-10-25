@@ -297,6 +297,9 @@ pub struct ChecksumEntryPayload {
     /// Why this entry could not be hashed, when it could not be.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Stable code of `error` that clients localise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
 }
 
 /// Two or more paths that are the same file through a hardlink (task 0077).
@@ -695,6 +698,9 @@ pub struct OperationUndoPayload {
     /// Explanation when undo is unavailable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// Stable code of `reason` that clients localise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
     /// Active or completed undo operation associated with this row.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub operation_id: Option<OperationId>,
@@ -821,8 +827,59 @@ pub struct NotificationPayload {
     pub id: String,
     /// Severity (`info`, `warning`, or `error`).
     pub level: NotificationLevelPayload,
-    /// Human-readable message.
+    /// Human-readable message (English fallback for clients without `code`).
     pub message: String,
+    /// Stable code clients map to localised text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    /// Values the localised text interpolates.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub params: std::collections::BTreeMap<String, String>,
+}
+
+impl NotificationPayload {
+    /// A notification with a fresh identifier and no localisation code.
+    #[must_use]
+    pub fn new(level: NotificationLevelPayload, message: impl Into<String>) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            level,
+            message: message.into(),
+            code: None,
+            params: std::collections::BTreeMap::new(),
+        }
+    }
+
+    /// Attaches the stable code clients localise.
+    #[must_use]
+    pub fn with_code(mut self, code: &str) -> Self {
+        self.code = Some(code.to_owned());
+        self
+    }
+
+    /// Adds one interpolation value.
+    #[must_use]
+    pub fn with_param(mut self, key: &str, value: impl ToString) -> Self {
+        self.params.insert(key.to_owned(), value.to_string());
+        self
+    }
+}
+
+/// Codes of [`NotificationPayload::code`]. Every value must have a translation in each frontend
+/// locale; a frontend test reads this file to enforce that.
+pub mod notification_codes {
+    /// The settings file could not be read; defaults were loaded (`path` of the backup).
+    pub const SETTINGS_CORRUPT: &str = "settingsCorrupt";
+    /// The settings file comes from a newer version.
+    pub const SETTINGS_NEWER_SCHEMA: &str = "settingsNewerSchema";
+    /// The settings could not be read; defaults were loaded.
+    pub const SETTINGS_UNREADABLE: &str = "settingsUnreadable";
+    /// LLM profiles could not be read.
+    pub const LLM_PROFILES_UNREADABLE: &str = "llmProfilesUnreadable";
+    /// A plugin action copied text to the clipboard.
+    pub const CLIPBOARD_COPIED: &str = "clipboardCopied";
+    /// A plugin was isolated after repeated failures (`plugin`, `detail`).
+    pub const PLUGIN_ISOLATED: &str = "pluginIsolated";
 }
 
 /// A connection's runtime state (task 0103, spec §5.4).
@@ -1116,8 +1173,11 @@ pub enum BackendEventPayload {
         scan_id: Uuid,
         /// Stable application error code.
         code: String,
-        /// Safe user-readable error message.
+        /// Safe user-readable error message (English fallback).
         message: String,
+        /// Code-specific facts clients localise with, such as the rejection reason.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        details: Option<serde_json::Value>,
     },
     /// Semantic ingestion or reconciliation progress changed.
     #[serde(rename = "semantic.ingestionProgress")]
@@ -1837,6 +1897,8 @@ mod tests {
                         id: "notification-1".to_owned(),
                         level: NotificationLevelPayload::Info,
                         message: "Done".to_owned(),
+                        code: None,
+                        params: std::collections::BTreeMap::new(),
                     },
                 },
                 Self::DiskUsageProgress {
@@ -1868,6 +1930,7 @@ mod tests {
                     scan_id: Uuid::from_str(OPERATION_ID).expect("fixture scan id must be valid"),
                     code: "internal".to_owned(),
                     message: "Disk-usage scan failed".to_owned(),
+                    details: None,
                 },
                 Self::SemanticIngestionProgress {
                     job_id: "semantic-job-1".to_owned(),

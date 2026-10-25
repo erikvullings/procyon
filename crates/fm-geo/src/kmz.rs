@@ -3,6 +3,7 @@
 //! The archive is read from memory and nothing is extracted to disk. Entry counts and sizes are
 //! bounded, so a zip bomb cannot exhaust memory.
 
+use crate::message::{GeoMessage, codes};
 use std::cell::RefCell;
 use std::io::{Cursor, Read, Write};
 
@@ -27,8 +28,8 @@ pub enum KmzError {
     #[error("the KMZ archive contains no .kml file")]
     NoKml,
     /// The archive has too many entries or the KML is too large.
-    #[error("{0}")]
-    TooLarge(String),
+    #[error("{}", .0.text)]
+    TooLarge(GeoMessage),
     /// The KML inside is invalid.
     #[error(transparent)]
     Kml(#[from] KmlError),
@@ -68,6 +69,31 @@ fn main_kml(names: &[String]) -> Option<&String> {
         })
 }
 
+fn too_many_entries() -> KmzError {
+    KmzError::TooLarge(
+        GeoMessage::new(
+            codes::KMZ_TOO_MANY_ENTRIES,
+            format!("the KMZ archive has more than {MAX_ENTRIES} entries"),
+        )
+        .with("max", MAX_ENTRIES),
+    )
+}
+
+impl KmzError {
+    /// The localisable description of the failure.
+    #[must_use]
+    pub fn message(&self) -> GeoMessage {
+        match self {
+            Self::Archive(detail) => {
+                GeoMessage::new(codes::KMZ_ARCHIVE, self.to_string()).with("detail", detail)
+            }
+            Self::NoKml => GeoMessage::new(codes::KMZ_NO_KML, self.to_string()),
+            Self::TooLarge(message) => message.clone(),
+            Self::Kml(error) => error.message(),
+        }
+    }
+}
+
 /// Reads KMZ bytes.
 ///
 /// # Errors
@@ -77,9 +103,7 @@ pub fn parse_kmz(bytes: &[u8], limits: Limits) -> Result<GeoDocument, KmzError> 
     let mut zip = ZipArchive::new(Cursor::new(bytes))
         .map_err(|error| KmzError::Archive(error.to_string()))?;
     if zip.len() > MAX_ENTRIES {
-        return Err(KmzError::TooLarge(format!(
-            "the KMZ archive has more than {MAX_ENTRIES} entries"
-        )));
+        return Err(too_many_entries());
     }
     let names: Vec<String> = zip.file_names().map(str::to_owned).collect();
     let kml_name = main_kml(&names).ok_or(KmzError::NoKml)?.clone();
@@ -89,18 +113,23 @@ pub fn parse_kmz(bytes: &[u8], limits: Limits) -> Result<GeoDocument, KmzError> 
             .by_name(&kml_name)
             .map_err(|error| KmzError::Archive(error.to_string()))?;
         if entry.size() > MAX_KML_BYTES {
-            return Err(KmzError::TooLarge(format!(
-                "the KML inside the KMZ is larger than {MAX_KML_BYTES} bytes"
-            )));
+            return Err(KmzError::TooLarge(
+                GeoMessage::new(
+                    codes::KMZ_KML_TOO_LARGE,
+                    format!("the KML inside the KMZ is larger than {MAX_KML_BYTES} bytes"),
+                )
+                .with("maxBytes", MAX_KML_BYTES),
+            ));
         }
         let mut limited = entry.take(MAX_KML_BYTES + 1);
         limited
             .read_to_end(&mut kml)
             .map_err(|error| KmzError::Archive(error.to_string()))?;
         if kml.len() as u64 > MAX_KML_BYTES {
-            return Err(KmzError::TooLarge(
-                "the KML inside the KMZ expands beyond the size limit".into(),
-            ));
+            return Err(KmzError::TooLarge(GeoMessage::new(
+                codes::KMZ_KML_EXPANDS,
+                "the KML inside the KMZ expands beyond the size limit",
+            )));
         }
     }
     let archive = Archive {
@@ -120,9 +149,7 @@ pub fn repack_kmz(bytes: &[u8]) -> Result<Vec<u8>, KmzError> {
     let mut zip = ZipArchive::new(Cursor::new(bytes))
         .map_err(|error| KmzError::Archive(error.to_string()))?;
     if zip.len() > MAX_ENTRIES {
-        return Err(KmzError::TooLarge(format!(
-            "the KMZ archive has more than {MAX_ENTRIES} entries"
-        )));
+        return Err(too_many_entries());
     }
     let mut output = Cursor::new(Vec::new());
     let mut writer = zip::ZipWriter::new(&mut output);
@@ -143,9 +170,10 @@ pub fn repack_kmz(bytes: &[u8]) -> Result<Vec<u8>, KmzError> {
         }
         total += entry.size();
         if entry.size() > MAX_KML_BYTES || total > MAX_TOTAL_BYTES {
-            return Err(KmzError::TooLarge(
-                "the KMZ archive is too large to repack".into(),
-            ));
+            return Err(KmzError::TooLarge(GeoMessage::new(
+                codes::KMZ_TOO_LARGE_TO_REPACK,
+                "the KMZ archive is too large to repack",
+            )));
         }
         let mut data = Vec::new();
         entry

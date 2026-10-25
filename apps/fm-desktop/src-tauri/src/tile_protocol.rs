@@ -62,7 +62,9 @@ fn status_for(error: &ApplicationError) -> StatusCode {
     match error {
         ApplicationError::NotFound => StatusCode::NOT_FOUND,
         ApplicationError::PermissionDenied => StatusCode::FORBIDDEN,
-        ApplicationError::InvalidRequest(_) => StatusCode::BAD_REQUEST,
+        ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_) => {
+            StatusCode::BAD_REQUEST
+        }
         ApplicationError::ProviderUnavailable => StatusCode::SERVICE_UNAVAILABLE,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     }

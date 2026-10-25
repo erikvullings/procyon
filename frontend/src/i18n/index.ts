@@ -223,7 +223,7 @@ export function actionTitle(actionId: string, fallback: string): string {
 const IEC_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB'] as const;
 
 /** Formats a byte count carried as a decimal string; non-numeric input is returned unchanged. */
-function byteCount(value: unknown): string {
+export function byteCount(value: unknown): string {
   const bytes = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(bytes)) return typeof value === 'string' ? value : '';
   let scaled = bytes;
@@ -242,31 +242,121 @@ function recordOf(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 }
 
-/** Interpolation values for coded messages; missing placeholders render empty, never as `{x}`. */
+/** Placeholders every coded message may use; they render empty when the backend omits them. */
+const KNOWN_PARAMS = [
+  'actionId',
+  'fingerprint',
+  'expectedFingerprint',
+  'name',
+  'detail',
+  'field',
+  'notes',
+  'count',
+  'items',
+] as const;
+
+function paramText(value: unknown): string {
+  return typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '';
+}
+
+/**
+ * Interpolation values for coded messages. Every backend parameter is passed through; the ones
+ * whose key ends in `Bytes` (or the legacy `required`/`available`) are formatted as sizes, and
+ * well-known placeholders that were not sent render empty, never as `{x}`.
+ */
 function messageParams(params: Readonly<Record<string, unknown>> | null | undefined): Params {
   const source = params ?? {};
-  const text = (value: unknown): string =>
-    typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '';
+  const result: Params = {};
+  for (const key of KNOWN_PARAMS) result[key] = paramText(source[key]);
+  for (const [key, value] of Object.entries(source)) {
+    result[key] = key.endsWith('Bytes') ? byteCount(value) : paramText(value);
+  }
+  result.required = byteCount(source.required);
+  result.available = byteCount(source.available);
+  return result;
+}
+
+/**
+ * Fills a catalogue template. Placeholders without a parameter render empty, and parameter
+ * values are never re-scanned, so a file named `{draft}` keeps its braces.
+ */
+function fillTemplate(template: string, params: Params): string {
+  return template.replaceAll(/\{(\w+)\}/gu, (_match, key: string) => String(params[key] ?? ''));
+}
+
+/** Renders `group.key` from the current catalogue with `params`. */
+function render(group: CodedGroup | 'previewResource', key: string, params: Params): string {
+  return fillTemplate((t as (group: string, key: string) => string)(group, key), params);
+}
+
+type CodedGroup =
+  | 'apiError'
+  | 'semanticError'
+  | 'operationEntryError'
+  | 'operationFailure'
+  | 'operationUndoReason'
+  | 'rejectionReason'
+  | 'geoMessage'
+  | 'viewerWarning'
+  | 'notification';
+
+/** Renders `group.code` with `params`; undefined when the English catalogue lacks the code. */
+function codedText(group: CodedGroup, code: string, params: Params): string | undefined {
+  if (!Object.hasOwn(en[group], code)) return undefined;
+  return render(group, code, params);
+}
+
+/** First catalogue (in order) that knows `code`. */
+function firstCodedText(
+  groups: readonly CodedGroup[],
+  code: string,
+  params: Params,
+): string | undefined {
+  for (const group of groups) {
+    const text = codedText(group, code, params);
+    if (text !== undefined) return text;
+  }
+  return undefined;
+}
+
+/** Budgets counted in items or nesting levels, not bytes or pixels. */
+const COUNT_BUDGETS = new Set(['zipEntries', 'imageCount', 'mediaCount', 'slideCount', 'xmlDepth']);
+
+/**
+ * Rejection reasons with parameters that need localising before interpolation: the exceeded
+ * preview budget names its resource and formats the limit per unit.
+ */
+function rejectionParams(reason: string, params: Params): Params {
+  if (reason !== 'previewBudget') return params;
+  const resource = String(params.resource ?? '');
+  const limit = Number(params.limit);
+  const known = Object.hasOwn(en.previewResource, resource);
   return {
-    actionId: text(source.actionId),
-    fingerprint: text(source.fingerprint),
-    expectedFingerprint: text(source.expectedFingerprint),
-    name: text(source.name),
-    detail: text(source.detail),
-    field: text(source.field),
-    notes: text(source.notes),
-    count: text(source.count),
-    items: text(source.items),
-    required: byteCount(source.required),
-    available: byteCount(source.available),
+    ...params,
+    resource: known ? render('previewResource', resource, {}) : resource,
+    limit:
+      COUNT_BUDGETS.has(resource) || resource.endsWith('Pixels')
+        ? new Intl.NumberFormat(currentLocale).format(limit)
+        : byteCount(limit),
   };
+}
+
+/** Text for the `reason` of an `invalidRequest`/`platformOperationFailed` rejection. */
+function rejectionText(reason: string, record: Record<string, unknown>): string | undefined {
+  const params = rejectionParams(reason, messageParams(record));
+  return firstCodedText(
+    ['rejectionReason', 'operationEntryError', 'operationUndoReason'],
+    reason,
+    params,
+  );
 }
 
 /**
  * Localised text for a stable backend error code, or undefined for codes without a dedicated
- * entry (e.g. `invalidRequest`, whose backend message carries the specifics). Looks through the
- * `ApplicationErrorCode` catalogue first, then the semantic component/library catalogue.
- * `fallback` is the backend's English text, offered to entries as `{detail}`.
+ * entry. Looks through the `ApplicationErrorCode` catalogue first, then the semantic
+ * component/library catalogue. `invalidRequest`/`platformOperationFailed` first try the
+ * rejection `reason` carried in `details`, then wrap the backend text. `fallback` is the
+ * backend's English text, offered to entries as `{detail}`.
  */
 export function apiErrorMessage(
   code: string,
@@ -274,17 +364,27 @@ export function apiErrorMessage(
   fallback?: string,
 ): string | undefined {
   const record = recordOf(details);
+  if (code === 'invalidRequest' || code === 'platformOperationFailed') {
+    const reason = typeof record.reason === 'string' ? record.reason : undefined;
+    const specific = reason === undefined ? undefined : rejectionText(reason, record);
+    if (specific !== undefined) return specific;
+  }
   if (Object.hasOwn(en.apiError, code)) {
-    return t('apiError', code as keyof EnglishCatalogue['apiError'], messageParams(record));
+    return render('apiError', code, {
+      ...messageParams(record),
+      detail: paramText(record.detail) || (fallback ?? ''),
+    });
   }
   if (Object.hasOwn(en.semanticError, code)) {
-    return t('semanticError', code as keyof EnglishCatalogue['semanticError'], {
+    return render('semanticError', code, {
       ...messageParams(record),
       required: byteCount(record.requiredBytes),
       available: byteCount(record.availableBytes),
-      detail: fallback ?? '',
+      detail: paramText(record.detail) || (fallback ?? ''),
     });
   }
+  // Plain reason codes (e.g. a `paneNotFound` failure raised without `invalidRequest`).
+  if (Object.hasOwn(en.rejectionReason, code)) return rejectionText(code, record);
   return undefined;
 }
 
@@ -297,15 +397,85 @@ export interface CodedMessage {
   readonly message: string;
 }
 
+/** Localised text of a geographic message (note, warning or failure) by its code. */
+export function geoMessageText(message: CodedMessage): string {
+  const { code } = message;
+  if (code == null || !Object.hasOwn(en.geoMessage, code)) return message.message;
+  const params = messageParams(message.params);
+  let text = render('geoMessage', code, params);
+  if (code === 'crsConverted' && Number(message.params?.failed) > 0) {
+    text += render('geoMessage', 'crsConvertedFailures', params);
+  }
+  return text;
+}
+
+/** Localises the JSON-encoded geo notes an operation entry error carries in `notes`. */
+function geoNotesText(notes: string): string {
+  try {
+    const parsed: unknown = JSON.parse(notes);
+    if (!Array.isArray(parsed)) return notes;
+    return parsed
+      .map((note) => {
+        const record = recordOf(note);
+        return geoMessageText({
+          code: typeof record.code === 'string' ? record.code : null,
+          message: typeof record.message === 'string' ? record.message : '',
+          params: recordOf(record.params) as Record<string, string>,
+        });
+      })
+      .join('; ');
+  } catch {
+    return notes;
+  }
+}
+
+const ENTRY_ERROR_GROUPS = ['operationEntryError', 'operationFailure', 'geoMessage'] as const;
+
 /** Localised per-entry operation failure; unknown or absent codes keep the English message. */
 export function operationEntryErrorText(error: CodedMessage): string {
   const { code } = error;
-  if (code == null || !Object.hasOwn(en.operationEntryError, code)) return error.message;
-  return t(
-    'operationEntryError',
-    code as keyof EnglishCatalogue['operationEntryError'],
-    messageParams(error.params),
+  if (code == null) return error.message;
+  const params = messageParams(error.params);
+  if (code === 'geoWrittenWithLoss') params.notes = geoNotesText(String(error.params?.notes ?? ''));
+  if (code === 'operationFailed' && params.detail === '') {
+    return t('operationFailure', 'operationFailedPlain');
+  }
+  return firstCodedText(ENTRY_ERROR_GROUPS, code, params) ?? error.message;
+}
+
+/** The terminal failure of an operation (`operation.failed`). */
+export interface OperationFailureInfo {
+  readonly code: string;
+  readonly message: string;
+  readonly details?: unknown;
+}
+
+/** Localised operation-level failure; unknown codes keep the backend's English message. */
+export function operationFailureText(failure: OperationFailureInfo): string {
+  const record = recordOf(failure.details);
+  const params = messageParams(record);
+  if (failure.code === 'operationFailed' && params.detail === '') {
+    return t('operationFailure', 'operationFailedPlain');
+  }
+  return (
+    firstCodedText(
+      ['operationFailure', 'operationEntryError', 'geoMessage'],
+      failure.code,
+      params,
+    ) ??
+    apiErrorMessage(failure.code, failure.details, failure.message) ??
+    failure.message
   );
+}
+
+/** Localised text of a rejection `reason` with its parameters; unknown reasons keep `fallback`. */
+export function reasonText(
+  reason: string | null | undefined,
+  params: Readonly<Record<string, string>> | null | undefined,
+  fallback: string,
+): string {
+  if (reason == null) return fallback;
+  return rejectionText(reason, recordOf(params)) ?? fallback;
 }
 
 /** Localised operation outcome summary; unknown or absent codes keep the English message. */
@@ -319,10 +489,81 @@ export function operationResultText(result: CodedMessage): string {
   );
 }
 
-/** Localised reason an undo is unavailable; unknown or absent codes keep the English reason. */
+/**
+ * English reasons stored in operation history written before undo reasons had codes, mapped to
+ * the code that now describes them.
+ */
+const LEGACY_UNDO_REASONS: Readonly<Record<string, keyof EnglishCatalogue['operationUndoReason']>> =
+  {
+    'This operation has already been undone.': 'alreadyUndone',
+    'Undo is already in progress for this operation.': 'undoInProgress',
+    'This operation cannot currently be undone safely.': 'undoUnsafe',
+    'This operation cannot be undone safely.': 'undoUnsafe',
+    'Operation history entry was not found.': 'historyEntryNotFound',
+    'This operation has no effects to undo.': 'noEffects',
+    'Undo is available only after the operation completes.': 'notYetAvailable',
+    'This operation does not retain enough evidence to be undone safely.': 'noEvidence',
+    'The previous undo was interrupted, so its remaining effects cannot be reversed safely.':
+      'undoInterrupted',
+    'The previous undo completed only partially, so it cannot be retried safely.': 'undoPartial',
+    'An existing file was replaced, which cannot be brought back.': 'replacedExisting',
+    'Existing files were replaced, which cannot be brought back.': 'replacedExisting',
+    'The link replaced an existing entry, which cannot be restored.': 'replacedExisting',
+    'Undo is unavailable because the copy replaced or merged existing entries.': 'replacedExisting',
+    'Undo needs the backup copy; run the reduction with "keep original" enabled.': 'backupRequired',
+    'Undo needs the backup copy; run the edit with "keep original" enabled.': 'backupRequired',
+    'No file was changed.': 'nothingToUndo',
+    'No entry was changed.': 'nothingToUndo',
+    'No file was created.': 'nothingToUndo',
+    'No link was created, so there is nothing to undo.': 'nothingToUndo',
+    'The copy created no entries to undo.': 'nothingToUndo',
+    'The operation created no entries to undo.': 'nothingToUndo',
+    'The move destination was not completed, so there is nothing safe to undo.': 'nothingToUndo',
+    'The renamed entry was not completed, so there is nothing safe to undo.': 'nothingToUndo',
+    'Undo operations cannot themselves be undone.': 'undoOfUndo',
+    'The platform did not provide a restorable trash location.': 'trashNotRestorable',
+    'The move did not retain its original source fingerprint.': 'moveEvidenceMissing',
+    'A collision changed the moved entry name, so cross-provider undo is unavailable.':
+      'collisionRenamed',
+  };
+
+/**
+ * Localised reason an undo is unavailable. History written before codes existed carries only the
+ * English reason; known reasons are mapped to their code, anything else keeps the English text.
+ */
 export function operationUndoReasonText(reason: string, code: string | null | undefined): string {
-  if (code == null || !Object.hasOwn(en.operationUndoReason, code)) return reason;
-  return t('operationUndoReason', code as keyof EnglishCatalogue['operationUndoReason']);
+  const resolved = code ?? LEGACY_UNDO_REASONS[reason];
+  if (resolved == null || !Object.hasOwn(en.operationUndoReason, resolved)) return reason;
+  return t('operationUndoReason', resolved as keyof EnglishCatalogue['operationUndoReason']);
+}
+
+/** Localised text of a viewer caveat (`warningCode`); unknown codes keep the English text. */
+export function viewerWarningText(
+  warning: string | null | undefined,
+  code: string | null | undefined,
+  detail?: string | null,
+): string | undefined {
+  if (warning == null) return undefined;
+  if (code == null) return warning;
+  return codedText('viewerWarning', code, messageParams({ detail })) ?? warning;
+}
+
+/** Localised backend notification; unknown or absent codes keep the English message. */
+export function notificationText(notification: CodedMessage): string {
+  const { code } = notification;
+  if (code == null) return notification.message;
+  return (
+    codedText('notification', code, messageParams(notification.params)) ?? notification.message
+  );
+}
+
+/** Localised reason a folder or estimate is unavailable. */
+export function semanticUnavailableText(
+  code: string | null | undefined,
+  fallback: string | null | undefined,
+): string | undefined {
+  if (code == null || !Object.hasOwn(en.semanticUnavailable, code)) return fallback ?? undefined;
+  return t('semanticUnavailable', code as keyof EnglishCatalogue['semanticUnavailable']);
 }
 
 /**

@@ -216,7 +216,7 @@ describe('OperationCentre states', () => {
     expect(root.textContent).toContain('report.pdf');
     expect(root.textContent).toContain('512 B/s');
     expect(root.querySelector('[data-operation-id="completed"] .fm-operation-result')).toBeNull();
-    expect(root.textContent).toContain('Could not copy report.pdf.');
+    expect(root.textContent).toContain('Permission denied.');
     expect(root.querySelector('details')?.textContent).toContain('Permission denied');
     expect(
       root.querySelector('[data-operation-id="queued"] [data-action="cancel"]'),
@@ -328,7 +328,7 @@ describe('OperationCentre states', () => {
 
     const failure = root.querySelector('[data-operation-id="failed"] .fm-operation-failure');
     expect(failure?.getAttribute('role')).toBe('alert');
-    expect(failure?.textContent).toContain('Could not copy report.pdf.');
+    expect(failure?.textContent).toContain('Permission denied.');
     expect(failure?.textContent).toContain('file:///Documents/The Report (2026).pdf');
     expect(failure?.textContent).toContain('sftp://server/home/demo/The Report (2026).pdf');
     expect(failure?.textContent).not.toContain('%20');

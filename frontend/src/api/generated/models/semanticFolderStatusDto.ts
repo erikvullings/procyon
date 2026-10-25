@@ -3,6 +3,7 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type { SemanticFolderConsentDto } from './semanticFolderConsentDto.ts';
+import type { SemanticUnavailableReasonDto } from './semanticUnavailableReasonDto.ts';
 
 /**
  * Safe active-folder consent status.
@@ -23,10 +24,11 @@ export interface SemanticFolderStatusDto {
   /** Whether source links can currently open. */
   sourceAvailable: boolean;
   /**
-     * Sanitized source-unavailable reason.
+     * English source-unavailable explanation (fallback for clients without a code).
      * @nullable
      */
   unavailableReason?: string | null;
+  unavailableReasonCode?: null | SemanticUnavailableReasonDto;
   /** Whether the active workspace is attached to the granting root. */
   workspaceReferenced: boolean;
 }

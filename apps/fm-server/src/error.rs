@@ -60,7 +60,9 @@ fn status_for(error: &ApplicationError) -> StatusCode {
         ApplicationError::PermissionDenied => StatusCode::FORBIDDEN,
         // The request is valid and may succeed once the holder releases the file.
         ApplicationError::FileLocked => StatusCode::CONFLICT,
-        ApplicationError::InvalidRequest(_) => StatusCode::BAD_REQUEST,
+        ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_) => {
+            StatusCode::BAD_REQUEST
+        }
         ApplicationError::DestinationAlreadyExists => StatusCode::CONFLICT,
         ApplicationError::ProviderUnavailable => StatusCode::SERVICE_UNAVAILABLE,
         ApplicationError::OperationCancelled => StatusCode::CONFLICT,
@@ -71,7 +73,9 @@ fn status_for(error: &ApplicationError) -> StatusCode {
         ApplicationError::FileRevisionConflict { .. } => StatusCode::CONFLICT,
         ApplicationError::ActionNotFound(_) => StatusCode::NOT_FOUND,
         ApplicationError::ActionUnavailable(_) => StatusCode::CONFLICT,
-        ApplicationError::PlatformOperationFailed(_) => StatusCode::BAD_GATEWAY,
+        ApplicationError::PlatformOperationFailed(_) | ApplicationError::PlatformFailed(_) => {
+            StatusCode::BAD_GATEWAY
+        }
         ApplicationError::HostKeyUnverified { .. } | ApplicationError::HostKeyMismatch { .. } => {
             StatusCode::CONFLICT
         }

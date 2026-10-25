@@ -77,9 +77,12 @@ pub enum ExecutionError {
     /// This operation kind has not landed yet.
     #[error("operation kind is not implemented")]
     NotImplemented,
-    /// Typed implementation failure.
+    /// Uncoded internal failure; clients show a generic localised line.
     #[error("operation execution failed: {0}")]
     Failed(String),
+    /// Failure with a stable code and parameters clients localise.
+    #[error("{}", .0.message)]
+    Coded(Box<CodedFailure>),
     /// Provider-neutral filesystem failure.
     #[error(transparent)]
     Provider(#[from] fm_vfs::VfsError),
@@ -92,6 +95,43 @@ pub enum ExecutionError {
     /// This item needs an explicit user decision before it can be retried.
     #[error("operation item has a destination conflict")]
     Conflict(OperationConflict),
+}
+
+/// An operation-level failure with a stable [`crate::codes::failure`] code, structured
+/// parameters and its English message as fallback.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodedFailure {
+    /// Stable machine-readable code.
+    pub code: String,
+    /// English fallback text.
+    pub message: String,
+    /// Values the localised text interpolates.
+    pub params: std::collections::BTreeMap<String, String>,
+}
+
+impl CodedFailure {
+    /// A failure with no parameters.
+    #[must_use]
+    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            message: message.into(),
+            params: std::collections::BTreeMap::new(),
+        }
+    }
+
+    /// Adds one structured interpolation value.
+    #[must_use]
+    pub fn with_param(mut self, key: &str, value: impl ToString) -> Self {
+        self.params.insert(key.to_owned(), value.to_string());
+        self
+    }
+}
+
+impl From<CodedFailure> for ExecutionError {
+    fn from(failure: CodedFailure) -> Self {
+        Self::Coded(Box::new(failure))
+    }
 }
 
 impl ExecutionError {
@@ -184,6 +224,7 @@ pub trait OperationExecutor: Send + Sync + 'static {
         _cancellation: &CancellationToken,
     ) -> Result<OperationUndo, ExecutionError> {
         Ok(OperationUndo::unavailable(
+            crate::codes::undo::NO_EVIDENCE,
             "This operation does not retain enough evidence to be undone safely.",
         ))
     }
@@ -285,10 +326,11 @@ impl From<ExecutionError> for SchedulerError {
 }
 
 impl ExecutionError {
-    fn code(&self) -> &'static str {
+    fn code(&self) -> &str {
         match self {
             Self::Provider(error) => error.code(),
-            _ => "operationFailed",
+            Self::Coded(failure) => &failure.code,
+            _ => crate::codes::failure::OPERATION_FAILED,
         }
     }
 
@@ -303,16 +345,24 @@ impl ExecutionError {
                 "required": required,
                 "available": available,
             })),
+            Self::Provider(
+                fm_vfs::VfsError::Io { message }
+                | fm_vfs::VfsError::AuthenticationFailed { message },
+            ) => Some(serde_json::json!({ "detail": message })),
+            Self::Coded(failure) if !failure.params.is_empty() => {
+                Some(serde_json::json!(failure.params))
+            }
+            Self::Failed(detail) => Some(serde_json::json!({ "detail": detail })),
             _ => None,
         }
     }
 }
 
 impl SchedulerError {
-    fn code(&self) -> &'static str {
+    fn code(&self) -> &str {
         match self {
             Self::Execution(error) => error.code(),
-            _ => "operationFailed",
+            _ => crate::codes::failure::OPERATION_FAILED,
         }
     }
 
@@ -366,7 +416,7 @@ mod error_code_tests {
         );
         assert_eq!(
             SchedulerError::from(ExecutionError::Failed("x".into())).details(),
-            None
+            Some(serde_json::json!({ "detail": "x" }))
         );
     }
 }
@@ -595,9 +645,13 @@ impl Scheduler {
             let mut state = job.lock();
             {
                 let conflict = state.pending_conflict.as_mut().ok_or_else(|| {
-                    SchedulerError::Execution(Box::new(ExecutionError::Failed(
-                        "operation has no pending conflict".into(),
-                    )))
+                    SchedulerError::Execution(Box::new(
+                        crate::CodedFailure::new(
+                            crate::codes::failure::NO_PENDING_CONFLICT,
+                            "operation has no pending conflict",
+                        )
+                        .into(),
+                    ))
                 })?;
                 conflict.decision = Some(resolution);
             }
@@ -1092,37 +1146,12 @@ fn operation_payload(operation: &Operation) -> OperationPayload {
 }
 
 fn operation_undo_payload(operation: &Operation) -> OperationUndoPayload {
-    if let Some(id) = operation.undo.undone_by {
-        return OperationUndoPayload {
-            available: false,
-            reason: Some("This operation has already been undone.".into()),
-            operation_id: Some(id),
-        };
-    }
-    if let Some(id) = operation.undo.pending_operation {
-        return OperationUndoPayload {
-            available: false,
-            reason: Some("Undo is already in progress for this operation.".into()),
-            operation_id: Some(id),
-        };
-    }
-    let available = operation.undo.plan.is_some()
-        && matches!(
-            operation.state,
-            OperationState::Completed | OperationState::CompletedWithWarnings
-        );
+    let status = operation.undo_status();
     OperationUndoPayload {
-        available,
-        reason: if available {
-            None
-        } else {
-            operation
-                .undo
-                .unavailable_reason
-                .clone()
-                .or_else(|| Some("This operation cannot currently be undone safely.".into()))
-        },
-        operation_id: None,
+        available: status.available,
+        reason: status.reason,
+        reason_code: status.reason_code,
+        operation_id: status.operation_id,
     }
 }
 

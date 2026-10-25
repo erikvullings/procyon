@@ -26,6 +26,25 @@ pub enum CrsError {
     Unsupported(String),
 }
 
+impl CrsError {
+    /// The localisable description of the failure.
+    #[must_use]
+    pub fn message(&self) -> crate::GeoMessage {
+        use crate::{GeoMessage, codes};
+        match self {
+            Self::Unrecognised(text) => {
+                GeoMessage::new(codes::CRS_UNRECOGNISED, self.to_string()).with("text", text)
+            }
+            Self::UnknownCode(code) => {
+                GeoMessage::new(codes::CRS_UNKNOWN_CODE, self.to_string()).with("code", code)
+            }
+            Self::Unsupported(name) => {
+                GeoMessage::new(codes::CRS_UNSUPPORTED, self.to_string()).with("name", name)
+            }
+        }
+    }
+}
+
 /// A coordinate reference system that can convert positions to WGS84.
 pub struct Crs {
     proj: Proj,

@@ -9703,6 +9703,13 @@
             ],
             "description": "Why this entry could not be hashed, when it could not be."
           },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable code of `error` that clients localise."
+          },
           "location": {
             "$ref": "#/components/schemas/LocationDto",
             "description": "Location of the hashed entry."
@@ -10663,7 +10670,7 @@
           "notes": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/GeoMessageDto"
             },
             "description": "What the target format cannot represent."
           }
@@ -13059,11 +13066,15 @@
         ],
         "properties": {
           "error": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Set when this file cannot be converted at all."
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GeoMessageDto",
+                "description": "Set when this file cannot be converted at all."
+              }
+            ]
           },
           "location": {
             "$ref": "#/components/schemas/LocationDto",
@@ -13072,7 +13083,7 @@
           "notes": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/GeoMessageDto"
             },
             "description": "What the target format cannot represent."
           },
@@ -13202,6 +13213,13 @@
           "message"
         ],
         "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable code clients localise."
+          },
           "column": {
             "type": [
               "integer",
@@ -13222,7 +13240,17 @@
           },
           "message": {
             "type": "string",
-            "description": "Human-readable message."
+            "description": "Human-readable message (English fallback)."
+          },
+          "params": {
+            "type": "object",
+            "description": "Values the localised sentence interpolates.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           },
           "path": {
             "type": [
@@ -13241,13 +13269,58 @@
           "message"
         ],
         "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable code clients localise."
+          },
           "message": {
             "type": "string",
-            "description": "What is wrong or left out."
+            "description": "What is wrong or left out (English fallback)."
+          },
+          "params": {
+            "type": "object",
+            "description": "Values the localised sentence interpolates.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           },
           "path": {
             "type": "string",
             "description": "Where in the document, for example `/features/3/geometry`."
+          }
+        }
+      },
+      "GeoMessageDto": {
+        "type": "object",
+        "description": "A message clients localise by `code`; `message` is the English fallback.",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable code."
+          },
+          "message": {
+            "type": "string",
+            "description": "English text for clients that do not know the code."
+          },
+          "params": {
+            "type": "object",
+            "description": "Values the localised sentence interpolates (counts, names).",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           }
         }
       },
@@ -14286,6 +14359,23 @@
               "null"
             ],
             "description": "Why the set cannot be joined (gaps, damaged manifest, mixed selection); absent when ready."
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable code of `error` that clients localise."
+          },
+          "errorParams": {
+            "type": "object",
+            "description": "Values the localised `error` interpolates.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           },
           "hasManifest": {
             "type": "boolean",
@@ -17591,7 +17681,14 @@
               "string",
               "null"
             ],
-            "description": "A user-facing caveat, e.g. a WAL file whose recent writes are not shown."
+            "description": "A user-facing caveat, e.g. a WAL file whose recent writes are not shown (English fallback)."
+          },
+          "warningCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable code of `warning` that clients localise."
           }
         }
       },
@@ -17733,7 +17830,21 @@
               "string",
               "null"
             ],
-            "description": "Explicit provider or format limitation shown to the user."
+            "description": "Explicit provider or format limitation shown to the user (English fallback)."
+          },
+          "warningCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable code of `warning` that clients localise."
+          },
+          "warningDetail": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Raw diagnostic text the localised warning appends."
           }
         }
       },
@@ -18984,11 +19095,15 @@
             "description": "Summed length of all lines before, metres."
           },
           "error": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Set when the file cannot be read."
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GeoMessageDto",
+                "description": "Set when the file cannot be read."
+              }
+            ]
           },
           "featuresAfter": {
             "type": "integer",
@@ -19011,7 +19126,7 @@
           "notes": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/GeoMessageDto"
             },
             "description": "What was removed or could not be represented."
           },
@@ -21710,10 +21825,37 @@
                 "type": "string",
                 "description": "Signed artifact identity."
               },
+              "detail": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Underlying diagnostic (raw platform or network text), when there is one."
+              },
               "kind": {
                 "type": "string",
                 "enum": [
                   "artifact"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "A failure whose only specific is the underlying diagnostic text.",
+            "required": [
+              "detail",
+              "kind"
+            ],
+            "properties": {
+              "detail": {
+                "type": "string",
+                "description": "Underlying diagnostic (raw platform or catalog text)."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "diagnostic"
                 ]
               }
             }
@@ -22330,7 +22472,18 @@
               "string",
               "null"
             ],
-            "description": "Sanitized reason no estimate is available."
+            "description": "English reason no estimate is available (fallback for clients without a code)."
+          },
+          "unavailableReasonCode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SemanticUnavailableReasonDto",
+                "description": "Stable code of `unavailableReason` that clients localise."
+              }
+            ]
           }
         }
       },
@@ -22581,7 +22734,18 @@
               "string",
               "null"
             ],
-            "description": "Sanitized source-unavailable reason."
+            "description": "English source-unavailable explanation (fallback for clients without a code)."
+          },
+          "unavailableReasonCode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SemanticUnavailableReasonDto",
+                "description": "Stable code of `unavailableReason` that clients localise."
+              }
+            ]
           },
           "workspaceReferenced": {
             "type": "boolean",
@@ -23765,6 +23929,14 @@
           "currentFolder",
           "entireLibrary",
           "enrolledRoots"
+        ]
+      },
+      "SemanticUnavailableReasonDto": {
+        "type": "string",
+        "description": "Why a folder source or an estimate is unavailable.",
+        "enum": [
+          "sourceUnavailable",
+          "noRecursiveEstimate"
         ]
       },
       "SemanticUninstallReceiptDto": {
@@ -25675,7 +25847,21 @@
               "string",
               "null"
             ],
-            "description": "Explicit provider or format limitation shown to the user."
+            "description": "Explicit provider or format limitation shown to the user (English fallback)."
+          },
+          "warningCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable code of `warning` that clients localise."
+          },
+          "warningDetail": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Raw diagnostic text the localised warning appends."
           }
         }
       },

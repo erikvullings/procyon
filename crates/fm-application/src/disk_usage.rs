@@ -1,5 +1,6 @@
 //! Parallel local disk-usage scanning for the WinDirStat-style treemap (task 0118).
 
+use crate::rejection::{Rejection, reason};
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
@@ -714,18 +715,20 @@ pub(crate) async fn scan_disk_usage(
 ) -> Result<ScanDiskUsageResponseDto, ApplicationError> {
     let location: Location = request.location.clone().into();
     if location.provider_id.as_str() != "local" {
-        return Err(ApplicationError::InvalidRequest(
-            "disk-usage analysis currently requires a local location".to_owned(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::LOCAL_LOCATION_REQUIRED,
+            "disk-usage analysis currently requires a local location",
+        )));
     }
     let root = location
         .to_native_path()
         .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
     let metadata = fs::symlink_metadata(&root).map_err(map_io_error)?;
     if !metadata.is_dir() {
-        return Err(ApplicationError::InvalidRequest(
-            "disk-usage analysis requires a directory".to_owned(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::DIRECTORY_REQUIRED,
+            "disk-usage analysis requires a directory",
+        )));
     }
 
     tokio::task::spawn_blocking(move || scan_local_tree(root, request, events, cancellation))

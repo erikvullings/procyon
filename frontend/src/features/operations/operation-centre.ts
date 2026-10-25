@@ -3,6 +3,7 @@ import m, { type Component } from 'mithril';
 import { closeIcon } from '../../components/tabler-icons';
 import {
   operationEntryErrorText,
+  operationFailureText,
   operationResultText,
   operationUndoReasonText,
   t,
@@ -430,7 +431,7 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                   failure === undefined
                     ? undefined
                     : m('.fm-operation-failure', { role: 'alert' }, [
-                        m('strong.fm-operation-failure-message', failure.message),
+                        m('strong.fm-operation-failure-message', operationFailureText(failure)),
                         m('dl.fm-operation-failure-context', [
                           operation.sources.length === 0
                             ? undefined

@@ -20,8 +20,13 @@ export interface OpenSqliteViewResponseDto {
   /** SQLite library version used to read the file. */
   sqliteVersion: string;
   /**
-     * A user-facing caveat, e.g. a WAL file whose recent writes are not shown.
+     * A user-facing caveat, e.g. a WAL file whose recent writes are not shown (English fallback).
      * @nullable
      */
   warning?: string | null;
+  /**
+     * Stable code of `warning` that clients localise.
+     * @nullable
+     */
+  warningCode?: string | null;
 }

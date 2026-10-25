@@ -3,7 +3,7 @@ import { toast } from 'mithril-materialized';
 import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import { chevronDownIcon, copyIcon, eyeOffIcon, linkIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
-import { errorText, t } from '../../i18n';
+import { type EnglishCatalogue, errorText, t } from '../../i18n';
 import type {
   EntryId,
   EntrySummary,
@@ -404,12 +404,12 @@ const GIT_STATUS_LETTERS: Record<GitFileStatus, string> = {
   ignored: 'I',
 };
 
-const GIT_STATUS_LABELS: Record<GitFileStatus, string> = {
-  clean: 'Clean',
-  modified: 'Modified',
-  staged: 'Staged',
-  untracked: 'Untracked',
-  ignored: 'Ignored',
+const GIT_STATUS_LABEL_KEYS: Record<GitFileStatus, keyof EnglishCatalogue['table']> = {
+  clean: 'gitClean',
+  modified: 'gitModified',
+  staged: 'gitStaged',
+  untracked: 'gitUntracked',
+  ignored: 'gitIgnored',
 };
 
 const INITIAL_COLUMNS: readonly DirectoryColumnDescriptor[] = [
@@ -545,7 +545,7 @@ const INITIAL_COLUMNS: readonly DirectoryColumnDescriptor[] = [
       return letter === ''
         ? ''
         : tooltip(
-            GIT_STATUS_LABELS[entry.gitStatus],
+            t('table', GIT_STATUS_LABEL_KEYS[entry.gitStatus]),
             m(
               `span.fm-directory-git-status-badge.fm-directory-git-status-badge--${entry.gitStatus}`,
               letter,

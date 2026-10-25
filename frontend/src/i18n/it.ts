@@ -12,6 +12,8 @@ export const it = {
     invitation: 'È la prima volta con Procyon? Guarda la breve guida.',
     watch: 'Apri la guida',
     dismiss: "Chiudi l'invito",
+    clipFailed: 'Impossibile riprodurre la clip. Segui i passaggi scritti qui sotto.',
+    clipCaption: 'Esempio macOS · sottotitoli in inglese · 18 secondi',
   },
   basket: {
     ...en.basket,
@@ -114,6 +116,7 @@ export const it = {
     minimize: 'Riduci a icona',
     maximize: 'Ingrandisci',
     unableToRecoverWorkspace: 'Impossibile ripristinare lo spazio di lavoro',
+    nativeDragFailed: 'Impossibile avviare il trascinamento fuori dall’app.',
   },
   menu: {
     app: 'Procyon',
@@ -406,6 +409,10 @@ export const it = {
     rowHeightRange: "L'altezza della riga deve essere compresa tra 16 e 64 pixel.",
     operationConcurrencyRange:
       'La concorrenza delle operazioni deve essere un numero intero di almeno 1.',
+    saveFailed: 'Impossibile salvare le impostazioni.',
+    hiddenFilesHidden: 'Nascosti',
+    hiddenFilesShown: 'Mostrati',
+    shortcutNone: 'Nessuno',
   },
   clipboard: {
     empty: 'Gli appunti sono vuoti.',
@@ -711,6 +718,10 @@ export const it = {
     structuredFormulaValue: 'Formula: ={formula}\nValore memorizzato nella cache: {value}',
     previousWindow: 'Finestra precedente',
     nextWindow: 'Finestra successiva',
+    openExternalSpreadsheet: 'Apri questo file in un’applicazione esterna per fogli di calcolo.',
+    pageRenderFailed: 'Impossibile visualizzare la pagina {page}: {error}',
+    pageAlt: 'Pagina {page} di {name}',
+    pageWord: 'Pagina',
   },
   state: {
     empty: 'Questa cartella è vuota.',
@@ -743,6 +754,11 @@ export const it = {
     sortOldestFirst: 'Ordina dal più vecchio',
     age: 'Età',
     tagged: 'Etichettato',
+    gitClean: 'Pulito',
+    gitModified: 'Modificato',
+    gitStaged: 'In stage',
+    gitUntracked: 'Non tracciato',
+    gitIgnored: 'Ignorato',
   },
   tree: {
     directoryTree: 'Struttura ad albero delle cartelle',
@@ -773,7 +789,6 @@ export const it = {
     deleteTitle: 'Eliminare questo spazio di lavoro?',
     deleteMessage:
       'Questo eliminerà definitivamente "{name}" e il suo layout salvato. L\'azione non può essere annullata.',
-    defaultName: 'questo spazio di lavoro',
     unableToDiscoverCloudLocations: 'Impossibile rilevare le posizioni cloud',
     unableToDiscoverVolumes: 'Impossibile rilevare i volumi',
     dropFilesOntoPaneOrTab: 'Rilascia i file su un riquadro o una scheda di cartella',
@@ -784,6 +799,7 @@ export const it = {
     unableToDeleteWorkspace: 'Impossibile eliminare lo spazio di lavoro',
     renameConflict: 'Questo spazio di lavoro è cambiato altrove; aggiorna e riprova a rinominarlo.',
     deleteConflict: 'Questo spazio di lavoro è cambiato altrove; aggiorna e riprova a eliminarlo.',
+    defaultName: 'Predefinito',
   },
   workspaceSwitcher: {
     empty: 'Nessuno spazio di lavoro ancora.',
@@ -821,6 +837,7 @@ export const it = {
     permissionProcessSpawn: 'Avvio di processi',
     permissionNotifications: 'Notifiche',
     permissionSettingsStorage: 'Archiviazione delle impostazioni',
+    diagnosticDetail: 'Questo plugin non è attivo: {detail}',
   },
   multiRename: {
     title: 'Rinomina {count} elementi',
@@ -851,6 +868,7 @@ export const it = {
     overwritePresetPrompt: 'Esiste già una preimpostazione chiamata "{name}". Sovrascriverla?',
     savePresetFailed: 'Impossibile salvare le preimpostazioni di ridenominazione.',
     rename: 'Rinomina',
+    invalidPattern: 'Quel modello di ricerca non è un’espressione regolare valida.',
   },
   search: {
     ...en.search,
@@ -1019,6 +1037,7 @@ export const it = {
     statusHostKeyUnverified: 'Chiave host non verificata',
     statusHostKeyMismatch: 'Chiave host modificata',
     statusFailed: 'Non riuscito',
+    lastErrorDetail: 'Connessione non riuscita: {detail}',
   },
   photoGrouping: {
     unknownDate: 'Data sconosciuta',
@@ -1110,6 +1129,7 @@ export const it = {
       'La rimozione dei contenuti multimediali indicizzati elimina definitivamente dalla libreria i vettori di quel tipo di media.',
     gemmaMediaAddingHelp:
       'I nuovi contenuti multimediali abilitati verranno indicizzati durante la prossima scansione della libreria.',
+    cleanupFailedDetail: 'Pulizia non riuscita: {detail}',
   },
   semanticOcr: {
     ...en.semanticOcr,
@@ -1414,6 +1434,7 @@ export const it = {
     actionDeleteLeft: 'Elimina sinistra',
     actionDeleteRight: 'Elimina destra',
     unableToStart: 'Impossibile avviare il confronto',
+    needsTwoPanes: 'Il confronto di cartelle richiede due pannelli aperti.',
   },
   diskUsage: {
     tabTitle: 'Utilizzo disco',
@@ -1608,6 +1629,19 @@ export const it = {
     externalLinkBlocked: 'Il browser ha bloccato il collegamento esterno.',
     desktopHostRequired: 'Questa azione è disponibile solo nell’app desktop.',
     unknownFailure: 'Si è verificato un errore sconosciuto.',
+    invalidRequest: 'La richiesta non era valida: {detail}',
+    platformOperationFailed: 'L’operazione di sistema non è riuscita: {detail}',
+    appUpdateUnavailable: 'L’aggiornamento selezionato dell’applicazione non è più disponibile.',
+    appUpdateChannelSilent: 'Il canale di aggiornamento non ha segnalato alcuna versione.',
+    appUpdateStateUnavailable: 'Lo stato dell’aggiornamento dell’applicazione non è disponibile.',
+    unsupportedPlatform: 'Questo non è disponibile su questa piattaforma.',
+    invalidViewerRequest: 'La richiesta del visualizzatore non è valida.',
+    connectionValidationFailed: 'La connessione non è valida.',
+    connectionNotBrowsable: 'Questa connessione non può essere esplorata.',
+    httpError: 'Il server ha risposto con un errore (stato {status}).',
+    oneDriveAuthorizationUrlInvalid: 'L’indirizzo di accesso Microsoft non è valido.',
+    oneDriveAuthorizationUrlUntrusted: 'L’indirizzo di accesso Microsoft non è attendibile.',
+    settingsNotLoaded: 'Le impostazioni non sono ancora state caricate.',
   },
   /** Localised copy for stable semantic component and library error codes; keys are the camelCase codes. */
   semanticError: {
@@ -1650,6 +1684,14 @@ export const it = {
     cleanup: 'La rimozione dei dati semantici non è riuscita.',
     stateUnavailable: 'Lo stato della libreria semantica non è temporaneamente disponibile.',
     revisionOverflow: 'Il contatore delle revisioni della libreria semantica è andato in overflow.',
+    disabled: 'Il riconoscimento del testo è disattivato. Attivalo prima.',
+    nothingToRemediate: 'Nessun file richiede al momento il riconoscimento del testo.',
+    unreportedTarget:
+      'Il file richiesto non risulta al momento tra quelli che necessitano di riconoscimento del testo.',
+    queueFull: 'La coda del riconoscimento del testo è piena. Riprova più tardi.',
+    tooManyTargets: 'Sono stati selezionati troppi file per il riconoscimento del testo.',
+    persist: 'Impossibile salvare lo stato del riconoscimento del testo.',
+    workerRestart: 'Impossibile riavviare il worker semantico.',
   },
   /** Localised copy for per-entry operation failures; keys are the stable codes the backend attaches. */
   operationEntryError: {
@@ -1677,7 +1719,6 @@ export const it = {
     invalidLocation: 'Posizione non valida.',
     unknownProvider: 'Provider di posizione sconosciuto.',
     platformFailed: 'L’operazione di sistema non è riuscita: {detail}',
-    entryFailed: 'Impossibile elaborare: {detail}',
     sourceMissing: 'L’origine non esiste più; saltato.',
     diskSpaceCheckSkipped:
       'Controllo dello spazio su disco saltato su sua richiesta: servono {required}, ne risultano liberi {available}.',
@@ -1696,6 +1737,10 @@ export const it = {
       '{name} non corrisponde al manifesto; è danneggiato o è stato modificato. Non è stato scritto nulla.',
     joinedFileMismatch: 'Il file unito non corrisponde al manifesto. Non è stato scritto nulla.',
     errorsOmitted: '{count} ulteriori errori sono omessi dalla cronologia salvata.',
+    entryReadOnly: '{path}: elemento di sola lettura; richiede un override esplicito.',
+    entryFailed: '{path}: impossibile rimuoverlo ({detail}).',
+    readFailed: 'Impossibile leggere il file.',
+    noAlgorithmRequested: 'Non è stato richiesto alcun algoritmo di checksum.',
   },
   /** Localised copy for operation outcome summaries; keys are the stable backend codes. */
   operationResult: {
@@ -1710,6 +1755,383 @@ export const it = {
     alreadyUndone: 'Questa operazione è già stata annullata.',
     undoInProgress: 'L’annullamento di questa operazione è già in corso.',
     undoUnsafe: 'Al momento questa operazione non può essere annullata in sicurezza.',
+    notYetAvailable: 'L’annullamento è disponibile solo al termine dell’operazione.',
+    noEvidence:
+      'Questa operazione non conserva informazioni sufficienti per essere annullata in sicurezza.',
+    undoInterrupted:
+      'L’annullamento precedente è stato interrotto, quindi gli effetti rimanenti non possono essere annullati in sicurezza.',
+    undoPartial:
+      'L’annullamento precedente è stato completato solo in parte e non può essere ritentato in sicurezza.',
+    replacedExisting:
+      'Elementi esistenti sono stati sostituiti o uniti e non possono essere ripristinati.',
+    backupRequired:
+      'L’annullamento richiede la copia di backup; esegui l’operazione con «mantieni l’originale» attivo.',
+    nothingToUndo: 'Non è stato modificato né creato nulla, quindi non c’è nulla da annullare.',
+    undoOfUndo: 'Un annullamento non può essere a sua volta annullato.',
+    trashNotRestorable: 'Il sistema non ha fornito una posizione da cui ripristinare gli elementi.',
+    moveEvidenceMissing:
+      'Lo spostamento non ha conservato l’impronta originale della sorgente, quindi non può essere annullato in sicurezza.',
+    collisionRenamed:
+      'Un conflitto di nomi ha cambiato il nome dell’elemento spostato, quindi l’annullamento non è disponibile tra tipi di posizione diversi.',
+    historyEntryNotFound: 'Questa operazione non è più nella cronologia.',
+    noEffects: 'Questa operazione non ha effetti da annullare.',
+  },
+  mapPreset: {
+    osm: 'Raster, mondiale. Server pubblici: solo uso leggero.',
+    osmDe: 'Raster, mondiale, etichette locali.',
+    opentopomap: 'Raster, curve di livello e rilievo.',
+    cyclosm: 'Raster, percorsi ciclabili e infrastrutture.',
+    pdokBrt: 'Raster, Paesi Bassi, mappa topografica ufficiale.',
+    pdokBrtGrey: 'Raster, Paesi Bassi, toni di grigio per le sovrapposizioni.',
+    pdokAerial: 'Raster, Paesi Bassi, immagini aeree attuali.',
+    pdokBrtVector: 'Stile vettoriale, Paesi Bassi. Nitido a ogni livello di zoom.',
+    openfreemapLiberty: 'Stile vettoriale, mondiale, senza limiti né chiave.',
+    openfreemapPositron: 'Stile vettoriale, mondiale, chiaro.',
+    versatiles: 'Stile vettoriale, mondiale, server della community.',
+  },
+  rejectionReason: {
+    workspaceInvalid: 'Lo spazio di lavoro non è valido.',
+    paneNotFound: 'Quel pannello non esiste più in questo spazio di lavoro.',
+    tabNotFound: 'Quella scheda non esiste più in questo pannello.',
+    workspaceNameExists: 'Esiste già uno spazio di lavoro chiamato "{name}".',
+    workspaceNotEphemeral: 'Questo non è uno spazio di lavoro temporaneo.',
+    workspaceTargetEphemeral:
+      'Uno spazio di lavoro temporaneo non può essere la destinazione di una risincronizzazione.',
+    connectionInvalid: 'Le impostazioni della connessione non sono valide.',
+    credentialStoreFailed: 'L’archivio delle credenziali ha avuto un errore: {detail}',
+    connectionFailed: 'Connessione non riuscita: {detail}',
+    llmProfileInvalid: 'Le impostazioni del profilo IA non sono valide.',
+    cloudConsentRequired: 'Serve il tuo consenso prima di usare il servizio cloud {host}.',
+    llmModelUnavailable: 'Il modello IA configurato non è disponibile.',
+    llmTimeout: 'La richiesta IA è scaduta.',
+    llmTls: 'La connessione sicura al servizio IA è stata rifiutata.',
+    llmMalformedResponse: 'Il servizio IA ha inviato una risposta non leggibile.',
+    llmTransport: 'Il servizio IA non è raggiungibile.',
+    platformUnsupported: 'Questo non è supportato su questo sistema.',
+    pathNotFound: 'Non trovato: {path}',
+    pathAlreadyExists: 'Esiste già: {path}',
+    platformFailed: 'L’operazione di sistema non è riuscita: {detail}',
+    cannotEditRoot: 'La radice di un file system non può essere modificata.',
+    notRegularFile: 'Qui sono supportati solo i file normali.',
+    editorFileTooLarge:
+      'Il file è troppo grande per l’editor ({sizeBytes}; limite {limitBytes}). Usa il visualizzatore di file grandi o un editor esterno.',
+    editorBinaryFile: 'I file binari non possono essere modificati qui. Usa un editor esterno.',
+    editorNotUtf8: 'Il file non è UTF-8 valido. Usa un editor esterno.',
+    editorCannotReplace:
+      'I collegamenti simbolici e gli altri elementi che non sono file non possono essere sostituiti dall’editor.',
+    editorContentTooLarge: 'Il contenuto modificato supera il limite di {limitBytes}.',
+    invalidRangeLength: 'La lunghezza richiesta deve essere compresa tra 1 byte e {maxBytes}.',
+    tooManyPreviews:
+      'Possono essere aperte al massimo {max} anteprime alla volta. Chiudine prima una.',
+    previewMalformed:
+      'L’anteprima non è disponibile perché il file è danneggiato o malformato: {detail}',
+    previewBudget:
+      'Questo file supera il limite di anteprima per {resource} ({limit}). Aprilo in un’applicazione esterna.',
+    previewRenderFailed:
+      'Impossibile generare l’anteprima: {detail}. Aprilo in un’applicazione esterna.',
+    notSqlite: 'Questo non è un database SQLite.',
+    remoteDatabaseTooLarge:
+      'Il database supera il limite di {limitBytes} per i file remoti. Copialo in locale per visualizzarlo.',
+    unknownTable: 'Tabella "{name}" sconosciuta.',
+    tooManyFilters: 'Sono supportati al massimo {max} filtri di colonna.',
+    unknownColumn: 'Colonna "{name}" sconosciuta.',
+    sqlEmpty: 'Inserisci un’istruzione SQL.',
+    sqlTooLong: 'L’istruzione SQL è troppo lunga.',
+    sqlReadOnly: 'Sono consentite solo istruzioni di sola lettura.',
+    sheetRequired: 'Scegli un foglio di lavoro.',
+    workbookFallback:
+      'Questa cartella di lavoro non può essere mostrata nell’app. Aprila in un’applicazione esterna.',
+    sheetNotFound: 'Il foglio "{name}" non esiste.',
+    delimiterOptionsOnly:
+      'Le opzioni di delimitatore e intestazione si applicano solo ai file CSV e TSV.',
+    rowCountRange: 'Il numero di righe deve essere compreso tra 1 e {max}.',
+    noTableRows: 'Questa vista non mostra righe di tabella.',
+    noJsonText: 'Questa vista non mostra testo JSON.',
+    jsonWindowRange: 'La finestra JSON deve essere compresa tra 1 byte e {maxBytes}.',
+    jsonWindowNotIndexed: 'Quella parte del file JSON non è ancora stata indicizzata.',
+    searchQueryInvalid: 'Inserisci un termine di ricerca e un limite di risultati tra 1 e 200.',
+    delimiterInvalid:
+      'Il delimitatore deve essere una virgola, un punto e virgola, una tabulazione o una barra verticale.',
+    delimitedMalformed: 'Il file delimitato contiene UTF-8 non valido o virgolette errate.',
+    csvMalformedRecord: 'L’indicizzazione del CSV si è interrotta su un record malformato.',
+    sequentialOnlyRows:
+      'Non è possibile saltare a una riga arbitraria in questa posizione. Apri il file esternamente per l’accesso casuale.',
+    sequentialOnlyJson:
+      'Non è possibile saltare a una finestra JSON arbitraria in questa posizione. Apri il file esternamente per l’accesso casuale.',
+    selectionSize: 'Seleziona da 1 a {max} elementi.',
+    noAttributeSelected: 'Scegli almeno un attributo da modificare.',
+    permissionBitsRange: 'I bit dei permessi devono essere compresi tra 0 e 0o7777.',
+    tokensInvalid: 'Ci sono troppi token oppure alcuni sono troppo lunghi.',
+    unknownMetadataField: 'Campo di metadati "{name}" sconosciuto.',
+    geoUnknownFormat: 'Formato di output "{name}" sconosciuto. Usa GeoJSON, GPX, KML, KMZ o CSV.',
+    geoTextTooLarge: 'Il testo è troppo grande per essere convertito (limite {limitBytes}).',
+    geoKmzBinary: 'KMZ è un formato binario. Salva il file e convertilo dal menu dei file.',
+    geoNothingToDo: 'Scegli un formato di output o almeno una riduzione.',
+    geoInPlaceFormat:
+      'Un file può essere sostituito sul posto solo da una riduzione che ne mantiene il formato.',
+    fileNeedsFolder: 'Un file ha bisogno di una cartella che lo contenga.',
+    partSizeTooSmall: 'La dimensione delle parti deve essere di almeno 1 byte.',
+    invalidOutputName: 'Il nome di output non è un nome di file valido.',
+    selectPartFiles: 'Seleziona uno o più file delle parti.',
+    hostKeyChanged:
+      'La chiave dell’host è cambiata di nuovo dopo il controllo. Controllala di nuovo prima di accettarla.',
+    knownHostRequired:
+      'Questa connessione richiede una chiave dell’host già attendibile e non accetta una nuova chiave.',
+    notSshConnection: 'Questa connessione non è una connessione SSH.',
+    notOnedriveConnection: 'Questa connessione non è una connessione OneDrive.',
+    authorizationInProgress: 'È già in corso un accesso per questa connessione.',
+    pluginPermissionDenied: 'Il plugin non ha il permesso "{permission}".',
+    pluginNoPreview: 'Il plugin {plugin} non mostra l’anteprima dei file .{extension}.',
+    pluginPreviewFailed: 'L’anteprima del plugin non è riuscita: {detail}',
+    pluginActionFailed: 'L’azione {action} del plugin non è riuscita: {detail}',
+    snapshotTooLarge: 'Il file dell’istantanea è troppo grande (limite {limitBytes}).',
+    snapshotNotUtf8: 'L’istantanea non è testo UTF-8 valido.',
+    unsupportedQuerySchema: 'Questa versione della query di ricerca non è supportata.',
+    semanticPredicateRequired: 'La ricerca semantica richiede una condizione semantica.',
+    semanticQueryEmpty: 'La query semantica non deve essere vuota.',
+    semanticExclusive:
+      'La ricerca semantica non può essere combinata con condizioni su nome o contenuto.',
+    conceptPredicateRequired: 'La ricerca per concetto richiede una condizione di concetto.',
+    continuationOutOfRange: 'La posizione della pagina è fuori intervallo. Ricarica la cartella.',
+    entryIdentityChanged:
+      'L’elemento in questa posizione non è più quello elencato. Ricarica la cartella.',
+    entryMetadataChanged: 'L’elemento è cambiato dopo essere stato elencato. Ricarica la cartella.',
+    localLocationRequired: 'L’analisi dell’uso del disco richiede attualmente una cartella locale.',
+    directoryRequired: 'L’analisi dell’uso del disco richiede una cartella.',
+    scanAlreadyRunning: 'Questa scansione è già in corso.',
+    basemapNotRaster: 'La mappa di base configurata non è una sorgente di tessere raster.',
+    tileZoomRange: 'Il livello di zoom è fuori dall’intervallo di questo fornitore di mappe.',
+    tileOutsideWorld: 'Le coordinate della tessera sono fuori dal mondo.',
+    rootRequired: 'Scegli almeno una cartella.',
+    rootAndTargetRequired: 'Scegli le cartelle e inserisci un nome di destinazione.',
+    localArchiveRequired: 'Il riepilogo richiede un file di archivio locale.',
+    diffFailed: 'Il confronto non è riuscito: {detail}',
+    summaryConfirmationStale: 'La conferma del riepilogo non è aggiornata. Controllala di nuovo.',
+    knowledgeScopeTooBroad:
+      'Una ricerca nell’intera libreria copre più di {max} partizioni di spazi di lavoro. Restringi l’ambito.',
+    knowledgeScopeWorkspace:
+      'Il selettore dello spazio di lavoro deve indicare lo spazio di lavoro richiesto.',
+    scopeEmpty: 'L’ambito scelto è vuoto.',
+    scopeRootInvalid: 'L’identificatore della cartella scelta non è valido.',
+    scopeFolderRequired: 'L’ambito «cartella corrente» richiede una cartella.',
+    summaryTokenBudget: 'La dimensione di input del riepilogo è fuori dall’intervallo supportato.',
+    conversationImmutable:
+      'Profilo, ambito e modalità di conoscenza di una conversazione non possono cambiare.',
+    scopeInvalid: 'I file selezionati non sono un ambito valido.',
+    conceptUriRequired: 'È richiesto un URI di concetto.',
+    preferredLabelRequired: 'È richiesta un’etichetta preferita.',
+    keepNewerUnsupported:
+      'La politica di conflitto «mantieni il più recente» non è ancora supportata. Scegli chiedi, salta, sovrascrivi o rinomina.',
+    pathBusy: 'È già attiva un’altra eliminazione, copia o spostamento per questo percorso.',
+    archiveDestinationExtension: 'Il nome dell’archivio deve terminare con .zip o .7z.',
+    archiveFormatMismatch: 'Il formato dell’archivio deve corrispondere all’estensione del file.',
+    archiveLevelRange: 'Il livello di compressione deve essere compreso tra 0 e 9.',
+    sevenZipLevelUnsupported: 'Questo livello di compressione non è supportato per gli archivi 7z.',
+    cannotDuplicateRoot: 'La radice di un file system non può essere duplicata.',
+    renameAcrossProviders:
+      'Una rinomina non può spostare un elemento in un altro tipo di posizione.',
+    crossProviderUndoCombined:
+      'Annullare uno spostamento tra tipi di posizione non può essere combinato con altre azioni di annullamento.',
+    providerRootNotRestorable:
+      'La radice di una posizione non può essere ripristinata annullando uno spostamento.',
+    linkProviderMismatch:
+      'Un collegamento e la sua destinazione devono trovarsi nello stesso tipo di posizione.',
+    signInListenerFailed: 'Impossibile avviare il listener di accesso: {detail}',
+    splitMissingParts: 'Parti mancanti: {parts}.',
+    splitMissingPartsMore: 'Parti mancanti: {parts} e altre {more}.',
+    splitMixed: 'I file selezionati appartengono a insiemi divisi diversi.',
+    splitNotAPart: '{name} non è una parte numerata (.001, .002, …).',
+    splitManifestDamaged: 'Il manifesto {name} è danneggiato o non è un manifesto Procyon.',
+    splitNoPartSelected: 'Nessuna parte selezionata.',
+    splitDifferentFolders: 'Le parti selezionate si trovano in cartelle diverse.',
+    splitPartNotFile: '{name} non è un file.',
+    splitManifestCount: 'Il manifesto elenca {listed} parti, ma ne sono state trovate {found}.',
+    splitManifestName: 'Il manifesto si aspetta {expected} dove è stato trovato {found}.',
+  },
+  geoMessage: {
+    kmzImagesDropped: '{count} immagine/i incorporata/e del KMZ non vengono riportata/e.',
+    overlaysDropped: '{count} sovrapposizione/i al suolo non viene/vengono riportata/e.',
+    elementsNeverRead:
+      '{count} elemento/i della sorgente non è/sono mai stato/i letto/i (collegamenti di rete, modelli 3D, tour).',
+    iconUrlsKept: 'Gli URL delle icone vengono mantenuti solo come proprietà icon-href.',
+    polygonsNotInGpx:
+      'I poligoni non possono essere salvati in GPX (non ha aree) e sono stati omessi.',
+    stylesNotInGpx:
+      'Colori, spessori di linea e icone di {count} elemento/i non vengono salvati in GPX.',
+    propertiesNotInGpx:
+      '{count} valore/i di proprietà personalizzata non vengono salvati in GPX (solo nome, descrizione, tipo, simbolo, collegamento, altitudine e ora).',
+    htmlAsText: 'Le descrizioni HTML vengono scritte come testo con il relativo markup.',
+    foldersNotInGpx: 'La struttura delle cartelle non viene salvata in GPX.',
+    structuredNotInKml:
+      'I valori di proprietà strutturati (oggetti, elenchi) non vengono salvati in KML.',
+    timestampsNotInKml:
+      'I timestamp e le frequenze cardiache per punto di {count} traccia/e non vengono salvati in KML semplice.',
+    featuresWithoutGeometry: '{count} elemento/i senza geometria è/sono stato/i omesso/i.',
+    nonPointsLeftOut:
+      '{count} elemento/i lineare/i o areale/i è/sono stato/i omesso/i: le righe CSV contengono punti (scegli l’opzione WKT per mantenere ogni geometria).',
+    structuredNotInCsv:
+      'I valori di proprietà strutturati (oggetti, elenchi) non vengono salvati in CSV.',
+    formulaCellsPrefixed:
+      '{count} cella/e di testo che iniziano con = + - o @ hanno ricevuto un apostrofo iniziale affinché i fogli di calcolo non le eseguano come formule.',
+    timestampsNotInCsv:
+      'I timestamp e le frequenze cardiache per punto non vengono salvati in CSV.',
+    propertiesRemoved: '{count} valore/i di proprietà personalizzata è/sono stato/i rimosso/i.',
+    ringsKept:
+      '{count} anello/i di area è/sono stato/i mantenuto/i invariato/i perché semplificarlo/i lo/li avrebbe fatto/i autointersecare.',
+    notSmaller: 'Il risultato ({afterBytes}) non è più piccolo dell’originale ({beforeBytes}).',
+    unrecognisedFile: 'Questo non è un file geografico riconosciuto.',
+    emptyDocument: 'Il documento è vuoto.',
+    rootNotKml: 'L’elemento radice è <{name}>, non <kml>.',
+    rootNotGpx: 'L’elemento radice è <{name}>, non <gpx>.',
+    entitiesNotAllowed: 'Le dichiarazioni DOCTYPE con entità non sono consentite.',
+    jsonSyntax: 'JSON non valido alla riga {line}, colonna {column}: {detail}',
+    xmlSyntax: 'XML non valido alla riga {line}, colonna {column}: {detail}',
+    positionNotArray: 'Una posizione deve essere un array di numeri.',
+    positionTooShort: 'Una posizione richiede almeno longitudine e latitudine.',
+    coordinatesNotFinite: 'Le coordinate devono essere numeri finiti.',
+    tooFewPositions: 'Servono almeno {minimum} posizioni, ma ne sono state trovate {found}.',
+    unknownGeometryType: 'Tipo di geometria "{type}" sconosciuto.',
+    expectedFeature: 'Il tipo deve essere "Feature".',
+    propertiesNotObject: 'Le proprietà devono essere un oggetto o null.',
+    coordinatesNotArray: 'Le coordinate devono essere un array.',
+    geometryNotObject: 'Una geometria deve essere un oggetto o null.',
+    geometryNeedsType: 'Una geometria richiede un tipo.',
+    geometryTooDeep: 'Le collezioni di geometrie sono annidate troppo in profondità.',
+    geometriesMissing: 'Una collezione di geometrie richiede un array "geometries".',
+    coordinatesMissing: 'La geometria richiede coordinate.',
+    featureNotObject: 'Una feature deve essere un oggetto.',
+    notJsonObject: 'Un documento GeoJSON deve essere un oggetto JSON.',
+    typeMissing: 'Un oggetto GeoJSON richiede un tipo.',
+    featuresMissing: 'Una FeatureCollection richiede un array "features".',
+    unknownType: 'Tipo GeoJSON "{type}" sconosciuto.',
+    ringNotClosed: 'L’anello non è chiuso (la prima e l’ultima posizione sono diverse).',
+    positionsOutOfRange:
+      '{count} posizione/i sono fuori da longitudine -180..180 / latitudine -90..90 (viene mostrata la prima); le coordinate devono essere longitudine, latitudine.',
+    crsUnusable:
+      'Il membro crs legacy dichiara "{name}", che non è un sistema di coordinate convertibile: la RFC 7946 richiede longitudine/latitudine WGS84, quindi i dati potrebbero essere disegnati nel posto sbagliato.',
+    crsLegacy:
+      'Il membro crs legacy è stato rimosso nella RFC 7946; le coordinate sono longitudine/latitudine WGS84.',
+    crsConverted: 'Le coordinate sono state convertite da {label} ({name}) a WGS84.',
+    crsConvertedFailures: ' {failed} posizione/i non ha/hanno potuto essere convertita/e.',
+    crsGuessed:
+      'Le coordinate sono state convertite da {label} ({name}) a WGS84; il sistema di coordinate è stato dedotto dai valori.',
+    rowsSkipped:
+      '{count} riga/righe senza coordinate utilizzabili è/sono stata/e omessa/e (prima: {first}).',
+    rowsUnconverted: '{count} riga/righe non ha/hanno potuto essere convertita/e in WGS84.',
+    csvOutOfRange:
+      '{count} posizione/i sono fuori da longitudine -180..180 / latitudine -90..90: scegli il sistema di coordinate di questo file o scambia le colonne.',
+    externalIcons:
+      '{count} segnaposto usano icone esterne, che non vengono scaricate; al loro posto viene disegnato un punto colorato.',
+    imagesMissing:
+      '{count} immagine/i referenziata/e mancano, sono troppo grandi o non sono un’immagine supportata.',
+    invalidPositions: '{count} coordinata/e non era/erano valida/e ed è/sono stata/e omessa/e.',
+    shortSegments: '{count} segmento/i con meno di due punti è/sono stato/i omesso/i.',
+    trackThinned:
+      'La traccia ha più punti di quelli disegnati; la linea viene semplificata per la visualizzazione e le statistiche usano ogni punto.',
+    timestampsMissing:
+      'Alcuni timestamp mancano o non hanno fuso orario, quindi durate e velocità non vengono mostrate.',
+    pointsDropped: '{count} punto/i con coordinate mancanti o non valide è/sono stato/i omesso/i.',
+    csvSyntax: 'Il file non è testo delimitato valido: {detail}',
+    csvNoColumn: 'Il file non ha nessuna colonna chiamata "{name}".',
+    csvNoCoordinates:
+      'Non è stata trovata nessuna colonna di latitudine/longitudine, x/y o geometria WKT.',
+    csvUnknownSystem:
+      'Le colonne sembrano valori x/y in un sistema di coordinate sconosciuto: sceglierne uno.',
+    crsUnrecognised: '"{text}" non è un codice EPSG né una definizione PROJ.',
+    crsUnknownCode: 'EPSG:{code} non è un sistema di riferimento di coordinate noto.',
+    crsUnsupported: '{name} non può essere convertito in longitudine/latitudine.',
+    kmzArchive: 'Il file KMZ non è un archivio zip valido: {detail}',
+    kmzNoKml: 'L’archivio KMZ non contiene alcun file .kml.',
+    kmzTooManyEntries: 'L’archivio KMZ ha più di {max} voci.',
+    kmzKmlTooLarge: 'Il KML all’interno del KMZ supera {maxBytes}.',
+    kmzKmlExpands: 'Il KML all’interno del KMZ, una volta espanso, supera il limite di dimensione.',
+    kmzTooLargeToRepack: 'L’archivio KMZ è troppo grande per essere ricompattato.',
+    gpxNothingToWrite: 'GPX può contenere solo punti e linee, e questo documento non ne ha.',
+    csvNothingToWrite:
+      'Questo documento non ha punti da scrivere; scegli l’opzione WKT per mantenere linee e aree.',
+    writeFailed: 'Scrittura dell’output non riuscita: {detail}',
+    csvCannotMinify: 'I file CSV non possono essere minimizzati.',
+    noOutputFormat: 'Questo file non ha un formato di output proprio.',
+    fileTooLarge:
+      'Il file è di {sizeBytes}; i file oltre {maxBytes} non vengono aperti né convertiti.',
+    readFailed: 'Impossibile leggere il file: {detail}',
+    minifyFailed: 'Riduzione del file non riuscita: {detail}',
+  },
+  operationFailure: {
+    operationFailed: 'L’operazione non è riuscita: {detail}',
+    operationFailedPlain: 'L’operazione non è riuscita.',
+    undoPathOccupied:
+      'La posizione originale è occupata, quindi l’annullamento sovrascriverebbe una modifica successiva.',
+    undoOutputMissing:
+      'Il risultato dell’operazione non esiste più, quindi non può essere annullata in sicurezza.',
+    undoOutputChanged:
+      'Il risultato dell’operazione è cambiato in seguito, quindi non può essere annullata in sicurezza.',
+    undoBackupMissing: 'La copia di backup manca, quindi l’annullamento non è possibile.',
+    undoEntryMissing:
+      'L’elemento non esiste più, quindi il suo stato precedente non può essere ripristinato.',
+    undoAttributesChanged:
+      'Gli attributi sono cambiati dopo l’operazione e non possono essere ripristinati in sicurezza.',
+    readOnlyNeedsOverride: 'L’elemento di sola lettura {location} richiede un override esplicito.',
+    kindMismatch: 'Un file e una cartella non possono sostituirsi a vicenda.',
+    pathComponentNotDirectory: 'Un componente del percorso non è una cartella.',
+    notRegularFile: '{name} non è un file normale.',
+    nameCollisionLimit:
+      'Non è stato trovato un nome libero: esistono già troppi elementi con questo nome.',
+    folderReplaceBlocked: 'Una cartella non può essere sostituita da un file.',
+    sourceChangedWhileSplitting: 'Il file di origine è cambiato durante la divisione.',
+    tooManyParts:
+      '{name} richiederebbe più di {max} parti. Scegli una dimensione delle parti maggiore.',
+    imageTooLarge:
+      'L’immagine è troppo grande per essere modificata ({sizeBytes}; limite {limitBytes}).',
+    tooManyEntries:
+      'La selezione contiene troppi elementi (più di {limit}). Seleziona un albero più piccolo.',
+    relativeLinkAcrossVolumes:
+      'Una destinazione relativa non è possibile tra volumi diversi. Scegli una destinazione assoluta.',
+    linkTargetNotUnicode: 'La destinazione del collegamento non è Unicode valido.',
+    noPendingConflict: 'Questa operazione non ha conflitti in attesa di una decisione.',
+  },
+  previewResource: {
+    sourceFileSize: 'dimensione del file',
+    expandedZip: 'dimensione espansa dell’archivio',
+    perImageBytes: 'dimensione di una singola immagine',
+    totalImageBytes: 'dimensione totale delle immagini',
+    renderedOutput: 'dimensione dell’output renderizzato',
+    perMediaBytes: 'dimensione di un singolo elemento multimediale',
+    totalMediaBytes: 'dimensione totale dei contenuti multimediali',
+    perImagePixels: 'pixel di una singola immagine',
+    totalImagePixels: 'pixel di tutte le immagini',
+    text: 'dimensione del testo estratto',
+    zipEntries: 'numero di voci del pacchetto',
+    imageCount: 'numero di immagini',
+    mediaCount: 'numero di elementi multimediali',
+    slideCount: 'numero di diapositive',
+    xmlDepth: 'profondità di annidamento XML',
+  },
+  viewerWarning: {
+    walNotShown:
+      'Accanto a questo database esiste un log write-ahead (-wal); le scritture non ancora consolidate non vengono mostrate.',
+    sequentialOnly:
+      'Questa posizione supporta solo la lettura sequenziale; le prime righe e l’indicizzazione in avanti funzionano, ma i salti a posizioni arbitrarie sono disattivati. Apri il file esternamente quando serve l’accesso casuale.',
+    spreadsheetFallback:
+      'Questo foglio di calcolo non può essere mostrato qui ({detail}). Aprilo in un’applicazione esterna per fogli di calcolo.',
+    indexingFailed: 'L’indicizzazione si è interrotta in anticipo: {detail}',
+  },
+  notification: {
+    settingsCorrupt:
+      'Impossibile leggere le impostazioni. Sono stati caricati i valori predefiniti e l’originale è stato salvato in {path}.',
+    settingsNewerSchema:
+      'Il file delle impostazioni è stato scritto da una versione più recente di Procyon ed è stato lasciato invariato. Chiudi questa versione precedente prima di modificare le impostazioni.',
+    settingsUnreadable:
+      'Impossibile leggere le impostazioni. Sono stati caricati i valori predefiniti dell’applicazione.',
+    llmProfilesUnreadable:
+      'Impossibile leggere i profili IA. Non è stato caricato alcun profilo di generazione.',
+    clipboardCopied: 'Copiato negli appunti.',
+    pluginIsolated: 'Il plugin {plugin} è stato isolato: {detail}',
+  },
+  semanticUnavailable: {
+    sourceUnavailable: 'La sorgente non è al momento disponibile.',
+    noRecursiveEstimate:
+      'Per questa sorgente non è disponibile una stima ricorsiva delle dimensioni.',
   },
   commandCategory: {
     recent: 'Usati di recente',
@@ -1915,6 +2337,7 @@ export const it = {
       'Il vecchio link è stato spostato nel cestino e il nuovo link può essere annullato dalla cronologia delle operazioni.',
     textFixHint:
       "Modifica il file per correggere questo link; l'editor mantiene una propria cronologia di annullamento.",
+    trashFailed: 'Impossibile spostare il vecchio collegamento nel cestino (stato: {state}).',
   },
   metadataRename: {
     ...en.metadataRename,
@@ -2325,6 +2748,15 @@ export const it = {
       "La mappa non è disponibile per gli screen reader. Usa l'elenco degli oggetti, la tabella delle proprietà e la scheda JSON; con un oggetto selezionato, i tasti Alt+Freccia lo spostano di circa un metro (Maiusc: dieci metri).",
     dropFailed: 'Impossibile importare il testo trascinato: {message}',
     mapUnavailable: 'Impossibile caricare la mappa.',
+    parseNotObject: 'Un documento GeoJSON deve essere un oggetto con un "type".',
+    parseNeedsFeatures: 'Una FeatureCollection richiede un array "features".',
+    parseNotFeature: 'features[{index}] non è una Feature.',
+    enterNumber: 'Inserisci un numero.',
+    enterBoolean: 'Inserisci true o false.',
+    enterJson: 'Inserisci JSON valido.',
+    tooLargeBytes: 'Il file supera {max}; usa la vista testo.',
+    tooManyFeatures: 'Il file ha più di {max} elementi; usa la vista testo.',
+    nothingToImport: 'Non c’è nulla in cui importare.',
   },
   geoTrack: {
     ...en.geoTrack,

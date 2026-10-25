@@ -1,5 +1,6 @@
 //! Authoritative directory listing state shared by every transport.
 
+use crate::rejection::{Rejection, reason};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -232,9 +233,10 @@ impl DirectoryService {
         let enumerate_elapsed = enumerate_started.elapsed();
         let offset = decode_page_offset(request.continuation_token.as_deref())?;
         if offset > full_entries.len() {
-            return Err(ApplicationError::InvalidRequest(
-                "continuation token is out of range".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::CONTINUATION_OUT_OF_RANGE,
+                "continuation token is out of range",
+            )));
         }
         let end = full_entries.len().min(offset + LIST_PAGE_SIZE);
         let has_more = end < full_entries.len();
@@ -374,7 +376,10 @@ impl DirectoryService {
             Ok(snapshot) => return Ok(snapshot),
             Err(error) => error,
         };
-        if !matches!(error, ApplicationError::InvalidRequest(_)) {
+        if !matches!(
+            error,
+            ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_)
+        ) {
             return Err(error);
         }
 
@@ -532,16 +537,18 @@ impl DirectoryService {
         current: &fm_domain::EntrySummary,
     ) -> Result<(), ApplicationError> {
         if current.id != expected {
-            return Err(ApplicationError::InvalidRequest(
-                "entry at this location no longer has the collected identity".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::ENTRY_IDENTITY_CHANGED,
+                "entry at this location no longer has the collected identity",
+            )));
         }
         if expected_size.is_some_and(|size| current.size != Some(size))
             || expected_modified_at.is_some_and(|modified| current.modified_at != Some(modified))
         {
-            return Err(ApplicationError::InvalidRequest(
-                "entry metadata has changed since it was collected".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::ENTRY_METADATA_CHANGED,
+                "entry metadata has changed since it was collected",
+            )));
         }
         Ok(())
     }
@@ -2202,11 +2209,11 @@ mod tests {
                 None,
                 &current
             ),
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
         assert!(matches!(
             DirectoryService::verify_entry_identity(current.id, Some(6), None, &current),
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
     }
 

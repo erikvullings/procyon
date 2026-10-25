@@ -3,7 +3,7 @@ import { NumberInput, Select, Switch, TextInput } from 'mithril-materialized';
 import { t } from '../../i18n';
 import type { MapBasemapKind, MapSettings } from '../../models';
 import { resolvedTheme } from '../../utilities/resolved-theme';
-import { applyPreset, MAP_PRESETS, presetFor } from './map-presets';
+import { applyPreset, MAP_PRESETS, presetFor, presetNoteKey } from './map-presets';
 import {
   DEFAULT_MAP_SETTINGS,
   locationFromPathInput,
@@ -62,7 +62,7 @@ export const MapSettingsSection: FactoryComponent<MapSettingsSectionAttrs> = () 
             placeholder: t('map', 'presetCustom'),
             options: MAP_PRESETS.map((entry) => ({
               id: entry.id,
-              label: `${entry.name} - ${entry.note}`,
+              label: `${entry.name} - ${t('mapPreset', presetNoteKey(entry.id))}`,
             })),
             ...(preset === undefined ? {} : { checkedId: preset.id }),
             onchange: ([value]) => {

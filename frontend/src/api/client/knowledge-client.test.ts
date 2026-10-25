@@ -339,9 +339,10 @@ describe('HttpFileManagerClient knowledge search', () => {
     cancelKnowledgeSearch.mockResolvedValue({ status: 200, data: undefined });
     const client = new HttpFileManagerClient();
 
-    await expect(client.cancelKnowledgeSearch({ requestId: 'request-c' })).rejects.toThrow(
-      /Unexpected cancelKnowledgeSearch response status/u,
-    );
+    await expect(client.cancelKnowledgeSearch({ requestId: 'request-c' })).rejects.toMatchObject({
+      code: 'unexpectedResponse',
+      status: 200,
+    });
   });
 });
 
@@ -527,9 +528,10 @@ describe('HttpFileManagerClient knowledge answers (task 0207)', () => {
     cancelKnowledgeAnswer.mockResolvedValue({ status: 200, data: undefined });
     const client = new HttpFileManagerClient();
 
-    await expect(client.cancelKnowledgeAnswer({ requestId: 'answer-d' })).rejects.toThrow(
-      /Unexpected cancelKnowledgeAnswer response status/u,
-    );
+    await expect(client.cancelKnowledgeAnswer({ requestId: 'answer-d' })).rejects.toMatchObject({
+      code: 'unexpectedResponse',
+      status: 200,
+    });
   });
 
   it('propagates a typed refresh-required conflict unchanged', async () => {

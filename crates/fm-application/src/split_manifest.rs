@@ -62,7 +62,8 @@ pub(crate) enum SetProblem {
 }
 
 impl SetProblem {
-    pub(crate) fn describe(&self, base: &str) -> String {
+    pub(crate) fn describe(&self, base: &str) -> crate::Rejection {
+        use crate::rejection::{Rejection, reason};
         match self {
             Self::Gaps(missing) => {
                 let shown: Vec<String> = missing
@@ -71,14 +72,29 @@ impl SetProblem {
                     .map(|index| part_name(base, *index))
                     .collect();
                 let more = missing.len().saturating_sub(5);
-                if more > 0 {
+                let text = if more > 0 {
                     format!("missing parts: {} and {more} more", shown.join(", "))
                 } else {
                     format!("missing parts: {}", shown.join(", "))
-                }
+                };
+                let code = if more > 0 {
+                    reason::SPLIT_MISSING_PARTS_MORE
+                } else {
+                    reason::SPLIT_MISSING_PARTS
+                };
+                Rejection::new(code, text)
+                    .with("parts", shown.join(", "))
+                    .with("more", more)
             }
-            Self::Mixed => "the selected files belong to different split sets".into(),
-            Self::NotAPart(name) => format!("{name} is not a numbered part (.001, .002, ...)"),
+            Self::Mixed => Rejection::new(
+                reason::SPLIT_MIXED,
+                "the selected files belong to different split sets",
+            ),
+            Self::NotAPart(name) => Rejection::new(
+                reason::SPLIT_NOT_A_PART,
+                format!("{name} is not a numbered part (.001, .002, ...)"),
+            )
+            .with("name", name),
         }
     }
 }
@@ -297,6 +313,7 @@ mod tests {
             set.problem
                 .expect("problem")
                 .describe("a.bin")
+                .message
                 .contains("a.bin.001")
         );
     }

@@ -1,4 +1,4 @@
-import { t } from '../../i18n';
+import { apiErrorMessage, t } from '../../i18n';
 import type {
   BackendEvent,
   Connection,
@@ -488,7 +488,10 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
     }
 
     if (payload.type === 'diskUsage.failed') {
-      ctx.applyDiskUsageFailure(payload.scanId, payload.message);
+      ctx.applyDiskUsageFailure(
+        payload.scanId,
+        apiErrorMessage(payload.code, payload.details, payload.message) ?? payload.message,
+      );
       ctx.redraw();
       return;
     }

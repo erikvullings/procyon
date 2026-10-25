@@ -91,8 +91,21 @@ pub struct SemanticFolderStatusDto {
     pub workspace_referenced: bool,
     /// Whether source links can currently open.
     pub source_available: bool,
-    /// Sanitized source-unavailable reason.
+    /// English source-unavailable explanation (fallback for clients without a code).
     pub unavailable_reason: Option<String>,
+    /// Stable code of `unavailableReason` that clients localise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable_reason_code: Option<SemanticUnavailableReasonDto>,
+}
+
+/// Why a folder source or an estimate is unavailable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SemanticUnavailableReasonDto {
+    /// The source root is temporarily unreachable.
+    SourceUnavailable,
+    /// No provider-neutral recursive estimate exists for this source.
+    NoRecursiveEstimate,
 }
 
 /// Whether a folder preview is complete, partial, or unavailable.
@@ -169,8 +182,11 @@ pub struct SemanticEnrolmentEstimateDto {
     pub skipped_reason_counts: Vec<SemanticEligibilityReasonCountDto>,
     /// Hard budgets the estimate appears to exceed.
     pub exceeded_budgets: Vec<SemanticBudgetKindDto>,
-    /// Sanitized reason no estimate is available.
+    /// English reason no estimate is available (fallback for clients without a code).
     pub unavailable_reason: Option<String>,
+    /// Stable code of `unavailableReason` that clients localise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable_reason_code: Option<SemanticUnavailableReasonDto>,
 }
 
 /// Confirmation-gated enrolment disclosure.

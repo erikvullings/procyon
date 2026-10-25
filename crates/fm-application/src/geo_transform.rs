@@ -5,20 +5,23 @@
 //! private temporary file, resolves name conflicts like copy does, and can be undone because the
 //! output is a new entry.
 
+use crate::rejection::{Rejection, reason};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use fm_domain::{EntryKind, Location};
-use fm_geo::{MinifyOptions, Target, TransformSpec, Transformed, transform};
+use fm_geo::{
+    GeoMessage, MinifyOptions, Target, TransformSpec, Transformed, codes as geo_codes, transform,
+};
 use fm_operations::{
     ConflictResolution, ExecutionError, ExecutionOutcome, Operation, OperationEntryError,
     OperationExecutor, OperationPlan, OperationProgressReporter, OperationUndo, PauseToken,
     PlanItem, UndoAction, UndoPlan,
 };
 use fm_transport_dto::{
-    ConvertGeoTextRequestDto, ConvertGeoTextResponseDto, GeoConversionReportDto, GeoMinifyDto,
-    PreviewGeoConversionRequestDto, PreviewGeoConversionResponseDto, PreviewGeoMinifyRequestDto,
-    PreviewGeoMinifyResponseDto, StartOperationRequestDto,
+    ConvertGeoTextRequestDto, ConvertGeoTextResponseDto, GeoConversionReportDto, GeoMessageDto,
+    GeoMinifyDto, PreviewGeoConversionRequestDto, PreviewGeoConversionResponseDto,
+    PreviewGeoMinifyRequestDto, PreviewGeoMinifyResponseDto, StartOperationRequestDto,
 };
 use fm_vfs::{
     CopyCommitOptions, EntryRef, FileSystemProvider, ProviderCapabilities, ProviderRegistry,
@@ -39,9 +42,13 @@ const MAX_TEXT_BYTES: usize = 2 * 1024 * 1024;
 
 fn target_of(id: &str, csv_wkt: bool) -> Result<Target, ApplicationError> {
     Target::parse(id, csv_wkt).ok_or_else(|| {
-        ApplicationError::InvalidRequest(format!(
-            "unknown output format '{id}'; use geojson, gpx, kml, kmz or csv"
-        ))
+        ApplicationError::from(
+            Rejection::new(
+                reason::GEO_UNKNOWN_FORMAT,
+                format!("unknown output format '{id}'; use geojson, gpx, kml, kmz or csv"),
+            )
+            .with("name", id),
+        )
     })
 }
 
@@ -83,35 +90,45 @@ fn minify_options(dto: &GeoMinifyDto) -> MinifyOptions {
     }
 }
 
+fn read_failed(error: &impl std::fmt::Display) -> GeoMessage {
+    let detail = error.to_string();
+    GeoMessage::new(geo_codes::READ_FAILED, detail.clone()).with("detail", detail)
+}
+
 async fn read_source(
     provider: &Arc<dyn FileSystemProvider>,
     location: &Location,
     cancellation: &CancellationToken,
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, GeoMessage> {
     let entry = entry_of(location);
     let size = provider
         .file_size(&entry, cancellation.clone())
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| read_failed(&error))?;
     if size > MAX_GEO_FILE_BYTES {
-        return Err(format!(
-            "the file is {size} bytes; files above {MAX_GEO_FILE_BYTES} bytes are not converted"
-        ));
+        return Err(GeoMessage::new(
+            geo_codes::FILE_TOO_LARGE,
+            format!(
+                "the file is {size} bytes; files above {MAX_GEO_FILE_BYTES} bytes are not converted"
+            ),
+        )
+        .with("sizeBytes", size)
+        .with("maxBytes", MAX_GEO_FILE_BYTES));
     }
     read_all(provider, &entry, cancellation)
         .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| read_failed(&error))
 }
 
 async fn transform_bytes(
     location: &Location,
     bytes: Vec<u8>,
     spec: TransformSpec,
-) -> Result<Transformed, String> {
+) -> Result<Transformed, GeoMessage> {
     let extension = extension_of(location);
     tokio::task::spawn_blocking(move || transform(&extension, &bytes, &spec))
         .await
-        .map_err(|error| error.to_string())?
+        .map_err(|error| read_failed(&error))?
 }
 
 async fn transform_location(
@@ -119,7 +136,7 @@ async fn transform_location(
     location: &Location,
     spec: TransformSpec,
     cancellation: &CancellationToken,
-) -> Result<Transformed, String> {
+) -> Result<Transformed, GeoMessage> {
     let bytes = read_source(provider, location, cancellation).await?;
     transform_bytes(location, bytes, spec).await
 }
@@ -130,9 +147,13 @@ pub(crate) async fn preview_conversion(
     request: PreviewGeoConversionRequestDto,
 ) -> Result<PreviewGeoConversionResponseDto, ApplicationError> {
     if request.locations.is_empty() || request.locations.len() > MAX_SOURCES {
-        return Err(ApplicationError::InvalidRequest(format!(
-            "between 1 and {MAX_SOURCES} files can be converted at once"
-        )));
+        return Err(ApplicationError::from(
+            Rejection::new(
+                reason::SELECTION_SIZE,
+                format!("between 1 and {MAX_SOURCES} files can be converted at once"),
+            )
+            .with("max", MAX_SOURCES),
+        ));
     }
     let target = target_of(&request.target_format, request.csv_wkt)?;
     let mut reports = Vec::with_capacity(request.locations.len());
@@ -149,14 +170,14 @@ pub(crate) async fn preview_conversion(
             Ok(converted) => GeoConversionReportDto {
                 location: dto,
                 output_name: Some(output_name(&location, &spec)),
-                notes: converted.notes,
+                notes: converted.notes.into_iter().map(message_dto).collect(),
                 error: None,
             },
             Err(message) => GeoConversionReportDto {
                 location: dto,
                 output_name: None,
                 notes: Vec::new(),
-                error: Some(message),
+                error: Some(message_dto(message)),
             },
         });
     }
@@ -168,15 +189,20 @@ pub(crate) async fn convert_text(
     request: ConvertGeoTextRequestDto,
 ) -> Result<ConvertGeoTextResponseDto, ApplicationError> {
     if request.text.len() > MAX_TEXT_BYTES {
-        return Err(ApplicationError::InvalidRequest(
-            "the text is too large to convert".into(),
+        return Err(ApplicationError::from(
+            Rejection::new(
+                reason::GEO_TEXT_TOO_LARGE,
+                "the text is too large to convert",
+            )
+            .with("limitBytes", MAX_TEXT_BYTES),
         ));
     }
     let target = target_of(&request.target_format, request.csv_wkt)?;
     if target == Target::Kmz {
-        return Err(ApplicationError::InvalidRequest(
-            "KMZ is a binary format; save the file and convert it from the file menu".into(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::GEO_KMZ_BINARY,
+            "KMZ is a binary format; save the file and convert it from the file menu",
+        )));
     }
     let converted = tokio::task::spawn_blocking(move || {
         transform(
@@ -191,12 +217,12 @@ pub(crate) async fn convert_text(
     })
     .await
     .map_err(|_| ApplicationError::Internal)?
-    .map_err(ApplicationError::InvalidRequest)?;
+    .map_err(|message| ApplicationError::InvalidRequest(message.text))?;
     let (converted, extension) = converted;
     Ok(ConvertGeoTextResponseDto {
         content: String::from_utf8(converted.bytes).map_err(|_| ApplicationError::Internal)?,
         extension: extension.to_owned(),
-        notes: converted.notes,
+        notes: converted.notes.into_iter().map(message_dto).collect(),
     })
 }
 
@@ -218,7 +244,7 @@ pub(crate) async fn preview_minify(
         target: None,
         minify: Some(minify_options(&request.minify)),
     };
-    let failed = |message: String| PreviewGeoMinifyResponseDto {
+    let failed = |message: GeoMessage| PreviewGeoMinifyResponseDto {
         original_bytes: size,
         minified_bytes: size,
         features_before: 0,
@@ -229,7 +255,7 @@ pub(crate) async fn preview_minify(
         distance_after_meters: 0.0,
         notes: Vec::new(),
         collection: None,
-        error: Some(message),
+        error: Some(message_dto(message)),
     };
     let result = match transform_location(&provider, &location, spec, &cancellation).await {
         Ok(result) => result,
@@ -250,7 +276,7 @@ pub(crate) async fn preview_minify(
         positions_after: stats.positions_after as u64,
         distance_before_meters: stats.distance_before_meters,
         distance_after_meters: stats.distance_after_meters,
-        notes: result.notes,
+        notes: result.notes.into_iter().map(message_dto).collect(),
         collection,
         error: None,
     })
@@ -265,9 +291,13 @@ pub(crate) fn plan_transform_geo(
         ApplicationError::InvalidRequest("transformGeo requires geoTransform".into())
     })?;
     if request.sources.is_empty() || request.sources.len() > MAX_SOURCES {
-        return Err(ApplicationError::InvalidRequest(format!(
-            "transformGeo needs between 1 and {MAX_SOURCES} files"
-        )));
+        return Err(ApplicationError::from(
+            Rejection::new(
+                reason::SELECTION_SIZE,
+                format!("transformGeo needs between 1 and {MAX_SOURCES} files"),
+            )
+            .with("max", MAX_SOURCES),
+        ));
     }
     let target = transform
         .target_format
@@ -276,15 +306,16 @@ pub(crate) fn plan_transform_geo(
         .transpose()?;
     let minify = transform.minify.as_ref().map(minify_options);
     if target.is_none() && minify.is_none() {
-        return Err(ApplicationError::InvalidRequest(
-            "choose an output format or at least one reduction".into(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::GEO_NOTHING_TO_DO,
+            "choose an output format or at least one reduction",
+        )));
     }
     if transform.in_place && (target.is_some() || minify.is_none()) {
-        return Err(ApplicationError::InvalidRequest(
-            "replacing a file in place is only possible for a reduction that keeps its format"
-                .into(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::GEO_IN_PLACE_FORMAT,
+            "replacing a file in place is only possible for a reduction that keeps its format",
+        )));
     }
     let destination: Option<Location> = request.destination.clone().map(Into::into);
     let mut sources = Vec::with_capacity(request.sources.len());
@@ -295,20 +326,24 @@ pub(crate) fn plan_transform_geo(
             provider
                 .capabilities_for(&location)?
                 .require(ProviderCapabilities::WRITE)?;
-            let folder =
-                location.parent().ok().flatten().ok_or_else(|| {
-                    ApplicationError::InvalidRequest("a file needs a folder".into())
-                })?;
+            let folder = location.parent().ok().flatten().ok_or_else(|| {
+                ApplicationError::from(Rejection::new(
+                    reason::FILE_NEEDS_FOLDER,
+                    "a file needs a folder",
+                ))
+            })?;
             sources.push((location, folder));
             continue;
         }
-        let folder =
-            match &destination {
-                Some(folder) => folder.clone(),
-                None => location.parent().ok().flatten().ok_or_else(|| {
-                    ApplicationError::InvalidRequest("a file needs a folder".into())
-                })?,
-            };
+        let folder = match &destination {
+            Some(folder) => folder.clone(),
+            None => location.parent().ok().flatten().ok_or_else(|| {
+                ApplicationError::from(Rejection::new(
+                    reason::FILE_NEEDS_FOLDER,
+                    "a file needs a folder",
+                ))
+            })?,
+        };
         providers
             .resolve(&folder)?
             .capabilities_for(&folder)?
@@ -346,10 +381,37 @@ struct TransformGeoExecutor {
     temporary: Mutex<Option<Location>>,
 }
 
-fn size_note(before: usize, after: usize) -> Option<String> {
+fn size_note(before: usize, after: usize) -> Option<GeoMessage> {
     (after >= before).then(|| {
-        format!("The result ({after} bytes) is not smaller than the original ({before} bytes)")
+        GeoMessage::new(
+            geo_codes::NOT_SMALLER,
+            format!("The result ({after} bytes) is not smaller than the original ({before} bytes)"),
+        )
+        .with("afterBytes", after)
+        .with("beforeBytes", before)
     })
+}
+
+/// A geo message as the transport shape.
+fn message_dto(message: GeoMessage) -> GeoMessageDto {
+    GeoMessageDto {
+        code: message.code.to_owned(),
+        message: message.text,
+        params: message.params,
+    }
+}
+
+/// Serialises notes into one entry-error parameter; clients localise each note by its code.
+fn notes_json(notes: &[GeoMessage]) -> String {
+    let notes: Vec<GeoMessageDto> = notes.iter().cloned().map(message_dto).collect();
+    serde_json::to_string(&notes).unwrap_or_default()
+}
+
+/// A geo failure as an operation failure that keeps the geo code and parameters.
+fn geo_failure(message: GeoMessage) -> ExecutionError {
+    let mut failure = fm_operations::CodedFailure::new(message.code, message.text);
+    failure.params = message.params;
+    ExecutionError::from(failure)
 }
 
 #[async_trait]
@@ -366,10 +428,13 @@ impl OperationExecutor for TransformGeoExecutor {
                 .inspect(&entry_of(location), cancellation.clone())
                 .await?;
             if summary.kind != EntryKind::File {
-                return Err(ExecutionError::Failed(format!(
-                    "{} is not a regular file",
-                    summary.name
-                )));
+                return Err(ExecutionError::from(
+                    fm_operations::CodedFailure::new(
+                        fm_operations::codes::failure::NOT_REGULAR_FILE,
+                        format!("{} is not a regular file", summary.name),
+                    )
+                    .with_param("name", &summary.name),
+                ));
             }
             items.push(PlanItem::new(
                 EntryRef {
@@ -400,10 +465,10 @@ impl OperationExecutor for TransformGeoExecutor {
         let source_provider = self.providers.resolve(&item.entry.location)?;
         let original = read_source(&source_provider, &item.entry.location, cancellation)
             .await
-            .map_err(ExecutionError::Failed)?;
+            .map_err(geo_failure)?;
         let converted = transform_bytes(&item.entry.location, original.clone(), self.spec)
             .await
-            .map_err(ExecutionError::Failed)?;
+            .map_err(geo_failure)?;
         let mut notes = converted.notes.clone();
         if self.spec.minify.is_some() {
             notes.extend(size_note(original.len(), converted.bytes.len()));
@@ -480,9 +545,10 @@ impl OperationExecutor for TransformGeoExecutor {
                 Some(ConflictResolution::Skip) => return Ok(ExecutionOutcome::Skipped),
                 Some(ConflictResolution::Overwrite) => {
                     if existing.kind != EntryKind::File {
-                        return Err(ExecutionError::Failed(
-                            "a folder cannot be replaced by a converted file".into(),
-                        ));
+                        return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                            fm_operations::codes::failure::FOLDER_REPLACE_BLOCKED,
+                            "a folder cannot be replaced by a converted file",
+                        )));
                     }
                     overwrite = true;
                 }
@@ -502,9 +568,10 @@ impl OperationExecutor for TransformGeoExecutor {
                         }
                         suffix += 1;
                         if suffix > 999 {
-                            return Err(ExecutionError::Failed(
-                                "too many files with this name already exist".into(),
-                            ));
+                            return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                                fm_operations::codes::failure::NAME_COLLISION_LIMIT,
+                                "too many files with this name already exist",
+                            )));
                         }
                     }
                 }
@@ -586,6 +653,7 @@ impl OperationExecutor for TransformGeoExecutor {
             .unwrap_or_else(|error| error.into_inner())
         {
             return Ok(OperationUndo::unavailable(
+                fm_operations::codes::undo::REPLACED_EXISTING,
                 "An existing file was replaced, which cannot be brought back.",
             ));
         }
@@ -599,6 +667,7 @@ impl OperationExecutor for TransformGeoExecutor {
             for (location, backup) in edited {
                 let Some(backup) = backup else {
                     return Ok(OperationUndo::unavailable(
+                        fm_operations::codes::undo::BACKUP_REQUIRED,
                         "Undo needs the backup copy; run the reduction with \"keep original\" enabled.",
                     ));
                 };
@@ -616,7 +685,10 @@ impl OperationExecutor for TransformGeoExecutor {
             .unwrap_or_else(|error| error.into_inner())
             .clone();
         if created.is_empty() {
-            return Ok(OperationUndo::unavailable("No file was changed."));
+            return Ok(OperationUndo::unavailable(
+                fm_operations::codes::undo::NOTHING_TO_UNDO,
+                "No file was changed.",
+            ));
         }
         let mut entries = Vec::with_capacity(created.len());
         for location in created {
@@ -630,21 +702,23 @@ impl OperationExecutor for TransformGeoExecutor {
 }
 
 impl TransformGeoExecutor {
-    fn outcome(item: &PlanItem, name: &str, notes: &[String]) -> ExecutionOutcome {
+    fn outcome(item: &PlanItem, name: &str, notes: &[GeoMessage]) -> ExecutionOutcome {
         if notes.is_empty() {
             ExecutionOutcome::Completed
         } else {
+            let text = notes
+                .iter()
+                .map(|note| note.text.as_str())
+                .collect::<Vec<_>>()
+                .join("; ");
             ExecutionOutcome::CompletedWithWarnings(vec![
                 OperationEntryError::new(
                     item.entry.clone(),
-                    format!(
-                        "Written as {name}. Not represented or removed: {}.",
-                        notes.join("; ")
-                    ),
+                    format!("Written as {name}. Not represented or removed: {text}."),
                 )
                 .with_code(fm_operations::codes::entry_error::GEO_WRITTEN_WITH_LOSS)
                 .with_param("name", name)
-                .with_param("notes", notes.join("; ")),
+                .with_param("notes", notes_json(notes)),
             ])
         }
     }

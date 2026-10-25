@@ -1,5 +1,6 @@
 //! The `FileManagerService` facade (specification §7).
 
+use crate::rejection::{Rejection, reason};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::PathBuf;
@@ -513,13 +514,11 @@ impl FileManagerService {
             events.publish(
                 EventAudience::Global,
                 BackendEventPayload::NotificationCreated {
-                    notification: NotificationPayload {
-                        id: Uuid::new_v4().to_string(),
-                        level: NotificationLevelPayload::Warning,
-                        message:
-                            "LLM profiles could not be read. No generation profiles were loaded."
-                                .to_owned(),
-                    },
+                    notification: NotificationPayload::new(
+                        NotificationLevelPayload::Warning,
+                        "LLM profiles could not be read. No generation profiles were loaded.",
+                    )
+                    .with_code(fm_events::notification_codes::LLM_PROFILES_UNREADABLE),
                 },
             );
             LlmProfileService::empty(
@@ -533,27 +532,33 @@ impl FileManagerService {
             Ok(loaded) => loaded,
             Err(error @ SettingsError::NewerSchema { .. }) => fm_settings::LoadOutcome {
                 settings: Settings::default(),
-                warning: Some(format!(
-                    "{error}. The settings file was left unchanged; close this older Procyon version before changing settings."
-                )),
+                warning: Some(fm_settings::LoadWarning {
+                    code: fm_events::notification_codes::SETTINGS_NEWER_SCHEMA,
+                    message: format!(
+                        "{error}. The settings file was left unchanged; close this older Procyon version before changing settings."
+                    ),
+                    backup_path: None,
+                }),
             },
             Err(_) => fm_settings::LoadOutcome {
                 settings: Settings::default(),
-                warning: Some(
-                    "Settings could not be read. Application defaults were loaded.".into(),
-                ),
+                warning: Some(fm_settings::LoadWarning {
+                    code: fm_events::notification_codes::SETTINGS_UNREADABLE,
+                    message: "Settings could not be read. Application defaults were loaded.".into(),
+                    backup_path: None,
+                }),
             },
         };
-        if let Some(message) = loaded.warning {
+        if let Some(warning) = loaded.warning {
+            let mut notification =
+                NotificationPayload::new(NotificationLevelPayload::Warning, warning.message)
+                    .with_code(warning.code);
+            if let Some(path) = warning.backup_path {
+                notification = notification.with_param("path", path);
+            }
             events.publish(
                 EventAudience::Global,
-                BackendEventPayload::NotificationCreated {
-                    notification: NotificationPayload {
-                        id: Uuid::new_v4().to_string(),
-                        level: NotificationLevelPayload::Warning,
-                        message,
-                    },
-                },
+                BackendEventPayload::NotificationCreated { notification },
             );
         }
         let operation_concurrency = loaded.settings.operation_concurrency;
@@ -887,10 +892,16 @@ impl FileManagerService {
             ReviewConceptCandidateActionDto::Edit => {
                 crate::semantic_vocabulary::ReviewDecision::AcceptEdited {
                     concept_uri: request.concept_uri.ok_or_else(|| {
-                        ApplicationError::InvalidRequest("concept URI is required".into())
+                        ApplicationError::from(Rejection::new(
+                            reason::CONCEPT_URI_REQUIRED,
+                            "concept URI is required",
+                        ))
                     })?,
                     pref_label: request.preferred_label.ok_or_else(|| {
-                        ApplicationError::InvalidRequest("preferred label is required".into())
+                        ApplicationError::from(Rejection::new(
+                            reason::PREFERRED_LABEL_REQUIRED,
+                            "preferred label is required",
+                        ))
                     })?,
                 }
             }
@@ -2269,9 +2280,10 @@ impl FileManagerService {
     ) -> Result<crate::document_summary::EphemeralDocumentSummary, ApplicationError> {
         const MAX_SUMMARY_INPUT_TOKENS: u32 = 131_072;
         if input_token_budget == 0 || input_token_budget > MAX_SUMMARY_INPUT_TOKENS {
-            return Err(ApplicationError::InvalidRequest(
-                "summary input token budget is outside the supported range".into(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::SUMMARY_TOKEN_BUDGET,
+                "summary input token budget is outside the supported range",
+            )));
         }
         let outcome = self
             .document_conversion
@@ -2311,9 +2323,10 @@ impl FileManagerService {
     {
         const MAX_SUMMARY_INPUT_TOKENS: u32 = 131_072;
         if input_token_budget == 0 || input_token_budget > MAX_SUMMARY_INPUT_TOKENS {
-            return Err(ApplicationError::InvalidRequest(
-                "summary input token budget is outside the supported range".into(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::SUMMARY_TOKEN_BUDGET,
+                "summary input token budget is outside the supported range",
+            )));
         }
         let library = self.semantic_library().await;
         let workspace_id = self.semantic_workspace_uuid(target.workspace_id).await;
@@ -2338,8 +2351,12 @@ impl FileManagerService {
                 tenant_id: resolved.tenant_id,
                 library_id: resolved.library_id,
                 document_id: resolved.document_id,
-                input_token_budget: usize::try_from(input_token_budget)
-                    .map_err(|_| ApplicationError::InvalidRequest("invalid token budget".into()))?,
+                input_token_budget: usize::try_from(input_token_budget).map_err(|_| {
+                    ApplicationError::from(Rejection::new(
+                        reason::SUMMARY_TOKEN_BUDGET,
+                        "invalid token budget",
+                    ))
+                })?,
             },
         )
     }
@@ -2434,9 +2451,10 @@ impl FileManagerService {
                 || conversation.model_knowledge_allowed != request.allow_model_knowledge
                 || conversation.retrieval_strategy != strategy_from_dto(request.retrieval_strategy)
             {
-                return Err(ApplicationError::InvalidRequest(
-                    "conversation profile, scope, and knowledge mode cannot change".into(),
-                ));
+                return Err(ApplicationError::from(Rejection::new(
+                    reason::CONVERSATION_IMMUTABLE,
+                    "conversation profile, scope, and knowledge mode cannot change",
+                )));
             }
             conversation
                 .turns
@@ -2602,9 +2620,10 @@ impl FileManagerService {
                         .iter()
                         .any(|target| target.workspace_id != scope.workspace_id)
                 {
-                    return Err(ApplicationError::InvalidRequest(
-                        "selected-file Ask scope is invalid".into(),
-                    ));
+                    return Err(ApplicationError::from(Rejection::new(
+                        reason::SCOPE_INVALID,
+                        "selected-file Ask scope is invalid",
+                    )));
                 }
                 RagScopeSelection::SelectedFiles(
                     scope
@@ -2619,25 +2638,28 @@ impl FileManagerService {
                     .folder
                     .clone()
                     .ok_or_else(|| {
-                        ApplicationError::InvalidRequest(
-                            "current-folder Ask scope requires a folder".into(),
-                        )
+                        ApplicationError::from(Rejection::new(
+                            reason::SCOPE_FOLDER_REQUIRED,
+                            "current-folder Ask scope requires a folder",
+                        ))
                     })?
                     .into(),
             ),
             RagScopeKindDto::SemanticResults => {
                 if scope.semantic_source_ids.is_empty() {
-                    return Err(ApplicationError::InvalidRequest(
-                        "semantic-result Ask scope is empty".into(),
-                    ));
+                    return Err(ApplicationError::from(Rejection::new(
+                        reason::SCOPE_EMPTY,
+                        "semantic-result Ask scope is empty",
+                    )));
                 }
                 RagScopeSelection::SemanticResults(scope.semantic_source_ids.clone())
             }
             RagScopeKindDto::EnrolledRoots => {
                 if scope.enrolled_root_ids.is_empty() {
-                    return Err(ApplicationError::InvalidRequest(
-                        "enrolled-root Ask scope is empty".into(),
-                    ));
+                    return Err(ApplicationError::from(Rejection::new(
+                        reason::SCOPE_EMPTY,
+                        "enrolled-root Ask scope is empty",
+                    )));
                 }
                 RagScopeSelection::EnrolledRoots(
                     scope
@@ -2645,7 +2667,12 @@ impl FileManagerService {
                         .iter()
                         .map(|value| crate::semantic_library::parse_semantic_root_id(value))
                         .collect::<Result<Vec<_>, _>>()
-                        .map_err(|_| ApplicationError::InvalidRequest("invalid root id".into()))?,
+                        .map_err(|_| {
+                            ApplicationError::from(Rejection::new(
+                                reason::SCOPE_ROOT_INVALID,
+                                "invalid root id",
+                            ))
+                        })?,
                 )
             }
         };
@@ -3556,6 +3583,7 @@ impl FileManagerService {
                     scan_id,
                     code,
                     message: error.message,
+                    details: error.details,
                 },
             );
         }
@@ -5833,7 +5861,7 @@ mod tests {
                     length: 0,
                 })
                 .await,
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
         assert!(matches!(
             service
@@ -5843,7 +5871,7 @@ mod tests {
                     length: MAX_RANGE_LENGTH + 1,
                 })
                 .await,
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
     }
 
@@ -5938,7 +5966,7 @@ mod tests {
                     location: location_dto_for(&large)
                 })
                 .await,
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
     }
 
@@ -6036,7 +6064,7 @@ mod tests {
                     whole_word: false,
                 })
                 .await,
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
     }
 
@@ -7671,7 +7699,10 @@ mod tests {
             )
             .expect_err("a non-local location has no native path to scan");
 
-        assert!(matches!(error, ApplicationError::InvalidRequest(_)));
+        assert!(matches!(
+            error,
+            ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_)
+        ));
     }
 
     #[test]

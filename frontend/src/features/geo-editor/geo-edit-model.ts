@@ -4,6 +4,8 @@
  * new documents; nothing mutates in place, which makes undo a stack of references.
  */
 
+import { t } from '../../i18n';
+
 export type JsonObject = Record<string, unknown>;
 
 /** A feature collection plus a stable editor id per feature (ids are never written to the file). */
@@ -52,13 +54,13 @@ export function parseEditDocument(text: string): GeoEditParse {
     return { ok: false, message, ...positionOf(message) };
   }
   if (!isObject(value) || typeof value.type !== 'string') {
-    return { ok: false, message: 'A GeoJSON document must be an object with a "type".' };
+    return { ok: false, message: t('geoEdit', 'parseNotObject') };
   }
   let root: JsonObject;
   let wrapped = false;
   if (value.type === 'FeatureCollection') {
     if (!Array.isArray(value.features)) {
-      return { ok: false, message: 'A FeatureCollection needs a "features" array.' };
+      return { ok: false, message: t('geoEdit', 'parseNeedsFeatures') };
     }
     root = value;
   } else if (value.type === 'Feature') {
@@ -74,7 +76,7 @@ export function parseEditDocument(text: string): GeoEditParse {
   const features: JsonObject[] = [];
   for (const [index, item] of (root.features as unknown[]).entries()) {
     if (!isObject(item) || item.type !== 'Feature') {
-      return { ok: false, message: `features[${index}] is not a Feature.` };
+      return { ok: false, message: t('geoEdit', 'parseNotFeature', { index }) };
     }
     features.push(item);
   }
@@ -269,13 +271,13 @@ export function parseTypedValue(text: string, type: PropertyType): ParsedValue {
       const value = Number(text.trim());
       return text.trim() !== '' && Number.isFinite(value)
         ? { ok: true, value }
-        : { ok: false, message: 'Enter a number.' };
+        : { ok: false, message: t('geoEdit', 'enterNumber') };
     }
     case 'boolean': {
       const lowered = text.trim().toLowerCase();
       return lowered === 'true' || lowered === 'false'
         ? { ok: true, value: lowered === 'true' }
-        : { ok: false, message: 'Enter true or false.' };
+        : { ok: false, message: t('geoEdit', 'enterBoolean') };
     }
     case 'null':
       return { ok: true, value: null };
@@ -283,7 +285,7 @@ export function parseTypedValue(text: string, type: PropertyType): ParsedValue {
       try {
         return { ok: true, value: JSON.parse(text) };
       } catch {
-        return { ok: false, message: 'Enter valid JSON.' };
+        return { ok: false, message: t('geoEdit', 'enterJson') };
       }
   }
 }

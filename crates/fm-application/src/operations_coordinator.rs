@@ -1,5 +1,6 @@
 //! Mutation operation coordination (task 0119).
 
+use crate::rejection::{Rejection, reason};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -49,9 +50,10 @@ impl OperationsCoordinator {
         idempotency_key: Option<String>,
     ) -> Result<OperationDto, ApplicationError> {
         if request.conflict_policy == OperationConflictPolicyDto::KeepNewer {
-            return Err(ApplicationError::InvalidRequest(
-                "keepNewer conflict policy is not supported yet; choose ask, skip, overwrite, or renameNew".into(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::KEEP_NEWER_UNSUPPORTED,
+                "keepNewer conflict policy is not supported yet; choose ask, skip, overwrite, or renameNew",
+            )));
         }
         let mut idempotency = self
             .idempotency
@@ -105,9 +107,10 @@ impl OperationsCoordinator {
                 {
                     return self.get(active.id);
                 }
-                return Err(ApplicationError::InvalidRequest(
-                    "another delete, copy, or move is already active for this path".into(),
-                ));
+                return Err(ApplicationError::from(Rejection::new(
+                    reason::PATH_BUSY,
+                    "another delete, copy, or move is already active for this path",
+                )));
             }
         }
         let operation = Operation::new(
@@ -202,7 +205,7 @@ impl OperationsCoordinator {
         let (_, plan) = self
             .history
             .reserve_undo(id, undo_id)
-            .map_err(ApplicationError::InvalidRequest)?;
+            .map_err(ApplicationError::from)?;
         let executor = match self.planner.plan_undo(plan) {
             Ok(executor) => executor,
             Err(error) => {
@@ -341,6 +344,9 @@ mod tests {
             .start(request, None)
             .expect_err("keepNewer must remain rejected");
 
-        assert!(matches!(error, ApplicationError::InvalidRequest(_)));
+        assert!(matches!(
+            error,
+            ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_)
+        ));
     }
 }

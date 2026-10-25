@@ -128,7 +128,11 @@ export const PluginManagement: FactoryComponent<PluginManagementAttrs> = () => {
                 ]),
                 plugin.diagnostic === undefined
                   ? undefined
-                  : m('.fm-plugin-diagnostic.col.s12', { role: 'alert' }, plugin.diagnostic),
+                  : m(
+                      '.fm-plugin-diagnostic.col.s12',
+                      { role: 'alert' },
+                      t('pluginManagement', 'diagnosticDetail', { detail: plugin.diagnostic }),
+                    ),
                 toggleErrors[plugin.id] === undefined
                   ? undefined
                   : m(

@@ -1,7 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { errorText, t } from '../../i18n';
+import { errorText, geoMessageText, t } from '../../i18n';
 import type {
   GeoDocument,
   GeoMinify,
@@ -81,7 +81,7 @@ export const MinifyGeoDialog: FactoryComponent<MinifyGeoDialogAttrs> = () => {
         .then((result) => {
           if (current !== token) return;
           preview = result;
-          failure = result.error ?? undefined;
+          failure = result.error == null ? undefined : geoMessageText(result.error);
           m.redraw();
         })
         .catch((error: unknown) => {
@@ -341,7 +341,9 @@ export const MinifyGeoDialog: FactoryComponent<MinifyGeoDialogAttrs> = () => {
                             ? undefined
                             : m(
                                 'ul.fm-geo-warning',
-                                preview.notes.map((note, index) => m('li', { key: index }, note)),
+                                preview.notes.map((note, index) =>
+                                  m('li', { key: index }, geoMessageText(note)),
+                                ),
                               ),
                         ],
                   ]),

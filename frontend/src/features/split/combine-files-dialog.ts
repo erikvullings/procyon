@@ -1,7 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
-import { errorText, t } from '../../i18n';
+import { errorText, reasonText, t } from '../../i18n';
 import type { InspectSplitSetResult, Location } from '../../models';
 
 /** The selected part files to join. */
@@ -108,7 +108,9 @@ export const CombineFilesDialog: FactoryComponent<CombineFilesDialogAttrs> = () 
                   : m(
                       'p.fm-field-error',
                       { role: 'alert' },
-                      t('splitCombine', 'cannotCombine', { message: set.error }),
+                      t('splitCombine', 'cannotCombine', {
+                        message: reasonText(set.errorCode, set.errorParams, set.error),
+                      }),
                     ),
                 set === undefined || set.error != null
                   ? undefined

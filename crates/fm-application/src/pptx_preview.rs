@@ -1,5 +1,6 @@
 //! Bounded, provider-neutral PPTX-to-PDF conversion for the F3 viewer.
 
+use crate::rejection::{Rejection, reason, resource_key};
 use std::collections::HashMap;
 use std::io::Read;
 use std::sync::Arc;
@@ -68,9 +69,15 @@ impl PptxConverter for NativePptxConverter {
 }
 
 fn render_error(error: fm_pptx_renderer::PptxRenderError) -> ApplicationError {
-    ApplicationError::InvalidRequest(format!(
-        "PowerPoint preview rendering failed: {error}; open it in an external application"
-    ))
+    ApplicationError::from(
+        Rejection::new(
+            reason::PREVIEW_RENDER_FAILED,
+            format!(
+                "PowerPoint preview rendering failed: {error}; open it in an external application"
+            ),
+        )
+        .with("detail", error),
+    )
 }
 
 /// Shared rendered-PDF session owner used by both HTTP and Tauri adapters.
@@ -101,9 +108,7 @@ impl PptxPreviewService {
             .clone()
             .try_acquire_owned()
             .map_err(|_| {
-                ApplicationError::InvalidRequest(format!(
-                    "at most {MAX_PPTX_SESSIONS} PowerPoint previews may be open; close another preview first"
-                ))
+                ApplicationError::from(Rejection::new(reason::TOO_MANY_PREVIEWS, format!("at most {MAX_PPTX_SESSIONS} PowerPoint previews may be open; close another preview first")).with("max", MAX_PPTX_SESSIONS))
             })?;
         let location: Location = request.location.into();
         let provider = self
@@ -125,9 +130,10 @@ impl PptxPreviewService {
             .await
             .map_err(ApplicationError::from)?;
         if summary.kind != EntryKind::File {
-            return Err(ApplicationError::InvalidRequest(
-                "PowerPoint preview requires a regular file".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::NOT_REGULAR_FILE,
+                "PowerPoint preview requires a regular file",
+            )));
         }
         let source_bytes = provider
             .file_size(&entry, cancellation.child_token())
@@ -204,9 +210,13 @@ impl PptxPreviewService {
         request: ReadPptxPreviewPdfRequestDto,
     ) -> Result<ReadFileRangeResponseDto, ApplicationError> {
         if request.length == 0 || request.length > MAX_RANGE_LENGTH {
-            return Err(ApplicationError::InvalidRequest(format!(
-                "length must be between 1 and {MAX_RANGE_LENGTH} bytes"
-            )));
+            return Err(ApplicationError::from(
+                Rejection::new(
+                    reason::INVALID_RANGE_LENGTH,
+                    format!("length must be between 1 and {MAX_RANGE_LENGTH} bytes"),
+                )
+                .with("maxBytes", MAX_RANGE_LENGTH),
+            ));
         }
         let session = self.session(request.session_id).await?;
         validate_revision(&session).await?;
@@ -319,9 +329,7 @@ fn preflight_package_with_expanded_limit(
     }
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(invalid_pptx)?;
     if archive.len() > MAX_PPTX_ZIP_ENTRIES {
-        return Err(ApplicationError::InvalidRequest(format!(
-            "PowerPoint preview exceeds the ZIP entry-count budget ({MAX_PPTX_ZIP_ENTRIES}); open it in an external application"
-        )));
+        return Err(ApplicationError::from(Rejection::new(reason::PREVIEW_BUDGET, format!("PowerPoint preview exceeds the ZIP entry-count budget ({MAX_PPTX_ZIP_ENTRIES}); open it in an external application")).with("resource", "zipEntries").with("limit", MAX_PPTX_ZIP_ENTRIES)));
     }
     let mut expanded_bytes = 0_u64;
     let mut slide_count = 0_usize;
@@ -344,17 +352,13 @@ fn preflight_package_with_expanded_limit(
         if name.starts_with("ppt/slides/slide") && name.ends_with(".xml") {
             slide_count += 1;
             if slide_count > MAX_PPTX_SLIDES {
-                return Err(ApplicationError::InvalidRequest(format!(
-                    "PowerPoint preview exceeds the slide-count budget ({MAX_PPTX_SLIDES}); open it in an external application"
-                )));
+                return Err(ApplicationError::from(Rejection::new(reason::PREVIEW_BUDGET, format!("PowerPoint preview exceeds the slide-count budget ({MAX_PPTX_SLIDES}); open it in an external application")).with("resource", "slideCount").with("limit", MAX_PPTX_SLIDES)));
             }
         }
         if name.starts_with("ppt/media/") && !entry.is_dir() {
             media_count += 1;
             if media_count > MAX_PPTX_MEDIA_ITEMS {
-                return Err(ApplicationError::InvalidRequest(format!(
-                    "PowerPoint preview exceeds the media-count budget ({MAX_PPTX_MEDIA_ITEMS}); open it in an external application"
-                )));
+                return Err(ApplicationError::from(Rejection::new(reason::PREVIEW_BUDGET, format!("PowerPoint preview exceeds the media-count budget ({MAX_PPTX_MEDIA_ITEMS}); open it in an external application")).with("resource", "mediaCount").with("limit", MAX_PPTX_MEDIA_ITEMS)));
             }
             if entry.size() > MAX_PPTX_SINGLE_MEDIA_BYTES as u64 {
                 return Err(budget_error(
@@ -439,9 +443,7 @@ fn validate_xml(
             Ok(Event::Start(_)) => {
                 depth += 1;
                 if depth > MAX_PPTX_XML_DEPTH {
-                    return Err(ApplicationError::InvalidRequest(format!(
-                        "PowerPoint preview exceeds the XML depth budget ({MAX_PPTX_XML_DEPTH}); open it in an external application"
-                    )));
+                    return Err(ApplicationError::from(Rejection::new(reason::PREVIEW_BUDGET, format!("PowerPoint preview exceeds the XML depth budget ({MAX_PPTX_XML_DEPTH}); open it in an external application")).with("resource", "xmlDepth").with("limit", MAX_PPTX_XML_DEPTH)));
                 }
             }
             Ok(Event::End(_)) => depth = depth.saturating_sub(1),
@@ -463,26 +465,27 @@ fn validate_xml(
 }
 
 fn budget_error(resource: &str, limit: u64) -> ApplicationError {
+    let numeric_limit = limit;
     let limit = if limit.is_multiple_of(1024 * 1024) {
         format!("{} MiB", limit / (1024 * 1024))
     } else {
         format!("{limit} bytes")
     };
-    ApplicationError::InvalidRequest(format!(
-        "PowerPoint preview cannot open this file because it exceeds the {resource} limit of {limit}. Open it externally."
-    ))
+    ApplicationError::from(Rejection::new(reason::PREVIEW_BUDGET, format!("PowerPoint preview cannot open this file because it exceeds the {resource} limit of {limit}. Open it externally.")).with("resource", resource_key(resource)).with("limit", numeric_limit))
 }
 
 fn pixel_budget_error(resource: &str, limit: u64) -> ApplicationError {
-    ApplicationError::InvalidRequest(format!(
-        "PowerPoint preview exceeds the {resource} budget ({limit} pixels); open it in an external application"
-    ))
+    ApplicationError::from(Rejection::new(reason::PREVIEW_BUDGET, format!("PowerPoint preview exceeds the {resource} budget ({limit} pixels); open it in an external application")).with("resource", resource_key(resource)).with("limit", limit))
 }
 
 fn invalid_pptx(error: impl std::fmt::Display) -> ApplicationError {
-    ApplicationError::InvalidRequest(format!(
-        "PowerPoint preview is unavailable because the package is malformed: {error}"
-    ))
+    ApplicationError::from(
+        Rejection::new(
+            reason::PREVIEW_MALFORMED,
+            format!("PowerPoint preview is unavailable because the package is malformed: {error}"),
+        )
+        .with("detail", error),
+    )
 }
 
 #[cfg(test)]
@@ -699,14 +702,18 @@ mod tests {
         assert_eq!(MAX_PPTX_EXPANDED_BYTES, 256 * 1024 * 1024);
         assert_eq!(MAX_PPTX_MEDIA_BYTES, 64 * 1024 * 1024);
         assert_eq!(MAX_PPTX_SINGLE_MEDIA_BYTES, 64 * 1024 * 1024);
-        let ApplicationError::InvalidRequest(message) =
+        let ApplicationError::Rejected(rejection) =
             budget_error("source file size", MAX_PPTX_SOURCE_BYTES)
         else {
             panic!("budget error must be an invalid request");
         };
         assert_eq!(
-            message,
+            rejection.message,
             "PowerPoint preview cannot open this file because it exceeds the source file size limit of 64 MiB. Open it externally."
+        );
+        assert_eq!(
+            rejection.params.get("resource").map(String::as_str),
+            Some("sourceFileSize")
         );
     }
 

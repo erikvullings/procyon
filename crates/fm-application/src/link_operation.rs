@@ -5,6 +5,7 @@
 //! an ordinary file written by the platform shell adapter (`CREATE_SHORTCUT`). Every kind runs
 //! as a single-item operation job so it inherits conflict handling, audit history and undo.
 
+use crate::rejection::{Rejection, reason};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -59,9 +60,10 @@ pub(crate) fn plan_create_link(
         .filter(|name| !name.trim().is_empty())
         .ok_or_else(|| ApplicationError::InvalidRequest("createLink requires a name".into()))?;
     if target.provider_id != parent.provider_id {
-        return Err(ApplicationError::InvalidRequest(
-            "a link and its target must use the same provider".into(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::LINK_PROVIDER_MISMATCH,
+            "a link and its target must use the same provider",
+        )));
     }
     // Validates the name as one path component before any filesystem work.
     parent
@@ -333,16 +335,16 @@ impl CreateLinkExecutor {
                     ExecutionError::Failed("the link has no parent directory".into())
                 })?;
                 relative_path(from, &target).ok_or_else(|| {
-                    ExecutionError::Failed(
-                        "a relative target is not possible across volumes; choose an absolute target"
-                            .into(),
-                    )
+                    ExecutionError::from(fm_operations::CodedFailure::new(fm_operations::codes::failure::RELATIVE_LINK_ACROSS_VOLUMES, "a relative target is not possible across volumes; choose an absolute target"))
                 })?
             }
         };
-        text.into_os_string()
-            .into_string()
-            .map_err(|_| ExecutionError::Failed("the link target is not valid Unicode".into()))
+        text.into_os_string().into_string().map_err(|_| {
+            ExecutionError::from(fm_operations::CodedFailure::new(
+                fm_operations::codes::failure::LINK_TARGET_NOT_UNICODE,
+                "the link target is not valid Unicode",
+            ))
+        })
     }
 }
 
@@ -463,6 +465,7 @@ impl OperationExecutor for CreateLinkExecutor {
             .unwrap_or_else(|error| error.into_inner())
         {
             return Ok(OperationUndo::unavailable(
+                fm_operations::codes::undo::REPLACED_EXISTING,
                 "The link replaced an existing entry, which cannot be restored.",
             ));
         }
@@ -477,7 +480,10 @@ impl OperationExecutor for CreateLinkExecutor {
                     entries: vec![entry],
                 }],
             }),
-            None => OperationUndo::unavailable("No link was created, so there is nothing to undo."),
+            None => OperationUndo::unavailable(
+                fm_operations::codes::undo::NOTHING_TO_UNDO,
+                "No link was created, so there is nothing to undo.",
+            ),
         })
     }
 }
@@ -494,9 +500,10 @@ impl CreateLinkExecutor {
                 return Ok(location);
             }
         }
-        Err(ExecutionError::Failed(
-            "no free name is available for the link".into(),
-        ))
+        Err(ExecutionError::from(fm_operations::CodedFailure::new(
+            fm_operations::codes::failure::NAME_COLLISION_LIMIT,
+            "no free name is available for the link",
+        )))
     }
 }
 

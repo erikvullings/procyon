@@ -221,7 +221,7 @@ async fn previews_report_losses_per_file_and_unreadable_files() {
         preview.reports[0]
             .notes
             .iter()
-            .any(|note| note.contains("left out"))
+            .any(|note| note.message.contains("left out"))
     );
     assert!(preview.reports[1].error.is_some());
     assert!(

@@ -488,6 +488,7 @@ async fn accept_ssh_host_key_rejects_a_stale_fingerprint_that_no_longer_matches(
     assert!(matches!(
         error,
         fm_application::ApplicationError::InvalidRequest(_)
+            | fm_application::ApplicationError::Rejected(_)
     ));
 }
 

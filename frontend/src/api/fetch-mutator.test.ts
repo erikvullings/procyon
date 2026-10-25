@@ -179,7 +179,7 @@ describe('fetchMutator', () => {
     }
 
     expect(error).toBeInstanceOf(ApiError);
-    expect(error?.code).toBe('unknownError');
+    expect(error?.code).toBe('httpError');
     expect(error?.status).toBe(500);
   });
 

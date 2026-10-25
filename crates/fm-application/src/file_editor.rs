@@ -3,6 +3,7 @@
 //! Provides load/save through a sibling temporary file and optimistic
 //! revision-based conflict detection.
 
+use crate::rejection::{Rejection, reason};
 use std::collections::{HashMap, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
 use std::io::Write;
@@ -35,11 +36,21 @@ async fn local_save_target(location: &Location) -> Result<PathBuf, ApplicationEr
         .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
     let parent = path
         .parent()
-        .ok_or_else(|| ApplicationError::InvalidRequest("cannot edit a filesystem root".into()))?
+        .ok_or_else(|| {
+            ApplicationError::from(Rejection::new(
+                reason::CANNOT_EDIT_ROOT,
+                "cannot edit a filesystem root",
+            ))
+        })?
         .to_path_buf();
     let name = path
         .file_name()
-        .ok_or_else(|| ApplicationError::InvalidRequest("cannot edit a filesystem root".into()))?
+        .ok_or_else(|| {
+            ApplicationError::from(Rejection::new(
+                reason::CANNOT_EDIT_ROOT,
+                "cannot edit a filesystem root",
+            ))
+        })?
         .to_os_string();
     tokio::task::spawn_blocking(move || {
         let canonical_parent = parent.canonicalize().map_err(local_lock_error)?;
@@ -203,18 +214,18 @@ impl FileEditorService {
             .await
             .map_err(ApplicationError::from)?;
         if summary.kind != EntryKind::File {
-            return Err(ApplicationError::InvalidRequest(
-                "only regular files can be edited".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::NOT_REGULAR_FILE,
+                "only regular files can be edited",
+            )));
         }
         let size = provider
             .file_size(&entry, cancellation.clone())
             .await
             .map_err(ApplicationError::from)?;
         if size > MAX_EDITABLE_FILE_BYTES {
-            return Err(ApplicationError::InvalidRequest(format!(
-                "file is too large for the editor ({size} bytes; limit is {MAX_EDITABLE_FILE_BYTES}); use the large-file viewer or external editor"
-            )));
+            return Err(ApplicationError::from(Rejection::new(reason::EDITOR_FILE_TOO_LARGE, format!("file is too large for the editor ({size} bytes; limit is {MAX_EDITABLE_FILE_BYTES}); use the large-file viewer or external editor")).with("sizeBytes", size)
+ .with("limitBytes", MAX_EDITABLE_FILE_BYTES)));
         }
         let mut reader = provider
             .open_read(&entry, cancellation)
@@ -226,14 +237,16 @@ impl FileEditorService {
             .await
             .map_err(read_stream_error)?;
         if fm_vfs::looks_like_binary(&bytes) {
-            return Err(ApplicationError::InvalidRequest(
-                "binary files cannot be edited in-app; use the external editor".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::EDITOR_BINARY_FILE,
+                "binary files cannot be edited in-app; use the external editor",
+            )));
         }
         let content = String::from_utf8(bytes.clone()).map_err(|_| {
-            ApplicationError::InvalidRequest(
-                "the file is not valid UTF-8; use the external editor".to_owned(),
-            )
+            ApplicationError::from(Rejection::new(
+                reason::EDITOR_NOT_UTF8,
+                "the file is not valid UTF-8; use the external editor",
+            ))
         })?;
         Ok(LoadEditableFileResponseDto {
             content,
@@ -286,18 +299,18 @@ impl FileEditorService {
             .await
             .map_err(ApplicationError::from)?;
         if summary.kind != EntryKind::File {
-            return Err(ApplicationError::InvalidRequest(
-                "symlinks and non-files cannot be replaced by the editor".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::EDITOR_CANNOT_REPLACE,
+                "symlinks and non-files cannot be replaced by the editor",
+            )));
         }
         let existing_size = provider
             .file_size(&entry, cancellation.clone())
             .await
             .map_err(ApplicationError::from)?;
         if existing_size > MAX_EDITABLE_FILE_BYTES {
-            return Err(ApplicationError::InvalidRequest(format!(
-                "file is too large for the editor ({existing_size} bytes; limit is {MAX_EDITABLE_FILE_BYTES})"
-            )));
+            return Err(ApplicationError::from(Rejection::new(reason::EDITOR_FILE_TOO_LARGE, format!("file is too large for the editor ({existing_size} bytes; limit is {MAX_EDITABLE_FILE_BYTES})")).with("sizeBytes", existing_size)
+ .with("limitBytes", MAX_EDITABLE_FILE_BYTES)));
         }
         let mut reader = provider
             .open_read(&entry, cancellation.clone())
@@ -318,16 +331,23 @@ impl FileEditorService {
         }
         let bytes = request.content.into_bytes();
         if bytes.len() as u64 > MAX_EDITABLE_FILE_BYTES {
-            return Err(ApplicationError::InvalidRequest(format!(
-                "edited content exceeds the {MAX_EDITABLE_FILE_BYTES}-byte limit"
-            )));
+            return Err(ApplicationError::from(
+                Rejection::new(
+                    reason::EDITOR_CONTENT_TOO_LARGE,
+                    format!("edited content exceeds the {MAX_EDITABLE_FILE_BYTES}-byte limit"),
+                )
+                .with("limitBytes", MAX_EDITABLE_FILE_BYTES),
+            ));
         }
         let save_location = destination.as_ref().unwrap_or(&location);
         let parent = save_location
             .parent()
             .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?
             .ok_or_else(|| {
-                ApplicationError::InvalidRequest("cannot edit a filesystem root".to_owned())
+                ApplicationError::from(Rejection::new(
+                    reason::CANNOT_EDIT_ROOT,
+                    "cannot edit a filesystem root",
+                ))
             })?;
         let temporary = parent
             .join(&format!(".fm-edit-{}.tmp", Uuid::new_v4()))
@@ -449,7 +469,10 @@ mod tests {
             .await
             .expect_err("binary file must be rejected");
 
-        assert!(matches!(error, ApplicationError::InvalidRequest(_)));
+        assert!(matches!(
+            error,
+            ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_)
+        ));
     }
 
     #[tokio::test]
@@ -468,7 +491,10 @@ mod tests {
             .await
             .expect_err("oversized file must be rejected");
 
-        assert!(matches!(error, ApplicationError::InvalidRequest(_)));
+        assert!(matches!(
+            error,
+            ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_)
+        ));
     }
 
     #[tokio::test]

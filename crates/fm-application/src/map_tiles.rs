@@ -6,6 +6,7 @@
 //! and caches tiles in memory so panning back does not hit the provider again. Nothing is fetched
 //! ahead of what the map asks for.
 
+use crate::rejection::{Rejection, reason};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -105,20 +106,23 @@ impl MapTileService {
             ..
         } = &settings.map.basemap
         else {
-            return Err(ApplicationError::InvalidRequest(
-                "the configured basemap is not a raster tile source".into(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::BASEMAP_NOT_RASTER,
+                "the configured basemap is not a raster tile source",
+            )));
         };
         if z > (*max_zoom).min(HIGHEST_ZOOM) {
-            return Err(ApplicationError::InvalidRequest(
-                "zoom level outside the provider's range".into(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::TILE_ZOOM_RANGE,
+                "zoom level outside the provider's range",
+            )));
         }
         let limit = 1_u64 << z;
         if u64::from(x) >= limit || u64::from(y) >= limit {
-            return Err(ApplicationError::InvalidRequest(
-                "tile coordinates outside the world".into(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::TILE_OUTSIDE_WORLD,
+                "tile coordinates outside the world",
+            )));
         }
         Ok(url_template
             .replace("{z}", &z.to_string())
@@ -309,7 +313,7 @@ mod tests {
         let tiles = MapTileService::new(Arc::new(Mutex::new(settings)));
         assert!(matches!(
             tiles.tile(1, 0, 0).await,
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
     }
 }

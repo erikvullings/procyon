@@ -4,6 +4,7 @@
 //! the browser and desktop hosts produce identical names. Values are sanitised for use in a file
 //! name with the same cross-platform rules the rename dialog validates against.
 
+use crate::rejection::{Rejection, reason};
 use std::collections::BTreeMap;
 
 use fm_domain::{EntryId, Location};
@@ -251,9 +252,13 @@ pub(crate) async fn resolve_metadata_tokens(
     request: ResolveMetadataTokensRequestDto,
 ) -> Result<ResolveMetadataTokensResponseDto, ApplicationError> {
     if request.locations.len() > MAX_LOCATIONS {
-        return Err(ApplicationError::InvalidRequest(format!(
-            "at most {MAX_LOCATIONS} files can be resolved at once"
-        )));
+        return Err(ApplicationError::from(
+            Rejection::new(
+                reason::SELECTION_SIZE,
+                format!("at most {MAX_LOCATIONS} files can be resolved at once"),
+            )
+            .with("max", MAX_LOCATIONS),
+        ));
     }
     if request.tokens.len() > MAX_TOKENS
         || request
@@ -261,9 +266,10 @@ pub(crate) async fn resolve_metadata_tokens(
             .iter()
             .any(|token| token.len() > MAX_TOKEN_LENGTH)
     {
-        return Err(ApplicationError::InvalidRequest(
-            "too many or overly long tokens".to_owned(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::TOKENS_INVALID,
+            "too many or overly long tokens",
+        )));
     }
     let mut parsed: Vec<(String, Token)> = Vec::new();
     let mut unknown_tokens = Vec::new();

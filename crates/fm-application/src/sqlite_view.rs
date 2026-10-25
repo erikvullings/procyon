@@ -9,6 +9,8 @@
 //! rusqlite needs a real file, so local files are opened in place and any other provider's file
 //! is first copied into a size-capped temporary file that lives as long as the session.
 
+use crate::rejection::{Rejection, reason};
+use crate::viewer_warning::{ViewerWarning, codes as viewer_codes};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -144,9 +146,10 @@ impl SqliteViewService {
             .await
             .map_err(ApplicationError::from)?;
         if summary.kind != EntryKind::File {
-            return Err(ApplicationError::InvalidRequest(
-                "database views require a regular file".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::NOT_REGULAR_FILE,
+                "database views require a regular file",
+            )));
         }
         let source_bytes = provider
             .file_size(&entry, cancellation.clone())
@@ -166,9 +169,10 @@ impl SqliteViewService {
         )
         .await?;
         if head.as_slice() != SQLITE_MAGIC {
-            return Err(ApplicationError::InvalidRequest(
-                "not a SQLite database".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::NOT_SQLITE,
+                "not a SQLite database",
+            )));
         }
         let (path, temp) = match location.to_native_path() {
             Ok(path) => (path, None),
@@ -199,7 +203,8 @@ impl SqliteViewService {
             source_bytes,
             sqlite_version: version,
             objects,
-            warning,
+            warning_code: warning.as_ref().map(|warning| warning.code.to_owned()),
+            warning: warning.map(|warning| warning.text),
         })
     }
 
@@ -237,8 +242,12 @@ impl SqliteViewService {
         let pending = self.pending.fetch_add(1, Ordering::AcqRel) + 1;
         let slot = PendingSlot(Arc::clone(&self.pending));
         if self.sessions.read().await.len() + pending > MAX_SESSIONS {
-            return Err(ApplicationError::InvalidRequest(
-                "too many open database views; close one first".to_owned(),
+            return Err(ApplicationError::from(
+                Rejection::new(
+                    reason::TOO_MANY_PREVIEWS,
+                    "too many open database views; close one first",
+                )
+                .with("max", MAX_SESSIONS),
             ));
         }
         Ok(slot)
@@ -262,10 +271,7 @@ async fn copy_to_temp(
     cancellation: CancellationToken,
 ) -> Result<tempfile::TempPath, ApplicationError> {
     if source_bytes > TEMP_COPY_LIMIT_BYTES {
-        return Err(ApplicationError::InvalidRequest(format!(
-            "database is larger than the {} MiB limit for remote files; copy it locally to view it",
-            TEMP_COPY_LIMIT_BYTES / (1024 * 1024)
-        )));
+        return Err(ApplicationError::from(Rejection::new(reason::REMOTE_DATABASE_TOO_LARGE, format!("database is larger than the {} MiB limit for remote files; copy it locally to view it", TEMP_COPY_LIMIT_BYTES / (1024 * 1024))).with("limitBytes", TEMP_COPY_LIMIT_BYTES)));
     }
     let reader = provider
         .open_read(entry, cancellation)
@@ -282,15 +288,19 @@ async fn copy_to_temp(
         .await
         .map_err(read_stream_error)?;
     if copied > TEMP_COPY_LIMIT_BYTES {
-        return Err(ApplicationError::InvalidRequest(
-            "database exceeded the size limit for remote files".to_owned(),
+        return Err(ApplicationError::from(
+            Rejection::new(
+                reason::REMOTE_DATABASE_TOO_LARGE,
+                "database exceeded the size limit for remote files",
+            )
+            .with("limitBytes", TEMP_COPY_LIMIT_BYTES),
         ));
     }
     Ok(temp_path)
 }
 
 /// Warns when a WAL file sits next to a local database, because `immutable` mode ignores it.
-fn wal_warning(path: &Path, copied: bool) -> Option<String> {
+fn wal_warning(path: &Path, copied: bool) -> Option<ViewerWarning> {
     if copied {
         return None;
     }
@@ -298,9 +308,11 @@ fn wal_warning(path: &Path, copied: bool) -> Option<String> {
     wal.push("-wal");
     let has_wal = std::fs::metadata(PathBuf::from(wal)).is_ok_and(|meta| meta.len() > 0);
     has_wal.then(|| {
-        "A write-ahead log (-wal) exists next to this database; writes that were not yet \
-         checkpointed are not shown."
-            .to_owned()
+        ViewerWarning::new(
+            viewer_codes::WAL_NOT_SHOWN,
+            "A write-ahead log (-wal) exists next to this database; writes that were not yet \
+             checkpointed are not shown.",
+        )
     })
 }
 
@@ -526,11 +538,20 @@ fn browse(
     let schema = objects
         .iter()
         .find(|candidate| candidate.name == object)
-        .ok_or_else(|| ApplicationError::InvalidRequest(format!("unknown table '{object}'")))?;
+        .ok_or_else(|| {
+            ApplicationError::from(
+                Rejection::new(reason::UNKNOWN_TABLE, format!("unknown table '{object}'"))
+                    .with("name", object),
+            )
+        })?;
     if filters.len() > MAX_FILTERS {
-        return Err(ApplicationError::InvalidRequest(format!(
-            "at most {MAX_FILTERS} column filters are supported"
-        )));
+        return Err(ApplicationError::from(
+            Rejection::new(
+                reason::TOO_MANY_FILTERS,
+                format!("at most {MAX_FILTERS} column filters are supported"),
+            )
+            .with("max", MAX_FILTERS),
+        ));
     }
     let mut conditions: Vec<String> = Vec::new();
     let mut parameters: Vec<Value> = Vec::new();
@@ -557,7 +578,13 @@ fn browse(
             .iter()
             .find(|candidate| candidate.name == filter.column)
             .ok_or_else(|| {
-                ApplicationError::InvalidRequest(format!("unknown column '{}'", filter.column))
+                ApplicationError::from(
+                    Rejection::new(
+                        reason::UNKNOWN_COLUMN,
+                        format!("unknown column '{}'", filter.column),
+                    )
+                    .with("name", &filter.column),
+                )
             })?;
         let quoted = quote_identifier(&column.name);
         match filter.operator {
@@ -610,7 +637,13 @@ fn browse(
                 .iter()
                 .find(|candidate| candidate.name == sort.column)
                 .ok_or_else(|| {
-                    ApplicationError::InvalidRequest(format!("unknown column '{}'", sort.column))
+                    ApplicationError::from(
+                        Rejection::new(
+                            reason::UNKNOWN_COLUMN,
+                            format!("unknown column '{}'", sort.column),
+                        )
+                        .with("name", &sort.column),
+                    )
                 })?;
             format!(
                 " ORDER BY {} {}",
@@ -655,14 +688,16 @@ fn run_sql(
     limit: u16,
 ) -> Result<QuerySqliteViewResponseDto, ApplicationError> {
     if sql.trim().is_empty() {
-        return Err(ApplicationError::InvalidRequest(
-            "enter a SQL statement".to_owned(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::SQL_EMPTY,
+            "enter a SQL statement",
+        )));
     }
     if sql.len() > MAX_SQL_BYTES {
-        return Err(ApplicationError::InvalidRequest(
-            "the SQL statement is too long".to_owned(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::SQL_TOO_LONG,
+            "the SQL statement is too long",
+        )));
     }
     read_page(connection, sql, &[], offset, limit)
 }
@@ -677,9 +712,10 @@ fn read_page(
 ) -> Result<QuerySqliteViewResponseDto, ApplicationError> {
     let mut statement = connection.prepare(sql).map_err(map_sqlite_error)?;
     if !statement.readonly() {
-        return Err(ApplicationError::InvalidRequest(
-            "only read-only statements are allowed".to_owned(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::SQL_READ_ONLY,
+            "only read-only statements are allowed",
+        )));
     }
     let columns: Vec<String> = statement
         .column_names()

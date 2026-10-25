@@ -67,7 +67,10 @@ function attrs(patch: Partial<GeoMapEditorAttrs> = {}): GeoMapEditorAttrs {
       convertGeoText: vi.fn(async (text: string, format: string) => ({
         content: `${format}:${text.length}`,
         extension: format,
-        notes: format === 'gpx' ? ['polygons cannot be stored in GPX'] : [],
+        notes:
+          format === 'gpx'
+            ? [{ code: 'polygonsNotInGpx', message: 'polygons cannot be stored in GPX' }]
+            : [],
       })),
       getSettings: vi.fn().mockRejectedValue(new Error('offline')),
       mapTileUrlTemplate: vi.fn(),
@@ -221,7 +224,7 @@ describe('GeoMapEditor', () => {
     m.redraw.sync();
     await vi.waitFor(() => {
       m.redraw.sync();
-      expect(root.textContent).toContain('polygons cannot be stored in GPX');
+      expect(root.textContent).toContain('Polygons cannot be stored in GPX');
     });
     const name = root.querySelector<HTMLInputElement>('.fm-geo-editor-export input[type="text"]');
     expect(name?.value).toBe('places.gpx');

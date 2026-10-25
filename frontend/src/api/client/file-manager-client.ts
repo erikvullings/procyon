@@ -69,6 +69,7 @@ import type {
   GenerateSyncPlanRequest,
   GeoConversionReport,
   GeoDocument,
+  GeoMessage,
   GeoMinify,
   GeoMinifyPreview,
   GeoTargetFormat,
@@ -614,7 +615,7 @@ export interface FileManagerClient {
     format: GeoTargetFormat,
     csvWkt: boolean,
     signal?: AbortSignal,
-  ): Promise<{ content: string; extension: string; notes: string[] }>;
+  ): Promise<{ content: string; extension: string; notes: GeoMessage[] }>;
   /** Parses GeoJSON text for live validation while editing (task 0278); never throws on bad text. */
   parseGeoText(text: string, signal?: AbortSignal): Promise<GeoDocument>;
   /** Reads a GeoJSON, GPX, KML or KMZ file into GeoJSON features (tasks 0277-0280). */

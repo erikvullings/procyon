@@ -132,8 +132,8 @@ pub use files::{
 pub use finder_tags::{FinderTagColorDto, FinderTagDto, FinderTagsDto, SpotlightCommentDto};
 pub use geo::{
     ConvertGeoTextRequestDto, ConvertGeoTextResponseDto, CsvGeoInfoDto, CsvGeoOptionsDto,
-    GeoConversionReportDto, GeoDocumentDto, GeoErrorDto, GeoIssueDto, GeoMinifyDto, GeoOverlayDto,
-    GeoProfilePointDto, GeoTrackDto, GeoTransformDto, ParseGeoTextRequestDto,
+    GeoConversionReportDto, GeoDocumentDto, GeoErrorDto, GeoIssueDto, GeoMessageDto, GeoMinifyDto,
+    GeoOverlayDto, GeoProfilePointDto, GeoTrackDto, GeoTransformDto, ParseGeoTextRequestDto,
     PreviewGeoConversionRequestDto, PreviewGeoConversionResponseDto, PreviewGeoMinifyRequestDto,
     PreviewGeoMinifyResponseDto, ReadGeoFileRequestDto,
 };

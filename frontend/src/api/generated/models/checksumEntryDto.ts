@@ -16,6 +16,11 @@ export interface ChecksumEntryDto {
      * @nullable
      */
   error?: string | null;
+  /**
+     * Stable code of `error` that clients localise.
+     * @nullable
+     */
+  errorCode?: string | null;
   /** Location of the hashed entry. */
   location: LocationDto;
   /** Path relative to the selection's common root. */

@@ -210,7 +210,7 @@ export function createLinkDoctorController(
         }
         const trashState = await waitForOperation(trashed);
         if (trashState !== 'completed' && trashState !== 'completedWithWarnings') {
-          throw new Error(`the old link could not be moved to the Trash (${trashState})`);
+          throw new Error(t('linkDoctor', 'trashFailed', { state: trashState }));
         }
         await ops.createLink(
           candidate.location,

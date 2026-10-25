@@ -4,6 +4,8 @@
 //! small hot-row cache. They never retain the source text or one offset per
 //! logical record.
 
+use crate::rejection::{Rejection, reason};
+use crate::viewer_warning::{ViewerWarning, codes as viewer_codes};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::io::Cursor;
 use std::sync::Arc;
@@ -100,7 +102,7 @@ struct Progress {
     indexed_rows: u64,
     total_rows: Option<u64>,
     complete: bool,
-    warning: Option<String>,
+    warning: Option<ViewerWarning>,
     checkpoints: Vec<CsvCheckpoint>,
     json_checkpoints: Vec<JsonCheckpoint>,
 }
@@ -183,9 +185,10 @@ impl StructuredViewService {
             .await
             .map_err(ApplicationError::from)?;
         if summary.kind != EntryKind::File {
-            return Err(ApplicationError::InvalidRequest(
-                "structured viewer sessions require a regular file".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::NOT_REGULAR_FILE,
+                "structured viewer sessions require a regular file",
+            )));
         }
         let source_bytes = provider
             .file_size(&entry, cancellation.clone())
@@ -211,9 +214,13 @@ impl StructuredViewService {
                     Ok(workbook) => (StructuredViewKindDto::Table, None, Some(workbook)),
                     Err(limit) => (
                         StructuredViewKindDto::ExternalFallback,
-                        Some(format!(
-                            "{limit} Open it in an external spreadsheet application."
-                        )),
+                        Some(
+                            ViewerWarning::new(
+                                viewer_codes::SPREADSHEET_FALLBACK,
+                                format!("{limit} Open it in an external spreadsheet application."),
+                            )
+                            .with_detail(limit),
+                        ),
                         None,
                     ),
                 }
@@ -318,6 +325,14 @@ impl StructuredViewService {
         if !session.progress.read().await.complete {
             spawn_indexer(Arc::clone(&session), 0);
         }
+        let open_warning = format_warning.or_else(|| {
+            (!random_access).then(|| {
+                ViewerWarning::new(
+                    viewer_codes::SEQUENTIAL_ONLY,
+                    "This provider is sequential-only; initial rows and forward indexing remain available, but arbitrary jumps are disabled. Open the file externally when random access is required.",
+                )
+            })
+        });
         let progress = session.progress.read().await;
         Ok(OpenStructuredViewResponseDto {
             session_id,
@@ -335,11 +350,9 @@ impl StructuredViewService {
             indexed_rows: progress.indexed_rows,
             total_rows: progress.total_rows,
             indexing_complete: progress.complete,
-            warning: format_warning.or_else(|| {
-                (!random_access).then(|| {
-                    "This provider is sequential-only; initial rows and forward indexing remain available, but arbitrary jumps are disabled. Open the file externally when random access is required.".to_owned()
-                })
-            }),
+            warning: open_warning.as_ref().map(|warning| warning.text.clone()),
+            warning_code: open_warning.as_ref().map(|warning| warning.code.to_owned()),
+            warning_detail: open_warning.and_then(|warning| warning.detail),
         })
     }
 
@@ -355,7 +368,18 @@ impl StructuredViewService {
             indexed_rows: progress.indexed_rows,
             total_rows: progress.total_rows,
             indexing_complete: progress.complete,
-            warning: progress.warning.clone(),
+            warning: progress
+                .warning
+                .as_ref()
+                .map(|warning| warning.text.clone()),
+            warning_code: progress
+                .warning
+                .as_ref()
+                .map(|warning| warning.code.to_owned()),
+            warning_detail: progress
+                .warning
+                .as_ref()
+                .and_then(|warning| warning.detail.clone()),
         })
     }
 
@@ -381,15 +405,17 @@ impl StructuredViewService {
         validate_revision(&session).await?;
         if session.format == StructuredViewFormatDto::Excel {
             let selected_sheet = request.selected_sheet.ok_or_else(|| {
-                ApplicationError::InvalidRequest(
-                    "a worksheet name is required for workbook sessions".to_owned(),
-                )
+                ApplicationError::from(Rejection::new(
+                    reason::SHEET_REQUIRED,
+                    "a worksheet name is required for workbook sessions",
+                ))
             })?;
             let (headers, rows, sheets, row_count) = {
                 let workbook_lock = session.workbook.as_ref().ok_or_else(|| {
-                    ApplicationError::InvalidRequest(
-                        "this workbook was opened as an external fallback".to_owned(),
-                    )
+                    ApplicationError::from(Rejection::new(
+                        reason::WORKBOOK_FALLBACK,
+                        "this workbook was opened as an external fallback",
+                    ))
                 })?;
                 let mut workbook = workbook_lock.write().await;
                 let selected = workbook
@@ -397,9 +423,13 @@ impl StructuredViewService {
                     .iter()
                     .position(|sheet| sheet.metadata.name == selected_sheet)
                     .ok_or_else(|| {
-                        ApplicationError::InvalidRequest(format!(
-                            "worksheet '{selected_sheet}' does not exist"
-                        ))
+                        ApplicationError::from(
+                            Rejection::new(
+                                reason::SHEET_NOT_FOUND,
+                                format!("worksheet '{selected_sheet}' does not exist"),
+                            )
+                            .with("name", &selected_sheet),
+                        )
                     })?;
                 workbook.selected = selected;
                 let sheet = &workbook.sheets[selected];
@@ -441,15 +471,18 @@ impl StructuredViewService {
                 total_rows: Some(row_count),
                 indexing_complete: true,
                 warning: None,
+                warning_code: None,
+                warning_detail: None,
             });
         }
         if !matches!(
             session.format,
             StructuredViewFormatDto::Csv | StructuredViewFormatDto::Tsv
         ) {
-            return Err(ApplicationError::InvalidRequest(
-                "delimiter and header options apply only to CSV/TSV sessions".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::DELIMITER_OPTIONS_ONLY,
+                "delimiter and header options apply only to CSV/TSV sessions",
+            )));
         }
         let delimiter = match request.delimiter {
             Some(value) => Some(parse_delimiter(&value)?),
@@ -510,7 +543,18 @@ impl StructuredViewService {
             indexed_rows: progress.indexed_rows,
             total_rows: progress.total_rows,
             indexing_complete: progress.complete,
-            warning: progress.warning.clone(),
+            warning: progress
+                .warning
+                .as_ref()
+                .map(|warning| warning.text.clone()),
+            warning_code: progress
+                .warning
+                .as_ref()
+                .map(|warning| warning.code.to_owned()),
+            warning_detail: progress
+                .warning
+                .as_ref()
+                .and_then(|warning| warning.detail.clone()),
         })
     }
 
@@ -519,16 +563,21 @@ impl StructuredViewService {
         request: ReadStructuredRowsRequestDto,
     ) -> Result<ReadStructuredRowsResponseDto, ApplicationError> {
         if request.count == 0 || request.count > MAX_ROWS_PER_REQUEST {
-            return Err(ApplicationError::InvalidRequest(format!(
-                "row count must be between 1 and {MAX_ROWS_PER_REQUEST}"
-            )));
+            return Err(ApplicationError::from(
+                Rejection::new(
+                    reason::ROW_COUNT_RANGE,
+                    format!("row count must be between 1 and {MAX_ROWS_PER_REQUEST}"),
+                )
+                .with("max", MAX_ROWS_PER_REQUEST),
+            ));
         }
         let session = self.session(request.session_id).await?;
         validate_revision(&session).await?;
         if session.kind != StructuredViewKindDto::Table {
-            return Err(ApplicationError::InvalidRequest(
-                "this session does not expose table rows".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::NO_TABLE_ROWS,
+                "this session does not expose table rows",
+            )));
         }
         let rows = if let Some(rows) = cached_rows(&session, request.start_row, request.count).await
         {
@@ -560,14 +609,19 @@ impl StructuredViewService {
         let session = self.session(request.session_id).await?;
         validate_revision(&session).await?;
         if session.kind != StructuredViewKindDto::JsonText {
-            return Err(ApplicationError::InvalidRequest(
-                "this session does not expose JSON text".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::NO_JSON_TEXT,
+                "this session does not expose JSON text",
+            )));
         }
         if request.length == 0 || u64::from(request.length) > SAMPLE_BYTES {
-            return Err(ApplicationError::InvalidRequest(format!(
-                "JSON window length must be between 1 and {SAMPLE_BYTES} bytes"
-            )));
+            return Err(ApplicationError::from(
+                Rejection::new(
+                    reason::JSON_WINDOW_RANGE,
+                    format!("JSON window length must be between 1 and {SAMPLE_BYTES} bytes"),
+                )
+                .with("maxBytes", SAMPLE_BYTES),
+            ));
         }
         if request.offset > 0 {
             require_random_access(session.random_access, "JSON window")?;
@@ -590,9 +644,10 @@ impl StructuredViewService {
             )
         };
         if request.offset > indexed_bytes && !indexing_complete {
-            return Err(ApplicationError::InvalidRequest(
-                "the requested JSON window has not been indexed yet".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::JSON_WINDOW_NOT_INDEXED,
+                "the requested JSON window has not been indexed yet",
+            )));
         }
         let prefix = request.offset.saturating_sub(checkpoint.byte);
         let read_length = prefix
@@ -647,9 +702,10 @@ impl StructuredViewService {
         request: SearchStructuredRowsRequestDto,
     ) -> Result<SearchStructuredRowsResponseDto, ApplicationError> {
         if request.query.is_empty() || request.limit == 0 || request.limit > 200 {
-            return Err(ApplicationError::InvalidRequest(
-                "search query must be non-empty and limit must be between 1 and 200".to_owned(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::SEARCH_QUERY_INVALID,
+                "search query must be non-empty and limit must be between 1 and 200",
+            )));
         }
         let session = self.session(request.session_id).await?;
         validate_revision(&session).await?;
@@ -1080,9 +1136,10 @@ fn delimiter_for(
 fn parse_delimiter(value: &str) -> Result<u8, ApplicationError> {
     let bytes = value.as_bytes();
     if bytes.len() != 1 || !matches!(bytes[0], b',' | b';' | b'\t' | b'|') {
-        return Err(ApplicationError::InvalidRequest(
-            "delimiter must be one of comma, semicolon, tab, or pipe".to_owned(),
-        ));
+        return Err(ApplicationError::from(Rejection::new(
+            reason::DELIMITER_INVALID,
+            "delimiter must be one of comma, semicolon, tab, or pipe",
+        )));
     }
     Ok(bytes[0])
 }
@@ -1172,9 +1229,10 @@ async fn parse_delimited_records(
             break;
         };
         let record = record.map_err(|_| {
-            ApplicationError::InvalidRequest(
-                "the delimited file contains invalid UTF-8 or malformed quoting".to_owned(),
-            )
+            ApplicationError::from(Rejection::new(
+                reason::DELIMITED_MALFORMED,
+                "the delimited file contains invalid UTF-8 or malformed quoting",
+            ))
         })?;
         rows.push(record.iter().map(ToOwned::to_owned).collect());
     }
@@ -1252,7 +1310,10 @@ fn spawn_indexer(session: Arc<Session>, generation: u64) {
             if !session.cancellation.is_cancelled()
                 && session.configuration_generation.load(Ordering::Acquire) == generation
             {
-                progress.warning = Some(error.to_string());
+                progress.warning = Some(
+                    ViewerWarning::new(viewer_codes::INDEXING_FAILED, error.to_string())
+                        .with_detail(error.to_string()),
+                );
             }
         }
     });
@@ -1280,9 +1341,10 @@ async fn index_delimited(session: Arc<Session>, generation: u64) -> Result<(), A
             return Err(ApplicationError::OperationCancelled);
         }
         let record = record.map_err(|_| {
-            ApplicationError::InvalidRequest(
-                "CSV indexing stopped at a malformed record".to_owned(),
-            )
+            ApplicationError::from(Rejection::new(
+                reason::CSV_MALFORMED_RECORD,
+                "CSV indexing stopped at a malformed record",
+            ))
         })?;
         let data_row = physical_row.saturating_sub(header_rows);
         let byte = record.position().map_or(0, csv_async::Position::byte);
@@ -1499,8 +1561,16 @@ fn require_random_access(random_access: bool, target: &str) -> Result<(), Applic
     if random_access {
         Ok(())
     } else {
-        Err(ApplicationError::InvalidRequest(format!(
-            "arbitrary {target} jumps are unavailable on this sequential-only provider; open the file externally for random access"
+        let code = if target == "row" {
+            reason::SEQUENTIAL_ONLY_ROWS
+        } else {
+            reason::SEQUENTIAL_ONLY_JSON
+        };
+        Err(ApplicationError::from(Rejection::new(
+            code,
+            format!(
+                "arbitrary {target} jumps are unavailable on this sequential-only provider; open the file externally for random access"
+            ),
         )))
     }
 }
@@ -1837,7 +1907,7 @@ mod tests {
                 .await;
         assert!(matches!(
             malformed,
-            Err(ApplicationError::InvalidRequest(_))
+            Err(ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_))
         ));
     }
 }

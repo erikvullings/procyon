@@ -110,7 +110,7 @@ describe('PluginManagement', () => {
     });
     m.redraw.sync();
 
-    expect(root.querySelector('.fm-plugin-diagnostic')?.textContent).toBe(
+    expect(root.querySelector('.fm-plugin-diagnostic')?.textContent).toContain(
       'disabled after 3 consecutive failures: timed out',
     );
   });

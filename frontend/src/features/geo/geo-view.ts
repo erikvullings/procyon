@@ -1,7 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { tooltip } from '../../components/tooltip';
-import { t } from '../../i18n';
+import { geoMessageText, t } from '../../i18n';
 import type {
   CsvGeoOptions,
   GeoDocument,
@@ -37,7 +37,7 @@ function describeError(document: GeoDocument): m.Children {
   if (error == null) return undefined;
   return m('.fm-geo-error', { role: 'alert' }, [
     m('strong', t('geo', 'errorTitle')),
-    m('p', error.message),
+    m('p', geoMessageText(error)),
     error.line != null && error.column != null
       ? m('p', t('geo', 'errorAt', { line: error.line, column: error.column }))
       : undefined,
@@ -363,7 +363,7 @@ export const GeoView: FactoryComponent<GeoViewAttrs> = (initial) => {
                 document.warnings.map((warning, index) =>
                   m('li', { key: index }, [
                     warning.path === '' ? undefined : m('code', `${warning.path} `),
-                    warning.message,
+                    geoMessageText(warning),
                   ]),
                 ),
               ),

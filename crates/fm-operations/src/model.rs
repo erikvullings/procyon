@@ -162,6 +162,69 @@ pub enum UndoAction {
     },
 }
 
+/// Whether an operation can be undone right now, and if not, why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UndoStatus {
+    /// Whether a guarded inverse operation can currently be submitted.
+    pub available: bool,
+    /// English explanation when unavailable.
+    pub reason: Option<String>,
+    /// Stable code of `reason` (absent for history written before codes existed).
+    pub reason_code: Option<String>,
+    /// Active or completed undo operation associated with this one.
+    pub operation_id: Option<OperationId>,
+}
+
+impl Operation {
+    /// Evaluates undo availability for clients (events and history share this projection).
+    #[must_use]
+    pub fn undo_status(&self) -> UndoStatus {
+        use crate::codes::undo;
+        if let Some(id) = self.undo.undone_by {
+            return UndoStatus {
+                available: false,
+                reason: Some("This operation has already been undone.".into()),
+                reason_code: Some(undo::ALREADY_UNDONE.into()),
+                operation_id: Some(id),
+            };
+        }
+        if let Some(id) = self.undo.pending_operation {
+            return UndoStatus {
+                available: false,
+                reason: Some("Undo is already in progress for this operation.".into()),
+                reason_code: Some(undo::UNDO_IN_PROGRESS.into()),
+                operation_id: Some(id),
+            };
+        }
+        let available = self.undo.plan.is_some()
+            && matches!(
+                self.state,
+                OperationState::Completed | OperationState::CompletedWithWarnings
+            );
+        if available {
+            return UndoStatus {
+                available,
+                reason: None,
+                reason_code: None,
+                operation_id: None,
+            };
+        }
+        let (reason, reason_code) = match &self.undo.unavailable_reason {
+            Some(reason) => (reason.clone(), self.undo.unavailable_code.clone()),
+            None => (
+                "This operation cannot currently be undone safely.".into(),
+                Some(undo::UNDO_UNSAFE.to_owned()),
+            ),
+        };
+        UndoStatus {
+            available,
+            reason: Some(reason),
+            reason_code,
+            operation_id: None,
+        }
+    }
+}
+
 /// Explicit inverse plan persisted with operation history.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UndoPlan {
@@ -174,8 +237,12 @@ pub struct UndoPlan {
 pub struct OperationUndo {
     /// Safe inverse plan, absent when the operation cannot be reversed.
     pub plan: Option<UndoPlan>,
-    /// Stable user-facing explanation when no plan can be offered.
+    /// English explanation when no plan can be offered (fallback for clients without a code).
     pub unavailable_reason: Option<String>,
+    /// Stable code of [`Self::unavailable_reason`] (see [`crate::codes::undo`]); absent in
+    /// history written before codes existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable_code: Option<String>,
     /// Undo job currently reserved for this operation.
     pub pending_operation: Option<OperationId>,
     /// Successfully completed undo job.
@@ -189,6 +256,7 @@ impl Default for OperationUndo {
             unavailable_reason: Some(
                 "Undo is available only after the operation completes.".into(),
             ),
+            unavailable_code: Some(crate::codes::undo::NOT_YET_AVAILABLE.into()),
             pending_operation: None,
             undone_by: None,
         }
@@ -202,17 +270,20 @@ impl OperationUndo {
         Self {
             plan: Some(plan),
             unavailable_reason: None,
+            unavailable_code: None,
             pending_operation: None,
             undone_by: None,
         }
     }
 
-    /// Records why no safe inverse can be offered.
+    /// Records why no safe inverse can be offered: a stable [`crate::codes::undo`] code plus its
+    /// English fallback text.
     #[must_use]
-    pub fn unavailable(reason: impl Into<String>) -> Self {
+    pub fn unavailable(code: &str, reason: impl Into<String>) -> Self {
         Self {
             plan: None,
             unavailable_reason: Some(reason.into()),
+            unavailable_code: Some(code.to_owned()),
             pending_operation: None,
             undone_by: None,
         }

@@ -46,9 +46,18 @@ export interface FileEditorController {
   dispose(): void;
 }
 
+/** The stable rejection reason (or error code) a backend failure carries, when it has one. */
+function failureReason(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const { code, details } = error as { code?: unknown; details?: unknown };
+  const reason = (details as { reason?: unknown } | null | undefined)?.reason;
+  if (typeof reason === 'string') return reason;
+  return typeof code === 'string' ? code : undefined;
+}
+
 function loadErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : '';
-  return message.includes('binary files cannot be edited') || message.includes('not valid UTF-8')
+  const reason = failureReason(error);
+  return reason === 'editorBinaryFile' || reason === 'editorNotUtf8'
     ? t('editor', 'binaryNotEditable')
     : t('editor', 'unableToLoad');
 }
@@ -147,9 +156,7 @@ export function createFileEditorController(options: {
       });
       return true;
     } catch (error: unknown) {
-      const conflict =
-        error instanceof Error &&
-        (error.message.includes('changed after') || error.message.includes('fileRevisionConflict'));
+      const conflict = failureReason(error) === 'fileRevisionConflict';
       const { error: _previousError, ...current } = snapshot;
       publish({
         ...current,

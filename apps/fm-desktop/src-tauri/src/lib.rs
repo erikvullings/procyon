@@ -6,9 +6,11 @@
 
 mod app_data_removal;
 mod app_update;
+mod command_failure;
 mod commands;
 mod credentials;
 mod event_stream;
+mod exit_dialog;
 #[cfg(any(target_os = "linux", all(test, unix)))]
 mod linux_clipboard;
 mod media_protocol;
@@ -95,34 +97,30 @@ fn warn_before_quit<R: tauri::Runtime>(
         return false;
     }
     if !warning.pending.swap(true, Ordering::SeqCst) {
+        let text = exit_dialog::text_for(service.get_settings().language);
         let message = match (file_operations, indexing) {
-            (true, true) => {
-                "File operations will stop and will not resume automatically. Partial deletes or moves remain changed. Semantic indexing will reconcile on restart."
-            }
-            (true, false) => {
-                "File operations will stop and will not resume automatically. Partial deletes or moves remain changed."
-            }
-            (false, true) => {
-                "Semantic indexing will stop and reconcile enrolled folders on restart."
-            }
+            (true, true) => text.operations_and_indexing,
+            (true, false) => text.operations,
+            (false, true) => text.indexing,
             (false, false) => unreachable!(),
         };
+        let quit_anyway = text.quit_anyway;
         let app = app.clone();
         use tauri_plugin_dialog::{
             DialogExt, MessageDialogButtons, MessageDialogKind, MessageDialogResult,
         };
         app.dialog()
             .message(message)
-            .title("Background work is running")
+            .title(text.title)
             .kind(MessageDialogKind::Warning)
             .buttons(MessageDialogButtons::OkCancelCustom(
-                "Quit anyway".into(),
-                "Keep working".into(),
+                quit_anyway.into(),
+                text.keep_working.into(),
             ))
             .show_with_result(move |answer| {
                 let warning = app.state::<ExitWarning>();
                 warning.pending.store(false, Ordering::SeqCst);
-                if matches!(answer, MessageDialogResult::Custom(ref label) if label == "Quit anyway")
+                if matches!(answer, MessageDialogResult::Custom(ref label) if label == quit_anyway)
                 {
                     warning.approved.store(true, Ordering::SeqCst);
                     on_confirm();

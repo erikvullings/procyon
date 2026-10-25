@@ -1,3 +1,5 @@
+import { ApiError } from '../fetch-mutator';
+
 const MICROSOFT_AUTHORIZATION_ORIGIN = 'https://login.microsoftonline.com';
 const MICROSOFT_AUTHORIZATION_PATH = '/common/oauth2/v2.0/authorize';
 
@@ -7,7 +9,10 @@ export function trustedOneDriveAuthorizationUrl(value: string): string {
   try {
     url = new URL(value);
   } catch {
-    throw new Error('The Microsoft authorization URL is invalid.');
+    throw new ApiError(0, {
+      code: 'oneDriveAuthorizationUrlInvalid',
+      message: 'The Microsoft authorization URL is invalid.',
+    });
   }
   if (
     url.origin !== MICROSOFT_AUTHORIZATION_ORIGIN ||
@@ -15,7 +20,10 @@ export function trustedOneDriveAuthorizationUrl(value: string): string {
     url.username.length > 0 ||
     url.password.length > 0
   ) {
-    throw new Error('The Microsoft authorization URL is not trusted.');
+    throw new ApiError(0, {
+      code: 'oneDriveAuthorizationUrlUntrusted',
+      message: 'The Microsoft authorization URL is not trusted.',
+    });
   }
   return url.href;
 }

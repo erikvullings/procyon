@@ -3048,7 +3048,11 @@ describe('AppShell', () => {
   it('shows a toast without leaving an editor pane when F4 targets a binary file', async () => {
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'loadEditableFile').mockRejectedValue(
-      new Error('binary files cannot be edited in-app; use the external editor'),
+      new ApiError(400, {
+        code: 'invalidRequest',
+        message: 'binary files cannot be edited in-app; use the external editor',
+        details: { reason: 'editorBinaryFile' },
+      }),
     );
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(root.textContent).toContain('.env'));
@@ -7302,7 +7306,7 @@ describe('tabs per pane (task 0069)', () => {
         payload: {
           type: 'diskUsage.failed',
           scanId: request.scanId,
-          code: 'internal',
+          code: 'permissionDenied',
           message: 'Scanner worker stopped unexpectedly',
         },
       });
@@ -7317,7 +7321,7 @@ describe('tabs per pane (task 0069)', () => {
 
     await vi.waitFor(() =>
       expect(activePane()?.querySelector('.fm-disk-usage-failure')?.textContent).toContain(
-        'Scanner worker stopped unexpectedly',
+        'Permission denied.',
       ),
     );
     expect(activePane()?.querySelector('.fm-disk-usage-body')).not.toBeNull();

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../../api/fetch-mutator';
 import type { EntrySummary } from '../../models';
 import { createFileEditorController, type FileEditorState } from './file-editor-controller';
 
@@ -79,9 +80,12 @@ describe('file editor controller', () => {
     const states: FileEditorState[] = [];
     const client = {
       loadEditableFile: vi.fn().mockResolvedValue({ content: '{}', revision: 'r1', size: 2 }),
-      saveEditableFile: vi
-        .fn()
-        .mockRejectedValue(new Error('fileRevisionConflict: changed after opening')),
+      saveEditableFile: vi.fn().mockRejectedValue(
+        new ApiError(409, {
+          code: 'fileRevisionConflict',
+          message: 'The file changed after it was loaded.',
+        }),
+      ),
     };
     const controller = createFileEditorController({
       client,
@@ -99,11 +103,13 @@ describe('file editor controller', () => {
     const states: FileEditorState[] = [];
     const controller = createFileEditorController({
       client: {
-        loadEditableFile: vi
-          .fn()
-          .mockRejectedValue(
-            new Error('binary files cannot be edited in-app; use the external editor'),
-          ),
+        loadEditableFile: vi.fn().mockRejectedValue(
+          new ApiError(400, {
+            code: 'invalidRequest',
+            message: 'binary files cannot be edited in-app; use the external editor',
+            details: { reason: 'editorBinaryFile' },
+          }),
+        ),
         saveEditableFile: vi.fn(),
       },
       entry,

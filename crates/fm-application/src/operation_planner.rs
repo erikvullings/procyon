@@ -4,6 +4,7 @@
 //! previously inline in `FileManagerService::start_operation()`. The planner is
 //! stateless per-call and testable without bootstrapping the full service.
 
+use crate::rejection::{Rejection, reason};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
@@ -89,18 +90,20 @@ impl OperationPlanner {
                     ArchiveCreationFormat::Zip => {
                         let level = request.archive_compression_level.unwrap_or(6);
                         if !(0..=9).contains(&level) {
-                            return Err(ApplicationError::InvalidRequest(
-                                "archive compression level must be between 0 and 9".into(),
-                            ));
+                            return Err(ApplicationError::from(Rejection::new(
+                                reason::ARCHIVE_LEVEL_RANGE,
+                                "archive compression level must be between 0 and 9",
+                            )));
                         }
                         level
                     }
                     ArchiveCreationFormat::SevenZip
                         if request.archive_compression_level.is_some() =>
                     {
-                        return Err(ApplicationError::InvalidRequest(
-                            "7z compression level is not supported by this backend".into(),
-                        ));
+                        return Err(ApplicationError::from(Rejection::new(
+                            reason::SEVEN_ZIP_LEVEL_UNSUPPORTED,
+                            "7z compression level is not supported by this backend",
+                        )));
                     }
                     ArchiveCreationFormat::SevenZip => 6,
                 };
@@ -213,9 +216,10 @@ impl OperationPlanner {
                     .resolve(&source)
                     .map_err(ApplicationError::from)?;
                 if source.provider_id != destination.provider_id {
-                    return Err(ApplicationError::InvalidRequest(
-                        "rename cannot cross providers".into(),
-                    ));
+                    return Err(ApplicationError::from(Rejection::new(
+                        reason::RENAME_ACROSS_PROVIDERS,
+                        "rename cannot cross providers",
+                    )));
                 }
                 provider
                     .capabilities_for(&source)
@@ -252,9 +256,10 @@ impl OperationPlanner {
                         .resolve(&source)
                         .map_err(ApplicationError::from)?;
                     if source.provider_id != destination.provider_id {
-                        return Err(ApplicationError::InvalidRequest(
-                            "rename cannot cross providers".into(),
-                        ));
+                        return Err(ApplicationError::from(Rejection::new(
+                            reason::RENAME_ACROSS_PROVIDERS,
+                            "rename cannot cross providers",
+                        )));
                     }
                     provider
                         .capabilities_for(&source)
@@ -408,9 +413,10 @@ impl OperationPlanner {
                         .parent()
                         .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?
                         .ok_or_else(|| {
-                            ApplicationError::InvalidRequest(
-                                "cannot duplicate a filesystem root".into(),
-                            )
+                            ApplicationError::from(Rejection::new(
+                                reason::CANNOT_DUPLICATE_ROOT,
+                                "cannot duplicate a filesystem root",
+                            ))
                         })?;
                     let provider = self
                         .providers
@@ -485,11 +491,10 @@ impl OperationPlanner {
                     .capabilities()
                     .contains(PlatformCapabilities::TRASH)
                 {
-                    return Err(ApplicationError::PlatformOperationFailed(
+                    return Err(crate::platform_mapping::platform_failure(
                         fm_platform::PlatformError::Unsupported {
                             capability: PlatformCapabilities::TRASH,
-                        }
-                        .to_string(),
+                        },
                     ));
                 }
                 Arc::new(TrashExecutor {
@@ -521,9 +526,10 @@ impl OperationPlanner {
         plan: UndoPlan,
     ) -> Result<Arc<dyn OperationExecutor>, ApplicationError> {
         if plan.actions.is_empty() {
-            return Err(ApplicationError::InvalidRequest(
-                "This operation has no effects to undo.".into(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                fm_operations::codes::undo::NO_EFFECTS,
+                "This operation has no effects to undo.",
+            )));
         }
         let guard = UndoExecutor {
             providers: self.providers.clone(),
@@ -540,17 +546,19 @@ impl OperationPlanner {
         });
         if let Some((original, current_root)) = cross_provider {
             if plan.actions.len() != 1 {
-                return Err(ApplicationError::InvalidRequest(
-                    "Cross-provider undo cannot be combined with other inverse actions.".into(),
-                ));
+                return Err(ApplicationError::from(Rejection::new(
+                    reason::CROSS_PROVIDER_UNDO_COMBINED,
+                    "Cross-provider undo cannot be combined with other inverse actions.",
+                )));
             }
             let destination = original
                 .parent()
                 .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?
                 .ok_or_else(|| {
-                    ApplicationError::InvalidRequest(
-                        "A provider root cannot be restored by move undo.".into(),
-                    )
+                    ApplicationError::from(Rejection::new(
+                        reason::PROVIDER_ROOT_NOT_RESTORABLE,
+                        "A provider root cannot be restored by move undo.",
+                    ))
                 })?;
             let request = StartOperationRequestDto {
                 operation_type: OperationKindDto::Move,
@@ -831,9 +839,10 @@ impl ArchiveCreationFormat {
         let inferred = match path.extension().and_then(|extension| extension.to_str()) {
             Some(extension) if extension.eq_ignore_ascii_case("zip") => Ok(Self::Zip),
             Some(extension) if extension.eq_ignore_ascii_case("7z") => Ok(Self::SevenZip),
-            _ => Err(ApplicationError::InvalidRequest(
-                "archive destination must end in .zip or .7z".into(),
-            )),
+            _ => Err(ApplicationError::from(Rejection::new(
+                reason::ARCHIVE_DESTINATION_EXTENSION,
+                "archive destination must end in .zip or .7z",
+            ))),
         }?;
         let requested = match requested {
             Some(ArchiveFormatDto::Zip) => Self::Zip,
@@ -841,9 +850,10 @@ impl ArchiveCreationFormat {
             None => inferred,
         };
         if requested != inferred {
-            return Err(ApplicationError::InvalidRequest(
-                "archive format must match the destination extension".into(),
-            ));
+            return Err(ApplicationError::from(Rejection::new(
+                reason::ARCHIVE_FORMAT_MISMATCH,
+                "archive format must match the destination extension",
+            )));
         }
         Ok(requested)
     }
@@ -935,10 +945,10 @@ impl OperationExecutor for UndoExecutor {
                     {
                         Err(fm_vfs::VfsError::NotFound { .. }) => {}
                         Ok(_) => {
-                            return Err(ExecutionError::Failed(
-                                "The original path is occupied, so undo would overwrite a later change."
-                                    .into(),
-                            ));
+                            return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                                fm_operations::codes::failure::UNDO_PATH_OCCUPIED,
+                                "The original path is occupied, so undo would overwrite a later change.",
+                            )));
                         }
                         Err(error) => return Err(error.into()),
                     }
@@ -1113,6 +1123,7 @@ impl OperationExecutor for UndoExecutor {
         _cancellation: &CancellationToken,
     ) -> Result<OperationUndo, ExecutionError> {
         Ok(OperationUndo::unavailable(
+            fm_operations::codes::undo::UNDO_OF_UNDO,
             "Undo operations cannot themselves be undone.",
         ))
     }
@@ -1129,16 +1140,19 @@ impl UndoExecutor {
             .inspect(&expected.entry, cancellation.clone())
             .await
             .map_err(|error| match error {
-                fm_vfs::VfsError::NotFound { .. } => ExecutionError::Failed(
-                    "The operation output is missing, so it cannot be undone safely.".into(),
-                ),
+                fm_vfs::VfsError::NotFound { .. } => {
+                    ExecutionError::from(fm_operations::CodedFailure::new(
+                        fm_operations::codes::failure::UNDO_OUTPUT_MISSING,
+                        "The operation output is missing, so it cannot be undone safely.",
+                    ))
+                }
                 error => error.into(),
             })?;
         if !fingerprint_matches(expected, &actual) {
-            return Err(ExecutionError::Failed(
-                "The operation output changed after completion, so it cannot be undone safely."
-                    .into(),
-            ));
+            return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                fm_operations::codes::failure::UNDO_OUTPUT_CHANGED,
+                "The operation output changed after completion, so it cannot be undone safely.",
+            )));
         }
         if let Some(expected_hash) = &expected.content_hash {
             let reader = provider
@@ -1158,10 +1172,10 @@ impl UndoExecutor {
             .await
             .map_err(|error| ExecutionError::Failed(error.to_string()))?;
             if hashes.get(fm_checksum::ChecksumAlgorithm::Blake3) != Some(expected_hash.as_str()) {
-                return Err(ExecutionError::Failed(
-                    "The operation output content changed after completion, so it cannot be undone safely."
-                        .into(),
-                ));
+                return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                    fm_operations::codes::failure::UNDO_OUTPUT_CHANGED,
+                    "The operation output content changed after completion, so it cannot be undone safely.",
+                )));
             }
         }
         Ok(())
@@ -1179,9 +1193,10 @@ impl UndoExecutor {
         };
         match provider.inspect(&entry, cancellation.clone()).await {
             Err(fm_vfs::VfsError::NotFound { .. }) => Ok(()),
-            Ok(_) => Err(ExecutionError::Failed(
-                "The original path is occupied, so undo would overwrite a later change.".into(),
-            )),
+            Ok(_) => Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                fm_operations::codes::failure::UNDO_PATH_OCCUPIED,
+                "The original path is occupied, so undo would overwrite a later change.",
+            ))),
             Err(error) => Err(error.into()),
         }
     }
@@ -1226,9 +1241,10 @@ impl OperationExecutor for GuardedUndoExecutor {
                 .await?;
         }
         if resolution.is_some() {
-            return Err(ExecutionError::Failed(
-                "Undo cannot overwrite or rename around an occupied original path.".into(),
-            ));
+            return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                fm_operations::codes::failure::UNDO_PATH_OCCUPIED,
+                "Undo cannot overwrite or rename around an occupied original path.",
+            )));
         }
         if let Some(original) = self
             .guard
@@ -1253,10 +1269,12 @@ impl OperationExecutor for GuardedUndoExecutor {
             .execute(operation, item, resolution, progress, pause, cancellation)
             .await
         {
-            Err(ExecutionError::Conflict(_)) => Err(ExecutionError::Failed(
-                "The original path became occupied, so undo was stopped without overwriting it."
-                    .into(),
-            )),
+            Err(ExecutionError::Conflict(_)) => {
+                Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                    fm_operations::codes::failure::UNDO_PATH_OCCUPIED,
+                    "The original path became occupied, so undo was stopped without overwriting it.",
+                )))
+            }
             result => result,
         }
     }
@@ -1279,6 +1297,7 @@ impl OperationExecutor for GuardedUndoExecutor {
         _cancellation: &CancellationToken,
     ) -> Result<OperationUndo, ExecutionError> {
         Ok(OperationUndo::unavailable(
+            fm_operations::codes::undo::UNDO_OF_UNDO,
             "Undo operations cannot themselves be undone.",
         ))
     }
@@ -1405,10 +1424,16 @@ impl OperationExecutor for DeleteExecutor {
             let root = provider.inspect(source, cancellation.clone()).await?;
             if source.location.provider_id.as_str() == "local" {
                 if root.read_only && !self.override_read_only && !self.requires_confirmation {
-                    return Err(ExecutionError::Failed(format!(
-                        "read-only entry requires explicit override: {}",
-                        root.location.uri
-                    )));
+                    return Err(ExecutionError::from(
+                        fm_operations::CodedFailure::new(
+                            fm_operations::codes::failure::READ_ONLY_NEEDS_OVERRIDE,
+                            format!(
+                                "read-only entry requires explicit override: {}",
+                                root.location.uri
+                            ),
+                        )
+                        .with_param("location", &root.location.uri),
+                    ));
                 }
                 items.push(PlanItem::new(
                     EntryRef {
@@ -1426,10 +1451,16 @@ impl OperationExecutor for DeleteExecutor {
                     return Err(fm_vfs::VfsError::Cancelled.into());
                 }
                 if summary.read_only && !self.override_read_only && !self.requires_confirmation {
-                    return Err(ExecutionError::Failed(format!(
-                        "read-only entry requires explicit override: {}",
-                        summary.location.uri
-                    )));
+                    return Err(ExecutionError::from(
+                        fm_operations::CodedFailure::new(
+                            fm_operations::codes::failure::READ_ONLY_NEEDS_OVERRIDE,
+                            format!(
+                                "read-only entry requires explicit override: {}",
+                                summary.location.uri
+                            ),
+                        )
+                        .with_param("location", &summary.location.uri),
+                    ));
                 }
                 let entry = EntryRef {
                     id: summary.id,
@@ -1522,10 +1553,27 @@ impl OperationExecutor for DeleteExecutor {
                 report
                     .failures
                     .into_iter()
-                    .map(|(entry, message)| {
-                        fm_operations::OperationEntryError::new(entry, message.clone())
+                    .map(|failure| match failure.kind {
+                        fm_vfs::RemoveFailureKind::ReadOnly => {
+                            fm_operations::OperationEntryError::new(
+                                failure.entry,
+                                format!(
+                                    "{}: read-only entry requires explicit override",
+                                    failure.path
+                                ),
+                            )
+                            .with_code(fm_operations::codes::entry_error::ENTRY_READ_ONLY)
+                            .with_param("path", failure.path)
+                        }
+                        fm_vfs::RemoveFailureKind::Io(detail) => {
+                            fm_operations::OperationEntryError::new(
+                                failure.entry,
+                                format!("{}: {detail}", failure.path),
+                            )
                             .with_code(fm_operations::codes::entry_error::ENTRY_FAILED)
-                            .with_param("detail", message)
+                            .with_param("path", failure.path)
+                            .with_param("detail", detail)
+                        }
                     })
                     .collect(),
             ));
@@ -1649,6 +1697,7 @@ impl OperationExecutor for TrashExecutor {
             .clone();
         if restored_entries.is_empty() {
             return Ok(OperationUndo::unavailable(
+                fm_operations::codes::undo::TRASH_NOT_RESTORABLE,
                 "The platform did not provide a restorable trash location.",
             ));
         }
@@ -2158,9 +2207,10 @@ impl OperationExecutor for MoveExecutor {
                 .inspect(&item.entry, cancellation.clone())
                 .await?;
             if source.kind != existing.kind {
-                return Err(ExecutionError::Failed(
-                    "a file and directory cannot replace one another".into(),
-                ));
+                return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                    fm_operations::codes::failure::KIND_MISMATCH,
+                    "a file and directory cannot replace one another",
+                )));
             }
             match effective_resolution(operation.conflict_policy, resolution) {
                 None => return Err(conflict_error(&source, &existing)),
@@ -2278,6 +2328,7 @@ impl OperationExecutor for MoveExecutor {
             .clone();
         let Some(original_fingerprint) = original_fingerprint else {
             return Ok(OperationUndo::unavailable(
+                fm_operations::codes::undo::MOVE_EVIDENCE_MISSING,
                 "The move did not retain its original source fingerprint.",
             ));
         };
@@ -2300,6 +2351,7 @@ impl OperationExecutor for MoveExecutor {
                     }],
                 }),
                 None => OperationUndo::unavailable(
+                    fm_operations::codes::undo::NOTHING_TO_UNDO,
                     "The move destination was not completed, so there is nothing safe to undo.",
                 ),
             });
@@ -2325,6 +2377,7 @@ impl OperationExecutor for MoveExecutor {
             .ok_or_else(|| ExecutionError::Failed("move destination evidence is missing".into()))?;
         if self.source.name().ok() != current_root_location.name().ok() {
             return Ok(OperationUndo::unavailable(
+                fm_operations::codes::undo::COLLISION_RENAMED,
                 "A collision changed the moved entry name, so cross-provider undo is unavailable.",
             ));
         }
@@ -2650,6 +2703,7 @@ impl OperationExecutor for CopyExecutor {
     ) -> Result<OperationUndo, ExecutionError> {
         if self.replaced_existing.load(Ordering::Acquire) {
             return Ok(OperationUndo::unavailable(
+                fm_operations::codes::undo::REPLACED_EXISTING,
                 "Undo is unavailable because the copy replaced or merged existing entries.",
             ));
         }
@@ -2663,7 +2717,10 @@ impl OperationExecutor for CopyExecutor {
             entries.push(fingerprint(&self.destination_provider, &location, cancellation).await?);
         }
         Ok(if entries.is_empty() {
-            OperationUndo::unavailable("The copy created no entries to undo.")
+            OperationUndo::unavailable(
+                fm_operations::codes::undo::NOTHING_TO_UNDO,
+                "The copy created no entries to undo.",
+            )
         } else {
             OperationUndo::available(UndoPlan {
                 actions: vec![UndoAction::RemoveCreated { entries }],
@@ -2688,7 +2745,10 @@ async fn copy_group_undo_evidence(
         }
     }
     Ok(if actions.is_empty() {
-        OperationUndo::unavailable("The operation created no entries to undo.")
+        OperationUndo::unavailable(
+            fm_operations::codes::undo::NOTHING_TO_UNDO,
+            "The operation created no entries to undo.",
+        )
     } else {
         OperationUndo::available(UndoPlan { actions })
     })
@@ -2857,9 +2917,10 @@ impl CopyExecutor {
                 .inspect(&planned.source, cancellation.clone())
                 .await?;
             if source.kind != destination.kind {
-                return Err(ExecutionError::Failed(
-                    "a file and directory cannot replace one another".into(),
-                ));
+                return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                    fm_operations::codes::failure::KIND_MISMATCH,
+                    "a file and directory cannot replace one another",
+                )));
             }
             match effective_resolution(operation.conflict_policy, resolution) {
                 None => return Err(conflict_error(&source, &destination)),
@@ -3204,9 +3265,10 @@ impl CopyExecutor {
                         )
                         .await?;
                     if source.kind != destination_summary.kind {
-                        return Err(ExecutionError::Failed(
-                            "a file and directory cannot replace one another".into(),
-                        ));
+                        return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                            fm_operations::codes::failure::KIND_MISMATCH,
+                            "a file and directory cannot replace one another",
+                        )));
                     }
                     return Err(conflict_error(&source, &destination_summary));
                 }
@@ -3291,6 +3353,7 @@ impl OperationExecutor for RenameExecutor {
                 }],
             }),
             _ => OperationUndo::unavailable(
+                fm_operations::codes::undo::NOTHING_TO_UNDO,
                 "The renamed entry was not completed, so there is nothing safe to undo.",
             ),
         })
@@ -3417,9 +3480,10 @@ impl OperationExecutor for CreateDirectoryExecutor {
                         )
                         .await?;
                     if existing.kind != EntryKind::Directory {
-                        return Err(ExecutionError::Failed(
-                            "an intermediate path component is not a directory".into(),
-                        ));
+                        return Err(ExecutionError::from(fm_operations::CodedFailure::new(
+                            fm_operations::codes::failure::PATH_COMPONENT_NOT_DIRECTORY,
+                            "an intermediate path component is not a directory",
+                        )));
                     }
                     parent = existing.location;
                 }
@@ -3572,8 +3636,24 @@ fn execution_entry_error(
         ExecutionError::Provider(error) => {
             fm_operations::OperationEntryError::from_vfs(entry, error)
         }
-        other => fm_operations::OperationEntryError::new(entry, other.to_string()),
+        ExecutionError::Coded(failure) => {
+            let mut error = fm_operations::OperationEntryError::new(entry, failure.message.clone())
+                .with_code(failure.code.clone());
+            error.params = failure.params.clone();
+            error
+        }
+        ExecutionError::Failed(detail) => {
+            fm_operations::OperationEntryError::new(entry, error_text(detail))
+                .with_code(fm_operations::codes::failure::OPERATION_FAILED)
+                .with_param("detail", detail)
+        }
+        other => fm_operations::OperationEntryError::new(entry, other.to_string())
+            .with_code(fm_operations::codes::failure::OPERATION_FAILED),
     }
+}
+
+fn error_text(detail: &str) -> String {
+    format!("operation execution failed: {detail}")
 }
 
 #[cfg(test)]

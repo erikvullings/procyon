@@ -318,9 +318,15 @@ pub struct OpenStructuredViewResponseDto {
     pub total_rows: Option<u64>,
     /// Whether the indexer reached EOF.
     pub indexing_complete: bool,
-    /// Explicit provider or format limitation shown to the user.
+    /// Explicit provider or format limitation shown to the user (English fallback).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+    /// Stable code of `warning` that clients localise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning_code: Option<String>,
+    /// Raw diagnostic text the localised warning appends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning_detail: Option<String>,
 }
 
 /// Identifies a structured-view session for status or close operations.
@@ -344,9 +350,15 @@ pub struct StructuredViewStatusDto {
     pub total_rows: Option<u64>,
     /// Whether the indexer reached EOF.
     pub indexing_complete: bool,
-    /// Explicit provider or format limitation shown to the user.
+    /// Explicit provider or format limitation shown to the user (English fallback).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+    /// Stable code of `warning` that clients localise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning_code: Option<String>,
+    /// Raw diagnostic text the localised warning appends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning_detail: Option<String>,
 }
 
 /// Reads a bounded page of logical CSV/TSV/NDJSON records.
