@@ -86,6 +86,8 @@ struct SharedWatch {
 #[derive(Default)]
 struct WatchHub {
     watches: Mutex<HashMap<fm_domain::Location, SharedWatch>>,
+    /// Test seam: overrides [`SAFETY_NET_INTERVAL`].
+    safety_net_interval: Option<Duration>,
 }
 
 /// Lists directories and owns per-pane cancellation and revision state.
@@ -649,13 +651,41 @@ impl WatchHub {
         let (sender, receiver) = broadcast::channel(16);
         let forward = sender.clone();
         let source_cancellation = cancellation.clone();
+        // A push-based watch can still miss events (FSEvents coalescing/history gaps, watcher
+        // silently dying, TCC-protected folders), so back it with a slow reconciling tick. Polled
+        // providers already re-list on their own cadence.
+        let safety_net = matches!(
+            provider.change_tracking(),
+            ChangeTracking::NativeWatch | ChangeTracking::DeltaApi
+        )
+        .then(|| self.safety_net_interval.unwrap_or(SAFETY_NET_INTERVAL));
         tokio::spawn(async move {
+            let mut ticker = safety_net.map(|period| {
+                let mut ticker =
+                    tokio::time::interval_at(tokio::time::Instant::now() + period, period);
+                ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                ticker
+            });
+            let mut stream_done = false;
             loop {
                 tokio::select! {
                     () = source_cancellation.cancelled() => break,
-                    item = stream.next() => match item {
+                    () = async {
+                        match ticker.as_mut() {
+                            Some(ticker) => { ticker.tick().await; }
+                            None => std::future::pending::<()>().await,
+                        }
+                    } => { let _ = forward.send(ProviderChange::Changed); }
+                    item = stream.next(), if !stream_done => match item {
                         Some(Ok(change)) => { let _ = forward.send(change); }
                         Some(Err(_)) => { let _ = forward.send(ProviderChange::ResetRequired); }
+                        // A dead native stream must not leave a registered-but-mute watch behind:
+                        // keep the safety-net ticks flowing when there are any.
+                        None if ticker.is_some() => {
+                            tracing::warn!("provider watch stream ended; relying on safety-net polling");
+                            stream_done = true;
+                            let _ = forward.send(ProviderChange::ResetRequired);
+                        }
                         None => break,
                     }
                 }
@@ -800,28 +830,66 @@ struct PaneWatch {
     git_status: Arc<GitStatusService>,
 }
 
+/// How many times a failed watch-triggered relist is retried before waiting for the next event.
+const RELIST_RETRY_ATTEMPTS: u32 = 6;
+/// First delay between relist retries; doubles per attempt.
+const RELIST_RETRY_BASE_DELAY: Duration = Duration::from_millis(100);
+/// Cadence of the reconciling relist that backs up a push-based (native/delta) watch. Publishing
+/// is a no-op when nothing changed, so this only ever costs one cheap directory read.
+const SAFETY_NET_INTERVAL: Duration = Duration::from_secs(10);
+
+/// Relists a watched directory, retrying transient failures (e.g. an entry vanishing mid-scan, a
+/// busy volume) so a lost relist never leaves the pane silently stale. `None` means the watch was
+/// cancelled; `Some(None)` means every attempt failed.
+async fn relist_with_retry(watch: &PaneWatch) -> Option<Option<Vec<fm_domain::EntrySummary>>> {
+    let mut delay = RELIST_RETRY_BASE_DELAY;
+    for attempt in 0..=RELIST_RETRY_ATTEMPTS {
+        match list_all(
+            Arc::clone(&watch.provider),
+            &watch.location,
+            watch.cancellation.clone(),
+        )
+        .await
+        {
+            Ok(entries) => return Some(Some(entries)),
+            Err(VfsError::Cancelled) => return None,
+            Err(error) => {
+                tracing::warn!(%error, attempt, "watch-triggered relist failed");
+            }
+        }
+        tokio::select! {
+            () = watch.cancellation.cancelled() => return None,
+            () = tokio::time::sleep(delay) => {}
+        }
+        delay = (delay * 2).min(Duration::from_secs(5));
+    }
+    Some(None)
+}
+
 fn spawn_pane_watch(mut watch: PaneWatch) {
     tokio::spawn(async move {
+        // Reconcile first: the listing that seeded this pane was taken before the watch became
+        // live (native watch setup can take seconds), so anything that changed in that window
+        // produced no event. One relist now closes the gap; an unchanged listing publishes nothing.
+        let mut next_change = Some(ProviderChange::Changed);
         loop {
-            let change = tokio::select! {
-                () = watch.cancellation.cancelled() => break,
-                received = watch.receiver.recv() => match received {
-                    Ok(change) => change,
-                    Err(broadcast::error::RecvError::Lagged(_)) => ProviderChange::ResetRequired,
-                    Err(broadcast::error::RecvError::Closed) => break,
-                }
+            let change = match next_change.take() {
+                Some(change) => change,
+                None => tokio::select! {
+                    () = watch.cancellation.cancelled() => break,
+                    received = watch.receiver.recv() => match received {
+                        Ok(change) => change,
+                        Err(broadcast::error::RecvError::Lagged(_)) => ProviderChange::ResetRequired,
+                        Err(broadcast::error::RecvError::Closed) => break,
+                    }
+                },
             };
             let relist_started = std::time::Instant::now();
-            let mut entries = match list_all(
-                Arc::clone(&watch.provider),
-                &watch.location,
-                watch.cancellation.clone(),
-            )
-            .await
-            {
-                Ok(entries) => entries,
-                Err(VfsError::Cancelled) => break,
-                Err(_) => continue,
+            let mut entries = match relist_with_retry(&watch).await {
+                None => break,
+                Some(Some(entries)) => entries,
+                // Out of retries: the next event or safety-net tick resynchronises.
+                Some(None) => continue,
             };
             let relist_elapsed = relist_started.elapsed();
             annotate_git_status(
@@ -1598,6 +1666,8 @@ mod tests {
             Duration::from_millis(20),
             vec![
                 PollOutcome::Ok(vec![entry_a.clone()]),
+                // Consumed by the reconciling relist that runs when the watch goes live.
+                PollOutcome::Ok(vec![entry_a.clone()]),
                 PollOutcome::Ok(vec![entry_a.clone()]),
                 PollOutcome::Ok(vec![entry_a.clone(), entry_b.clone()]),
             ],
@@ -1646,6 +1716,271 @@ mod tests {
         }
     }
 
+    /// A native-watch provider whose listing, failures and watch start-up are test-controlled.
+    struct ControlledProvider {
+        entries: std::sync::Mutex<Vec<fm_domain::EntrySummary>>,
+        list_calls: AtomicUsize,
+        fail_lists: AtomicUsize,
+        watch_gate: Notify,
+        gated: bool,
+        events: std::sync::Mutex<Option<tokio::sync::mpsc::Receiver<ProviderChange>>>,
+    }
+
+    impl ControlledProvider {
+        fn new(
+            entries: Vec<fm_domain::EntrySummary>,
+            gated: bool,
+        ) -> (Arc<Self>, tokio::sync::mpsc::Sender<ProviderChange>) {
+            let (tx, rx) = tokio::sync::mpsc::channel(8);
+            (
+                Arc::new(Self {
+                    entries: std::sync::Mutex::new(entries),
+                    list_calls: AtomicUsize::new(0),
+                    fail_lists: AtomicUsize::new(0),
+                    watch_gate: Notify::new(),
+                    gated,
+                    events: std::sync::Mutex::new(Some(rx)),
+                }),
+                tx,
+            )
+        }
+
+        fn set_entries(&self, entries: Vec<fm_domain::EntrySummary>) {
+            *self.entries.lock().expect("entries lock") = entries;
+        }
+    }
+
+    #[async_trait]
+    impl FileSystemProvider for ControlledProvider {
+        fn id(&self) -> ProviderId {
+            ProviderId::new("controlled")
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities::LIST | ProviderCapabilities::WATCH
+        }
+
+        async fn list(
+            &self,
+            _location: &Location,
+            _options: ListOptions,
+            _cancellation: CancellationToken,
+        ) -> Result<DirectoryPage, VfsError> {
+            self.list_calls.fetch_add(1, AtomicOrdering::SeqCst);
+            if self
+                .fail_lists
+                .fetch_update(AtomicOrdering::SeqCst, AtomicOrdering::SeqCst, |n| {
+                    n.checked_sub(1)
+                })
+                .is_ok()
+            {
+                return Err(VfsError::Io {
+                    message: "entry vanished mid-scan".to_owned(),
+                });
+            }
+            Ok(DirectoryPage {
+                entries: self.entries.lock().expect("entries lock").clone(),
+                total_known_entries: None,
+                has_more: false,
+                continuation_token: None,
+            })
+        }
+
+        async fn metadata(
+            &self,
+            _entry: &EntryRef,
+            _cancellation: CancellationToken,
+        ) -> Result<EntryMetadata, VfsError> {
+            Err(unsupported())
+        }
+
+        async fn create_directory(
+            &self,
+            _location: &Location,
+            _name: &str,
+            _cancellation: CancellationToken,
+        ) -> Result<EntryRef, VfsError> {
+            Err(unsupported())
+        }
+
+        async fn rename(
+            &self,
+            _source: &EntryRef,
+            _destination: &Location,
+            _cancellation: CancellationToken,
+        ) -> Result<EntryRef, VfsError> {
+            Err(unsupported())
+        }
+
+        async fn remove(
+            &self,
+            _entry: &EntryRef,
+            _options: RemoveOptions,
+            _cancellation: CancellationToken,
+        ) -> Result<(), VfsError> {
+            Err(unsupported())
+        }
+
+        async fn open_read(
+            &self,
+            _entry: &EntryRef,
+            _cancellation: CancellationToken,
+        ) -> Result<ProviderReadStream, VfsError> {
+            Err(unsupported())
+        }
+
+        async fn open_write(
+            &self,
+            _destination: &Location,
+            _options: WriteOptions,
+            _cancellation: CancellationToken,
+        ) -> Result<ProviderWriteStream, VfsError> {
+            Err(unsupported())
+        }
+
+        async fn watch(
+            &self,
+            _location: &Location,
+            _cancellation: CancellationToken,
+        ) -> Result<ProviderChangeStream, VfsError> {
+            if self.gated {
+                self.watch_gate.notified().await;
+            }
+            let receiver = self
+                .events
+                .lock()
+                .expect("events lock")
+                .take()
+                .expect("watch started once");
+            Ok(Box::pin(stream::unfold(receiver, |mut receiver| async {
+                receiver.recv().await.map(|change| (Ok(change), receiver))
+            })))
+        }
+    }
+
+    fn controlled_request() -> ListDirectoryRequest {
+        let mut request = request(PaneId::new(), Uuid::new_v4());
+        request.location = LocationDto {
+            provider_id: "controlled".to_owned(),
+            uri: "controlled:///dir".to_owned(),
+        };
+        request
+    }
+
+    fn service_for(
+        provider: Arc<ControlledProvider>,
+        safety_net: Option<Duration>,
+    ) -> (DirectoryService, fm_events::EventSubscription) {
+        let mut providers = ProviderRegistry::new();
+        providers.register(provider);
+        let events = EventBus::default();
+        let mut service = DirectoryService::with_event_bus(providers, events.clone());
+        service.watches = Arc::new(WatchHub {
+            safety_net_interval: safety_net,
+            ..WatchHub::default()
+        });
+        let subscription = events.subscribe_all_workspaces(SessionId::new("test"), None);
+        (service, subscription)
+    }
+
+    async fn next_delta(subscription: &mut fm_events::EventSubscription) -> DirectoryDeltaPayload {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let SubscriptionEvent::Event(envelope) =
+                    subscription.recv().await.expect("subscription open")
+                    && let BackendEventPayload::DirectoryDelta { delta, .. } = envelope.payload
+                {
+                    return delta;
+                }
+            }
+        })
+        .await
+        .expect("a delta must be published")
+    }
+
+    #[tokio::test]
+    async fn a_change_made_before_the_watch_became_live_is_still_published() {
+        let a = poll_entry("a.txt");
+        let b = poll_entry("b.txt");
+        let (provider, _events) = ControlledProvider::new(vec![a.clone()], true);
+        let (service, mut subscription) =
+            service_for(Arc::clone(&provider), Some(Duration::from_secs(3600)));
+        service
+            .list(controlled_request())
+            .await
+            .expect("initial listing");
+        // The file lands while the (slow) native watcher is still starting: no event exists.
+        provider.set_entries(vec![a, b]);
+        provider.watch_gate.notify_one();
+        match next_delta(&mut subscription).await {
+            DirectoryDeltaPayload::EntriesAdded { entries, .. } => {
+                assert_eq!(entries[0].name, "b.txt");
+            }
+            other => panic!("expected EntriesAdded, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_failed_relist_is_retried_instead_of_dropping_the_change() {
+        let a = poll_entry("a.txt");
+        let b = poll_entry("b.txt");
+        let (provider, events) = ControlledProvider::new(vec![a.clone()], false);
+        let (service, mut subscription) =
+            service_for(Arc::clone(&provider), Some(Duration::from_secs(3600)));
+        service
+            .list(controlled_request())
+            .await
+            .expect("initial listing");
+        // Wait until the start-up reconcile has run so the failure hits the event-driven relist.
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while provider.list_calls.load(AtomicOrdering::SeqCst) < 2 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("reconcile relist");
+        provider.set_entries(vec![a, b]);
+        provider.fail_lists.store(2, AtomicOrdering::SeqCst);
+        events
+            .send(ProviderChange::Changed)
+            .await
+            .expect("watch alive");
+        match next_delta(&mut subscription).await {
+            DirectoryDeltaPayload::EntriesAdded { entries, .. } => {
+                assert_eq!(entries[0].name, "b.txt");
+            }
+            other => panic!("expected EntriesAdded, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_native_watch_that_never_reports_is_backed_by_safety_net_relists() {
+        let a = poll_entry("a.txt");
+        let b = poll_entry("b.txt");
+        let (provider, _events) = ControlledProvider::new(vec![a.clone()], false);
+        let (service, mut subscription) =
+            service_for(Arc::clone(&provider), Some(Duration::from_millis(50)));
+        service
+            .list(controlled_request())
+            .await
+            .expect("initial listing");
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while provider.list_calls.load(AtomicOrdering::SeqCst) < 2 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("reconcile relist");
+        // The OS never delivers an event for this change (FSEvents gap, dead watcher, ...).
+        provider.set_entries(vec![a, b]);
+        match next_delta(&mut subscription).await {
+            DirectoryDeltaPayload::EntriesAdded { entries, .. } => {
+                assert_eq!(entries[0].name, "b.txt");
+            }
+            other => panic!("expected EntriesAdded, got {other:?}"),
+        }
+    }
+
     #[tokio::test]
     async fn a_failed_native_watch_falls_back_to_polling() {
         let entry_a = poll_entry("a.txt");
@@ -1653,6 +1988,8 @@ mod tests {
         let provider = Arc::new(PollingProvider::with_failed_native_watch(
             ProviderId::new("failing-watch"),
             vec![
+                PollOutcome::Ok(vec![entry_a.clone()]),
+                // Consumed by the reconciling relist that runs when the watch goes live.
                 PollOutcome::Ok(vec![entry_a.clone()]),
                 PollOutcome::Ok(vec![entry_a.clone()]),
                 PollOutcome::Ok(vec![entry_a, entry_b]),

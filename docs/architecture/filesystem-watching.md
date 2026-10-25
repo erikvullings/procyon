@@ -68,3 +68,18 @@ very next tick. It has no effect on `NativeWatch`/`DeltaApi` tracking, which is 
 no cadence to throttle. Polling stops the same way a native watch does: cancelling the pane's
 `watch_cancellation` on navigation-away releases the shared `SharedWatch` once its reference count
 reaches zero, cancelling the underlying poll loop's `CancellationToken`.
+
+## Staleness safety nets (2026-10)
+
+A native watch is not trusted to be complete. `DirectoryService` layers these on top of it:
+
+- **Reconcile on go-live.** The listing that seeds a pane predates the watch becoming live (FSEvents
+  setup can take seconds), so each pane watch starts with one relist; an unchanged listing
+  publishes nothing.
+- **Relist retry.** A watch-triggered relist that fails (entry vanished mid-scan, busy volume) is
+  retried with backoff instead of silently dropping the change.
+- **Safety-net tick.** Native/delta watches also relist every `SAFETY_NET_INTERVAL` (10 s) to cover
+  missed/coalesced events; a dead native stream keeps the tick alive instead of leaving a mute watch.
+- **Tolerant local listing.** `fm-vfs-local` skips an entry that disappears between `readdir` and
+  `stat` (temp-file-then-rename writers) instead of failing the whole listing.
+- **Frontend.** Window focus / tab visibility triggers a throttled background reload of open panes.

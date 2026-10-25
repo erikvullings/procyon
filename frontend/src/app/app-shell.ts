@@ -2220,6 +2220,22 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    * alt-tabbing back into the app). Without this, `document.activeElement` is left wherever it was
    * before the app lost focus (often nowhere useful), so the cursor row still *looks* highlighted
    * but arrow keys silently do nothing until the user clicks a row to re-establish focus manually. */
+  /** Minimum gap between focus-triggered revalidations (focus can fire in bursts). */
+  const FOCUS_REVALIDATE_MIN_INTERVAL_MS = 2_000;
+  let lastFocusRevalidation = Number.NEGATIVE_INFINITY;
+
+  /**
+   * Safety net behind the filesystem watchers: events can be missed (coalesced FSEvents, a watcher
+   * that died, a stream that lagged), and the user returning to the window is the moment they would
+   * notice a stale folder. A background reload is cheap and publishes nothing visible if unchanged.
+   */
+  function revalidateDirectoriesOnReturn(): void {
+    const now = Date.now();
+    if (now - lastFocusRevalidation < FOCUS_REVALIDATE_MIN_INTERVAL_MS) return;
+    lastFocusRevalidation = now;
+    refetchAffectedPanes(undefined, { background: true });
+  }
+
   function handleWindowFocus(): void {
     const openModals = document.querySelectorAll<HTMLElement>('.modal.active[aria-modal="true"]');
     const openModal = openModals.item(openModals.length - 1);
@@ -2235,10 +2251,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       }
       return;
     }
+    revalidateDirectoriesOnReturn();
     const activePaneId = workspace?.activePaneId;
     if (activePaneId === undefined) return;
     if (focusPane !== undefined) focusPane(activePaneId);
     else void activatePane(attrsClient, activePaneId);
+  }
+
+  function handleVisibilityChange(): void {
+    if (document.visibilityState === 'visible') revalidateDirectoriesOnReturn();
   }
 
   async function loadSettings(client: FileManagerClient): Promise<void> {
@@ -6305,6 +6326,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       windowTitleSink = dedupeWindowTitleSink(createWindowTitleSink(attrs.client));
       systemThemeQuery?.addEventListener('change', handleSystemThemeChange);
       window.addEventListener('focus', handleWindowFocus);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
       document.addEventListener('keydown', updateFunctionKeyModifiers);
       document.addEventListener('keyup', updateFunctionKeyModifiers);
       window.addEventListener('blur', resetFunctionKeyModifiers);
@@ -6402,6 +6424,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       dialogs.clearArchiveCredential();
       systemThemeQuery?.removeEventListener('change', handleSystemThemeChange);
       window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('keydown', updateFunctionKeyModifiers);
       document.removeEventListener('keyup', updateFunctionKeyModifiers);
       window.removeEventListener('blur', resetFunctionKeyModifiers);
