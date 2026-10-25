@@ -1763,6 +1763,7 @@ export const it = {
     citationCells: 'Celle {range}',
     citationSheetCells: 'Foglio {sheet}, celle {range}',
     citationBlock: 'Blocco {block}',
+    citationRecord: 'Record alla riga {line}',
     retrieve: 'Anteprima delle prove',
     retrieving: 'Recupero in corso…',
     generate: 'Genera risposta',

@@ -16,7 +16,7 @@ use std::sync::Arc;
 use fm_domain::{EntryId, EntryKind, Location};
 use fm_semantic_conversion::{
     Cancellation, CancellationSignal, ConversionBudgets, ConversionContext, ConversionOutcome,
-    DocumentConverter, DocumentMetadata, SourceContent,
+    DocumentConverter, DocumentMetadata, MediaType, SourceContent, is_jsonl_hint,
 };
 use fm_semantic_docling::converter_with_baseline_fallback;
 use fm_vfs::{EntryRef, ProviderCapabilities, ProviderRegistry};
@@ -108,6 +108,15 @@ impl DocumentConversionService {
                 "semantic conversion requires a regular file",
             )));
         }
+        let metadata = trusted_metadata(&summary, summary.size.unwrap_or(0));
+        if is_jsonl_hint(
+            summary.mime_type.as_deref().map(MediaType::parse).as_ref(),
+            metadata.extension(),
+        ) {
+            return self
+                .convert_streamed(&provider, &entry, metadata, cancellation)
+                .await;
+        }
         let max_source_bytes = self.budgets.max_source_bytes;
         if summary.size.is_some_and(|size| size > max_source_bytes) {
             return Ok(ConversionOutcome::OverBudget {
@@ -148,6 +157,36 @@ impl DocumentConversionService {
         .map_err(|_| ApplicationError::Internal)?
         .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
         Ok(outcome)
+    }
+
+    /// Converts a file the engine reads as a stream, so no source-size limit
+    /// applies: the provider stream is bridged to the engine's synchronous
+    /// reader and consumed in bounded whole-line windows, while the output
+    /// budgets, deadline and cancellation still bound the work.
+    async fn convert_streamed(
+        &self,
+        provider: &Arc<dyn fm_vfs::FileSystemProvider>,
+        entry: &EntryRef,
+        metadata: DocumentMetadata,
+        cancellation: CancellationToken,
+    ) -> Result<ConversionOutcome, ApplicationError> {
+        let reader = provider
+            .open_read(entry, cancellation.child_token())
+            .await
+            .map_err(ApplicationError::from)?;
+        let mut bridge = tokio_util::io::SyncIoBridge::new(reader);
+        let context = ConversionContext::new()
+            .with_budgets(self.budgets.clone())
+            .with_cancellation(Cancellation::new(Arc::new(TokenSignal(
+                cancellation.clone(),
+            ))));
+        let converter = Arc::clone(&self.converter);
+        tokio::task::spawn_blocking(move || {
+            converter.convert(SourceContent::Reader(&mut bridge), &metadata, &context)
+        })
+        .await
+        .map_err(|_| ApplicationError::Internal)?
+        .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))
     }
 }
 
@@ -574,6 +613,94 @@ mod tests {
                 limit: 16
             }
         ));
+    }
+
+    fn jsonl_feed(records: usize) -> Vec<u8> {
+        (1..=records)
+            .map(|index| {
+                format!(
+                    "{{\"title\":\"Story {index}\",\"text\":\"Body of story {index}.\",\"channel\":\"News\"}}\n"
+                )
+            })
+            .collect::<String>()
+            .into_bytes()
+    }
+
+    fn low_budget() -> ConversionBudgets {
+        ConversionBudgets {
+            max_source_bytes: 256,
+            ..ConversionBudgets::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn json_lines_larger_than_the_source_budget_stream_through_the_provider() {
+        let bytes = jsonl_feed(500);
+        assert!(bytes.len() as u64 > low_budget().max_source_bytes * 100);
+        let mut service = memory_service(&bytes, "feed.jsonl");
+        service.budgets = low_budget();
+        let outcome = service
+            .convert(
+                Location::new(
+                    ProviderId::new("memory-conversion-test-double"),
+                    "memory://feed.jsonl",
+                ),
+                CancellationToken::new(),
+            )
+            .await
+            .expect("conversion");
+        let document = outcome.document().expect("converted");
+        assert_eq!(document.format(), fm_semantic_conversion::FormatKind::Jsonl);
+        assert_eq!(document.units().len(), 500);
+        assert!(!document.is_partial());
+        assert_eq!(
+            document.units()[499].provenance,
+            fm_semantic_conversion::Provenance::JsonlRecord {
+                line: 500,
+                byte_offset: jsonl_feed(499).len() as u64
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn a_local_json_lines_file_larger_than_the_budget_converts_with_output_budgets_applied() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = directory.path().join("export.ndjson");
+        std::fs::write(&path, jsonl_feed(300)).expect("write");
+        let mut service = local_service();
+        service.budgets = ConversionBudgets {
+            max_units: 40,
+            ..low_budget()
+        };
+        let outcome = service
+            .convert(
+                Location::from_native_path(&path).expect("location"),
+                CancellationToken::new(),
+            )
+            .await
+            .expect("conversion");
+        let document = outcome.document().expect("converted");
+        assert_eq!(document.units().len(), 40);
+        assert!(document.is_partial());
+    }
+
+    #[tokio::test]
+    async fn streamed_json_lines_conversion_honours_cancellation() {
+        let mut service = memory_service(&jsonl_feed(10), "feed.jsonl");
+        service.budgets = low_budget();
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+        let outcome = service
+            .convert(
+                Location::new(
+                    ProviderId::new("memory-conversion-test-double"),
+                    "memory://feed.jsonl",
+                ),
+                cancellation,
+            )
+            .await
+            .expect("conversion");
+        assert_eq!(outcome, ConversionOutcome::Cancelled);
     }
 
     #[tokio::test]

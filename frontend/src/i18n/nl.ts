@@ -1071,6 +1071,7 @@ export const nl = {
     citationCells: 'Cellen {range}',
     citationSheetCells: 'Blad {sheet}, cellen {range}',
     citationBlock: 'Blok {block}',
+    citationRecord: 'Record op regel {line}',
     retrieve: 'Bewijs bekijken',
     retrieving: 'Ophalen…',
     generate: 'Antwoord genereren',

@@ -3676,6 +3676,31 @@ mod tests {
     }
 
     #[test]
+    fn json_lines_are_converted_without_blobs_and_a_changed_file_replaces_the_generation() {
+        let fixture = Fixture::new(healthy_resources());
+        let blob = "QUJD".repeat(300);
+        let mut first = fixture.document(&format!(
+            "{{\"title\":\"Dam breach\",\"text\":\"Water rose overnight.\",\"image\":\"{blob}\"}}\n"
+        ));
+        first.media_type = "application/x-ndjson".into();
+        fixture
+            .coordinator
+            .ingest(&first, &CancellationToken::new())
+            .expect("initial ingestion");
+        let excerpt = fixture.visible_excerpt();
+        assert!(excerpt.contains("Water rose overnight."), "{excerpt}");
+        assert!(!excerpt.contains("QUJD"));
+
+        let mut second = fixture.document("{\"text\":\"Harvest report\"}\nnot json\n");
+        second.media_type = "application/x-ndjson".into();
+        fixture
+            .coordinator
+            .ingest(&second, &CancellationToken::new())
+            .expect("changed ingestion");
+        assert_eq!(fixture.visible_excerpt(), "Harvest report");
+    }
+
+    #[test]
     fn unreadable_pdf_page_does_not_replace_prior_complete_generation() {
         let fixture = Fixture::new(healthy_resources());
         let original = fixture.document("prior complete evidence");

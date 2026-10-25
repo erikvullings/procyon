@@ -515,6 +515,17 @@ CSV. EPUB conversion follows the package manifest and spine in reading order, in
 XHTML/HTML content, and ignores bundled images and other media. Font-only obfuscation does not block
 readable text, while encryption of a spine document is reported explicitly. Because EPUB is
 reflowable, evidence uses chapter and source-line provenance rather than synthetic page numbers.
+JSON Lines (`.jsonl`, `.ndjson`, `application/x-ndjson`) is streamed through a bounded window of
+whole lines instead of being loaded, so the converter itself has no source-size limit; the output
+budgets (units, characters, deadline) and cancellation still stop it with a partial result. One
+record becomes one unit: summary and text form the body, while title, channel and date are carried
+once in the section path. Data URIs and long base64 values are omitted, records without known fields
+keep short string fields (values repeated unchanged from the previous record are not re-emitted),
+and unusable lines are skipped with typed warnings carrying their line number. Evidence cites the
+record's 1-based line number and byte offset. Worker indexing still buffers each file up to the
+per-document source limit (64 MiB), so larger JSON Lines files are skipped as oversized there;
+streaming them through the worker transport is a follow-up (the host conversion service used by
+summaries streams without that limit).
 PDFs with an extractable text layer use the deterministic, pure-Rust Docling Adapter by default,
 with the original `lopdf` implementation retained for recoverable fallback. Docling heading nodes
 become section paths and its page-furniture nodes are excluded from chunks. The deterministic

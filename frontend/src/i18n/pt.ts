@@ -1770,6 +1770,7 @@ export const pt = {
     citationCells: 'Células {range}',
     citationSheetCells: 'Folha {sheet}, células {range}',
     citationBlock: 'Bloco {block}',
+    citationRecord: 'Registro na linha {line}',
     retrieve: 'Pré-visualizar evidência',
     retrieving: 'A obter…',
     generate: 'Gerar resposta',

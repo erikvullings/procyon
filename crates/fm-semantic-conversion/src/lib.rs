@@ -108,12 +108,12 @@ pub use formats::pdf::{PdfWindowMergeError, merge_pdf_text_windows};
 pub use model::{
     Completeness, ComponentVersion, ConversionOutcome, ConversionWarning, ConvertedDocument,
     DocumentMetadata, FormatKind, MAX_TOTAL_VISUAL_BYTES, MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES,
-    MAX_VISUAL_PIXELS, MediaType, Omission, Provenance, SkipReason, StructuralUnit,
-    TopLevelBoundary, UnitKind, VisualAttachment, VisualOmission, VisualProvenance,
+    MAX_VISUAL_PIXELS, MediaType, Omission, Provenance, SkipReason, SkippedRecordReason,
+    StructuralUnit, TopLevelBoundary, UnitKind, VisualAttachment, VisualOmission, VisualProvenance,
 };
 pub use pdf_report::{InvalidPdfTextReport, PdfTextReport};
 pub use pdf_toc::{clean_pdf_toc_text, is_pdf_toc_section, repair_spaced_elsevier_doi};
-pub use sniff::{ResolvedFormat, resolve_format};
+pub use sniff::{ResolvedFormat, is_jsonl_hint, resolve_format};
 pub use text::{
     DecodedText, SanitizedText, SourceMap, SourceSegment, decode, instruction_like_excerpt,
     sanitize,

@@ -177,6 +177,10 @@ function citationLocation(value: unknown): string | undefined {
         ? undefined
         : t('ragAsk', 'citationEpubLines', { chapter: spine + 1, start, end });
     }
+    case 'jsonlRecord': {
+      const line = number('line');
+      return line === undefined ? undefined : t('ragAsk', 'citationRecord', { line });
+    }
     case 'slide': {
       const slide = number('slide_number');
       return slide === undefined ? undefined : t('ragAsk', 'citationSlide', { slide });

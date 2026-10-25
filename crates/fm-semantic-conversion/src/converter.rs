@@ -12,12 +12,14 @@ use std::sync::Arc;
 use crate::budget::{BudgetTracker, Clock, ConversionBudgets, Stop, SystemClock};
 use crate::builder::DocumentBuilder;
 use crate::cancellation::Cancellation;
-use crate::formats::{csv, docx, epub, html, markdown, package, pdf, plain, pptx, spreadsheet};
+use crate::formats::{
+    csv, docx, epub, html, jsonl, markdown, package, pdf, plain, pptx, spreadsheet,
+};
 use crate::model::{
     ComponentVersion, ConversionOutcome, ConversionWarning, ConvertedDocument, DocumentMetadata,
     FormatKind, MediaType, SkipReason,
 };
-use crate::sniff::{ResolvedFormat, resolve_format};
+use crate::sniff::{ResolvedFormat, is_jsonl_hint, resolve_format};
 use crate::text::decode;
 
 /// Version of the baseline converter. Bumping it invalidates every fingerprint
@@ -291,6 +293,64 @@ fn is_office_hint(metadata: &DocumentMetadata) -> bool {
     extension_matches || media_matches
 }
 
+impl BaselineConverter {
+    /// Streams JSON Lines through a bounded window. Unlike every other
+    /// format there is deliberately no source-size limit: memory is bounded by
+    /// the window and the output budgets, and reading stops as soon as an
+    /// output budget is saturated.
+    fn convert_jsonl(
+        &self,
+        content: SourceContent<'_>,
+        context: &ConversionContext,
+    ) -> Result<ConversionOutcome, ConversionError> {
+        let mut tracker = BudgetTracker::new(
+            &context.budgets,
+            &context.cancellation,
+            context.clock.as_ref(),
+        );
+        if let Err(stop) = tracker.checkpoint() {
+            return Ok(stop_outcome(stop));
+        }
+        let mut builder = DocumentBuilder::new(self.version(), FormatKind::Jsonl, &mut tracker);
+        let mut bytes_slice;
+        let reader: &mut dyn Read = match content {
+            SourceContent::Bytes(bytes) => {
+                bytes_slice = bytes;
+                &mut bytes_slice
+            }
+            SourceContent::Reader(reader) => reader,
+        };
+        let stats = match jsonl::convert(&mut builder, reader, jsonl::WINDOW_BYTES) {
+            Ok(stats) => stats,
+            Err(jsonl::JsonlError::Read(error)) => return Err(ConversionError::Read(error)),
+            Err(jsonl::JsonlError::Stopped(stop)) => return Ok(stop_outcome(stop)),
+            Err(jsonl::JsonlError::Binary) => {
+                return Ok(ConversionOutcome::Unsupported {
+                    media_type: None,
+                    detail: "the content is binary, not JSON Lines text".to_owned(),
+                });
+            }
+        };
+        if stats.bytes_read == 0 {
+            return Ok(ConversionOutcome::Skipped {
+                reason: SkipReason::EmptySource,
+            });
+        }
+        let document = builder.finish();
+        if document.units().is_empty()
+            && let Some(line) = stats.first_skipped_line
+        {
+            return Ok(ConversionOutcome::Malformed {
+                detail: format!(
+                    "no JSON object record could be read; {} lines were skipped, the first at line {line}",
+                    stats.skipped
+                ),
+            });
+        }
+        Ok(finish(document))
+    }
+}
+
 impl DocumentConverter for BaselineConverter {
     fn version(&self) -> ComponentVersion {
         BASELINE_CONVERTER_VERSION
@@ -302,6 +362,9 @@ impl DocumentConverter for BaselineConverter {
         metadata: &DocumentMetadata,
         context: &ConversionContext,
     ) -> Result<ConversionOutcome, ConversionError> {
+        if is_jsonl_hint(metadata.media_type(), metadata.extension()) {
+            return self.convert_jsonl(content, context);
+        }
         let Some(materialized) = materialize(content, &context.budgets)? else {
             return Ok(ConversionOutcome::OverBudget {
                 budget: crate::budget::BudgetKind::SourceBytes,
@@ -427,6 +490,9 @@ impl DocumentConverter for BaselineConverter {
                 }
                 builder.finish()
             }
+            // Hints identify JSON Lines before any bytes are read, so this arm
+            // is only a safety net that keeps the match exhaustive.
+            FormatKind::Jsonl => return self.convert_jsonl(SourceContent::Bytes(bytes), context),
             FormatKind::Pdf => {
                 let mut builder = DocumentBuilder::new(self.version(), format, &mut tracker);
                 builder.set_visuals_enabled(context.visual_evidence());

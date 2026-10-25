@@ -1773,6 +1773,7 @@ export const fr = {
     citationCells: 'Cellules {range}',
     citationSheetCells: 'Feuille {sheet}, cellules {range}',
     citationBlock: 'Bloc {block}',
+    citationRecord: 'Enregistrement à la ligne {line}',
     retrieve: 'Aperçu des preuves',
     retrieving: 'Récupération…',
     generate: 'Générer la réponse',

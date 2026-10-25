@@ -771,6 +771,10 @@ impl DocumentConverter for OcrMyPdfConverter {
         metadata: &DocumentMetadata,
         context: &ConversionContext,
     ) -> Result<ConversionOutcome, ConversionError> {
+        // Streamed JSON Lines never needs OCR and must not be materialized.
+        if fm_semantic_conversion::is_jsonl_hint(metadata.media_type(), metadata.extension()) {
+            return self.deterministic.convert(content, metadata, context);
+        }
         let owned;
         let source = match content {
             SourceContent::Bytes(bytes) => bytes,

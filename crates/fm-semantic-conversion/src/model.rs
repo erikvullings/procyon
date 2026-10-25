@@ -199,6 +199,8 @@ pub enum FormatKind {
     Csv,
     /// PDF with an extractable text layer.
     Pdf,
+    /// JSON Lines (NDJSON): one JSON object per line.
+    Jsonl,
 }
 
 impl FormatKind {
@@ -216,6 +218,7 @@ impl FormatKind {
             Self::Spreadsheet => "spreadsheet",
             Self::Csv => "csv",
             Self::Pdf => "pdf",
+            Self::Jsonl => "jsonl",
         }
     }
 }
@@ -319,6 +322,15 @@ pub enum Provenance {
     DocxBlock {
         /// 0-based index in document body order.
         block_index: u32,
+    },
+    /// One record of a JSON Lines file, identified by where it starts in the
+    /// source stream. Line numbers count every physical line, including the
+    /// blank and malformed ones that produced no record.
+    JsonlRecord {
+        /// 1-based line number of the record.
+        line: u64,
+        /// 0-based byte offset of the first byte of that line in the source.
+        byte_offset: u64,
     },
     /// Inclusive 1-based line range in one EPUB spine item.
     EpubText {
@@ -486,6 +498,21 @@ pub enum ConversionWarning {
         /// What was not read.
         detail: String,
     },
+    /// A JSON Lines record was skipped; the rest of the file still converts.
+    /// Only the first few skips are itemized; see
+    /// [`ConversionWarning::SkippedRecords`] for the total.
+    SkippedRecord {
+        /// 1-based line number of the skipped record.
+        line: u64,
+        /// Why the record was skipped.
+        reason: SkippedRecordReason,
+    },
+    /// Total number of JSON Lines records skipped, including those not
+    /// itemized individually.
+    SkippedRecords {
+        /// How many lines were skipped.
+        count: u64,
+    },
     /// OCR configuration and aggregate recognition confidence disclosed by an
     /// advanced converter.
     OcrAssessment {
@@ -495,6 +522,21 @@ pub enum ConversionWarning {
         /// backend could measure it.
         mean_confidence_basis_points: Option<u16>,
     },
+}
+
+/// Why one JSON Lines record produced no searchable unit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SkippedRecordReason {
+    /// The line is not valid JSON.
+    InvalidJson,
+    /// The line is valid JSON but not an object.
+    NotAnObject,
+    /// The line is not valid UTF-8.
+    InvalidUtf8,
+    /// The line is longer than the converter reads into memory.
+    LineTooLong,
+    /// The object has no text worth indexing.
+    NoTextFields,
 }
 
 /// Content that a bounded conversion deliberately left out.

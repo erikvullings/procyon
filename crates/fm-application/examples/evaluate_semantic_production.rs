@@ -607,6 +607,7 @@ fn provenance_kind(provenance: &ChunkProvenance) -> &'static str {
         Provenance::DocxBlock { .. } => "docxBlock",
         Provenance::Media { .. } => "media",
         Provenance::EpubText { .. } => "epubText",
+        Provenance::JsonlRecord { .. } => "jsonlRecord",
     }
 }
 

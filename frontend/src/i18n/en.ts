@@ -1058,6 +1058,7 @@ export const en = {
     citationCells: 'Cells {range}',
     citationSheetCells: 'Sheet {sheet}, cells {range}',
     citationBlock: 'Block {block}',
+    citationRecord: 'Record at line {line}',
     retrieve: 'Preview evidence',
     retrieving: 'Retrieving…',
     generate: 'Generate answer',

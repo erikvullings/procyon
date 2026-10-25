@@ -2570,6 +2570,15 @@ describe('knowledgeProvenanceLabel spreadsheet ranges (task 0206)', () => {
     ).toBe('Chapter 3, lines 7–11');
   });
 
+  it('labels a JSON Lines record by its source line', () => {
+    expect(
+      knowledgeProvenanceLabel(
+        JSON.stringify({ kind: 'jsonlRecord', line: 4812, byte_offset: 1048576 }),
+      ),
+    ).toBe('Record at line 4812');
+    expect(knowledgeProvenanceLabel(JSON.stringify({ kind: 'jsonlRecord' }))).toBe('');
+  });
+
   it('labels a sheet cell range', () => {
     expect(
       knowledgeProvenanceLabel(

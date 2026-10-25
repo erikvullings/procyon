@@ -46,6 +46,11 @@ fn format_for_media_type(media_type: &MediaType) -> Option<FormatKind> {
         "text/markdown" | "text/x-markdown" => Some(FormatKind::Markdown),
         "text/html" | "application/xhtml+xml" => Some(FormatKind::Html),
         "text/csv" | "text/tab-separated-values" => Some(FormatKind::Csv),
+        "application/x-ndjson"
+        | "application/ndjson"
+        | "application/jsonl"
+        | "application/x-jsonlines"
+        | "application/jsonlines" => Some(FormatKind::Jsonl),
         "application/pdf" => Some(FormatKind::Pdf),
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => {
             Some(FormatKind::Docx)
@@ -74,6 +79,7 @@ fn format_for_extension(extension: &str) -> Option<FormatKind> {
         "md" | "markdown" => Some(FormatKind::Markdown),
         "html" | "htm" | "xhtml" => Some(FormatKind::Html),
         "csv" | "tsv" => Some(FormatKind::Csv),
+        "jsonl" | "ndjson" => Some(FormatKind::Jsonl),
         "pdf" => Some(FormatKind::Pdf),
         "docx" => Some(FormatKind::Docx),
         "pptx" => Some(FormatKind::Pptx),
@@ -172,6 +178,18 @@ fn looks_binary(bytes: &[u8]) -> bool {
         .any(|byte| *byte == 0x00)
 }
 
+/// Whether the caller's hints alone identify JSON Lines.
+///
+/// JSON Lines is streamed rather than materialized, so it must be recognized
+/// before any bytes are read. Either hint is sufficient: file-type detection
+/// commonly labels `.jsonl` as generic text or JSON, so a `jsonl`/`ndjson`
+/// extension is not overridden by a more generic declared media type.
+#[must_use]
+pub fn is_jsonl_hint(declared: Option<&MediaType>, extension: Option<&str>) -> bool {
+    declared.and_then(format_for_media_type) == Some(FormatKind::Jsonl)
+        || extension.and_then(format_for_extension) == Some(FormatKind::Jsonl)
+}
+
 /// Resolves which baseline converter should handle `bytes`.
 ///
 /// `declared` and `extension` are hints only; see the module documentation for
@@ -187,6 +205,9 @@ pub fn resolve_format(
     }
     if bytes.starts_with(b"PK\x03\x04") || bytes.starts_with(b"PK\x05\x06") {
         return zip_format(bytes);
+    }
+    if is_jsonl_hint(declared, extension) {
+        return ResolvedFormat::Supported(FormatKind::Jsonl);
     }
     if let Some(format) = declared.and_then(format_for_media_type) {
         // A declared container type that the magic bytes just contradicted is
@@ -312,6 +333,31 @@ mod tests {
         assert_eq!(
             resolve_format(b"plain", None, None),
             ResolvedFormat::Supported(FormatKind::PlainText)
+        );
+    }
+
+    #[test]
+    fn json_lines_is_recognized_from_either_hint_even_under_a_generic_media_type() {
+        let ndjson = MediaType::parse("application/x-ndjson");
+        let text = MediaType::parse("text/plain");
+        let json = MediaType::parse("application/json");
+        assert!(is_jsonl_hint(Some(&ndjson), None));
+        assert!(is_jsonl_hint(None, Some("jsonl")));
+        assert!(is_jsonl_hint(Some(&text), Some("ndjson")));
+        assert!(!is_jsonl_hint(Some(&json), Some("json")));
+        assert!(!is_jsonl_hint(Some(&text), Some("txt")));
+        assert_eq!(
+            resolve_format(b"{\"a\":1}\n", Some(&ndjson), None),
+            ResolvedFormat::Supported(FormatKind::Jsonl)
+        );
+        assert_eq!(
+            resolve_format(b"{\"a\":1}\n", Some(&text), Some("jsonl")),
+            ResolvedFormat::Supported(FormatKind::Jsonl)
+        );
+        // Container signatures still win over a JSON Lines hint.
+        assert_eq!(
+            resolve_format(b"%PDF-1.7", Some(&ndjson), Some("jsonl")),
+            ResolvedFormat::Supported(FormatKind::Pdf)
         );
     }
 

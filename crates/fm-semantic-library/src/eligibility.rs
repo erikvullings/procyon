@@ -252,6 +252,7 @@ impl EligibilityPolicy {
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/x-ndjson",
                 "application/xml",
                 "text/css",
                 "text/csv",

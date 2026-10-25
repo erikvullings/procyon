@@ -201,6 +201,11 @@ impl DocumentConverter for OptionalConverter {
         metadata: &DocumentMetadata,
         context: &ConversionContext,
     ) -> Result<ConversionOutcome, ConversionError> {
+        // JSON Lines is streamed by the baseline converter and has no size
+        // limit, so it must not be materialized under the source budget here.
+        if crate::sniff::is_jsonl_hint(metadata.media_type(), metadata.extension()) {
+            return self.baseline.convert(content, metadata, context);
+        }
         let bytes = match bounded_bytes(content, metadata, context)? {
             BoundedBytes::Bytes(bytes) => bytes,
             BoundedBytes::Outcome(outcome) => return Ok(outcome),

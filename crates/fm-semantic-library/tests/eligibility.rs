@@ -133,6 +133,44 @@ fn gemma_media_eligibility_respects_each_creation_time_choice() {
 }
 
 #[test]
+fn json_lines_media_type_is_eligible_by_default_but_generic_octet_streams_are_not() {
+    let policy = EligibilityPolicy::curated_defaults();
+    let root = location("file:///repo");
+    let evaluate = |mime: &str| {
+        let candidate = EligibilityCandidate {
+            location: location("file:///repo/feed.jsonl"),
+            kind: EligibilityEntryKind::File,
+            hidden: false,
+            system: false,
+            application_or_package_bundle: false,
+            git_ignored: false,
+            mime_type: Some(mime.to_owned()),
+            source_bytes: 10,
+            estimated_extracted_bytes: 10,
+            estimated_vector_bytes: 100,
+            symlink_target: None,
+        };
+        policy
+            .evaluate(
+                &root,
+                &candidate,
+                &ResourceBudgets::default(),
+                ResourceUsage::default(),
+                &Default::default(),
+            )
+            .unwrap()
+    };
+    assert_eq!(
+        evaluate("application/x-ndjson"),
+        EligibilityDecision::Eligible
+    );
+    assert!(matches!(
+        evaluate("application/octet-stream"),
+        EligibilityDecision::Skipped(reasons) if reasons.contains(&EligibilityReason::UnsupportedMime)
+    ));
+}
+
+#[test]
 fn symlink_confinement_is_structural_and_cannot_be_overridden() {
     let policy = EligibilityPolicy::curated_defaults();
     let root = location("file:///repo");

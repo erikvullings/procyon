@@ -949,10 +949,25 @@ fn eligibility_candidate(entry: EntrySummary) -> EligibilityCandidate {
     }
 }
 
+/// Media type under which JSON Lines files are indexed.
+const NDJSON_MEDIA_TYPE: &str = "application/x-ndjson";
+
 fn media_type(entry: &EntrySummary) -> Option<&'static str> {
+    // File-type detection commonly labels `.jsonl` as generic text or JSON, so
+    // the extension identifies JSON Lines before any declared type is read.
+    if entry.extension.as_deref().is_some_and(|extension| {
+        extension.eq_ignore_ascii_case("jsonl") || extension.eq_ignore_ascii_case("ndjson")
+    }) {
+        return Some(NDJSON_MEDIA_TYPE);
+    }
     if let Some(media_type) = entry.mime_type.as_deref() {
         return match media_type {
             "application/json" => Some("application/json"),
+            "application/x-ndjson"
+            | "application/ndjson"
+            | "application/jsonl"
+            | "application/x-jsonlines"
+            | "application/jsonlines" => Some(NDJSON_MEDIA_TYPE),
             "application/pdf" => Some("application/pdf"),
             "application/vnd.openxmlformats-officedocument.presentationml.presentation" => {
                 Some("application/vnd.openxmlformats-officedocument.presentationml.presentation")

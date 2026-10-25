@@ -2732,3 +2732,142 @@ async fn cancelling_running_ocr_stops_worker_ingestion_and_persists_cancelled_st
     shutdown.cancel();
     runner.await.unwrap();
 }
+
+/// Records the media type of every buffered ingestion before delegating.
+struct MediaRecordingCapability {
+    inner: FakeSemanticCapability,
+    ingested: Mutex<Vec<(String, Vec<u8>)>>,
+}
+
+#[async_trait]
+impl SemanticCapability for MediaRecordingCapability {
+    async fn health(&self) -> Result<SemanticHealth, SemanticError> {
+        self.inner.health().await
+    }
+
+    async fn ingest(&self, ingestion: DocumentIngestion) -> Result<SemanticJobId, SemanticError> {
+        self.ingested
+            .lock()
+            .unwrap()
+            .push((ingestion.media_type.clone(), ingestion.content.clone()));
+        self.inner.ingest(ingestion).await
+    }
+
+    async fn query(
+        &self,
+        query: SemanticQuery,
+    ) -> Result<Vec<SemanticSearchResult>, SemanticError> {
+        self.inner.query(query).await
+    }
+
+    async fn ingestion_job(
+        &self,
+        scope: SemanticScope,
+        job_id: SemanticJobId,
+    ) -> Result<SemanticIngestionJob, SemanticError> {
+        self.inner.ingestion_job(scope, job_id).await
+    }
+
+    async fn events(
+        &self,
+        scope: SemanticScope,
+    ) -> Result<Vec<SemanticProgressEvent>, SemanticError> {
+        self.inner.events(scope).await
+    }
+
+    async fn cancel(&self, operation_id: SemanticOperationId) -> Result<bool, SemanticError> {
+        self.inner.cancel(operation_id).await
+    }
+
+    async fn shutdown(&self, grace: Duration) -> Result<(), SemanticError> {
+        self.inner.shutdown(grace).await
+    }
+}
+
+#[tokio::test]
+async fn json_lines_files_are_eligible_and_reindexed_as_ndjson_after_a_change() {
+    let root = project_temp_dir("jsonl-root-");
+    std::fs::write(
+        root.path().join("feed.jsonl"),
+        "{\"title\":\"Dam breach\",\"text\":\"floods\",\"channel\":\"News\"}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.path().join("export.ndjson"),
+        "{\"text\":\"harvest\"}\n",
+    )
+    .unwrap();
+    std::fs::write(root.path().join("data.json"), "{\"text\":\"plain json\"}").unwrap();
+    let state = project_temp_dir("jsonl-state-");
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x2831));
+    let library = library(&state);
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let capability = Arc::new(MediaRecordingCapability {
+        inner: FakeSemanticCapability::new(),
+        ingested: Mutex::new(Vec::new()),
+    });
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(capability.clone());
+
+    let first = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(first.observed_files, 3);
+    assert!(
+        !first
+            .skipped_reason_counts
+            .iter()
+            .any(|count| count.reason == EligibilityReason::UnsupportedMime)
+    );
+    let mut media = capability
+        .ingested
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(media, _)| media.clone())
+        .collect::<Vec<_>>();
+    media.sort();
+    assert_eq!(
+        media,
+        [
+            "application/json",
+            "application/x-ndjson",
+            "application/x-ndjson"
+        ]
+    );
+
+    std::fs::write(
+        root.path().join("feed.jsonl"),
+        "{\"title\":\"Dam breach\",\"text\":\"floods\",\"channel\":\"News\"}\n{\"text\":\"new record\"}\n",
+    )
+    .unwrap();
+    let second = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(second.observed_files, 3);
+    assert_eq!(
+        service.semantic_library_status(&HOST).await.unwrap().roots[0].indexed_occurrences,
+        3,
+        "a changed file replaces, never duplicates, its occurrence"
+    );
+    assert!(
+        capability
+            .ingested
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(media, content)| media == "application/x-ndjson"
+                && String::from_utf8_lossy(content).contains("new record"))
+    );
+}

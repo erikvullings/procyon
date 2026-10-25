@@ -1766,6 +1766,7 @@ export const pl = {
     citationCells: 'Komórki {range}',
     citationSheetCells: 'Arkusz {sheet}, komórki {range}',
     citationBlock: 'Blok {block}',
+    citationRecord: 'Rekord w wierszu {line}',
     retrieve: 'Podgląd dowodów',
     retrieving: 'Pobieranie…',
     generate: 'Generuj odpowiedź',

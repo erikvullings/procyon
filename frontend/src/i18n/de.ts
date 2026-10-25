@@ -1784,6 +1784,7 @@ export const de = {
     citationCells: 'Zellen {range}',
     citationSheetCells: 'Blatt {sheet}, Zellen {range}',
     citationBlock: 'Block {block}',
+    citationRecord: 'Datensatz in Zeile {line}',
     retrieve: 'Belege in der Vorschau anzeigen',
     retrieving: 'Wird abgerufen…',
     generate: 'Antwort generieren',
