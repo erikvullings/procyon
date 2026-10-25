@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use fm_semantic_worker::corpus_theme_ipc::{ThemeRequest, ThemeResponse};
 use fm_semantic_worker::corpus_theme_storage::CorpusScope;
 use fm_semantic_worker::corpus_themes::{
     CorpusThemeConfig, CorpusThemeError, CorpusThemeService, CorpusThemeStatus, CorpusThemes,
@@ -144,6 +145,105 @@ impl CorpusThemeCapability for CorpusThemeService {
     }
 }
 
+/// Corpus themes over the host-provided semantic capability, so desktop and
+/// server hosts reach the same worker route as indexing and knowledge search.
+pub(crate) struct SemanticCorpusThemeCapability {
+    semantic: crate::semantic::SemanticService,
+}
+
+impl SemanticCorpusThemeCapability {
+    pub(crate) const fn new(semantic: crate::semantic::SemanticService) -> Self {
+        Self { semantic }
+    }
+
+    async fn call(
+        &self,
+        request: ThemeRequest,
+        cancellation: Option<&CancellationToken>,
+    ) -> Result<ThemeResponse, CorpusThemeCapabilityError> {
+        if cancellation.is_some_and(CancellationToken::is_cancelled) {
+            return Err(CorpusThemeError::Cancelled.into());
+        }
+        let request_id =
+            crate::semantic::SemanticOperationId::new(uuid::Uuid::new_v4().to_string());
+        let execution = self.semantic.corpus_themes(request_id.clone(), request);
+        let outcome = match cancellation {
+            Some(token) => tokio::select! {
+                result = execution => result,
+                () = token.cancelled() => {
+                    let _ = self.semantic.cancel(request_id).await;
+                    return Err(CorpusThemeError::Cancelled.into());
+                }
+            },
+            None => execution.await,
+        };
+        match outcome {
+            Ok(ThemeResponse::Failure(failure)) => Err(failure.into_error().into()),
+            Ok(response) => Ok(response),
+            Err(crate::semantic::SemanticError::Cancelled) => {
+                Err(CorpusThemeError::Cancelled.into())
+            }
+            Err(crate::semantic::SemanticError::Unavailable) => {
+                Err(CorpusThemeCapabilityError::Unavailable)
+            }
+            Err(_) => Err(CorpusThemeError::Remote.into()),
+        }
+    }
+}
+
+#[async_trait]
+impl CorpusThemeCapability for SemanticCorpusThemeCapability {
+    async fn status(
+        &self,
+        scope: CorpusScope,
+    ) -> Result<CorpusThemeStatus, CorpusThemeCapabilityError> {
+        match self.call(ThemeRequest::Status { scope }, None).await? {
+            ThemeResponse::Status(status) => Ok(status),
+            _ => Err(CorpusThemeError::Remote.into()),
+        }
+    }
+
+    async fn analyze(
+        &self,
+        scope: CorpusScope,
+        config: CorpusThemeConfig,
+        cancellation: &CancellationToken,
+    ) -> Result<CorpusThemes, CorpusThemeCapabilityError> {
+        match self
+            .call(ThemeRequest::Analyze { scope, config }, Some(cancellation))
+            .await?
+        {
+            ThemeResponse::Themes(themes) => Ok(*themes),
+            _ => Err(CorpusThemeError::Remote.into()),
+        }
+    }
+
+    async fn theme_sources(
+        &self,
+        scope: CorpusScope,
+        theme: Option<u32>,
+        fingerprint: String,
+        limit: usize,
+        cancellation: &CancellationToken,
+    ) -> Result<ThemeSources, CorpusThemeCapabilityError> {
+        match self
+            .call(
+                ThemeRequest::Sources {
+                    scope,
+                    theme,
+                    fingerprint,
+                    limit,
+                },
+                Some(cancellation),
+            )
+            .await?
+        {
+            ThemeResponse::Sources(sources) => Ok(sources),
+            _ => Err(CorpusThemeError::Remote.into()),
+        }
+    }
+}
+
 /// Largest number of sources handed to a theme-filtered search.
 const THEME_SEARCH_SOURCE_LIMIT: usize = 1_024;
 
@@ -270,6 +370,7 @@ pub(crate) fn theme_error_to_application(error: CorpusThemeCapabilityError) -> A
                 ApplicationError::InvalidRequest(error.to_string())
             }
             CorpusThemeError::ProfileTooWeak { .. }
+            | CorpusThemeError::Remote
             | CorpusThemeError::EmptyScope
             | CorpusThemeError::InsufficientContent { .. }
             | CorpusThemeError::InvalidEmbeddings

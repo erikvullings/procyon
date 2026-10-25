@@ -1781,6 +1781,9 @@ impl FileManagerService {
             ),
             self.knowledge_release,
         );
+        self.corpus_themes = crate::corpus_themes::CorpusThemeCoordinator::new(Arc::new(
+            crate::corpus_themes::SemanticCorpusThemeCapability::new(semantic.clone()),
+        ));
         self.semantic = semantic;
         self
     }

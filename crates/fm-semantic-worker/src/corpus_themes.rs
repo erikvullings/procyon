@@ -270,7 +270,7 @@ pub struct CorpusThemes {
 }
 
 /// Sources contributing to one theme.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ThemeSources {
     /// Authorized source identities, strongest contribution first.
     pub source_ids: Vec<String>,
@@ -279,7 +279,7 @@ pub struct ThemeSources {
 }
 
 /// Cheap, vector-free facts about a scope, used for the stale-index indicator.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CorpusThemeStatus {
     /// Digest of the documents and generations currently visible.
     pub index_revision: String,
@@ -332,6 +332,9 @@ pub enum CorpusThemeError {
     /// Catalog failure.
     #[error(transparent)]
     Storage(#[from] StorageError),
+    /// The worker reported a failure whose detail stays on the worker side.
+    #[error("the semantic worker failed the corpus theme request")]
+    Remote,
 }
 
 /// Whether `identity` is the deterministic token-hashing profile.

@@ -23,7 +23,7 @@ const MAX_CHUNK_TEXT_CHARS: usize = 4_096;
 /// Authorized sources of one corpus whose chunks may be analysed.
 ///
 /// An empty source list authorizes nothing; it never means "everything".
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CorpusScope {
     /// Tenant boundary.
     pub tenant_id: String,
