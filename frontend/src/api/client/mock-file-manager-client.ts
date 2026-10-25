@@ -1362,6 +1362,10 @@ export class MockFileManagerClient implements FileManagerClient {
   readonly supportsAppDataRemoval = false;
   private readonly frontendDiagnostics: FrontendDiagnostic[] = [];
 
+  async setWindowTitle(title: string): Promise<void> {
+    document.title = title;
+  }
+
   async openExternalUrl(url: string): Promise<void> {
     const opened = globalThis.open(url, '_blank', 'noopener,noreferrer');
     if (opened === null) {

@@ -338,6 +338,15 @@ describe('HttpFileManagerClient', () => {
     expect(discoverLlmProfileDraftModelLimits).toHaveBeenCalledWith(request, undefined);
   });
 
+  it('sets document.title and exposes no native window chrome', async () => {
+    const client = new HttpFileManagerClient();
+
+    await client.setWindowTitle('Main — Procyon');
+
+    expect(document.title).toBe('Main — Procyon');
+    expect('setWindowChrome' in client).toBe(false);
+  });
+
   it('keeps copies inside Procyon because a browser has no OS file clipboard', async () => {
     const client = new HttpFileManagerClient();
     const fetchSpy = vi.spyOn(globalThis, 'fetch');

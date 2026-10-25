@@ -1,25 +1,14 @@
-import { getCurrentWindow } from '@tauri-apps/api/window';
-
-import type { RuntimeKind } from './runtime';
+import type { FileManagerClient } from '../api/client/file-manager-client';
 
 /** Applies a title to the host window; implementations never throw. */
 export type WindowTitleSink = (title: string) => void;
 
-/**
- * Desktop windows get the native title (what the macOS Dock menu lists); browser, http and mock
- * runtimes set `document.title` for parity.
- */
-export function createWindowTitleSink(kind: RuntimeKind): WindowTitleSink {
+/** Routes titles through the runtime client (native title on desktop, `document.title` elsewhere). */
+export function createWindowTitleSink(
+  client: Pick<FileManagerClient, 'setWindowTitle'>,
+): WindowTitleSink {
   return (title) => {
-    document.title = title;
-    if (kind !== 'tauri') return;
-    try {
-      void getCurrentWindow()
-        .setTitle(title)
-        .catch(() => undefined);
-    } catch {
-      // Not running inside a Tauri window.
-    }
+    void client.setWindowTitle?.(title).catch(() => undefined);
   };
 }
 

@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const invoke = vi.fn();
 const onDragDropEvent = vi.fn();
+const setTitle = vi.fn();
+const setBackgroundColor = vi.fn();
+const setTheme = vi.fn();
 const openUrl = vi.fn();
 const getVersion = vi.fn();
 const relaunch = vi.fn();
@@ -20,7 +23,7 @@ vi.mock('@tauri-apps/api/core', () => ({
     `${protocol}://localhost/${encodeURIComponent(path)}`,
 }));
 vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ onDragDropEvent }),
+  getCurrentWindow: () => ({ onDragDropEvent, setTitle, setBackgroundColor, setTheme }),
 }));
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: (...args: unknown[]) => openUrl(...args),
@@ -155,6 +158,34 @@ describe('TauriFileManagerClient', () => {
     expect(JSON.parse(decodeURIComponent(url.slice('procyon-media://localhost/'.length)))).toEqual({
       providerId: 'local',
       uri: 'file:///a b.mp3',
+    });
+  });
+
+  it('sets the native window title and document title', async () => {
+    setTitle.mockResolvedValue(undefined);
+
+    await new TauriFileManagerClient().setWindowTitle('Main · docs — Procyon');
+
+    expect(setTitle).toHaveBeenCalledWith('Main · docs — Procyon');
+    expect(document.title).toBe('Main · docs — Procyon');
+  });
+
+  it('applies window chrome through the window API and caption command', async () => {
+    setBackgroundColor.mockResolvedValue(undefined);
+    setTheme.mockResolvedValue(undefined);
+    invoke.mockResolvedValue(undefined);
+
+    await new TauriFileManagerClient().setWindowChrome({
+      background: '#101010',
+      foreground: '#eeeeee',
+      theme: null,
+    });
+
+    expect(setBackgroundColor).toHaveBeenCalledWith('#101010');
+    expect(setTheme).toHaveBeenCalledWith(null);
+    expect(invoke).toHaveBeenCalledWith('set_caption_colours', {
+      background: '#101010',
+      foreground: '#eeeeee',
     });
   });
 

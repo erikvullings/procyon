@@ -449,6 +449,10 @@ import { settingsFromDto, settingsToDto } from './settings-mapping';
 export class HttpFileManagerClient implements FileManagerClient {
   readonly supportsAppUpdates = false;
   readonly supportsAppDataRemoval = false;
+  async setWindowTitle(title: string): Promise<void> {
+    document.title = title;
+  }
+
   async openExternalUrl(url: string): Promise<void> {
     const opened = globalThis.open(url, '_blank', 'noopener,noreferrer');
     if (opened === null)

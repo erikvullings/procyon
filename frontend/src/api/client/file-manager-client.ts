@@ -259,6 +259,16 @@ export interface PluginPanelBounds {
   readonly height: number;
 }
 
+/** Resolved theme colours pushed to the native window frame. */
+export interface WindowChrome {
+  /** CSS colour for the window background and (on Windows) the caption. */
+  background: string;
+  /** CSS colour for caption text (Windows). */
+  foreground: string;
+  /** Forced OS theme, or `null` to follow the system. */
+  theme: 'light' | 'dark' | null;
+}
+
 export interface FileManagerClient {
   readonly connection: EventStreamStatusObservable;
   readonly supportsAppUpdates: boolean;
@@ -423,6 +433,12 @@ export interface FileManagerClient {
 
   /** Closes the desktop window (Alt+F4, task 0128). Only implemented on the Tauri host. */
   quit?(): Promise<void>;
+
+  /** Sets the host window title (what the macOS Dock menu lists). Never rejects. */
+  setWindowTitle?(title: string): Promise<void>;
+
+  /** Applies theme-derived chrome colours to the host window. Desktop-only; absent elsewhere. */
+  setWindowChrome?(chrome: WindowChrome): Promise<void>;
 
   /** Subscribes to Finder/Explorer file drops over the desktop window. */
   subscribeNativeFileDrops(listener: (drop: NativeFileDrop) => void): Promise<Unsubscribe>;

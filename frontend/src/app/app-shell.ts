@@ -1751,7 +1751,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    * a state change that affects the menu. */
   /** Re-derives the native window title (the Dock menu entry) from the workspace each render;
    * the sink only fires when the formatted title changes. */
-  let windowTitleSink = dedupeWindowTitleSink(createWindowTitleSink('http'));
+  let windowTitleSink = dedupeWindowTitleSink(() => undefined);
   function syncWindowTitle(): void {
     windowTitleSink(formatWindowTitle({ workspace }));
   }
@@ -6206,7 +6206,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       disposeShellControllers = shellControllers.dispose;
       keybindingRuntime = attrs.runtime === 'http' ? 'browser' : 'desktop';
       runtimeKind = attrs.runtime;
-      windowTitleSink = dedupeWindowTitleSink(createWindowTitleSink(runtimeKind));
+      windowTitleSink = dedupeWindowTitleSink(createWindowTitleSink(attrs.client));
       systemThemeQuery?.addEventListener('change', handleSystemThemeChange);
       window.addEventListener('focus', handleWindowFocus);
       document.addEventListener('keydown', updateFunctionKeyModifiers);

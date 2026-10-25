@@ -251,6 +251,15 @@ describe('MockFileManagerClient directories', () => {
 });
 
 describe('MockFileManagerClient API', () => {
+  it('sets document.title and exposes no native window chrome', async () => {
+    const client = new MockFileManagerClient();
+
+    await client.setWindowTitle('Mock — Procyon');
+
+    expect(document.title).toBe('Mock — Procyon');
+    expect('setWindowChrome' in client).toBe(false);
+  });
+
   it('returns deterministic native icon bytes only for configured extensions', async () => {
     const client = new MockFileManagerClient({ nativeIconExtensions: ['pdf'] });
 

@@ -239,7 +239,7 @@ import type { EntrySummaryDto } from '../generated/models/entrySummaryDto';
 import type { OperationDto } from '../generated/models/operationDto';
 import type { SettingsDto } from '../generated/models/settingsDto';
 import type { WorkspaceDto } from '../generated/models/workspaceDto';
-import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
+import type { FileManagerClient, NativeFileDrop, WindowChrome } from './file-manager-client';
 import { trustedOneDriveAuthorizationUrl } from './onedrive-authorization-url';
 import { operationFromDto } from './operation-mapping';
 import { settingsFromDto, settingsToDto } from './settings-mapping';
@@ -655,6 +655,30 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   async quit(): Promise<void> {
     await getCurrentWindow().close();
+  }
+
+  async setWindowTitle(title: string): Promise<void> {
+    document.title = title;
+    try {
+      await getCurrentWindow().setTitle(title);
+    } catch {
+      // Not running inside a Tauri window, or the title was rejected.
+    }
+  }
+
+  async setWindowChrome(chrome: WindowChrome): Promise<void> {
+    try {
+      const win = getCurrentWindow();
+      await win.setBackgroundColor(chrome.background);
+      await win.setTheme(chrome.theme);
+      // Windows draws its own caption, which otherwise stays at the OS chrome colour.
+      await invoke('set_caption_colours', {
+        background: chrome.background,
+        foreground: chrome.foreground,
+      });
+    } catch {
+      // Cosmetic only; ignore hosts that lack a window or the command.
+    }
   }
 
   async openWorkspaceWindow(sourceWorkspaceId?: WorkspaceId): Promise<void> {
