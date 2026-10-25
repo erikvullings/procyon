@@ -633,6 +633,19 @@ describe('AppShell', () => {
     expect(document.activeElement).toBe(left);
   });
 
+  it('revalidates open directories when the window regains focus (watcher safety net)', async () => {
+    const client = new MockFileManagerClient();
+    const listDirectory = vi.spyOn(client, 'listDirectory');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.querySelectorAll('.fm-workspace-pane')).toHaveLength(2));
+    await vi.waitFor(() => expect(root.textContent).toContain('Projects'));
+    const before = listDirectory.mock.calls.length;
+
+    window.dispatchEvent(new Event('focus'));
+
+    await vi.waitFor(() => expect(listDirectory.mock.calls.length).toBeGreaterThan(before));
+  });
+
   it('End loads every remaining page and moves the cursor to the true last entry', async () => {
     const client = new MockFileManagerClient({ pageSize: 100 });
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });

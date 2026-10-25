@@ -1041,27 +1041,46 @@ fn list_directory_page_sync(
     }
 
     let mut entries = Vec::with_capacity(page_size.min(4096));
-    while entries.len() < page_size {
+    // Continuation offsets count directory positions, not returned entries: an entry that
+    // vanished between `readdir` and `stat` still occupied its slot.
+    let mut consumed = 0usize;
+    while consumed < page_size {
         let Some(entry) = directory.next() else {
             break;
         };
-        entries.push(summarize_entry_sync(
-            entry.map_err(|error| map_io_error(error, uri))?,
-            parent,
-        )?);
+        consumed += 1;
+        if let Some(summary) =
+            summarize_listed_entry(entry.map_err(|error| map_io_error(error, uri))?, parent)?
+        {
+            entries.push(summary);
+        }
     }
     let has_more = match directory.next() {
         Some(Ok(_)) => true,
         Some(Err(error)) => return Err(map_io_error(error, uri)),
         None => false,
     };
-    let continuation_token = has_more.then(|| (offset + entries.len()).to_string());
+    let continuation_token = has_more.then(|| (offset + consumed).to_string());
     Ok(DirectoryPage {
         entries,
         total_known_entries: None,
         has_more,
         continuation_token,
     })
+}
+
+/// Summarises an entry returned by `read_dir`, tolerating one that disappeared before it could be
+/// inspected. Temp-file-then-rename writers (browsers, editors, `jq > out`) make this race routine
+/// in busy folders; failing the whole listing for it left panes stale or in error.
+fn summarize_listed_entry(
+    entry: std::fs::DirEntry,
+    parent: &Location,
+) -> Result<Option<EntrySummary>, VfsError> {
+    match summarize_entry_sync(entry, parent) {
+        Ok(summary) => Ok(Some(summary)),
+        Err(VfsError::NotFound { .. }) => Ok(None),
+        Err(error) => Err(error),
+    }
 }
 
 fn summarize_entry_sync(
@@ -1526,4 +1545,47 @@ fn is_privilege_error(_error: &io::Error) -> bool {
 
 fn unsupported<T>(capability: ProviderCapabilities) -> Result<T, VfsError> {
     Err(VfsError::UnsupportedCapability { capability })
+}
+
+#[cfg(test)]
+mod listing_race_tests {
+    use super::*;
+
+    #[test]
+    fn an_entry_that_vanishes_before_it_is_inspected_does_not_fail_the_listing() {
+        let root = tempfile::tempdir().expect("temp dir");
+        std::fs::write(root.path().join("stays.txt"), b"x").expect("fixture");
+        std::fs::write(root.path().join("vanishes.tmp"), b"x").expect("fixture");
+        let parent = Location::from_native_path(root.path()).expect("location");
+        // `read_dir` has already yielded both entries when the temp file is renamed away.
+        let entries: Vec<_> = std::fs::read_dir(root.path())
+            .expect("read_dir")
+            .collect::<Result<_, _>>()
+            .expect("entries");
+        std::fs::remove_file(root.path().join("vanishes.tmp")).expect("remove");
+
+        let summaries: Vec<_> = entries
+            .into_iter()
+            .filter_map(|entry| {
+                summarize_listed_entry(entry, &parent).expect("must tolerate ENOENT")
+            })
+            .collect();
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].name, "stays.txt");
+    }
+
+    #[test]
+    fn continuation_offsets_count_skipped_entries() {
+        let root = tempfile::tempdir().expect("temp dir");
+        for index in 0..10 {
+            std::fs::write(root.path().join(format!("f{index}")), b"x").expect("fixture");
+        }
+        let parent = Location::from_native_path(root.path()).expect("location");
+        let first = list_directory_page_sync(root.path(), &parent, 0, 4).expect("page");
+        let token = first.continuation_token.expect("more pages");
+        assert_eq!(token, "4");
+        let rest = list_directory_page_sync(root.path(), &parent, 4, 100).expect("page");
+        assert_eq!(first.entries.len() + rest.entries.len(), 10);
+    }
 }

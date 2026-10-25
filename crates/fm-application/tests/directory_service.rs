@@ -406,3 +406,203 @@ async fn refresh_affected_publishes_nothing_when_the_listing_is_unchanged() {
         event => panic!("unexpected subscription item: {event:?}"),
     }
 }
+
+/// Drains deltas until one satisfies `matches` or the timeout elapses.
+async fn wait_for_delta<T>(
+    subscription: &mut fm_events::EventSubscription,
+    timeout: std::time::Duration,
+    mut matches: impl FnMut(&DirectoryDeltaPayload) -> Option<T>,
+) -> Option<T> {
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        let remaining = deadline.checked_duration_since(tokio::time::Instant::now())?;
+        let event = tokio::time::timeout(remaining, subscription.recv())
+            .await
+            .ok()?
+            .ok()?;
+        if let SubscriptionEvent::Event(event) = event
+            && let BackendEventPayload::DirectoryDelta { delta, .. } = event.payload
+            && let Some(found) = matches(&delta)
+        {
+            return Some(found);
+        }
+    }
+}
+
+fn names_in(delta: &DirectoryDeltaPayload) -> Vec<String> {
+    match delta {
+        DirectoryDeltaPayload::EntriesAdded { entries, .. }
+        | DirectoryDeltaPayload::EntriesUpdated { entries, .. } => {
+            entries.iter().map(|e| e.name.clone()).collect()
+        }
+        DirectoryDeltaPayload::Reset { snapshot } => {
+            snapshot.entries.iter().map(|e| e.name.clone()).collect()
+        }
+        DirectoryDeltaPayload::EntriesRemoved { .. } => Vec::new(),
+    }
+}
+
+struct Fixture {
+    _root: tempfile::TempDir,
+    dir: std::path::PathBuf,
+    service: DirectoryService,
+    events: EventBus,
+    workspace_id: fm_domain::WorkspaceId,
+    pane_id: PaneId,
+    location: Location,
+}
+
+impl Fixture {
+    fn new(files: usize) -> Self {
+        let root = tempfile::tempdir().expect("temp dir");
+        let dir = root.path().join("Downloads");
+        std::fs::create_dir(&dir).expect("fixture dir");
+        for index in 0..files {
+            std::fs::write(dir.join(format!("file-{index:04}.dat")), b"x").expect("fixture file");
+        }
+        let location = Location::from_native_path(&dir).expect("location");
+        let events = EventBus::new(256);
+        let mut providers = ProviderRegistry::new();
+        providers.register(Arc::new(LocalFileSystemProvider));
+        Self {
+            _root: root,
+            dir,
+            service: DirectoryService::with_event_bus(providers, events.clone()),
+            events,
+            workspace_id: fm_domain::WorkspaceId::new(),
+            pane_id: PaneId::new(),
+            location,
+        }
+    }
+
+    fn request(&self, location: &Location) -> ListDirectoryRequest {
+        let mut request = request(self.pane_id, location);
+        request.workspace_id = self.workspace_id.into();
+        request.sort = vec![SortDescriptorDto {
+            column_id: "core.modified".to_owned(),
+            direction: SortDirectionDto::Descending,
+        }];
+        request
+    }
+
+    fn subscribe(&self) -> fm_events::EventSubscription {
+        self.events
+            .subscribe(SessionId::new("test"), [self.workspace_id], None)
+    }
+}
+
+const SEEN: std::time::Duration = std::time::Duration::from_secs(5);
+
+#[tokio::test]
+async fn temp_file_then_rename_into_a_large_directory_is_reported() {
+    let fx = Fixture::new(649);
+    let first = fx
+        .service
+        .list(fx.request(&fx.location))
+        .await
+        .expect("list");
+    assert!(first.has_more);
+    let mut sub = fx.subscribe();
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    std::fs::write(fx.dir.join(".out.tmp"), b"{}\n").expect("tmp");
+    std::fs::rename(fx.dir.join(".out.tmp"), fx.dir.join("converted.jsonl")).expect("rename");
+    let seen = wait_for_delta(&mut sub, SEEN, |d| {
+        names_in(d)
+            .contains(&"converted.jsonl".to_owned())
+            .then_some(())
+    })
+    .await;
+    assert!(seen.is_some(), "rename-into-place was never reported");
+}
+
+#[tokio::test]
+async fn truncate_and_rewrite_of_a_large_file_is_reported_with_final_size() {
+    let fx = Fixture::new(649);
+    let _ = fx
+        .service
+        .list(fx.request(&fx.location))
+        .await
+        .expect("list");
+    let mut sub = fx.subscribe();
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    // `jq ... > out.jsonl`: create (truncate) then stream-write for a while.
+    let path = fx.dir.join("out.jsonl");
+    let mut file = std::fs::File::create(&path).expect("create");
+    use std::io::Write;
+    for _ in 0..10 {
+        file.write_all(&[b'a'; 1_000_000]).expect("write");
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    drop(file);
+    let size = wait_for_delta(&mut sub, SEEN, |d| match d {
+        DirectoryDeltaPayload::Reset { snapshot } => snapshot
+            .entries
+            .iter()
+            .find(|e| e.name == "out.jsonl")
+            .and_then(|e| e.size),
+        DirectoryDeltaPayload::EntriesAdded { entries, .. }
+        | DirectoryDeltaPayload::EntriesUpdated { entries, .. } => entries
+            .iter()
+            .find(|e| e.name == "out.jsonl")
+            .and_then(|e| e.size),
+        DirectoryDeltaPayload::EntriesRemoved { .. } => None,
+    })
+    .await;
+    assert!(size.is_some(), "file written in place never reported");
+    // Final state must eventually be consistent.
+    let mut last = size;
+    while let Some(next) =
+        wait_for_delta(&mut sub, std::time::Duration::from_secs(2), |d| match d {
+            DirectoryDeltaPayload::Reset { snapshot } => snapshot
+                .entries
+                .iter()
+                .find(|e| e.name == "out.jsonl")
+                .and_then(|e| e.size),
+            DirectoryDeltaPayload::EntriesAdded { entries, .. }
+            | DirectoryDeltaPayload::EntriesUpdated { entries, .. } => entries
+                .iter()
+                .find(|e| e.name == "out.jsonl")
+                .and_then(|e| e.size),
+            DirectoryDeltaPayload::EntriesRemoved { .. } => None,
+        })
+        .await
+    {
+        last = Some(next);
+    }
+    assert_eq!(last, Some(Some(10_000_000)).flatten());
+}
+
+#[tokio::test]
+async fn navigating_away_and_back_lists_files_created_while_away_and_keeps_watching() {
+    let fx = Fixture::new(649);
+    let other = tempfile::tempdir().expect("other");
+    let other_location = Location::from_native_path(other.path()).expect("other loc");
+    let _ = fx
+        .service
+        .list(fx.request(&fx.location))
+        .await
+        .expect("list");
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let _ = fx
+        .service
+        .list(fx.request(&other_location))
+        .await
+        .expect("away");
+    std::fs::write(fx.dir.join("while-away.txt"), b"x").expect("create");
+    let back = fx
+        .service
+        .list(fx.request(&fx.location))
+        .await
+        .expect("back");
+    assert_eq!(back.total_known_entries, Some(650));
+    let mut sub = fx.subscribe();
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    std::fs::write(fx.dir.join("after-back.txt"), b"x").expect("create");
+    let seen = wait_for_delta(&mut sub, SEEN, |d| {
+        names_in(d)
+            .contains(&"after-back.txt".to_owned())
+            .then_some(())
+    })
+    .await;
+    assert!(seen.is_some(), "no delta after navigating back");
+}
