@@ -165,9 +165,14 @@ function setup(initial = workspace()): {
   };
 }
 
-function echoingSnapshot(client: NavigationClient, uri: string, names: readonly string[]): void {
+function echoingSnapshot(
+  client: NavigationClient,
+  uri: string,
+  names: readonly string[],
+  overrides: Partial<DirectorySnapshot> = {},
+): void {
   vi.mocked(client.listDirectory).mockImplementation(async (request) =>
-    snapshot(request.requestId, uri, names),
+    snapshot(request.requestId, uri, names, overrides),
   );
 }
 
@@ -893,6 +898,29 @@ describe('navigation controller', () => {
 
     expect(applied).toBe(false);
     expect(context.views.at(-1)?.entries.map((entry) => entry.name)).toEqual(['current']);
+  });
+
+  it('keeps the volume capacity when a watcher reset snapshot omits it', async () => {
+    const context = setup();
+    const capacity = { totalBytes: 1000, availableBytes: 170 };
+    echoingSnapshot(context.client, 'file:///home/erik', ['one'], { volumeCapacity: capacity });
+    const controller = createNavigationController({
+      client: context.client,
+      getWorkspace: context.getWorkspace,
+      replaceWorkspace: context.replaceWorkspace,
+      updatePane: (_paneId, _tabId, view) => context.views.push(view),
+    });
+    await controller.load('left');
+    expect(context.views.at(-1)?.volumeCapacity).toEqual(capacity);
+
+    const applied = controller.applySnapshot(
+      'left',
+      snapshot('reset', 'file:///home/erik', ['one', 'two'], { revision: 2 }),
+    );
+
+    expect(applied).toBe(true);
+    expect(context.views.at(-1)?.entries).toHaveLength(2);
+    expect(context.views.at(-1)?.volumeCapacity).toEqual(capacity);
   });
 
   it('appends the next page and renders readable errors with retry', async () => {
