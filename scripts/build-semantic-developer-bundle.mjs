@@ -84,14 +84,11 @@ export async function buildSemanticDeveloperBundle() {
   const profile = process.argv.includes('--release') || gemma ? 'release' : 'debug';
   // Fetched and verified before the long compile so a bad or missing download
   // fails in seconds rather than after a full ONNX Runtime build.
-  const modelCache = await fetchMultilingualModel(
-    path.join(metadata.target_directory, 'semantic-model-cache'),
-  );
+  const modelCacheRoot = path.join(metadata.target_directory, 'semantic-model-cache');
+  const modelCache = await fetchMultilingualModel(modelCacheRoot);
+  // Same cache root as `node scripts/fetch-embeddinggemma-probe.mjs` so a prefetch is reused.
   const gemmaFiles = gemma
-    ? await fetchPinnedModel(
-        EMBEDDINGGEMMA_PROBE,
-        path.join(metadata.target_directory, 'embeddinggemma-probe'),
-      )
+    ? await fetchPinnedModel(EMBEDDINGGEMMA_PROBE, modelCacheRoot)
     : undefined;
   const buildArgs = [
     'build',

@@ -10,9 +10,33 @@ semantic lifecycle) only show fixture themes.
 ```bash
 pnpm install
 pnpm dev:tauri:semantic          # builds the developer bundle, then runs the debug Tauri app
-# optional: EmbeddingGemma instead of multilingual E5
+# EmbeddingGemma 2 instead of multilingual E5 (recommended for themes)
 pnpm dev:tauri:semantic:gemma
 ```
+
+Plain `dev:tauri:semantic` builds a worker and Tauri app **without** Gemma: its catalog offers only
+the token-hashing fixture and E5, so Gemma stays unavailable even if an earlier Gemma install is
+still marked active in your app data. Only `dev:tauri:semantic:gemma` (worker with `gemma-native`,
+Tauri feature `semantic-gemma`, release-profile worker) puts EmbeddingGemma 2 in the catalog.
+
+`:gemma` needs ~1.5 GB of pinned, SHA-256-verified files from the public (ungated, Apache-2.0)
+`google/embeddinggemma-2` Hugging Face repo, cached under
+`target/semantic-model-cache/google--embeddinggemma-2/<revision>`. To fetch them up front:
+
+```bash
+node scripts/fetch-embeddinggemma-probe.mjs
+```
+
+The first `:gemma` run also compiles the worker in release mode, which takes a while.
+
+### Verify Gemma is active
+
+1. **Settings > Semantic**: install/offer list shows *EmbeddingGemma 2*; choose it as the model
+   (Gemma library consent: dimensions 256, images optional) and let the re-index finish.
+2. The active model line reads `google-embeddinggemma-2` (not "multilingual-e5-small" or
+   "token hashing"), and the worker status shows a Gemma launch (backend line, GPU/CPU).
+3. **Explore themes** then analyses with that same active profile; only the token-hashing profile is
+   refused as "too basic".
 
 `dev:tauri:semantic` runs `scripts/build-semantic-developer-bundle.mjs` (worker, native Zvec runtime,
 model packs, catalog signed with the public development key; Apple-silicon macOS, x86-64 Windows,
