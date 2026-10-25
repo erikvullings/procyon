@@ -529,6 +529,14 @@ fn library(directory: &TempDir) -> SemanticLibraryService {
 }
 
 fn library_with_model(directory: &TempDir, model: ModelIdentity) -> SemanticLibraryService {
+    library_with_budgets(directory, model, ResourceBudgets::default())
+}
+
+fn library_with_budgets(
+    directory: &TempDir,
+    model: ModelIdentity,
+    budgets: ResourceBudgets,
+) -> SemanticLibraryService {
     SemanticLibraryService::desktop_managed(
         SemanticLibraryConfiguration::new(
             directory.path().join("library-config"),
@@ -536,7 +544,7 @@ fn library_with_model(directory: &TempDir, model: ModelIdentity) -> SemanticLibr
             DeviceLibraryIdentity::new(LibraryId::from_uuid(Uuid::from_u128(0x190)), model),
             ResourceProfile {
                 kind: ResourceProfileKind::Balanced,
-                budgets: ResourceBudgets::default(),
+                budgets,
             },
         ),
         Arc::new(FixedSemanticEnrolmentEstimator::new(
@@ -2869,5 +2877,324 @@ async fn json_lines_files_are_eligible_and_reindexed_as_ndjson_after_a_change() 
             .iter()
             .any(|(media, content)| media == "application/x-ndjson"
                 && String::from_utf8_lossy(content).contains("new record"))
+    );
+}
+
+/// Records every buffered ingestion (window) before delegating.
+struct WindowRecordingCapability {
+    inner: FakeSemanticCapability,
+    windows: Mutex<Vec<RecordedWindow>>,
+    /// Cancelled as soon as the first window arrives.
+    cancel_on_first: Mutex<Option<CancellationToken>>,
+}
+
+struct RecordedWindow {
+    document_id: String,
+    metadata: BTreeMap<String, String>,
+    length: usize,
+    lines: u64,
+    content: Option<Vec<u8>>,
+}
+
+impl WindowRecordingCapability {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            inner: FakeSemanticCapability::new(),
+            windows: Mutex::new(Vec::new()),
+            cancel_on_first: Mutex::new(None),
+        })
+    }
+
+    /// Windows of the most recent ingestion pass, in feed order.
+    fn take(&self) -> Vec<RecordedWindow> {
+        std::mem::take(&mut *self.windows.lock().unwrap())
+    }
+}
+
+#[async_trait]
+impl SemanticCapability for WindowRecordingCapability {
+    async fn health(&self) -> Result<SemanticHealth, SemanticError> {
+        self.inner.health().await
+    }
+
+    async fn ingest(&self, ingestion: DocumentIngestion) -> Result<SemanticJobId, SemanticError> {
+        assert_eq!(ingestion.media_type, "application/x-ndjson");
+        if let Some(token) = self.cancel_on_first.lock().unwrap().take() {
+            token.cancel();
+        }
+        self.windows.lock().unwrap().push(RecordedWindow {
+            document_id: ingestion.document_id.as_str().to_owned(),
+            metadata: ingestion.metadata.clone(),
+            length: ingestion.content.len(),
+            lines: ingestion
+                .content
+                .iter()
+                .filter(|byte| **byte == b'\n')
+                .count() as u64,
+            content: (ingestion.content.len() <= 1 << 20).then(|| ingestion.content.clone()),
+        });
+        self.inner.ingest(ingestion).await
+    }
+
+    async fn query(
+        &self,
+        query: SemanticQuery,
+    ) -> Result<Vec<SemanticSearchResult>, SemanticError> {
+        self.inner.query(query).await
+    }
+
+    async fn ingestion_job(
+        &self,
+        scope: SemanticScope,
+        job_id: SemanticJobId,
+    ) -> Result<SemanticIngestionJob, SemanticError> {
+        self.inner.ingestion_job(scope, job_id).await
+    }
+
+    async fn events(
+        &self,
+        scope: SemanticScope,
+    ) -> Result<Vec<SemanticProgressEvent>, SemanticError> {
+        self.inner.events(scope).await
+    }
+
+    async fn cancel(&self, operation_id: SemanticOperationId) -> Result<bool, SemanticError> {
+        self.inner.cancel(operation_id).await
+    }
+
+    async fn shutdown(&self, grace: Duration) -> Result<(), SemanticError> {
+        self.inner.shutdown(grace).await
+    }
+}
+
+/// Asserts that `windows` tile `source` exactly: contiguous, in order, each
+/// carrying its true first line and byte offset and the same window count.
+fn assert_windows_tile(windows: &[RecordedWindow], source: &[u8]) {
+    assert!(!windows.is_empty());
+    let count = windows.len().to_string();
+    let mut offset = 0_u64;
+    let mut line = 1_u64;
+    let mut ids = std::collections::BTreeSet::new();
+    for (index, window) in windows.iter().enumerate() {
+        assert_eq!(window.metadata["jsonl_windows"], count);
+        assert_eq!(window.metadata["jsonl_window"], index.to_string());
+        assert_eq!(window.metadata["jsonl_byte_offset"], offset.to_string());
+        assert_eq!(window.metadata["jsonl_line"], line.to_string());
+        assert!(window.metadata["occurrence_id"].ends_with(&format!("#w{index}")));
+        assert!(
+            window.metadata["jsonl_set"]
+                .ends_with(&format!("@{}", window.metadata["workspace_id"]))
+        );
+        assert!(
+            ids.insert(window.document_id.clone()),
+            "document ids are unique"
+        );
+        assert!(window.document_id.ends_with(&format!("-w{index}")));
+        if let Some(content) = &window.content {
+            assert_eq!(
+                content.as_slice(),
+                &source[offset as usize..offset as usize + window.length]
+            );
+        }
+        line += window.lines;
+        offset += window.length as u64;
+    }
+    assert_eq!(offset, source.len() as u64);
+}
+
+fn jsonl_records(count: u32, padding: usize) -> Vec<u8> {
+    (1..=count)
+        .map(|index| {
+            format!(
+                "{{\"title\":\"Story {index}\",\"text\":\"Body {index} {}\"}}\n",
+                "x".repeat(padding)
+            )
+        })
+        .collect::<String>()
+        .into_bytes()
+}
+
+#[tokio::test]
+async fn json_lines_beyond_the_library_per_document_limit_are_windowed_replaced_and_pruned() {
+    let root = project_temp_dir("jsonl-window-root-");
+    let feed = jsonl_records(400, 60);
+    std::fs::write(root.path().join("feed.jsonl"), &feed).unwrap();
+    let state = project_temp_dir("jsonl-window-state-");
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x2832));
+    // The library refuses any other document above 4 KiB; the feed is ~40 KiB.
+    let library = library_with_budgets(
+        &state,
+        ModelIdentity::new("fixture-model", "revision-1", 384, "fixture-space").unwrap(),
+        ResourceBudgets {
+            max_source_bytes_per_document: 4 * 1024,
+            ..ResourceBudgets::default()
+        },
+    );
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let capability = WindowRecordingCapability::new();
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(capability.clone())
+    .with_semantic_jsonl_windows(8 * 1024, 150);
+
+    let first = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            first.observed_files,
+            first.ingested_occurrences,
+            first.failed_occurrences
+        ),
+        (1, 1, 0)
+    );
+    assert!(
+        !first
+            .skipped_reason_counts
+            .iter()
+            .any(|count| count.reason == EligibilityReason::Oversized),
+        "{:?}",
+        first.skipped_reason_counts
+    );
+    let windows = capability.take();
+    assert!(windows.len() >= 3, "{} windows", windows.len());
+    assert_windows_tile(&windows, &feed);
+    assert_eq!(
+        service.semantic_library_status(&HOST).await.unwrap().roots[0].indexed_occurrences,
+        1
+    );
+
+    // A shorter edit re-windows from scratch; every window of the new version
+    // announces the new, smaller count so the worker can prune the rest.
+    let shorter = jsonl_records(120, 60);
+    std::fs::write(root.path().join("feed.jsonl"), &shorter).unwrap();
+    let second = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            second.observed_files,
+            second.ingested_occurrences,
+            second.failed_occurrences
+        ),
+        (1, 1, 0)
+    );
+    let replaced = capability.take();
+    assert!(replaced.len() < windows.len());
+    assert_windows_tile(&replaced, &shorter);
+    assert_eq!(
+        service.semantic_library_status(&HOST).await.unwrap().roots[0].indexed_occurrences,
+        1
+    );
+}
+
+#[tokio::test]
+async fn json_lines_larger_than_the_buffered_source_limit_are_fully_streamed() {
+    let root = project_temp_dir("jsonl-big-root-");
+    // 33 records of ~2 MiB each (mostly an inline image) = ~66 MiB, above the
+    // 64 MiB buffered-document limit that every other text format obeys.
+    let blob = "QUJD".repeat(512 * 1024);
+    let mut source = Vec::new();
+    for index in 1..=33 {
+        source.extend_from_slice(
+            format!("{{\"title\":\"Photo {index}\",\"text\":\"Caption {index}\",\"image\":\"{blob}\"}}\n")
+                .as_bytes(),
+        );
+    }
+    assert!(source.len() as u64 > 64 * 1024 * 1024);
+    std::fs::write(root.path().join("photos.ndjson"), &source).unwrap();
+    let state = project_temp_dir("jsonl-big-state-");
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x2833));
+    let library = library(&state);
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let capability = WindowRecordingCapability::new();
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(capability.clone());
+
+    let report = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            report.observed_files,
+            report.ingested_occurrences,
+            report.failed_occurrences
+        ),
+        (1, 1, 0),
+        "{report:?}"
+    );
+    assert!(
+        !report
+            .skipped_reason_counts
+            .iter()
+            .any(|count| count.reason == EligibilityReason::Oversized)
+    );
+    let windows = capability.take();
+    // Every window is far below the buffered limit and the windows tile the file.
+    assert!(windows.len() >= 16, "{} windows", windows.len());
+    assert!(
+        windows
+            .iter()
+            .all(|window| window.length <= 6 * 1024 * 1024)
+    );
+    assert_windows_tile(&windows, &source);
+}
+
+#[tokio::test]
+async fn json_lines_windowing_stops_when_cancelled_between_windows() {
+    let root = project_temp_dir("jsonl-cancel-root-");
+    let feed = jsonl_records(300, 60);
+    std::fs::write(root.path().join("feed.jsonl"), &feed).unwrap();
+    let state = project_temp_dir("jsonl-cancel-state-");
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x2834));
+    let library = library(&state);
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let capability = WindowRecordingCapability::new();
+    let cancellation = CancellationToken::new();
+    *capability.cancel_on_first.lock().unwrap() = Some(cancellation.clone());
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(capability.clone())
+    .with_semantic_jsonl_windows(4 * 1024, 50);
+
+    let result = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, cancellation)
+        .await;
+    assert!(
+        matches!(result, Err(SemanticIndexingError::Cancelled)),
+        "{result:?}"
+    );
+    assert_eq!(
+        capability.take().len(),
+        1,
+        "no window is fed after cancellation"
     );
 }

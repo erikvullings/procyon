@@ -1750,6 +1750,16 @@ impl FileManagerService {
         self.semantic.health().await
     }
 
+    /// Sets the byte and line limits of one JSON Lines window fed to the
+    /// semantic worker (defaults are sized so a window never reaches the
+    /// worker's conversion budgets). Mainly useful to exercise windowing on
+    /// small files.
+    #[must_use]
+    pub fn with_semantic_jsonl_windows(self, bytes: usize, lines: u32) -> Self {
+        self.semantic_indexing.set_jsonl_windows(bytes, lines);
+        self
+    }
+
     /// Replaces the unavailable default with a host-provided semantic capability.
     #[must_use]
     pub fn with_semantic_capability(mut self, capability: Arc<dyn SemanticCapability>) -> Self {

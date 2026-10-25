@@ -1167,6 +1167,7 @@ mod tests {
                     root_id: root_id.parse().expect("root id"),
                     workspace_ids: vec![workspace_id],
                     source_bytes: 512,
+                    streamed_source: false,
                 },
             )
             .expect("record observation")
@@ -2625,6 +2626,7 @@ mod answer_flow_tests {
                     root_id: root_id.parse().expect("root id"),
                     workspace_ids: vec![workspace_id],
                     source_bytes: 512,
+                    streamed_source: false,
                 },
             )
             .expect("record observation")

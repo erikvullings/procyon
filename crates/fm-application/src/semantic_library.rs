@@ -2090,14 +2090,24 @@ impl SemanticLibraryService {
         let mut decisions = Vec::new();
         for candidate in candidates {
             let mut candidate_budgets = budgets;
-            candidate_budgets.max_source_bytes_per_document =
-                candidate_budgets.max_source_bytes_per_document.min(
-                    if candidate.candidate.mime_type.as_deref() == Some("application/pdf") {
-                        max_pdf_source_bytes
-                    } else {
-                        crate::semantic_indexing::MAX_SOURCE_BYTES
-                    },
-                );
+            match candidate.candidate.mime_type.as_deref() {
+                // Streamed in bounded windows: only the cumulative budgets
+                // limit it, not the per-document memory ceiling.
+                Some("application/x-ndjson") => {
+                    candidate_budgets.max_source_bytes_per_document =
+                        candidate_budgets.max_total_source_bytes;
+                }
+                Some("application/pdf") => {
+                    candidate_budgets.max_source_bytes_per_document = candidate_budgets
+                        .max_source_bytes_per_document
+                        .min(max_pdf_source_bytes);
+                }
+                _ => {
+                    candidate_budgets.max_source_bytes_per_document = candidate_budgets
+                        .max_source_bytes_per_document
+                        .min(crate::semantic_indexing::MAX_SOURCE_BYTES);
+                }
+            }
             let root = data
                 .policy
                 .root(candidate.root_id)
@@ -2169,14 +2179,19 @@ impl SemanticLibraryService {
             .iter()
             .copied()
             .map(|workspace_id| {
-                core::CatalogObservation::new(
+                let candidate = core::CatalogObservation::new(
                     observation.entry_id,
                     observation.location.clone(),
                     observation.content_fingerprint.clone(),
                     core::OccurrenceScope::new(workspace_id, observation.root_id),
                     core::DocumentArtifacts::default(),
                     core::DocumentMeasurement::new(observation.source_bytes, 0, 0),
-                )
+                );
+                if observation.streamed_source {
+                    candidate.with_streamed_source()
+                } else {
+                    candidate
+                }
             });
         let result = match (&managed.server_access, access) {
             (Some(server), SemanticAccessContext::Server(identity)) => {
@@ -2654,6 +2669,9 @@ pub(crate) struct SemanticIndexingObservation {
     pub(crate) root_id: core::RootId,
     pub(crate) workspace_ids: Vec<WorkspaceId>,
     pub(crate) source_bytes: u64,
+    /// The source is consumed in bounded windows, so the per-document source
+    /// ceiling (a memory bound) does not apply to it.
+    pub(crate) streamed_source: bool,
 }
 
 /// Provider-neutral feed plan produced from durable consent.
@@ -2807,6 +2825,7 @@ mod tenant_tests {
                     root_id,
                     workspace_ids: vec![enrolled_workspace],
                     source_bytes: 128,
+                    streamed_source: false,
                 },
             )
             .unwrap();
@@ -2869,6 +2888,7 @@ mod tenant_tests {
                     root_id,
                     workspace_ids: vec![enrolled_workspace],
                     source_bytes: 256,
+                    streamed_source: false,
                 },
             )
             .unwrap();
@@ -3014,6 +3034,7 @@ mod tenant_tests {
                         root_id,
                         workspace_ids: vec![workspace_id],
                         source_bytes: 256,
+                        streamed_source: false,
                     },
                 )
                 .unwrap();

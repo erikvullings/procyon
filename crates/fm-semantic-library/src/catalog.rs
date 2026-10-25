@@ -220,6 +220,7 @@ pub struct CatalogObservation {
     scope: OccurrenceScope,
     artifacts: DocumentArtifacts,
     measurement: DocumentMeasurement,
+    streamed_source: bool,
 }
 
 impl CatalogObservation {
@@ -240,7 +241,19 @@ impl CatalogObservation {
             scope,
             artifacts,
             measurement,
+            streamed_source: false,
         }
+    }
+
+    /// Marks the source as consumed in bounded windows, never held whole.
+    ///
+    /// Such a source is exempt from the per-document source ceiling, which
+    /// exists to bound what is loaded into memory at once. The cumulative
+    /// library budgets still apply to its measured bytes.
+    #[must_use]
+    pub const fn with_streamed_source(mut self) -> Self {
+        self.streamed_source = true;
+        self
     }
 }
 
@@ -641,7 +654,9 @@ impl SemanticCatalog {
             BTreeMap::new();
         for observation in &observations {
             validate_observation(policy, observation)?;
-            if observation.measurement.source_bytes() > budgets.max_source_bytes_per_document {
+            if !observation.streamed_source
+                && observation.measurement.source_bytes() > budgets.max_source_bytes_per_document
+            {
                 return Err(CatalogError::BudgetExceeded(
                     BudgetKind::SourceBytesPerDocument,
                 ));

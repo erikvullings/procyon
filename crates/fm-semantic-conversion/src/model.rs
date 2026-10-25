@@ -104,6 +104,28 @@ pub struct DocumentMetadata {
     extension: Option<String>,
     language_hint: Option<String>,
     byte_length: Option<u64>,
+    jsonl_origin: Option<JsonlOrigin>,
+}
+
+/// Where a JSON Lines window starts inside its complete source.
+///
+/// A very large file is converted as consecutive windows of whole lines. Each
+/// window is converted on its own, so it must be told which line and byte of
+/// the full source its first line is; record provenance is then absolute.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct JsonlOrigin {
+    /// 1-based line number of the window's first line.
+    pub line: u64,
+    /// 0-based byte offset of the window's first byte in the full source.
+    pub byte_offset: u64,
+}
+
+impl JsonlOrigin {
+    /// The start of a complete source.
+    pub const START: Self = Self {
+        line: 1,
+        byte_offset: 0,
+    };
 }
 
 impl DocumentMetadata {
@@ -143,6 +165,23 @@ impl DocumentMetadata {
     pub fn with_byte_length(mut self, bytes: u64) -> Self {
         self.byte_length = Some(bytes);
         self
+    }
+
+    /// Declares that the content is a window of a larger JSON Lines source
+    /// starting at `origin`. A `line` of zero is treated as the first line.
+    #[must_use]
+    pub fn with_jsonl_origin(mut self, line: u64, byte_offset: u64) -> Self {
+        self.jsonl_origin = Some(JsonlOrigin {
+            line: line.max(1),
+            byte_offset,
+        });
+        self
+    }
+
+    /// The JSON Lines window origin, when the content is a window.
+    #[must_use]
+    pub fn jsonl_origin(&self) -> Option<JsonlOrigin> {
+        self.jsonl_origin
     }
 
     /// The declared media type, if any.

@@ -26,7 +26,8 @@ use serde_json::{Map, Value};
 use crate::budget::{BudgetKind, Stop};
 use crate::builder::{DocumentBuilder, UnitDraft};
 use crate::model::{
-    ConversionWarning, Omission, Provenance, SkippedRecordReason, TopLevelBoundary, UnitKind,
+    ConversionWarning, JsonlOrigin, Omission, Provenance, SkippedRecordReason, TopLevelBoundary,
+    UnitKind,
 };
 use crate::text::sanitize;
 
@@ -36,6 +37,13 @@ pub(crate) const WINDOW_BYTES: usize = 1024 * 1024;
 /// Longest line that is parsed. A longer line is drained from the stream and
 /// reported, so one pathological record cannot exhaust memory.
 pub(crate) const MAX_LINE_BYTES: usize = 16 * 1024 * 1024;
+
+/// Content of the stand-in line that a windower writes for a source line that
+/// was too long to carry in any window. It keeps line numbers and byte offsets
+/// of everything after it exact, and is reported as a too-long line.
+pub const JSONL_OVERLONG_LINE_PLACEHOLDER: &[u8] = b"\x1e";
+
+use JSONL_OVERLONG_LINE_PLACEHOLDER as OVERLONG_LINE_PLACEHOLDER;
 
 /// Skipped records itemized individually; the total is always reported.
 const MAX_ITEMIZED_SKIPS: usize = 32;
@@ -134,6 +142,7 @@ pub(crate) struct LineReader<'r> {
     exhausted: bool,
     upcoming_line: u64,
     next_offset: u64,
+    origin_offset: u64,
     max_line_bytes: usize,
 }
 
@@ -142,6 +151,7 @@ impl<'r> LineReader<'r> {
         reader: &'r mut dyn Read,
         window_bytes: usize,
         max_line_bytes: usize,
+        origin: JsonlOrigin,
     ) -> Self {
         Self {
             reader,
@@ -149,8 +159,9 @@ impl<'r> LineReader<'r> {
             start: 0,
             end: 0,
             exhausted: false,
-            upcoming_line: 1,
-            next_offset: 0,
+            upcoming_line: origin.line,
+            next_offset: origin.byte_offset,
+            origin_offset: origin.byte_offset,
             max_line_bytes,
         }
     }
@@ -162,7 +173,7 @@ impl<'r> LineReader<'r> {
 
     /// Bytes consumed so far.
     pub(crate) fn bytes_read(&self) -> u64 {
-        self.next_offset
+        self.next_offset - self.origin_offset
     }
 
     fn refill(&mut self) -> io::Result<()> {
@@ -512,8 +523,9 @@ pub(crate) fn convert(
     builder: &mut DocumentBuilder<'_, '_>,
     reader: &mut dyn Read,
     window_bytes: usize,
+    origin: JsonlOrigin,
 ) -> Result<JsonlStats, JsonlError> {
-    let mut lines = LineReader::new(reader, window_bytes, MAX_LINE_BYTES);
+    let mut lines = LineReader::new(reader, window_bytes, MAX_LINE_BYTES, origin);
     let mut buffer = Vec::new();
     let mut constants = ConstantFilter::default();
     let mut stats = JsonlStats::default();
@@ -538,11 +550,11 @@ pub(crate) fn convert(
             {
                 return Err(JsonlError::Binary);
             }
-            if buffer.starts_with(b"\xEF\xBB\xBF") {
+            if line.offset == 0 && buffer.starts_with(b"\xEF\xBB\xBF") {
                 buffer.drain(..3);
             }
         }
-        let skip = if line.overlong {
+        let skip = if line.overlong || buffer == OVERLONG_LINE_PLACEHOLDER {
             Some(SkippedRecordReason::LineTooLong)
         } else {
             match parse_line(&buffer, &mut constants) {
@@ -624,7 +636,7 @@ mod tests {
             &mut tracker,
         );
         let mut reader = Cursor::new(source.to_vec());
-        let stats = convert(&mut builder, &mut reader, window_bytes)?;
+        let stats = convert(&mut builder, &mut reader, window_bytes, JsonlOrigin::START)?;
         Ok(Outcome {
             document: builder.finish(),
             stats,
@@ -644,7 +656,7 @@ mod tests {
 
     fn lines_of(source: &[u8], window_bytes: usize) -> Vec<(u64, u64, bool, Vec<u8>)> {
         let mut reader = Cursor::new(source.to_vec());
-        let mut lines = LineReader::new(&mut reader, window_bytes, 64);
+        let mut lines = LineReader::new(&mut reader, window_bytes, 64, JsonlOrigin::START);
         let mut buffer = Vec::new();
         let mut result = Vec::new();
         while let Some(line) = lines.next_line(&mut buffer).expect("read") {
@@ -1073,7 +1085,7 @@ mod tests {
             data: Cursor::new(b"{\"text\":\"a\"}\n{\"text\":\"b\"}\n{\"text\":\"c\"}\n".to_vec()),
             clock: &clock,
         };
-        convert(&mut builder, &mut reader, 13).expect("conversion");
+        convert(&mut builder, &mut reader, 13, JsonlOrigin::START).expect("conversion");
         let document = builder.finish();
         assert!(document.is_partial());
         assert!(document.omissions().iter().any(

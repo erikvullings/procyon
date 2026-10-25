@@ -480,5 +480,6 @@ content streaming, and mapping concerns live in dedicated modules with interface
   fixed a real conflict-resolution deadlock bug along the way — see task notes)*
 - [x] 0155 Add unit-level coverage for S3 provider multipart upload paths *(private upload-client
   seam; bounded transient retries and partial-failure aborts covered without the fixture server)*
-- [x] 0283 Semantic indexing for large JSONL files *(streamed converter + host conversion service with
-  no size limit; worker indexing of files over 64 MiB is a flagged follow-up, see task notes)*
+- [x] 0283 Semantic indexing for large JSONL files *(streamed converter; whole-line windows fed to the
+  worker as sub-documents with absolute line/byte provenance, no file-size limit; skipped-line counts
+  are in the host report/log only, not the UI, see task notes)*

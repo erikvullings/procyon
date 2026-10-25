@@ -1473,6 +1473,25 @@ impl SemanticCatalog {
             .transpose()
     }
 
+    /// Lists occurrence identities that start with `prefix`, in order.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation or database error.
+    pub fn occurrence_ids_with_prefix(&self, prefix: &str) -> Result<Vec<String>, StorageError> {
+        validate_identifier(prefix, "occurrence_id")?;
+        let connection = self.connection()?;
+        let mut statement = connection.prepare(
+            "SELECT DISTINCT occurrence_id FROM occurrences
+             WHERE substr(occurrence_id, 1, length(?1)) = ?1
+             ORDER BY occurrence_id",
+        )?;
+        let ids = statement
+            .query_map([prefix], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
+
     /// Deletes one source occurrence and releases its cached-vector references.
     ///
     /// The returned record IDs let the ingestion coordinator remove matching

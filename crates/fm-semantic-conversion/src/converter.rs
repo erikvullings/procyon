@@ -17,7 +17,7 @@ use crate::formats::{
 };
 use crate::model::{
     ComponentVersion, ConversionOutcome, ConversionWarning, ConvertedDocument, DocumentMetadata,
-    FormatKind, MediaType, SkipReason,
+    FormatKind, JsonlOrigin, MediaType, SkipReason,
 };
 use crate::sniff::{ResolvedFormat, is_jsonl_hint, resolve_format};
 use crate::text::decode;
@@ -301,6 +301,7 @@ impl BaselineConverter {
     fn convert_jsonl(
         &self,
         content: SourceContent<'_>,
+        metadata: &DocumentMetadata,
         context: &ConversionContext,
     ) -> Result<ConversionOutcome, ConversionError> {
         let mut tracker = BudgetTracker::new(
@@ -320,7 +321,12 @@ impl BaselineConverter {
             }
             SourceContent::Reader(reader) => reader,
         };
-        let stats = match jsonl::convert(&mut builder, reader, jsonl::WINDOW_BYTES) {
+        let stats = match jsonl::convert(
+            &mut builder,
+            reader,
+            jsonl::WINDOW_BYTES,
+            metadata.jsonl_origin().unwrap_or(JsonlOrigin::START),
+        ) {
             Ok(stats) => stats,
             Err(jsonl::JsonlError::Read(error)) => return Err(ConversionError::Read(error)),
             Err(jsonl::JsonlError::Stopped(stop)) => return Ok(stop_outcome(stop)),
@@ -363,7 +369,7 @@ impl DocumentConverter for BaselineConverter {
         context: &ConversionContext,
     ) -> Result<ConversionOutcome, ConversionError> {
         if is_jsonl_hint(metadata.media_type(), metadata.extension()) {
-            return self.convert_jsonl(content, context);
+            return self.convert_jsonl(content, metadata, context);
         }
         let Some(materialized) = materialize(content, &context.budgets)? else {
             return Ok(ConversionOutcome::OverBudget {
@@ -492,7 +498,9 @@ impl DocumentConverter for BaselineConverter {
             }
             // Hints identify JSON Lines before any bytes are read, so this arm
             // is only a safety net that keeps the match exhaustive.
-            FormatKind::Jsonl => return self.convert_jsonl(SourceContent::Bytes(bytes), context),
+            FormatKind::Jsonl => {
+                return self.convert_jsonl(SourceContent::Bytes(bytes), metadata, context);
+            }
             FormatKind::Pdf => {
                 let mut builder = DocumentBuilder::new(self.version(), format, &mut tracker);
                 builder.set_visuals_enabled(context.visual_evidence());

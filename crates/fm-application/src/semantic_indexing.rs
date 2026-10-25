@@ -13,10 +13,14 @@ use std::time::Duration;
 
 use fm_domain::{EntryKind, EntrySummary, GitFileStatus, Location, LocationError, WorkspaceId};
 use fm_events::{BackendEventPayload, EventAudience, EventBus};
+use fm_semantic_conversion::{
+    DEFAULT_JSONL_WINDOW_BYTES, DEFAULT_JSONL_WINDOW_LINES, JsonlWindower,
+};
 use fm_semantic_library::{
     ContentFingerprint, EligibilityCandidate, EligibilityEntryKind, EligibilityReason,
     GemmaMediaSelection, OccurrenceId, OccurrenceScope, RootId,
 };
+use fm_semantic_worker::ingestion::JsonlWindowSet;
 use fm_vcs_status::{GitIgnoreError, ignored_entries};
 use fm_vfs::{
     EntryRef, FileSystemProvider, ListOptions, ProviderCapabilities, ProviderRegistry, VfsError,
@@ -43,6 +47,8 @@ const MAX_ENTRIES: u64 = 100_000;
 const MAX_DIRECTORIES: u64 = 10_000;
 const MAX_RECURSION_DEPTH: u16 = 64;
 const MAX_FAILURE_DETAILS: usize = 16;
+/// Bytes requested from the provider per read while windowing JSON Lines.
+const JSONL_READ_CHUNK_BYTES: usize = 256 * 1024;
 const MAX_FAILURE_DETAIL_CHARS: usize = 512;
 pub(crate) const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
 const INGESTION_POLL_INTERVAL: Duration = Duration::from_millis(25);
@@ -140,6 +146,7 @@ pub struct SemanticIndexingService {
     semantic: std::sync::RwLock<SemanticService>,
     ocr_required_files: std::sync::RwLock<BTreeMap<RootId, Vec<Location>>>,
     run_lock: tokio::sync::Mutex<()>,
+    jsonl_windows: std::sync::RwLock<(usize, u32)>,
 }
 
 struct ReconciliationGuard<'a>(&'a AtomicBool);
@@ -160,7 +167,27 @@ impl SemanticIndexingService {
             semantic: std::sync::RwLock::new(SemanticService::unavailable()),
             ocr_required_files: std::sync::RwLock::new(BTreeMap::new()),
             run_lock: tokio::sync::Mutex::new(()),
+            jsonl_windows: std::sync::RwLock::new((
+                DEFAULT_JSONL_WINDOW_BYTES,
+                DEFAULT_JSONL_WINDOW_LINES,
+            )),
         }
+    }
+
+    /// Overrides the byte and line limits of one JSON Lines window.
+    pub(crate) fn set_jsonl_windows(&self, bytes: usize, lines: u32) {
+        *self
+            .jsonl_windows
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = (bytes.max(1), lines.max(1));
+    }
+
+    fn jsonl_windower(&self) -> JsonlWindower {
+        let (bytes, lines) = *self
+            .jsonl_windows
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        JsonlWindower::new(bytes, lines)
     }
 
     pub(crate) fn ocr_required_files(&self, root_id: RootId) -> Vec<Location> {
@@ -598,7 +625,11 @@ impl SemanticIndexingService {
             cancellation,
         } = request;
         let media_type = media_type(entry).ok_or(SemanticLibraryError::InvalidRequest)?;
-        let source = if media_type == "application/pdf"
+        let source = if media_type == NDJSON_MEDIA_TYPE {
+            self.snapshot_jsonl(provider, entry, cancellation)
+                .await
+                .map(|snapshot| Some(SourceBytes::Jsonl(snapshot)))
+        } else if media_type == "application/pdf"
             && context.max_pdf_source_bytes > MAX_SOURCE_BYTES
             && entry.size.is_none_or(|size| size > MAX_SOURCE_BYTES)
         {
@@ -636,6 +667,7 @@ impl SemanticIndexingService {
                 root_id: context.root_id,
                 workspace_ids: context.workspace_ids.clone(),
                 source_bytes: source.len(),
+                streamed_source: matches!(source, SourceBytes::Jsonl(_)),
             },
         )?;
 
@@ -671,6 +703,27 @@ impl SemanticIndexingService {
             exclusion_details: Vec::new(),
             requires_ocr: false,
         };
+        if let SourceBytes::Jsonl(snapshot) = &source {
+            return self
+                .ingest_jsonl_windows(
+                    JsonlIngest {
+                        request: EntryIngestRequest {
+                            library,
+                            access,
+                            context,
+                            provider,
+                            entry,
+                            semantic,
+                            cancellation,
+                        },
+                        decision: &decision,
+                        fingerprint: &fingerprint,
+                        snapshot,
+                    },
+                    report,
+                )
+                .await;
+        }
         for workspace_id in &context.workspace_ids {
             check_cancelled(cancellation)?;
             let tenant_id = match access {
@@ -687,6 +740,9 @@ impl SemanticIndexingService {
             }
             let content = match &mut source {
                 SourceBytes::Buffered(bytes) => FeedContent::Buffered(bytes.clone()),
+                SourceBytes::Jsonl(_) => {
+                    return Err(SemanticIndexingError::LimitExceeded("streamed source"));
+                }
                 SourceBytes::Pdf(snapshot) => {
                     snapshot
                         .file
@@ -720,6 +776,7 @@ impl SemanticIndexingService {
                     modified_at_ms: entry
                         .modified_at
                         .map_or(0, |value| value.timestamp_millis()),
+                    jsonl_window: None,
                     content,
                 },
                 cancellation,
@@ -750,6 +807,270 @@ impl SemanticIndexingService {
             }
         }
         Ok(EntryIngestOutcome::Ingested(report))
+    }
+
+    /// Streams a JSON Lines source once, computing its length, digest and
+    /// window count without keeping any content.
+    async fn snapshot_jsonl(
+        &self,
+        provider: &dyn FileSystemProvider,
+        entry: &EntrySummary,
+        cancellation: &CancellationToken,
+    ) -> Result<JsonlSnapshot, SemanticIndexingError> {
+        let mut reader = provider
+            .open_read(
+                &EntryRef {
+                    id: entry.id,
+                    location: entry.location.clone(),
+                },
+                cancellation.child_token(),
+            )
+            .await?;
+        let mut windower = self.jsonl_windower();
+        let mut hasher = Sha256::new();
+        let mut len = 0_u64;
+        let mut windows = 0_usize;
+        let mut chunk = vec![0_u8; JSONL_READ_CHUNK_BYTES];
+        loop {
+            check_cancelled(cancellation)?;
+            let read = reader
+                .read(&mut chunk)
+                .await
+                .map_err(|error| VfsError::Io {
+                    message: error.to_string(),
+                })?;
+            if read == 0 {
+                break;
+            }
+            hasher.update(&chunk[..read]);
+            len += read as u64;
+            windows += windower.push(&chunk[..read]).len();
+        }
+        windows += windower.finish().len();
+        Ok(JsonlSnapshot {
+            len,
+            digest: hasher.finalize().into(),
+            // An empty file is still one (empty) window, so that it replaces
+            // whatever an earlier version of the file left behind.
+            windows: u32::try_from(windows.max(1))
+                .map_err(|_| SemanticIndexingError::LimitExceeded("JSON Lines windows"))?,
+        })
+    }
+
+    /// Feeds a JSON Lines file to the worker as consecutive windows of whole
+    /// lines, each an ordinary bounded document, in a second streaming pass
+    /// that verifies the source did not change since the first.
+    async fn ingest_jsonl_windows(
+        &self,
+        ingest: JsonlIngest<'_>,
+        mut report: EntryIngestReport,
+    ) -> Result<EntryIngestOutcome, SemanticIndexingError> {
+        let JsonlIngest {
+            request:
+                EntryIngestRequest {
+                    library,
+                    access,
+                    context,
+                    provider,
+                    entry,
+                    semantic,
+                    cancellation,
+                },
+            decision,
+            fingerprint,
+            snapshot,
+        } = ingest;
+        let mut targets = Vec::new();
+        for workspace_id in &context.workspace_ids {
+            let tenant_id = match access {
+                SemanticAccessContext::Host => workspace_id.to_string(),
+                SemanticAccessContext::Server(_) => access.tenant_id()?,
+                SemanticAccessContext::Anonymous => {
+                    return Err(SemanticLibraryError::AccessDenied.into());
+                }
+            };
+            if matches!(access, SemanticAccessContext::Server(_))
+                && decision.tenant_id().as_str() != tenant_id
+            {
+                return Err(SemanticLibraryError::AccessDenied.into());
+            }
+            targets.push(JsonlTarget {
+                workspace_id: *workspace_id,
+                tenant_id,
+                state: JsonlTargetState::Active,
+            });
+        }
+
+        let mut reader = match provider
+            .open_read(
+                &EntryRef {
+                    id: entry.id,
+                    location: entry.location.clone(),
+                },
+                cancellation.child_token(),
+            )
+            .await
+        {
+            Ok(reader) => reader,
+            Err(error) if is_entry_local_failure(&error) => {
+                return Ok(EntryIngestOutcome::Unreadable(error));
+            }
+            Err(error) => return Err(error.into()),
+        };
+        let mut windower = self.jsonl_windower();
+        let mut hasher = Sha256::new();
+        let mut len = 0_u64;
+        let mut fed = 0_u32;
+        let mut chunk = vec![0_u8; JSONL_READ_CHUNK_BYTES];
+        let changed = || {
+            EntryIngestOutcome::Unreadable(VfsError::Io {
+                message: "the JSON Lines source changed while it was being indexed".to_owned(),
+            })
+        };
+        loop {
+            check_cancelled(cancellation)?;
+            let read = match reader.read(&mut chunk).await {
+                Ok(read) => read,
+                Err(error) => {
+                    return Ok(EntryIngestOutcome::Unreadable(VfsError::Io {
+                        message: error.to_string(),
+                    }));
+                }
+            };
+            let windows = if read == 0 {
+                windower.finish()
+            } else {
+                hasher.update(&chunk[..read]);
+                len += read as u64;
+                windower.push(&chunk[..read])
+            };
+            for window in windows {
+                if window.index >= snapshot.windows {
+                    return Ok(changed());
+                }
+                fed += 1;
+                self.feed_jsonl_window(
+                    JsonlWindowFeed {
+                        context,
+                        entry,
+                        semantic,
+                        decision,
+                        cancellation,
+                        count: snapshot.windows,
+                    },
+                    &mut targets,
+                    &mut report,
+                    window,
+                )
+                .await?;
+            }
+            if read == 0 {
+                break;
+            }
+        }
+        if fed == 0 {
+            fed = 1;
+            self.feed_jsonl_window(
+                JsonlWindowFeed {
+                    context,
+                    entry,
+                    semantic,
+                    decision,
+                    cancellation,
+                    count: snapshot.windows,
+                },
+                &mut targets,
+                &mut report,
+                fm_semantic_conversion::JsonlWindow {
+                    index: 0,
+                    line: 1,
+                    byte_offset: 0,
+                    bytes: Vec::new(),
+                },
+            )
+            .await?;
+        }
+        let digest: [u8; 32] = hasher.finalize().into();
+        if len != snapshot.len || fed != snapshot.windows || digest != snapshot.digest {
+            return Ok(changed());
+        }
+        for target in targets {
+            if matches!(target.state, JsonlTargetState::Active) {
+                library.confirm_indexed_observation(
+                    access,
+                    report.occurrence_id,
+                    fingerprint,
+                    OccurrenceScope::new(target.workspace_id, context.root_id),
+                )?;
+                report.ingested = report.ingested.saturating_add(1);
+            }
+        }
+        Ok(EntryIngestOutcome::Ingested(report))
+    }
+
+    /// Ingests one window for every workspace still being fed.
+    async fn feed_jsonl_window(
+        &self,
+        feed: JsonlWindowFeed<'_>,
+        targets: &mut [JsonlTarget],
+        report: &mut EntryIngestReport,
+        window: fm_semantic_conversion::JsonlWindow,
+    ) -> Result<(), SemanticIndexingError> {
+        for target in targets
+            .iter_mut()
+            .filter(|target| matches!(target.state, JsonlTargetState::Active))
+        {
+            check_cancelled(feed.cancellation)?;
+            let outcome = ingest_and_wait(
+                feed.semantic,
+                feed.decision,
+                FeedDocument {
+                    tenant_id: target.tenant_id.clone(),
+                    title: feed.entry.name.clone(),
+                    root_id: feed.context.root_id,
+                    workspace_id: target.workspace_id,
+                    media_type: NDJSON_MEDIA_TYPE,
+                    pdf_images_consented: false,
+                    pdf_image_page_budget: None,
+                    modified_at_ms: feed
+                        .entry
+                        .modified_at
+                        .map_or(0, |value| value.timestamp_millis()),
+                    jsonl_window: Some(JsonlFeedWindow {
+                        index: window.index,
+                        count: feed.count,
+                        line: window.line,
+                        byte_offset: window.byte_offset,
+                    }),
+                    content: FeedContent::Buffered(window.bytes.clone()),
+                },
+                feed.cancellation,
+            )
+            .await?;
+            match outcome {
+                IngestionOutcome::Completed(detail) => {
+                    if let Some(detail) = detail {
+                        tracing::info!(%detail, "semantic JSON Lines window indexed with coverage notes");
+                        if report.coverage_details.len() < MAX_FAILURE_DETAILS
+                            && !report.coverage_details.contains(&detail)
+                        {
+                            report.coverage_details.push(detail);
+                        }
+                    }
+                }
+                IngestionOutcome::Failed(detail) => {
+                    target.state = JsonlTargetState::Stopped;
+                    report.failed = report.failed.saturating_add(1);
+                    report.failure_details.push(detail);
+                }
+                IngestionOutcome::Excluded(detail) => {
+                    target.state = JsonlTargetState::Stopped;
+                    report.excluded = report.excluded.saturating_add(1);
+                    report.exclusion_details.push(detail);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Returns every source file whose latest reconciliation reported it as
@@ -1097,6 +1418,15 @@ struct PdfSnapshot {
 enum SourceBytes {
     Buffered(Vec<u8>),
     Pdf(PdfSnapshot),
+    Jsonl(JsonlSnapshot),
+}
+
+/// Whole-file facts about a JSON Lines source, established by one streaming
+/// pass without keeping any of its content.
+struct JsonlSnapshot {
+    len: u64,
+    digest: [u8; 32],
+    windows: u32,
 }
 
 impl SourceBytes {
@@ -1104,6 +1434,7 @@ impl SourceBytes {
         match self {
             Self::Buffered(bytes) => bytes.len() as u64,
             Self::Pdf(snapshot) => snapshot.len,
+            Self::Jsonl(snapshot) => snapshot.len,
         }
     }
 
@@ -1111,6 +1442,7 @@ impl SourceBytes {
         match self {
             Self::Buffered(bytes) => sha256_fingerprint(bytes),
             Self::Pdf(snapshot) => sha256_fingerprint_digest(&snapshot.digest),
+            Self::Jsonl(snapshot) => sha256_fingerprint_digest(&snapshot.digest),
         }
     }
 }
@@ -1201,7 +1533,48 @@ struct FeedDocument<'content> {
     pdf_images_consented: bool,
     pdf_image_page_budget: Option<u32>,
     modified_at_ms: i64,
+    /// Set when `content` is one window of a larger JSON Lines file.
+    jsonl_window: Option<JsonlFeedWindow>,
     content: FeedContent<'content>,
+}
+
+/// Inputs of the streamed JSON Lines ingestion of one file.
+struct JsonlIngest<'a> {
+    request: EntryIngestRequest<'a>,
+    decision: &'a fm_semantic_library::WorkerFeedDecision,
+    fingerprint: &'a ContentFingerprint,
+    snapshot: &'a JsonlSnapshot,
+}
+
+/// What feeding one window needs besides the window itself.
+struct JsonlWindowFeed<'a> {
+    context: &'a RootIngestContext,
+    entry: &'a EntrySummary,
+    semantic: &'a SemanticService,
+    decision: &'a fm_semantic_library::WorkerFeedDecision,
+    cancellation: &'a CancellationToken,
+    count: u32,
+}
+
+struct JsonlTarget {
+    workspace_id: WorkspaceId,
+    tenant_id: String,
+    state: JsonlTargetState,
+}
+
+enum JsonlTargetState {
+    /// Every window so far completed.
+    Active,
+    /// A window failed or was excluded; no further windows are fed.
+    Stopped,
+}
+
+/// Position of one JSON Lines window within its file.
+struct JsonlFeedWindow {
+    index: u32,
+    count: u32,
+    line: u64,
+    byte_offset: u64,
 }
 
 enum IngestionOutcome {
@@ -1262,7 +1635,11 @@ async fn ingest_and_wait(
     let operation_id = SemanticOperationId::new(Uuid::new_v4().to_string());
     let occurrence_id = decision.occurrence_id().to_string();
     let workspace = document.workspace_id.to_string();
-    let scoped_occurrence_id = format!("{occurrence_id}@{workspace}");
+    let base_occurrence_id = format!("{occurrence_id}@{workspace}");
+    let scoped_occurrence_id = document.jsonl_window.as_ref().map_or_else(
+        || base_occurrence_id.clone(),
+        |window| JsonlWindowSet::occurrence_id(&base_occurrence_id, window.index),
+    );
     let scope = SemanticScope::new(
         TenantId::new(document.tenant_id),
         LibraryId::new(decision.library_id().to_string()),
@@ -1278,10 +1655,25 @@ async fn ingest_and_wait(
         ),
     ]);
     metadata.insert("title".to_owned(), document.title);
+    if let Some(window) = &document.jsonl_window {
+        metadata.extend([
+            ("jsonl_set".to_owned(), base_occurrence_id),
+            ("jsonl_window".to_owned(), window.index.to_string()),
+            ("jsonl_windows".to_owned(), window.count.to_string()),
+            ("jsonl_line".to_owned(), window.line.to_string()),
+            (
+                "jsonl_byte_offset".to_owned(),
+                window.byte_offset.to_string(),
+            ),
+        ]);
+    }
     if let Some(page_budget) = document.pdf_image_page_budget {
         metadata.insert("pdf_image_page_budget".to_owned(), page_budget.to_string());
     }
-    let document_id = DocumentId::new(decision.document_id().to_string());
+    let document_id = DocumentId::new(match &document.jsonl_window {
+        Some(window) => format!("{}-w{}", decision.document_id(), window.index),
+        None => decision.document_id().to_string(),
+    });
     let pdf_images_consented =
         document.pdf_images_consented && document.media_type == "application/pdf";
     let job_id = match document.content {

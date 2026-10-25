@@ -37,6 +37,7 @@ mod cancellation;
 mod chunk;
 mod converter;
 mod formats;
+mod jsonl_window;
 mod model;
 mod pdf_report;
 mod pdf_toc;
@@ -104,12 +105,17 @@ pub use converter::{
     BASELINE_CONVERTER_VERSION, BaselineConverter, ConversionContext, ConversionError,
     DocumentConverter, InvalidPdfPageWindow, PdfPageWindow, SourceContent,
 };
+pub use formats::jsonl::JSONL_OVERLONG_LINE_PLACEHOLDER;
 pub use formats::pdf::{PdfWindowMergeError, merge_pdf_text_windows};
+pub use jsonl_window::{
+    DEFAULT_JSONL_WINDOW_BYTES, DEFAULT_JSONL_WINDOW_LINES, JsonlWindow, JsonlWindower,
+};
 pub use model::{
     Completeness, ComponentVersion, ConversionOutcome, ConversionWarning, ConvertedDocument,
-    DocumentMetadata, FormatKind, MAX_TOTAL_VISUAL_BYTES, MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES,
-    MAX_VISUAL_PIXELS, MediaType, Omission, Provenance, SkipReason, SkippedRecordReason,
-    StructuralUnit, TopLevelBoundary, UnitKind, VisualAttachment, VisualOmission, VisualProvenance,
+    DocumentMetadata, FormatKind, JsonlOrigin, MAX_TOTAL_VISUAL_BYTES, MAX_VISUAL_ATTACHMENTS,
+    MAX_VISUAL_BYTES, MAX_VISUAL_PIXELS, MediaType, Omission, Provenance, SkipReason,
+    SkippedRecordReason, StructuralUnit, TopLevelBoundary, UnitKind, VisualAttachment,
+    VisualOmission, VisualProvenance,
 };
 pub use pdf_report::{InvalidPdfTextReport, PdfTextReport};
 pub use pdf_toc::{clean_pdf_toc_text, is_pdf_toc_section, repair_spaced_elsevier_doi};

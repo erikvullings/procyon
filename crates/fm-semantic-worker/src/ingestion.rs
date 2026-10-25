@@ -147,6 +147,8 @@ pub struct IngestionDocument {
     pub modified_at_ms: i64,
     /// Bounded source bytes streamed by the host.
     pub bytes: Vec<u8>,
+    /// Set when this document is one window of a larger JSON Lines file.
+    pub jsonl_window: Option<JsonlWindowSet>,
     /// Verified, isolated text conversion instead of source bytes.
     #[cfg(feature = "experimental-large-pdf")]
     pub pdf_text: Option<PdfTextSource>,
@@ -163,6 +165,38 @@ pub struct PdfTextSource {
     /// Same-source, page-complete image evidence held on anonymous storage.
     pub visual_stage: Option<Arc<std::sync::Mutex<crate::pdf_text_child::StagedPdfVisualPages>>>,
 }
+
+/// Position of one document in a JSON Lines window set.
+///
+/// A JSON Lines file too large to ingest as one document is fed as consecutive
+/// windows of whole lines. Each window is an ordinary document with its own
+/// occurrence, so it publishes and is replaced atomically on its own, while
+/// the set identity lets any window prune windows that a shorter version of
+/// the file no longer has.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JsonlWindowSet {
+    /// Host occurrence identity shared by every window of the file.
+    pub set_id: String,
+    /// 0-based window position.
+    pub index: u32,
+    /// Number of windows in this version of the file.
+    pub count: u32,
+    /// 1-based source line number of the window's first line.
+    pub line: u64,
+    /// 0-based source byte offset of the window's first line.
+    pub byte_offset: u64,
+}
+
+impl JsonlWindowSet {
+    /// Occurrence identity of window `index` of the set `set_id`.
+    #[must_use]
+    pub fn occurrence_id(set_id: &str, index: u32) -> String {
+        format!("{set_id}{WINDOW_OCCURRENCE_SEPARATOR}{index}")
+    }
+}
+
+/// Separates a window set identity from the window index in an occurrence id.
+pub const WINDOW_OCCURRENCE_SEPARATOR: &str = "#w";
 
 /// Derived occurrence record written before generation publication.
 #[derive(Debug, Clone)]
@@ -416,6 +450,46 @@ impl PipelineIngestionBackend {
     }
 }
 
+/// Reads the optional JSON Lines window metadata. Either every key is present
+/// and consistent, or none is.
+fn parse_jsonl_window(
+    metadata: &std::collections::BTreeMap<String, String>,
+    media_type: &str,
+    occurrence_id: &str,
+) -> Result<Option<JsonlWindowSet>, String> {
+    let Some(set_id) = metadata.get("jsonl_set") else {
+        return Ok(None);
+    };
+    let number = |key: &str| -> Result<u64, String> {
+        metadata
+            .get(key)
+            .and_then(|value| value.parse::<u64>().ok())
+            .ok_or_else(|| format!("ingestion metadata `{key}` is required and numeric"))
+    };
+    let index = u32::try_from(number("jsonl_window")?)
+        .map_err(|_| "ingestion metadata `jsonl_window` is out of range".to_owned())?;
+    let count = u32::try_from(number("jsonl_windows")?)
+        .map_err(|_| "ingestion metadata `jsonl_windows` is out of range".to_owned())?;
+    let line = number("jsonl_line")?;
+    let byte_offset = number("jsonl_byte_offset")?;
+    if media_type != "application/x-ndjson"
+        || set_id.is_empty()
+        || count == 0
+        || index >= count
+        || line == 0
+        || occurrence_id != JsonlWindowSet::occurrence_id(set_id, index)
+    {
+        return Err("ingestion metadata describes an inconsistent JSON Lines window".into());
+    }
+    Ok(Some(JsonlWindowSet {
+        set_id: set_id.clone(),
+        index,
+        count,
+        line,
+        byte_offset,
+    }))
+}
+
 impl WorkerIngestionBackend for PipelineIngestionBackend {
     fn enqueue(
         &self,
@@ -466,6 +540,7 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
         if requested_pdf_image_page_budget.is_some() && !input.pdf_images_consented {
             return Err("PDF image budget requires host-authorized image consent".into());
         }
+        let jsonl_window = parse_jsonl_window(&input.metadata, &input.media_type, &occurrence_id)?;
         let document = IngestionDocument {
             job_id: input.job_id.clone(),
             tenant_id: input.tenant_id,
@@ -489,6 +564,7 @@ impl WorkerIngestionBackend for PipelineIngestionBackend {
             pdf_image_page_budget: requested_pdf_image_page_budget,
             modified_at_ms,
             bytes: input.content,
+            jsonl_window,
             #[cfg(feature = "experimental-large-pdf")]
             pdf_text: input.pdf_text,
         };
@@ -809,9 +885,12 @@ impl IngestionCoordinator {
         }
 
         self.transition(document, IngestionStage::Converting, attempts, None, 0, 1)?;
-        let metadata = DocumentMetadata::unknown()
+        let mut metadata = DocumentMetadata::unknown()
             .with_media_type(&document.media_type)
             .with_byte_length(document.bytes.len() as u64);
+        if let Some(window) = &document.jsonl_window {
+            metadata = metadata.with_jsonl_origin(window.line, window.byte_offset);
+        }
         let context = ConversionContext::new()
             .with_budgets(self.conversion_budgets.clone())
             .with_visual_evidence(document.pdf_images_consented)
@@ -831,6 +910,7 @@ impl IngestionCoordinator {
             .converter
             .convert(SourceContent::Bytes(&document.bytes), &metadata, &context)
             .map_err(|error| self.fail(document, attempts, error.to_string()))?;
+        let mut empty_jsonl_window = false;
         let converted = match outcome {
             ConversionOutcome::Converted(converted) => converted,
             ConversionOutcome::Cancelled => {
@@ -862,6 +942,21 @@ impl IngestionCoordinator {
                     1,
                 )?;
                 return Err(IngestionError::Excluded(detail));
+            }
+            // A window of a larger JSON Lines file may hold no usable record
+            // (blank or unreadable lines only). It still publishes, empty, so
+            // that records it held in an earlier version are replaced.
+            ConversionOutcome::Skipped { .. } | ConversionOutcome::Malformed { .. }
+                if document.jsonl_window.is_some() =>
+            {
+                empty_jsonl_window = true;
+                fm_semantic_conversion::ConvertedDocument::new(
+                    self.converter.version(),
+                    FormatKind::Jsonl,
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                )
             }
             outcome => {
                 let detail = format!("{outcome:?}");
@@ -1207,6 +1302,13 @@ impl IngestionCoordinator {
                 image_pages_skipped.len(),
             ));
         }
+        if let Some(window) = &document.jsonl_window {
+            coverage_details.extend(jsonl_coverage_notes(
+                &converted,
+                window.line,
+                empty_jsonl_window,
+            ));
+        }
         let omission_detail = (!coverage_details.is_empty()).then(|| coverage_details.join("; "));
 
         self.transition(
@@ -1251,6 +1353,9 @@ impl IngestionCoordinator {
             &document.document_id,
             generation,
         )?;
+        if let Some(window) = &document.jsonl_window {
+            self.prune_stale_jsonl_windows(window)?;
+        }
         match self.catalog.reclaim_superseded() {
             Ok(reclaimed) => {
                 self.index
@@ -1276,6 +1381,24 @@ impl IngestionCoordinator {
                 .len()
                 .saturating_sub(embedded_count + image_embedded),
         })
+    }
+
+    /// Removes windows of a JSON Lines file that a shorter current version no
+    /// longer has, so their records stop being evidence immediately.
+    fn prune_stale_jsonl_windows(&self, window: &JsonlWindowSet) -> Result<(), IngestionError> {
+        let prefix = format!("{}{WINDOW_OCCURRENCE_SEPARATOR}", window.set_id);
+        for occurrence_id in self.catalog.occurrence_ids_with_prefix(&prefix)? {
+            let stale = occurrence_id[prefix.len()..]
+                .parse::<u32>()
+                .is_ok_and(|index| index >= window.count);
+            if stale {
+                let deleted = self.catalog.delete_occurrence(&occurrence_id)?;
+                self.index
+                    .delete(&deleted.record_ids)
+                    .map_err(IngestionError::DerivedCleanup)?;
+            }
+        }
+        Ok(())
     }
 
     fn ingest_media(
@@ -1633,6 +1756,51 @@ impl CancellationSignal for TokenSignal {
     }
 }
 
+/// Plain-language diagnostics for one JSON Lines window, reported to the host
+/// as coverage detail so skipped or truncated records are never silent.
+fn jsonl_coverage_notes(
+    converted: &fm_semantic_conversion::ConvertedDocument,
+    window_line: u64,
+    empty_window: bool,
+) -> Vec<String> {
+    use fm_semantic_conversion::ConversionWarning;
+    let mut notes = Vec::new();
+    let skipped = converted
+        .warnings()
+        .iter()
+        .find_map(|warning| match warning {
+            ConversionWarning::SkippedRecords { count } => Some(*count),
+            _ => None,
+        });
+    let first_skipped = converted
+        .warnings()
+        .iter()
+        .filter_map(|warning| match warning {
+            ConversionWarning::SkippedRecord { line, .. } => Some(*line),
+            _ => None,
+        })
+        .min();
+    if let Some(count) = skipped {
+        notes.push(match first_skipped {
+            Some(line) => format!(
+                "{count} JSON Lines line(s) were skipped as unreadable (first at line {line})."
+            ),
+            None => format!("{count} JSON Lines line(s) were skipped as unreadable."),
+        });
+    }
+    if empty_window {
+        notes.push(format!(
+            "The JSON Lines window starting at line {window_line} had no indexable records."
+        ));
+    }
+    if converted.is_partial() {
+        notes.push(format!(
+            "Records in the JSON Lines window starting at line {window_line} were truncated by conversion limits."
+        ));
+    }
+    notes
+}
+
 fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     let mut encoded = String::with_capacity(digest.len() * 2);
@@ -1910,6 +2078,7 @@ mod tests {
                 pdf_image_page_budget: None,
                 modified_at_ms: 1_000,
                 bytes: body.as_bytes().to_vec(),
+                jsonl_window: None,
                 #[cfg(feature = "experimental-large-pdf")]
                 pdf_text: None,
             }
@@ -3698,6 +3867,159 @@ mod tests {
             .ingest(&second, &CancellationToken::new())
             .expect("changed ingestion");
         assert_eq!(fixture.visible_excerpt(), "Harvest report");
+    }
+
+    fn jsonl_feed(range: std::ops::RangeInclusive<u32>) -> String {
+        range
+            .map(|index| match index {
+                7 => "not json at all\n".to_owned(),
+                12 => "\n".to_owned(),
+                _ => format!("{{\"title\":\"Story {index}\",\"text\":\"Body {index}\"}}\n"),
+            })
+            .collect()
+    }
+
+    fn ingest_jsonl_windows(
+        fixture: &Fixture,
+        source: &str,
+        generation_tag: &str,
+        max_lines: u32,
+    ) -> u32 {
+        let mut windower = fm_semantic_conversion::JsonlWindower::new(1_000_000, max_lines);
+        let mut windows = windower.push(source.as_bytes());
+        windows.extend(windower.finish());
+        let count = u32::try_from(windows.len()).expect("window count");
+        for window in windows {
+            let mut document = fixture.document("");
+            document.document_id = format!("document-{generation_tag}-w{}", window.index);
+            document.job_id = format!("job-{generation_tag}-w{}", window.index);
+            document.occurrence_id = JsonlWindowSet::occurrence_id("occurrence-a", window.index);
+            document.media_type = "application/x-ndjson".into();
+            document.bytes = window.bytes;
+            document.jsonl_window = Some(JsonlWindowSet {
+                set_id: "occurrence-a".into(),
+                index: window.index,
+                count,
+                line: window.line,
+                byte_offset: window.byte_offset,
+            });
+            fixture
+                .coordinator
+                .ingest(&document, &CancellationToken::new())
+                .expect("window ingestion");
+        }
+        count
+    }
+
+    fn visible_jsonl_lines(fixture: &Fixture) -> Vec<(u64, u64)> {
+        let records = fixture.index.records.lock().expect("records");
+        let candidates = records.keys().cloned().collect::<Vec<_>>();
+        let mut lines = fixture
+            .catalog
+            .begin_read()
+            .expect("reader")
+            .filter_visible_candidates(
+                &candidates,
+                &QueryFilters {
+                    tenant_id: "tenant-a".into(),
+                    ..QueryFilters::default()
+                },
+            )
+            .expect("evidence")
+            .into_iter()
+            .map(|evidence| {
+                let provenance: serde_json::Value =
+                    serde_json::from_str(&evidence.provenance).expect("provenance json");
+                let record = &provenance["value"];
+                assert_eq!(record["kind"], "jsonlRecord", "{provenance}");
+                assert_eq!(evidence.source_id, "source-a");
+                (
+                    record["line"].as_u64().expect("line"),
+                    record["byte_offset"].as_u64().expect("offset"),
+                )
+            })
+            .collect::<Vec<_>>();
+        lines.sort_unstable();
+        lines
+    }
+
+    #[test]
+    fn json_lines_windows_publish_absolute_line_provenance_and_prune_a_shorter_version() {
+        let fixture = Fixture::new(healthy_resources());
+        let source = jsonl_feed(1..=25);
+        let mut offsets = std::collections::BTreeMap::new();
+        let mut offset = 0_u64;
+        for (index, line) in source.split_inclusive('\n').enumerate() {
+            offsets.insert(index as u64 + 1, offset);
+            offset += line.len() as u64;
+        }
+
+        let windows = ingest_jsonl_windows(&fixture, &source, "v1", 10);
+        assert_eq!(windows, 3);
+        let expected = (1..=25_u64)
+            .filter(|line| *line != 7 && *line != 12)
+            .map(|line| (line, offsets[&line]))
+            .collect::<Vec<_>>();
+        assert_eq!(visible_jsonl_lines(&fixture), expected);
+
+        // A shorter edit: window 0 now holds 4 records; windows 1 and 2 must
+        // disappear rather than keep serving records the file no longer has.
+        let shorter = jsonl_feed(1..=4);
+        assert_eq!(ingest_jsonl_windows(&fixture, &shorter, "v2", 10), 1);
+        let after = visible_jsonl_lines(&fixture);
+        assert_eq!(
+            after,
+            (1..=4_u64)
+                .map(|line| (line, offsets[&line]))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn a_json_lines_window_without_records_replaces_its_earlier_records() {
+        let fixture = Fixture::new(healthy_resources());
+        ingest_jsonl_windows(&fixture, &jsonl_feed(1..=3), "v1", 100);
+        assert_eq!(visible_jsonl_lines(&fixture).len(), 3);
+        ingest_jsonl_windows(&fixture, "garbage\n\n", "v2", 100);
+        assert!(visible_jsonl_lines(&fixture).is_empty());
+    }
+
+    #[test]
+    fn inconsistent_json_lines_window_metadata_is_rejected_at_the_queue() {
+        let metadata = |pairs: &[(&str, &str)]| {
+            pairs
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect::<std::collections::BTreeMap<_, _>>()
+        };
+        let good = metadata(&[
+            ("jsonl_set", "occ"),
+            ("jsonl_window", "1"),
+            ("jsonl_windows", "3"),
+            ("jsonl_line", "10"),
+            ("jsonl_byte_offset", "99"),
+        ]);
+        let parsed = parse_jsonl_window(&good, "application/x-ndjson", "occ#w1")
+            .expect("valid")
+            .expect("window");
+        assert_eq!(
+            (parsed.index, parsed.count, parsed.line, parsed.byte_offset),
+            (1, 3, 10, 99)
+        );
+        assert!(parse_jsonl_window(&good, "text/plain", "occ#w1").is_err());
+        assert!(parse_jsonl_window(&good, "application/x-ndjson", "occ#w2").is_err());
+        let beyond = metadata(&[
+            ("jsonl_set", "occ"),
+            ("jsonl_window", "3"),
+            ("jsonl_windows", "3"),
+            ("jsonl_line", "10"),
+            ("jsonl_byte_offset", "99"),
+        ]);
+        assert!(parse_jsonl_window(&beyond, "application/x-ndjson", "occ#w3").is_err());
+        assert_eq!(
+            parse_jsonl_window(&metadata(&[]), "text/plain", "occ").expect("none"),
+            None
+        );
     }
 
     #[test]

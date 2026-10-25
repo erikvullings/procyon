@@ -515,17 +515,23 @@ CSV. EPUB conversion follows the package manifest and spine in reading order, in
 XHTML/HTML content, and ignores bundled images and other media. Font-only obfuscation does not block
 readable text, while encryption of a spine document is reported explicitly. Because EPUB is
 reflowable, evidence uses chapter and source-line provenance rather than synthetic page numbers.
-JSON Lines (`.jsonl`, `.ndjson`, `application/x-ndjson`) is streamed through a bounded window of
-whole lines instead of being loaded, so the converter itself has no source-size limit; the output
-budgets (units, characters, deadline) and cancellation still stop it with a partial result. One
-record becomes one unit: summary and text form the body, while title, channel and date are carried
-once in the section path. Data URIs and long base64 values are omitted, records without known fields
-keep short string fields (values repeated unchanged from the previous record are not re-emitted),
-and unusable lines are skipped with typed warnings carrying their line number. Evidence cites the
-record's 1-based line number and byte offset. Worker indexing still buffers each file up to the
-per-document source limit (64 MiB), so larger JSON Lines files are skipped as oversized there;
-streaming them through the worker transport is a follow-up (the host conversion service used by
-summaries streams without that limit).
+JSON Lines (`.jsonl`, `.ndjson`, `application/x-ndjson`) has no file-size limit. The converter
+streams it through a bounded window of whole lines, and indexing feeds the worker one window at a
+time: the host splits the file into windows of at most 4 MiB / 10,000 lines (so a window never
+reaches the unit or output budgets), and each window is an ordinary bounded document with its own
+occurrence, a document id derived from the file's streamed SHA-256 plus the window index, and the
+window's true first line number and byte offset. The file is read twice (a hashing pass, then a
+feeding pass that verifies the digest, so a file that changes mid-index is retried rather than
+half-published). An edited file re-publishes every window atomically per window, and any window of
+the new version prunes windows a shorter version no longer has. The per-document source ceiling
+(64 MiB buffered, library `maxSourceBytesPerDocument`) does not apply to JSON Lines; the cumulative
+library budgets still do. One record becomes one unit: summary and text form the body, while title,
+channel and date are carried once in the section path. Data URIs and long base64 values are
+omitted, records without known fields keep short string fields (values repeated unchanged from the
+previous record are not re-emitted), and unusable lines are skipped with typed warnings carrying
+their line number; per-window skipped/empty/truncated counts are reported as coverage details in
+the indexing report and logged. Evidence cites the record's absolute 1-based line number and byte
+offset. A line longer than 16 MiB is skipped and reported, never carried.
 PDFs with an extractable text layer use the deterministic, pure-Rust Docling Adapter by default,
 with the original `lopdf` implementation retained for recoverable fallback. Docling heading nodes
 become section paths and its page-furniture nodes are excluded from chunks. The deterministic

@@ -343,3 +343,39 @@ fn a_per_document_source_ceiling_is_enforced_against_the_measured_record() {
     ));
     assert_eq!(catalog.document_count(), 0);
 }
+
+#[test]
+fn a_streamed_source_skips_the_per_document_ceiling_but_not_the_cumulative_budget() {
+    let policy = policy_with(ResourceBudgets {
+        max_source_bytes_per_document: 100,
+        max_total_source_bytes: 5_000,
+        ..generous_budgets()
+    });
+    let mut catalog = SemanticCatalog::new(library_id());
+    let state = SemanticLibraryState::new(library_id());
+
+    catalog
+        .upsert_observations(
+            &policy,
+            &state,
+            [
+                observation(100, "sha256-big", DocumentMeasurement::new(4_000, 0, 0))
+                    .with_streamed_source(),
+            ],
+        )
+        .unwrap();
+    assert_eq!(catalog.document_count(), 1);
+
+    let rejected = catalog.upsert_observations(
+        &policy,
+        &state,
+        [
+            observation(101, "sha256-bigger", DocumentMeasurement::new(4_000, 0, 0))
+                .with_streamed_source(),
+        ],
+    );
+    assert!(matches!(
+        rejected,
+        Err(CatalogError::BudgetExceeded(BudgetKind::SourceBytes))
+    ));
+}
