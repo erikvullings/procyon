@@ -39,6 +39,19 @@ function button(label: string): HTMLButtonElement {
   return match;
 }
 
+function chooseGemma(): void {
+  root
+    .querySelector<HTMLInputElement>('.fm-semantic-install input[value="embeddingGemma2"]')
+    ?.click();
+  m.redraw.sync();
+}
+
+function profileCopy(): string {
+  return [...root.querySelectorAll('.fm-semantic-profile-copy')]
+    .map((item) => item.textContent)
+    .join('\n');
+}
+
 function setInput(selector: string, value: string): void {
   const input = root.querySelector<HTMLInputElement>(selector);
   if (input === null) throw new Error(`No input matching "${selector}"`);
@@ -111,6 +124,8 @@ describe('SemanticComponentManagement', () => {
     const createOffer = vi.spyOn(client, 'createSemanticComponentInstallationOffer');
     mountComponent(client);
     await waitForLoaded();
+    expect(createOffer).not.toHaveBeenCalled();
+    chooseGemma();
 
     await vi.waitFor(() =>
       expect(createOffer).toHaveBeenCalledWith({ profile: 'embeddingGemma2' }),
@@ -136,12 +151,8 @@ describe('SemanticComponentManagement', () => {
     mountComponent(client);
     await waitForLoaded();
 
-    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
-      'EmbeddingGemma 2',
-    );
-    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).not.toContain(
-      'experimental',
-    );
+    expect(profileCopy()).toContain('EmbeddingGemma 2');
+    expect(profileCopy()).not.toContain('experimental');
   });
 
   it('labels risk-accepted Gemma as unqualified in Settings', async () => {
@@ -151,15 +162,9 @@ describe('SemanticComponentManagement', () => {
     mountComponent(client);
     await waitForLoaded();
 
-    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
-      'EmbeddingGemma 2 (opt-in)',
-    );
-    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
-      'has not completed the full qualification yet',
-    );
-    expect(root.querySelector('.fm-semantic-profile-copy')?.textContent).toContain(
-      'file an issue for CPU or Windows GPU problems',
-    );
+    expect(profileCopy()).toContain('EmbeddingGemma 2 (opt-in)');
+    expect(profileCopy()).toContain('has not completed the full qualification yet');
+    expect(profileCopy()).toContain('file an issue for CPU or Windows GPU problems');
   });
 
   it('gives the Gemma setup and consent focusable, labelled controls', async () => {
@@ -205,7 +210,9 @@ describe('SemanticComponentManagement', () => {
     const selectable = root.querySelectorAll<HTMLInputElement>(
       '.fm-semantic-install input[type="radio"]',
     );
-    expect([...selectable].map((option) => option.value)).toEqual(['embeddingGemma2']);
+    expect([...selectable].map((option) => option.value)).toContain('embeddingGemma2');
+    expect(selectable.length).toBeGreaterThan(1);
+    chooseGemma();
     await vi.waitFor(() => expect(root.querySelector('.fm-semantic-gemma-setup')).not.toBeNull());
     expect(button('Accept and install').disabled).toBe(true);
     const dimensions = root.querySelector<HTMLSelectElement>('#fm-semantic-gemma-dimensions');
@@ -781,14 +788,15 @@ describe('SemanticComponentManagement', () => {
 
     expect(root.textContent).toContain('This profile still uses an older model package');
     expect(root.textContent).toContain('Update available');
+    expect(
+      root.querySelector<HTMLInputElement>(
+        '.fm-semantic-install input[value="multilingualQuality"]',
+      )?.checked,
+    ).toBe(true);
     root
-      .querySelector<HTMLDetailsElement>('.fm-semantic-migration-details')
-      ?.setAttribute('open', '');
-    expect(root.querySelector<HTMLSelectElement>('#fm-semantic-migration-profile')?.value).toBe(
-      'multilingualQuality',
-    );
-    expect(button('Review model change').disabled).toBe(false);
-    button('Review model change').click();
+      .querySelector<HTMLInputElement>('.fm-semantic-install input[value="multilingualQuality"]')
+      ?.click();
+    m.redraw.sync();
 
     await vi.waitFor(() =>
       expect(plan).toHaveBeenCalledWith({
@@ -840,20 +848,13 @@ describe('SemanticComponentManagement', () => {
     const complete = vi.spyOn(client, 'completeSemanticComponentModelMigration');
     mountComponent(client);
     await waitForLoaded();
-    root
-      .querySelector<HTMLDetailsElement>('.fm-semantic-migration-details')
-      ?.setAttribute('open', '');
     expect(root.querySelector('#fm-semantic-migration-documents')).toBeNull();
     expect(root.querySelector('#fm-semantic-migration-source-bytes')).toBeNull();
-    const targetProfile = root.querySelector<HTMLSelectElement>('#fm-semantic-migration-profile');
-    expect(targetProfile?.classList).toContain('browser-default');
-    expect(root.querySelector('.fm-semantic-migration-details input[type="radio"]')).toBeNull();
-    if (targetProfile === null) throw new Error('Migration target profile select is missing');
-    targetProfile.value = 'multilingualQuality';
-    targetProfile.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(root.querySelector('#fm-semantic-migration-profile')).toBeNull();
+    root
+      .querySelector<HTMLInputElement>('.fm-semantic-install input[value="multilingualQuality"]')
+      ?.click();
     m.redraw.sync();
-    expect(button('Review model change').disabled).toBe(false);
-    button('Review model change').click();
     await vi.waitFor(() =>
       expect(plan).toHaveBeenCalledWith({
         profile: 'multilingualQuality',
@@ -886,14 +887,9 @@ describe('SemanticComponentManagement', () => {
     mountComponent(client);
     await waitForLoaded();
     root
-      .querySelector<HTMLDetailsElement>('.fm-semantic-migration-details')
-      ?.setAttribute('open', '');
-    const targetProfile = root.querySelector<HTMLSelectElement>('#fm-semantic-migration-profile');
-    if (targetProfile === null) throw new Error('Migration target profile select is missing');
-    targetProfile.value = 'multilingualQuality';
-    targetProfile.dispatchEvent(new Event('change', { bubbles: true }));
+      .querySelector<HTMLInputElement>('.fm-semantic-install input[value="multilingualQuality"]')
+      ?.click();
     m.redraw.sync();
-    button('Review model change').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Full reindex required'));
 
     const confirmation = button('Confirm migration');

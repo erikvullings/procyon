@@ -195,7 +195,7 @@ function profileChoices(
               name,
               value: profile.profile,
               checked: selected === profile.profile,
-              onchange: () => onchange(profile.profile),
+              onclick: () => onchange(profile.profile),
             }),
             m('span.fm-semantic-radio-copy.fm-semantic-profile-copy', [
               m('strong', profileName(profile.profile)),
@@ -785,16 +785,9 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         installProfile = recommended.profile;
         localModelProfile = recommended.profile;
       }
-      if (profiles.some((profile) => profile.profile === 'embeddingGemma2') && status.activeModel) {
-        installProfile =
-          status.activeModel.profile === 'embeddingGemma2'
-            ? (recommended?.profile ?? installProfile)
-            : 'embeddingGemma2';
-      }
-      migrationProfile =
-        status.activeModel?.profile === 'embeddingGemma2'
-          ? (recommended?.profile ?? migrationProfile)
-          : (status.activeModel?.profile ?? recommended?.profile ?? migrationProfile);
+      // Keep the choice on the model in use so every other model reads as an explicit switch.
+      if (status.activeModel != null) installProfile = status.activeModel.profile;
+      migrationProfile = installProfile;
       const gemmaSetup = profiles.some((profile) => profile.profile === 'embeddingGemma2')
         ? await client.getGemmaLibrarySetup(loadController.signal)
         : null;
@@ -802,14 +795,6 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
       loaded = { capabilities, status, profiles, gemmaSetup };
       onStatusChange?.(status);
       loadState = 'loaded';
-      if (
-        installProfile === 'embeddingGemma2' &&
-        capabilities.operations.includes('createInstallationOffer') &&
-        (capabilities.runtimeExecutableDownload === 'directDistribution' ||
-          capabilities.runtimeExecutableDownload === 'simulated')
-      ) {
-        createOffer();
-      }
     } catch (error: unknown) {
       if (loadController.signal.aborted) return;
       loadError = errorMessage(error);
@@ -927,6 +912,28 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         profile: installProfile,
       });
     });
+  }
+
+  /** Selecting a model immediately shows its impact: an install offer, or a migration plan when switching. */
+  function selectProfile(profile: SemanticProfile): void {
+    if (busy !== undefined || loaded === undefined) return;
+    const { status, profiles } = loaded;
+    installProfile = profile;
+    migrationProfile = profile;
+    offer = undefined;
+    pendingMigration = undefined;
+    const active = status.activeModel ?? undefined;
+    const target = profiles.find((candidate) => candidate.profile === profile);
+    if (target === undefined) return;
+    const installed = status.lifecycle.state !== 'absent';
+    const alreadyActive = modelSelectionMatchesProfile(active, target);
+    if (active !== undefined && installed && !alreadyActive) {
+      // Gemma installs replace the index through the offer itself; other targets need a plan.
+      if (profile === 'embeddingGemma2') createOffer();
+      else planMigration();
+    } else if (!(status.lifecycle.state === 'installedEnabled' && alreadyActive)) {
+      createOffer();
+    }
   }
 
   function acceptOffer(): void {
@@ -1289,22 +1296,13 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
 
   function renderManagement(current: LoadedState): Vnode[] {
     const { capabilities, profiles, status } = current;
-    // An active model whose worker generation is missing reports `absent`: every profile,
-    // including the active one, is then offered so the current worker can be installed again.
-    const switchProfiles =
-      status.activeModel && status.lifecycle.state !== 'absent'
-        ? profiles.filter((profile) =>
-            status.activeModel?.profile === 'embeddingGemma2'
-              ? profile.profile !== 'embeddingGemma2'
-              : profile.profile === 'embeddingGemma2',
-          )
-        : profiles;
+    // Every profile stays listed (the active one is badged) so a selection never disappears.
+    const switchProfiles = profiles;
     const managed =
       capabilities.authority === 'desktopManaged' || capabilities.authority === 'deterministicMock';
     const developerBundle = profiles.some((profile) =>
       profile.resolvedModel.modelId.startsWith('procyon.dev.'),
     );
-    const migrationTarget = profiles.find((profile) => profile.profile === migrationProfile);
     if (!managed) {
       return [
         capabilities.authority === 'unavailable'
@@ -1351,11 +1349,11 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
         : undefined,
       canOffer && (installableLifecycle || switchProfiles.length > 0)
         ? m(
-            status.activeModel?.profile === 'embeddingGemma2' && !installableLifecycle
+            status.activeModel != null && !installableLifecycle
               ? 'details.fm-semantic-model-switch'
               : 'div',
             [
-              status.activeModel?.profile === 'embeddingGemma2' && !installableLifecycle
+              status.activeModel != null && !installableLifecycle
                 ? m('summary', t('semanticComponents', 'changeModel'))
                 : undefined,
               m('fieldset.fm-semantic-install', [
@@ -1369,30 +1367,27 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
                   'fm-semantic-install-profile',
                   switchProfiles,
                   installProfile,
-                  (profile) => {
-                    if (busy !== undefined) return;
-                    installProfile = profile;
-                    offer = undefined;
-                    if (profile === 'embeddingGemma2') createOffer();
-                  },
+                  selectProfile,
+                  undefined,
+                  status.activeModel ?? undefined,
                 ),
-                installProfile === 'embeddingGemma2' && busy === 'offer'
+                busy === 'offer' || busy === 'planMigration'
                   ? m('p', { role: 'status' }, t('semanticComponents', 'loadingOffer'))
                   : undefined,
-                installProfile !== 'embeddingGemma2' || (offer === undefined && busy !== 'offer')
+                offer === undefined &&
+                pendingMigration === undefined &&
+                busy === undefined &&
+                status.lifecycle.state !== 'installedEnabled'
                   ? m(
                       'button.btn.fm-semantic-action',
                       {
                         type: 'button',
-                        ...busyButtonAttrs(busy === 'offer'),
-                        disabled: busy !== undefined || switchProfiles.length === 0,
-                        onclick: createOffer,
+                        disabled: switchProfiles.length === 0,
+                        onclick: () => selectProfile(installProfile),
                       },
-                      busy === 'offer'
-                        ? t('semanticComponents', 'working')
-                        : installProfile === 'embeddingGemma2'
-                          ? t('semanticComponents', 'retryOffer')
-                          : t('semanticComponents', 'installEnableAction'),
+                      installProfile === 'embeddingGemma2'
+                        ? t('semanticComponents', 'retryOffer')
+                        : t('semanticComponents', 'installEnableAction'),
                     )
                   : undefined,
               ]),
@@ -1700,61 +1695,6 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
             () => checkpointMigration(progress),
             () => completeMigration(progress),
           ),
-      can('planModelMigration') &&
-      status.activeModel != null &&
-      status.activeModel.profile !== 'embeddingGemma2'
-        ? m('details.fm-semantic-action-details.fm-semantic-migration-details', [
-            m('summary', t('semanticComponents', 'migrationSummary')),
-            m('p.fm-semantic-guidance', t('semanticComponents', 'migrationExplanation')),
-            m('fieldset.fm-semantic-form-grid', [
-              m('label.fm-semantic-field', { for: 'fm-semantic-migration-profile' }, [
-                m('span', t('semanticComponents', 'migrationTargetLegend')),
-                m(
-                  'select#fm-semantic-migration-profile.browser-default',
-                  {
-                    value: migrationProfile,
-                    onchange: (event: Event) => {
-                      migrationProfile = (event.target as HTMLSelectElement)
-                        .value as SemanticProfile;
-                      pendingMigration = undefined;
-                    },
-                  },
-                  profiles
-                    .filter((profile) => profile.profile !== 'embeddingGemma2')
-                    .map((profile) =>
-                      m(
-                        'option',
-                        {
-                          key: profile.profile,
-                          value: profile.profile,
-                        },
-                        modelSelectionMatchesProfile(status.activeModel ?? undefined, profile)
-                          ? `${profileName(profile.profile)} · ${t('semanticComponents', 'componentStateActive')}`
-                          : status.activeModel?.profile === profile.profile
-                            ? `${profileName(profile.profile)} · ${t('semanticComponents', 'profileUpdateAvailable')}`
-                            : profileName(profile.profile),
-                      ),
-                    ),
-                ),
-              ]),
-              m(
-                'button.fm-semantic-action',
-                {
-                  type: 'button',
-                  ...busyButtonAttrs(busy === 'planMigration'),
-                  disabled:
-                    busy !== undefined ||
-                    migrationTarget === undefined ||
-                    modelSelectionMatchesProfile(status.activeModel, migrationTarget),
-                  onclick: planMigration,
-                },
-                busy === 'planMigration'
-                  ? t('semanticComponents', 'working')
-                  : t('semanticComponents', 'reviewModelChange'),
-              ),
-            ]),
-          ])
-        : undefined,
       pendingMigration === undefined ? undefined : renderPendingMigration(pendingMigration),
       can('importLocalModel')
         ? m('label.fm-semantic-developer-tools-toggle', [
