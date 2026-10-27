@@ -4,6 +4,10 @@
 //! boundary. The worker has no file-provider or network-facing dependency.
 
 pub mod advanced;
+mod corpus_projection;
+pub mod corpus_theme_ipc;
+pub mod corpus_theme_storage;
+pub mod corpus_themes;
 #[cfg(feature = "semantic-runtime")]
 pub mod developer_bundle;
 #[cfg(feature = "semantic-runtime")]
@@ -35,6 +39,7 @@ pub mod gemma_vision;
 #[cfg(feature = "gemma-probe")]
 pub mod gemma_visual;
 pub mod ingestion;
+mod kmeans;
 pub mod knowledge_ipc;
 pub mod knowledge_retrieval;
 #[cfg(feature = "experimental-pdf-render")]
@@ -2296,6 +2301,47 @@ impl WorkerClient {
         }
     }
 
+    /// Executes one corpus-theme operation over the authenticated channel.
+    ///
+    /// The caller owns authorization: the scope already lists the exact
+    /// authorized sources. Analysis may run for minutes on a large corpus, so
+    /// it uses the stream deadline.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed transport, authentication, capability, or protocol
+    /// failure.
+    pub async fn corpus_themes(
+        &self,
+        request_id: &str,
+        request: &corpus_theme_ipc::ThemeRequest,
+    ) -> Result<corpus_theme_ipc::ThemeResponse, ClientError> {
+        if !self.supports(v1::Capability::CorpusThemes) {
+            return Err(ClientError::CapabilityUnavailable {
+                capability: v1::Capability::CorpusThemes,
+            });
+        }
+        let payload = corpus_theme_ipc::encode_request(request)
+            .map_err(|_| ClientError::UnexpectedResponse)?;
+        let responses = self
+            .request(
+                v1::client_frame::Payload::CorpusThemes(v1::CorpusThemesRequest {
+                    session: Some(self.session.clone()),
+                    request_id: request_id.to_owned(),
+                    payload,
+                }),
+                DeadlineKind::Stream,
+            )
+            .await?;
+        match responses.as_slice() {
+            [v1::server_frame::Payload::CorpusThemes(response)] => {
+                corpus_theme_ipc::decode_response(&response.payload)
+                    .map_err(|_| ClientError::UnexpectedResponse)
+            }
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
     /// Rejects a knowledge RPC that an older compatible worker cannot serve.
     fn require_knowledge_capability(&self) -> Result<(), ClientError> {
         if self.supports(v1::Capability::KnowledgeSearch) {
@@ -2866,6 +2912,10 @@ impl WorkerClient {
                 session: self.session.clone(),
                 request_id: request.request_id.clone(),
             }),
+            v1::client_frame::Payload::CorpusThemes(request) => Some(PendingCancellation {
+                session: self.session.clone(),
+                request_id: request.request_id.clone(),
+            }),
             _ => None,
         };
         let (mut receiver, mut pending_request) = self.register(correlation_id, cancellation);
@@ -3094,6 +3144,7 @@ fn all_capabilities() -> Vec<i32> {
         v1::Capability::Cancellation,
         v1::Capability::GracefulShutdown,
         v1::Capability::KnowledgeSearch,
+        v1::Capability::CorpusThemes,
     ]
     .into_iter()
     .map(i32::from)
@@ -3109,6 +3160,7 @@ struct RuntimeState {
     ingestion_backend: Option<Arc<dyn WorkerIngestionBackend>>,
     query_backend: Option<Arc<dyn WorkerQueryBackend>>,
     knowledge_backend: Option<Arc<dyn WorkerKnowledgeBackend>>,
+    corpus_theme_backend: Option<Arc<dyn corpus_theme_ipc::WorkerCorpusThemeBackend>>,
     documents: Mutex<Vec<Arc<Document>>>,
     jobs: Mutex<Arc<HashMap<String, Arc<Job>>>>,
     connections: watch::Sender<usize>,
@@ -3305,6 +3357,26 @@ impl WorkerServer {
             Some(ingestion_backend),
             Some(query_backend),
             Some(knowledge_backend),
+            None,
+        )
+    }
+
+    /// Creates a worker backed by durable ingestion, dense retrieval, hybrid
+    /// knowledge retrieval, and corpus themes.
+    #[must_use]
+    pub fn with_all_backends_and_themes(
+        config: WorkerConfig,
+        ingestion_backend: Arc<dyn WorkerIngestionBackend>,
+        query_backend: Arc<dyn WorkerQueryBackend>,
+        knowledge_backend: Arc<dyn WorkerKnowledgeBackend>,
+        corpus_theme_backend: Arc<dyn corpus_theme_ipc::WorkerCorpusThemeBackend>,
+    ) -> Self {
+        Self::compose(
+            config,
+            Some(ingestion_backend),
+            Some(query_backend),
+            Some(knowledge_backend),
+            Some(corpus_theme_backend),
         )
     }
 
@@ -3315,7 +3387,17 @@ impl WorkerServer {
         config: WorkerConfig,
         knowledge_backend: Arc<dyn WorkerKnowledgeBackend>,
     ) -> Self {
-        Self::compose(config, None, None, Some(knowledge_backend))
+        Self::compose(config, None, None, Some(knowledge_backend), None)
+    }
+
+    /// Creates a worker backed by corpus themes only, primarily for
+    /// independently testing the theme route.
+    #[must_use]
+    pub fn with_corpus_theme_backend(
+        config: WorkerConfig,
+        corpus_theme_backend: Arc<dyn corpus_theme_ipc::WorkerCorpusThemeBackend>,
+    ) -> Self {
+        Self::compose(config, None, None, None, Some(corpus_theme_backend))
     }
 
     fn with_optional_backends(
@@ -3323,7 +3405,7 @@ impl WorkerServer {
         ingestion_backend: Option<Arc<dyn WorkerIngestionBackend>>,
         query_backend: Option<Arc<dyn WorkerQueryBackend>>,
     ) -> Self {
-        Self::compose(config, ingestion_backend, query_backend, None)
+        Self::compose(config, ingestion_backend, query_backend, None, None)
     }
 
     fn compose(
@@ -3331,6 +3413,7 @@ impl WorkerServer {
         ingestion_backend: Option<Arc<dyn WorkerIngestionBackend>>,
         query_backend: Option<Arc<dyn WorkerQueryBackend>>,
         knowledge_backend: Option<Arc<dyn WorkerKnowledgeBackend>>,
+        corpus_theme_backend: Option<Arc<dyn corpus_theme_ipc::WorkerCorpusThemeBackend>>,
     ) -> Self {
         let concurrency = Arc::new(Semaphore::new(config.limits.max_concurrent_requests()));
         let (connections, _) = watch::channel(0);
@@ -3344,6 +3427,7 @@ impl WorkerServer {
                 ingestion_backend,
                 query_backend,
                 knowledge_backend,
+                corpus_theme_backend,
                 documents: Mutex::new(Vec::new()),
                 jobs: Mutex::new(Arc::new(HashMap::new())),
                 connections,
@@ -3526,6 +3610,16 @@ async fn serve_connection(stream: BoxedIo, state: Arc<RuntimeState>) -> Result<(
                         None => RequestRegistration::Duplicate,
                     }
                 }
+                Some(v1::client_frame::Payload::CorpusThemes(request))
+                    if session_matches(&connection, request.session.as_ref())
+                        && !connection.disconnected.is_cancelled()
+                        && !request.request_id.is_empty() =>
+                {
+                    match register_cancellation(&connection, &request.request_id) {
+                        Some(cancellation) => RequestRegistration::Registered(cancellation),
+                        None => RequestRegistration::Duplicate,
+                    }
+                }
                 _ => RequestRegistration::Unregistered,
             };
             let handshake = matches!(
@@ -3580,6 +3674,9 @@ async fn handle_frame(
             ];
             if state.knowledge_backend.is_some() {
                 capabilities.push(v1::Capability::KnowledgeSearch);
+            }
+            if state.corpus_theme_backend.is_some() {
+                capabilities.push(v1::Capability::CorpusThemes);
             }
             match Negotiator::new(state.config.versions, capabilities, state.config.limits)
                 .negotiate(&request)
@@ -4734,6 +4831,133 @@ async fn handle_frame(
                         &writer,
                         correlation_id,
                         protocol_error(v1::ErrorCode::Internal, "knowledge retrieval failed"),
+                        state.config.limits,
+                    )
+                    .await;
+                    return;
+                }
+            }
+        }
+        Some(v1::client_frame::Payload::CorpusThemes(request)) => {
+            let registration_guard =
+                matches!(&request_registration, RequestRegistration::Registered(_)).then(|| {
+                    RequestRegistrationGuard {
+                        connection: Arc::clone(&connection),
+                        request_id: request.request_id.clone(),
+                    }
+                });
+            if !session_matches(&connection, request.session.as_ref()) {
+                send_error(
+                    &writer,
+                    correlation_id,
+                    protocol_error(v1::ErrorCode::Unauthenticated, "session rejected"),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            }
+            let Some(backend) = state.corpus_theme_backend.clone() else {
+                send_error(
+                    &writer,
+                    correlation_id,
+                    protocol_error(v1::ErrorCode::Unavailable, "corpus themes are unavailable"),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            };
+            let Ok(theme_request) = corpus_theme_ipc::decode_request(&request.payload) else {
+                send_error(
+                    &writer,
+                    correlation_id,
+                    protocol_error(
+                        v1::ErrorCode::InvalidRequest,
+                        "corpus theme request is malformed",
+                    ),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            };
+            let (cancellation, _registration_guard) = match request_registration {
+                RequestRegistration::Registered(cancellation) => (cancellation, registration_guard),
+                RequestRegistration::Duplicate | RequestRegistration::Unregistered => {
+                    send_error(
+                        &writer,
+                        correlation_id,
+                        protocol_error(
+                            v1::ErrorCode::InvalidRequest,
+                            "request identifier is missing or already active",
+                        ),
+                        state.config.limits,
+                    )
+                    .await;
+                    return;
+                }
+            };
+            if cancellation.is_cancelled() {
+                send_error(
+                    &writer,
+                    correlation_id,
+                    protocol_error(v1::ErrorCode::Cancelled, "corpus theme operation cancelled"),
+                    state.config.limits,
+                )
+                .await;
+                return;
+            }
+            let disconnected = connection.disconnected.clone();
+            let task_cancellation = cancellation.clone();
+            let executed = tokio::task::spawn_blocking(move || {
+                backend.handle(theme_request, &task_cancellation)
+            });
+            let result = tokio::select! {
+                result = executed => result,
+                () = disconnected.cancelled() => {
+                    cancellation.cancel();
+                    return;
+                }
+            };
+            let response = match result {
+                Ok(Ok(response)) => response,
+                Ok(Err(error)) => match corpus_theme_ipc::failure_of(error) {
+                    Ok(failure) => corpus_theme_ipc::ThemeResponse::Failure(failure),
+                    Err(_) => {
+                        send_error(
+                            &writer,
+                            correlation_id,
+                            protocol_error(
+                                v1::ErrorCode::Cancelled,
+                                "corpus theme operation cancelled",
+                            ),
+                            state.config.limits,
+                        )
+                        .await;
+                        return;
+                    }
+                },
+                Err(_) => {
+                    send_error(
+                        &writer,
+                        correlation_id,
+                        protocol_error(v1::ErrorCode::Internal, "corpus theme operation failed"),
+                        state.config.limits,
+                    )
+                    .await;
+                    return;
+                }
+            };
+            match corpus_theme_ipc::encode_response_bounded(
+                response,
+                knowledge_response_budget(state.config.limits),
+            ) {
+                Ok(payload) => {
+                    v1::server_frame::Payload::CorpusThemes(v1::CorpusThemesResponse { payload })
+                }
+                Err(error) => {
+                    send_error(
+                        &writer,
+                        correlation_id,
+                        protocol_error(v1::ErrorCode::LimitExceeded, error.to_string()),
                         state.config.limits,
                     )
                     .await;

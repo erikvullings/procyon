@@ -3384,6 +3384,45 @@ pub(crate) async fn get_document_summary(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Reports whether themes are available for a scope and its current index revision.
+#[tauri::command]
+pub(crate) async fn get_corpus_theme_status(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::GetCorpusThemeStatusRequestDto,
+) -> Result<fm_transport_dto::CorpusThemeStatusDto, ApplicationErrorDto> {
+    state
+        .service
+        .get_corpus_theme_status(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Lists the authorized sources contributing to one theme.
+#[tauri::command]
+pub(crate) async fn get_corpus_theme_sources(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::GetCorpusThemeSourcesRequestDto,
+) -> Result<fm_transport_dto::CorpusThemeSourcesDto, ApplicationErrorDto> {
+    state
+        .service
+        .get_corpus_theme_sources(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Discovers labelled themes across the authorized chunks of a scope.
+#[tauri::command]
+pub(crate) async fn analyze_corpus_themes(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::AnalyzeCorpusThemesRequestDto,
+) -> Result<fm_transport_dto::CorpusThemesResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .analyze_corpus_themes(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Previews authorized local evidence before grounded generation.
 #[tauri::command]
 pub(crate) async fn preview_rag(

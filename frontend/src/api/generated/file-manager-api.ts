@@ -8,6 +8,7 @@ import type {
   ActionDescriptorDto,
   ActionResultDto,
   ActivateLlmProfileRequestDto,
+  AnalyzeCorpusThemesRequestDto,
   ApplicationErrorDto,
   ApplySyncPlanRequestDto,
   ApplySyncPlanResponseDto,
@@ -32,6 +33,9 @@ import type {
   ConnectionDto,
   ConvertGeoTextRequestDto,
   ConvertGeoTextResponseDto,
+  CorpusThemeSourcesDto,
+  CorpusThemeStatusDto,
+  CorpusThemesResponseDto,
   CreateConnectionRequestDto,
   CreateSemanticIndexRemovalPlanRequestDto,
   CreateSemanticInstallationOfferRequestDto,
@@ -69,6 +73,8 @@ import type {
   GeoDocumentDto,
   GetChecksumsParams,
   GetComparisonParams,
+  GetCorpusThemeSourcesRequestDto,
+  GetCorpusThemeStatusRequestDto,
   GetDocumentSummaryRequestDto,
   GetDuplicateScanParams,
   GetFileGitHistoryRequestDto,
@@ -9646,6 +9652,198 @@ export const getSemanticLibraryStatus = async ( options?: Parameters<typeof fetc
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type analyzeCorpusThemesResponse200 = {
+  data: CorpusThemesResponseDto
+  status: 200
+}
+
+export type analyzeCorpusThemesResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type analyzeCorpusThemesResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type analyzeCorpusThemesResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type analyzeCorpusThemesResponseSuccess = (analyzeCorpusThemesResponse200) & {
+  headers: Headers;
+};
+export type analyzeCorpusThemesResponseError = (analyzeCorpusThemesResponse400 | analyzeCorpusThemesResponse403 | analyzeCorpusThemesResponse503) & {
+  headers: Headers;
+};
+
+export type analyzeCorpusThemesResponse = (analyzeCorpusThemesResponseSuccess | analyzeCorpusThemesResponseError)
+
+export const getAnalyzeCorpusThemesUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/themes/analyze`
+}
+
+export const analyzeCorpusThemes = async (analyzeCorpusThemesRequestDto: AnalyzeCorpusThemesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<analyzeCorpusThemesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<analyzeCorpusThemesResponse>(getAnalyzeCorpusThemesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(analyzeCorpusThemesRequestDto)
+  }
+);}
+
+
+
+export type getCorpusThemeSourcesResponse200 = {
+  data: CorpusThemeSourcesDto
+  status: 200
+}
+
+export type getCorpusThemeSourcesResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type getCorpusThemeSourcesResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type getCorpusThemeSourcesResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type getCorpusThemeSourcesResponseSuccess = (getCorpusThemeSourcesResponse200) & {
+  headers: Headers;
+};
+export type getCorpusThemeSourcesResponseError = (getCorpusThemeSourcesResponse400 | getCorpusThemeSourcesResponse403 | getCorpusThemeSourcesResponse503) & {
+  headers: Headers;
+};
+
+export type getCorpusThemeSourcesResponse = (getCorpusThemeSourcesResponseSuccess | getCorpusThemeSourcesResponseError)
+
+export const getGetCorpusThemeSourcesUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/themes/sources`
+}
+
+export const getCorpusThemeSources = async (getCorpusThemeSourcesRequestDto: GetCorpusThemeSourcesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<getCorpusThemeSourcesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<getCorpusThemeSourcesResponse>(getGetCorpusThemeSourcesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(getCorpusThemeSourcesRequestDto)
+  }
+);}
+
+
+
+export type getCorpusThemeStatusResponse200 = {
+  data: CorpusThemeStatusDto
+  status: 200
+}
+
+export type getCorpusThemeStatusResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type getCorpusThemeStatusResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type getCorpusThemeStatusResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type getCorpusThemeStatusResponseSuccess = (getCorpusThemeStatusResponse200) & {
+  headers: Headers;
+};
+export type getCorpusThemeStatusResponseError = (getCorpusThemeStatusResponse400 | getCorpusThemeStatusResponse403 | getCorpusThemeStatusResponse503) & {
+  headers: Headers;
+};
+
+export type getCorpusThemeStatusResponse = (getCorpusThemeStatusResponseSuccess | getCorpusThemeStatusResponseError)
+
+export const getGetCorpusThemeStatusUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/themes/status`
+}
+
+export const getCorpusThemeStatus = async (getCorpusThemeStatusRequestDto: GetCorpusThemeStatusRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<getCorpusThemeStatusResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<getCorpusThemeStatusResponse>(getGetCorpusThemeStatusUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(getCorpusThemeStatusRequestDto)
   }
 );}
 

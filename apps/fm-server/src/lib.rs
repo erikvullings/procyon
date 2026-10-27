@@ -352,6 +352,15 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::document_summary::get_document_summary
         ))
+        .routes(utoipa_axum::routes!(
+            routes::corpus_themes::get_corpus_theme_status
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::corpus_themes::analyze_corpus_themes
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::corpus_themes::get_corpus_theme_sources
+        ))
         .routes(utoipa_axum::routes!(routes::rag::preview_rag))
         .routes(utoipa_axum::routes!(routes::rag::generate_rag_answer))
         .routes(utoipa_axum::routes!(routes::rag::save_rag_conversation))

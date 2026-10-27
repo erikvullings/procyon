@@ -984,6 +984,7 @@ impl SemanticCatalog {
             [],
         )?;
         transaction.execute("DELETE FROM generations WHERE state = 'superseded'", [])?;
+        crate::corpus_theme_storage::discard_orphaned_centroids(&transaction)?;
         transaction.commit()?;
         Ok(ReclaimStats {
             records: rows.len(),
@@ -1528,10 +1529,22 @@ impl SemanticCatalog {
                 [cache_key],
             )?;
         }
+        let owners = {
+            let mut statement = transaction.prepare(
+                "SELECT DISTINCT tenant_id, library_id FROM occurrences
+                 WHERE occurrence_id = ?1",
+            )?;
+            statement
+                .query_map([occurrence_id], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<Result<Vec<_>, _>>()?
+        };
         transaction.execute(
             "DELETE FROM occurrences WHERE occurrence_id = ?1",
             [occurrence_id],
         )?;
+        crate::corpus_theme_storage::discard_derived_theme_state(&transaction, &owners)?;
         transaction.commit()?;
         Ok(DeletedOccurrence {
             record_ids: records
@@ -2117,7 +2130,7 @@ impl SemanticCatalog {
         Ok(())
     }
 
-    fn connection(&self) -> Result<Connection, StorageError> {
+    pub(crate) fn connection(&self) -> Result<Connection, StorageError> {
         let connection = Connection::open(&self.path)?;
         connection.busy_timeout(Duration::from_secs(5))?;
         connection.pragma_update(None, "foreign_keys", true)?;
@@ -2647,6 +2660,28 @@ fn initialize_schema(connection: &Connection) -> Result<(), StorageError> {
            PRIMARY KEY (tenant_id, library_id, document_id),
            FOREIGN KEY (record_id) REFERENCES records (record_id) ON DELETE CASCADE
          );
+         CREATE TABLE IF NOT EXISTS document_centroids (
+           tenant_id TEXT NOT NULL,
+           library_id TEXT NOT NULL,
+           document_id TEXT NOT NULL,
+           generation INTEGER NOT NULL,
+           content_hash TEXT NOT NULL,
+           model_tag TEXT NOT NULL,
+           normalization TEXT NOT NULL,
+           algorithm_version TEXT NOT NULL,
+           dimensions INTEGER NOT NULL,
+           chunk_count INTEGER NOT NULL,
+           vector BLOB NOT NULL,
+           PRIMARY KEY (tenant_id, library_id, document_id)
+         );
+         CREATE TABLE IF NOT EXISTS corpus_theme_runs (
+           tenant_id TEXT NOT NULL,
+           library_id TEXT NOT NULL,
+           scope_key TEXT NOT NULL,
+           fingerprint TEXT NOT NULL,
+           run_json TEXT NOT NULL,
+           PRIMARY KEY (tenant_id, library_id, scope_key)
+         );
          CREATE TABLE IF NOT EXISTS jobs (
            job_id TEXT PRIMARY KEY,
            tenant_id TEXT,
@@ -2986,7 +3021,7 @@ fn validate_staged_generation(staged: &StagedGeneration) -> Result<(), StorageEr
     Ok(())
 }
 
-fn validate_identifier(value: &str, field: &'static str) -> Result<(), StorageError> {
+pub(crate) fn validate_identifier(value: &str, field: &'static str) -> Result<(), StorageError> {
     if value.is_empty()
         || value.len() > 1_024
         || value
@@ -3002,7 +3037,7 @@ fn i64_generation(value: u64) -> Result<i64, StorageError> {
     i64::try_from(value).map_err(|_| StorageError::CorruptCatalog)
 }
 
-fn encode_vector(vector: &[f32]) -> Vec<u8> {
+pub(crate) fn encode_vector(vector: &[f32]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(std::mem::size_of_val(vector));
     for value in vector {
         bytes.extend_from_slice(&value.to_le_bytes());
@@ -3010,7 +3045,7 @@ fn encode_vector(vector: &[f32]) -> Vec<u8> {
     bytes
 }
 
-fn decode_vector(bytes: &[u8]) -> Result<Vec<f32>, StorageError> {
+pub(crate) fn decode_vector(bytes: &[u8]) -> Result<Vec<f32>, StorageError> {
     if !bytes.len().is_multiple_of(std::mem::size_of::<f32>()) {
         return Err(StorageError::CorruptCatalog);
     }

@@ -7,6 +7,7 @@ import type {
   AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
   ActionResult,
+  AnalyzeCorpusThemesRequest,
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
   ArchiveCredentialRequest,
@@ -38,6 +39,9 @@ import type {
   ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
+  CorpusThemeSources,
+  CorpusThemeStatus,
+  CorpusThemesResponse,
   CreateConnectionRequest,
   CreateSemanticIndexRemovalPlanRequest,
   CreateSemanticInstallationOfferRequest,
@@ -80,6 +84,8 @@ import type {
   GeoMinify,
   GeoMinifyPreview,
   GeoTargetFormat,
+  GetCorpusThemeSourcesRequest,
+  GetCorpusThemeStatusRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
@@ -252,6 +258,7 @@ import { bindLocalisedMessage } from '../error-localiser';
 import { EventStreamSignalRegistry, MutableEventStreamStatus } from '../events/event-stream';
 import { ApiError, desktopHostRequiredError } from '../fetch-mutator';
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
+import { mockCorpusThemeStatus, mockCorpusThemes } from './mock-corpus-themes';
 import {
   createGeneratedDirectory,
   GENERATED_DIRECTORY_SIZES,
@@ -459,6 +466,9 @@ export type MockClientMethod =
   | 'previewDocumentSummary'
   | 'generateDocumentSummary'
   | 'getDocumentSummary'
+  | 'getCorpusThemeStatus'
+  | 'analyzeCorpusThemes'
+  | 'getCorpusThemeSources'
   | 'previewRag'
   | 'generateRagAnswer'
   | 'saveRagConversation'
@@ -5271,6 +5281,44 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.perform('getDocumentSummary', signal, () => {
       const summary = this.documentSummaries.get(request.target.entryId);
       return summary === undefined ? null : structuredClone(summary);
+    });
+  }
+
+  getCorpusThemeStatus(
+    _request: GetCorpusThemeStatusRequest,
+    signal?: AbortSignal,
+  ): Promise<CorpusThemeStatus> {
+    return this.perform('getCorpusThemeStatus', signal, () => mockCorpusThemeStatus());
+  }
+
+  analyzeCorpusThemes(
+    _request: AnalyzeCorpusThemesRequest,
+    signal?: AbortSignal,
+  ): Promise<CorpusThemesResponse> {
+    return this.perform('analyzeCorpusThemes', signal, () => ({
+      outcome: 'ready',
+      modelId: 'mock-embedding-model',
+      themes: mockCorpusThemes(),
+    }));
+  }
+
+  getCorpusThemeSources(
+    request: GetCorpusThemeSourcesRequest,
+    signal?: AbortSignal,
+  ): Promise<CorpusThemeSources> {
+    return this.perform('getCorpusThemeSources', signal, () => {
+      const themes = mockCorpusThemes();
+      if (request.fingerprint !== themes.fingerprint) {
+        throw new MockClientError('invalidRequest', 'the corpus themes are out of date', {
+          reason: 'corpusThemesStale',
+        });
+      }
+      const sourceIds = themes.documentMixtures
+        .filter((mixture) =>
+          mixture.shares.some((share) => (share.theme ?? null) === (request.theme ?? null)),
+        )
+        .map((mixture) => mixture.sourceId);
+      return { sourceIds, truncated: false };
     });
   }
 

@@ -3679,6 +3679,15 @@ mod tests {
         );
     }
 
+    /// Page content whose text extracts as single-letter words, one line per
+    /// repetition so every line stays on the page.
+    fn damaged_pdf_page() -> String {
+        let lines: String = (0..8)
+            .map(|line| format!("(T A R G E T W e n e e d t o i n c r e a s e s {line}) Tj T*\n"))
+            .collect();
+        format!("BT /F1 12 Tf 72 720 Td 14 TL\n{lines}ET\n")
+    }
+
     #[test]
     fn pdf_quality_gate_rejects_character_spaced_extraction_without_hiding_ordinary_text() {
         let damaged = "T A R G E T W e n e e d t o i n c r e a s e s a l e s ".repeat(8);
@@ -3706,8 +3715,7 @@ mod tests {
             .expect("initial readable PDF");
         assert!(!fixture.index.records.lock().unwrap().is_empty());
 
-        let damaged = "T A R G E T W e n e e d t o i n c r e a s e s a l e s ".repeat(8);
-        document.bytes = positioned_pdf(&format!("BT /F1 12 Tf 72 720 Td ({damaged}) Tj ET\n"));
+        document.bytes = positioned_pdf(&damaged_pdf_page());
 
         let outcome = fixture
             .coordinator
@@ -3725,8 +3733,7 @@ mod tests {
         let fixture = Fixture::new(healthy_resources());
         let mut document = fixture.document("");
         document.media_type = "application/pdf".into();
-        let damaged = "T A R G E T W e n e e d t o i n c r e a s e s a l e s ".repeat(8);
-        let damaged_page = format!("BT /F1 12 Tf 72 720 Td ({damaged}) Tj ET\n");
+        let damaged_page = damaged_pdf_page();
         let readable_page =
             "BT /F1 12 Tf 72 720 Td (Inventive patterns solve technical contradictions.) Tj ET\n";
         document.bytes = positioned_pdf_pages(&[&damaged_page, readable_page]);

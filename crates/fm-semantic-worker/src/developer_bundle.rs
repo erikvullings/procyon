@@ -116,7 +116,7 @@ pub const DEVELOPMENT_MAX_INPUT_TOKENS: usize = 8_192;
 /// Fixed maximum UTF-8 byte length accepted per input.
 pub const DEVELOPMENT_MAX_INPUT_BYTES: usize = 256 * 1024;
 
-const DEVELOPMENT_MODEL_ID: &str = "procyon.dev.hashing-embedding";
+const DEVELOPMENT_MODEL_ID: &str = crate::corpus_themes::TOKEN_HASHING_MODEL_ID;
 const DEVELOPMENT_MODEL_REVISION: &str = "sha256-token-hashing-v1";
 const DEVELOPMENT_TOKENIZER: &str = "unicode-words-v1";
 const MAX_TOKEN_BYTES: usize = 64;
@@ -856,6 +856,7 @@ struct DeveloperWorker {
     gemma_code: Option<Arc<dyn EmbeddingProvider>>,
     index: Arc<ZvecStorage>,
     manifest: LibraryIndexManifest,
+    identity: EmbeddingModelIdentity,
     data_directory: PathBuf,
     description: String,
     ocr: OcrConfigSource,
@@ -1055,6 +1056,7 @@ impl DeveloperWorker {
             gemma_code,
             index: Arc::new(index),
             manifest,
+            identity: model.identity,
             data_directory: data_directory.to_owned(),
             description: model.description,
             ocr,
@@ -1172,8 +1174,13 @@ impl DeveloperWorker {
 
     fn into_server(self, config: WorkerConfig) -> WorkerServer {
         let knowledge = self.knowledge_backend();
+        let themes: Arc<dyn crate::corpus_theme_ipc::WorkerCorpusThemeBackend> =
+            Arc::new(crate::corpus_themes::CorpusThemeService::new(
+                self.catalog.clone(),
+                self.identity.clone(),
+            ));
         let (ingestion, query) = self.backends();
-        WorkerServer::with_all_backends(config, ingestion, query, knowledge)
+        WorkerServer::with_all_backends_and_themes(config, ingestion, query, knowledge, themes)
     }
 }
 

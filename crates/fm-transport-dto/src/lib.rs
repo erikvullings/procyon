@@ -11,6 +11,7 @@ pub mod attributes;
 pub mod checksum;
 pub mod comparison;
 pub mod connection;
+pub mod corpus_themes;
 pub mod diagnostics;
 pub mod disk_usage;
 pub mod document_summary;
@@ -86,6 +87,12 @@ pub use connection::{
     S3ConnectionConfigurationDto, SmbConnectionConfigurationDto, SshAuthenticationMethodDto,
     SshConnectionConfigurationDto, UpdateConnectionRequestDto, WebDavAuthenticationSchemeDto,
     WebDavConnectionConfigurationDto,
+};
+pub use corpus_themes::{
+    AnalyzeCorpusThemesRequestDto, CorpusThemeDto, CorpusThemeOutcomeDto, CorpusThemeSourcesDto,
+    CorpusThemeStatusDto, CorpusThemesDto, CorpusThemesResponseDto, DocumentThemeMixtureDto,
+    GetCorpusThemeSourcesRequestDto, GetCorpusThemeStatusRequestDto, NoThemeDto, ThemeConceptDto,
+    ThemeKeywordDto, ThemeMapPointDto, ThemePassageDto, ThemeShareDto,
 };
 pub use diagnostics::{
     ConnectionStateDto, DiagnosticErrorDto, DiagnosticsDto, OperationQueueStatusDto,

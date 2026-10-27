@@ -88,6 +88,7 @@ function fakeContext(
     toggleSyncBrowsing: () => {},
     openSemanticAssistant: () => {},
     openKnowledgeSearch: () => {},
+    openThemes: () => {},
     uninstallApplication: () => {},
     toggleDirectoryTree: () => {},
     toggleOperationCentre: () => {},
@@ -261,6 +262,29 @@ describe('action-command-controller uninstallApplication wiring', () => {
     createActionCommandController(context).invokePaletteAction(searchKnowledge, undefined, {});
 
     expect(openKnowledgeSearch).toHaveBeenCalledOnce();
+    expect(getClient).not.toHaveBeenCalled();
+  });
+
+  it('dispatches client.exploreThemes to the themes dialog without the backend invoke (task 0284)', () => {
+    const openThemes = vi.fn();
+    const getClient = vi.fn();
+    const exploreThemes = {
+      id: 'client.exploreThemes',
+      title: 'Explore themes',
+      category: 'tools',
+      defaultShortcuts: [],
+      contextRequirements: {},
+      source: { kind: 'core' as const },
+    };
+    const context = fakeContext({
+      getRegisteredActions: () => [exploreThemes],
+      openThemes,
+      getClient,
+    });
+
+    createActionCommandController(context).invokePaletteAction(exploreThemes, undefined, {});
+
+    expect(openThemes).toHaveBeenCalledOnce();
     expect(getClient).not.toHaveBeenCalled();
   });
 

@@ -2,6 +2,7 @@ import type {
   AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
   ActionResult,
+  AnalyzeCorpusThemesRequest,
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
   AppUpdateCheck,
@@ -31,6 +32,9 @@ import type {
   ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
+  CorpusThemeSources,
+  CorpusThemeStatus,
+  CorpusThemesResponse,
   CreateConnectionRequest,
   CreateSemanticIndexRemovalPlanRequest,
   CreateSemanticInstallationOfferRequest,
@@ -73,6 +77,8 @@ import type {
   GeoMinify,
   GeoMinifyPreview,
   GeoTargetFormat,
+  GetCorpusThemeSourcesRequest,
+  GetCorpusThemeStatusRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
@@ -1021,6 +1027,21 @@ export interface FileManagerClient {
     request: GetDocumentSummaryRequest,
     signal?: AbortSignal,
   ): Promise<DocumentSummary | null>;
+  /** Reports whether themes are meaningful for a scope and its current index revision. */
+  getCorpusThemeStatus(
+    request: GetCorpusThemeStatusRequest,
+    signal?: AbortSignal,
+  ): Promise<CorpusThemeStatus>;
+  /** Discovers labelled themes across the authorized chunks of a scope. */
+  analyzeCorpusThemes(
+    request: AnalyzeCorpusThemesRequest,
+    signal?: AbortSignal,
+  ): Promise<CorpusThemesResponse>;
+  /** Lists the authorized sources contributing to one theme, to scope a follow-up search. */
+  getCorpusThemeSources(
+    request: GetCorpusThemeSourcesRequest,
+    signal?: AbortSignal,
+  ): Promise<CorpusThemeSources>;
   previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview>;
   generateRagAnswer(
     request: GenerateRagAnswerRequest,

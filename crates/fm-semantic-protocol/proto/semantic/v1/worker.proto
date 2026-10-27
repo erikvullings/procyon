@@ -387,6 +387,8 @@ enum Capability {
   CAPABILITY_GRACEFUL_SHUTDOWN = 5;
   // Bounded hybrid knowledge retrieval is available.
   CAPABILITY_KNOWLEDGE_SEARCH = 6;
+  // Corpus themes over indexed chunk embeddings are available.
+  CAPABILITY_CORPUS_THEMES = 7;
 }
 
 // One planned knowledge source query and why it exists.
@@ -627,7 +629,24 @@ message ClientFrame {
     ShutdownRequest shutdown = 10;
     KnowledgeSearchRequest knowledge_search = 11;
     KnowledgeCapabilitiesRequest knowledge_capabilities = 12;
+    CorpusThemesRequest corpus_themes = 13;
   }
+}
+
+// One corpus-theme operation (status, analysis, or theme sources).
+message CorpusThemesRequest {
+  // Session authenticating the request.
+  SessionContext session = 1;
+  // Host-chosen opaque identifier used to cancel the operation.
+  string request_id = 2;
+  // Versioned JSON-encoded operation; vectors never travel on this channel.
+  bytes payload = 3;
+}
+
+// Typed result of a corpus-theme operation.
+message CorpusThemesResponse {
+  // Versioned JSON-encoded result or typed failure.
+  bytes payload = 1;
 }
 
 // Marks the successful end of a multiplexed RPC stream.
@@ -652,6 +671,7 @@ message ServerFrame {
     StreamEnd stream_end = 12;
     KnowledgeSearchResponse knowledge_result = 13;
     KnowledgeCapabilities knowledge_capabilities = 14;
+    CorpusThemesResponse corpus_themes = 15;
   }
 }
 
@@ -679,4 +699,6 @@ service SemanticWorker {
   rpc KnowledgeSearch(KnowledgeSearchRequest) returns (KnowledgeSearchResponse);
   // Reports full-text and query-embedding availability independently.
   rpc GetKnowledgeCapabilities(KnowledgeCapabilitiesRequest) returns (KnowledgeCapabilities);
+  // Computes or reads corpus themes over indexed chunk embeddings.
+  rpc CorpusThemes(CorpusThemesRequest) returns (CorpusThemesResponse);
 }

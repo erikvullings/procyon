@@ -237,6 +237,7 @@ pub struct FileManagerService {
     docx_preview: DocxPreviewService,
     document_conversion: DocumentConversionService,
     document_summaries: DocumentSummaryCoordinator,
+    corpus_themes: crate::corpus_themes::CorpusThemeCoordinator,
     knowledge: KnowledgeService,
     knowledge_release: KnowledgeReleaseAccess,
     rag: RagCoordinator,
@@ -698,6 +699,9 @@ impl FileManagerService {
             document_conversion: DocumentConversionService::new(providers.clone()),
             document_summaries: DocumentSummaryCoordinator::new(Arc::new(
                 UnavailableDocumentSummaryCapability,
+            )),
+            corpus_themes: crate::corpus_themes::CorpusThemeCoordinator::new(Arc::new(
+                crate::corpus_themes::UnavailableCorpusThemeCapability,
             )),
             rag: RagCoordinator::new(Arc::new(UnavailableRagRetrievalCapability)),
             knowledge: KnowledgeService::new(Arc::new(UnavailableKnowledgeRetrievalCapability)),
@@ -1777,6 +1781,9 @@ impl FileManagerService {
             ),
             self.knowledge_release,
         );
+        self.corpus_themes = crate::corpus_themes::CorpusThemeCoordinator::new(Arc::new(
+            crate::corpus_themes::SemanticCorpusThemeCapability::new(semantic.clone()),
+        ));
         self.semantic = semantic;
         self
     }
@@ -1962,6 +1969,16 @@ impl FileManagerService {
         self
     }
 
+    /// Replaces the unavailable default with a worker-backed corpus theme capability.
+    #[must_use]
+    pub fn with_corpus_theme_capability(
+        mut self,
+        capability: Arc<dyn crate::corpus_themes::CorpusThemeCapability>,
+    ) -> Self {
+        self.corpus_themes = crate::corpus_themes::CorpusThemeCoordinator::new(capability);
+        self
+    }
+
     /// Replaces the unavailable default with a worker-backed Ask retriever.
     #[must_use]
     pub fn with_rag_retrieval_capability(
@@ -1993,6 +2010,90 @@ impl FileManagerService {
         self.knowledge_release = access;
         self.knowledge.set_release_access(access);
         self
+    }
+
+    /// Reports whether themes are meaningful for a scope and its current index revision.
+    pub async fn get_corpus_theme_status(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::GetCorpusThemeStatusRequestDto,
+    ) -> Result<fm_transport_dto::CorpusThemeStatusDto, ApplicationError> {
+        let (scope, _titles) = self
+            .resolve_corpus_theme_scope(access, &request.scope)
+            .await?;
+        self.corpus_themes.status(scope).await
+    }
+
+    /// Lists the authorized sources contributing to one theme, for a theme-filtered search.
+    pub async fn get_corpus_theme_sources(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::GetCorpusThemeSourcesRequestDto,
+    ) -> Result<fm_transport_dto::CorpusThemeSourcesDto, ApplicationError> {
+        let (scope, _titles) = self
+            .resolve_corpus_theme_scope(access, &request.scope)
+            .await?;
+        self.corpus_themes
+            .sources(
+                scope,
+                request.theme,
+                request.fingerprint,
+                &tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+    }
+
+    /// Discovers labelled themes across the authorized chunks of a scope.
+    pub async fn analyze_corpus_themes(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::AnalyzeCorpusThemesRequestDto,
+    ) -> Result<fm_transport_dto::CorpusThemesResponseDto, ApplicationError> {
+        let (scope, titles) = self
+            .resolve_corpus_theme_scope(access, &request.scope)
+            .await?;
+        self.corpus_themes
+            .analyze(
+                scope,
+                request.max_themes,
+                &titles,
+                &tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+    }
+
+    /// Re-authorizes a visible scope into the exact sources the worker may read.
+    ///
+    /// An empty authorized set stays empty: it never widens to the whole library.
+    async fn resolve_corpus_theme_scope(
+        &self,
+        access: &SemanticAccessContext,
+        scope: &RagScopeDto,
+    ) -> Result<
+        (
+            fm_semantic_worker::corpus_theme_storage::CorpusScope,
+            HashMap<String, String>,
+        ),
+        ApplicationError,
+    > {
+        let selection = rag_scope_selection(scope)?;
+        let workspace_id = self.semantic_workspace_uuid(scope.workspace_id).await;
+        let resolved = self
+            .semantic_library()
+            .await
+            .resolve_knowledge_scope(access, workspace_id.into(), &selection)
+            .map_err(crate::knowledge_service::library_error)?;
+        Ok((
+            fm_semantic_worker::corpus_theme_storage::CorpusScope {
+                tenant_id: resolved.filters.tenant_id,
+                library_id: resolved
+                    .filters
+                    .library_id
+                    .ok_or(ApplicationError::ProviderUnavailable)?,
+                source_ids: resolved.allowed_source_ids.into_iter().collect(),
+            },
+            resolved.titles,
+        ))
     }
 
     /// Prepares bounded key passages and the disclosure required before generation.
@@ -2621,71 +2722,7 @@ impl FileManagerService {
         scope: &RagScopeDto,
         retrieval_strategy: crate::rag::RagRetrievalStrategy,
     ) -> Result<AuthorizedRagRequest, ApplicationError> {
-        let selection = match scope.kind {
-            RagScopeKindDto::EntireLibrary => RagScopeSelection::EntireLibrary,
-            RagScopeKindDto::SelectedFiles => {
-                if scope.selected_files.is_empty()
-                    || scope
-                        .selected_files
-                        .iter()
-                        .any(|target| target.workspace_id != scope.workspace_id)
-                {
-                    return Err(ApplicationError::from(Rejection::new(
-                        reason::SCOPE_INVALID,
-                        "selected-file Ask scope is invalid",
-                    )));
-                }
-                RagScopeSelection::SelectedFiles(
-                    scope
-                        .selected_files
-                        .iter()
-                        .map(|target| (target.entry_id.into(), target.location.clone().into()))
-                        .collect(),
-                )
-            }
-            RagScopeKindDto::CurrentFolder => RagScopeSelection::CurrentFolder(
-                scope
-                    .folder
-                    .clone()
-                    .ok_or_else(|| {
-                        ApplicationError::from(Rejection::new(
-                            reason::SCOPE_FOLDER_REQUIRED,
-                            "current-folder Ask scope requires a folder",
-                        ))
-                    })?
-                    .into(),
-            ),
-            RagScopeKindDto::SemanticResults => {
-                if scope.semantic_source_ids.is_empty() {
-                    return Err(ApplicationError::from(Rejection::new(
-                        reason::SCOPE_EMPTY,
-                        "semantic-result Ask scope is empty",
-                    )));
-                }
-                RagScopeSelection::SemanticResults(scope.semantic_source_ids.clone())
-            }
-            RagScopeKindDto::EnrolledRoots => {
-                if scope.enrolled_root_ids.is_empty() {
-                    return Err(ApplicationError::from(Rejection::new(
-                        reason::SCOPE_EMPTY,
-                        "enrolled-root Ask scope is empty",
-                    )));
-                }
-                RagScopeSelection::EnrolledRoots(
-                    scope
-                        .enrolled_root_ids
-                        .iter()
-                        .map(|value| crate::semantic_library::parse_semantic_root_id(value))
-                        .collect::<Result<Vec<_>, _>>()
-                        .map_err(|_| {
-                            ApplicationError::from(Rejection::new(
-                                reason::SCOPE_ROOT_INVALID,
-                                "invalid root id",
-                            ))
-                        })?,
-                )
-            }
-        };
+        let selection = rag_scope_selection(scope)?;
         let workspace_id = self.semantic_workspace_uuid(scope.workspace_id).await;
         let resolved = self
             .semantic_library()
@@ -4653,6 +4690,77 @@ impl From<WorkspaceSummary> for WorkspaceSummaryDto {
             ephemeral: summary.ephemeral,
         }
     }
+}
+
+/// Maps a visible semantic scope to the host-side selection that is authorized.
+pub(crate) fn rag_scope_selection(
+    scope: &RagScopeDto,
+) -> Result<RagScopeSelection, ApplicationError> {
+    Ok(match scope.kind {
+        RagScopeKindDto::EntireLibrary => RagScopeSelection::EntireLibrary,
+        RagScopeKindDto::SelectedFiles => {
+            if scope.selected_files.is_empty()
+                || scope
+                    .selected_files
+                    .iter()
+                    .any(|target| target.workspace_id != scope.workspace_id)
+            {
+                return Err(ApplicationError::from(Rejection::new(
+                    reason::SCOPE_INVALID,
+                    "selected-file Ask scope is invalid",
+                )));
+            }
+            RagScopeSelection::SelectedFiles(
+                scope
+                    .selected_files
+                    .iter()
+                    .map(|target| (target.entry_id.into(), target.location.clone().into()))
+                    .collect(),
+            )
+        }
+        RagScopeKindDto::CurrentFolder => RagScopeSelection::CurrentFolder(
+            scope
+                .folder
+                .clone()
+                .ok_or_else(|| {
+                    ApplicationError::from(Rejection::new(
+                        reason::SCOPE_FOLDER_REQUIRED,
+                        "current-folder Ask scope requires a folder",
+                    ))
+                })?
+                .into(),
+        ),
+        RagScopeKindDto::SemanticResults => {
+            if scope.semantic_source_ids.is_empty() {
+                return Err(ApplicationError::from(Rejection::new(
+                    reason::SCOPE_EMPTY,
+                    "semantic-result Ask scope is empty",
+                )));
+            }
+            RagScopeSelection::SemanticResults(scope.semantic_source_ids.clone())
+        }
+        RagScopeKindDto::EnrolledRoots => {
+            if scope.enrolled_root_ids.is_empty() {
+                return Err(ApplicationError::from(Rejection::new(
+                    reason::SCOPE_EMPTY,
+                    "enrolled-root Ask scope is empty",
+                )));
+            }
+            RagScopeSelection::EnrolledRoots(
+                scope
+                    .enrolled_root_ids
+                    .iter()
+                    .map(|value| crate::semantic_library::parse_semantic_root_id(value))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|_| {
+                        ApplicationError::from(Rejection::new(
+                            reason::SCOPE_ROOT_INVALID,
+                            "invalid root id",
+                        ))
+                    })?,
+            )
+        }
+    })
 }
 
 #[cfg(test)]

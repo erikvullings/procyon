@@ -179,6 +179,33 @@ export { formatShortcut };
 
 const MaterializedCommandPalette = MaterializedCommandPaletteFactory<string>();
 
+const PALETTE_SELECTOR = '.fm-command-palette';
+const SELECTED_OPTION_SELECTOR = `${PALETTE_SELECTOR} [role="option"][aria-selected="true"]`;
+
+/** Keeps the keyboard-highlighted option visible: the library moves the highlight, not the scroll. */
+function scrollSelectedIntoView(): void {
+  document.querySelector(SELECTED_OPTION_SELECTOR)?.scrollIntoView?.({ block: 'nearest' });
+}
+
+/**
+ * The library moves the highlight to whichever option the pointer is over on every `mousemove`.
+ * Browsers also fire a synthetic `mousemove` when the list scrolls or re-renders under a resting
+ * pointer, which snapped the highlight back after each arrow key. Only real pointer movement may
+ * reach the options.
+ */
+function createRealPointerMoveFilter(): (event: MouseEvent) => void {
+  let lastX = Number.NaN;
+  let lastY = Number.NaN;
+  return (event) => {
+    const inPalette = event.target instanceof Element && event.target.closest(PALETTE_SELECTOR);
+    if (!inPalette) return;
+    const moved = event.screenX !== lastX || event.screenY !== lastY;
+    lastX = event.screenX;
+    lastY = event.screenY;
+    if (!moved) event.stopPropagation();
+  };
+}
+
 /** Adapts Procyon's action registry to mithril-materialized's accessible command palette. */
 export const CommandPalette: FactoryComponent<CommandPaletteAttrs> = () => {
   let parameterAction: ActionDescriptor | undefined;
@@ -218,7 +245,12 @@ export const CommandPalette: FactoryComponent<CommandPaletteAttrs> = () => {
     close(attrs);
   };
 
+  const pointerFilter = createRealPointerMoveFilter();
+
   return {
+    oncreate: () => document.addEventListener('mousemove', pointerFilter, true),
+    onupdate: scrollSelectedIntoView,
+    onremove: () => document.removeEventListener('mousemove', pointerFilter, true),
     view: ({ attrs }) => {
       if (attrs.open && previousFocus === undefined) {
         previousFocus = document.activeElement as HTMLElement;

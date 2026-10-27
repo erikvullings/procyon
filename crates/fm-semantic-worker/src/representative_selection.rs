@@ -6,6 +6,8 @@ use std::fmt::Write;
 use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
+use crate::kmeans::{self, squared_distance};
+
 const ALGORITHM_VERSION: &str = "representative-kmeans/1";
 const DEFAULT_MIN_CLUSTERS: usize = 2;
 const DEFAULT_MAX_CLUSTERS: usize = 12;
@@ -212,20 +214,21 @@ pub fn select_representative_chunks(
         .clamp(config.minimum_clusters, config.maximum_clusters)
         .min(eligible.len());
     let seed = deterministic_seed(&fingerprint, eligible.len());
-    let mut centroids = initialize_centroids(&eligible, cluster_count, seed);
-    let mut assignments = vec![usize::MAX; eligible.len()];
-    for _ in 0..config.maximum_iterations {
-        if cancellation.is_cancelled() {
-            return Err(RepresentativeSelectionError::Cancelled);
-        }
-        let next = assign_chunks(&eligible, &centroids);
-        let converged = next == assignments;
-        assignments = next;
-        if converged {
-            break;
-        }
-        recompute_centroids(&eligible, &assignments, &mut centroids);
-    }
+    let points = eligible
+        .iter()
+        .map(|chunk| chunk.embedding.as_slice())
+        .collect::<Vec<_>>();
+    let kmeans::KMeans {
+        centroids,
+        assignments,
+    } = kmeans::run(
+        &points,
+        cluster_count,
+        seed,
+        config.maximum_iterations,
+        cancellation,
+    )
+    .map_err(|kmeans::Cancelled| RepresentativeSelectionError::Cancelled)?;
 
     let populations = (0..cluster_count)
         .map(|cluster| {
@@ -386,86 +389,6 @@ fn deterministic_seed(fingerprint: &str, count: usize) -> usize {
     }) % count
 }
 
-fn initialize_centroids(chunks: &[SummarySourceChunk], count: usize, seed: usize) -> Vec<Vec<f32>> {
-    let mut selected = vec![seed];
-    while selected.len() < count {
-        let candidate = (0..chunks.len())
-            .filter(|index| !selected.contains(index))
-            .max_by(|left, right| {
-                let left_distance = selected
-                    .iter()
-                    .map(|selected| {
-                        squared_distance(&chunks[*left].embedding, &chunks[*selected].embedding)
-                    })
-                    .min_by(f32::total_cmp)
-                    .unwrap_or_default();
-                let right_distance = selected
-                    .iter()
-                    .map(|selected| {
-                        squared_distance(&chunks[*right].embedding, &chunks[*selected].embedding)
-                    })
-                    .min_by(f32::total_cmp)
-                    .unwrap_or_default();
-                left_distance
-                    .total_cmp(&right_distance)
-                    .then_with(|| {
-                        chunks[*right]
-                            .source_position
-                            .cmp(&chunks[*left].source_position)
-                    })
-                    .then_with(|| chunks[*right].chunk_id.cmp(&chunks[*left].chunk_id))
-            })
-            .expect("cluster count never exceeds source count");
-        selected.push(candidate);
-    }
-    selected
-        .into_iter()
-        .map(|index| chunks[index].embedding.clone())
-        .collect()
-}
-
-fn assign_chunks(chunks: &[SummarySourceChunk], centroids: &[Vec<f32>]) -> Vec<usize> {
-    chunks
-        .iter()
-        .map(|chunk| {
-            centroids
-                .iter()
-                .enumerate()
-                .min_by(|(left_index, left), (right_index, right)| {
-                    squared_distance(&chunk.embedding, left)
-                        .total_cmp(&squared_distance(&chunk.embedding, right))
-                        .then_with(|| left_index.cmp(right_index))
-                })
-                .map(|(index, _)| index)
-                .expect("selection always has at least one centroid")
-        })
-        .collect()
-}
-
-fn recompute_centroids(
-    chunks: &[SummarySourceChunk],
-    assignments: &[usize],
-    centroids: &mut [Vec<f32>],
-) {
-    for (cluster, centroid) in centroids.iter_mut().enumerate() {
-        let members = assignments
-            .iter()
-            .enumerate()
-            .filter_map(|(index, assignment)| (*assignment == cluster).then_some(index))
-            .collect::<Vec<_>>();
-        if members.is_empty() {
-            continue;
-        }
-        for (dimension, value) in centroid.iter_mut().enumerate() {
-            *value = members
-                .iter()
-                .map(|index| chunks[*index].embedding[dimension])
-                .sum::<f32>()
-                / members.len() as f32;
-        }
-    }
-}
-
 fn structural_anchor_indices(chunks: &[SummarySourceChunk]) -> BTreeSet<usize> {
     let mut anchors = BTreeSet::new();
     if let Some(index) = chunks
@@ -505,16 +428,6 @@ fn representative(
         centroid_distance: squared_distance(&chunks[index].embedding, &centroids[cluster]),
         structural_anchor,
     }
-}
-
-fn squared_distance(left: &[f32], right: &[f32]) -> f32 {
-    left.iter()
-        .zip(right)
-        .map(|(left, right)| {
-            let difference = left - right;
-            difference * difference
-        })
-        .sum()
 }
 
 #[cfg(test)]

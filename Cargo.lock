@@ -2206,7 +2206,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading",
+ "libloading 0.7.4",
 ]
 
 [[package]]
@@ -2234,19 +2234,23 @@ dependencies = [
 
 [[package]]
 name = "docling-core"
-version = "1.36.0"
+version = "2.52.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "190122d1b99fc40a1b64595d3275a9fc26075143dbc9f57fd89c236bf2e292d9"
+checksum = "37b4d9e53ea11451e662267ea1665cc3e299f111dcffc935dbb16a9ceafd29d9"
 dependencies = [
+ "libc",
+ "png 0.18.1",
+ "regex",
+ "serde",
  "serde_json",
  "sha2 0.10.9",
 ]
 
 [[package]]
 name = "docling-onnx"
-version = "1.36.0"
+version = "2.52.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33e784a999dcc8e4c697f10831105944e4f9f6321ccf1a1b0c01f17b00aa7193"
+checksum = "42e6ff42ae61bb56fc93f2098167112a12029c2985c7ef20ac4cf50968083a92"
 dependencies = [
  "docling-core",
  "ort",
@@ -2254,22 +2258,26 @@ dependencies = [
 
 [[package]]
 name = "docling-pdf"
-version = "1.36.0"
+version = "2.52.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c0b863e5a9356be7aa085bf2d75e5b36ffea9e0a19ee5824a29ba05ef4ce133"
+checksum = "0bc469da82b520648aa1732325112b946de874f443da51086f371c474c99b47e"
 dependencies = [
  "docling-core",
  "docling-onnx",
  "fast_image_resize",
  "flate2",
+ "hayro-jbig2",
+ "hayro-jpeg2000 0.4.1",
  "image",
- "lopdf",
+ "libloading 0.8.9",
+ "lopdf 0.45.0",
  "ort",
- "pdfium-render",
  "regex",
  "tar",
- "time",
+ "tiny-skia",
  "tokenizers 0.20.4",
+ "ttf-parser",
+ "weezl 0.2.1",
 ]
 
 [[package]]
@@ -2727,6 +2735,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
 
 [[package]]
+name = "fearless_simd"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "629c9d6b6f30b5604089e0980f4d924a013aacb1654a6cdf5d3d852224f68651"
+
+[[package]]
 name = "ferrodoc"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2911,7 +2925,7 @@ dependencies = [
  "futures",
  "git2",
  "image",
- "lopdf",
+ "lopdf 0.44.0",
  "mp4",
  "openh264",
  "parallel-disk-usage",
@@ -3182,7 +3196,7 @@ dependencies = [
  "kamadak-exif",
  "little_exif",
  "lofty",
- "lopdf",
+ "lopdf 0.44.0",
  "mp4",
  "openh264",
  "quick-xml 0.41.0",
@@ -3338,7 +3352,7 @@ dependencies = [
  "calamine",
  "encoding_rs",
  "image",
- "lopdf",
+ "lopdf 0.44.0",
  "pulldown-cmark",
  "quick-xml 0.41.0",
  "serde",
@@ -3356,7 +3370,7 @@ dependencies = [
  "docling-core",
  "docling-pdf",
  "fm-semantic-conversion",
- "lopdf",
+ "lopdf 0.44.0",
  "rustix",
  "tempfile",
 ]
@@ -3403,7 +3417,7 @@ dependencies = [
  "image",
  "interprocess",
  "lattice-inference",
- "lopdf",
+ "lopdf 0.44.0",
  "ort",
  "pdfium-render",
  "prost",
@@ -4459,17 +4473,17 @@ dependencies = [
 
 [[package]]
 name = "hayro-ccitt"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f4d0e94ddd48749f06bbe4e5389fb9799a0c45bcaf00495042076ef05e3241a"
+checksum = "2866f0d976e76497480b853d5e258dab6e4b89ecfe991124e08f15dfa8fd03ad"
 
 [[package]]
 name = "hayro-jbig2"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69374b3668dd45aeb3d3145cda68f2c7b4f223aaa2511e67d076f1c7d741388d"
+checksum = "000e025850f4592ddcaee85640db70704151f2bafd43b6f431aa5b6a2c6a35a9"
 dependencies = [
- "fearless_simd",
+ "fearless_simd 1.2.0",
  "hayro-ccitt",
 ]
 
@@ -4479,7 +4493,16 @@ version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c75ab947623ef4ccaa7acf0579edf7cbb5a73838e3839a7be73335e522f433a1"
 dependencies = [
- "fearless_simd",
+ "fearless_simd 0.4.1",
+]
+
+[[package]]
+name = "hayro-jpeg2000"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "122c5f834c37a2260b9c851bb8be685cf539b2a8b94b704a931ef7d2525d5835"
+dependencies = [
+ "fearless_simd 1.2.0",
 ]
 
 [[package]]
@@ -4490,7 +4513,7 @@ checksum = "0edeafd70aa2db743de8ede8637d07ec87db05efe69cde371d03f1b185fcef27"
 dependencies = [
  "flate2",
  "hayro-jbig2",
- "hayro-jpeg2000",
+ "hayro-jpeg2000 0.3.5",
  "memchr",
  "rustc-hash",
  "smallvec",
@@ -5790,7 +5813,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e9ec52138abedcc58dc17a7c6c0c00a2bdb4f3427c7f63fa97fd0d859155caf"
 dependencies = [
  "gtk-sys",
- "libloading",
+ "libloading 0.7.4",
  "once_cell",
 ]
 
@@ -5845,6 +5868,16 @@ checksum = "b67380fd3b2fbe7527a606e18729d21c6f3951633d0500574c4dc22d2d638b9f"
 dependencies = [
  "cfg-if",
  "winapi",
+]
+
+[[package]]
+name = "libloading"
+version = "0.8.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55"
+dependencies = [
+ "cfg-if",
+ "windows-link 0.2.1",
 ]
 
 [[package]]
@@ -6000,6 +6033,35 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.20",
  "time",
+ "weezl 0.2.1",
+]
+
+[[package]]
+name = "lopdf"
+version = "0.45.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bfffda0fe1ab0157e1a13c14bebd3f28671f2fccb7922f0722ec53926e6922d3"
+dependencies = [
+ "aes",
+ "bitflags 2.13.1",
+ "brotli-decompressor",
+ "cbc",
+ "chrono",
+ "ecb",
+ "encoding_rs",
+ "flate2",
+ "getrandom 0.4.3",
+ "indexmap 2.14.0",
+ "itoa",
+ "log",
+ "md-5",
+ "nom 8.0.0",
+ "rand 0.10.2",
+ "rangemap",
+ "rayon",
+ "sha2 0.11.0",
+ "stringprep",
+ "thiserror 2.0.20",
  "weezl 0.2.1",
 ]
 
@@ -7157,7 +7219,7 @@ dependencies = [
  "krilla",
  "krilla-svg",
  "kurbo",
- "lopdf",
+ "lopdf 0.44.0",
  "ooxmlsdk",
  "ooxmlsdk-fonts",
  "ooxmlsdk-formula",
@@ -7274,9 +7336,9 @@ dependencies = [
 
 [[package]]
 name = "ort"
-version = "2.0.0-rc.13"
+version = "2.0.0-rc.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4336a1e2b38848325241c72889086886004e589b7c74f335e60a8e8db5138a0b"
+checksum = "37c87aa7a90b7ff3e0fe36cccd475df8d67f15f07f4d6c370c4b38464232813c"
 dependencies = [
  "ndarray",
  "ort-sys",
@@ -7287,9 +7349,9 @@ dependencies = [
 
 [[package]]
 name = "ort-sys"
-version = "2.0.0-rc.13"
+version = "2.0.0-rc.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf211e3776eea6aec988552fa118dd746d70e1b1e5e244058d1c98015f3e5872"
+checksum = "8d22b0417f1838db5a3ac0b3f98dfe39f6fb73624aa0a27c6bbb5040b9c7db2b"
 dependencies = [
  "hmac-sha256",
  "lzma-rust2 0.15.8",
@@ -7545,7 +7607,7 @@ dependencies = [
  "image",
  "itertools 0.14.0",
  "js-sys",
- "libloading",
+ "libloading 0.7.4",
  "log",
  "maybe-owned",
  "once_cell",

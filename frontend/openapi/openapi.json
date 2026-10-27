@@ -7750,6 +7750,177 @@
         }
       }
     },
+    "/api/v1/semantic/themes/analyze": {
+      "post": {
+        "operationId": "analyzeCorpusThemes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyzeCorpusThemesRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorpusThemesResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/themes/sources": {
+      "post": {
+        "operationId": "getCorpusThemeSources",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetCorpusThemeSourcesRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorpusThemeSourcesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/semantic/themes/status": {
+      "post": {
+        "operationId": "getCorpusThemeStatus",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetCorpusThemeStatusRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorpusThemeStatusDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/semantic/vocabularies": {
       "get": {
         "operationId": "listSemanticVocabularies",
@@ -9007,6 +9178,28 @@
           "consent": {
             "type": "boolean",
             "description": "Whether the user consented to sending prompts and retrieved excerpts to\nthe profile's normalized cloud host."
+          }
+        }
+      },
+      "AnalyzeCorpusThemesRequestDto": {
+        "type": "object",
+        "description": "Requests themes for one authorized scope (library, folder, files, roots).",
+        "required": [
+          "scope"
+        ],
+        "properties": {
+          "maxThemes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Optional upper bound on discovered themes (2 to 24).",
+            "minimum": 0
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RagScopeDto",
+            "description": "Visible authorized scope; re-authorized on every request."
           }
         }
       },
@@ -10676,6 +10869,253 @@
           }
         }
       },
+      "CorpusThemeDto": {
+        "type": "object",
+        "description": "One discovered theme.",
+        "required": [
+          "id",
+          "chunkCount",
+          "documentCount",
+          "share",
+          "keywords",
+          "passages",
+          "concepts"
+        ],
+        "properties": {
+          "chunkCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Chunks assigned to the theme.",
+            "minimum": 0
+          },
+          "concepts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThemeConceptDto"
+            },
+            "description": "Most common SKOS concepts, when the library is labelled."
+          },
+          "documentCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Documents with at least one chunk in the theme.",
+            "minimum": 0
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Stable id within this analysis; themes are ordered by size.",
+            "minimum": 0
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThemeKeywordDto"
+            },
+            "description": "Top c-TF-IDF terms."
+          },
+          "passages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThemePassageDto"
+            },
+            "description": "Chunks nearest the theme centroid."
+          },
+          "share": {
+            "type": "number",
+            "format": "float",
+            "description": "Share of all analysed chunks."
+          }
+        }
+      },
+      "CorpusThemeOutcomeDto": {
+        "type": "string",
+        "description": "Why a scope can or cannot show themes.",
+        "enum": [
+          "ready",
+          "profileTooWeak",
+          "insufficientContent",
+          "noContent"
+        ]
+      },
+      "CorpusThemeSourcesDto": {
+        "type": "object",
+        "description": "Authorized sources contributing to one theme, strongest first.",
+        "required": [
+          "sourceIds",
+          "truncated"
+        ],
+        "properties": {
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Opaque authorized source identities, usable as a semantic-result search scope."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Whether weaker sources were left out to respect the limit."
+          }
+        }
+      },
+      "CorpusThemeStatusDto": {
+        "type": "object",
+        "description": "Current facts about a scope, without computing themes.",
+        "required": [
+          "indexRevision",
+          "documentCount",
+          "chunkCount",
+          "modelId",
+          "profileTooWeak"
+        ],
+        "properties": {
+          "chunkCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Indexed chunks in the scope.",
+            "minimum": 0
+          },
+          "documentCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Indexed documents in the scope.",
+            "minimum": 0
+          },
+          "indexRevision": {
+            "type": "string",
+            "description": "Digest of the documents and generations currently indexed in the scope."
+          },
+          "modelId": {
+            "type": "string",
+            "description": "Active embedding model identity."
+          },
+          "profileTooWeak": {
+            "type": "boolean",
+            "description": "Whether the active profile is too weak for meaningful themes."
+          }
+        }
+      },
+      "CorpusThemesDto": {
+        "type": "object",
+        "description": "Complete themes of one scope.",
+        "required": [
+          "indexRevision",
+          "fingerprint",
+          "algorithmVersion",
+          "modelId",
+          "chunkCount",
+          "documentCount",
+          "sampled",
+          "incremental",
+          "themes",
+          "noTheme",
+          "documentMixtures",
+          "mixturesTruncated",
+          "mapPoints",
+          "mapSampled"
+        ],
+        "properties": {
+          "algorithmVersion": {
+            "type": "string",
+            "description": "Versioned algorithm identity."
+          },
+          "chunkCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Chunks analysed.",
+            "minimum": 0
+          },
+          "documentCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Documents analysed.",
+            "minimum": 0
+          },
+          "documentMixtures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentThemeMixtureDto"
+            },
+            "description": "Per-document theme distributions, bounded."
+          },
+          "fingerprint": {
+            "type": "string",
+            "description": "Digest of everything that determines this result."
+          },
+          "incremental": {
+            "type": "boolean",
+            "description": "Whether the previous fit was kept because few chunks changed (stable theme ids)."
+          },
+          "indexRevision": {
+            "type": "string",
+            "description": "Digest of the indexed documents these themes describe; compare with the\nstatus revision to detect a stale analysis."
+          },
+          "mapPoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThemeMapPointDto"
+            },
+            "description": "Deterministic 2D projection of a bounded sample of chunks."
+          },
+          "mapSampled": {
+            "type": "boolean",
+            "description": "Whether the map shows a sample rather than every chunk."
+          },
+          "mixturesTruncated": {
+            "type": "boolean",
+            "description": "Whether further document mixtures were left out."
+          },
+          "modelId": {
+            "type": "string",
+            "description": "Embedding model that produced the clustered vectors."
+          },
+          "noTheme": {
+            "$ref": "#/components/schemas/NoThemeDto",
+            "description": "Chunks that fit no theme."
+          },
+          "sampled": {
+            "type": "boolean",
+            "description": "Whether the clustering used a sample of the chunks."
+          },
+          "themes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CorpusThemeDto"
+            },
+            "description": "Themes, largest first."
+          }
+        }
+      },
+      "CorpusThemesResponseDto": {
+        "type": "object",
+        "description": "Themes of a scope, or the typed reason there are none.",
+        "required": [
+          "outcome",
+          "modelId"
+        ],
+        "properties": {
+          "modelId": {
+            "type": "string",
+            "description": "Active embedding model identity."
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/CorpusThemeOutcomeDto",
+            "description": "Typed outcome."
+          },
+          "themes": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CorpusThemesDto",
+                "description": "Present only when the outcome is ready."
+              }
+            ]
+          }
+        }
+      },
       "CreateConnectionRequestDto": {
         "type": "object",
         "description": "Request body for `POST /api/v1/connections`.",
@@ -11974,6 +12414,39 @@
             "type": "string",
             "format": "uuid",
             "description": "Workspace through which the occurrence is authorized."
+          }
+        }
+      },
+      "DocumentThemeMixtureDto": {
+        "type": "object",
+        "description": "A document's distribution over themes, largest share first.",
+        "required": [
+          "sourceId",
+          "title",
+          "chunkCount",
+          "shares"
+        ],
+        "properties": {
+          "chunkCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Analysed chunks of the document.",
+            "minimum": 0
+          },
+          "shares": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThemeShareDto"
+            },
+            "description": "Buckets with at least one chunk."
+          },
+          "sourceId": {
+            "type": "string",
+            "description": "Opaque authorized source identity."
+          },
+          "title": {
+            "type": "string",
+            "description": "User-visible file title."
           }
         }
       },
@@ -13617,6 +14090,46 @@
               "null"
             ],
             "description": "Output format: `geojson`, `gpx`, `kml`, `kmz` or `csv`; absent keeps each file's format."
+          }
+        }
+      },
+      "GetCorpusThemeSourcesRequestDto": {
+        "type": "object",
+        "description": "Asks which sources contribute to one theme of an analysis the caller is viewing.",
+        "required": [
+          "scope",
+          "fingerprint"
+        ],
+        "properties": {
+          "fingerprint": {
+            "type": "string",
+            "description": "Fingerprint of the analysis being viewed; a mismatch means it is stale."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RagScopeDto",
+            "description": "Visible authorized scope; re-authorized on every request."
+          },
+          "theme": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Theme id, or absent for the \"no theme\" bucket.",
+            "minimum": 0
+          }
+        }
+      },
+      "GetCorpusThemeStatusRequestDto": {
+        "type": "object",
+        "description": "Asks whether the themes of a scope are available and current.",
+        "required": [
+          "scope"
+        ],
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/RagScopeDto",
+            "description": "Visible authorized scope."
           }
         }
       },
@@ -17359,6 +17872,42 @@
           "forward",
           "refresh"
         ]
+      },
+      "NoThemeDto": {
+        "type": "object",
+        "description": "Chunks that fit no theme.",
+        "required": [
+          "chunkCount",
+          "documentCount",
+          "share",
+          "passages"
+        ],
+        "properties": {
+          "chunkCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Chunks in the bucket.",
+            "minimum": 0
+          },
+          "documentCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Documents with at least one such chunk.",
+            "minimum": 0
+          },
+          "passages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThemePassageDto"
+            },
+            "description": "A few examples."
+          },
+          "share": {
+            "type": "number",
+            "format": "float",
+            "description": "Share of all analysed chunks."
+          }
+        }
       },
       "OneDriveAuthorizationAttemptDto": {
         "type": "object",
@@ -26384,6 +26933,26 @@
           }
         }
       },
+      "ThemeConceptDto": {
+        "type": "object",
+        "description": "A SKOS concept shared by many chunks of a theme.",
+        "required": [
+          "conceptId",
+          "chunkCount"
+        ],
+        "properties": {
+          "chunkCount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Chunks of the theme carrying it.",
+            "minimum": 0
+          },
+          "conceptId": {
+            "type": "string",
+            "description": "Stable concept identity."
+          }
+        }
+      },
       "ThemeDto": {
         "type": "string",
         "description": "Application colour theme.",
@@ -26392,6 +26961,137 @@
           "light",
           "dark"
         ]
+      },
+      "ThemeKeywordDto": {
+        "type": "object",
+        "description": "One scored label term.",
+        "required": [
+          "term",
+          "score"
+        ],
+        "properties": {
+          "score": {
+            "type": "number",
+            "format": "float",
+            "description": "c-TF-IDF weight."
+          },
+          "term": {
+            "type": "string",
+            "description": "Lower-cased term."
+          }
+        }
+      },
+      "ThemeMapPointDto": {
+        "type": "object",
+        "description": "One chunk on the 2D theme map; only projected coordinates are exposed.",
+        "required": [
+          "x",
+          "y",
+          "passage"
+        ],
+        "properties": {
+          "passage": {
+            "$ref": "#/components/schemas/ThemePassageDto",
+            "description": "The chunk this point stands for, with provenance to open its source."
+          },
+          "theme": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Theme id, or absent for the \"no theme\" bucket.",
+            "minimum": 0
+          },
+          "x": {
+            "type": "number",
+            "format": "float",
+            "description": "Horizontal coordinate in -1 to 1."
+          },
+          "y": {
+            "type": "number",
+            "format": "float",
+            "description": "Vertical coordinate in -1 to 1."
+          }
+        }
+      },
+      "ThemePassageDto": {
+        "type": "object",
+        "description": "A real chunk that exemplifies a theme, with provenance to open it.",
+        "required": [
+          "chunkId",
+          "sourceId",
+          "title",
+          "sourcePosition",
+          "sectionPath",
+          "provenance",
+          "excerpt"
+        ],
+        "properties": {
+          "chunkId": {
+            "type": "string",
+            "description": "Stable chunk identity."
+          },
+          "excerpt": {
+            "type": "string",
+            "description": "Bounded opening of the chunk text."
+          },
+          "provenance": {
+            "type": "string",
+            "description": "Serialized provenance; carries the line number for JSONL records."
+          },
+          "sectionPath": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Structural heading hierarchy."
+          },
+          "sourceId": {
+            "type": "string",
+            "description": "Opaque authorized source identity; resolve it to open the file."
+          },
+          "sourcePosition": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Position of the chunk within its document.",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string",
+            "description": "User-visible file title."
+          }
+        }
+      },
+      "ThemeShareDto": {
+        "type": "object",
+        "description": "One slice of a document's theme distribution.",
+        "required": [
+          "chunkCount",
+          "share"
+        ],
+        "properties": {
+          "chunkCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Chunks of the document in this bucket.",
+            "minimum": 0
+          },
+          "share": {
+            "type": "number",
+            "format": "float",
+            "description": "Fraction of the document's chunks."
+          },
+          "theme": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Theme id, or absent for the \"no theme\" bucket.",
+            "minimum": 0
+          }
+        }
       },
       "UninstallSemanticComponentsRequestDto": {
         "type": "object",

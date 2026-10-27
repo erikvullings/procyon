@@ -8,6 +8,7 @@ import type {
   AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
   ActionResult,
+  AnalyzeCorpusThemesRequest,
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
   AppUpdateCheck,
@@ -37,6 +38,9 @@ import type {
   ConfirmSemanticModelMigrationRequest,
   Connection,
   ConnectionId,
+  CorpusThemeSources,
+  CorpusThemeStatus,
+  CorpusThemesResponse,
   CreateConnectionRequest,
   CreateSemanticIndexRemovalPlanRequest,
   CreateSemanticInstallationOfferRequest,
@@ -79,6 +83,8 @@ import type {
   GeoMinify,
   GeoMinifyPreview,
   GeoTargetFormat,
+  GetCorpusThemeSourcesRequest,
+  GetCorpusThemeStatusRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   GitFileHistoryRequest,
@@ -1669,6 +1675,27 @@ export class TauriFileManagerClient implements FileManagerClient {
     _signal?: AbortSignal,
   ): Promise<DocumentSummary | null> {
     return invoke<DocumentSummary | null>('get_document_summary', { request });
+  }
+
+  getCorpusThemeStatus(
+    request: GetCorpusThemeStatusRequest,
+    _signal?: AbortSignal,
+  ): Promise<CorpusThemeStatus> {
+    return invoke<CorpusThemeStatus>('get_corpus_theme_status', { request });
+  }
+
+  analyzeCorpusThemes(
+    request: AnalyzeCorpusThemesRequest,
+    _signal?: AbortSignal,
+  ): Promise<CorpusThemesResponse> {
+    return invoke<CorpusThemesResponse>('analyze_corpus_themes', { request });
+  }
+
+  getCorpusThemeSources(
+    request: GetCorpusThemeSourcesRequest,
+    _signal?: AbortSignal,
+  ): Promise<CorpusThemeSources> {
+    return invoke<CorpusThemeSources>('get_corpus_theme_sources', { request });
   }
 
   previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview> {

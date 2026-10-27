@@ -262,6 +262,10 @@ pub mod reason {
     pub const SCOPE_ROOT_INVALID: &str = "scopeRootInvalid";
     /// Rejection reason `scopeFolderRequired` (see the frontend `rejectionReason` catalogue).
     pub const SCOPE_FOLDER_REQUIRED: &str = "scopeFolderRequired";
+    /// Rejection reason `corpusThemeProfileMismatch` (see the frontend `rejectionReason` catalogue).
+    pub const CORPUS_THEME_PROFILE_MISMATCH: &str = "corpusThemeProfileMismatch";
+    /// Rejection reason `corpusThemesStale` (see the frontend `rejectionReason` catalogue).
+    pub const CORPUS_THEMES_STALE: &str = "corpusThemesStale";
     /// Rejection reason `summaryTokenBudget` (see the frontend `rejectionReason` catalogue).
     pub const SUMMARY_TOKEN_BUDGET: &str = "summaryTokenBudget";
     /// Rejection reason `conversationImmutable` (see the frontend `rejectionReason` catalogue).

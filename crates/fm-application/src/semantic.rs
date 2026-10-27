@@ -398,6 +398,22 @@ pub trait SemanticCapability: Send + Sync {
         Err(SemanticError::Unavailable)
     }
 
+    /// Executes one corpus-theme operation over indexed chunk embeddings.
+    ///
+    /// Capabilities without a theme route report themselves unavailable.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed transport, capability, or protocol failure.
+    async fn corpus_themes(
+        &self,
+        request_id: SemanticOperationId,
+        request: fm_semantic_worker::corpus_theme_ipc::ThemeRequest,
+    ) -> Result<fm_semantic_worker::corpus_theme_ipc::ThemeResponse, SemanticError> {
+        let _ = (request_id, request);
+        Err(SemanticError::Unavailable)
+    }
+
     /// Requests cancellation of an opaque operation.
     async fn cancel(&self, operation_id: SemanticOperationId) -> Result<bool, SemanticError>;
 
@@ -921,6 +937,16 @@ impl SemanticCapability for IpcSemanticCapability {
         self.adapt_result(result).await
     }
 
+    async fn corpus_themes(
+        &self,
+        request_id: SemanticOperationId,
+        request: fm_semantic_worker::corpus_theme_ipc::ThemeRequest,
+    ) -> Result<fm_semantic_worker::corpus_theme_ipc::ThemeResponse, SemanticError> {
+        let client = self.worker_client().await?;
+        let result = client.corpus_themes(request_id.as_str(), &request).await;
+        self.adapt_result(result).await
+    }
+
     async fn ingestion_job(
         &self,
         scope: SemanticScope,
@@ -1117,6 +1143,15 @@ impl SemanticService {
     ) -> Result<fm_semantic_worker::knowledge_retrieval::KnowledgeCapabilities, SemanticError> {
         self.record_search_activity();
         self.capability.knowledge_capabilities().await
+    }
+
+    pub(crate) async fn corpus_themes(
+        &self,
+        request_id: SemanticOperationId,
+        request: fm_semantic_worker::corpus_theme_ipc::ThemeRequest,
+    ) -> Result<fm_semantic_worker::corpus_theme_ipc::ThemeResponse, SemanticError> {
+        self.record_search_activity();
+        self.capability.corpus_themes(request_id, request).await
     }
 
     pub(crate) async fn ingestion_job(
