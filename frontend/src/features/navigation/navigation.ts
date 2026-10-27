@@ -393,7 +393,7 @@ export function createNavigationController(
     pendingNextPage.delete(key);
     backgroundFailureCounts.delete(key);
     clearBackgroundRetry(key);
-    publish(paneId, tab.id, viewFromSnapshot(snapshot));
+    publish(paneId, tab.id, viewFromSnapshot(snapshot, snapshot.entries, current));
     return true;
   }
 
@@ -452,7 +452,16 @@ export function createNavigationController(
   function viewFromSnapshot(
     snapshot: DirectorySnapshot,
     entries: readonly EntrySummary[] = snapshot.entries,
+    previous?: PaneDirectoryView,
   ): PaneDirectoryView {
+    // Watcher-pushed snapshots (directory.delta "reset") are not enriched with the volume's
+    // capacity; keep the last known value for the same location instead of dropping it.
+    const volumeCapacity =
+      snapshot.volumeCapacity ??
+      (previous?.location?.providerId === snapshot.location.providerId &&
+      previous.location.uri === snapshot.location.uri
+        ? previous.volumeCapacity
+        : undefined);
     return {
       state: snapshot.loadingState,
       entries,
@@ -471,7 +480,7 @@ export function createNavigationController(
       ...(snapshot.totalKnownFileCount === undefined
         ? {}
         : { totalKnownFileCount: snapshot.totalKnownFileCount }),
-      ...(snapshot.volumeCapacity === undefined ? {} : { volumeCapacity: snapshot.volumeCapacity }),
+      ...(volumeCapacity === undefined ? {} : { volumeCapacity }),
       ...(snapshot.viewRemembered === true ? { viewRemembered: true } : {}),
     };
   }
@@ -573,7 +582,7 @@ export function createNavigationController(
         );
       }
       if (isCurrent(paneId, tab.id, request) && snapshot.requestId === request.id) {
-        publish(paneId, tab.id, viewFromSnapshot(snapshot));
+        publish(paneId, tab.id, viewFromSnapshot(snapshot, snapshot.entries, current));
         perfMarkOnce('first-listing-published', { entries: snapshot.entries.length });
         perfEndAfterPaint('load-to-paint', loadStarted, {
           background: loadOptions?.background === true,
@@ -833,7 +842,7 @@ export function createNavigationController(
         publish(
           paneId,
           tabId,
-          viewFromSnapshot(snapshot, [...current.entries, ...snapshot.entries]),
+          viewFromSnapshot(snapshot, [...current.entries, ...snapshot.entries], current),
         );
       }
     } catch (error: unknown) {

@@ -259,6 +259,19 @@ afterEach(() => {
   document.documentElement.removeAttribute('data-theme');
 });
 
+/**
+ * The "Find by concept" button only renders after the dialog's async availability check resolves,
+ * so under load a bare query-and-click is a silent no-op. Wait for it before clicking.
+ */
+async function clickFindByConcept(): Promise<void> {
+  const conceptButton = () =>
+    [...document.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')].find(
+      (button) => button.textContent === 'Find by concept',
+    );
+  await vi.waitFor(() => expect(conceptButton()).not.toBeUndefined());
+  conceptButton()?.click();
+}
+
 describe('AppShell', () => {
   for (const runtime of ['mock', 'http', 'tauri'] as const) {
     it(`offers a non-modal, silent walkthrough once a fresh ${runtime} workspace opens`, async () => {
@@ -3361,9 +3374,7 @@ describe('AppShell', () => {
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-find-files-modal.active')).not.toBeNull(),
     );
-    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
-      .find((button) => button.textContent === 'Find by concept')
-      ?.click();
+    await clickFindByConcept();
     await vi.waitFor(() => expect(root.querySelector('#find-files-concept')).not.toBeNull());
     const filter = root.querySelector<HTMLInputElement>('#find-files-concept');
     if (!filter) throw new Error('Concept filter missing');
@@ -3470,9 +3481,7 @@ describe('AppShell', () => {
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-find-files-modal.active')).not.toBeNull(),
     );
-    [...root.querySelectorAll<HTMLButtonElement>('.fm-find-files-modes button')]
-      .find((button) => button.textContent === 'Find by concept')
-      ?.click();
+    await clickFindByConcept();
     await vi.waitFor(() => expect(root.querySelector('#find-files-concept')).not.toBeNull());
     const nextFilter = root.querySelector<HTMLInputElement>('#find-files-concept');
     if (!nextFilter) throw new Error('Concept filter missing on retry');
