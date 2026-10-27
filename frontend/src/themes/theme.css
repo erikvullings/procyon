@@ -5551,6 +5551,11 @@ button.fm-activity-count {
   font-size: 1.25rem;
 }
 
+.fm-themes-content,
+.fm-themes-body {
+  min-width: 0;
+}
+
 .fm-themes-content {
   display: grid;
   gap: 0.75rem;
@@ -5609,7 +5614,8 @@ button.fm-activity-count {
 
 .fm-themes-scope:focus-visible,
 .fm-themes-row:focus-visible,
-.fm-themes-open:focus-visible {
+.fm-themes-source:focus-visible,
+.fm-themes-expand:focus-visible {
   outline: 2px solid var(--fm-accent);
   outline-offset: 2px;
 }
@@ -5637,8 +5643,15 @@ button.fm-activity-count {
 }
 
 .fm-themes-hover {
+  /* One fixed line, even when empty, so hovering never moves the content below. */
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 1.5em;
   margin: 0.25rem 0 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fm-themes-list,
@@ -5648,6 +5661,12 @@ button.fm-activity-count {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* The theme list scrolls within the height of the map beside it. */
+.fm-themes-listing .fm-themes-list {
+  max-height: 420px;
+  overflow-y: auto;
 }
 
 .fm-themes-row {
@@ -5708,14 +5727,47 @@ button.fm-activity-count {
   border-bottom: 1px solid var(--fm-border);
 }
 
-.fm-themes-excerpt {
-  margin: 0.2rem 0;
+.fm-themes-source {
+  font-weight: 600;
+  color: var(--fm-accent);
+  text-decoration: underline;
   overflow-wrap: anywhere;
 }
 
-.fm-themes-open {
+.fm-themes-excerpt {
+  margin: 0.3rem 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.fm-themes-excerpt.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+
+.fm-themes-excerpt > :first-child {
+  margin-top: 0;
+}
+
+.fm-themes-excerpt > :last-child {
+  margin-bottom: 0;
+}
+
+.fm-themes-expand {
   padding: 0 0.4rem;
   color: var(--fm-accent);
+}
+
+.fm-themes-document-list {
+  padding-left: 1.4rem;
+  list-style: decimal;
+}
+
+.fm-themes-document-list li {
+  padding: 0.1rem 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

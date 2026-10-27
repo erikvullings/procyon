@@ -1716,7 +1716,10 @@ export const de = {
       'Das aktuelle Embedding-Modell ({model}) ist zu einfach, um Themen zu trennen. Installieren Sie ein vollständiges Embedding-Modell, um Themen zu sehen.',
     outcomeInsufficient: 'Es ist noch nicht genug indizierter Text vorhanden, um Themen zu bilden.',
     outcomeNoContent: 'In diesem Bereich sind keine indizierten Dokumente verfügbar.',
-    selectedPassage: 'Ausgewählte Passage',
+    selectedPassage: 'Angeklickte Passage',
+    showMore: 'Mehr anzeigen',
+    showLess: 'Weniger anzeigen',
+    examplesHint: 'Die Passagen nahe der Mitte dieses Themas: der typischste Text.',
     concepts: 'Konzepte',
     mapHint:
       'Mit der Maus über einen Punkt fahren, um die Passage zu lesen. Klicken öffnet die Quelle.',

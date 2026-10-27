@@ -1705,7 +1705,11 @@ export const fr = {
       'Le modèle d’embedding actuel ({model}) est trop simple pour séparer les sujets. Installez un modèle d’embedding complet pour voir les thèmes.',
     outcomeInsufficient: 'Il n’y a pas encore assez de texte indexé pour former des thèmes.',
     outcomeNoContent: 'Aucun document indexé n’est disponible dans cette portée.',
-    selectedPassage: 'Passage sélectionné',
+    selectedPassage: 'Passage cliqué',
+    showMore: 'Afficher plus',
+    showLess: 'Afficher moins',
+    examplesHint:
+      'Les passages les plus proches du centre de ce thème : son texte le plus typique.',
     concepts: 'Concepts',
     mapHint: 'Survolez un point pour lire son passage. Cliquez pour ouvrir la source.',
     untitled: 'Source sans titre',

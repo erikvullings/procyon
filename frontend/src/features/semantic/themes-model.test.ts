@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { mockCorpusThemes } from '../../api/client/mock-corpus-themes';
 import {
+  cleanTitle,
+  decodeEntities,
+  folderIsEnrolled,
+  folderName,
   isThemesStale as isStaleRejection,
   NO_THEME_COLOUR,
   percentText,
@@ -96,5 +100,26 @@ describe('themes model', () => {
     expect(isStaleRejection({ details: { reason: 'scopeEmpty' } })).toBe(false);
     expect(isStaleRejection(new Error('x'))).toBe(false);
     expect(isStaleRejection(null)).toBe(false);
+  });
+});
+
+describe('display text helpers', () => {
+  it('decodes percent-encoded titles and HTML entities', () => {
+    expect(cleanTitle('multi%20problem%20families.pdf')).toBe('multi problem families.pdf');
+    expect(cleanTitle('O&amp;O in perspectief')).toBe('O&O in perspectief');
+    expect(cleanTitle('100%.pdf')).toBe('100%.pdf');
+    expect(decodeEntities('a &lt;b&gt; &#39;c&#39;', true)).toBe("a &lt;b&gt; 'c'");
+  });
+
+  it('names a folder scope and checks it against enrolled roots', () => {
+    expect(folderName('file:///Users/me/My%20Docs/triz/')).toBe('triz');
+    const root = { location: { providerId: 'file', uri: 'file:///docs' }, recursive: true };
+    expect(folderIsEnrolled({ providerId: 'file', uri: 'file:///docs/a/b' }, [root])).toBe(true);
+    expect(folderIsEnrolled({ providerId: 'file', uri: 'file:///docs2' }, [root])).toBe(false);
+    expect(
+      folderIsEnrolled({ providerId: 'file', uri: 'file:///docs/a' }, [
+        { ...root, recursive: false },
+      ]),
+    ).toBe(false);
   });
 });

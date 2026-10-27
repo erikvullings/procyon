@@ -24,6 +24,7 @@ import {
   plusIcon,
   searchIcon,
   settingsIcon,
+  themeMapIcon,
 } from '../components/tabler-icons';
 import { tooltip } from '../components/tooltip';
 import {
@@ -6759,6 +6760,23 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                         onclick: openKnowledgeSearch,
                       },
                       contentSearchIcon(),
+                    ),
+                  )
+                : undefined,
+              knowledgeSearchAvailable
+                ? tooltip(
+                    labelWithShortcut(
+                      t('themes', 'openTitle'),
+                      shortcutFor('client.exploreThemes'),
+                    ),
+                    m(
+                      IconButton,
+                      {
+                        className: 'fm-themes-trigger',
+                        'aria-label': t('themes', 'openTitle'),
+                        onclick: openThemes,
+                      },
+                      themeMapIcon(),
                     ),
                   )
                 : undefined,

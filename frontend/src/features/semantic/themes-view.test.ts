@@ -9,8 +9,13 @@ import { ThemesView } from './themes-view';
 
 let root: HTMLElement;
 
-const scope = (kind: 'entireLibrary' | 'currentFolder', label: string): RagScope => ({
+const scope = (
+  kind: 'entireLibrary' | 'currentFolder',
+  label: string,
+  folderUri = 'mock:///Documents/handbook/chapters',
+): RagScope => ({
   kind,
+  ...(kind === 'currentFolder' ? { folder: { providerId: 'file', uri: folderUri } } : {}),
   workspaceId: '22222222-2222-4222-8222-222222222222',
   label,
   selectedFiles: [],
@@ -141,7 +146,7 @@ describe('ThemesView', () => {
     m.redraw.sync();
 
     onOpenPassage.mockRejectedValueOnce(new Error('gone'));
-    (root.querySelector('.fm-themes-open') as HTMLButtonElement).click();
+    (root.querySelector('.fm-themes-examples .fm-themes-source') as HTMLAnchorElement).click();
     expect(onOpenPassage).toHaveBeenCalledWith(
       expect.objectContaining({ sourceId: 'mock-source-a', chunkId: 'chunk-a' }),
     );
@@ -192,6 +197,18 @@ describe('ThemesView', () => {
     expect(root.querySelector('.fm-themes-list')).toBeNull();
   });
 
+  it('offers no folder scope when the folder is outside every enrolled root', async () => {
+    const client = new MockFileManagerClient();
+    mount(client, {
+      scopes: [
+        scope('entireLibrary', 'Entire library'),
+        scope('currentFolder', 'Current folder', 'mock:///Downloads/triz'),
+      ],
+    });
+    await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+    expect(root.querySelector('.fm-themes-scope')).toBeNull();
+  });
+
   it('switches scope and shows a sampled-map disclosure', async () => {
     const client = new MockFileManagerClient();
     const analyze = vi.spyOn(client, 'analyzeCorpusThemes');
@@ -209,7 +226,7 @@ describe('ThemesView', () => {
     const buttons = [...root.querySelectorAll<HTMLButtonElement>('.fm-themes-scope')];
     expect(buttons.map((button) => button.textContent)).toEqual([
       'Entire library',
-      'Current folder',
+      'Current folder: chapters',
     ]);
     buttons[1]?.click();
     await vi.waitFor(() => expect(analyze).toHaveBeenCalledTimes(2));
@@ -231,8 +248,29 @@ describe('ThemesView', () => {
     );
     expect(onSearchSources).toHaveBeenCalledWith(
       ['mock-source-a', 'mock-source-b'],
-      'harbour, shipping',
+      'harbour, shipping ',
     );
+  });
+
+  it('lists only documents above the share threshold, as links that open the source', async () => {
+    const client = new MockFileManagerClient();
+    const { onOpenPassage } = mount(client, { minDocumentShare: 0.99 });
+    await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+    (root.querySelector('.fm-themes-row') as HTMLButtonElement).click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-themes-document-list')).toBeNull();
+
+    m.mount(root, null);
+    const opened = mount(client, { minDocumentShare: 0 });
+    await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+    (root.querySelector('.fm-themes-row') as HTMLButtonElement).click();
+    m.redraw.sync();
+    expect(root.querySelector('ol.fm-themes-document-list')).not.toBeNull();
+    (root.querySelector('.fm-themes-document-list a') as HTMLAnchorElement).click();
+    expect(opened.onOpenPassage).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceId: expect.any(String) }),
+    );
+    expect(onOpenPassage).not.toHaveBeenCalled();
   });
 
   it('re-analyses instead of searching when the themes went stale', async () => {

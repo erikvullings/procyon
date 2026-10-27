@@ -25,14 +25,14 @@ use crate::kmeans;
 use crate::semantic_storage::{SemanticCatalog, StorageError};
 
 /// Versioned clustering and labelling contract.
-pub const ALGORITHM_VERSION: &str = "corpus-themes-kmeans/1";
+pub const ALGORITHM_VERSION: &str = "corpus-themes-kmeans/2";
 /// Versioned document-centroid contract.
 pub const CENTROID_ALGORITHM_VERSION: &str = "document-centroid-mean/1";
 /// Model identity of the deterministic token-hashing development profile.
 pub const TOKEN_HASHING_MODEL_ID: &str = "procyon.dev.hashing-embedding";
 
-const MAX_EXCERPT_CHARS: usize = 240;
-const MAP_EXCERPT_CHARS: usize = 120;
+const MAX_EXCERPT_CHARS: usize = 1200;
+const MAP_EXCERPT_CHARS: usize = 400;
 const MAX_TERMS_PER_CLASS: usize = 50_000;
 const MAX_CONCEPTS_PER_CLASS: usize = 1_024;
 const SILHOUETTE_SAMPLE: usize = 300;
@@ -143,7 +143,7 @@ pub struct ThemePassage {
     pub section_path: Vec<String>,
     /// Serialized provenance; line numbers for JSONL records.
     pub provenance: String,
-    /// Bounded, whitespace-collapsed opening of the chunk text.
+    /// Bounded opening of the chunk text; line and paragraph breaks are kept.
     pub excerpt: String,
     /// Squared distance from the centroid (zero for "no theme").
     pub distance: f32,
@@ -1119,7 +1119,14 @@ impl ThemeAccumulator {
                 vector: chunk.vector.clone(),
                 bucket,
                 passage: ThemePassage {
-                    excerpt: passage.excerpt.chars().take(MAP_EXCERPT_CHARS).collect(),
+                    excerpt: passage
+                        .excerpt
+                        .split_whitespace()
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .chars()
+                        .take(MAP_EXCERPT_CHARS)
+                        .collect(),
                     ..passage.clone()
                 },
             });
@@ -1314,18 +1321,27 @@ fn passage_of(chunk: &CorpusChunk, distance: f32) -> ThemePassage {
     }
 }
 
+/// Bounded opening of a chunk. Words are whitespace-normalised within a line but the line and
+/// paragraph breaks survive, so the text still renders as Markdown.
 fn excerpt(text: &str) -> String {
-    let mut collapsed = String::new();
-    for word in text.split_whitespace() {
-        if !collapsed.is_empty() {
-            collapsed.push(' ');
+    let mut out = String::new();
+    let mut paragraph_break = false;
+    for line in text.lines() {
+        let line = line.split_whitespace().collect::<Vec<_>>().join(" ");
+        if line.is_empty() {
+            paragraph_break = true;
+            continue;
         }
-        collapsed.push_str(word);
-        if collapsed.chars().count() >= MAX_EXCERPT_CHARS {
+        if !out.is_empty() {
+            out.push_str(if paragraph_break { "\n\n" } else { "\n" });
+        }
+        paragraph_break = false;
+        out.push_str(&line);
+        if out.chars().count() >= MAX_EXCERPT_CHARS {
             break;
         }
     }
-    collapsed.chars().take(MAX_EXCERPT_CHARS).collect()
+    out.chars().take(MAX_EXCERPT_CHARS).collect()
 }
 
 fn keep_nearest(passages: &mut Vec<ThemePassage>, passage: ThemePassage, limit: usize) {
@@ -1441,8 +1457,15 @@ fn hex(bytes: &[u8]) -> String {
 
 /// Frequent function words in the languages the app ships, never useful as labels.
 const STOPWORDS: &[&str] = &[
-    "the", "and", "for", "that", "with", "this", "from", "are", "was", "were", "has", "have",
-    "had", "not", "but", "you", "your", "can", "will", "all", "any", "its", "our", "their", "than",
+    // English filler that otherwise ranks as a label.
+    "may", "might", "must", "would", "could", "should", "shall", "one", "two", "use", "used",
+    "using", "within", "such", "these", "those", "been", "being", "more", "most", "other", "some",
+    "into", "between", "about", "after", "before", "during", "both", "each", "only", "very",
+    "much", "many", "however", "per", "via", "see", "new",
+    // Markup and web debris extracted text carries (`&amp;`, URLs, DOIs).
+    "amp", "nbsp", "quot", "http", "https", "www", "com", "org", "html", "htm", "doi", "pdf", "the",
+    "and", "for", "that", "with", "this", "from", "are", "was", "were", "has", "have", "had",
+    "not", "but", "you", "your", "can", "will", "all", "any", "its", "our", "their", "than",
     "then", "there", "which", "who", "whom", "what", "when", "where", "how", "also", "een", "het",
     "van", "dat", "die", "voor", "met", "zijn", "niet", "ook", "maar", "als", "naar", "bij",
     "deze", "dit", "kan", "worden", "wordt", "door", "over", "aan", "uit", "der", "die", "das",

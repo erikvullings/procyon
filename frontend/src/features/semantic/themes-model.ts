@@ -33,12 +33,79 @@ export function resolveColour(colour: string, element: Element): string {
   return value.length > 0 ? value : 'gray';
 }
 
+/**
+ * Terms that are never a useful label: markup and URL debris from extracted text, and filler
+ * words. The worker filters the same terms; repeating it here keeps themes computed by an older
+ * worker readable.
+ */
+const NON_LABEL_TERMS: ReadonlySet<string> = new Set([
+  'amp',
+  'nbsp',
+  'quot',
+  'http',
+  'https',
+  'www',
+  'com',
+  'org',
+  'html',
+  'htm',
+  'doi',
+  'pdf',
+  'may',
+  'might',
+  'must',
+  'would',
+  'could',
+  'should',
+  'shall',
+  'one',
+  'two',
+  'use',
+  'used',
+  'using',
+  'within',
+  'such',
+  'these',
+  'those',
+  'been',
+  'being',
+  'more',
+  'most',
+  'other',
+  'some',
+  'into',
+  'between',
+  'about',
+  'after',
+  'before',
+  'during',
+  'both',
+  'each',
+  'only',
+  'very',
+  'much',
+  'many',
+  'however',
+  'per',
+  'via',
+  'see',
+  'new',
+  'et',
+]);
+
+/** Keywords fit to show, in their ranked order. */
+export function usableKeywords<T extends { readonly term: string }>(
+  keywords: readonly T[],
+): readonly T[] {
+  return keywords.filter((keyword) => !NON_LABEL_TERMS.has(keyword.term.toLowerCase()));
+}
+
 /** Label of a theme: its leading keywords, or a numbered fallback supplied by the caller. */
 export function themeKeywordLabel(
   keywords: readonly { readonly term: string }[],
   limit = 3,
 ): string {
-  return keywords
+  return usableKeywords(keywords)
     .slice(0, limit)
     .map((keyword) => keyword.term)
     .join(', ');
@@ -129,11 +196,12 @@ export function topDocumentsForTheme(
   mixtures: readonly DocumentThemeMixture[],
   theme: number | null,
   limit: number,
+  minShare = 0,
 ): readonly ThemeDocumentShare[] {
   const rows: ThemeDocumentShare[] = [];
   for (const mixture of mixtures) {
     const slice = mixture.shares.find((share) => (share.theme ?? null) === theme);
-    if (slice !== undefined) {
+    if (slice !== undefined && slice.share >= minShare) {
       rows.push({
         sourceId: mixture.sourceId,
         title: mixture.title,
@@ -168,4 +236,68 @@ export function isThemesStale(error: unknown): boolean {
     details !== null &&
     (details as { readonly reason?: unknown }).reason === 'corpusThemesStale'
   );
+}
+
+const NAMED_ENTITIES: Readonly<Record<string, string>> = {
+  amp: '&',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+  lt: '<',
+  gt: '>',
+};
+
+/**
+ * Decodes the HTML entities extracted document text carries (`&amp;`, `&#39;`, …). With
+ * `keepAngleBrackets` the `&lt;`/`&gt;` pair stays encoded so text bound for the Markdown
+ * renderer can never turn into markup.
+ */
+export function decodeEntities(text: string, keepAngleBrackets = false): string {
+  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, body: string) => {
+    const lower = body.toLowerCase();
+    if (keepAngleBrackets && (lower === 'lt' || lower === 'gt')) return match;
+    if (lower.startsWith('#')) {
+      const code =
+        lower[1] === 'x'
+          ? Number.parseInt(lower.slice(2), 16)
+          : Number.parseInt(lower.slice(1), 10);
+      return Number.isInteger(code) && code > 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : match;
+    }
+    return NAMED_ENTITIES[lower] ?? match;
+  });
+}
+
+/** Display form of a source title: file names arrive percent-encoded, text HTML-escaped. */
+export function cleanTitle(title: string): string {
+  let decoded = title;
+  try {
+    decoded = decodeURIComponent(title);
+  } catch {
+    // Not percent-encoded (or a stray `%`): keep the raw title.
+  }
+  return decodeEntities(decoded);
+}
+
+/** The last path segment of a folder URI, decoded, for labelling a scope. */
+export function folderName(uri: string): string {
+  const segment = uri.split('/').filter(Boolean).at(-1) ?? uri;
+  return cleanTitle(segment);
+}
+
+/** Whether a folder lies within an enrolled root, mirroring the backend scope authorization. */
+export function folderIsEnrolled(
+  folder: { readonly providerId: string; readonly uri: string },
+  roots: readonly {
+    readonly location: { readonly providerId: string; readonly uri: string };
+    readonly recursive: boolean;
+  }[],
+): boolean {
+  return roots.some((root) => {
+    if (root.location.providerId !== folder.providerId) return false;
+    const base = root.location.uri.replace(/\/+$/u, '');
+    const candidate = folder.uri.replace(/\/+$/u, '');
+    return candidate === base || (root.recursive && candidate.startsWith(`${base}/`));
+  });
 }

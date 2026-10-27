@@ -137,6 +137,12 @@ export const contentSearchIcon = trustedStrokeIcon(
   'fm-icon-content-search',
 );
 
+/** "chart-scatter" — corpus theme map. */
+export const themeMapIcon = trustedStrokeIcon(
+  '<path d="M3 3v18h18" /><path d="M8 15v.01" /><path d="M11 9v.01" /><path d="M16 7v.01" /><path d="M17 15v.01" /><path d="M13 13v.01" />',
+  'fm-icon-theme-map',
+);
+
 /** "command" — command palette. */
 export const commandIcon = trustedStrokeIcon(
   '<path d="M7 9a2 2 0 1 1 2 -2v10a2 2 0 1 1 -2 -2h10a2 2 0 1 1 -2 2v-10a2 2 0 1 1 2 2h-10" />',

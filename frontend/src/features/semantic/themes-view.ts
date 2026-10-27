@@ -11,8 +11,13 @@ import type {
   ThemeMapPoint,
   ThemePassage,
 } from '../../models';
+import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { knowledgeProvenanceLabel } from './knowledge-search-dialog';
 import {
+  cleanTitle,
+  decodeEntities,
+  folderIsEnrolled,
+  folderName,
   isThemesStale,
   NO_THEME_COLOUR,
   percentText,
@@ -24,6 +29,7 @@ import {
   themesAreStale,
   topDocumentsForTheme,
   toScreen,
+  usableKeywords,
 } from './themes-model';
 
 export interface ThemesViewAttrs {
@@ -35,6 +41,8 @@ export interface ThemesViewAttrs {
   readonly onOpenPassage: (passage: ThemePassage) => void | Promise<void>;
   /** Starts a search limited to the given authorized sources, about the given subject. */
   readonly onSearchSources: (sourceIds: readonly string[], subject: string) => void;
+  /** Smallest share of a document's passages for it to be listed under a theme (default 5%). */
+  readonly minDocumentShare?: number;
   readonly onClose: () => void;
 }
 
@@ -45,7 +53,9 @@ const STATUS_POLL_MS = 15_000;
 const MAP_HEIGHT = 420;
 const MAP_PADDING = 14;
 const HIT_RADIUS = 9;
-const TOP_DOCUMENTS = 5;
+/** Documents listed for a theme: at most this many, each with at least `minDocumentShare`. */
+const TOP_DOCUMENTS = 10;
+const DEFAULT_MIN_DOCUMENT_SHARE = 0.05;
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.length > 0) return error.message;
@@ -183,30 +193,85 @@ function conceptLabel(conceptId: string): string {
   return decoded.replace(/[_-]+/g, ' ').trim() || conceptId;
 }
 
+/** A document row opened like a passage: the host only needs its source and title. */
+function documentAsPassage(document: {
+  readonly sourceId: string;
+  readonly title: string;
+}): ThemePassage {
+  return {
+    chunkId: '',
+    excerpt: '',
+    provenance: '',
+    sectionPath: [],
+    sourceId: document.sourceId,
+    sourcePosition: 0,
+    title: document.title,
+  };
+}
+
+/** Passages longer than this get a show more / show less toggle. */
+const COLLAPSED_PASSAGE_CHARS = 260;
+
+interface PassageTextAttrs {
+  readonly excerpt: string;
+}
+
+/** A passage rendered as Markdown, clamped to a few lines until expanded. */
+const PassageText: FactoryComponent<PassageTextAttrs> = () => {
+  let expanded = false;
+  return {
+    view: ({ attrs }) => {
+      const long = attrs.excerpt.length > COLLAPSED_PASSAGE_CHARS;
+      return m('.fm-themes-passage-body', [
+        m('.fm-themes-excerpt', {
+          class: long && !expanded ? 'is-clamped' : '',
+          // Sanitized by `safeMarkdownHtml` (DOMPurify), like the Markdown file preview.
+          innerHTML: safeMarkdownHtml(decodeEntities(attrs.excerpt, true)),
+        }),
+        long
+          ? m(
+              'button.btn-flat.fm-themes-expand',
+              {
+                type: 'button',
+                'aria-expanded': String(expanded),
+                onclick: () => {
+                  expanded = !expanded;
+                },
+              },
+              t('themes', expanded ? 'showLess' : 'showMore'),
+            )
+          : undefined,
+      ]);
+    },
+  };
+};
+
 function passageRow(
   passage: ThemePassage,
   attrs: ThemesViewAttrs,
   failed: (message: string) => void,
 ): Vnode {
   const location = knowledgeProvenanceLabel(passage.provenance);
+  const title = passage.title.length > 0 ? cleanTitle(passage.title) : t('themes', 'untitled');
   return m('li.fm-themes-passage', { key: passage.chunkId }, [
     m('.fm-themes-passage-head', [
-      m('strong', passage.title.length > 0 ? passage.title : t('themes', 'untitled')),
+      m(
+        'a.fm-themes-source',
+        {
+          href: '#',
+          title: t('themes', 'openSource'),
+          onclick: (event: MouseEvent) => {
+            event.preventDefault();
+            void Promise.resolve(attrs.onOpenPassage(passage)).catch((cause: unknown) =>
+              failed(errorMessage(cause, t('themes', 'openSourceFailed'))),
+            );
+          },
+        },
+        title,
+      ),
       location.length > 0 ? m('span.fm-themes-muted', ` · ${location}`) : undefined,
     ]),
-    m('p.fm-themes-excerpt', passage.excerpt),
-    m(
-      'button.btn-flat.fm-themes-open',
-      {
-        type: 'button',
-        onclick: () => {
-          void Promise.resolve(attrs.onOpenPassage(passage)).catch((cause: unknown) =>
-            failed(errorMessage(cause, t('themes', 'openSourceFailed'))),
-          );
-        },
-      },
-      t('themes', 'openSource'),
-    ),
+    m(PassageText, { excerpt: passage.excerpt }),
   ]);
 }
 
@@ -222,9 +287,29 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
   let poll: ReturnType<typeof setInterval> | undefined;
   let generation = 0;
   let scopeIndex = 0;
+  let visibleScopes: readonly RagScope[] = [];
 
-  function activeScope(attrs: ThemesViewAttrs): RagScope | undefined {
-    return attrs.scopes[Math.min(scopeIndex, attrs.scopes.length - 1)];
+  function activeScope(): RagScope | undefined {
+    return visibleScopes[Math.min(scopeIndex, visibleScopes.length - 1)];
+  }
+
+  /** Offers the folder scope only when the backend would authorize it (an enrolled root). */
+  async function resolveScopes(attrs: ThemesViewAttrs): Promise<readonly RagScope[]> {
+    const folderScopes = attrs.scopes.filter((scope) => scope.kind === 'currentFolder');
+    if (folderScopes.length === 0) return attrs.scopes;
+    let roots: Awaited<ReturnType<FileManagerClient['listKnowledgeRoots']>> = [];
+    try {
+      roots = await attrs.client.listKnowledgeRoots({
+        workspaceId: folderScopes[0]?.workspaceId ?? '',
+      });
+    } catch {
+      // Without the roots the folder scope cannot be vouched for: offer the library only.
+    }
+    return attrs.scopes.filter(
+      (scope) =>
+        scope.kind !== 'currentFolder' ||
+        (scope.folder != null && folderIsEnrolled(scope.folder, roots)),
+    );
   }
 
   function stopPolling(): void {
@@ -233,7 +318,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
   }
 
   async function refreshStatus(attrs: ThemesViewAttrs, ticket: number): Promise<void> {
-    const scope = activeScope(attrs);
+    const scope = activeScope();
     if (scope === undefined) return;
     try {
       const next = await attrs.client.getCorpusThemeStatus({ scope });
@@ -245,7 +330,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
   }
 
   async function load(attrs: ThemesViewAttrs): Promise<void> {
-    const scope = activeScope(attrs);
+    const scope = activeScope();
     if (scope === undefined) return;
     generation += 1;
     const ticket = generation;
@@ -281,7 +366,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
     themes: CorpusThemes,
     theme: number | null,
   ): Promise<void> {
-    const scope = activeScope(attrs);
+    const scope = activeScope();
     if (scope === undefined) return;
     try {
       const { sourceIds } = await attrs.client.getCorpusThemeSources({
@@ -290,7 +375,8 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
         fingerprint: themes.fingerprint,
       });
       error = undefined;
-      attrs.onSearchSources(sourceIds, theme === null ? '' : themeLabel(theme, themes));
+      // The trailing space lets the user keep typing straight after the theme words.
+      attrs.onSearchSources(sourceIds, theme === null ? '' : `${themeLabel(theme, themes)} `);
     } catch (cause) {
       if (isThemesStale(cause)) {
         // The index moved on: show current themes instead of searching a stale set.
@@ -307,11 +393,18 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
     const theme =
       selected === null ? undefined : themes.themes.find((item) => item.id === selected);
     const passages = selected === null ? themes.noTheme.passages : (theme?.passages ?? []);
-    const documents = topDocumentsForTheme(themes.documentMixtures, selected, TOP_DOCUMENTS);
+    const minShare = attrs.minDocumentShare ?? DEFAULT_MIN_DOCUMENT_SHARE;
+    const documents = topDocumentsForTheme(
+      themes.documentMixtures,
+      selected,
+      TOP_DOCUMENTS,
+      minShare,
+    );
     const fail = (message: string): void => {
       error = message;
       m.redraw();
     };
+    const picked = selectedPoint;
     return m('section.fm-themes-details', { 'aria-live': 'polite' }, [
       m('h4', selected === null ? t('themes', 'noTheme') : themeLabel(selected, themes)),
       m(
@@ -329,7 +422,40 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
             m('h5', t('themes', 'keywords')),
             m(
               'ul.fm-themes-chips',
-              theme.keywords.map((keyword) => m('li', { key: keyword.term }, keyword.term)),
+              usableKeywords(theme.keywords).map((keyword) =>
+                m('li', { key: keyword.term }, keyword.term),
+              ),
+            ),
+          ]),
+      documents.length === 0
+        ? undefined
+        : m('.fm-themes-documents', [
+            m('h5', t('themes', 'topDocuments')),
+            m(
+              'ol.fm-themes-document-list',
+              documents.map((document) =>
+                m('li', { key: document.sourceId }, [
+                  m(
+                    'a.fm-themes-source',
+                    {
+                      href: '#',
+                      title: t('themes', 'openSource'),
+                      onclick: (event: MouseEvent) => {
+                        event.preventDefault();
+                        void Promise.resolve(
+                          attrs.onOpenPassage(documentAsPassage(document)),
+                        ).catch((cause: unknown) =>
+                          fail(errorMessage(cause, t('themes', 'openSourceFailed'))),
+                        );
+                      },
+                    },
+                    document.title.length > 0
+                      ? cleanTitle(document.title)
+                      : t('themes', 'untitled'),
+                  ),
+                  m('span.fm-themes-muted', ` · ${percentText(document.share)}`),
+                ]),
+              ),
             ),
           ]),
       theme === undefined || theme.concepts.length === 0
@@ -347,33 +473,26 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
               ),
             ),
           ]),
-      selectedPoint === undefined
+      picked === undefined
         ? undefined
         : m('.fm-themes-selected-point', [
             m('h5', t('themes', 'selectedPassage')),
-            m('ul.fm-themes-passages', [passageRow(selectedPoint.passage, attrs, fail)]),
+            m('ul.fm-themes-passages', [
+              passageRow(
+                passages.find((item) => item.chunkId === picked.passage.chunkId) ?? picked.passage,
+                attrs,
+                fail,
+              ),
+            ]),
           ]),
       passages.length === 0
         ? undefined
         : m('.fm-themes-examples', [
             m('h5', t('themes', 'examples')),
+            m('p.fm-themes-muted', t('themes', 'examplesHint')),
             m(
               'ul.fm-themes-passages',
               passages.map((passage) => passageRow(passage, attrs, fail)),
-            ),
-          ]),
-      documents.length === 0
-        ? undefined
-        : m('.fm-themes-documents', [
-            m('h5', t('themes', 'topDocuments')),
-            m(
-              'ul.fm-themes-document-list',
-              documents.map((document) =>
-                m('li', { key: document.sourceId }, [
-                  m('span', document.title.length > 0 ? document.title : t('themes', 'untitled')),
-                  m('span.fm-themes-muted', ` · ${percentText(document.share)}`),
-                ]),
-              ),
             ),
           ]),
     ]);
@@ -433,7 +552,12 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
 
   function start(attrs: ThemesViewAttrs): void {
     scopeIndex = 0;
-    void load(attrs);
+    busy = true;
+    visibleScopes = attrs.scopes.filter((scope) => scope.kind !== 'currentFolder');
+    void resolveScopes(attrs).then((resolved) => {
+      visibleScopes = resolved;
+      void load(attrs);
+    });
     stopPolling();
     poll = setInterval(() => {
       if (!busy) void refreshStatus(attrs, generation);
@@ -456,11 +580,11 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
           m('button.btn-flat', { type: 'button', onclick: attrs.onClose }, t('button', 'close')),
         ]),
         m('.fm-themes-content', [
-          attrs.scopes.length > 1
+          visibleScopes.length > 1
             ? m(
                 '.fm-themes-scopes',
                 { role: 'group', 'aria-label': t('themes', 'scopeLabel') },
-                attrs.scopes.map((scope, index) =>
+                visibleScopes.map((scope, index) =>
                   m(
                     'button.fm-themes-scope',
                     {
@@ -474,7 +598,9 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
                         void load(attrs);
                       },
                     },
-                    scope.label,
+                    scope.kind === 'currentFolder' && scope.folder != null
+                      ? `${scope.label}: ${folderName(scope.folder.uri)}`
+                      : scope.label,
                   ),
                 ),
               )
@@ -500,13 +626,13 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
           themes === undefined
             ? undefined
             : m('.fm-themes-body', [
-                m('p.fm-themes-muted', [
+                m(
+                  'p.fm-themes-muted',
                   t('themes', 'analysed', {
                     documents: themes.documentCount,
                     passages: themes.chunkCount,
                   }),
-                  ` · ${t('themes', 'model', { model: themes.modelId })}`,
-                ]),
+                ),
                 m('.fm-themes-layout', [
                   m('.fm-themes-map', [
                     m('h4', t('themes', 'mapHeading')),
@@ -530,12 +656,6 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
                     }),
                     m('p.fm-themes-muted', t('themes', 'mapLabel')),
                     m('p.fm-themes-muted', t('themes', 'mapHint')),
-                    hovered === undefined
-                      ? undefined
-                      : m('p.fm-themes-hover', { role: 'status' }, [
-                          m('strong', hovered.passage.title),
-                          ` — ${hovered.passage.excerpt}`,
-                        ]),
                     themes.mapSampled
                       ? m(
                           'p.fm-themes-muted',
@@ -548,6 +668,16 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
                   ]),
                   m('.fm-themes-listing', [m('h4', t('themes', 'listHeading')), themeList(themes)]),
                 ]),
+                m(
+                  'p.fm-themes-hover',
+                  { role: 'status' },
+                  hovered === undefined
+                    ? undefined
+                    : [
+                        m('strong', cleanTitle(hovered.passage.title)),
+                        ` — ${decodeEntities(hovered.passage.excerpt)}`,
+                      ],
+                ),
                 themeDetails(themes, attrs),
               ]),
         ]),
