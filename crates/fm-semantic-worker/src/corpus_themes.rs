@@ -25,9 +25,9 @@ use crate::kmeans;
 use crate::semantic_storage::{SemanticCatalog, StorageError};
 
 /// Versioned clustering and labelling contract.
-pub const ALGORITHM_VERSION: &str = "corpus-themes-kmeans/2";
+pub const ALGORITHM_VERSION: &str = "corpus-themes-kmeans/3";
 /// Versioned document-centroid contract.
-pub const CENTROID_ALGORITHM_VERSION: &str = "document-centroid-mean/1";
+pub const CENTROID_ALGORITHM_VERSION: &str = "document-centroid-mean/2";
 /// Model identity of the deterministic token-hashing development profile.
 pub const TOKEN_HASHING_MODEL_ID: &str = "procyon.dev.hashing-embedding";
 

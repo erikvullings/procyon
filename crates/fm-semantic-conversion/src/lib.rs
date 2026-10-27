@@ -118,7 +118,10 @@ pub use model::{
     VisualOmission, VisualProvenance,
 };
 pub use pdf_report::{InvalidPdfTextReport, PdfTextReport};
-pub use pdf_toc::{clean_pdf_toc_text, is_pdf_toc_section, repair_spaced_elsevier_doi};
+pub use pdf_toc::{
+    clean_pdf_toc_text, is_back_matter, is_pdf_toc_section, is_references_section,
+    looks_like_reference_list, repair_spaced_elsevier_doi,
+};
 pub use sniff::{ResolvedFormat, is_jsonl_hint, resolve_format};
 pub use text::{
     DecodedText, SanitizedText, SourceMap, SourceSegment, decode, instruction_like_excerpt,

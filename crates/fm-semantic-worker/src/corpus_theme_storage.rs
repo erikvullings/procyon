@@ -168,30 +168,35 @@ impl SemanticCatalog {
         let sources = serde_json::to_string(&scope.source_ids)?;
         let connection = self.connection()?;
         let mut statement = connection.prepare(&format!(
-            "SELECT r.document_id, r.generation, d.content_hash, COUNT(*)
+            "SELECT r.document_id, r.generation, d.content_hash, r.section_path_json,
+                    substr(r.content, 1, {MAX_CHUNK_TEXT_CHARS})
              {CORPUS_FROM}
-             GROUP BY r.document_id, r.generation, d.content_hash
-             ORDER BY r.document_id"
+             ORDER BY r.document_id, r.generation"
         ))?;
-        let rows =
-            statement.query_map(params![scope.tenant_id, scope.library_id, sources], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, i64>(3)?,
-                ))
-            })?;
-        rows.map(|row| {
-            let (document_id, generation, content_hash, chunks) = row?;
-            Ok(CorpusDocument {
-                document_id,
-                generation: u64::try_from(generation).map_err(|_| StorageError::CorruptCatalog)?,
-                content_hash,
-                chunk_count: u32::try_from(chunks).map_err(|_| StorageError::CorruptCatalog)?,
-            })
-        })
-        .collect()
+        let mut rows = statement.query(params![scope.tenant_id, scope.library_id, sources])?;
+        let mut documents: Vec<CorpusDocument> = Vec::new();
+        while let Some(row) = rows.next()? {
+            let document_id: String = row.get(0)?;
+            let generation =
+                u64::try_from(row.get::<_, i64>(1)?).map_err(|_| StorageError::CorruptCatalog)?;
+            let section_path: Vec<String> = serde_json::from_str(&row.get::<_, String>(3)?)?;
+            // Counts must match what `visit_corpus_chunks` streams.
+            if fm_semantic_conversion::is_back_matter(&section_path, &row.get::<_, String>(4)?) {
+                continue;
+            }
+            match documents.last_mut() {
+                Some(last) if last.document_id == document_id && last.generation == generation => {
+                    last.chunk_count += 1;
+                }
+                _ => documents.push(CorpusDocument {
+                    document_id,
+                    generation,
+                    content_hash: row.get(2)?,
+                    chunk_count: 1,
+                }),
+            }
+        }
+        Ok(documents)
     }
 
     /// Streams eligible chunks ordered by document, position and chunk id.
@@ -239,6 +244,10 @@ impl SemanticCatalog {
                 provenance: row.get(9)?,
                 concept_id: row.get(10)?,
             };
+            // Contents pages and bibliographies describe a document's apparatus, not its themes.
+            if fm_semantic_conversion::is_back_matter(&chunk.section_path, &chunk.text) {
+                continue;
+            }
             if !visitor(chunk) {
                 break;
             }

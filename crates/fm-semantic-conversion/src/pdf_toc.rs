@@ -87,9 +87,98 @@ pub fn is_pdf_toc_section(section_path: &[String]) -> bool {
     })
 }
 
+/// Heading titles (lower-cased, without numbering) that open a bibliography.
+const REFERENCE_HEADINGS: &[&str] = &[
+    "references",
+    "reference list",
+    "bibliography",
+    "works cited",
+    "literature cited",
+    "literature",
+    "referenties",
+    "literatuur",
+    "literatuurlijst",
+    "bronnen",
+    "bronnenlijst",
+    "bibliografie",
+    "literaturverzeichnis",
+    "literatur",
+    "quellenverzeichnis",
+    "références",
+    "bibliographie",
+    "referencias",
+    "bibliografía",
+    "referências",
+    "bibliografia",
+    "riferimenti",
+    "piśmiennictwo",
+];
+
+/// Whether a structural path sits under a references / bibliography heading.
+#[must_use]
+pub fn is_references_section(section_path: &[String]) -> bool {
+    section_path.iter().any(|component| {
+        let title = component
+            .trim()
+            .trim_start_matches(|character: char| {
+                character.is_ascii_digit() || matches!(character, '.' | ')' | ' ')
+            })
+            .trim_end_matches([':', '.'])
+            .to_lowercase();
+        REFERENCE_HEADINGS.contains(&title.as_str())
+    })
+}
+
+/// Citations an APA-style entry list needs before text counts as a reference list.
+const MIN_REFERENCE_ENTRIES: usize = 3;
+
+/// Whether text is dominated by bibliography entries such as `Kelly, J. (1986). Title`,
+/// for lists whose heading was not recognised as a heading.
+#[must_use]
+pub fn looks_like_reference_list(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let entries = bytes
+        .windows(7)
+        .filter(|window| {
+            window[0] == b'('
+                && window[1..5].iter().all(u8::is_ascii_digit)
+                && matches!(window[5], b')' | b'a'..=b'z')
+                && (window[5] == b')' && window[6] == b'.'
+                    || window[5] != b')' && window[6] == b')')
+        })
+        .count();
+    entries >= MIN_REFERENCE_ENTRIES
+}
+
+/// Whether a chunk is table-of-contents or reference-list material that should not shape
+/// corpus-level analysis.
+#[must_use]
+pub fn is_back_matter(section_path: &[String], text: &str) -> bool {
+    is_pdf_toc_section(section_path)
+        || is_references_section(section_path)
+        || clean_pdf_toc_text(text).1
+        || looks_like_reference_list(text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recognises_reference_headings_and_citation_lists() {
+        assert!(is_references_section(&["7. References".into()]));
+        assert!(is_references_section(&[
+            "Intro".into(),
+            "LITERATUUR".into()
+        ]));
+        assert!(!is_references_section(&["Referencing methods".into()]));
+        assert!(looks_like_reference_list(
+            "Kelly, J. (1986). Title one. Pittman, K. (1996). Title two. Rutter, M. (1987). Three."
+        ));
+        assert!(!looks_like_reference_list(
+            "Resilience (Rutter, 1987). Risk factors (Durlak, 1997). A later study (2004) agreed."
+        ));
+    }
 
     #[test]
     fn cleans_only_separated_navigation_leaders() {

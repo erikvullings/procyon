@@ -38,9 +38,12 @@ fn topic_vector(topic: usize, seed: u64) -> Vec<f32> {
     vector.iter().map(|value| value / norm).collect()
 }
 
+#[derive(Clone, Copy)]
 struct ChunkSpec {
     topic: usize,
     word: &'static str,
+    /// Overrides the structural heading of the chunk.
+    section: Option<&'static str>,
 }
 
 const TOPIC_WORDS: [&str; 4] = ["harbour", "mortgage", "volcano", "violin"];
@@ -49,6 +52,7 @@ fn spec(topic: usize) -> ChunkSpec {
     ChunkSpec {
         topic,
         word: TOPIC_WORDS[topic],
+        section: None,
     }
 }
 
@@ -120,7 +124,11 @@ fn stage_document(
                 excerpt: content.clone(),
                 content,
                 token_count: 10,
-                section_path: vec![format!("section {position}")],
+                section_path: vec![
+                    chunk
+                        .section
+                        .map_or_else(|| format!("section {position}"), str::to_owned),
+                ],
                 structural_role: "body".into(),
                 provenance: format!(
                     "{{\"kind\":\"textLines\",\"start_line\":{},\"end_line\":{}}}",
@@ -848,4 +856,32 @@ fn labels_ignore_stopwords_and_rank_distinctive_terms() {
         assert!(theme.keywords.iter().all(|keyword| keyword.term != "the"));
     }
     assert!(terms("The harbour and 1234 of 42 harbours").eq(["harbour", "harbours"]));
+}
+
+#[test]
+fn references_and_contents_do_not_shape_the_themes() {
+    let catalog = open_catalog();
+    stage_corpus(&catalog, &ALL_DOCS);
+    let reference = ChunkSpec {
+        section: Some("7. References"),
+        ..spec(0)
+    };
+    let contents = ChunkSpec {
+        section: Some("Contents"),
+        ..spec(1)
+    };
+    stage_document(
+        &catalog,
+        "doc-a",
+        2,
+        &[spec(0), spec(0), spec(0), spec(0), reference, contents],
+    );
+    let service = CorpusThemeService::new(catalog, identity());
+    let themes = analyze(&service, &scope_of(&ALL_DOCS));
+    // doc-a keeps its four body chunks; the two back-matter chunks are not counted.
+    assert_eq!(
+        themes.chunk_count,
+        4 + 4 + 4 + 4 + 6 + 6 + 4 + 4,
+        "{themes:#?}"
+    );
 }
