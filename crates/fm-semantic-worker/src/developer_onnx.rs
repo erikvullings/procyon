@@ -65,7 +65,8 @@ impl OnnxEmbeddingBackend {
         let graph = pack
             .read(GRAPH_MEMBER)
             .map_err(|error| EmbeddingError::Backend(error.to_string()))?;
-        let session = Session::builder()
+        let environment = ort::init().build().map_err(tensor_error)?;
+        let session = Session::builder(&environment)
             .map_err(session_error)?
             .with_optimization_level(GraphOptimizationLevel::Level3)
             .map_err(session_error)?
