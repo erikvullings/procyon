@@ -33,7 +33,7 @@ const OCR_REQUIRED_GUIDANCE: &str = "This PDF has no searchable text layer and w
 
 /// Version of the Docling extraction and Procyon structural mapping behavior.
 pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
-    ComponentVersion::new("docling-pdf", 1_036_001);
+    ComponentVersion::new("docling-pdf", 2_052_009);
 /// Stable identity of the production conversion pipeline.
 ///
 /// This changes whenever the preferred converter or fallback behaviour can
@@ -41,7 +41,7 @@ pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
 /// included: enabling it retries only previously textless PDFs, while
 /// disabling it makes reconciliation remove their OCR-derived occurrences.
 /// OCR-derived documents carry [`OCRMYPDF_CONVERTER_VERSION`] themselves.
-pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/1036001+baseline/3";
+pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2052009+baseline/4";
 /// Version of the optional OCRmyPDF plus deterministic Docling composition.
 pub const OCRMYPDF_CONVERTER_VERSION: ComponentVersion =
     ComponentVersion::new("ocrmypdf-docling", 2);
@@ -1393,6 +1393,13 @@ impl<'a> Mapper<'a> {
                     self.emit(UnitKind::Paragraph, text);
                 }
             }
+            Node::Caption { text, .. }
+            | Node::LabeledText { text, .. }
+            | Node::ListText { text, .. } => {
+                if !self.is_page_number(&text) {
+                    self.emit(UnitKind::Paragraph, text);
+                }
+            }
             Node::InlineGroup { md_text, .. } => self.emit(UnitKind::Paragraph, md_text),
             Node::CheckboxItem { checked, text } => {
                 self.emit(
@@ -1436,10 +1443,23 @@ impl<'a> Mapper<'a> {
                     }
                 }
             }
-            Node::Located { inner, .. } | Node::Commented { inner, .. } => {
+            Node::Located { inner, .. }
+            | Node::Commented { inner, .. }
+            | Node::Track { inner, .. }
+            | Node::Prov { inner, .. } => {
                 self.map_node(*inner, depth.saturating_add(1));
             }
-            Node::Furniture { .. } | Node::PageFurniture { .. } | Node::CommentSection { .. } => {}
+            Node::PictureChildren(children) => {
+                for child in children {
+                    self.map_node(child, depth.saturating_add(1));
+                }
+            }
+            Node::Furniture { .. }
+            | Node::PageFurniture { .. }
+            | Node::FurnitureText { .. }
+            | Node::CommentSection { .. }
+            | Node::Anchor { .. }
+            | Node::KeyValueGraph { .. } => {}
             Node::DoclangOnly(_) => self.warn(ConversionWarning::UnsupportedFeature {
                 detail: "DocLang-only PDF content was not added to semantic text".into(),
             }),
@@ -1872,6 +1892,7 @@ mod tests {
             compact_tables: false,
             links: Vec::new(),
             confidence: None,
+            ..DoclingDocument::new("fixture")
         };
         let context = ConversionContext::new();
         let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 2, 2, None);
@@ -1927,6 +1948,7 @@ mod tests {
             compact_tables: false,
             links: Vec::new(),
             confidence: None,
+            ..DoclingDocument::new("fixture")
         };
         let context = ConversionContext::new();
         let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 1, 1, None);
@@ -1961,6 +1983,7 @@ mod tests {
             compact_tables: false,
             links: Vec::new(),
             confidence: None,
+            ..DoclingDocument::new("fixture")
         };
         let context = ConversionContext::new();
         let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 1, 1, None);
@@ -2001,6 +2024,7 @@ mod tests {
             compact_tables: false,
             links: Vec::new(),
             confidence: None,
+            ..DoclingDocument::new("fixture")
         };
         let context = ConversionContext::new();
         let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 1, 1, None);
@@ -2049,6 +2073,7 @@ mod tests {
             compact_tables: false,
             links: Vec::new(),
             confidence: None,
+            ..DoclingDocument::new("fixture")
         };
         let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 1, 1, None);
         mapper.map_document(document);
@@ -2087,6 +2112,7 @@ mod tests {
             confidence: Some(docling_core::confidence::ConfidenceReport::from_pages(
                 pages,
             )),
+            ..DoclingDocument::new("fixture")
         };
         let context = ConversionContext::new();
         let mut mapper = Mapper::new(

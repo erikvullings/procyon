@@ -182,13 +182,55 @@ fn page_blocks(text: &str) -> Vec<String> {
     blocks
 }
 
+/// Kerning adjustment (thousandths of an em) beyond which `lopdf` reads a gap
+/// between `TJ` strings as a word space.
+const WORD_GAP_THRESHOLD: f32 = -100.0;
+
+/// Rewrites fractional `TJ` word gaps on one page as integers.
+///
+/// `lopdf` only turns an `Integer` adjustment below [`WORD_GAP_THRESHOLD`] into
+/// a space, but many producers write gaps as reals (`-333.7`), so their words
+/// were glued together (`riskandprotectivefactors`). Best effort: an
+/// unreadable or over-limit page is left for the text extraction to report.
+fn promote_fractional_word_gaps(document: &mut Document, page_id: lopdf::ObjectId) {
+    let Ok(bytes) = document.get_page_content_with_limit(page_id, MAX_PAGE_CONTENT_BYTES) else {
+        return;
+    };
+    let Ok(mut content) = Content::decode(&bytes) else {
+        return;
+    };
+    let mut changed = false;
+    for operation in content
+        .operations
+        .iter_mut()
+        .filter(|operation| operation.operator == "TJ")
+    {
+        for operand in &mut operation.operands {
+            let Object::Array(elements) = operand else {
+                continue;
+            };
+            for element in elements {
+                if let Object::Real(gap) = element
+                    && *gap < WORD_GAP_THRESHOLD
+                {
+                    *element = Object::Integer(gap.round() as i64);
+                    changed = true;
+                }
+            }
+        }
+    }
+    if changed && let Ok(encoded) = content.encode() {
+        let _ = document.change_page_content(page_id, encoded);
+    }
+}
+
 /// Converts a PDF's text layer into per-page blocks.
 pub(crate) fn convert(
     builder: &mut DocumentBuilder<'_, '_>,
     bytes: &[u8],
     window: Option<PdfPageWindow>,
 ) -> Result<(), PdfError> {
-    let document = crate::load_pdf_structure(bytes)
+    let mut document = crate::load_pdf_structure(bytes)
         .map_err(|error| PdfError::Malformed(format!("the PDF is not readable: {error}")))?;
     if document.is_encrypted() {
         return Err(PdfError::Encrypted(
@@ -233,6 +275,9 @@ pub(crate) fn convert(
         builder.checkpoint().map_err(PdfError::from)?;
         if builder.is_saturated() {
             break;
+        }
+        if let Some(&page_id) = pages.get(&page_number) {
+            promote_fractional_word_gaps(&mut document, page_id);
         }
         let text = match document.extract_text_with_limit(&[page_number], MAX_PAGE_CONTENT_BYTES) {
             Ok(text) => text,
@@ -913,6 +958,45 @@ pub(crate) mod tests {
                 .any(|unit| unit.kind == UnitKind::Paragraph
                     && unit.text.contains("prose... retains"))
         );
+    }
+
+    #[test]
+    fn baseline_pdf_reads_fractional_kerning_gaps_as_word_spaces() {
+        let mut document = Document::with_version("1.5");
+        let pages_id = document.new_object_id();
+        let font_id = document.add_object(dictionary! {
+            "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
+        });
+        let content =
+            b"BT /F1 12 Tf 72 720 Td [(risk)-333.7(and)-333.7(protective)-2.5(factors)] TJ ET";
+        let content_id = document.add_object(Stream::new(dictionary! {}, content.to_vec()));
+        let page_id = document.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "Contents" => content_id,
+            "Resources" => dictionary! { "Font" => dictionary! { "F1" => font_id } },
+            "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        });
+        document.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages", "Kids" => vec![Object::Reference(page_id)], "Count" => 1,
+            }),
+        );
+        let catalog_id =
+            document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+        document.trailer.set("Root", catalog_id);
+        let mut bytes = Vec::new();
+        document.save_to(&mut bytes).expect("save pdf");
+
+        let converted = convert_pdf(&bytes).expect("convert PDF");
+        let text = converted
+            .units()
+            .iter()
+            .map(|unit| unit.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(text.contains("risk and protectivefactors"), "{text}");
     }
 
     #[test]

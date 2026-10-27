@@ -1119,14 +1119,14 @@ impl ThemeAccumulator {
                 vector: chunk.vector.clone(),
                 bucket,
                 passage: ThemePassage {
-                    excerpt: passage
-                        .excerpt
-                        .split_whitespace()
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                        .chars()
-                        .take(MAP_EXCERPT_CHARS)
-                        .collect(),
+                    excerpt: truncate_at_word(
+                        &passage
+                            .excerpt
+                            .split_whitespace()
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                        MAP_EXCERPT_CHARS,
+                    ),
                     ..passage.clone()
                 },
             });
@@ -1341,7 +1341,21 @@ fn excerpt(text: &str) -> String {
             break;
         }
     }
-    out.chars().take(MAX_EXCERPT_CHARS).collect()
+    truncate_at_word(&out, MAX_EXCERPT_CHARS)
+}
+
+/// Cuts at the last whitespace before `limit` chars and marks the cut, so an
+/// excerpt never ends in the middle of a word.
+fn truncate_at_word(text: &str, limit: usize) -> String {
+    let Some((cut, _)) = text.char_indices().nth(limit) else {
+        return text.to_owned();
+    };
+    let head = &text[..cut];
+    let boundary = head
+        .rfind(char::is_whitespace)
+        .filter(|&index| index > 0)
+        .unwrap_or(cut);
+    format!("{}…", head[..boundary].trim_end())
 }
 
 fn keep_nearest(passages: &mut Vec<ThemePassage>, passage: ThemePassage, limit: usize) {
