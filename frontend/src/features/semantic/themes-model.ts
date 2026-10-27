@@ -301,3 +301,33 @@ export function folderIsEnrolled(
     return candidate === base || (root.recursive && candidate.startsWith(`${base}/`));
   });
 }
+
+/** A line that starts its own Markdown block, so it must keep its line break. */
+const BLOCK_START = /^(?:[-*+] |\d+[.)] |#{1,6} |> |\||```)/;
+
+/**
+ * Re-flows hard-wrapped PDF text: a single line break inside a block is a wrap, not a
+ * paragraph, so it becomes a space (a hyphenated break is rejoined). Blank lines stay
+ * paragraph breaks, and list/heading/table lines keep their own line.
+ */
+export function reflowPassage(text: string): string {
+  return text
+    .split(/\n[ \t]*\n/)
+    .map((block) => {
+      const lines = block
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      let out = '';
+      for (const line of lines) {
+        if (out.length === 0) out = line;
+        else if (BLOCK_START.test(line) || BLOCK_START.test(out.slice(out.lastIndexOf('\n') + 1)))
+          out += `\n${line}`;
+        else if (/[\p{L}]-$/u.test(out) && /^\p{Ll}/u.test(line)) out += line;
+        else out += ` ${line}`;
+      }
+      return out;
+    })
+    .filter((block) => block.length > 0)
+    .join('\n\n');
+}

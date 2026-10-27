@@ -1696,8 +1696,7 @@ export const fr = {
     noThemeHint: 'Passages qui ne correspondent à aucun thème.',
     mapHeading: 'Carte des thèmes',
     mapLabel:
-      'Carte bidimensionnelle des passages, colorée par thème. La liste des thèmes offre les mêmes informations.',
-    mapSampled: 'La carte montre un échantillon de {shown} passages sur {total}.',
+      'Carte bidimensionnelle des passages, colorée par thème. La liste des thèmes offre les mêmes informations. Survolez un point pour lire son passage. Cliquez pour ouvrir la source.',
     openSource: 'Ouvrir la source',
     openSourceFailed: 'La source n’a pas pu être ouverte.',
     atLine: 'Ligne {line}',
@@ -1711,11 +1710,10 @@ export const fr = {
     examplesHint:
       'Les passages les plus proches du centre de ce thème : son texte le plus typique.',
     concepts: 'Concepts',
-    mapHint: 'Survolez un point pour lire son passage. Cliquez pour ouvrir la source.',
     untitled: 'Source sans titre',
     themeNumber: 'Thème {number}',
     model: 'Modèle d’embedding : {model}',
-    analysed: '{documents} documents · {passages} passages',
+    analysed: '{documents} documents · {passages} passages · {shown} affichés',
     themeMixture: 'Répartition des thèmes',
     selectTheme: 'Sélectionner ce thème',
     unavailable: 'Les thèmes ne sont pas disponibles dans cette configuration.',

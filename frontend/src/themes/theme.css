@@ -5657,6 +5657,20 @@ button.fm-activity-count {
 .fm-themes-list,
 .fm-themes-passages,
 .fm-themes-document-list,
+.fm-themes-details-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.fm-themes-details-head h4 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .fm-themes-chips {
   margin: 0;
   padding: 0;
@@ -5756,9 +5770,39 @@ button.fm-activity-count {
   margin-bottom: 0;
 }
 
+.fm-themes-passage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.fm-themes-passage-title {
+  min-width: 0;
+}
+
 .fm-themes-expand {
-  padding: 0 0.4rem;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--fm-accent);
+  border-radius: 999px;
+  background: transparent;
   color: var(--fm-accent);
+  font-size: 0.8rem;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.fm-themes-expand:hover {
+  background: color-mix(in srgb, var(--fm-accent) 12%, transparent);
+}
+
+.fm-themes-expand svg {
+  width: 0.9rem;
+  height: 0.9rem;
 }
 
 .fm-themes-document-list {

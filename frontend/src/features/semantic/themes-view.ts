@@ -1,7 +1,8 @@
-import m, { type FactoryComponent, type Vnode } from 'mithril';
+import m, { type FactoryComponent, type Vnode, type VnodeDOM } from 'mithril';
 import { Skeleton } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
+import { chevronDownIcon, chevronUpIcon } from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import type {
   CorpusThemeStatus,
@@ -22,6 +23,7 @@ import {
   NO_THEME_COLOUR,
   percentText,
   pickPoint,
+  reflowPassage,
   resolveColour,
   type ScatterGeometry,
   themeColour,
@@ -209,38 +211,81 @@ function documentAsPassage(document: {
   };
 }
 
-/** Passages longer than this get a show more / show less toggle. */
-const COLLAPSED_PASSAGE_CHARS = 260;
-
-interface PassageTextAttrs {
-  readonly excerpt: string;
+interface PassageAttrs {
+  readonly passage: ThemePassage;
+  readonly attrs: ThemesViewAttrs;
+  readonly failed: (message: string) => void;
 }
 
-/** A passage rendered as Markdown, clamped to a few lines until expanded. */
-const PassageText: FactoryComponent<PassageTextAttrs> = () => {
+/**
+ * One passage: the source link and an expand toggle share the head line, and the text is
+ * clamped to a few lines. The toggle only appears when the clamp actually hides text.
+ */
+const PassageItem: FactoryComponent<PassageAttrs> = () => {
   let expanded = false;
+  let overflowing = false;
+  let excerpt: HTMLElement | undefined;
+  const measure = (): void => {
+    if (excerpt === undefined || expanded) return;
+    const next = excerpt.scrollHeight > excerpt.clientHeight + 1;
+    if (next !== overflowing) {
+      overflowing = next;
+      m.redraw();
+    }
+  };
   return {
-    view: ({ attrs }) => {
-      const long = attrs.excerpt.length > COLLAPSED_PASSAGE_CHARS;
-      return m('.fm-themes-passage-body', [
-        m('.fm-themes-excerpt', {
-          class: long && !expanded ? 'is-clamped' : '',
-          // Sanitized by `safeMarkdownHtml` (DOMPurify), like the Markdown file preview.
-          innerHTML: safeMarkdownHtml(decodeEntities(attrs.excerpt, true)),
-        }),
-        long
-          ? m(
-              'button.btn-flat.fm-themes-expand',
+    oncreate: measure,
+    onupdate: measure,
+    view: ({ attrs: { passage, attrs, failed } }) => {
+      const location = knowledgeProvenanceLabel(passage.provenance);
+      const title = passage.title.length > 0 ? cleanTitle(passage.title) : t('themes', 'untitled');
+      const toggleLabel = t('themes', expanded ? 'showLess' : 'showMore');
+      return m('.fm-themes-passage-item', [
+        m('.fm-themes-passage-head', [
+          m('.fm-themes-passage-title', [
+            m(
+              'a.fm-themes-source',
               {
-                type: 'button',
-                'aria-expanded': String(expanded),
-                onclick: () => {
-                  expanded = !expanded;
+                href: '#',
+                title: t('themes', 'openSource'),
+                onclick: (event: MouseEvent) => {
+                  event.preventDefault();
+                  void Promise.resolve(attrs.onOpenPassage(passage)).catch((cause: unknown) =>
+                    failed(errorMessage(cause, t('themes', 'openSourceFailed'))),
+                  );
                 },
               },
-              t('themes', expanded ? 'showLess' : 'showMore'),
-            )
-          : undefined,
+              title,
+            ),
+            location.length > 0 ? m('span.fm-themes-muted', ` · ${location}`) : undefined,
+          ]),
+          overflowing || expanded
+            ? m(
+                'button.fm-themes-expand',
+                {
+                  type: 'button',
+                  title: toggleLabel,
+                  'aria-label': toggleLabel,
+                  'aria-expanded': String(expanded),
+                  onclick: () => {
+                    expanded = !expanded;
+                  },
+                },
+                [
+                  m('span', toggleLabel),
+                  expanded ? chevronUpIcon({ size: 14 }) : chevronDownIcon({ size: 14 }),
+                ],
+              )
+            : undefined,
+        ]),
+        m('.fm-themes-excerpt', {
+          class: expanded ? '' : 'is-clamped',
+          oncreate: (vnode: VnodeDOM) => {
+            excerpt = vnode.dom as HTMLElement;
+          },
+          // Sanitized by `safeMarkdownHtml` (DOMPurify), like the Markdown file preview.
+          innerHTML: safeMarkdownHtml(reflowPassage(decodeEntities(passage.excerpt, true))),
+        }),
       ]);
     },
   };
@@ -251,28 +296,11 @@ function passageRow(
   attrs: ThemesViewAttrs,
   failed: (message: string) => void,
 ): Vnode {
-  const location = knowledgeProvenanceLabel(passage.provenance);
-  const title = passage.title.length > 0 ? cleanTitle(passage.title) : t('themes', 'untitled');
-  return m('li.fm-themes-passage', { key: passage.chunkId }, [
-    m('.fm-themes-passage-head', [
-      m(
-        'a.fm-themes-source',
-        {
-          href: '#',
-          title: t('themes', 'openSource'),
-          onclick: (event: MouseEvent) => {
-            event.preventDefault();
-            void Promise.resolve(attrs.onOpenPassage(passage)).catch((cause: unknown) =>
-              failed(errorMessage(cause, t('themes', 'openSourceFailed'))),
-            );
-          },
-        },
-        title,
-      ),
-      location.length > 0 ? m('span.fm-themes-muted', ` · ${location}`) : undefined,
-    ]),
-    m(PassageText, { excerpt: passage.excerpt }),
-  ]);
+  return m(
+    'li.fm-themes-passage',
+    { key: passage.chunkId },
+    m(PassageItem, { passage, attrs, failed }),
+  );
 }
 
 /** Corpus themes as a full pane view (map, theme list, details), like disk usage. */
@@ -406,16 +434,18 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
     };
     const picked = selectedPoint;
     return m('section.fm-themes-details', { 'aria-live': 'polite' }, [
-      m('h4', selected === null ? t('themes', 'noTheme') : themeLabel(selected, themes)),
-      m(
-        'button.btn.fm-themes-search',
-        {
-          type: 'button',
-          disabled: busy,
-          onclick: () => void searchWithinTheme(attrs, themes, selected ?? null),
-        },
-        t('themes', 'searchInTheme'),
-      ),
+      m('.fm-themes-details-head', [
+        m('h4', selected === null ? t('themes', 'noTheme') : themeLabel(selected, themes)),
+        m(
+          'button.btn.fm-themes-search',
+          {
+            type: 'button',
+            disabled: busy,
+            onclick: () => void searchWithinTheme(attrs, themes, selected ?? null),
+          },
+          t('themes', 'searchInTheme'),
+        ),
+      ]),
       theme === undefined
         ? m('p.fm-themes-muted', t('themes', 'noThemeHint'))
         : m('.fm-themes-keywords', [
@@ -631,6 +661,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
                   t('themes', 'analysed', {
                     documents: themes.documentCount,
                     passages: themes.chunkCount,
+                    shown: themes.mapPoints.length,
                   }),
                 ),
                 m('.fm-themes-layout', [
@@ -655,16 +686,6 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
                       },
                     }),
                     m('p.fm-themes-muted', t('themes', 'mapLabel')),
-                    m('p.fm-themes-muted', t('themes', 'mapHint')),
-                    themes.mapSampled
-                      ? m(
-                          'p.fm-themes-muted',
-                          t('themes', 'mapSampled', {
-                            shown: themes.mapPoints.length,
-                            total: themes.chunkCount,
-                          }),
-                        )
-                      : undefined,
                   ]),
                   m('.fm-themes-listing', [m('h4', t('themes', 'listHeading')), themeList(themes)]),
                 ]),

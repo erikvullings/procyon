@@ -1707,8 +1707,7 @@ export const de = {
     noThemeHint: 'Passagen, die zu keinem Thema passen.',
     mapHeading: 'Themenkarte',
     mapLabel:
-      'Zweidimensionale Karte der Passagen, nach Thema eingefärbt. Die Themenliste enthält dieselben Informationen.',
-    mapSampled: 'Die Karte zeigt eine Stichprobe von {shown} von {total} Passagen.',
+      'Zweidimensionale Karte der Passagen, nach Thema eingefärbt. Die Themenliste enthält dieselben Informationen. Mit der Maus über einen Punkt fahren, um die Passage zu lesen. Klicken öffnet die Quelle.',
     openSource: 'Quelle öffnen',
     openSourceFailed: 'Die Quelle konnte nicht geöffnet werden.',
     atLine: 'Zeile {line}',
@@ -1721,12 +1720,10 @@ export const de = {
     showLess: 'Weniger anzeigen',
     examplesHint: 'Die Passagen nahe der Mitte dieses Themas: der typischste Text.',
     concepts: 'Konzepte',
-    mapHint:
-      'Mit der Maus über einen Punkt fahren, um die Passage zu lesen. Klicken öffnet die Quelle.',
     untitled: 'Unbenannte Quelle',
     themeNumber: 'Thema {number}',
     model: 'Embedding-Modell: {model}',
-    analysed: '{documents} Dokumente · {passages} Passagen',
+    analysed: '{documents} Dokumente · {passages} Passagen · {shown} angezeigt',
     themeMixture: 'Themenmix',
     selectTheme: 'Dieses Thema auswählen',
     unavailable: 'Themen sind in dieser Konfiguration nicht verfügbar.',

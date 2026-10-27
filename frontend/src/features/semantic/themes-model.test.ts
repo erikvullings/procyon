@@ -11,6 +11,7 @@ import {
   percentText,
   pickPoint,
   provenanceLine,
+  reflowPassage,
   themeColour,
   themeKeywordLabel,
   themesAreStale,
@@ -121,5 +122,17 @@ describe('display text helpers', () => {
         { ...root, recursive: false },
       ]),
     ).toBe(false);
+  });
+});
+
+describe('reflowPassage', () => {
+  it('joins hard-wrapped lines and rejoins hyphenation, keeping paragraphs', () => {
+    expect(reflowPassage('risk and\nprotective well-\nbeing\n\nSecond paragraph')).toBe(
+      'risk and protective well-being\n\nSecond paragraph',
+    );
+  });
+
+  it('keeps list items on their own lines', () => {
+    expect(reflowPassage('Intro\n- one\n- two')).toBe('Intro\n- one\n- two');
   });
 });

@@ -209,7 +209,7 @@ describe('ThemesView', () => {
     expect(root.querySelector('.fm-themes-scope')).toBeNull();
   });
 
-  it('switches scope and shows a sampled-map disclosure', async () => {
+  it('switches scope and summarizes documents, passages and displayed points', async () => {
     const client = new MockFileManagerClient();
     const analyze = vi.spyOn(client, 'analyzeCorpusThemes');
     analyze.mockResolvedValue({
@@ -221,7 +221,7 @@ describe('ThemesView', () => {
       scopes: [scope('entireLibrary', 'Entire library'), scope('currentFolder', 'Current folder')],
     });
     await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
-    expect(root.textContent).toContain('The map shows a sample of 24 of 24 passages.');
+    expect(root.textContent).toMatch(/\d+ documents · 24 passages · 24 displayed/);
 
     const buttons = [...root.querySelectorAll<HTMLButtonElement>('.fm-themes-scope')];
     expect(buttons.map((button) => button.textContent)).toEqual([
