@@ -286,6 +286,9 @@ pub fn run() {
                     bundle.original_model,
                     bundle.ocr_executable,
                 );
+                tauri::async_runtime::spawn(semantic_developer::refresh_rebuilt_developer_install(
+                    Arc::clone(&bundle.components),
+                ));
                 service = service
                     .with_semantic_component_capability(bundle.components)
                     .with_semantic_capability(Arc::new(semantic))

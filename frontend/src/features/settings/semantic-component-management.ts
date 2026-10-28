@@ -1,4 +1,4 @@
-import m, { type FactoryComponent, type Vnode } from 'mithril';
+import m, { type FactoryComponent, type Vnode, type VnodeDOM } from 'mithril';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
@@ -444,103 +444,118 @@ function offerView(
     }),
     { download: 0, installed: 0, ram: 0 },
   );
-  return m('section.fm-semantic-offer', { 'aria-labelledby': 'fm-semantic-offer-heading' }, [
-    m('h6#fm-semantic-offer-heading', t('semanticComponents', 'offerHeading')),
-    m('dl.fm-semantic-definition-list', [
-      m('dt', t('semanticComponents', 'profile')),
-      m('dd', profileName(offer.profile)),
-      m('dt', t('semanticComponents', 'totalDownload')),
-      m('dd', formatBytes(totals.download)),
-      m('dt', t('semanticComponents', 'totalInstalled')),
-      m('dd', formatBytes(totals.installed)),
-      m('dt', t('semanticComponents', 'peakRam')),
-      m('dd', formatBytes(totals.ram)),
-      m('dt', t('semanticComponents', 'license')),
-      m('dd', [...new Set(offer.components.map((component) => component.license.spdx))].join(', ')),
-      m('dt', t('semanticComponents', 'localOnly')),
-      m('dd', [
-        `${offer.embeddingsStayLocal ? t('semanticComponents', 'yes') : t('semanticComponents', 'no')} · `,
-        offer.localOnlyDisclosure,
-      ]),
-      m('dt', t('semanticComponents', 'dataRoot')),
-      m('dd', offer.dataRoot),
-    ]),
-    setup,
-    m('details.fm-semantic-offer-details', [
-      m('summary', t('semanticComponents', 'technicalDetails')),
+  return m(
+    'section.fm-semantic-offer',
+    {
+      'aria-labelledby': 'fm-semantic-offer-heading',
+      // The disclosure is long; bring the decision into view once it has loaded.
+      oncreate: ({ dom }: VnodeDOM) =>
+        dom.querySelector('.fm-semantic-accept')?.scrollIntoView?.({ block: 'nearest' }),
+    },
+    [
+      m('h6#fm-semantic-offer-heading', t('semanticComponents', 'offerHeading')),
       m('dl.fm-semantic-definition-list', [
-        m('dt', t('semanticComponents', 'catalogRevision')),
-        m('dd', offer.catalogRevision),
-        m('dt', t('semanticComponents', 'modelId')),
-        m('dd', offer.resolvedModel.modelId),
-        m('dt', t('semanticComponents', 'exactModelRevision')),
-        m('dd', offer.resolvedModel.revision),
-        m('dt', t('semanticComponents', 'minimumReserve')),
-        m('dd', formatBytes(offer.minimumFreeSpaceReserveBytes)),
-      ]),
-      m('h6', t('semanticComponents', 'offerComponentsHeading')),
-      m(
-        'div.fm-semantic-table-wrap',
-        m('table.fm-semantic-component-table', [
-          m('thead', [
-            m('tr', [
-              m('th', t('semanticComponents', 'kind')),
-              m('th', t('semanticComponents', 'component')),
-              m('th', t('semanticComponents', 'signedArtifact')),
-              m('th', t('semanticComponents', 'version')),
-              m('th', t('semanticComponents', 'license')),
-              m('th', t('semanticComponents', 'downloadSize')),
-              m('th', t('semanticComponents', 'estimatedInstalledSize')),
-              m('th', t('semanticComponents', 'estimatedRam')),
-            ]),
-          ]),
-          m(
-            'tbody',
-            offer.components.map((component) =>
-              m('tr.fm-semantic-offer-component', { key: component.artifactId }, [
-                m('td', componentKindLabel(component.kind)),
-                m('td', [
-                  component.componentId,
-                  component.model == null
-                    ? undefined
-                    : m('small', `${component.model.modelId} · ${component.model.revision}`),
-                ]),
-                m('td', component.artifactId),
-                m('td', component.version),
-                m('td', [m('span', component.license.spdx), m('small', component.license.notice)]),
-                m('td', formatBytes(component.downloadBytes)),
-                m('td', formatBytes(component.estimatedInstalledBytes)),
-                m('td', formatBytes(component.estimatedRamBytes)),
-              ]),
-            ),
-          ),
+        m('dt', t('semanticComponents', 'profile')),
+        m('dd', profileName(offer.profile)),
+        m('dt', t('semanticComponents', 'totalDownload')),
+        m('dd', formatBytes(totals.download)),
+        m('dt', t('semanticComponents', 'totalInstalled')),
+        m('dd', formatBytes(totals.installed)),
+        m('dt', t('semanticComponents', 'peakRam')),
+        m('dd', formatBytes(totals.ram)),
+        m('dt', t('semanticComponents', 'license')),
+        m(
+          'dd',
+          [...new Set(offer.components.map((component) => component.license.spdx))].join(', '),
+        ),
+        m('dt', t('semanticComponents', 'localOnly')),
+        m('dd', [
+          `${offer.embeddingsStayLocal ? t('semanticComponents', 'yes') : t('semanticComponents', 'no')} · `,
+          offer.localOnlyDisclosure,
         ]),
-      ),
-    ]),
-    m('p.fm-semantic-consent-copy', t('semanticComponents', 'consentInstruction')),
-    busy === 'install'
-      ? m(
-          'p.fm-semantic-install-progress',
-          { role: 'status' },
-          t(
-            'semanticComponents',
-            offer.profile === 'embeddingGemma2' ? 'gemmaInstallStarting' : 'installStarting',
-          ),
-        )
-      : undefined,
-    m(
-      'button.btn.fm-semantic-action.fm-semantic-accept',
-      {
-        type: 'button',
-        ...busyButtonAttrs(busy === 'install'),
-        disabled: busy !== undefined || !canAccept,
-        onclick: onAccept,
-      },
+        m('dt', t('semanticComponents', 'dataRoot')),
+        m('dd', offer.dataRoot),
+      ]),
+      setup,
+      m('details.fm-semantic-offer-details', [
+        m('summary', t('semanticComponents', 'technicalDetails')),
+        m('dl.fm-semantic-definition-list', [
+          m('dt', t('semanticComponents', 'catalogRevision')),
+          m('dd', offer.catalogRevision),
+          m('dt', t('semanticComponents', 'modelId')),
+          m('dd', offer.resolvedModel.modelId),
+          m('dt', t('semanticComponents', 'exactModelRevision')),
+          m('dd', offer.resolvedModel.revision),
+          m('dt', t('semanticComponents', 'minimumReserve')),
+          m('dd', formatBytes(offer.minimumFreeSpaceReserveBytes)),
+        ]),
+        m('h6', t('semanticComponents', 'offerComponentsHeading')),
+        m(
+          'div.fm-semantic-table-wrap',
+          m('table.fm-semantic-component-table', [
+            m('thead', [
+              m('tr', [
+                m('th', t('semanticComponents', 'kind')),
+                m('th', t('semanticComponents', 'component')),
+                m('th', t('semanticComponents', 'signedArtifact')),
+                m('th', t('semanticComponents', 'version')),
+                m('th', t('semanticComponents', 'license')),
+                m('th', t('semanticComponents', 'downloadSize')),
+                m('th', t('semanticComponents', 'estimatedInstalledSize')),
+                m('th', t('semanticComponents', 'estimatedRam')),
+              ]),
+            ]),
+            m(
+              'tbody',
+              offer.components.map((component) =>
+                m('tr.fm-semantic-offer-component', { key: component.artifactId }, [
+                  m('td', componentKindLabel(component.kind)),
+                  m('td', [
+                    component.componentId,
+                    component.model == null
+                      ? undefined
+                      : m('small', `${component.model.modelId} · ${component.model.revision}`),
+                  ]),
+                  m('td', component.artifactId),
+                  m('td', component.version),
+                  m('td', [
+                    m('span', component.license.spdx),
+                    m('small', component.license.notice),
+                  ]),
+                  m('td', formatBytes(component.downloadBytes)),
+                  m('td', formatBytes(component.estimatedInstalledBytes)),
+                  m('td', formatBytes(component.estimatedRamBytes)),
+                ]),
+              ),
+            ),
+          ]),
+        ),
+      ]),
+      m('p.fm-semantic-consent-copy', t('semanticComponents', 'consentInstruction')),
       busy === 'install'
-        ? t('semanticComponents', 'installing')
-        : t('semanticComponents', 'acceptAndInstall'),
-    ),
-  ]);
+        ? m(
+            'p.fm-semantic-install-progress',
+            { role: 'status' },
+            t(
+              'semanticComponents',
+              offer.profile === 'embeddingGemma2' ? 'gemmaInstallStarting' : 'installStarting',
+            ),
+          )
+        : undefined,
+      m(
+        'button.btn.fm-semantic-action.fm-semantic-accept',
+        {
+          type: 'button',
+          ...busyButtonAttrs(busy === 'install'),
+          disabled: busy !== undefined || !canAccept,
+          onclick: onAccept,
+        },
+        busy === 'install'
+          ? t('semanticComponents', 'installing')
+          : t('semanticComponents', 'acceptAndInstall'),
+      ),
+    ],
+  );
 }
 
 function indexRemovalPlanView(

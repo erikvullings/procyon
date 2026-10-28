@@ -129,14 +129,16 @@ fn is_bracket(text: &str) -> Option<char> {
     }
 }
 
-/// A lone outline number such as `1.` or `2.3`, the orphaned left column of a contents line.
+/// A lone outline number such as `1.` or `2.3.`, the orphaned left column of a contents line.
+/// The trailing full stop is required: a bare `25.1` is a table value, not an outline number.
 pub(crate) fn is_bare_section_number(text: &str) -> bool {
-    let trimmed = text.trim().trim_end_matches('.');
-    !trimmed.is_empty()
-        && trimmed.len() <= 8
-        && trimmed
+    let Some(number) = text.trim().strip_suffix('.') else {
+        return false;
+    };
+    number.len() <= 8
+        && number
             .split('.')
-            .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 /// Undoes the Markdown escaping Docling applies to prose.
@@ -428,5 +430,14 @@ mod tests {
         let out = reflow_lines(nodes, &[]);
         assert_eq!(texts(&out)[0], "protective well-being of youth");
         assert_eq!(out.len(), 3);
+    }
+
+    #[test]
+    fn only_dotted_outline_numbers_are_contents_numbers() {
+        assert!(is_bare_section_number("1."));
+        assert!(is_bare_section_number("2.3."));
+        assert!(!is_bare_section_number("25.1"));
+        assert!(!is_bare_section_number("2003"));
+        assert!(!is_bare_section_number("."));
     }
 }

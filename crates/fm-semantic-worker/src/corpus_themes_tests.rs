@@ -300,7 +300,8 @@ fn far_away_chunks_fall_into_the_no_theme_bucket() {
     stage_corpus(&catalog, &["doc-a", "doc-b", "doc-c", "doc-d"]);
     // A chunk on an axis none of the four topics use.
     let identity = identity();
-    let content = "stray remark about nothing".to_owned();
+    let content =
+        "stray remark about nothing in particular, entirely unrelated to the rest".to_owned();
     catalog
         .stage_generation(&StagedGeneration {
             tenant_id: TENANT.into(),

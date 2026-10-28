@@ -9,6 +9,7 @@ use ed25519_dalek::SigningKey;
 use fm_application::semantic_components::{
     DesktopSemanticDistribution, ManagedSemanticComponentAdapters,
     ManagedSemanticComponentCapability, ManagedSemanticComponentConfiguration,
+    SemanticComponentCapability, SemanticComponentLifecycle, SemanticInstallationConsent,
 };
 use fm_application::semantic_ocr::{
     DoclingOcrExecutableProbe, OcrExecutableProbe, OcrPolicyStore, SemanticOcrService,
@@ -200,6 +201,41 @@ impl DeveloperSemanticBundle {
             ocr: SemanticOcrService::load(ocr_directory, ocr_policy, ocr_probe),
             ocr_executable,
         })
+    }
+}
+
+/// Re-installs the freshly built developer worker and runtime for the model that is already
+/// active.
+///
+/// Every rebuild of the developer bundle changes the content-addressed worker artifact, so the
+/// previously installed one is no longer in the catalog and the install reads as absent. The user
+/// accepted these same developer artifacts for this model already; a rebuild is not a new
+/// decision, so the offer is accepted here instead of asking again. Production never reaches
+/// this: it needs a signed catalog and explicit consent.
+pub(crate) async fn refresh_rebuilt_developer_install(
+    components: Arc<ManagedSemanticComponentCapability>,
+) {
+    let Ok(status) = components.status().await else {
+        return;
+    };
+    let Some(profile) = status.active_model().map(|selection| selection.profile()) else {
+        return;
+    };
+    if !matches!(status.lifecycle(), SemanticComponentLifecycle::Absent) {
+        return;
+    }
+    let refreshed = async {
+        let offer = components.installation_offer(profile).await?;
+        components
+            .install_or_enable(SemanticInstallationConsent::accept(offer.id().clone()))
+            .await
+    }
+    .await;
+    match refreshed {
+        Ok(_) => {
+            eprintln!("Procyon developer bundle: refreshed the rebuilt worker for {profile:?}")
+        }
+        Err(error) => eprintln!("Procyon developer bundle: could not refresh the worker: {error}"),
     }
 }
 

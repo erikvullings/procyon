@@ -30,7 +30,7 @@ use crate::tokens::{TOKEN_ESTIMATOR_VERSION, estimate_tokens};
 use serde::{Deserialize, Serialize};
 
 /// Version of the packing rules implemented here.
-pub const STRUCTURAL_CHUNKER_VERSION: ComponentVersion = ComponentVersion::new("structural", 4);
+pub const STRUCTURAL_CHUNKER_VERSION: ComponentVersion = ComponentVersion::new("structural", 5);
 
 /// Domain separator, so a fingerprint cannot collide with any other BLAKE3 use
 /// in the workspace.
@@ -372,9 +372,20 @@ impl Chunker {
                 windows.extend(split_without_overlap(&tail, content_budget));
                 return windows;
             }
+            // A window that is not the last ends on a sentence boundary when one is reasonably
+            // close, so a chunk neither stops nor (via the overlap) starts mid-sentence.
+            let taken_start = window.len() - used;
+            let mut sentence_aligned = false;
+            if index + used < pieces.len()
+                && let Some(cut) = sentence_cut(&pieces[index..index + used], pieces[index + used])
+            {
+                window.truncate(taken_start + cut);
+                used = cut;
+                sentence_aligned = true;
+            }
             windows.push((window.concat(), overlap_tokens));
             index += used;
-            overlap = self.overlap_pieces(&pieces[..index], overlap_budget);
+            overlap = self.overlap_pieces(&pieces[..index], overlap_budget, sentence_aligned);
             if index >= pieces.len() {
                 break;
             }
@@ -387,7 +398,12 @@ impl Chunker {
 
     /// Trailing pieces of `consumed` whose combined estimate stays within the
     /// overlap budget.
-    fn overlap_pieces<'a>(&self, consumed: &[&'a str], budget: u32) -> Vec<&'a str> {
+    fn overlap_pieces<'a>(
+        &self,
+        consumed: &[&'a str],
+        budget: u32,
+        sentence_aligned: bool,
+    ) -> Vec<&'a str> {
         let mut overlap: Vec<&str> = Vec::new();
         for piece in consumed.iter().rev() {
             let mut trial = vec![*piece];
@@ -397,7 +413,21 @@ impl Chunker {
             }
             overlap = trial;
         }
-        overlap
+        if !sentence_aligned {
+            return overlap;
+        }
+        // Repeat whole sentences only: drop a leading fragment, or the overlap entirely.
+        let start = (0..overlap.len()).find(|&position| {
+            position == 0 && consumed.len() == overlap.len()
+                || position > 0 && ends_sentence(overlap[position - 1], overlap[position])
+                || position == 0
+                    && consumed.len() > overlap.len()
+                    && ends_sentence(consumed[consumed.len() - overlap.len() - 1], overlap[0])
+        });
+        match start {
+            Some(position) => overlap.split_off(position),
+            None => Vec::new(),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -452,6 +482,52 @@ fn chunk_content(units: &[&StructuralUnit]) -> String {
         .map(|unit| unit.text.as_str())
         .collect::<Vec<_>>()
         .join("\n\n")
+}
+
+/// Abbreviations whose trailing full stop does not end a sentence.
+const NON_TERMINAL_ABBREVIATIONS: [&str; 14] = [
+    "al.", "e.g.", "i.e.", "etc.", "vs.", "fig.", "dr.", "mr.", "mrs.", "ms.", "prof.", "no.",
+    "cf.", "approx.",
+];
+
+/// Whether `piece` (a whitespace-terminated token) ends a sentence that `next` then opens: a
+/// terminal mark, not an abbreviation or initial, followed by a capitalised word.
+fn ends_sentence(piece: &str, next: &str) -> bool {
+    let word = piece
+        .trim_end()
+        .trim_end_matches([')', ']', '"', '\'', '”', '’']);
+    if !word.ends_with(['.', '?', '!']) {
+        return false;
+    }
+    if word.ends_with('.') {
+        let lower = word.to_lowercase();
+        let initial = word.chars().filter(|c| c.is_alphabetic()).count() == 1;
+        if initial
+            || NON_TERMINAL_ABBREVIATIONS
+                .iter()
+                .any(|abbreviation| lower.ends_with(abbreviation))
+        {
+            return false;
+        }
+    }
+    next.trim_start_matches(['(', '[', '"', '\'', '“', '‘'])
+        .chars()
+        .next()
+        .is_some_and(char::is_uppercase)
+}
+
+/// How many of `taken` to keep so the window ends on a sentence boundary, provided at least half
+/// of it survives; `None` keeps the window as filled.
+fn sentence_cut(taken: &[&str], following: &str) -> Option<usize> {
+    (taken.len() / 2..taken.len())
+        .rev()
+        .map(|position| position + 1)
+        .find(|&cut| {
+            let next = taken.get(cut).copied().unwrap_or(following);
+            cut < taken.len() && ends_sentence(taken[cut - 1], next)
+                || cut == taken.len() && ends_sentence(taken[cut - 1], following)
+        })
+        .filter(|&cut| cut > 0)
 }
 
 fn split_without_overlap(text: &str, max_tokens: u32) -> Vec<(String, u32)> {
@@ -791,6 +867,49 @@ mod tests {
             .next()
             .expect("word");
         assert!(chunks[0].embedding_input.contains(second_start));
+    }
+
+    #[test]
+    fn split_windows_start_and_end_on_sentence_boundaries() {
+        let chunker = Chunker::new(ChunkerOptions {
+            target_tokens: 30,
+            max_tokens: 40,
+            overlap_tokens: 12,
+            max_excerpt_chars: 400,
+        })
+        .expect("chunker");
+        let text = (0..12)
+            .map(|index| format!("Sentence number {index} says something rather ordinary here."))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let chunks = chunker.chunk(&document(vec![unit(
+            0,
+            &text,
+            TopLevelBoundary::Document,
+            &[],
+        )]));
+        assert!(chunks.len() > 1);
+        for chunk in &chunks {
+            assert!(
+                chunk.embedding_input.starts_with("Sentence"),
+                "{}",
+                chunk.embedding_input
+            );
+            assert!(
+                chunk.embedding_input.trim_end().ends_with("here."),
+                "{}",
+                chunk.embedding_input
+            );
+        }
+    }
+
+    #[test]
+    fn abbreviations_and_initials_do_not_end_sentences() {
+        assert!(!ends_sentence("al.", "Furthermore"));
+        assert!(!ends_sentence("J.", "Kelly"));
+        assert!(!ends_sentence("2003).", "later"));
+        assert!(ends_sentence("effects.", "Furthermore,"));
+        assert!(ends_sentence("(2003).", "Furthermore,"));
     }
 
     #[test]

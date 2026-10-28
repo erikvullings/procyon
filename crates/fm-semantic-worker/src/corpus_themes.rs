@@ -25,13 +25,14 @@ use crate::kmeans;
 use crate::semantic_storage::{SemanticCatalog, StorageError};
 
 /// Versioned clustering and labelling contract.
-pub const ALGORITHM_VERSION: &str = "corpus-themes-kmeans/3";
+pub const ALGORITHM_VERSION: &str = "corpus-themes-kmeans/5";
 /// Versioned document-centroid contract.
-pub const CENTROID_ALGORITHM_VERSION: &str = "document-centroid-mean/2";
+pub const CENTROID_ALGORITHM_VERSION: &str = "document-centroid-mean/4";
 /// Model identity of the deterministic token-hashing development profile.
 pub const TOKEN_HASHING_MODEL_ID: &str = "procyon.dev.hashing-embedding";
 
-const MAX_EXCERPT_CHARS: usize = 1200;
+/// A passage carries its whole chunk (the storage layer already caps chunk text at 4096).
+const MAX_EXCERPT_CHARS: usize = 4_096;
 const MAP_EXCERPT_CHARS: usize = 400;
 const MAX_TERMS_PER_CLASS: usize = 50_000;
 const MAX_CONCEPTS_PER_CLASS: usize = 1_024;

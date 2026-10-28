@@ -485,3 +485,5 @@ content streaming, and mapping concerns live in dedicated modules with interface
   are in the host report/log only, not the UI, see task notes)*
 - [ ] 0284 Corpus themes and 2D embedding cluster map *(in_progress — slices 1-3 built, gaps listed in task notes;
   needs 0185, 0283)*
+- [ ] 0285 Rebuild PDF table rows in semantic conversion *(open — text-layer path emits one paragraph per
+  table cell; related to 0284)*

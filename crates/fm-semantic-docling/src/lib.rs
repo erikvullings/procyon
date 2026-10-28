@@ -43,7 +43,7 @@ pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
 /// included: enabling it retries only previously textless PDFs, while
 /// disabling it makes reconciliation remove their OCR-derived occurrences.
 /// OCR-derived documents carry [`OCRMYPDF_CONVERTER_VERSION`] themselves.
-pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2052009+baseline/6";
+pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2052009+baseline/9";
 /// Version of the optional OCRmyPDF plus deterministic Docling composition.
 pub const OCRMYPDF_CONVERTER_VERSION: ComponentVersion =
     ComponentVersion::new("ocrmypdf-docling", 2);
@@ -1528,6 +1528,11 @@ impl<'a> Mapper<'a> {
         let order = self.units.len() as u32;
         let (mut text, has_leader) =
             clean_pdf_toc_text(&repair_spaced_elsevier_doi(&sanitized.text));
+        // A line of nothing but dot leaders cleans down to nothing; an empty unit would make the
+        // adapter reject the whole document and fall back to the baseline extractor.
+        if text.trim().is_empty() {
+            return false;
+        }
         let toc_marker = is_pdf_toc_section(std::slice::from_ref(&text))
             || reflow::is_bare_section_number(&text);
         let kind = if kind != UnitKind::Heading
@@ -2022,6 +2027,44 @@ mod tests {
         let text = &converted.document().expect("converted").units()[0].text;
         assert!(text.contains("https://doi.org/10.1016/j.chiabu.2011.01.002"));
         assert!(text.contains("j. chiabu.2011.01.002"));
+    }
+
+    #[test]
+    fn leader_only_paragraphs_never_become_empty_units() {
+        let document = DoclingDocument {
+            name: "fixture".into(),
+            nodes: vec![
+                Node::PageInfo {
+                    page_no: 1,
+                    width: 612.0,
+                    height: 792.0,
+                },
+                Node::Paragraph {
+                    text: ". . . . . . . . . . . .".into(),
+                },
+                Node::Paragraph {
+                    text: "A substantive passage.".into(),
+                },
+            ],
+            strict_markdown: false,
+            compact_tables: false,
+            links: Vec::new(),
+            confidence: None,
+            ..DoclingDocument::new("fixture")
+        };
+        let context = ConversionContext::new();
+        let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 1, 1, None);
+        mapper.map_document(document);
+        let converted = mapper.finish().document().expect("converted").clone();
+
+        assert_eq!(
+            converted
+                .units()
+                .iter()
+                .map(|unit| unit.text.as_str())
+                .collect::<Vec<_>>(),
+            ["A substantive passage."]
+        );
     }
 
     #[test]

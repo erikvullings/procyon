@@ -171,11 +171,39 @@ pub fn is_back_matter(section_path: &[String], text: &str) -> bool {
         || is_references_section(section_path)
         || clean_pdf_toc_text(text).1
         || looks_like_reference_list(text)
+        || is_low_information(text)
+}
+
+/// Text with too little language to carry a topic: a stray cell (`.070`, `a a a`) or a statistics
+/// table flattened to text, mostly digits, signs and brackets. Prose is overwhelmingly letters
+/// even when it quotes figures.
+#[must_use]
+fn is_low_information(text: &str) -> bool {
+    let (letters, total) = text
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .fold((0_usize, 0_usize), |(letters, total), character| {
+            (letters + usize::from(character.is_alphabetic()), total + 1)
+        });
+    letters < 25 || total >= 80 && letters * 10 < total * 6
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn flattened_statistics_tables_are_back_matter_but_prose_with_figures_is_not() {
+        let table = "16 −0.080 ( −0.492, 0.332) 0.002 ( −0.012, 0.016) F(1, 14) = 0.087 .773 .096 .286 \
+                     F(1, 14) = 0.028 .869 .096 .288 7 11 −0.105 ( −0.598, 0.388) 3 5 −0.035 ( −0.787, 0.718)";
+        assert!(is_back_matter(&[], table));
+        assert!(is_back_matter(&[], ".070"));
+        assert!(is_back_matter(&[], "a a a"));
+        assert!(!is_back_matter(
+            &[],
+            "The effect was larger (d = 0.758, 95% CI 0.4 to 1.1) for the criminal history domain than for neighbourhood factors, which showed no significant effect overall."
+        ));
+    }
 
     #[test]
     fn recognises_reference_headings_and_citation_lists() {
