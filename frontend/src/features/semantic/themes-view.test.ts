@@ -40,11 +40,9 @@ function mount(
 ): {
   onOpenPassage: ReturnType<typeof vi.fn>;
   onSearchSources: ReturnType<typeof vi.fn>;
-  onClose: ReturnType<typeof vi.fn>;
 } {
   const onOpenPassage = vi.fn();
   const onSearchSources = vi.fn();
-  const onClose = vi.fn();
   m.mount(root, {
     view: () =>
       m(ThemesView, {
@@ -52,11 +50,10 @@ function mount(
         scopes: [scope('entireLibrary', 'Entire library')],
         onOpenPassage,
         onSearchSources,
-        onClose,
         ...overrides,
       }),
   });
-  return { onOpenPassage, onSearchSources, onClose };
+  return { onOpenPassage, onSearchSources };
 }
 
 describe('ThemesView', () => {

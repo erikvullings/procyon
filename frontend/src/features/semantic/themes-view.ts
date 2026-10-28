@@ -45,7 +45,6 @@ export interface ThemesViewAttrs {
   readonly onSearchSources: (sourceIds: readonly string[], subject: string) => void;
   /** Smallest share of a document's passages for it to be listed under a theme (default 5%). */
   readonly minDocumentShare?: number;
-  readonly onClose: () => void;
 }
 
 /** Selection in the list or on the map; `null` is the "no theme" bucket. */
@@ -605,10 +604,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
       const message = response === undefined ? undefined : outcomeMessage(response);
       const stale = themes !== undefined && themesAreStale(themes, status);
       return m('.fm-themes.fm-themes-view', [
-        m('.fm-themes-header', [
-          m('h3', t('themes', 'title')),
-          m('button.btn-flat', { type: 'button', onclick: attrs.onClose }, t('button', 'close')),
-        ]),
+        m('.fm-themes-header', [m('h3', t('themes', 'title'))]),
         m('.fm-themes-content', [
           visibleScopes.length > 1
             ? m(

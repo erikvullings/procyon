@@ -1539,7 +1539,7 @@ export const en = {
     failedVersion: 'Failed version',
     availableSpace: 'Available',
     requiredSpace: 'Required',
-    activeModelHeading: 'Exact active model',
+    activeModelHeading: 'Active model',
     profile: 'Profile',
     modelId: 'Model ID',
     revision: 'Revision',

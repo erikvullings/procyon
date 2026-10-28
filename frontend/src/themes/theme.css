@@ -1503,7 +1503,6 @@ main.fm-workspace {
 }
 
 .fm-semantic-lifecycle {
-  font-weight: 600;
   color: var(--fm-text);
 }
 
@@ -5654,7 +5653,6 @@ button.fm-activity-count {
   white-space: nowrap;
 }
 
-.fm-themes-list,
 .fm-themes-passages,
 .fm-themes-document-list,
 .fm-themes-details-head {
@@ -5671,6 +5669,13 @@ button.fm-activity-count {
   overflow-wrap: anywhere;
 }
 
+.fm-themes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fm-themes-list,
 .fm-themes-chips {
   margin: 0;
   padding: 0;

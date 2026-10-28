@@ -507,7 +507,7 @@ describe('SemanticComponentManagement', () => {
     expect(button('Review removal')).toBeInstanceOf(HTMLButtonElement);
     expect(button('Move data')).toBeInstanceOf(HTMLButtonElement);
     expect(button('Confirm uninstall').disabled).toBe(true);
-    expect(root.textContent).toContain('Exact active model');
+    expect(root.textContent).toContain('Active model');
     expect(root.textContent).toContain('mock-compact-multilingual-revision');
     expect(root.querySelectorAll('.fm-semantic-installed-component')).toHaveLength(3);
     expect(root.textContent).toContain('In use');

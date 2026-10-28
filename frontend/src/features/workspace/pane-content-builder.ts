@@ -253,7 +253,6 @@ export interface PaneContentContext {
   openKnowledgeSearch?(): void;
   openKnowledgeAnswerSettings?(): void;
   closeKnowledgeSearch(paneId: PaneId, tabId: TabId): void;
-  closeThemes(paneId: PaneId, tabId: TabId): void;
   openThemePassage(passage: ThemePassage): Promise<void>;
   searchThemeSources(sourceIds: readonly string[], subject: string): void;
   openKnowledgeSource(paneId: PaneId, evidence: KnowledgeEvidence): Promise<void>;
@@ -1106,7 +1105,6 @@ export function createPaneContentBuilder(
                       scopes: themes.scopes,
                       onOpenPassage: context.openThemePassage,
                       onSearchSources: context.searchThemeSources,
-                      onClose: () => context.closeThemes(paneId, themes.tabId),
                     });
                   }
                   if (knowledgeSearch !== undefined) {

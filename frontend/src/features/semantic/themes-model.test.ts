@@ -135,4 +135,8 @@ describe('reflowPassage', () => {
   it('keeps list items on their own lines', () => {
     expect(reflowPassage('Intro\n- one\n- two')).toBe('Intro\n- one\n- two');
   });
+
+  it('drops text-less bullets that the Markdown renderer would leak as placeholders', () => {
+    expect(reflowPassage('abuse\n\n-\n\nnext')).toBe('abuse\n\nnext');
+  });
 });

@@ -306,7 +306,7 @@ function lifecycleView(status: SemanticComponentStatus): Vnode {
       'data-state': lifecycle.state,
       ...(alert ? { role: 'alert' } : { 'aria-live': 'polite' }),
     },
-    copy,
+    [`${t('semanticComponents', 'statusHeading')}: `, copy],
   );
 }
 
@@ -401,7 +401,7 @@ function modelAndComponentStatus(
     : [
         m('p.fm-semantic-active-model', [
           `${t('semanticComponents', 'activeModelHeading')}: `,
-          m('strong', profileName(status.activeModel.profile)),
+          profileName(status.activeModel.profile),
         ]),
         activeProfileNeedsUpdate
           ? m('p.fm-semantic-component-note', t('semanticComponents', 'activeModelUpdateAvailable'))
@@ -1944,7 +1944,6 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
       }
       return m('.fm-semantic-management', { 'aria-label': t('semanticComponents', 'title') }, [
         m('section.fm-semantic-status', { 'aria-live': 'polite' }, [
-          m('h6', t('semanticComponents', 'statusHeading')),
           lifecycleView(loaded.status),
           ...modelAndComponentStatus(loaded.status, loaded.profiles),
         ]),

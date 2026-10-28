@@ -303,6 +303,8 @@ export function folderIsEnrolled(
 }
 
 /** A line that starts its own Markdown block, so it must keep its line break. */
+/** A bullet with no text: the Markdown renderer would leak its list placeholder. */
+const EMPTY_MARKER = /^[-*+•–]$/;
 const BLOCK_START = /^(?:[-*+] |\d+[.)] |#{1,6} |> |\||```)/;
 
 /**
@@ -317,7 +319,7 @@ export function reflowPassage(text: string): string {
       const lines = block
         .split('\n')
         .map((line) => line.trim())
-        .filter((line) => line.length > 0);
+        .filter((line) => line.length > 0 && !EMPTY_MARKER.test(line));
       let out = '';
       for (const line of lines) {
         if (out.length === 0) out = line;

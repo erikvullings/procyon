@@ -7,4 +7,8 @@ describe('safeMarkdownHtml', () => {
     expect(html).toContain('<h1>Safe</h1>');
     expect(html).not.toContain('<script');
   });
+
+  it('does not leak the list placeholder of a bullet without text', () => {
+    expect(safeMarkdownHtml('before\n\n-\n\nafter')).not.toContain('LISTITEM');
+  });
 });

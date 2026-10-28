@@ -641,6 +641,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   let selectedWalkthrough: WalkthroughId = 'basics';
   let semanticAssistantAvailable = false;
   let knowledgeSearchAvailable = false;
+  /** Themes cluster embeddings, so full-text alone cannot serve them. */
+  let themesAvailable = false;
   let knowledgeSearchChecked = false;
   let knowledgeAnswerRevision = 0;
   let semanticEnrolmentRequest:
@@ -1696,6 +1698,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               contextRequirements: {},
               source: { kind: 'core' as const },
             },
+          ]
+        : []),
+      ...(themesAvailable
+        ? [
             {
               id: 'client.exploreThemes',
               title: t('themes', 'openTitle'),
@@ -3906,8 +3912,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     try {
       const capabilities = await attrsClient.getKnowledgeCapabilities();
       knowledgeSearchAvailable = capabilities.fullText || capabilities.semantic;
+      themesAvailable = capabilities.semantic;
     } catch {
       knowledgeSearchAvailable = false;
+      themesAvailable = false;
     } finally {
       knowledgeSearchChecked = true;
       m.redraw();
@@ -5828,7 +5836,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     openKnowledgeSearch,
     openKnowledgeAnswerSettings: () => openSettingsDialog('semantic'),
     closeKnowledgeSearch: (paneId, tabId) => tabController.performCloseTab(paneId, tabId),
-    closeThemes: (paneId, tabId) => tabController.performCloseTab(paneId, tabId),
     openThemePassage,
     searchThemeSources: (sourceIds, subject) =>
       openKnowledgeSearchTab({ semanticSourceIds: sourceIds, initialSubject: subject }),
@@ -6763,7 +6770,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     ),
                   )
                 : undefined,
-              knowledgeSearchAvailable
+              themesAvailable
                 ? tooltip(
                     labelWithShortcut(
                       t('themes', 'openTitle'),

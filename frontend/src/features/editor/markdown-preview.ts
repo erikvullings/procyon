@@ -9,6 +9,12 @@ export const PREVIEW_SANITIZE_OPTIONS = {
   ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
 };
 
+/** slimdown leaves its list placeholder behind for a bullet without text. */
+const LEAKED_LIST_PLACEHOLDER = /\{\{LISTITEM:[^{}]*\}\}/g;
+
 export function safeMarkdownHtml(markdown: string): string {
-  return DOMPurify.sanitize(render(markdown), PREVIEW_SANITIZE_OPTIONS);
+  return DOMPurify.sanitize(
+    render(markdown).replace(LEAKED_LIST_PLACEHOLDER, ''),
+    PREVIEW_SANITIZE_OPTIONS,
+  );
 }
