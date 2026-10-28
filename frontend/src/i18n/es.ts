@@ -1239,7 +1239,6 @@ export const es = {
     multilingualQualityName: 'Calidad multilingüe',
     multilingualQualityDescription:
       'Recuperación multilingüe de mayor calidad con mayor coste de disco, memoria e indexación.',
-    gemmaRiskAcceptedName: 'EmbeddingGemma 2 (opcional)',
     gemmaDescription:
       'Búsqueda nativa en CPU de texto y código, con indexación opcional de imágenes, audio y vídeo. Requiere una biblioteca independiente recién indexada.',
     gemmaRiskAcceptedDescription:

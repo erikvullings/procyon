@@ -1237,7 +1237,6 @@ export const pl = {
     multilingualQualityName: 'Jakość wielojęzyczna',
     multilingualQualityDescription:
       'Pobieranie wielojęzyczne wyższej jakości, kosztem większego zużycia dysku, pamięci i czasu indeksowania.',
-    gemmaRiskAcceptedName: 'EmbeddingGemma 2 (opcjonalny)',
     gemmaDescription:
       'Natywne wyszukiwanie tekstu i kodu na CPU z opcjonalnym indeksowaniem obrazów, dźwięku i wideo. Wymaga osobnej, świeżo zindeksowanej biblioteki.',
     gemmaRiskAcceptedDescription:

@@ -1609,7 +1609,6 @@ export const nl = {
     multilingualQualityDescription:
       'Meertalig zoeken van hogere kwaliteit met meer schijf-, geheugen- en indexeerkosten.',
     gemmaQualifiedName: 'EmbeddingGemma 2',
-    gemmaRiskAcceptedName: 'EmbeddingGemma 2 (optioneel)',
     gemmaDescription:
       'Tekst en code op de CPU, met optionele indexering van afbeeldingen, audio en video. Vereist een afzonderlijke, nieuwe index.',
     gemmaRiskAcceptedDescription:

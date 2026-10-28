@@ -1253,7 +1253,6 @@ export const de = {
     multilingualQualityName: 'Mehrsprachige Qualität',
     multilingualQualityDescription:
       'Mehrsprachiger Abruf in höherer Qualität mit größerem Platz-, Speicher- und Indizierungsaufwand.',
-    gemmaRiskAcceptedName: 'EmbeddingGemma 2 (optional)',
     gemmaDescription:
       'Native CPU-Text- und Codesuche mit optionaler Indizierung von Bildern, Audio und Video. Erfordert eine separate, neu indizierte Bibliothek.',
     gemmaRiskAcceptedDescription:

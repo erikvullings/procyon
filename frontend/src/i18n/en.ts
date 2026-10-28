@@ -1583,7 +1583,6 @@ export const en = {
     multilingualQualityDescription:
       'Higher-quality multilingual retrieval with greater disk, memory, and indexing cost.',
     gemmaQualifiedName: 'EmbeddingGemma 2',
-    gemmaRiskAcceptedName: 'EmbeddingGemma 2 (opt-in)',
     gemmaDescription:
       'Native CPU text and code search with optional image, audio, and video indexing. Requires a separate, freshly indexed library.',
     gemmaRiskAcceptedDescription:

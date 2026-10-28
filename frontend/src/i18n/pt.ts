@@ -1240,7 +1240,6 @@ export const pt = {
     multilingualQualityName: 'Qualidade multilingue',
     multilingualQualityDescription:
       'Obtenção multilingue de maior qualidade, com maior custo de disco, memória e indexação.',
-    gemmaRiskAcceptedName: 'EmbeddingGemma 2 (opcional)',
     gemmaDescription:
       'Pesquisa nativa em CPU de texto e código, com indexação opcional de imagens, áudio e vídeo. Requer uma biblioteca separada, recém-indexada.',
     gemmaRiskAcceptedDescription:

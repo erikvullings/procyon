@@ -155,14 +155,14 @@ describe('SemanticComponentManagement', () => {
     expect(profileCopy()).not.toContain('experimental');
   });
 
-  it('labels risk-accepted Gemma as unqualified in Settings', async () => {
+  it('describes risk-accepted Gemma as unqualified in Settings', async () => {
     vi.stubEnv('VITE_GEMMA_RISK_ACCEPTED', 'true');
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     await withGemmaProfile(client);
     mountComponent(client);
     await waitForLoaded();
 
-    expect(profileCopy()).toContain('EmbeddingGemma 2 (opt-in)');
+    expect(profileCopy()).toContain('EmbeddingGemma 2');
     expect(profileCopy()).toContain('has not completed the full qualification yet');
     expect(profileCopy()).toContain('file an issue for CPU or Windows GPU problems');
   });

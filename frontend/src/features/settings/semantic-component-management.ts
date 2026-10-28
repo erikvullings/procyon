@@ -119,12 +119,7 @@ function profileName(profile: SemanticProfile): string {
     case 'multilingualQuality':
       return t('semanticComponents', 'multilingualQualityName');
     case 'embeddingGemma2':
-      return t(
-        'semanticComponents',
-        import.meta.env.VITE_GEMMA_RISK_ACCEPTED === 'true'
-          ? 'gemmaRiskAcceptedName'
-          : 'gemmaQualifiedName',
-      );
+      return t('semanticComponents', 'gemmaQualifiedName');
   }
 }
 
