@@ -123,9 +123,7 @@ function profileName(profile: SemanticProfile): string {
         'semanticComponents',
         import.meta.env.VITE_GEMMA_RISK_ACCEPTED === 'true'
           ? 'gemmaRiskAcceptedName'
-          : import.meta.env.VITE_GEMMA_QUALIFIED === 'true'
-            ? 'gemmaQualifiedName'
-            : 'gemmaName',
+          : 'gemmaQualifiedName',
       );
   }
 }
@@ -1335,17 +1333,10 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
       capabilities.authority === 'deterministicMock'
         ? m('p.fm-semantic-authority-note', t('semanticComponents', 'developmentSimulation'))
         : undefined,
-      developerBundle
-        ? m(
-            'p.fm-semantic-authority-note',
-            t(
-              'semanticComponents',
-              installProfile === 'embeddingGemma2' ||
-                status.activeModel?.profile === 'embeddingGemma2'
-                ? 'developmentGemmaBundle'
-                : 'developmentBundle',
-            ),
-          )
+      developerBundle &&
+      installProfile !== 'embeddingGemma2' &&
+      status.activeModel?.profile !== 'embeddingGemma2'
+        ? m('p.fm-semantic-authority-note', t('semanticComponents', 'developmentBundle'))
         : undefined,
       canOffer && (installableLifecycle || switchProfiles.length > 0)
         ? m(

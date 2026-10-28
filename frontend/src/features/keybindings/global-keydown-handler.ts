@@ -239,6 +239,22 @@ function isFileClipboardPassthrough(event: KeyboardEvent): boolean {
   );
 }
 
+/**
+ * True when the user has selected page text in an element that opts into text selection (the
+ * Themes passages, Search/Ask results, ...). Copy then belongs to the native clipboard, not to the
+ * pane's file selection. Selections inside `user-select: none` chrome never count, so a stale
+ * range cannot hijack the file shortcut.
+ */
+function hasSelectedPageText(): boolean {
+  const selection = window.getSelection();
+  if (selection === null || selection.isCollapsed || selection.toString().trim() === '') {
+    return false;
+  }
+  const anchor = selection.anchorNode;
+  const element = anchor instanceof HTMLElement ? anchor : anchor?.parentElement;
+  return element != null && getComputedStyle(element).userSelect !== 'none';
+}
+
 function isWithinModal(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.closest('[role="dialog"]') !== null;
 }
@@ -833,6 +849,7 @@ const ACTION_KEYDOWN_ROUTES = [
         !event.altKey
       ) {
         const key = event.key.toLowerCase();
+        if (key === 'c' && hasSelectedPageText()) return false;
         const sources = context.selectedLocations();
         if ((key === 'c' || key === 'x') && sources.length > 0) {
           event.preventDefault();

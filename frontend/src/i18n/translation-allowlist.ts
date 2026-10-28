@@ -185,7 +185,6 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   'search.tags': ['nl', 'de'],
   'search.videoResult': ['nl', 'de', 'it'],
   'semanticComponents.downloadSize': ['nl', 'de', 'it'],
-  'semanticComponents.gemmaName': ['es', 'pt'],
   'semanticComponents.kindModel': ['nl', 'pl'],
   'semanticComponents.kindRuntime': ['nl'],
   'semanticComponents.movePickerVolume': ['nl', 'fr', 'it', 'pt'],

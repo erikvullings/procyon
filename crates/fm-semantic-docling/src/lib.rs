@@ -43,7 +43,7 @@ pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
 /// included: enabling it retries only previously textless PDFs, while
 /// disabling it makes reconciliation remove their OCR-derived occurrences.
 /// OCR-derived documents carry [`OCRMYPDF_CONVERTER_VERSION`] themselves.
-pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2052009+baseline/5";
+pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2052009+baseline/6";
 /// Version of the optional OCRmyPDF plus deterministic Docling composition.
 pub const OCRMYPDF_CONVERTER_VERSION: ComponentVersion =
     ComponentVersion::new("ocrmypdf-docling", 2);
@@ -1528,7 +1528,10 @@ impl<'a> Mapper<'a> {
         let order = self.units.len() as u32;
         let (mut text, has_leader) =
             clean_pdf_toc_text(&repair_spaced_elsevier_doi(&sanitized.text));
-        let kind = if kind != UnitKind::Heading && (has_leader || is_pdf_toc_section(&section_path))
+        let toc_marker = is_pdf_toc_section(std::slice::from_ref(&text))
+            || reflow::is_bare_section_number(&text);
+        let kind = if kind != UnitKind::Heading
+            && (has_leader || toc_marker || is_pdf_toc_section(&section_path))
         {
             UnitKind::Navigation
         } else {

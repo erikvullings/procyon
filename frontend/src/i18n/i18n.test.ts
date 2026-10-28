@@ -96,9 +96,8 @@ describe('i18n', () => {
       }
     });
 
-    it.each(LOCALES)('localises experimental Gemma wording and media labels in %s', (locale) => {
+    it.each(LOCALES)('localises Gemma wording and media labels in %s', (locale) => {
       setLocale(locale);
-      expect(t('semanticComponents', 'gemmaName')).toMatch(/\(.*\)/u);
       expect(t('semanticComponents', 'gemmaQualifiedName')).toBe('EmbeddingGemma 2');
       expect(t('semanticComponents', 'gemmaFreshLibraryExplanation')).toMatch(
         /dimension|dimension|dimensi|dimens|dimensió|wymiar/iu,

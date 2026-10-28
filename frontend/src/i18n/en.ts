@@ -1518,8 +1518,6 @@ export const en = {
       'Development simulation: lifecycle controls are test doubles and do not install a real model or index files.',
     developmentBundle:
       'Development-only bundle: this installs a real local worker and index with a deterministic test embedder. It validates the pipeline, not semantic retrieval quality, and must not be used in production.',
-    developmentGemmaBundle:
-      'Development-only Gemma bundle: this installs a real local worker and index with the pinned native model. It is not the production-signed package, does not establish retrieval quality, and must not be used in production.',
     executableDownloadProhibited:
       'This distribution cannot download executable semantic components. Existing administrator-provisioned components remain available read-only.',
     statusHeading: 'Status',
@@ -1584,7 +1582,6 @@ export const en = {
     multilingualQualityName: 'Multilingual quality',
     multilingualQualityDescription:
       'Higher-quality multilingual retrieval with greater disk, memory, and indexing cost.',
-    gemmaName: 'EmbeddingGemma 2 (experimental)',
     gemmaQualifiedName: 'EmbeddingGemma 2',
     gemmaRiskAcceptedName: 'EmbeddingGemma 2 (opt-in)',
     gemmaDescription:

@@ -129,6 +129,16 @@ fn is_bracket(text: &str) -> Option<char> {
     }
 }
 
+/// A lone outline number such as `1.` or `2.3`, the orphaned left column of a contents line.
+pub(crate) fn is_bare_section_number(text: &str) -> bool {
+    let trimmed = text.trim().trim_end_matches('.');
+    !trimmed.is_empty()
+        && trimmed.len() <= 8
+        && trimmed
+            .split('.')
+            .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// Undoes the Markdown escaping Docling applies to prose.
 pub(crate) fn unescape(token: &str) -> String {
     token

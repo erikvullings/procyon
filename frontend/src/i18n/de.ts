@@ -1188,8 +1188,6 @@ export const de = {
       'Entwicklungssimulation: Die Lebenszyklussteuerung verwendet Testdoubles und installiert weder ein echtes Modell noch Indexdateien.',
     developmentBundle:
       'Nur für die Entwicklung: Dieses Paket installiert einen echten lokalen Worker und Index mit einem deterministischen Test-Embedder. Es prüft die Pipeline, nicht die Qualität der semantischen Suche, und darf nicht in der Produktion verwendet werden.',
-    developmentGemmaBundle:
-      'Nur für die Entwicklung: Dieses Gemma-Paket installiert einen echten lokalen Worker und Index mit dem festgelegten nativen Modell. Es ist nicht das produktiv signierte Paket, belegt keine Abrufqualität und darf nicht in der Produktion verwendet werden.',
     executableDownloadProhibited:
       'Diese Distribution darf keine ausführbaren semantischen Komponenten herunterladen. Vorhandene, vom Administrator bereitgestellte Komponenten bleiben schreibgeschützt verfügbar.',
     statusHeading: 'Status',
@@ -1389,7 +1387,6 @@ export const de = {
     reviewLocalModelMigration: 'Lokale Modellmigration prüfen',
     actionFailed: 'Aktion für semantische Komponenten fehlgeschlagen: {error}',
     working: 'Wird bearbeitet…',
-    gemmaName: 'EmbeddingGemma 2 (experimentell)',
     gemmaQualifiedName: 'EmbeddingGemma 2',
     gemmaFreshLibraryExplanation:
       'Dies startet eine leere Bibliothek. Ihre E5-Bibliothek und ihr Index bleiben erhalten. Die gewählte Einbettungsdimension ist für diese Bibliothek festgelegt; Medienindexierungsoptionen können später geändert werden. Das Speichern der Einstellungen installiert Gemma nicht. Mit „Annehmen und installieren“ wird die neue Bibliothek erstellt und der Modelldownload gestartet.',

@@ -1708,6 +1708,48 @@ describe('createGlobalKeydownHandler clipboard paste', () => {
   });
 });
 
+describe('Cmd+C with selected page text', () => {
+  const selected: Location = { providerId: 'local', uri: 'file:///a/photo.jpg' };
+
+  function copyWithText(selectable: boolean) {
+    const replaceClipboard = vi.fn();
+    const handler = createGlobalKeydownHandler(
+      makeContext({
+        getPlatform: () => 'macos',
+        selectedLocations: () => [selected],
+        replaceClipboard,
+      }),
+    );
+    const passage = document.createElement('p');
+    passage.textContent = 'Selectable passage';
+    passage.style.userSelect = selectable ? 'text' : 'none';
+    document.body.append(passage);
+    window.getSelection()?.selectAllChildren(passage);
+    document.addEventListener('keydown', handler);
+    try {
+      const event = keydown('c', { metaKey: true });
+      document.body.dispatchEvent(event);
+      return { prevented: event.defaultPrevented, replaceClipboard };
+    } finally {
+      document.removeEventListener('keydown', handler);
+      window.getSelection()?.removeAllRanges();
+      passage.remove();
+    }
+  }
+
+  it('leaves copy to the native clipboard when selectable text is selected', () => {
+    const { prevented, replaceClipboard } = copyWithText(true);
+    expect(prevented).toBe(false);
+    expect(replaceClipboard).not.toHaveBeenCalled();
+  });
+
+  it('still copies the selected files when the selection is in non-selectable chrome', () => {
+    const { prevented, replaceClipboard } = copyWithText(false);
+    expect(prevented).toBe(true);
+    expect(replaceClipboard).toHaveBeenCalledOnce();
+  });
+});
+
 describe('file clipboard shortcuts from the quick-filter input', () => {
   const selected: Location = { providerId: 'local', uri: 'file:///a/photo.jpg' };
 

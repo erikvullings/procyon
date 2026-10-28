@@ -1175,8 +1175,6 @@ export const pt = {
       'Simulação de desenvolvimento: os controlos do ciclo de vida são duplos de teste e não instalam um modelo real nem ficheiros de índice.',
     developmentBundle:
       'Pacote apenas para desenvolvimento: instala um worker local e um índice reais com um embedder de teste determinístico. Valida o pipeline, não a qualidade da obtenção semântica, e não deve ser usado em produção.',
-    developmentGemmaBundle:
-      'Pacote Gemma apenas para desenvolvimento: instala um worker local e um índice reais com o modelo nativo fixado. Não é o pacote assinado de produção, não estabelece a qualidade da obtenção e não deve ser usado em produção.',
     executableDownloadProhibited:
       'Esta distribuição não pode transferir componentes semânticos executáveis. Os componentes já disponibilizados pelo administrador continuam disponíveis apenas para leitura.',
     statusHeading: 'Estado',
@@ -1374,7 +1372,6 @@ export const pt = {
     reviewLocalModelMigration: 'Rever a migração do modelo local',
     actionFailed: 'A ação dos componentes semânticos falhou: {error}',
     working: 'A processar…',
-    gemmaName: 'EmbeddingGemma 2 (experimental)',
     gemmaQualifiedName: 'EmbeddingGemma 2',
     gemmaFreshLibraryExplanation:
       'Isto inicia uma biblioteca vazia. A sua biblioteca E5 e o respetivo índice permanecem intactos. A dimensão de embedding selecionada fica bloqueada para esta biblioteca; as opções de indexação de multimédia podem ser alteradas mais tarde. Guardar as Definições não instala o Gemma. Aceitar e instalar cria a nova biblioteca e inicia a transferência do modelo.',

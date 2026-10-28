@@ -1170,8 +1170,6 @@ export const it = {
       'Simulazione di sviluppo: i controlli del ciclo di vita sono test double e non installano un modello reale né file di indice.',
     developmentBundle:
       'Bundle solo per lo sviluppo: installa un worker locale e un indice reali con un embedder di test deterministico. Convalida la pipeline, non la qualità del recupero semantico, e non deve essere usato in produzione.',
-    developmentGemmaBundle:
-      'Bundle Gemma solo per lo sviluppo: installa un worker locale e un indice reali con il modello nativo fissato. Non è il pacchetto firmato per la produzione, non stabilisce la qualità del recupero e non deve essere usato in produzione.',
     executableDownloadProhibited:
       "Questa distribuzione non può scaricare componenti semantici eseguibili. I componenti già forniti dall'amministratore restano disponibili in sola lettura.",
     statusHeading: 'Stato',
@@ -1368,7 +1366,6 @@ export const it = {
     reviewLocalModelMigration: 'Rivedi la migrazione del modello locale',
     actionFailed: 'Azione sui componenti semantici non riuscita: {error}',
     working: 'Elaborazione…',
-    gemmaName: 'EmbeddingGemma 2 (sperimentale)',
     gemmaQualifiedName: 'EmbeddingGemma 2',
     gemmaFreshLibraryExplanation:
       'Questo avvia una libreria vuota. La libreria E5 e il relativo indice restano intatti. La dimensione di embedding scelta è bloccata per questa libreria; le opzioni di indicizzazione dei contenuti multimediali potranno essere modificate in seguito. Salvare le impostazioni non installa Gemma. Accetta e installa crea la nuova libreria e avvia il download del modello.',

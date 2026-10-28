@@ -1172,8 +1172,6 @@ export const pl = {
       'Symulacja programistyczna: elementy sterujące cyklem życia to atrapy testowe i nie instalują prawdziwego modelu ani plików indeksu.',
     developmentBundle:
       'Pakiet wyłącznie programistyczny: instaluje prawdziwego lokalnego workera i indeks z deterministycznym testowym embedderem. Sprawdza potok, a nie jakość pobierania semantycznego, i nie może być używany w środowisku produkcyjnym.',
-    developmentGemmaBundle:
-      'Pakiet Gemma wyłącznie programistyczny: instaluje prawdziwego lokalnego workera i indeks z przypiętym modelem natywnym. To nie jest podpisany pakiet produkcyjny, nie potwierdza jakości pobierania i nie może być używany w środowisku produkcyjnym.',
     executableDownloadProhibited:
       'Ta dystrybucja nie może pobierać wykonywalnych komponentów semantycznych. Komponenty już udostępnione przez administratora pozostają dostępne tylko do odczytu.',
     statusHeading: 'Stan',
@@ -1369,7 +1367,6 @@ export const pl = {
     reviewLocalModelMigration: 'Przejrzyj migrację modelu lokalnego',
     actionFailed: 'Akcja komponentów semantycznych nie powiodła się: {error}',
     working: 'Przetwarzanie…',
-    gemmaName: 'EmbeddingGemma 2 (eksperymentalny)',
     gemmaQualifiedName: 'EmbeddingGemma 2',
     gemmaFreshLibraryExplanation:
       'Tworzy to pustą bibliotekę. Biblioteka E5 i jej indeks pozostają nienaruszone. Wybrany wymiar embeddingu jest zablokowany dla tej biblioteki; opcje indeksowania multimediów można zmienić później. Zapisanie ustawień nie instaluje Gemmy. Wybór „Akceptuj i zainstaluj” utworzy nową bibliotekę i rozpocznie pobieranie modelu.',

@@ -366,8 +366,7 @@ describe('SemanticComponentManagement', () => {
       .querySelector<HTMLInputElement>('.fm-semantic-install input[value="embeddingGemma2"]')
       ?.click();
     m.redraw.sync();
-    expect(root.textContent).toContain('Development-only Gemma bundle');
-    expect(root.textContent).toContain('pinned native model');
+    expect(root.textContent).not.toContain('Development-only');
     expect(root.textContent).not.toContain('deterministic test embedder');
   });
 

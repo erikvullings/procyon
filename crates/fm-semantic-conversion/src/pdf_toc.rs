@@ -45,13 +45,26 @@ pub fn clean_pdf_toc_text(text: &str) -> (String, bool) {
             let chars = line.char_indices().collect::<Vec<_>>();
             while cursor < chars.len() {
                 let start = cursor;
+                let mut dots = 0;
+                let mut spaced = false;
                 while cursor < chars.len() && chars[cursor].1 == '.' {
                     cursor += 1;
+                    dots += 1;
+                    // `. . . .` leaders: absorb dots separated by whitespace.
+                    let gap_end = chars[cursor..]
+                        .iter()
+                        .position(|(_, character)| !character.is_whitespace())
+                        .map_or(chars.len(), |offset| cursor + offset);
+                    if gap_end > cursor && gap_end < chars.len() && chars[gap_end].1 == '.' {
+                        spaced = true;
+                        cursor = gap_end;
+                    }
                 }
                 if cursor > start {
                     let separated_before = start == 0 || chars[start - 1].1.is_whitespace();
                     let separated_after = cursor == chars.len() || chars[cursor].1.is_whitespace();
-                    if cursor - start >= 4 && separated_before && separated_after {
+                    // A spaced leader may hang off the preceding word ("Introduction. . . .").
+                    if dots >= 4 && (separated_before || spaced) && separated_after {
                         navigation = true;
                         cleaned.push(' ');
                         continue;
@@ -209,5 +222,15 @@ mod tests {
             repair_spaced_elsevier_doi("https://doi.org/10.1016/j. Next sentence. 2011"),
             "https://doi.org/10.1016/j. Next sentence. 2011"
         );
+    }
+
+    #[test]
+    fn spaced_dot_leaders_are_navigation() {
+        let (text, navigation) = clean_pdf_toc_text("Introduction. . . . . . . . . 425");
+        assert!(navigation);
+        assert_eq!(text, "Introduction 425");
+        let (text, navigation) = clean_pdf_toc_text("Wait. . . and then");
+        assert!(!navigation);
+        assert_eq!(text, "Wait. . . and then");
     }
 }
