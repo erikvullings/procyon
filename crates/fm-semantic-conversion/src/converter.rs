@@ -24,7 +24,7 @@ use crate::text::decode;
 
 /// Version of the baseline converter. Bumping it invalidates every fingerprint
 /// derived from its output.
-pub const BASELINE_CONVERTER_VERSION: ComponentVersion = ComponentVersion::new("baseline", 4);
+pub const BASELINE_CONVERTER_VERSION: ComponentVersion = ComponentVersion::new("baseline", 5);
 
 /// One-based, inclusive page window for staged PDF conversion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

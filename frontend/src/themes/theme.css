@@ -5753,6 +5753,13 @@ button.fm-activity-count {
   overflow-wrap: anywhere;
 }
 
+/* Passage text is content the user may copy; the rest of the view stays chrome. */
+.fm-themes-excerpt,
+.fm-themes-excerpt * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .fm-themes-excerpt {
   margin: 0.3rem 0;
   line-height: 1.5;

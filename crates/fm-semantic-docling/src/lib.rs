@@ -17,6 +17,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use docling_core::{DoclingDocument, FieldItem, Node, Table};
+mod reflow;
+
 use docling_pdf::{PdfError, convert_text_layer_pages};
 use fm_semantic_conversion::{
     AdvancedCapability, AdvancedConversion, AdvancedConverterAdapter, AdvancedConverterBackend,
@@ -41,7 +43,7 @@ pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
 /// included: enabling it retries only previously textless PDFs, while
 /// disabling it makes reconciliation remove their OCR-derived occurrences.
 /// OCR-derived documents carry [`OCRMYPDF_CONVERTER_VERSION`] themselves.
-pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2052009+baseline/4";
+pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2052009+baseline/5";
 /// Version of the optional OCRmyPDF plus deterministic Docling composition.
 pub const OCRMYPDF_CONVERTER_VERSION: ComponentVersion =
     ComponentVersion::new("ocrmypdf-docling", 2);
@@ -1151,7 +1153,7 @@ fn convert_text_layer(
     }
 
     let mut mapper = Mapper::new(version, context, total_pages, selected_pages, None);
-    mapper.map_document(document);
+    mapper.map_pdf_document(document, bytes);
     conversion(mapper.finish())
 }
 
@@ -1252,7 +1254,7 @@ fn convert_ml(
         selected_pages,
         Some(language),
     );
-    mapper.map_document(combined);
+    mapper.map_pdf_document(combined, bytes);
     conversion(mapper.finish())
 }
 
@@ -1346,7 +1348,23 @@ impl<'a> Mapper<'a> {
         }
     }
 
+    /// Maps a PDF conversion, consulting the PDF's word cells only when Docling split brackets
+    /// off their lines.
+    fn map_pdf_document(&mut self, document: DoclingDocument, pdf: &[u8]) {
+        let pages = if reflow::has_stray_brackets(&document.nodes) {
+            reflow::page_words(pdf)
+        } else {
+            Vec::new()
+        };
+        self.map_pages(document, &pages);
+    }
+
+    #[cfg(test)]
     fn map_document(&mut self, document: DoclingDocument) {
+        self.map_pages(document, &[]);
+    }
+
+    fn map_pages(&mut self, document: DoclingDocument, pages: &[reflow::PageWords]) {
         if let Some(language) = self.ocr_language {
             let confidence = document
                 .confidence
@@ -1358,7 +1376,7 @@ impl<'a> Mapper<'a> {
                 mean_confidence_basis_points: confidence,
             });
         }
-        for node in document.nodes {
+        for node in reflow::reflow_lines(document.nodes, pages) {
             if self.saturated || self.checkpoint().is_err() {
                 break;
             }
@@ -1493,6 +1511,15 @@ impl<'a> Mapper<'a> {
             return false;
         }
 
+        // Docling escapes prose for Markdown (`&amp;`, `\_`); stored text is plain.
+        let text = if matches!(
+            kind,
+            UnitKind::Paragraph | UnitKind::ListItem | UnitKind::Heading
+        ) {
+            reflow::unescape(&text)
+        } else {
+            text
+        };
         let sanitized = sanitize(text.trim(), 0);
         self.removed_characters = self.removed_characters.saturating_add(sanitized.removed);
         if sanitized.text.trim().is_empty() {

@@ -191,7 +191,7 @@ test('production bundle records the compiled structural chunker identity', () =>
 });
 
 test('production bundle records the current PDF and baseline converter identity', () => {
-  assert.equal(PRODUCTION_CONVERTER_IDENTITY, 'docling-pdf/2052009+baseline/4');
+  assert.equal(PRODUCTION_CONVERTER_IDENTITY, 'docling-pdf/2052009+baseline/5');
 });
 
 test('model verification resolves the content-addressed developer artifact', () => {
