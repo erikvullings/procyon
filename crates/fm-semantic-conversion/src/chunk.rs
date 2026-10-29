@@ -60,6 +60,35 @@ impl Default for ChunkerOptions {
     }
 }
 
+/// Smallest maximum chunk size derived for a model, in estimated tokens.
+const MIN_MODEL_CHUNK_TOKENS: u32 = 256;
+/// Largest maximum chunk size derived for a model, in estimated tokens. Models
+/// with more context do not get larger chunks: retrieval precision drops.
+const MAX_MODEL_CHUNK_TOKENS: u32 = 1000;
+
+impl ChunkerOptions {
+    /// Options sized for an embedding model that accepts `model_input_tokens`.
+    ///
+    /// The maximum is the model's limit clamped into
+    /// [`MIN_MODEL_CHUNK_TOKENS`]..=[`MAX_MODEL_CHUNK_TOKENS`], but never above
+    /// the limit itself (the token estimator over-estimates, so an estimated
+    /// size within the limit fits the real tokenizer). Target and overlap keep
+    /// the default 25:32 and 3:32 proportions of the maximum.
+    #[must_use]
+    pub fn for_model_input_limit(model_input_tokens: usize) -> Self {
+        let limit = u32::try_from(model_input_tokens).unwrap_or(u32::MAX);
+        let max_tokens = limit
+            .clamp(MIN_MODEL_CHUNK_TOKENS, MAX_MODEL_CHUNK_TOKENS)
+            .min(limit);
+        Self {
+            target_tokens: (max_tokens * 25 / 32).max(1),
+            max_tokens,
+            overlap_tokens: max_tokens * 3 / 32,
+            ..Self::default()
+        }
+    }
+}
+
 /// Why a [`ChunkerOptions`] value cannot be used.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum InvalidChunkerOptions {
@@ -618,6 +647,32 @@ mod tests {
     use super::*;
     use crate::model::{TopLevelBoundary, UnitKind};
     use crate::text::SourceMap;
+
+    #[test]
+    fn the_512_token_model_keeps_the_default_options() {
+        assert_eq!(
+            ChunkerOptions::for_model_input_limit(512),
+            ChunkerOptions::default()
+        );
+    }
+
+    #[test]
+    fn long_context_models_are_capped_at_the_maximum_chunk_size() {
+        let options = ChunkerOptions::for_model_input_limit(8_192);
+        assert_eq!(options.max_tokens, MAX_MODEL_CHUNK_TOKENS);
+        assert!(options.target_tokens >= MIN_MODEL_CHUNK_TOKENS);
+        Chunker::new(options).expect("derived options are valid");
+    }
+
+    #[test]
+    fn derived_maximum_never_exceeds_a_small_model_limit() {
+        for limit in [1_usize, 32, 128, 255] {
+            let options = ChunkerOptions::for_model_input_limit(limit);
+            assert_eq!(options.max_tokens as usize, limit);
+            Chunker::new(options).expect("derived options are valid");
+        }
+        assert_eq!(ChunkerOptions::for_model_input_limit(300).max_tokens, 300);
+    }
 
     #[test]
     fn exact_provenance_round_trips_for_evidence_navigation() {

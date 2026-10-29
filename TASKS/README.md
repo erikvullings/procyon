@@ -487,3 +487,5 @@ content streaming, and mapping concerns live in dedicated modules with interface
   needs 0185, 0283)*
 - [ ] 0285 Rebuild PDF table rows in semantic conversion *(open — text-layer path emits one paragraph per
   table cell; related to 0284)*
+- [ ] 0287 Chunk size range 256-1000 estimated tokens *(in_progress — `for_model_input_limit` added but
+  not wired; no retrieval eval possible, defaults kept; stats in task notes)*
