@@ -50,6 +50,9 @@ const CAPTION_WORDS: &[&str] = &[
     "abbildung",
 ];
 
+/// How many leading `CAPTION_WORDS` name tables rather than figures.
+const TABLE_CAPTION_WORDS: usize = 8;
+
 /// A located one-line cell as the text layer reports it (`[left, top, right, bottom]`).
 pub(crate) struct Cell<'a> {
     pub location: [u16; 4],
@@ -258,6 +261,16 @@ fn merge_marks(cells: &[Cell<'_>]) -> Vec<Work> {
         }
     }
     work.into_iter().flatten().collect()
+}
+
+/// Whether `text` opens a table caption (`Table 3`, `TABLE 3 (Continued)`), not a figure caption.
+pub(crate) fn is_table_caption(text: &str) -> bool {
+    let lower = text.trim().to_lowercase();
+    CAPTION_WORDS[..TABLE_CAPTION_WORDS].iter().any(|word| {
+        lower
+            .strip_prefix(word)
+            .is_some_and(|rest| rest.trim_start().starts_with(|c: char| c.is_ascii_digit()))
+    })
 }
 
 fn is_caption_start(text: &str) -> bool {

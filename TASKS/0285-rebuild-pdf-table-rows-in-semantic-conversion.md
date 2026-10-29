@@ -107,3 +107,16 @@ changelog for table or text-layer changes before deciding.
   tables (e.g. continued multi-column review tables) are read column by column because the table
   gate only accepts datum-like cells. MiniCPM is a second opinion, not ground truth: hand-verify
   a sample before trusting small differences.
+- 2026-10-29: Text-heavy tables (`fm-semantic-docling/src/table_text.rs`, run from `reflow::flush`
+  after the numeric gate, only with word boxes). Gate: >=3 and <=8 columns separated by vertical
+  corridors (>=6 page units, <=1% of words touching), each column >=3% of words; region = below a
+  `Table N` caption, else the page body (running headers drop repeated captions, so continuation
+  pages have none). Lines crossing a corridor at the top/bottom (wrapped caption, note) are cut;
+  word runs (gap <=4 units) join the column they start in (centred headers). Rows break at gaps
+  >1.35x line pitch; equal-pitch records fall back to repeated first-column labels (`Item 1`...).
+  Identity `.../baseline/11`. Gold (text-layer, 177 pages): reading order 0.683 -> 0.721, units per
+  gold paragraph 6.6 -> 6.0, FFP 0.837 -> 0.916 (ML 0.904), Radicalisation 0.498 -> 0.620 (ML
+  0.694); table cell F1 on model-found tables unchanged (0.36 vs ML 0.64). Known limits: a page
+  mixing prose and a table without a caption is not detected; forest-plot pages with side prose
+  (Radicalisation p54) become a table with prose cells; tables where only the header/records
+  separate by gap and rows <3 are skipped. Next: ruling-line grids, bands, confidence.

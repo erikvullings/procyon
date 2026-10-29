@@ -8,7 +8,7 @@
 
 use docling_core::Node;
 
-use crate::table_rows;
+use crate::{table_rows, table_text};
 
 /// Horizontal tolerance, in Docling's 0–511 page units, for "same left edge" and "reaches the
 /// right edge".
@@ -20,7 +20,7 @@ const MAX_LINE_GAP: f32 = 2.2;
 /// Widest indent, in page units, of a hanging continuation or a first-line indent.
 const MAX_INDENT: u16 = 40;
 /// Height, in page units, of the top and bottom bands where running headers and footers live.
-const MARGIN_BAND: u16 = 40;
+pub(crate) const MARGIN_BAND: u16 = 40;
 /// Pages a margin line must repeat on to count as running furniture.
 const MIN_FURNITURE_PAGES: usize = 3;
 /// Fewest letters a margin line needs to be matched across pages (a lone page number has none).
@@ -68,7 +68,7 @@ pub(crate) struct PageWords {
 }
 
 /// Docling's location grid spans the page in 0–511 units on both axes.
-const GRID: f32 = 511.0;
+pub(crate) const GRID: f32 = 511.0;
 /// Largest gap, in points, between a bracket and the word it touches.
 const TOUCHING: f32 = 3.0;
 /// Lines searched on either side of a stray bracket for the word it belongs to.
@@ -231,6 +231,18 @@ fn flush(
         })
         .collect();
     let mut tables = table_rows::find_tables(&cells);
+    if order_columns && let Some(page) = page {
+        let claimed: Vec<[u16; 4]> = tables
+            .iter()
+            .filter_map(|block| block.table.location)
+            .collect();
+        tables.extend(table_text::find_text_tables(
+            page,
+            &cells,
+            &claimed,
+            median_height(&lines),
+        ));
+    }
     if order_columns
         && let Some(page) = page
         && let Some(gutter) = word_gutter(page)
@@ -633,7 +645,7 @@ fn columns_in_order(lines: Vec<Line>, order_columns: bool) -> Vec<Line> {
     }
 }
 
-fn to_units(value: f32, extent: f32) -> f32 {
+pub(crate) fn to_units(value: f32, extent: f32) -> f32 {
     if extent <= 0.0 {
         0.0
     } else {
@@ -848,7 +860,7 @@ fn has_content(line: &Line) -> bool {
 }
 
 /// Appends a continuation line, rejoining a word hyphenated at the line end.
-fn join(text: &mut String, next: &str) {
+pub(crate) fn join(text: &mut String, next: &str) {
     let next = next.trim_start();
     let hyphenated = {
         let mut tail = text.chars().rev();
