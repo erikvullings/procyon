@@ -15,6 +15,10 @@ const MAX_ROW_GAP: f32 = 3.0;
 const MIN_TABLE_ROWS: usize = 3;
 /// Fewest cells that make a table.
 const MIN_TABLE_CELLS: usize = 8;
+/// Longest cell, in characters, a rebuilt table may contain.
+const MAX_CELL_CHARS: usize = 70;
+/// Fewest non-stub cells with letters or digits that make a table.
+const MIN_JUDGED_CELLS: usize = 4;
 /// Longest cell, in characters, that still reads as a datum rather than prose.
 const MAX_DATUM_CHARS: usize = 24;
 /// Longest lone label, in characters, tolerated between two multi-cell rows.
@@ -116,8 +120,7 @@ fn block_end(cells: &[Cell<'_>], rows: &[Row], start: usize) -> usize {
 
 fn is_datum(text: &str) -> bool {
     let text = text.trim();
-    text.chars().count() <= MAX_DATUM_CHARS
-        && (text.chars().any(|c| c.is_ascii_digit()) || text.chars().all(|c| !c.is_alphanumeric()))
+    text.chars().count() <= MAX_DATUM_CHARS && text.chars().any(|c| c.is_ascii_digit())
 }
 
 fn build(cells: &[Cell<'_>], rows: &[Row]) -> Option<TableBlock> {
@@ -129,11 +132,26 @@ fn build(cells: &[Cell<'_>], rows: &[Row]) -> Option<TableBlock> {
     if tabular < MIN_TABLE_ROWS || members.len() < MIN_TABLE_CELLS {
         return None;
     }
-    let datums = members
+    // A running sentence inside the block means prose with a formula or figure beside it.
+    if members
+        .iter()
+        .any(|&index| cells[index].text.chars().count() > MAX_CELL_CHARS)
+    {
+        return None;
+    }
+    // Row stubs (the first cell of a row) are labels and mark-only cells (`-`, `–`, `*`) are
+    // legitimate content that says nothing about tabularity, so only the remaining cells with
+    // letters or digits are judged.
+    let judged: Vec<usize> = rows
+        .iter()
+        .flat_map(|row| row.cells.iter().skip(1).copied())
+        .filter(|&index| cells[index].text.chars().any(char::is_alphanumeric))
+        .collect();
+    let datums = judged
         .iter()
         .filter(|&&index| is_datum(cells[index].text))
         .count();
-    if (datums as f32) < MIN_DATUM_SHARE * members.len() as f32 {
+    if judged.len() < MIN_JUDGED_CELLS || (datums as f32) < MIN_DATUM_SHARE * judged.len() as f32 {
         return None;
     }
 
@@ -166,7 +184,8 @@ fn build(cells: &[Cell<'_>], rows: &[Row]) -> Option<TableBlock> {
         let mut line = vec![String::new(); tracks.len()];
         for &index in &row.cells {
             let cell = &cells[index];
-            let text = cell.text.trim();
+            let text = crate::reflow::unescape(cell.text);
+            let text = text.trim();
             if text.is_empty() {
                 continue;
             }
@@ -292,6 +311,65 @@ mod tests {
             cell(280, 120, 460, "who found small but reliable effects"),
         ];
         assert!(find_tables(&cells).is_empty());
+    }
+
+    #[test]
+    fn dash_bullets_in_two_column_prose_are_not_a_table() {
+        let cells = vec![
+            cell(60, 100, 70, "-"),
+            cell(280, 100, 290, "-"),
+            cell(75, 100, 240, "mixed right wing extremism with"),
+            cell(295, 100, 460, "related consequences"),
+            cell(60, 110, 70, "-"),
+            cell(280, 110, 290, "-"),
+            cell(75, 110, 240, "xenophobia and classified"),
+            cell(295, 110, 460, "including their different forms"),
+            cell(60, 120, 70, "-"),
+            cell(280, 120, 290, "-"),
+            cell(75, 120, 240, "participants as radicalized"),
+            cell(295, 120, 460, "in 2019"),
+        ];
+        assert!(find_tables(&cells).is_empty());
+    }
+
+    #[test]
+    fn html_entities_in_cells_are_unescaped() {
+        let cells = vec![
+            cell(60, 100, 120, "Study &amp; sample"),
+            cell(200, 100, 230, "d"),
+            cell(60, 110, 120, "Smith"),
+            cell(200, 110, 230, "0.1"),
+            cell(60, 120, 120, "Jones"),
+            cell(200, 120, 230, "0.2"),
+            cell(60, 130, 120, "Brown"),
+            cell(200, 130, 230, "0.3"),
+            cell(60, 140, 120, "Green"),
+            cell(200, 140, 230, "0.4"),
+        ];
+        assert_eq!(rows_of(&find_tables(&cells))[0], "Study & sample\td");
+    }
+
+    #[test]
+    fn a_sentence_is_never_pulled_into_a_table() {
+        let sentence =
+            "We did not include a medium quality category because we did not expect enough";
+        let cells = vec![
+            cell(60, 100, 460, sentence),
+            cell(60, 110, 120, "a ="),
+            cell(200, 110, 230, "2.5"),
+            cell(60, 120, 120, "b ="),
+            cell(200, 120, 230, "3.5"),
+            cell(60, 130, 120, "c ="),
+            cell(200, 130, 230, "4.5"),
+            cell(60, 140, 120, "d ="),
+            cell(200, 140, 230, "5.5"),
+            cell(300, 100, 330, "1"),
+        ];
+        assert!(
+            find_tables(&cells)
+                .iter()
+                .all(|block| !block.members.contains(&0))
+        );
     }
 
     #[test]
