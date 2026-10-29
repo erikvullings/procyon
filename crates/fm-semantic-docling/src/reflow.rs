@@ -8,7 +8,7 @@
 
 use docling_core::Node;
 
-use crate::{table_rows, table_text};
+use crate::{regions, table_rows, table_text};
 
 /// Horizontal tolerance, in Docling's 0–511 page units, for "same left edge" and "reaches the
 /// right edge".
@@ -232,38 +232,12 @@ fn flush(
         .collect();
     let mut tables = table_rows::find_tables(&cells);
     if order_columns && let Some(page) = page {
-        let claimed: Vec<[u16; 4]> = tables
-            .iter()
-            .filter_map(|block| block.table.location)
-            .collect();
-        tables.extend(table_text::find_text_tables(
-            page,
-            &cells,
-            &claimed,
-            median_height(&lines),
-        ));
-    }
-    if order_columns
-        && let Some(page) = page
-        && let Some(gutter) = word_gutter(page)
-    {
         let boxes: Vec<[u16; 4]> = tables
             .iter()
             .filter_map(|block| block.table.location)
             .collect();
-        let rebuilt = lines_from_words(page, gutter, median_height(&lines), &boxes);
-        let rebuilt: Vec<Line> = rebuilt
-            .into_iter()
-            .filter(|line| {
-                !(in_margin_band(line.location) && furniture.contains(&furniture_key(&line.text)))
-            })
-            .collect();
-        if !rebuilt.is_empty() {
-            let paragraphs = merge_lines(in_column_order(rebuilt, Some(gutter)))
-                .into_iter()
-                .filter(has_content)
-                .collect::<Vec<_>>();
-            emit_with_tables(paragraphs, tables, output);
+        if let Some(nodes) = read_regions(page, median_height(&lines), &boxes, furniture) {
+            insert_tables(nodes, tables, output);
             return;
         }
     }
@@ -522,11 +496,6 @@ fn continues(
 
 /// Widest crossing share of lines tolerated at the gutter (titles, captions spanning both columns).
 const MAX_SPANNING_SHARE: f32 = 0.12;
-/// Fewest word cells that make word-based column detection meaningful.
-const MIN_WORDS_FOR_COLUMNS: usize = 80;
-/// Smallest gap, in page units, between the last word of a left column and the first of the right
-/// for a spanning cell to be split there rather than kept as one line.
-const MIN_SPLIT_GAP: f32 = 4.0;
 /// Narrowest empty strip, in page units, that separates two columns.
 const MIN_GUTTER: u16 = 5;
 /// Share of the lines each column must hold.
@@ -601,45 +570,10 @@ fn median_height(lines: &[Line]) -> f32 {
         .map_or(6.0, |height| f32::from(*height).max(3.0))
 }
 
-/// Emits paragraphs in order with each table placed before the first paragraph that starts at or
-/// below it; leftover tables follow the text.
-fn emit_with_tables(
-    paragraphs: Vec<Line>,
-    mut tables: Vec<table_rows::TableBlock>,
-    output: &mut Vec<Node>,
-) {
-    let mut pending: Vec<Option<table_rows::TableBlock>> = tables.drain(..).map(Some).collect();
-    let emit_table = |slot: &mut Option<table_rows::TableBlock>, output: &mut Vec<Node>| {
-        if let Some(block) = slot.take() {
-            output.push(Node::Table(block.table));
-        }
-    };
-    for paragraph in paragraphs {
-        for slot in &mut pending {
-            let above = slot
-                .as_ref()
-                .and_then(|block| block.table.location)
-                .is_some_and(|location| location[1] <= paragraph.location[1]);
-            if above {
-                emit_table(slot, output);
-            }
-        }
-        output.push(Node::Located {
-            location: paragraph.location,
-            inner: Box::new(Node::Paragraph {
-                text: paragraph.text,
-            }),
-        });
-    }
-    for slot in &mut pending {
-        emit_table(slot, output);
-    }
-}
-
 /// Puts a page's lines in column reading order when no word cells can rebuild them.
 fn columns_in_order(lines: Vec<Line>, order_columns: bool) -> Vec<Line> {
     if order_columns {
-        in_column_order(lines, None)
+        in_column_order(lines)
     } else {
         lines
     }
@@ -653,144 +587,157 @@ pub(crate) fn to_units(value: f32, extent: f32) -> f32 {
     }
 }
 
-/// Finds the gutter between two text columns from the page's word boxes: a strip of the middle
-/// half of the text block that almost no word touches, with a good share of the words each side.
-fn word_gutter(page: &PageWords) -> Option<u16> {
-    let words = &page.words;
-    if words.len() < MIN_WORDS_FOR_COLUMNS {
-        return None;
-    }
-    let spans: Vec<(f32, f32)> = words
-        .iter()
-        .map(|word| {
-            (
-                to_units(word.left, page.width),
-                to_units(word.right, page.width),
-            )
-        })
-        .collect();
-    let left_edge = spans.iter().map(|span| span.0).fold(f32::MAX, f32::min);
-    let right_edge = spans.iter().map(|span| span.1).fold(f32::MIN, f32::max);
-    let width = right_edge - left_edge;
-    if width < 100.0 {
-        return None;
-    }
-    let mut coverage = vec![0_u32; GRID as usize + 2];
-    for (left, right) in &spans {
-        let last = (right.max(0.0) as usize).min(GRID as usize + 1);
-        for count in &mut coverage[left.max(0.0) as usize..=last] {
-            *count += 1;
-        }
-    }
-    let allowed = (words.len() as f32 * 0.01).max(1.0) as u32;
-    let from = (left_edge + width / 4.0) as usize;
-    let to = (right_edge - width / 4.0) as usize;
-    let mut best: Option<(usize, usize)> = None;
-    let mut run: Option<usize> = None;
-    for (bin, &count) in coverage.iter().enumerate().take(to + 1).skip(from) {
-        if count <= allowed {
-            run.get_or_insert(bin);
-        } else if let Some(start) = run.take()
-            && best.is_none_or(|(_, w)| bin - start > w)
-        {
-            best = Some((start, bin - start));
-        }
-    }
-    if let Some(start) = run
-        && best.is_none_or(|(_, w)| to - start + 1 > w)
-    {
-        best = Some((start, to - start + 1));
-    }
-    let (start, strip) = best?;
-    if strip < usize::from(MIN_GUTTER) {
-        return None;
-    }
-    let gutter = (start + strip / 2) as f32;
-    let left = spans.iter().filter(|span| span.1 <= gutter + 2.0).count();
-    let right = spans.iter().filter(|span| span.0 + 2.0 >= gutter).count();
-    let minimum = (words.len() as f32 * MIN_COLUMN_SHARE) as usize;
-    (left >= minimum && right >= minimum).then_some(gutter as u16)
-}
-
-/// A word as `(left, right, top, text)` in page units.
-type Word<'a> = (f32, f32, f32, &'a str);
-
-/// Rebuilds a two-column page's lines from its word boxes. On such pages the text layer's cells
-/// carry words from both columns (a left-hand box holding left and right text alike), so lines
-/// cannot be trusted and are re-derived: words are grouped into rows, each row is cut at the
-/// gutter into a left and a right line, and a row whose words run continuously across the gutter
-/// (a title) stays whole. Words inside `exclude` (tables) are left to their own rendering.
-fn lines_from_words(page: &PageWords, gutter: u16, height: f32, exclude: &[[u16; 4]]) -> Vec<Line> {
-    let gutter = f32::from(gutter);
-    let mut words: Vec<Word> = page
-        .words
-        .iter()
-        .map(|word| {
-            (
-                to_units(word.left, page.width),
-                to_units(word.right, page.width),
-                to_units(word.top, page.height),
-                word.text.as_str(),
-            )
-        })
-        .filter(|(left, right, top, _)| {
-            let (centre_x, centre_y) = ((left + right) / 2.0, top + height / 2.0);
+/// Reads a page's lines and text tables off its whitespace regions, or `None` when the page has
+/// no column boundary and the cell-based path should read it. Words inside `exclude` (tables
+/// already rebuilt from cells) are left to those tables.
+fn read_regions(
+    page: &PageWords,
+    height: f32,
+    exclude: &[[u16; 4]],
+    furniture: &std::collections::HashSet<String>,
+) -> Option<Vec<Node>> {
+    let words = regions::words_of(page);
+    let indices: Vec<usize> = (0..words.len())
+        .filter(|&index| {
+            let word = &words[index];
+            let (x, y) = ((word.left + word.right) / 2.0, word.top + height / 2.0);
             !exclude.iter().any(|b| {
-                centre_x >= f32::from(b[0]) - 1.0
-                    && centre_x <= f32::from(b[2]) + 1.0
-                    && centre_y >= f32::from(b[1]) - 1.0
-                    && centre_y <= f32::from(b[3]) + 1.0
+                x >= f32::from(b[0]) - 1.0
+                    && x <= f32::from(b[2]) + 1.0
+                    && y >= f32::from(b[1]) - 1.0
+                    && y <= f32::from(b[3]) + 1.0
             })
         })
-        .filter(|word| !word.3.trim().is_empty())
         .collect();
-    words.sort_by(|a, b| a.2.total_cmp(&b.2).then(a.0.total_cmp(&b.0)));
-
-    let mut lines = Vec::new();
-    let mut start = 0;
-    while start < words.len() {
-        let row_top = words[start].2;
-        let mut end = start + 1;
-        while end < words.len() && words[end].2 - row_top <= height * 0.6 {
-            end += 1;
-        }
-        let mut row = words[start..end].to_vec();
-        row.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let (west, east): (Vec<&Word>, Vec<&Word>) = row
-            .iter()
-            .partition(|word| (word.0 + word.1) / 2.0 < gutter);
-        let gap = match (west.last(), east.first()) {
-            (Some(w), Some(e)) => e.0 - w.1,
-            _ => f32::MAX,
-        };
-        let sides: Vec<Vec<&Word>> = if gap < MIN_SPLIT_GAP {
-            vec![row.iter().collect()]
-        } else {
-            vec![west, east]
-                .into_iter()
-                .filter(|side| !side.is_empty())
-                .collect()
-        };
-        for side in sides {
-            let text = side.iter().map(|word| word.3).collect::<Vec<_>>().join(" ");
-            let left = side.iter().map(|word| word.0).fold(f32::MAX, f32::min);
-            let right = side.iter().map(|word| word.1).fold(f32::MIN, f32::max);
-            let top = row_top.max(0.0) as u16;
-            lines.push(Line::new(
-                [left as u16, top, right as u16, top + height as u16],
-                text,
-            ));
-        }
-        start = end;
+    let root = regions::segment(&words, indices, height);
+    if !regions::has_columns(&root) {
+        return None;
     }
-    lines
+    let mut pieces = Vec::new();
+    collect_pieces(&root, &words, height, &mut pieces);
+
+    let mut nodes: Vec<Node> = Vec::new();
+    let mut pending: Vec<Line> = Vec::new();
+    let flush_pending = |pending: &mut Vec<Line>, nodes: &mut Vec<Node>| {
+        let lines: Vec<Line> = std::mem::take(pending)
+            .into_iter()
+            .filter(|line| {
+                !(in_margin_band(line.location) && furniture.contains(&furniture_key(&line.text)))
+            })
+            .collect();
+        nodes.extend(
+            merge_lines(lines)
+                .into_iter()
+                .filter(has_content)
+                .map(|line| Node::Located {
+                    location: line.location,
+                    inner: Box::new(Node::Paragraph { text: line.text }),
+                }),
+        );
+    };
+    for piece in pieces {
+        match piece {
+            Piece::Lines(lines) => pending.extend(lines),
+            Piece::Table(table) => {
+                let mut table = *table;
+                // The caption is the last few lines before the table, from the one that opens it.
+                let from = pending.len().saturating_sub(MAX_CAPTION_LINES);
+                if let Some(at) = (from..pending.len())
+                    .find(|&at| table_rows::is_table_caption(&pending[at].text))
+                {
+                    let caption: Vec<String> = pending
+                        .drain(at..)
+                        .map(|line| unescape(&line.text))
+                        .collect();
+                    table.caption = Some(caption.join(" "));
+                }
+                flush_pending(&mut pending, &mut nodes);
+                nodes.push(Node::Table(table));
+            }
+        }
+    }
+    flush_pending(&mut pending, &mut nodes);
+    (!nodes.is_empty()).then_some(nodes)
+}
+
+/// Most lines a caption spans above its table.
+const MAX_CAPTION_LINES: usize = 3;
+
+enum Piece {
+    Lines(Vec<Line>),
+    Table(Box<docling_core::Table>),
+}
+
+/// Walks the region tree in reading order: bands top to bottom, columns left to right; a column
+/// cut that reads as a table becomes one.
+fn collect_pieces(
+    region: &regions::Region,
+    words: &[regions::Word<'_>],
+    height: f32,
+    pieces: &mut Vec<Piece>,
+) {
+    match region {
+        regions::Region::Leaf(indices) => {
+            let lines = regions::rows(words, indices, height)
+                .into_iter()
+                .map(|row| {
+                    let text = row
+                        .iter()
+                        .map(|&i| words[i].text)
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let left = row.iter().map(|&i| words[i].left).fold(f32::MAX, f32::min);
+                    let right = row.iter().map(|&i| words[i].right).fold(f32::MIN, f32::max);
+                    let top = words[row[0]].top.max(0.0) as u16;
+                    Line::new([left as u16, top, right as u16, top + height as u16], text)
+                })
+                .collect();
+            pieces.push(Piece::Lines(lines));
+        }
+        regions::Region::Bands(children) => {
+            for child in children {
+                collect_pieces(child, words, height, pieces);
+            }
+        }
+        regions::Region::Columns {
+            words: indices,
+            corridors,
+            children,
+        } => {
+            if let Some(table) = table_text::table_in_columns(words, indices, corridors, height) {
+                pieces.push(Piece::Table(Box::new(table)));
+            } else {
+                for child in children {
+                    collect_pieces(child, words, height, pieces);
+                }
+            }
+        }
+    }
+}
+
+/// Places each table (rebuilt from cells) before the first paragraph that starts at or below it;
+/// leftover tables follow the text.
+fn insert_tables(
+    mut nodes: Vec<Node>,
+    tables: Vec<table_rows::TableBlock>,
+    output: &mut Vec<Node>,
+) {
+    for block in tables {
+        let top = block.table.location.map_or(0, |location| location[1]);
+        let at = nodes
+            .iter()
+            .position(|node| matches!(node, Node::Located { location, .. } if location[1] >= top))
+            .unwrap_or(nodes.len());
+        nodes.insert(at, Node::Table(block.table));
+    }
+    output.append(&mut nodes);
 }
 
 /// Re-reads a two-column page column by column. The text layer can hand the lines over row by
 /// row (left line, right line, ...), which would weave the columns into one paragraph. Lines that
 /// span the gutter (titles, abstracts) stay where they are and separate the column blocks.
-fn in_column_order(lines: Vec<Line>, known_gutter: Option<u16>) -> Vec<Line> {
-    let Some(gutter) = known_gutter.or_else(|| find_gutter(&lines)) else {
+fn in_column_order(lines: Vec<Line>) -> Vec<Line> {
+    let Some(gutter) = find_gutter(&lines) else {
         return lines;
     };
     let mut ordered: Vec<Line> = Vec::with_capacity(lines.len());

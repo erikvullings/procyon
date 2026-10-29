@@ -120,3 +120,18 @@ changelog for table or text-layer changes before deciding.
   mixing prose and a table without a caption is not detected; forest-plot pages with side prose
   (Radicalisation p54) become a table with prose cells; tables where only the header/records
   separate by gap and rows <3 are skipped. Next: ruling-line grids, bands, confidence.
+- 2026-10-29: Whitespace segmentation (`fm-semantic-docling/src/regions.rs`) replaces the page-wide
+  gutter and the page-level text-table finder. `segment` builds a region tree from the word boxes:
+  vertical corridors (>= 1 line height, <= 1% of words touching, >= 6 rows, 2 columns need >= 25%
+  of the words each, 3-8 columns >= 3%) become `Columns`; rows crossing a corridor (titles, wrapped
+  captions, notes) become their own bands and the stretches between them are cut again; otherwise
+  the widest empty horizontal strip (>= 0.6 line height) cuts `Bands`. `reflow::read_regions`
+  walks the tree (bands top-down, columns left-right), turns a 3-8 column cut that reads as a
+  table (`table_text::table_in_columns`) into a table with its caption lines lifted from the text
+  above, and falls back to the cell path when a page has no column cut. Identity `.../baseline/12`.
+  Gold (text layer, 177 pages): reading order 0.721 -> 0.734, units per gold paragraph 6.0 -> 4.6,
+  words F1 0.901; big movers: Loeber 0.884 -> 0.935, meta analyse youth 0.774 -> 0.874, attachment
+  0.350 -> 0.415, context specific 0.488 -> 0.563, trauma 0.838 -> 0.884; small drops: content
+  0.522 -> 0.494, Radicalisation 0.620 -> 0.610. Units keep their line box and tables their
+  region box (page + location) for later crops. Not done: spanning titles closer than 0.6 line
+  height to the columns stay in the left column; ruling-line grids; per-page confidence.
