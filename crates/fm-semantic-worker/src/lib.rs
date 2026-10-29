@@ -451,6 +451,8 @@ pub enum ClientError {
     ShutdownTimedOut,
 }
 
+// One long-lived value per connector; boxing `Desktop` would only add indirection to every match.
+#[allow(clippy::large_enum_variant)]
 enum ConnectorSource {
     Provisioned(LaunchSecret),
     /// Joins a worker that another host process launched and owns, without
