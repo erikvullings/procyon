@@ -683,10 +683,13 @@ mod tests {
     #[test]
     fn only_local_provider_locations_resolve_to_a_replaceable_path() {
         let root = temp_root();
-        let local = Location::from_native_path(&root.path().join("a.pdf")).unwrap();
+        let file = root.path().join("a.pdf");
+        fs::write(&file, b"%PDF").unwrap();
+        let local = Location::from_native_path(&file).unwrap();
+        // Windows locations carry the verbatim `\\?\` form of the same file.
         assert_eq!(
-            local_original_path(&local).unwrap(),
-            root.path().join("a.pdf")
+            fs::canonicalize(local_original_path(&local).unwrap()).unwrap(),
+            fs::canonicalize(&file).unwrap()
         );
 
         let remote = Location::parse("sftp://host/docs/a.pdf").unwrap();
