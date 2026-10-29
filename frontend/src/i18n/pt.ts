@@ -1555,7 +1555,7 @@ export const pt = {
     outputTooLarge: 'A saída da versão do OCRmyPDF excedeu {limit} bytes',
     installationDocs: 'Abrir o guia de instalação do OCRmyPDF',
     consentDisclosure:
-      'O Procyon executa o OCRmyPDF apenas nos ficheiros que escolher explicitamente. Nunca substitui o PDF original.',
+      'O Procyon executa o OCRmyPDF apenas nos ficheiros que escolher explicitamente. Só substitui o PDF original se ativar a opção de substituição abaixo.',
     consentLabel: 'Permitir o OCRmyPDF nos PDFs selecionados',
     reportedFiles: 'PDFs digitalizados sem texto pesquisável',
     noReportedFiles: 'Neste momento, nenhum PDF digitalizado precisa de texto pesquisável.',
@@ -1584,6 +1584,23 @@ export const pt = {
     outcomeExecutionFailure: 'O reconhecimento de texto em PDF falhou',
     outcomeSkipped: 'Ignorado',
     moreOutcomes: '{count} resultados de ficheiros adicionais não são apresentados.',
+    replaceOriginalLabel: 'Substituir o PDF original pela versão pesquisável',
+    replaceOriginalHelp:
+      'Apenas para PDFs neste computador que pode editar. O original é movido para o Lixo e permanece lá. Nada é substituído se o número de páginas diferir, o ficheiro tiver mudado entretanto ou não houver Lixo disponível.',
+    replacementReplaced: 'Original substituído; a versão anterior está no Lixo',
+    replacementKept: 'Original mantido: {reason}',
+    keptNotLocal: 'só são substituídos ficheiros neste computador',
+    keptNotRegularFile: 'não é um ficheiro normal',
+    keptReadOnly: 'o ficheiro é só de leitura',
+    keptSourceUnreadable: 'não foi possível ler o ficheiro',
+    keptSourceChanged: 'o ficheiro mudou durante o processamento',
+    keptRetainedOutputMissing:
+      'não foi guardada nenhuma cópia pesquisável desta versão do ficheiro',
+    keptOutputUnreadable: 'não foi possível ler a cópia pesquisável',
+    keptPageCountMismatch: 'a cópia pesquisável tem {outputPages} páginas em vez de {sourcePages}',
+    keptTrashUnavailable: 'este sistema não tem Lixo onde guardar o original',
+    keptTrashFailed: 'não foi possível mover o original para o Lixo',
+    keptReplaceFailed: 'não foi possível colocar a cópia pesquisável no lugar',
   },
   semanticVocabulary: {
     title: 'Vocabulários de conceitos',

@@ -4,7 +4,9 @@ import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type {
   SemanticOcrJob,
+  SemanticOcrKeptReason,
   SemanticOcrOutcome,
+  SemanticOcrReplacement,
   SemanticOcrStatus,
   SemanticOcrTarget,
   SemanticOcrUnavailableReason,
@@ -18,7 +20,7 @@ export interface SemanticOcrManagementAttrs {
   readonly onStatusChange?: (status: SemanticOcrStatus) => void;
 }
 
-type BusyAction = 'consent' | 'start' | 'cancel';
+type BusyAction = 'consent' | 'replace' | 'start' | 'cancel';
 
 const INSTALLATION_DOCUMENTATION = 'https://ocrmypdf.readthedocs.io/en/latest/installation.html';
 const VISIBLE_FILE_LIMIT = 200;
@@ -108,6 +110,46 @@ function outcomeView(outcome: SemanticOcrOutcome): Vnode {
   }
 }
 
+function keptReason(reason: SemanticOcrKeptReason): string {
+  switch (reason.code) {
+    case 'notLocal':
+      return t('semanticOcr', 'keptNotLocal');
+    case 'notRegularFile':
+      return t('semanticOcr', 'keptNotRegularFile');
+    case 'readOnly':
+      return t('semanticOcr', 'keptReadOnly');
+    case 'sourceUnreadable':
+      return t('semanticOcr', 'keptSourceUnreadable');
+    case 'sourceChanged':
+      return t('semanticOcr', 'keptSourceChanged');
+    case 'retainedOutputMissing':
+      return t('semanticOcr', 'keptRetainedOutputMissing');
+    case 'outputUnreadable':
+      return t('semanticOcr', 'keptOutputUnreadable');
+    case 'pageCountMismatch':
+      return t('semanticOcr', 'keptPageCountMismatch', {
+        sourcePages: reason.sourcePages,
+        outputPages: reason.outputPages,
+      });
+    case 'trashUnavailable':
+      return t('semanticOcr', 'keptTrashUnavailable');
+    case 'trashFailed':
+      return t('semanticOcr', 'keptTrashFailed');
+    case 'replaceFailed':
+      return t('semanticOcr', 'keptReplaceFailed');
+  }
+}
+
+function replacementView(replacement: SemanticOcrReplacement | undefined): Vnode | undefined {
+  if (replacement === undefined) return undefined;
+  return replacement.state === 'replaced'
+    ? m('small.fm-semantic-ocr-success', t('semanticOcr', 'replacementReplaced'))
+    : m(
+        'small.fm-semantic-ocr-warning',
+        t('semanticOcr', 'replacementKept', { reason: keptReason(replacement.reason) }),
+      );
+}
+
 /** Desktop OCRmyPDF discovery, consent, remediation scopes, and durable jobs. */
 export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs> = () => {
   let status: SemanticOcrStatus | undefined;
@@ -168,6 +210,24 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
       busy = undefined;
       busyTarget = undefined;
       schedulePoll(attrs);
+      m.redraw();
+    }
+  }
+
+  async function updateReplaceOriginal(
+    attrs: SemanticOcrManagementAttrs,
+    enabled: boolean,
+  ): Promise<void> {
+    busy = 'replace';
+    error = undefined;
+    try {
+      applyStatus(await attrs.client.setSemanticOcrReplaceOriginal(enabled), attrs);
+    } catch (cause) {
+      error = errorMessage(cause);
+      await load(attrs, false);
+    } finally {
+      busy = undefined;
+      busyTarget = undefined;
       m.redraw();
     }
   }
@@ -347,6 +407,7 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
                             m('li', { key: targetKey(file) }, [
                               m('span.fm-semantic-ocr-path', decodedLocation(file.location.uri)),
                               outcomeView(file.outcome),
+                              replacementView(file.replacement),
                             ]),
                           ),
                       ),
@@ -474,6 +535,19 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
                 void updateConsent(attrs, (event.target as HTMLInputElement).checked),
             }),
             m('span', t('semanticOcr', 'consentLabel')),
+          ]),
+          m('p#fm-semantic-ocr-replace-help', t('semanticOcr', 'replaceOriginalHelp')),
+          m('label.fm-semantic-ocr-consent', { for: 'fm-semantic-ocr-replace' }, [
+            m('input', {
+              id: 'fm-semantic-ocr-replace',
+              type: 'checkbox',
+              checked: current.replaceOriginal,
+              disabled: busy !== undefined || !current.enabled,
+              'aria-describedby': 'fm-semantic-ocr-replace-help',
+              onchange: (event: Event) =>
+                void updateReplaceOriginal(attrs, (event.target as HTMLInputElement).checked),
+            }),
+            m('span', t('semanticOcr', 'replaceOriginalLabel')),
           ]),
           remediationControls(attrs, current),
           jobsView(attrs, current),

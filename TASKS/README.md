@@ -487,7 +487,7 @@ content streaming, and mapping concerns live in dedicated modules with interface
   needs 0185, 0283)*
 - [ ] 0285 Rebuild PDF table rows in semantic conversion *(open — text-layer path emits one paragraph per
   table cell; related to 0284)*
-- [ ] 0286 OCR: opt-in replace original PDF with OCR'd version *(open — local writable files only,
-  verified replace, original to trash; builds on 0197)*
+- [x] 0286 OCR: opt-in replace original PDF with OCR'd version *(done — local writable files only,
+  verified replace, original to trash; builds on 0197; real OCRmyPDF + OS trash not run end-to-end)*
 - [ ] 0287 Chunk size range 256-1000 estimated tokens *(open — model-derived, not user-adjustable;
   measure retrieval first; related to 0285)*

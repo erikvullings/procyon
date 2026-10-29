@@ -1549,7 +1549,7 @@ export const it = {
     outputTooLarge: "L'output della versione di OCRmyPDF ha superato {limit} byte",
     installationDocs: "Apri la guida all'installazione di OCRmyPDF",
     consentDisclosure:
-      'Procyon esegue OCRmyPDF solo sui file che scegli esplicitamente. Non sovrascrive mai il PDF originale.',
+      "Procyon esegue OCRmyPDF solo sui file che scegli esplicitamente. Sostituisce il PDF originale solo se attivi l'opzione di sostituzione qui sotto.",
     consentLabel: 'Consenti OCRmyPDF per i PDF selezionati',
     reportedFiles: 'PDF scansionati senza testo ricercabile',
     noReportedFiles: 'Al momento nessun PDF scansionato richiede testo ricercabile.',
@@ -1579,6 +1579,23 @@ export const it = {
     outcomeExecutionFailure: 'Riconoscimento del testo nel PDF non riuscito',
     outcomeSkipped: 'Saltato',
     moreOutcomes: '{count} esiti di file aggiuntivi non sono mostrati.',
+    replaceOriginalLabel: 'Sostituisci il PDF originale con la versione ricercabile',
+    replaceOriginalHelp:
+      "Solo per i PDF su questo computer che puoi modificare. L'originale viene spostato nel Cestino e vi resta. Non viene sostituito nulla se il numero di pagine differisce, il file è cambiato nel frattempo o non è disponibile alcun Cestino.",
+    replacementReplaced: 'Originale sostituito; la versione precedente è nel Cestino',
+    replacementKept: 'Originale mantenuto: {reason}',
+    keptNotLocal: 'vengono sostituiti solo i file di questo computer',
+    keptNotRegularFile: 'non è un file normale',
+    keptReadOnly: 'il file è di sola lettura',
+    keptSourceUnreadable: 'impossibile leggere il file',
+    keptSourceChanged: "il file è cambiato durante l'elaborazione",
+    keptRetainedOutputMissing:
+      'nessuna copia ricercabile è stata conservata per questa versione del file',
+    keptOutputUnreadable: 'impossibile leggere la copia ricercabile',
+    keptPageCountMismatch: 'la copia ricercabile ha {outputPages} pagine invece di {sourcePages}',
+    keptTrashUnavailable: "questo sistema non ha un Cestino in cui conservare l'originale",
+    keptTrashFailed: "impossibile spostare l'originale nel Cestino",
+    keptReplaceFailed: 'impossibile mettere al suo posto la copia ricercabile',
   },
   semanticVocabulary: {
     title: 'Vocabolari di concetti',

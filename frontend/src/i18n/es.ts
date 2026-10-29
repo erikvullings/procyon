@@ -1552,7 +1552,7 @@ export const es = {
     outputTooLarge: 'La salida de versión de OCRmyPDF superó {limit} bytes',
     installationDocs: 'Abrir la guía de instalación de OCRmyPDF',
     consentDisclosure:
-      'Procyon ejecuta OCRmyPDF solo en los archivos que eliges explícitamente. Nunca sobrescribe tu PDF original.',
+      'Procyon ejecuta OCRmyPDF solo en los archivos que eliges explícitamente. Solo sustituye tu PDF original si activas la opción de sustitución de abajo.',
     consentLabel: 'Permitir OCRmyPDF para los PDF seleccionados',
     reportedFiles: 'PDF escaneados sin texto buscable',
     noReportedFiles: 'Ningún PDF escaneado necesita texto buscable por ahora.',
@@ -1581,6 +1581,24 @@ export const es = {
     outcomeExecutionFailure: 'Falló el reconocimiento de texto en PDF',
     outcomeSkipped: 'Omitido',
     moreOutcomes: 'No se muestran {count} resultados de archivos adicionales.',
+    replaceOriginalLabel: 'Sustituir el PDF original por la versión con búsqueda',
+    replaceOriginalHelp:
+      'Solo para PDF de este equipo que puedas editar. El original se mueve a la Papelera y permanece allí. No se sustituye nada si el número de páginas difiere, el archivo cambió entretanto o no hay Papelera disponible.',
+    replacementReplaced: 'Original sustituido; la versión anterior está en la Papelera',
+    replacementKept: 'Original conservado: {reason}',
+    keptNotLocal: 'solo se sustituyen archivos de este equipo',
+    keptNotRegularFile: 'no es un archivo normal',
+    keptReadOnly: 'el archivo es de solo lectura',
+    keptSourceUnreadable: 'no se pudo leer el archivo',
+    keptSourceChanged: 'el archivo cambió durante el procesamiento',
+    keptRetainedOutputMissing:
+      'no se conservó ninguna copia con búsqueda para esta versión del archivo',
+    keptOutputUnreadable: 'no se pudo leer la copia con búsqueda',
+    keptPageCountMismatch:
+      'la copia con búsqueda tiene {outputPages} páginas en lugar de {sourcePages}',
+    keptTrashUnavailable: 'este sistema no tiene Papelera donde conservar el original',
+    keptTrashFailed: 'no se pudo mover el original a la Papelera',
+    keptReplaceFailed: 'no se pudo colocar la copia con búsqueda',
   },
   semanticVocabulary: {
     title: 'Vocabularios de conceptos',
