@@ -84,3 +84,14 @@ changelog for table or text-layer changes before deciding.
   timeout for ML). ML pack still unshipped: signing, Win/Linux smoke tests, catalog, size/licence
   disclosure remain. Suggested next: ship ML, keep the geometric pass for pages where ML yields no
   or implausible tables, and measure retrieval on the corpus.
+- 2026-10-29 (geometric improvements, corpus `~/Downloads/Custom Chat Leiden`, 22 PDFs): table rebuild
+  now attaches captions, keeps lone signs/brackets with their values, joins wrapped row labels,
+  and ignores rows holding a sentence. Reflow (`reflow.rs`) now: continues hanging-indent entries
+  (reference lists) and indented first-line paragraphs, rejoins fragments painted on one line
+  (`X`, `=`, `definition`), drops punctuation-only lines and running headers/footers repeated on >=3
+  pages. Corpus units 18,122 -> 12,948, units under 30 chars 8,290 -> 4,022, average unit 96 -> 134
+  chars (ML pipeline: 4,683 units, 1,159 short). Table row comparison vs ML (weak yardstick: ML
+  itself garbles some tables): numeric-token agreement ~54%, exact rows ~34%; captions 22 vs ML 60.
+  Remaining short units: stray table remnants, headings, page-top labels, merged column text
+  ("Author. Banducci" - two entries in one text-layer line, unfixable at this layer). Next ideas: a
+  gold standard (hand-labelled tables + page-level transcription) before deciding on the ML pack.
