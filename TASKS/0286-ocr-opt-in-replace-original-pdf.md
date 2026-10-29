@@ -1,6 +1,6 @@
 # 0286 OCR: opt-in replace original PDF with OCR'd version
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, frontend
 Depends on: none
@@ -47,3 +47,27 @@ original with the OCR'd version so OCR happens once.
 ## Agent Notes
 - 2026-10-29: Created from the discussion on task 0285 (probe showed 3 of 22 corpus PDFs have no text
   layer). Nothing implemented yet.
+- 2026-10-29 Claude (4 commits): (1) `replaceOriginal` in `PersistedOcrPolicy` (additive serde default,
+  no schema bump; forced off when consent is withdrawn), `set_semantic_ocr_replace_original` service,
+  `SetSemanticOcrReplaceOriginalRequestDto` + Tauri command + client in mock/tauri/http(unavailable);
+  the OCR DTOs are hand-authored, so `openapi.json`/Orval output is unchanged. Changing the opt-in
+  restarts the worker (retention dir is fixed at launch). (2) `OcrMyPdfConfiguration::with_retention_directory`
+  (+ `PROCYON_OCRMYPDF_RETAIN_DIR`, validated absolute existing dir): worker writes `<sha256(OCR input)>.pdf`
+  atomically; command line unchanged. Host sets/clears the env at launch for managed and developer
+  workers; dir is `<semantic data>/extracted/ocr-retention`, mode 0700 on unix. (3)
+  `semantic_ocr/replace.rs`: snapshot (size+mtime, regular file, not read-only) before the worker
+  reads the file; after success verify content digest finds retained output, lopdf opens both and page
+  counts match, re-check snapshot right before swap, stage beside original, trash via `PlatformAdapter`
+  (needs TRASH capability), rename in place, restore original if the rename fails; typed
+  `OcrReplacementSkip` per file in job report; re-ingest after replace; retained files purged at job end.
+  (4) Settings checkbox (disabled without consent), per-file replaced/kept line, 8 locales, docs.
+- Verified: fm-application (1335 tests incl. replace unit tests with fake trash in temp roots and
+  service-level tests for replaced / not opted in / page-count mismatch), fm-semantic-docling and
+  fm-semantic-worker OCR tests, vitest + tsc + biome, clippy `-D warnings`.
+- Not verified: a real OCRmyPDF run end-to-end, the real macOS/Windows/Linux trash adapters in this
+  flow (only a fake folder trash; macOS adapter has its own tests), Windows and Linux at all, the
+  `semantic-gemma` developer path beyond compiling. Known limits: retained output from ordinary
+  (non-remediation) OCR during indexing accumulates until the next remediation job ends; directory
+  mtime/permission failures on the parent surface as `replaceFailed`; no cap on source size read for
+  verification beyond the existing PDF ingest limit.
+

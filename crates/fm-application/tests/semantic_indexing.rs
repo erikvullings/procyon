@@ -29,8 +29,9 @@ use fm_application::semantic_library::{
     SemanticLibraryService, SemanticRootIdentity,
 };
 use fm_application::semantic_ocr::{
-    OcrAvailability, OcrExecutableProbe, OcrPolicyStore, OcrRemediationScope, OcrRemediationState,
-    OcrRemediationTarget, SemanticOcrError, SemanticOcrService,
+    OcrAvailability, OcrExecutableProbe, OcrPolicyStore, OcrRemediationJob, OcrRemediationOutcome,
+    OcrRemediationScope, OcrRemediationState, OcrRemediationTarget, OcrReplacementOutcome,
+    OcrReplacementSkip, SemanticOcrError, SemanticOcrService,
 };
 use fm_domain::{Location, WorkspaceId};
 use fm_events::{BackendEventPayload, SessionId, SubscriptionEvent};
@@ -108,6 +109,14 @@ struct RemediatingDocumentCapability {
     remediated_contents: Mutex<Vec<Vec<u8>>>,
     ingested_titles: Mutex<Vec<String>>,
     ingested_pdf_consents: Mutex<Vec<(String, bool)>>,
+    /// Simulates the worker retaining OCR output: directory plus output bytes.
+    retained_output: Option<(std::path::PathBuf, Vec<u8>)>,
+}
+
+/// Content the fake worker treats as a scan: legacy `scan-` fixtures and
+/// real PDFs carrying the marker in an uncompressed content stream.
+fn is_scan(content: &[u8]) -> bool {
+    content.starts_with(b"scan-") || content.windows(11).any(|window| window == b"scan-marker")
 }
 
 impl RemediatingDocumentCapability {
@@ -122,6 +131,14 @@ impl RemediatingDocumentCapability {
             remediated_contents: Mutex::new(Vec::new()),
             ingested_titles: Mutex::new(Vec::new()),
             ingested_pdf_consents: Mutex::new(Vec::new()),
+            retained_output: None,
+        }
+    }
+
+    fn retaining(directory: std::path::PathBuf, output: Vec<u8>) -> Self {
+        Self {
+            retained_output: Some((directory, output)),
+            ..Self::new()
         }
     }
 
@@ -152,13 +169,23 @@ impl SemanticCapability for RemediatingDocumentCapability {
                 .expect("host supplies a real display title")
                 .clone(),
         );
-        if ingestion.content.starts_with(b"scan-") && !self.ocr_enabled.load(Ordering::Acquire) {
+        if is_scan(&ingestion.content) && !self.ocr_enabled.load(Ordering::Acquire) {
             return Ok(SemanticJobId::new(format!(
                 "ocr-required-{}",
                 ingestion.document_id.as_str()
             )));
         }
-        if ingestion.content.starts_with(b"scan-") {
+        if is_scan(&ingestion.content) {
+            if let Some((directory, output)) = &self.retained_output {
+                std::fs::write(
+                    fm_semantic_docling::retained_ocr_output_path(
+                        directory,
+                        &fm_semantic_docling::ocr_source_digest(&ingestion.content),
+                    ),
+                    output,
+                )
+                .unwrap();
+            }
             self.remediated_contents
                 .lock()
                 .unwrap()
@@ -2530,6 +2557,296 @@ async fn ocr_scope_expansion_accepts_only_backend_reported_files() {
         service.start_semantic_ocr_remediation(OcrRemediationScope::File(outside)),
         Err(SemanticOcrError::UnreportedTarget)
     ));
+}
+
+/// A platform whose trash moves files into a folder inside a temp root.
+struct FolderTrashPlatform {
+    folder: std::path::PathBuf,
+}
+
+impl fm_platform::PlatformAdapter for FolderTrashPlatform {
+    fn capabilities(&self) -> fm_platform::PlatformCapabilities {
+        fm_platform::PlatformCapabilities::TRASH
+    }
+
+    fn trash(&self, path: &Path) -> Result<(), fm_platform::PlatformError> {
+        self.trash_with_restore_location(path).map(|_| ())
+    }
+
+    fn trash_with_restore_location(
+        &self,
+        path: &Path,
+    ) -> Result<Option<std::path::PathBuf>, fm_platform::PlatformError> {
+        let destination = self.folder.join(path.file_name().unwrap());
+        std::fs::rename(path, &destination).map_err(|error| fm_platform::PlatformError::Io {
+            message: error.to_string(),
+        })?;
+        Ok(Some(destination))
+    }
+}
+
+fn scanned_pdf(pages: usize, marker: &str) -> Vec<u8> {
+    use lopdf::{Document, Object, Stream, dictionary};
+
+    let mut document = Document::with_version("1.5");
+    let pages_id = document.new_object_id();
+    let mut kids = Vec::new();
+    for page in 0..pages {
+        let content = document.add_object(Stream::new(
+            dictionary! {},
+            format!("% {marker} {page}").into_bytes(),
+        ));
+        let id = document.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "Contents" => content,
+            "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
+        });
+        kids.push(Object::Reference(id));
+    }
+    document.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages",
+            "Count" => i64::try_from(pages).unwrap(),
+            "Kids" => kids,
+        }),
+    );
+    let catalog = document.add_object(dictionary! {
+        "Type" => "Catalog",
+        "Pages" => pages_id,
+    });
+    document.trailer.set("Root", catalog);
+    let mut bytes = Vec::new();
+    document.save_to(&mut bytes).unwrap();
+    bytes
+}
+
+struct ReplaceHarness {
+    service: Arc<FileManagerService>,
+    capability: Arc<RemediatingDocumentCapability>,
+    target: OcrRemediationTarget,
+    original: std::path::PathBuf,
+    trash: std::path::PathBuf,
+    _directories: [TempDir; 3],
+}
+
+impl ReplaceHarness {
+    async fn new(source: &[u8], ocr_output: &[u8], replace: bool) -> Self {
+        let root = project_temp_dir("ocr-replace-root-");
+        let state = project_temp_dir("ocr-replace-state-");
+        let trash = project_temp_dir("ocr-replace-trash-");
+        let retention = state.path().join("retention");
+        std::fs::create_dir_all(&retention).unwrap();
+        let original = root.path().join("scan.pdf");
+        std::fs::write(&original, source).unwrap();
+        let workspace_id = WorkspaceId::from(Uuid::from_u128(0x2860));
+        let library = library(&state);
+        let root_id = enrol(
+            &library,
+            workspace_id,
+            Location::from_native_path(root.path()).unwrap(),
+        );
+        let capability = Arc::new(RemediatingDocumentCapability::retaining(
+            retention.clone(),
+            ocr_output.to_vec(),
+        ));
+        let service = Arc::new(
+            FileManagerService::with_platform_adapter(
+                RuntimeKindDto::Tauri,
+                state.path().join("workspaces"),
+                state.path().join("settings"),
+                fm_events::EventBus::default(),
+                Arc::new(FolderTrashPlatform {
+                    folder: trash.path().to_owned(),
+                }),
+            )
+            .with_semantic_library_service(library)
+            .with_semantic_capability(capability.clone())
+            .with_semantic_ocr_service(
+                SemanticOcrService::load(
+                    state.path().join("ocr"),
+                    Arc::new(OcrPolicyStore::load(state.path().join("ocr"))),
+                    Arc::new(AvailableOcrProbe),
+                )
+                .with_retention_directory(retention),
+            ),
+        );
+        let report = service
+            .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(report.ocr_required_files.len(), 1);
+        service.set_semantic_ocr_consent(true).await.unwrap();
+        if replace {
+            service
+                .set_semantic_ocr_replace_original(true)
+                .await
+                .unwrap();
+        }
+        let target = OcrRemediationTarget {
+            root_id,
+            location: report.ocr_required_files[0].clone(),
+        };
+        let trash_path = trash.path().to_owned();
+        Self {
+            service,
+            capability,
+            target,
+            original,
+            trash: trash_path,
+            _directories: [root, state, trash],
+        }
+    }
+
+    async fn remediate(&self) -> OcrRemediationJob {
+        let job = self
+            .service
+            .start_semantic_ocr_remediation(OcrRemediationScope::File(self.target.clone()))
+            .unwrap();
+        let shutdown = CancellationToken::new();
+        let runner = tokio::spawn(
+            Arc::clone(&self.service).run_semantic_ocr_remediation_jobs(shutdown.clone()),
+        );
+        let finished = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let current = self
+                    .service
+                    .semantic_ocr_status()
+                    .jobs
+                    .into_iter()
+                    .find(|candidate| candidate.id == job.id)
+                    .unwrap();
+                if current.state == OcrRemediationState::Completed {
+                    return current;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("remediation completed");
+        shutdown.cancel();
+        runner.await.unwrap();
+        finished
+    }
+
+    fn trashed(&self) -> Vec<std::path::PathBuf> {
+        std::fs::read_dir(&self.trash)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect()
+    }
+}
+
+#[tokio::test]
+async fn opted_in_ocr_replaces_a_local_pdf_and_trashes_the_original() {
+    let source = scanned_pdf(2, "scan-marker");
+    let ocr = scanned_pdf(2, "ocr-text-layer");
+    let harness = ReplaceHarness::new(&source, &ocr, true).await;
+
+    let job = harness.remediate().await;
+
+    assert_eq!(job.files[0].outcome, OcrRemediationOutcome::Succeeded);
+    assert_eq!(
+        job.files[0].replacement,
+        Some(OcrReplacementOutcome::Replaced)
+    );
+    assert_eq!(std::fs::read(&harness.original).unwrap(), ocr);
+    let trashed = harness.trashed();
+    assert_eq!(trashed.len(), 1);
+    assert_eq!(std::fs::read(&trashed[0]).unwrap(), source);
+    // The replaced file was re-ingested once more, without another OCR run.
+    assert!(
+        harness
+            .capability
+            .ingested_titles
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|title| title.as_str() == "scan.pdf")
+            .count()
+            >= 2
+    );
+}
+
+#[tokio::test]
+async fn ocr_without_the_opt_in_never_touches_the_original() {
+    let source = scanned_pdf(2, "scan-marker");
+    let harness = ReplaceHarness::new(&source, &scanned_pdf(2, "ocr"), false).await;
+
+    let job = harness.remediate().await;
+
+    assert_eq!(job.files[0].outcome, OcrRemediationOutcome::Succeeded);
+    assert_eq!(job.files[0].replacement, None);
+    assert_eq!(std::fs::read(&harness.original).unwrap(), source);
+    assert!(harness.trashed().is_empty());
+}
+
+#[tokio::test]
+async fn a_page_count_mismatch_is_reported_and_the_original_is_kept() {
+    let source = scanned_pdf(2, "scan-marker");
+    let harness = ReplaceHarness::new(&source, &scanned_pdf(5, "ocr"), true).await;
+
+    let job = harness.remediate().await;
+
+    assert_eq!(job.files[0].outcome, OcrRemediationOutcome::Succeeded);
+    assert_eq!(
+        job.files[0].replacement,
+        Some(OcrReplacementOutcome::Kept {
+            reason: OcrReplacementSkip::PageCountMismatch {
+                original_pages: 2,
+                output_pages: 5
+            }
+        })
+    );
+    assert_eq!(std::fs::read(&harness.original).unwrap(), source);
+    assert!(harness.trashed().is_empty());
+}
+
+#[tokio::test]
+async fn replace_original_opt_in_requires_consent_and_restarts_the_worker() {
+    let state = project_temp_dir("ocr-replace-optin-state-");
+    let capability = Arc::new(RemediatingDocumentCapability::new());
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_capability(capability.clone())
+    .with_semantic_ocr_service(SemanticOcrService::load(
+        state.path().join("ocr"),
+        Arc::new(OcrPolicyStore::load(state.path().join("ocr"))),
+        Arc::new(AvailableOcrProbe),
+    ));
+    assert!(!service.semantic_ocr_status().replace_original);
+    assert!(matches!(
+        service.set_semantic_ocr_replace_original(true).await,
+        Err(SemanticOcrError::Disabled)
+    ));
+
+    service.set_semantic_ocr_consent(true).await.unwrap();
+    let restarts = capability.restart_count.load(Ordering::Acquire);
+    let status = service
+        .set_semantic_ocr_replace_original(true)
+        .await
+        .unwrap();
+    assert!(status.replace_original);
+    assert_eq!(
+        capability.restart_count.load(Ordering::Acquire),
+        restarts + 1
+    );
+    // Unchanged value neither restarts nor errors.
+    service
+        .set_semantic_ocr_replace_original(true)
+        .await
+        .unwrap();
+    assert_eq!(
+        capability.restart_count.load(Ordering::Acquire),
+        restarts + 1
+    );
+
+    let status = service.set_semantic_ocr_consent(false).await.unwrap();
+    assert!(!status.replace_original);
 }
 
 #[tokio::test]

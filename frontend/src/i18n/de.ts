@@ -1569,7 +1569,7 @@ export const de = {
     outputTooLarge: 'Die OCRmyPDF-Versionsausgabe überschritt {limit} Bytes',
     installationDocs: 'OCRmyPDF-Installationsanleitung öffnen',
     consentDisclosure:
-      'Procyon führt OCRmyPDF nur für Dateien aus, die Sie ausdrücklich auswählen. Ihr ursprüngliches PDF wird nie überschrieben.',
+      'Procyon führt OCRmyPDF nur für Dateien aus, die Sie ausdrücklich auswählen. Ihr ursprüngliches PDF wird nur ersetzt, wenn Sie die Option zum Ersetzen unten aktivieren.',
     consentLabel: 'OCRmyPDF für ausgewählte PDFs erlauben',
     reportedFiles: 'Gescannte PDFs ohne durchsuchbaren Text',
     noReportedFiles: 'Derzeit benötigt kein gescanntes PDF durchsuchbaren Text.',
@@ -1598,6 +1598,23 @@ export const de = {
     outcomeExecutionFailure: 'Die PDF-Texterkennung ist fehlgeschlagen',
     outcomeSkipped: 'Übersprungen',
     moreOutcomes: '{count} weitere Dateiergebnisse werden nicht angezeigt.',
+    replaceOriginalLabel: 'Original-PDF durch die durchsuchbare Version ersetzen',
+    replaceOriginalHelp:
+      'Nur für PDFs auf diesem Computer, die Sie bearbeiten können. Das Original wird in den Papierkorb verschoben und bleibt dort. Es wird nichts ersetzt, wenn sich die Seitenzahl unterscheidet, die Datei sich zwischenzeitlich geändert hat oder kein Papierkorb verfügbar ist.',
+    replacementReplaced: 'Original ersetzt; die vorherige Version liegt im Papierkorb',
+    replacementKept: 'Original behalten: {reason}',
+    keptNotLocal: 'nur Dateien auf diesem Computer werden ersetzt',
+    keptNotRegularFile: 'es ist keine reguläre Datei',
+    keptReadOnly: 'die Datei ist schreibgeschützt',
+    keptSourceUnreadable: 'die Datei konnte nicht gelesen werden',
+    keptSourceChanged: 'die Datei hat sich während der Verarbeitung geändert',
+    keptRetainedOutputMissing:
+      'für diese Version der Datei wurde keine durchsuchbare Kopie aufbewahrt',
+    keptOutputUnreadable: 'die durchsuchbare Kopie konnte nicht gelesen werden',
+    keptPageCountMismatch: 'die durchsuchbare Kopie hat {outputPages} statt {sourcePages} Seiten',
+    keptTrashUnavailable: 'dieses System hat keinen Papierkorb für das Original',
+    keptTrashFailed: 'das Original konnte nicht in den Papierkorb verschoben werden',
+    keptReplaceFailed: 'die durchsuchbare Kopie konnte nicht an ihren Platz gelegt werden',
   },
   semanticVocabulary: {
     title: 'Konzeptvokabulare',

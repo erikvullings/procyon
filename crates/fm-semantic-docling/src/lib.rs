@@ -52,6 +52,13 @@ pub const OCRMYPDF_CONVERTER_VERSION: ComponentVersion =
 pub const OCRMYPDF_ENABLED_ENV: &str = "PROCYON_SEMANTIC_OCRMYPDF";
 /// Optional trusted executable override for non-standard installations.
 pub const OCRMYPDF_EXECUTABLE_ENV: &str = "PROCYON_OCRMYPDF_EXECUTABLE";
+/// Host-private directory where the worker retains successful OCR output.
+///
+/// Set by the trusted desktop host on the worker process only while the user
+/// has opted in to replacing original PDFs (task 0286). The worker never
+/// writes to user files: the host verifies the retained output and performs
+/// any replacement itself.
+pub const OCRMYPDF_RETAIN_DIR_ENV: &str = "PROCYON_OCRMYPDF_RETAIN_DIR";
 const DEFAULT_OCR_TIMEOUT: Duration = Duration::from_secs(4 * 60);
 /// OCRmyPDF page-worker processes per conversion (`--jobs`).
 ///
@@ -537,6 +544,39 @@ pub struct OcrMyPdfConfiguration {
     executable: PathBuf,
     timeout: Duration,
     temporary_root: Option<PathBuf>,
+    retention_directory: Option<PathBuf>,
+}
+
+/// Lowercase SHA-256 digest of the exact source bytes handed to OCRmyPDF.
+///
+/// It names the retained output, so the host can find it from the source file
+/// alone and a changed source can never match a stale retained output.
+#[must_use]
+pub fn ocr_source_digest(source: &[u8]) -> String {
+    use std::fmt::Write as _;
+
+    use sha2::{Digest as _, Sha256};
+
+    Sha256::digest(source)
+        .iter()
+        .fold(String::with_capacity(64), |mut digest, byte| {
+            let _ = write!(digest, "{byte:02x}");
+            digest
+        })
+}
+
+/// Location of the retained OCR output for a source digest.
+#[must_use]
+pub fn retained_ocr_output_path(directory: &Path, source_digest: &str) -> PathBuf {
+    directory.join(format!("{source_digest}.pdf"))
+}
+
+/// Accepts [`OCRMYPDF_RETAIN_DIR_ENV`] only as an absolute existing directory.
+#[must_use]
+pub fn retention_directory_from_value(value: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
+    value
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute() && path.is_dir())
 }
 
 impl OcrMyPdfConfiguration {
@@ -547,6 +587,26 @@ impl OcrMyPdfConfiguration {
             executable: executable.into(),
             timeout: DEFAULT_OCR_TIMEOUT,
             temporary_root: None,
+            retention_directory: None,
+        }
+    }
+
+    /// Retains each successful OCR output as `<source sha256>.pdf` in a
+    /// host-private directory so the trusted host can verify and apply it.
+    ///
+    /// Retention is best-effort and never changes the conversion outcome.
+    #[must_use]
+    pub fn with_retention_directory(mut self, directory: impl Into<PathBuf>) -> Self {
+        self.retention_directory = Some(directory.into());
+        self
+    }
+
+    /// Applies [`OCRMYPDF_RETAIN_DIR_ENV`] from the worker's environment.
+    #[must_use]
+    pub fn with_retention_from_environment(self) -> Self {
+        match retention_directory_from_value(std::env::var_os(OCRMYPDF_RETAIN_DIR_ENV).as_deref()) {
+            Some(directory) => self.with_retention_directory(directory),
+            None => self,
         }
     }
 
@@ -727,6 +787,9 @@ impl OcrMyPdfConverter {
             )));
         }
         let output = fs::read(&output_path).map_err(ConversionError::Read)?;
+        if let Some(directory) = self.configuration.retention_directory.as_deref() {
+            retain_ocr_output(directory, source, &output);
+        }
         let outcome =
             self.deterministic
                 .convert(SourceContent::Bytes(&output), metadata, context)?;
@@ -760,6 +823,23 @@ impl OcrMyPdfConverter {
             ),
             other => other,
         })
+    }
+}
+
+/// Atomically stores `output` as `<source digest>.pdf`; failures are ignored
+/// because the host reports a missing retained output as a typed reason.
+fn retain_ocr_output(directory: &Path, source: &[u8], output: &[u8]) {
+    use std::io::Write as _;
+
+    let path = retained_ocr_output_path(directory, &ocr_source_digest(source));
+    let Ok(mut staged) = tempfile::Builder::new()
+        .prefix(".retaining-")
+        .tempfile_in(directory)
+    else {
+        return;
+    };
+    if staged.write_all(output).is_ok() && staged.flush().is_ok() {
+        let _ = staged.persist(path);
     }
 }
 

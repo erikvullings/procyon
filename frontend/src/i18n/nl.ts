@@ -1919,7 +1919,7 @@ export const nl = {
     outputTooLarge: 'OCRmyPDF-versie-uitvoer overschreed {limit} bytes',
     installationDocs: 'Installatiehandleiding voor OCRmyPDF openen',
     consentDisclosure:
-      'Procyon voert OCRmyPDF alleen uit voor bestanden die u expliciet kiest. Uw originele PDF wordt nooit overschreven.',
+      'Procyon voert OCRmyPDF alleen uit voor bestanden die u expliciet kiest. Uw originele PDF wordt alleen vervangen als u de vervangoptie hieronder inschakelt.',
     consentLabel: 'OCRmyPDF toestaan voor geselecteerde PDF’s',
     reportedFiles: 'Gescande PDF’s zonder doorzoekbare tekst',
     noReportedFiles: 'Geen gescande PDF’s waarvoor nu tekstherkenning nodig is.',
@@ -1948,6 +1948,24 @@ export const nl = {
     outcomeExecutionFailure: 'PDF-tekstherkenning mislukt',
     outcomeSkipped: 'Overgeslagen',
     moreOutcomes: '{count} extra bestandsresultaten worden niet getoond.',
+    replaceOriginalLabel: 'Vervang de originele PDF door de doorzoekbare versie',
+    replaceOriginalHelp:
+      "Alleen voor PDF's op deze computer die u kunt bewerken. Het origineel gaat naar de Prullenbak en blijft daar staan. Er wordt niets vervangen als het aantal pagina's afwijkt, het bestand intussen is gewijzigd of er geen Prullenbak beschikbaar is.",
+    replacementReplaced: 'Origineel vervangen; de vorige versie staat in de Prullenbak',
+    replacementKept: 'Origineel behouden: {reason}',
+    keptNotLocal: 'alleen bestanden op deze computer worden vervangen',
+    keptNotRegularFile: 'het is geen gewoon bestand',
+    keptReadOnly: 'het bestand is alleen-lezen',
+    keptSourceUnreadable: 'het bestand kon niet worden gelezen',
+    keptSourceChanged: 'het bestand is gewijzigd tijdens het verwerken',
+    keptRetainedOutputMissing:
+      'er is geen doorzoekbare kopie bewaard voor deze versie van het bestand',
+    keptOutputUnreadable: 'de doorzoekbare kopie kon niet worden gelezen',
+    keptPageCountMismatch:
+      "de doorzoekbare kopie heeft {outputPages} pagina's in plaats van {sourcePages}",
+    keptTrashUnavailable: 'dit systeem heeft geen Prullenbak om het origineel in te bewaren',
+    keptTrashFailed: 'het origineel kon niet naar de Prullenbak worden verplaatst',
+    keptReplaceFailed: 'de doorzoekbare kopie kon niet op zijn plaats worden gezet',
   },
   semanticVocabulary: {
     title: 'Conceptwoordenlijsten',

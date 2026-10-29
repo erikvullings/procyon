@@ -332,6 +332,7 @@ export type MockClientMethod =
   | 'completeSemanticComponentModelMigration'
   | 'getSemanticOcrStatus'
   | 'setSemanticOcrConsent'
+  | 'setSemanticOcrReplaceOriginal'
   | 'startSemanticOcrRemediation'
   | 'cancelSemanticOcrRemediation'
   | 'getSemanticLibraryCapabilities'
@@ -1321,6 +1322,7 @@ function mockSemanticLibraryStatus(): SemanticLibraryStatus {
 function mockSemanticOcrStatus(): SemanticOcrStatus {
   return {
     enabled: false,
+    replaceOriginal: false,
     availability: {
       state: 'available',
       executable: '/usr/local/bin/ocrmypdf',
@@ -1645,6 +1647,7 @@ export class MockFileManagerClient implements FileManagerClient {
       this.semanticOcrStatus = {
         ...this.semanticOcrStatus,
         enabled,
+        replaceOriginal: enabled && this.semanticOcrStatus.replaceOriginal,
         jobs: enabled
           ? this.semanticOcrStatus.jobs
           : this.semanticOcrStatus.jobs.map((job) =>
@@ -1653,6 +1656,19 @@ export class MockFileManagerClient implements FileManagerClient {
                 : job,
             ),
       };
+      return structuredClone(this.semanticOcrStatus);
+    });
+  }
+
+  setSemanticOcrReplaceOriginal(
+    enabled: boolean,
+    signal?: AbortSignal,
+  ): Promise<SemanticOcrStatus> {
+    return this.perform('setSemanticOcrReplaceOriginal', signal, () => {
+      if (enabled && !this.semanticOcrStatus.enabled) {
+        throw new MockClientError('disabled', 'OCR remediation is disabled');
+      }
+      this.semanticOcrStatus = { ...this.semanticOcrStatus, replaceOriginal: enabled };
       return structuredClone(this.semanticOcrStatus);
     });
   }

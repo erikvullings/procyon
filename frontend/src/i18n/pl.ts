@@ -1549,7 +1549,7 @@ export const pl = {
     outputTooLarge: 'Dane wyjściowe wersji OCRmyPDF przekroczyły {limit} bajtów',
     installationDocs: 'Otwórz instrukcję instalacji OCRmyPDF',
     consentDisclosure:
-      'Procyon uruchamia OCRmyPDF tylko dla plików wybranych jawnie przez Ciebie. Nigdy nie nadpisuje oryginalnego pliku PDF.',
+      'Procyon uruchamia OCRmyPDF tylko dla plików wybranych jawnie przez Ciebie. Oryginalny plik PDF zastępuje tylko wtedy, gdy włączysz poniższą opcję zastępowania.',
     consentLabel: 'Zezwól na OCRmyPDF dla wybranych plików PDF',
     reportedFiles: 'Zeskanowane pliki PDF bez przeszukiwalnego tekstu',
     noReportedFiles: 'Żaden zeskanowany plik PDF nie wymaga teraz przeszukiwalnego tekstu.',
@@ -1579,6 +1579,24 @@ export const pl = {
     outcomeExecutionFailure: 'Rozpoznawanie tekstu w pliku PDF nie powiodło się',
     outcomeSkipped: 'Pominięto',
     moreOutcomes: 'Nie pokazano {count} dodatkowych wyników dla plików.',
+    replaceOriginalLabel: 'Zastąp oryginalny plik PDF wersją z możliwością wyszukiwania',
+    replaceOriginalHelp:
+      'Tylko dla plików PDF na tym komputerze, które możesz edytować. Oryginał trafia do Kosza i tam pozostaje. Nic nie jest zastępowane, jeśli liczba stron się różni, plik w międzyczasie się zmienił lub Kosz jest niedostępny.',
+    replacementReplaced: 'Oryginał zastąpiony; poprzednia wersja jest w Koszu',
+    replacementKept: 'Oryginał zachowany: {reason}',
+    keptNotLocal: 'zastępowane są tylko pliki na tym komputerze',
+    keptNotRegularFile: 'to nie jest zwykły plik',
+    keptReadOnly: 'plik jest tylko do odczytu',
+    keptSourceUnreadable: 'nie udało się odczytać pliku',
+    keptSourceChanged: 'plik zmienił się podczas przetwarzania',
+    keptRetainedOutputMissing:
+      'nie zachowano kopii z możliwością wyszukiwania dla tej wersji pliku',
+    keptOutputUnreadable: 'nie udało się odczytać kopii z możliwością wyszukiwania',
+    keptPageCountMismatch:
+      'kopia z możliwością wyszukiwania ma {outputPages} stron zamiast {sourcePages}',
+    keptTrashUnavailable: 'ten system nie ma Kosza, w którym można zachować oryginał',
+    keptTrashFailed: 'nie udało się przenieść oryginału do Kosza',
+    keptReplaceFailed: 'nie udało się umieścić kopii z możliwością wyszukiwania na miejscu',
   },
   semanticVocabulary: {
     title: 'Słowniki pojęć',

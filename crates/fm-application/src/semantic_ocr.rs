@@ -24,10 +24,13 @@ use fm_settings::{SettingsStore, VersionedDocument};
 use serde::{Deserialize, Serialize};
 
 mod remediation;
+mod replace;
 
 pub(crate) use coordinator::SemanticOcrCoordinator;
 pub(crate) use remediation::{ClaimedOcrJob, classify_ingest_report};
 mod coordinator;
+
+pub use replace::{OcrReplacementOutcome, OcrReplacementSkip};
 
 pub use remediation::{
     OcrRemediationFileOutcome, OcrRemediationJob, OcrRemediationJobId, OcrRemediationOutcome,
@@ -40,6 +43,8 @@ pub use remediation::{
 pub struct SemanticOcrStatus {
     /// Whether the user has explicitly enabled OCR remediation.
     pub enabled: bool,
+    /// Whether successfully OCR'd local PDFs replace their originals (0286).
+    pub replace_original: bool,
     /// Current host discovery result.
     pub availability: OcrAvailability,
     /// Backend-reported files that remain eligible for remediation.
@@ -199,13 +204,19 @@ struct PersistedOcrPolicy {
     #[serde(rename = "schemaVersion")]
     schema_version: u32,
     enabled: bool,
+    /// Opt-in (task 0286): replace the original PDF with its OCR'd version.
+    /// Additive field, so schema version 1 documents written before it
+    /// existed deserialize as `false` without a migration.
+    #[serde(default, rename = "replaceOriginal")]
+    replace_original: bool,
 }
 
 impl PersistedOcrPolicy {
-    const fn new(enabled: bool) -> Self {
+    const fn new(enabled: bool, replace_original: bool) -> Self {
         Self {
             schema_version: Self::CURRENT_SCHEMA_VERSION,
             enabled,
+            replace_original,
         }
     }
 }
@@ -238,7 +249,13 @@ impl VersionedDocument for PersistedOcrPolicy {
 #[derive(Debug)]
 pub struct OcrPolicyStore {
     store: SettingsStore,
-    enabled: RwLock<bool>,
+    state: RwLock<OcrPolicyState>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct OcrPolicyState {
+    enabled: bool,
+    replace_original: bool,
 }
 
 impl OcrPolicyStore {
@@ -246,24 +263,40 @@ impl OcrPolicyStore {
     #[must_use]
     pub fn load(directory: impl Into<PathBuf>) -> Self {
         let store = SettingsStore::new(directory);
-        let enabled = store
+        let state = store
             .load_document::<PersistedOcrPolicy>()
             .ok()
             .flatten()
-            .is_some_and(|policy| policy.enabled);
+            .map_or_else(OcrPolicyState::default, |policy| OcrPolicyState {
+                enabled: policy.enabled,
+                // Replacing files is only ever honoured alongside consent.
+                replace_original: policy.enabled && policy.replace_original,
+            });
         Self {
             store,
-            enabled: RwLock::new(enabled),
+            state: RwLock::new(state),
         }
+    }
+
+    fn state(&self) -> OcrPolicyState {
+        *self
+            .state
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Returns whether OCR remediation is currently enabled.
     #[must_use]
     pub fn enabled(&self) -> bool {
-        *self
-            .enabled
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.state().enabled
+    }
+
+    /// Returns whether the opt-in to replace original PDFs with their OCR'd
+    /// version is on. Always `false` while OCR consent is off.
+    #[must_use]
+    pub fn replace_original(&self) -> bool {
+        let state = self.state();
+        state.enabled && state.replace_original
     }
 
     /// Durably records explicit consent, returning whether the value changed.
@@ -277,16 +310,53 @@ impl OcrPolicyStore {
     /// in-memory value is only updated after a successful persist.
     pub fn set_enabled(&self, enabled: bool) -> std::io::Result<bool> {
         let mut guard = self
-            .enabled
+            .state
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if *guard == enabled {
+        if guard.enabled == enabled {
             return Ok(false);
         }
+        // Withdrawing consent also withdraws the replace-original opt-in so a
+        // later re-consent never silently starts replacing files.
+        let next = OcrPolicyState {
+            enabled,
+            replace_original: enabled && guard.replace_original,
+        };
         self.store
-            .save_document(&PersistedOcrPolicy::new(enabled))
+            .save_document(&PersistedOcrPolicy::new(
+                next.enabled,
+                next.replace_original,
+            ))
             .map_err(std::io::Error::other)?;
-        *guard = enabled;
+        *guard = next;
+        Ok(true)
+    }
+
+    /// Durably records the replace-original opt-in, returning whether the
+    /// effective value changed. Callers must have verified OCR consent.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error if the durable file could not be written.
+    pub fn set_replace_original(&self, replace_original: bool) -> std::io::Result<bool> {
+        let mut guard = self
+            .state
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if guard.replace_original == replace_original {
+            return Ok(false);
+        }
+        let next = OcrPolicyState {
+            enabled: guard.enabled,
+            replace_original,
+        };
+        self.store
+            .save_document(&PersistedOcrPolicy::new(
+                next.enabled,
+                next.replace_original,
+            ))
+            .map_err(std::io::Error::other)?;
+        *guard = next;
         Ok(true)
     }
 }
@@ -322,6 +392,39 @@ mod tests {
 
         assert!(reloaded.set_enabled(false).unwrap());
         assert!(!OcrPolicyStore::load(directory.path()).enabled());
+    }
+
+    #[test]
+    fn replace_original_defaults_off_persists_and_follows_consent() {
+        let directory = temp_dir();
+        let store = OcrPolicyStore::load(directory.path());
+        assert!(!store.replace_original());
+
+        store.set_enabled(true).unwrap();
+        assert!(store.set_replace_original(true).unwrap());
+        assert!(!store.set_replace_original(true).unwrap());
+        assert!(store.replace_original());
+        assert!(OcrPolicyStore::load(directory.path()).replace_original());
+
+        // Withdrawing consent withdraws the opt-in; re-consent does not revive it.
+        store.set_enabled(false).unwrap();
+        assert!(!store.replace_original());
+        store.set_enabled(true).unwrap();
+        assert!(!store.replace_original());
+        assert!(!OcrPolicyStore::load(directory.path()).replace_original());
+    }
+
+    #[test]
+    fn version_one_policy_without_replace_field_loads_with_replace_off() {
+        let directory = temp_dir();
+        std::fs::write(
+            directory.path().join(POLICY_FILE_NAME),
+            br#"{"schemaVersion":1,"enabled":true}"#,
+        )
+        .unwrap();
+        let store = OcrPolicyStore::load(directory.path());
+        assert!(store.enabled());
+        assert!(!store.replace_original());
     }
 
     #[test]

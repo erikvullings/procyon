@@ -33,6 +33,22 @@ content search, and baseline document viewing available.
   post-OCR no-text outcomes. Disabling consent cancels work and retires the running worker so a
   later launch cannot retain stale OCR authority. The backend intersects explicit file requests
   with its own report; frontend paths never become executable commands.
+- **Replace the original PDF** (task 0286) is a second, default-off opt-in under the OCR consent
+  and is withdrawn whenever consent is withdrawn. While on, a successfully OCR'd PDF that is a
+  local, writable, regular file replaces the original; remote providers, archive members, symlinks
+  and read-only files keep using the temporary OCR copy for the index only. The worker never gains
+  write authority over user files: it retains OCR output as `<sha256 of the OCR input>.pdf` in an
+  owner-only host directory (`ocr-retention` under the semantic extracted-data category, passed
+  through `PROCYON_OCRMYPDF_RETAIN_DIR`; changing the opt-in restarts the worker). The host
+  then verifies that the output opens with lopdf and has the original's page count, and that the
+  original is unchanged since before the worker read it (size and modification time before and
+  immediately before the swap, plus the content digest that names the output). Only then does it
+  stage the output beside the original, move the original to the system Trash or Recycle Bin, and
+  rename the staged file into place; a failed swap restores the original. Every failed check
+  leaves the original untouched and records a typed reason (`notLocal`, `readOnly`,
+  `sourceChanged`, `pageCountMismatch`, `trashUnavailable`, `trashFailed`, ...) that Settings shows
+  per file. After a replacement the file is re-ingested so the index reflects it without another
+  OCR run. Retained output is single-use and is purged when a job ends.
 - `pnpm dev:tauri:semantic:ocr` remains the explicit environment opt-in for the developer bundle.
   Set `PROCYON_OCRMYPDF_EXECUTABLE` when its test executable is outside `PATH`. Production managed
   workers never read that override. On macOS install OCRmyPDF with Homebrew

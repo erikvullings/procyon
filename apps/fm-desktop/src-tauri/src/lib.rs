@@ -284,7 +284,7 @@ pub fn run() {
                     &bundle.native_library_directory,
                     Some(Arc::clone(&bundle.active_model_pack)),
                     bundle.original_model,
-                    bundle.ocr_executable,
+                    bundle.ocr_resolvers,
                 );
                 tauri::async_runtime::spawn(semantic_developer::refresh_rebuilt_developer_install(
                     Arc::clone(&bundle.components),
@@ -576,6 +576,7 @@ pub fn run() {
             commands::get_semantic_component_capabilities,
             commands::get_semantic_ocr_status,
             commands::set_semantic_ocr_consent,
+            commands::set_semantic_ocr_replace_original,
             commands::start_semantic_ocr_remediation,
             commands::cancel_semantic_ocr_remediation,
             commands::get_semantic_component_status,
@@ -991,6 +992,7 @@ mod tests {
                 commands::get_semantic_component_capabilities,
                 commands::get_semantic_ocr_status,
                 commands::set_semantic_ocr_consent,
+            commands::set_semantic_ocr_replace_original,
                 commands::start_semantic_ocr_remediation,
                 commands::cancel_semantic_ocr_remediation,
                 commands::get_semantic_component_status,

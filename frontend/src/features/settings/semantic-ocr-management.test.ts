@@ -27,6 +27,7 @@ const reportedFiles = [
 function status(overrides: Partial<SemanticOcrStatus> = {}): SemanticOcrStatus {
   return {
     enabled: false,
+    replaceOriginal: false,
     availability: {
       state: 'available',
       executable: '/opt/homebrew/bin/ocrmypdf',
@@ -183,6 +184,77 @@ describe('SemanticOcrManagement', () => {
     expect(root.querySelectorAll('.fm-semantic-ocr-unavailable strong')).toHaveLength(1);
     expect(root.querySelectorAll('.fm-semantic-ocr-unavailable p')).toHaveLength(1);
     expect(root.textContent).toContain('index the file again');
+  });
+
+  it('offers the replace-original opt-in only after consent and persists the choice', async () => {
+    const client = new MockFileManagerClient({
+      semanticLifecycle: 'installedEnabled',
+      semanticOcrStatus: status(),
+    });
+    const setReplace = vi.spyOn(client, 'setSemanticOcrReplaceOriginal');
+    await mount(client);
+
+    const replace = root.querySelector<HTMLInputElement>('#fm-semantic-ocr-replace');
+    expect(replace?.type).toBe('checkbox');
+    expect(replace?.checked).toBe(false);
+    expect(replace?.disabled).toBe(true);
+    expect(replace?.getAttribute('aria-describedby')).toBe('fm-semantic-ocr-replace-help');
+    expect(root.querySelector('#fm-semantic-ocr-replace-help')?.textContent).toContain('Trash');
+
+    root.querySelector<HTMLInputElement>('#fm-semantic-ocr-consent')?.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLInputElement>('#fm-semantic-ocr-replace')?.disabled).toBe(
+        false,
+      ),
+    );
+    root.querySelector<HTMLInputElement>('#fm-semantic-ocr-replace')?.click();
+    await vi.waitFor(() => expect(setReplace).toHaveBeenCalledWith(true));
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLInputElement>('#fm-semantic-ocr-replace')?.checked).toBe(true),
+    );
+  });
+
+  it('shows whether each original was replaced or why it was kept', async () => {
+    const now = Date.now();
+    const client = new MockFileManagerClient({
+      semanticLifecycle: 'installedEnabled',
+      semanticOcrStatus: status({
+        enabled: true,
+        replaceOriginal: true,
+        jobs: [
+          {
+            id: '00000000-0000-4000-8000-000000000002',
+            state: 'completed',
+            createdAtMs: now,
+            updatedAtMs: now,
+            totalFiles: 2,
+            processedFiles: 2,
+            availabilityFailure: null,
+            files: [
+              {
+                ...reportedFiles[0],
+                outcome: { outcome: 'succeeded' },
+                replacement: { state: 'replaced' },
+              },
+              {
+                ...reportedFiles[1],
+                outcome: { outcome: 'succeeded' },
+                replacement: {
+                  state: 'kept',
+                  reason: { code: 'pageCountMismatch', sourcePages: 2, outputPages: 3 },
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    await mount(client);
+
+    expect(root.textContent).toContain('Original replaced; the previous version is in the Trash');
+    expect(root.textContent).toContain(
+      'Original kept: the searchable copy has 3 pages instead of 2',
+    );
   });
 
   it('announces success, execution failure, and post-OCR no-text outcomes and can cancel work', async () => {

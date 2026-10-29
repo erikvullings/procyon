@@ -69,10 +69,11 @@ use fm_transport_dto::{
     SemanticModelProfileDto, SemanticModelSelectionDto, SemanticOcrErrorDto, SemanticOcrJobDto,
     SemanticOcrStatusDto, SemanticUninstallReceiptDto, SemanticVocabularyDto,
     SemanticWorkerPatchResponseDto, SetPaneActivityRequest, SetSemanticOcrConsentRequestDto,
-    SettingsDto, SpotlightCommentDto, StartChecksumRequestDto, StartChecksumResponseDto,
-    StartComparisonRequestDto, StartComparisonResponseDto, StartDuplicateScanRequestDto,
-    StartDuplicateScanResponseDto, StartOperationRequestDto, StartSearchRequestDto,
-    StartSearchResponseDto, StartSemanticOcrRemediationRequestDto, StructuredViewSessionRequestDto,
+    SetSemanticOcrReplaceOriginalRequestDto, SettingsDto, SpotlightCommentDto,
+    StartChecksumRequestDto, StartChecksumResponseDto, StartComparisonRequestDto,
+    StartComparisonResponseDto, StartDuplicateScanRequestDto, StartDuplicateScanResponseDto,
+    StartOperationRequestDto, StartSearchRequestDto, StartSearchResponseDto,
+    StartSemanticOcrRemediationRequestDto, StructuredViewSessionRequestDto,
     StructuredViewStatusDto, SyncPlanDto, UninstallSemanticComponentsRequestDto,
     UpdateConnectionRequestDto, UpdateGemmaMediaRequestDto,
     UpdateSemanticEligibilityOverridesRequestDto, UpdateStructuredViewRequestDto,
@@ -762,6 +763,20 @@ pub(crate) async fn set_semantic_ocr_consent(
     state
         .service
         .set_semantic_ocr_consent(request.enabled)
+        .await
+        .map(semantic_ocr_status_to_dto)
+        .map_err(semantic_ocr_error_to_dto)
+}
+
+/// Persists the opt-in to replace original PDFs with their OCR'd version.
+#[tauri::command]
+pub(crate) async fn set_semantic_ocr_replace_original(
+    state: State<'_, AppState>,
+    request: SetSemanticOcrReplaceOriginalRequestDto,
+) -> Result<SemanticOcrStatusDto, SemanticOcrErrorDto> {
+    state
+        .service
+        .set_semantic_ocr_replace_original(request.enabled)
         .await
         .map(semantic_ocr_status_to_dto)
         .map_err(semantic_ocr_error_to_dto)

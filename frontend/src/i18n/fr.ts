@@ -1556,7 +1556,7 @@ export const fr = {
     outputTooLarge: "La sortie de version d'OCRmyPDF dépasse {limit} octets",
     installationDocs: "Ouvrir le guide d'installation d'OCRmyPDF",
     consentDisclosure:
-      "Procyon n'exécute OCRmyPDF que pour les fichiers que vous choisissez explicitement. Il n'écrase jamais votre PDF d'origine.",
+      "Procyon n'exécute OCRmyPDF que pour les fichiers que vous choisissez explicitement. Il ne remplace votre PDF d'origine que si vous activez l'option de remplacement ci-dessous.",
     consentLabel: 'Autoriser OCRmyPDF pour les PDF sélectionnés',
     reportedFiles: 'PDF numérisés sans texte consultable',
     noReportedFiles: 'Aucun PDF numérisé ne nécessite de texte consultable pour le moment.',
@@ -1586,6 +1586,24 @@ export const fr = {
     outcomeExecutionFailure: 'Échec de la reconnaissance de texte PDF',
     outcomeSkipped: 'Ignoré',
     moreOutcomes: '{count} résultats de fichiers supplémentaires ne sont pas affichés.',
+    replaceOriginalLabel: "Remplacer le PDF d'origine par la version interrogeable",
+    replaceOriginalHelp:
+      "Uniquement pour les PDF de cet ordinateur que vous pouvez modifier. L'original est déplacé dans la Corbeille et y reste. Rien n'est remplacé si le nombre de pages diffère, si le fichier a changé entre-temps ou si aucune Corbeille n'est disponible.",
+    replacementReplaced: 'Original remplacé ; la version précédente est dans la Corbeille',
+    replacementKept: 'Original conservé : {reason}',
+    keptNotLocal: 'seuls les fichiers de cet ordinateur sont remplacés',
+    keptNotRegularFile: "ce n'est pas un fichier ordinaire",
+    keptReadOnly: 'le fichier est en lecture seule',
+    keptSourceUnreadable: "le fichier n'a pas pu être lu",
+    keptSourceChanged: 'le fichier a changé pendant le traitement',
+    keptRetainedOutputMissing:
+      "aucune copie interrogeable n'a été conservée pour cette version du fichier",
+    keptOutputUnreadable: "la copie interrogeable n'a pas pu être lue",
+    keptPageCountMismatch:
+      'la copie interrogeable compte {outputPages} pages au lieu de {sourcePages}',
+    keptTrashUnavailable: "ce système n'a pas de Corbeille pour conserver l'original",
+    keptTrashFailed: "l'original n'a pas pu être déplacé dans la Corbeille",
+    keptReplaceFailed: "la copie interrogeable n'a pas pu être mise en place",
   },
   semanticVocabulary: {
     title: 'Vocabulaires de concepts',

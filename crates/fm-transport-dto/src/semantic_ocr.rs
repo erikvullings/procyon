@@ -126,6 +126,75 @@ pub struct SemanticOcrFileOutcomeDto {
     pub location: LocationDto,
     /// Typed result.
     pub outcome: SemanticOcrOutcomeDto,
+    /// Result of the opt-in replace-original step, when it ran.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replacement: Option<SemanticOcrReplacementDto>,
+}
+
+/// Result of replacing an original PDF with its OCR'd version.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "state",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum SemanticOcrReplacementDto {
+    /// The original is in the trash and the OCR'd file took its place.
+    Replaced,
+    /// The original was left untouched.
+    Kept {
+        /// Why the original was kept.
+        reason: SemanticOcrKeptReasonDto,
+    },
+}
+
+/// Typed reason an original PDF was kept instead of replaced.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "code",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum SemanticOcrKeptReasonDto {
+    /// Only local files are replaced.
+    NotLocal,
+    /// The original is not a plain regular file.
+    NotRegularFile,
+    /// The original is read-only.
+    ReadOnly,
+    /// The original could not be read for verification.
+    SourceUnreadable {
+        /// Sanitized diagnostic.
+        detail: String,
+    },
+    /// The original changed after it was read for OCR.
+    SourceChanged,
+    /// No OCR output was retained for the original's current content.
+    RetainedOutputMissing,
+    /// The OCR output is not a readable PDF.
+    OutputUnreadable {
+        /// Sanitized diagnostic.
+        detail: String,
+    },
+    /// The OCR output has a different page count.
+    PageCountMismatch {
+        /// Pages in the original.
+        source_pages: u32,
+        /// Pages in the OCR output.
+        output_pages: u32,
+    },
+    /// The system has no trash to preserve the original in.
+    TrashUnavailable,
+    /// Moving the original to the trash failed.
+    TrashFailed {
+        /// Sanitized diagnostic.
+        detail: String,
+    },
+    /// The OCR output could not be put in place.
+    ReplaceFailed {
+        /// Sanitized diagnostic.
+        detail: String,
+    },
 }
 
 /// Durable public snapshot of one remediation job.
@@ -156,6 +225,10 @@ pub struct SemanticOcrJobDto {
 pub struct SemanticOcrStatusDto {
     /// Whether the user explicitly opted in.
     pub enabled: bool,
+    /// Whether OCR'd local PDFs replace their originals (always false without
+    /// consent).
+    #[serde(default)]
+    pub replace_original: bool,
     /// Current executable discovery result.
     pub availability: SemanticOcrAvailabilityDto,
     /// Backend-owned files that currently require OCR.
@@ -168,6 +241,14 @@ pub struct SemanticOcrStatusDto {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetSemanticOcrConsentRequestDto {
+    /// New opt-in value.
+    pub enabled: bool,
+}
+
+/// Explicit opt-in to replace original PDFs with their OCR'd version.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetSemanticOcrReplaceOriginalRequestDto {
     /// New opt-in value.
     pub enabled: bool,
 }
