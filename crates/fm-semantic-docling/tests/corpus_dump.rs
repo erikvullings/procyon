@@ -124,10 +124,37 @@ fn dump_ml() {
         .expect("conversion");
         let stem = path.file_stem().expect("file stem").to_string_lossy();
         match converted.outcome {
-            ConversionOutcome::Converted(document) => write_dump("ml", &stem, document.units()),
+            ConversionOutcome::Converted(document) => {
+                write_dump("ml", &stem, document.units());
+                if let Ok(out) = std::env::var("PROCYON_CHUNK_OUT") {
+                    write_chunks(Path::new(&out), &stem, &document);
+                }
+            }
             other => eprintln!("{stem}: {other:?}"),
         }
     }
+}
+
+/// Writes the chunks of `document` at 400/512 estimated tokens as JSON lines to
+/// `<out>/512/<stem>.jsonl`, the layout `scripts/eval/retrieval` reads.
+#[cfg(feature = "ml")]
+fn write_chunks(out: &Path, stem: &str, document: &fm_semantic_conversion::ConvertedDocument) {
+    let chunker = fm_semantic_conversion::Chunker::default();
+    let mut lines = String::new();
+    for chunk in chunker.chunk(document) {
+        let _ = writeln!(
+            lines,
+            "{{\"doc\":{},\"index\":{},\"tokens\":{},\"navigation\":{},\"text\":{}}}",
+            json_string(stem),
+            chunk.index,
+            chunk.estimated_tokens,
+            chunk.is_navigation,
+            json_string(&chunk.embedding_input),
+        );
+    }
+    let directory = out.join("512");
+    fs::create_dir_all(&directory).expect("create chunk directory");
+    fs::write(directory.join(format!("{stem}.jsonl")), lines).expect("write chunks");
 }
 
 /// Writes the per-page layout confidence as JSON lines to `<out>/confidence/<pdf stem>.jsonl`.

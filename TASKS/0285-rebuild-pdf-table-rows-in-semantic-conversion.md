@@ -145,3 +145,5 @@ changelog for table or text-layer changes before deciding.
   top band still reads badly. Not yet used by the converter; next use is "ML first, geometric
   fallback" or flagging low-confidence pages for the ML pack. Gold pages with words F1 < 0.5
   (e.g. attachment-and-violent-offending p7/9/18) disagree on the content itself and are skipped.
+
+- Retrieval A/B (e5-small, 33 questions, 400/512 chunks, same chunker): geometric 2294 chunks, hit@1 0.42, MRR 0.492; ML 2574 chunks, hit@1 0.21, MRR 0.322. ML is not better for retrieval here. Caveat: evidence phrases were written against geometric text and 33 questions is small, so ML may be slightly disadvantaged, but there is no sign of an ML advantage. `dump_ml` writes chunks when `PROCYON_CHUNK_OUT` is set. Decision: no "ML first" path; page confidence stays unused.

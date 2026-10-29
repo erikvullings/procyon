@@ -1,6 +1,6 @@
 # 0287 Chunk size range 256-1000 estimated tokens
 
-Status: in_progress
+Status: done
 Priority: low
 Subsystem: backend
 Depends on: none
@@ -59,3 +59,5 @@ maximum of ~1,000 tokens; do not make it user-adjustable (settings complexity).
   `for_model_input_limit` unwired, chunker version stays 5. Revisit with a larger question set
   (100+) and hand-verified evidence before changing; the 256-1000 range stays the bound for any
   model-derived sizing. Task left open as measurement-blocked.
+
+- Closed by the user: keep the 400/512 defaults. `ChunkerOptions::for_model_input_limit` stays available but unwired; no identity bump. Reopen only with a 100+ question set with hand-verified evidence.
