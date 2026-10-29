@@ -880,16 +880,26 @@ impl OcrConfigSource {
         match self {
             // Developer bundles are rejected by release builds, so reading the
             // environment here never affects a production worker.
-            Self::DeveloperEnvironment => OcrMyPdfConfiguration::from_environment(),
+            Self::DeveloperEnvironment => {
+                OcrMyPdfConfiguration::from_environment().map(retention_from_host_environment)
+            }
             // Defense in depth: the host already validated the path, but the
             // worker still accepts only an absolute regular file and never
             // consults the environment in this managed mode.
             Self::ManagedExecutable(executable) => executable
                 .as_deref()
                 .filter(|path| path.is_absolute() && path.is_file())
-                .map(OcrMyPdfConfiguration::new),
+                .map(OcrMyPdfConfiguration::new)
+                .map(retention_from_host_environment),
         }
     }
+}
+
+/// The trusted host launches the worker with the retention directory only
+/// while the user has opted in to replacing originals; the worker merely
+/// writes OCR output there and never touches the user's files.
+fn retention_from_host_environment(configuration: OcrMyPdfConfiguration) -> OcrMyPdfConfiguration {
+    configuration.with_retention_from_environment()
 }
 
 impl DeveloperWorker {

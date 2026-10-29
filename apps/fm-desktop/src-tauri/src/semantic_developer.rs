@@ -42,7 +42,7 @@ pub(crate) struct DeveloperSemanticBundle {
     pub(crate) active_model_pack: fm_semantic_worker::DeveloperModelPackResolver,
     pub(crate) original_model: Option<fm_semantic_worker::DeveloperManagedWorkerResolver>,
     pub(crate) ocr: SemanticOcrService,
-    pub(crate) ocr_executable: fm_semantic_worker::DeveloperOcrExecutableResolver,
+    pub(crate) ocr_resolvers: fm_semantic_worker::DeveloperOcrResolvers,
 }
 
 impl DeveloperSemanticBundle {
@@ -139,6 +139,20 @@ impl DeveloperSemanticBundle {
                 )
             }) as fm_semantic_worker::DeveloperOcrExecutableResolver
         };
+        let ocr_retention = {
+            let policy = Arc::clone(&ocr_policy);
+            let directory = super::semantic_production::ocr_retention_directory(&data_root);
+            Arc::new(move || {
+                super::semantic_production::configured_ocr_retention_directory(
+                    policy.as_ref(),
+                    &directory,
+                )
+            }) as fm_semantic_worker::OcrRetentionDirectoryResolver
+        };
+        let ocr_resolvers = fm_semantic_worker::DeveloperOcrResolvers {
+            executable: ocr_executable,
+            retention: ocr_retention,
+        };
         #[cfg(feature = "semantic-gemma")]
         let original_model = Some(original_model_resolver(
             manager.clone(),
@@ -150,7 +164,7 @@ impl DeveloperSemanticBundle {
                 .parent()
                 .expect("an installed artifact payload always has a parent")
                 .to_path_buf(),
-            Arc::clone(&ocr_executable),
+            ocr_resolvers.clone(),
         ));
         #[cfg(not(feature = "semantic-gemma"))]
         let original_model = None;
@@ -199,7 +213,7 @@ impl DeveloperSemanticBundle {
             active_model_pack,
             original_model,
             ocr: SemanticOcrService::load(ocr_directory, ocr_policy, ocr_probe),
-            ocr_executable,
+            ocr_resolvers,
         })
     }
 }
@@ -299,7 +313,7 @@ fn original_model_resolver(
     installed_worker: PathBuf,
     data_directory: PathBuf,
     native_library_directory: PathBuf,
-    ocr_executable: fm_semantic_worker::DeveloperOcrExecutableResolver,
+    ocr: fm_semantic_worker::DeveloperOcrResolvers,
 ) -> fm_semantic_worker::DeveloperManagedWorkerResolver {
     Arc::new(move || {
         let state = manager.state().map_err(|error| error.to_string())?;
@@ -330,7 +344,8 @@ fn original_model_resolver(
             dimensions,
             media,
         )
-        .with_ocrmypdf_executable(ocr_executable());
+        .with_ocrmypdf_executable((ocr.executable)())
+        .with_ocr_retention_directory((ocr.retention)());
         Ok(Some(launch))
     })
 }
@@ -641,7 +656,7 @@ mod tests {
             status.active_model().is_some(),
             "installed original Gemma files must resolve to the active embedding space",
         );
-        let ocr_executable = Arc::clone(&bundle.ocr_executable);
+        let ocr_executable = Arc::clone(&bundle.ocr_resolvers.executable);
         let service = fm_application::FileManagerService::new(
             fm_transport_dto::RuntimeKindDto::Tauri,
             data.path().join("workspaces"),
@@ -703,7 +718,7 @@ mod tests {
             &bundle.native_library_directory,
             Some(bundle.active_model_pack),
             Some(original_model),
-            bundle.ocr_executable,
+            bundle.ocr_resolvers,
         );
         let results = semantic
             .query(SemanticQuery {

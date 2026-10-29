@@ -10,7 +10,8 @@ use fm_semantic_docling::{DOCLING_PDF_CONVERTER_VERSION, converter_with_baseline
 #[cfg(unix)]
 use fm_semantic_docling::{
     OCRMYPDF_CONVERTER_VERSION, OCRMYPDF_JOBS, OcrMyPdfAvailability, OcrMyPdfConfiguration,
-    OcrMyPdfConverter, OcrMyPdfRejectionReason, OcrMyPdfVersion,
+    OcrMyPdfConverter, OcrMyPdfRejectionReason, OcrMyPdfVersion, ocr_source_digest,
+    retained_ocr_output_path, retention_directory_from_value,
 };
 use lopdf::{Document, Object, Stream, dictionary};
 
@@ -388,6 +389,75 @@ mod ocrmypdf {
         assert!(guidance.contains("Homebrew"));
         assert!(guidance.contains("Linux"));
         assert!(guidance.contains("WSL"));
+    }
+
+    #[test]
+    fn retention_directory_receives_the_ocr_output_keyed_by_the_source_digest() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let temporary_root = tempfile::tempdir().expect("OCR temporary root");
+        let retention = tempfile::tempdir().expect("retention directory");
+        let searchable = text_pdf(&[&[
+            "Recognized evidence from OCR contains enough meaningful prose.",
+            "The second sentence confirms that deterministic conversion sees a real text layer.",
+        ]]);
+        let executable = fake_executable(
+            directory.path(),
+            "cp \"$(dirname \"$0\")/fixture.pdf\" \"$output\"",
+            Some(&searchable),
+        );
+        let converter = ocr_converter(
+            OcrMyPdfConfiguration::new(executable)
+                .with_temporary_root(temporary_root.path())
+                .with_retention_directory(retention.path()),
+        );
+        let source = no_text_pdf();
+
+        let outcome = convert(&converter, &source, &ConversionContext::new());
+        assert!(outcome.document().is_some());
+
+        let retained = retained_ocr_output_path(retention.path(), &ocr_source_digest(&source));
+        assert_eq!(
+            fs::read(&retained).expect("retained OCR output"),
+            searchable
+        );
+        assert_eq!(
+            fs::read_dir(retention.path())
+                .expect("list retention")
+                .count(),
+            1,
+            "no partial files may remain"
+        );
+        assert_temporary_root_is_empty(temporary_root.path());
+    }
+
+    #[test]
+    fn failed_ocr_retains_nothing() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let retention = tempfile::tempdir().expect("retention directory");
+        let executable = fake_executable(directory.path(), "exit 3", None);
+        let converter = ocr_converter(
+            OcrMyPdfConfiguration::new(executable).with_retention_directory(retention.path()),
+        );
+
+        convert(&converter, &no_text_pdf(), &ConversionContext::new());
+        assert_eq!(
+            fs::read_dir(retention.path())
+                .expect("list retention")
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn retention_environment_accepts_only_an_absolute_existing_directory() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        assert!(retention_directory_from_value(Some(directory.path().as_os_str())).is_some());
+        assert!(retention_directory_from_value(Some(std::ffi::OsStr::new("relative"))).is_none());
+        assert!(
+            retention_directory_from_value(Some(directory.path().join("missing").as_os_str()))
+                .is_none()
+        );
+        assert!(retention_directory_from_value(None).is_none());
     }
 
     #[test]

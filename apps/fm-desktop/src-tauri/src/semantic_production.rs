@@ -103,14 +103,18 @@ impl ProductionSemanticBundle {
         let ocr_directory = configuration_directory.join("semantic-ocr");
         let ocr_policy = Arc::new(OcrPolicyStore::load(&ocr_directory));
         let ocr_probe: Arc<dyn OcrExecutableProbe> = Arc::new(DoclingOcrExecutableProbe);
+        let ocr_retention = ocr_retention_directory(&data_root);
         let resolver = managed_worker_resolver(
             manager.clone(),
             Arc::clone(&catalog),
             configuration_directory.to_path_buf(),
             data_root.category_path(DataCategory::Zvec),
             native_library_directory,
-            Arc::clone(&ocr_policy),
-            Arc::clone(&ocr_probe),
+            ManagedOcrLaunch {
+                policy: Arc::clone(&ocr_policy),
+                probe: Arc::clone(&ocr_probe),
+                retention: ocr_retention,
+            },
         );
         let source = HttpArtifactSource::new(&catalog)?;
         let components = Arc::new(ManagedSemanticComponentCapability::new(
@@ -257,14 +261,20 @@ fn target_artifacts<'a>(
     })
 }
 
+/// Host-owned OCR inputs consulted each time a managed worker launches.
+struct ManagedOcrLaunch {
+    policy: Arc<OcrPolicyStore>,
+    probe: Arc<dyn OcrExecutableProbe>,
+    retention: PathBuf,
+}
+
 fn managed_worker_resolver(
     manager: ComponentManager,
     catalog: Arc<TrustedCatalog>,
     configuration_directory: PathBuf,
     data_directory: PathBuf,
     native_library_directory: PathBuf,
-    ocr_policy: Arc<OcrPolicyStore>,
-    ocr_probe: Arc<dyn OcrExecutableProbe>,
+    ocr: ManagedOcrLaunch,
 ) -> fm_semantic_worker::ManagedWorkerResolver {
     Arc::new(move || {
         let state = manager
@@ -318,7 +328,7 @@ fn managed_worker_resolver(
             &native_payloads,
         )?;
         let ocrmypdf_executable =
-            configured_ocrmypdf_executable(ocr_policy.as_ref(), ocr_probe.as_ref());
+            configured_ocrmypdf_executable(ocr.policy.as_ref(), ocr.probe.as_ref());
         let launch = match model.kind() {
             ArtifactKind::Model(_) => {
                 let model_pack = required_verified_payload(&manager, model, "model")?;
@@ -360,7 +370,12 @@ fn managed_worker_resolver(
             }
             _ => return Err("active model has an invalid catalog kind".to_owned()),
         };
-        Ok(launch.with_ocrmypdf_executable(ocrmypdf_executable))
+        Ok(launch
+            .with_ocrmypdf_executable(ocrmypdf_executable)
+            .with_ocr_retention_directory(configured_ocr_retention_directory(
+                ocr.policy.as_ref(),
+                &ocr.retention,
+            )))
     })
 }
 
@@ -393,6 +408,35 @@ pub(crate) fn gemma_library_settings(
             video: media.video,
         },
     ))
+}
+
+/// Host-private directory where the worker retains OCR output for the
+/// replace-original step (task 0286), inside the semantic-data root.
+pub(crate) fn ocr_retention_directory(data_root: &SemanticDataRoot) -> PathBuf {
+    data_root
+        .category_path(DataCategory::Extracted)
+        .join("ocr-retention")
+}
+
+/// Returns the retention directory only while the user has opted in to
+/// replacing originals, creating it owner-only so other local users cannot
+/// plant or read retained output.
+pub(crate) fn configured_ocr_retention_directory(
+    policy: &OcrPolicyStore,
+    directory: &Path,
+) -> Option<PathBuf> {
+    if !policy.replace_original() {
+        return None;
+    }
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt as _;
+        builder.mode(0o700);
+    }
+    builder.create(directory).ok()?;
+    Some(directory.to_owned())
 }
 
 pub(crate) fn configured_ocrmypdf_executable(

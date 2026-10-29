@@ -284,7 +284,7 @@ pub fn run() {
                     &bundle.native_library_directory,
                     Some(Arc::clone(&bundle.active_model_pack)),
                     bundle.original_model,
-                    bundle.ocr_executable,
+                    bundle.ocr_resolvers,
                 );
                 tauri::async_runtime::spawn(semantic_developer::refresh_rebuilt_developer_install(
                     Arc::clone(&bundle.components),

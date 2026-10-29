@@ -469,8 +469,22 @@ enum ConnectorSource {
         developer_native_library_directory: Option<PathBuf>,
         developer_model_pack: Option<DeveloperModelPackResolver>,
         developer_ocr_executable: Option<DeveloperOcrExecutableResolver>,
+        developer_ocr_retention: Option<OcrRetentionDirectoryResolver>,
     },
 }
+
+/// Host-owned launch-time OCR resolvers for a developer-bundle worker.
+#[derive(Clone)]
+pub struct DeveloperOcrResolvers {
+    /// Discovered executable, present only with consent.
+    pub executable: DeveloperOcrExecutableResolver,
+    /// Output-retention directory, present only with the replace-original opt-in.
+    pub retention: OcrRetentionDirectoryResolver,
+}
+
+/// Resolves the host-private directory in which the worker retains OCR output
+/// so the host can verify and apply it (task 0286). `None` disables retention.
+pub type OcrRetentionDirectoryResolver = Arc<dyn Fn() -> Option<PathBuf> + Send + Sync>;
 
 /// Resolves the host-owned path of the currently activated developer model pack.
 ///
@@ -513,6 +527,7 @@ pub struct ManagedWorkerLaunch {
     native_library_directory: PathBuf,
     model: ManagedModel,
     ocrmypdf_executable: Option<PathBuf>,
+    ocr_retention_directory: Option<PathBuf>,
     #[cfg(feature = "gemma-launch")]
     development_cpu_images: bool,
     #[cfg(feature = "gemma-launch")]
@@ -540,6 +555,7 @@ impl ManagedWorkerLaunch {
             native_library_directory,
             model: ManagedModel::Pack(model_pack),
             ocrmypdf_executable: None,
+            ocr_retention_directory: None,
             #[cfg(feature = "gemma-launch")]
             development_cpu_images: false,
             #[cfg(feature = "gemma-launch")]
@@ -568,6 +584,7 @@ impl ManagedWorkerLaunch {
                 media,
             },
             ocrmypdf_executable: None,
+            ocr_retention_directory: None,
             development_cpu_images: false,
             forced_cpu: false,
         }
@@ -584,6 +601,19 @@ impl ManagedWorkerLaunch {
     #[must_use]
     pub fn with_ocrmypdf_executable(mut self, executable: Option<PathBuf>) -> Self {
         self.ocrmypdf_executable = sanitize_ocrmypdf_executable(executable);
+        self
+    }
+
+    /// Records the host-private directory in which the worker retains OCR
+    /// output (as `<source sha256>.pdf`) for host-side verification and
+    /// replacement of the original (task 0286).
+    ///
+    /// Supplied only while the user has opted in. The worker receives it as an
+    /// environment variable it validates (absolute existing directory); it
+    /// gains no authority over user files and the host does the replacing.
+    #[must_use]
+    pub fn with_ocr_retention_directory(mut self, directory: Option<PathBuf>) -> Self {
+        self.ocr_retention_directory = sanitize_ocr_retention_directory(directory);
         self
     }
 
@@ -626,6 +656,24 @@ impl ManagedWorkerLaunch {
 /// relative argument.
 fn sanitize_ocrmypdf_executable(executable: Option<PathBuf>) -> Option<PathBuf> {
     executable.filter(|path| path.is_absolute() && path.is_file())
+}
+
+/// Accepts only an absolute path to an existing directory.
+fn sanitize_ocr_retention_directory(directory: Option<PathBuf>) -> Option<PathBuf> {
+    directory.filter(|path| path.is_absolute() && path.is_dir())
+}
+
+/// Sets (or clears, so a host environment value cannot leak through) the
+/// worker's OCR output-retention directory.
+fn configure_ocr_retention(command: &mut std::process::Command, directory: Option<PathBuf>) {
+    match sanitize_ocr_retention_directory(directory) {
+        Some(directory) => {
+            command.env(fm_semantic_docling::OCRMYPDF_RETAIN_DIR_ENV, directory);
+        }
+        None => {
+            command.env_remove(fm_semantic_docling::OCRMYPDF_RETAIN_DIR_ENV);
+        }
+    }
 }
 
 /// Resolves the currently active production worker generation at launch time.
@@ -687,6 +735,7 @@ impl WorkerConnector {
                 developer_native_library_directory: None,
                 developer_model_pack: None,
                 developer_ocr_executable: None,
+                developer_ocr_retention: None,
             },
         }
     }
@@ -833,6 +882,23 @@ impl WorkerConnector {
         self
     }
 
+    /// Resolves, at launch time, the host-private directory in which developer
+    /// workers retain OCR output for host-side verification and replacement.
+    #[must_use]
+    pub fn with_developer_ocr_retention_resolver(
+        mut self,
+        resolver: OcrRetentionDirectoryResolver,
+    ) -> Self {
+        if let ConnectorSource::Desktop {
+            developer_ocr_retention,
+            ..
+        } = &mut self.source
+        {
+            *developer_ocr_retention = Some(resolver);
+        }
+        self
+    }
+
     /// Selects a host-verified original-file development model at launch time.
     #[must_use]
     pub fn with_developer_managed_worker_resolver(
@@ -971,6 +1037,7 @@ impl WorkerConnector {
                 developer_native_library_directory,
                 developer_model_pack,
                 developer_ocr_executable,
+                developer_ocr_retention,
             } => {
                 ensure_runtime_directory(runtime_directory)?;
                 let secret_path = runtime_directory.join("launch.secret");
@@ -1045,6 +1112,15 @@ impl WorkerConnector {
                         configure_developer_ocr(&mut command, resolver);
                     }
                 }
+                configure_ocr_retention(
+                    &mut command,
+                    match &managed_launch {
+                        Some(launch) => launch.ocr_retention_directory.clone(),
+                        None => developer_ocr_retention
+                            .as_ref()
+                            .and_then(|resolve| resolve()),
+                    },
+                );
                 if let Some(directory) = managed_launch
                     .as_ref()
                     .map(|launch| &launch.native_library_directory)
@@ -1251,6 +1327,8 @@ fn validate_managed_launch(
     // failing the whole semantic capability. It is re-checked at launch time
     // because discovery ran earlier and the file may have changed since.
     launch.ocrmypdf_executable = sanitize_ocrmypdf_executable(launch.ocrmypdf_executable);
+    launch.ocr_retention_directory =
+        sanitize_ocr_retention_directory(launch.ocr_retention_directory);
     Ok(launch)
 }
 
@@ -1358,6 +1436,35 @@ mod developer_connector_tests {
         let mut stale = std::process::Command::new("worker");
         configure_developer_ocr(&mut stale, &resolver);
         assert!(stale.get_args().next().is_none());
+    }
+
+    #[test]
+    fn ocr_retention_directory_is_set_only_for_an_absolute_existing_directory() {
+        let directory = tempfile::tempdir().expect("directory");
+        let variable = std::ffi::OsStr::new(fm_semantic_docling::OCRMYPDF_RETAIN_DIR_ENV);
+
+        let mut enabled = std::process::Command::new("worker");
+        configure_ocr_retention(&mut enabled, Some(directory.path().to_owned()));
+        assert!(
+            enabled
+                .get_envs()
+                .any(|(key, value)| key == variable && value == Some(directory.path().as_os_str()))
+        );
+
+        for rejected in [
+            None,
+            Some(PathBuf::from("relative")),
+            Some(directory.path().join("missing")),
+        ] {
+            let mut command = std::process::Command::new("worker");
+            configure_ocr_retention(&mut command, rejected);
+            assert!(
+                command
+                    .get_envs()
+                    .any(|(key, value)| key == variable && value.is_none()),
+                "an inherited value must be removed"
+            );
+        }
     }
 
     #[cfg(unix)]
@@ -1563,6 +1670,7 @@ mod developer_connector_tests {
             native_library_directory: native,
             model: ManagedModel::Pack(model),
             ocrmypdf_executable: Some(stale),
+            ocr_retention_directory: Some(directory.path().join("removed-retention")),
             #[cfg(feature = "gemma-launch")]
             development_cpu_images: false,
             #[cfg(feature = "gemma-launch")]
@@ -1571,6 +1679,7 @@ mod developer_connector_tests {
         let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
         let resolved = resolve_managed_worker(&resolver).expect("launch");
         assert!(resolved.ocrmypdf_executable.is_none());
+        assert!(resolved.ocr_retention_directory.is_none());
     }
 
     #[test]
