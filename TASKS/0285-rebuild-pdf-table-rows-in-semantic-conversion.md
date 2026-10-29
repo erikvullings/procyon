@@ -74,3 +74,13 @@ changelog for table or text-layer changes before deciding.
   size, licence disclosure) - needs model artifacts and pack signing; not started. Not verified on
   the real juveniles PDF (not on this machine). Protocol ideas not yet used: multi-row header tiers,
   total/subtotal rows, cross-page table continuation.
+- 2026-10-29 (ML probe, macOS arm64, release build, ONNX Runtime 1.28.0 + PDFium chromium/8125 +
+  upstream models-v1 layout_heron_int8/TableFormer, SHA-256 checked against upstream SHA256SUMS) on
+  `Risk factors ... juveniles_meta analyse.pdf`: ML 13 s, 128 units / 5 tables / 41 under 30 chars;
+  geometric text-layer 619 units / 16 tables / 238 under 30 chars. ML keeps captions and header rows
+  and gets Tables 1-2 exactly right (Table 1: all 12 columns). It mangles big multi-row-span
+  Table 3 (rows shuffled, e.g. `Parent-report 1 16 1 ...`), where the geometric rows stay intact but
+  lack headers/captions. Default 30 s budget is exceeded by a debug build (needs release, or a larger
+  timeout for ML). ML pack still unshipped: signing, Win/Linux smoke tests, catalog, size/licence
+  disclosure remain. Suggested next: ship ML, keep the geometric pass for pages where ML yields no
+  or implausible tables, and measure retrieval on the corpus.
