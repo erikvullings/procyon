@@ -51,3 +51,11 @@ maximum of ~1,000 tokens; do not make it user-adjustable (settings complexity).
   Not measured: any model above 512 (EmbeddingGemma weights are in `target/semantic-model-cache`
   but no runner exists here). Leave `for_model_input_limit` unwired and keep chunker version 5
   until a Gemma retrieval run shows larger chunks help. 33 questions is a small sample.
+- 2026-10-29: EmbeddingGemma 2 (native runner, `examples/evaluate_gemma_retrieval.rs`, same 33
+  questions, pool = documents with questions; maximum in estimated tokens): 256: MRR 0.516 /
+  hit@1 0.33; 384: 0.642 / 0.52; 512: 0.577 / 0.39; 768: 0.514 / 0.36; 1000: 0.598 / 0.45.
+  Not monotonic and within noise for 33 questions: no evidence that ~1000 beats 512 (+0.02 MRR,
+  hit@1 +0.06), and 384 scored best on both models. Decision: keep 400/512 defaults, leave
+  `for_model_input_limit` unwired, chunker version stays 5. Revisit with a larger question set
+  (100+) and hand-verified evidence before changing; the 256-1000 range stays the bound for any
+  model-derived sizing. Task left open as measurement-blocked.

@@ -93,3 +93,7 @@ required-features = ["gemma-probe"]
 [[example]]
 name = "evaluate_gemma_native"
 required-features = ["gemma-native"]
+
+[[example]]
+name = "evaluate_gemma_retrieval"
+required-features = ["gemma-probe"]
