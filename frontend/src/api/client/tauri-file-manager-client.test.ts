@@ -471,6 +471,7 @@ describe('TauriFileManagerClient', () => {
 
     await client.getSemanticOcrStatus();
     await client.setSemanticOcrConsent(true);
+    await client.setSemanticOcrReplaceOriginal(true);
     await client.startSemanticOcrRemediation({ scope: 'oneFile', file });
     await client.cancelSemanticOcrRemediation('job-1');
 
@@ -478,10 +479,13 @@ describe('TauriFileManagerClient', () => {
     expect(invoke).toHaveBeenNthCalledWith(2, 'set_semantic_ocr_consent', {
       request: { enabled: true },
     });
-    expect(invoke).toHaveBeenNthCalledWith(3, 'start_semantic_ocr_remediation', {
+    expect(invoke).toHaveBeenNthCalledWith(3, 'set_semantic_ocr_replace_original', {
+      request: { enabled: true },
+    });
+    expect(invoke).toHaveBeenNthCalledWith(4, 'start_semantic_ocr_remediation', {
       request: { scope: 'oneFile', file },
     });
-    expect(invoke).toHaveBeenNthCalledWith(4, 'cancel_semantic_ocr_remediation', {
+    expect(invoke).toHaveBeenNthCalledWith(5, 'cancel_semantic_ocr_remediation', {
       request: { jobId: 'job-1' },
     });
     expect(JSON.stringify(invoke.mock.calls)).not.toContain('executable');

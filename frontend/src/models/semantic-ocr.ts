@@ -60,6 +60,8 @@ export interface SemanticOcrJob {
 /** Complete OCR Settings projection. */
 export interface SemanticOcrStatus {
   readonly enabled: boolean;
+  /** Replace local PDFs with their OCR'd version (opt-in; false without consent). */
+  readonly replaceOriginal: boolean;
   readonly availability: SemanticOcrAvailability;
   readonly reportedFiles: readonly SemanticOcrTarget[];
   readonly jobs: readonly SemanticOcrJob[];

@@ -2533,6 +2533,52 @@ async fn ocr_scope_expansion_accepts_only_backend_reported_files() {
 }
 
 #[tokio::test]
+async fn replace_original_opt_in_requires_consent_and_restarts_the_worker() {
+    let state = project_temp_dir("ocr-replace-optin-state-");
+    let capability = Arc::new(RemediatingDocumentCapability::new());
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_capability(capability.clone())
+    .with_semantic_ocr_service(SemanticOcrService::load(
+        state.path().join("ocr"),
+        Arc::new(OcrPolicyStore::load(state.path().join("ocr"))),
+        Arc::new(AvailableOcrProbe),
+    ));
+    assert!(!service.semantic_ocr_status().replace_original);
+    assert!(matches!(
+        service.set_semantic_ocr_replace_original(true).await,
+        Err(SemanticOcrError::Disabled)
+    ));
+
+    service.set_semantic_ocr_consent(true).await.unwrap();
+    let restarts = capability.restart_count.load(Ordering::Acquire);
+    let status = service
+        .set_semantic_ocr_replace_original(true)
+        .await
+        .unwrap();
+    assert!(status.replace_original);
+    assert_eq!(
+        capability.restart_count.load(Ordering::Acquire),
+        restarts + 1
+    );
+    // Unchanged value neither restarts nor errors.
+    service
+        .set_semantic_ocr_replace_original(true)
+        .await
+        .unwrap();
+    assert_eq!(
+        capability.restart_count.load(Ordering::Acquire),
+        restarts + 1
+    );
+
+    let status = service.set_semantic_ocr_consent(false).await.unwrap();
+    assert!(!status.replace_original);
+}
+
+#[tokio::test]
 async fn successful_ocr_reingests_only_selected_files_and_updates_reported_state() {
     let root = project_temp_dir("ocr-remediation-root-");
     for (name, content) in [

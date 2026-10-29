@@ -768,6 +768,7 @@ export class HttpFileManagerClient implements FileManagerClient {
     signal?.throwIfAborted();
     return {
       enabled: false,
+      replaceOriginal: false,
       availability: {
         state: 'unavailable',
         reason: { code: 'hostUnavailable' },
@@ -779,6 +780,14 @@ export class HttpFileManagerClient implements FileManagerClient {
   }
 
   setSemanticOcrConsent(_enabled: boolean, signal?: AbortSignal): Promise<SemanticOcrStatus> {
+    signal?.throwIfAborted();
+    return Promise.reject(desktopHostRequiredError());
+  }
+
+  setSemanticOcrReplaceOriginal(
+    _enabled: boolean,
+    signal?: AbortSignal,
+  ): Promise<SemanticOcrStatus> {
     signal?.throwIfAborted();
     return Promise.reject(desktopHostRequiredError());
   }

@@ -27,6 +27,7 @@ const reportedFiles = [
 function status(overrides: Partial<SemanticOcrStatus> = {}): SemanticOcrStatus {
   return {
     enabled: false,
+    replaceOriginal: false,
     availability: {
       state: 'available',
       executable: '/opt/homebrew/bin/ocrmypdf',

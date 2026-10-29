@@ -156,6 +156,10 @@ pub struct SemanticOcrJobDto {
 pub struct SemanticOcrStatusDto {
     /// Whether the user explicitly opted in.
     pub enabled: bool,
+    /// Whether OCR'd local PDFs replace their originals (always false without
+    /// consent).
+    #[serde(default)]
+    pub replace_original: bool,
     /// Current executable discovery result.
     pub availability: SemanticOcrAvailabilityDto,
     /// Backend-owned files that currently require OCR.
@@ -168,6 +172,14 @@ pub struct SemanticOcrStatusDto {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetSemanticOcrConsentRequestDto {
+    /// New opt-in value.
+    pub enabled: bool,
+}
+
+/// Explicit opt-in to replace original PDFs with their OCR'd version.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetSemanticOcrReplaceOriginalRequestDto {
     /// New opt-in value.
     pub enabled: bool,
 }

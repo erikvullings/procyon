@@ -18,6 +18,7 @@ use crate::semantic_ocr::{
 pub fn semantic_ocr_status_to_dto(status: SemanticOcrStatus) -> SemanticOcrStatusDto {
     SemanticOcrStatusDto {
         enabled: status.enabled,
+        replace_original: status.replace_original,
         availability: availability_to_dto(status.availability),
         reported_files: status
             .reported_files

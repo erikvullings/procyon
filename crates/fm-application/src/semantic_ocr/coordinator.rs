@@ -54,6 +54,22 @@ impl SemanticOcrCoordinator {
         Ok(self.status())
     }
 
+    pub(crate) async fn set_replace_original(
+        &self,
+        semantic: &SemanticService,
+        enabled: bool,
+    ) -> Result<SemanticOcrStatus, SemanticOcrError> {
+        let changed = self.jobs.set_replace_original(enabled)?;
+        if changed {
+            // The worker's output-retention directory is fixed at launch.
+            semantic
+                .restart(WORKER_RESTART_GRACE)
+                .await
+                .map_err(|error| SemanticOcrError::WorkerRestart(error.to_string()))?;
+        }
+        Ok(self.status())
+    }
+
     pub(crate) fn start(
         &self,
         scope: OcrRemediationScope,

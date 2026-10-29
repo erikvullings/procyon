@@ -350,6 +350,7 @@ impl SemanticOcrService {
     ) -> super::SemanticOcrStatus {
         super::SemanticOcrStatus {
             enabled: self.consent(),
+            replace_original: self.policy.replace_original(),
             availability: self.availability(),
             reported_files,
             jobs: self.jobs(),
@@ -378,6 +379,22 @@ impl SemanticOcrService {
             self.cancel_all_active()?;
         }
         Ok(changed)
+    }
+
+    /// Durably records the replace-original opt-in (task 0286), returning
+    /// whether the effective value changed. Requires OCR consent.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SemanticOcrError::Disabled`] when enabling without consent or
+    /// [`SemanticOcrError::Persist`] if the durable file cannot be written.
+    pub(crate) fn set_replace_original(&self, enabled: bool) -> Result<bool, SemanticOcrError> {
+        if enabled && !self.policy.enabled() {
+            return Err(SemanticOcrError::Disabled);
+        }
+        self.policy
+            .set_replace_original(enabled)
+            .map_err(|error| SemanticOcrError::Persist(error.to_string()))
     }
 
     /// Enqueues a remediation job for the resolved target files.

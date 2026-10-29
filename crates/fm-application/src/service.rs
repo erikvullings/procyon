@@ -1816,6 +1816,22 @@ impl FileManagerService {
         self.semantic_ocr.set_consent(&self.semantic, enabled).await
     }
 
+    /// Persists the opt-in to replace original local PDFs with their OCR'd
+    /// version (task 0286) and retires the worker so its output-retention
+    /// configuration matches. Requires OCR consent when enabling.
+    ///
+    /// # Errors
+    ///
+    /// Returns a consent, persistence, or worker-restart failure.
+    pub async fn set_semantic_ocr_replace_original(
+        &self,
+        enabled: bool,
+    ) -> Result<SemanticOcrStatus, SemanticOcrError> {
+        self.semantic_ocr
+            .set_replace_original(&self.semantic, enabled)
+            .await
+    }
+
     /// Expands one of the four user-visible scopes against the current
     /// backend-owned OCR report and enqueues only exact reported targets.
     ///

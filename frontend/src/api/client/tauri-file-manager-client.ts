@@ -469,6 +469,15 @@ export class TauriFileManagerClient implements FileManagerClient {
     });
   }
 
+  async setSemanticOcrReplaceOriginal(
+    enabled: boolean,
+    _signal?: AbortSignal,
+  ): Promise<SemanticOcrStatus> {
+    return invoke<SemanticOcrStatus>('set_semantic_ocr_replace_original', {
+      request: { enabled },
+    });
+  }
+
   async startSemanticOcrRemediation(
     request: StartSemanticOcrRemediationRequest,
     _signal?: AbortSignal,

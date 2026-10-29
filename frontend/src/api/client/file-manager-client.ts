@@ -343,6 +343,7 @@ export interface FileManagerClient {
   ): Promise<SemanticModelSelection>;
   getSemanticOcrStatus(signal?: AbortSignal): Promise<SemanticOcrStatus>;
   setSemanticOcrConsent(enabled: boolean, signal?: AbortSignal): Promise<SemanticOcrStatus>;
+  setSemanticOcrReplaceOriginal(enabled: boolean, signal?: AbortSignal): Promise<SemanticOcrStatus>;
   startSemanticOcrRemediation(
     request: StartSemanticOcrRemediationRequest,
     signal?: AbortSignal,
