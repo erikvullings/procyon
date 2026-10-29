@@ -39,10 +39,35 @@ export type SemanticOcrOutcome =
   | { readonly outcome: 'executionFailure'; readonly detail: string }
   | { readonly outcome: 'skipped'; readonly detail: string };
 
+/** Why an original PDF was kept instead of replaced by its OCR'd version. */
+export type SemanticOcrKeptReason =
+  | { readonly code: 'notLocal' }
+  | { readonly code: 'notRegularFile' }
+  | { readonly code: 'readOnly' }
+  | { readonly code: 'sourceUnreadable'; readonly detail: string }
+  | { readonly code: 'sourceChanged' }
+  | { readonly code: 'retainedOutputMissing' }
+  | { readonly code: 'outputUnreadable'; readonly detail: string }
+  | {
+      readonly code: 'pageCountMismatch';
+      readonly sourcePages: number;
+      readonly outputPages: number;
+    }
+  | { readonly code: 'trashUnavailable' }
+  | { readonly code: 'trashFailed'; readonly detail: string }
+  | { readonly code: 'replaceFailed'; readonly detail: string };
+
+/** Result of the opt-in replace-original step. */
+export type SemanticOcrReplacement =
+  | { readonly state: 'replaced' }
+  | { readonly state: 'kept'; readonly reason: SemanticOcrKeptReason };
+
 export interface SemanticOcrFileOutcome {
   readonly rootId: string;
   readonly location: Location;
   readonly outcome: SemanticOcrOutcome;
+  /** Present only when the replace-original opt-in was on and OCR succeeded. */
+  readonly replacement?: SemanticOcrReplacement;
 }
 
 /** Durable remediation job snapshot. */

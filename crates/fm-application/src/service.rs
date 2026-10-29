@@ -597,6 +597,7 @@ impl FileManagerService {
                 Arc::new(UnavailableOcrExecutableProbe),
             )),
             Arc::clone(&semantic_indexing),
+            Arc::clone(&platform),
         );
         let search_comparison = SearchComparisonCoordinator::new(
             search,

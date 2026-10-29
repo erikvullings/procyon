@@ -24,10 +24,13 @@ use fm_settings::{SettingsStore, VersionedDocument};
 use serde::{Deserialize, Serialize};
 
 mod remediation;
+mod replace;
 
 pub(crate) use coordinator::SemanticOcrCoordinator;
 pub(crate) use remediation::{ClaimedOcrJob, classify_ingest_report};
 mod coordinator;
+
+pub use replace::{OcrReplacementOutcome, OcrReplacementSkip};
 
 pub use remediation::{
     OcrRemediationFileOutcome, OcrRemediationJob, OcrRemediationJobId, OcrRemediationOutcome,

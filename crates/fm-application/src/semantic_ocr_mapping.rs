@@ -2,15 +2,15 @@
 
 use fm_transport_dto::{
     SemanticOcrAvailabilityDto, SemanticOcrErrorCodeDto, SemanticOcrErrorDto,
-    SemanticOcrFileOutcomeDto, SemanticOcrJobDto, SemanticOcrJobStateDto, SemanticOcrOutcomeDto,
-    SemanticOcrStatusDto, SemanticOcrTargetDto, SemanticOcrUnavailableReasonDto,
-    StartSemanticOcrRemediationRequestDto,
+    SemanticOcrFileOutcomeDto, SemanticOcrJobDto, SemanticOcrJobStateDto, SemanticOcrKeptReasonDto,
+    SemanticOcrOutcomeDto, SemanticOcrReplacementDto, SemanticOcrStatusDto, SemanticOcrTargetDto,
+    SemanticOcrUnavailableReasonDto, StartSemanticOcrRemediationRequestDto,
 };
 
 use crate::semantic_ocr::{
     OcrAvailability, OcrRemediationFileOutcome, OcrRemediationJob, OcrRemediationOutcome,
-    OcrRemediationScope, OcrRemediationState, OcrRemediationTarget, OcrUnavailableReason,
-    SemanticOcrError, SemanticOcrStatus,
+    OcrRemediationScope, OcrRemediationState, OcrRemediationTarget, OcrReplacementOutcome,
+    OcrReplacementSkip, OcrUnavailableReason, SemanticOcrError, SemanticOcrStatus,
 };
 
 /// Maps complete application OCR state to the stable desktop wire contract.
@@ -188,6 +188,44 @@ fn file_outcome_to_dto(outcome: OcrRemediationFileOutcome) -> SemanticOcrFileOut
                 SemanticOcrOutcomeDto::ExecutionFailure { detail }
             }
             OcrRemediationOutcome::Skipped { detail } => SemanticOcrOutcomeDto::Skipped { detail },
+        },
+        replacement: outcome.replacement.map(replacement_to_dto),
+    }
+}
+
+fn replacement_to_dto(outcome: OcrReplacementOutcome) -> SemanticOcrReplacementDto {
+    match outcome {
+        OcrReplacementOutcome::Replaced => SemanticOcrReplacementDto::Replaced,
+        OcrReplacementOutcome::Kept { reason } => SemanticOcrReplacementDto::Kept {
+            reason: match reason {
+                OcrReplacementSkip::NotLocal => SemanticOcrKeptReasonDto::NotLocal,
+                OcrReplacementSkip::NotRegularFile => SemanticOcrKeptReasonDto::NotRegularFile,
+                OcrReplacementSkip::ReadOnly => SemanticOcrKeptReasonDto::ReadOnly,
+                OcrReplacementSkip::SourceUnreadable { detail } => {
+                    SemanticOcrKeptReasonDto::SourceUnreadable { detail }
+                }
+                OcrReplacementSkip::SourceChanged => SemanticOcrKeptReasonDto::SourceChanged,
+                OcrReplacementSkip::RetainedOutputMissing => {
+                    SemanticOcrKeptReasonDto::RetainedOutputMissing
+                }
+                OcrReplacementSkip::OutputUnreadable { detail } => {
+                    SemanticOcrKeptReasonDto::OutputUnreadable { detail }
+                }
+                OcrReplacementSkip::PageCountMismatch {
+                    original_pages,
+                    output_pages,
+                } => SemanticOcrKeptReasonDto::PageCountMismatch {
+                    source_pages: original_pages,
+                    output_pages,
+                },
+                OcrReplacementSkip::TrashUnavailable => SemanticOcrKeptReasonDto::TrashUnavailable,
+                OcrReplacementSkip::TrashFailed { detail } => {
+                    SemanticOcrKeptReasonDto::TrashFailed { detail }
+                }
+                OcrReplacementSkip::ReplaceFailed { detail } => {
+                    SemanticOcrKeptReasonDto::ReplaceFailed { detail }
+                }
+            },
         },
     }
 }

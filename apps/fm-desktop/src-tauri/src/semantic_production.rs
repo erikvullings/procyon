@@ -146,7 +146,8 @@ impl ProductionSemanticBundle {
                 .category_path(DataCategory::Zvec)
                 .join("model-reindex-pending"),
             worker: resolver,
-            ocr: SemanticOcrService::load(ocr_directory, ocr_policy, ocr_probe),
+            ocr: SemanticOcrService::load(ocr_directory, ocr_policy, ocr_probe)
+                .with_retention_directory(ocr_retention_directory(&data_root)),
         })
     }
 }

@@ -147,6 +147,10 @@ pub struct OcrRemediationFileOutcome {
     pub location: Location,
     /// Typed outcome for this file.
     pub outcome: OcrRemediationOutcome,
+    /// Result of the opt-in replace-original step (task 0286); `None` when
+    /// the opt-in was off or OCR did not succeed.
+    #[serde(default)]
+    pub replacement: Option<super::OcrReplacementOutcome>,
 }
 
 /// Public snapshot of a remediation job.
@@ -260,6 +264,7 @@ pub struct SemanticOcrService {
     probe: Arc<dyn OcrExecutableProbe>,
     availability: Mutex<Option<(Instant, OcrAvailability)>>,
     path: PathBuf,
+    retention_directory: Option<PathBuf>,
     state: Mutex<RegistryState>,
     notify: Notify,
 }
@@ -302,9 +307,29 @@ impl SemanticOcrService {
             probe,
             availability: Mutex::new(None),
             path,
+            retention_directory: None,
             state: Mutex::new(state),
             notify: Notify::new(),
         }
+    }
+
+    /// Names the host-private directory in which the semantic worker retains
+    /// OCR output (task 0286). It must be the directory the host hands the
+    /// worker at launch; without it originals are never replaced.
+    #[must_use]
+    pub fn with_retention_directory(mut self, directory: impl Into<PathBuf>) -> Self {
+        self.retention_directory = Some(directory.into());
+        self
+    }
+
+    pub(crate) fn retention_directory(&self) -> Option<&Path> {
+        self.retention_directory.as_deref()
+    }
+
+    /// Returns whether original PDFs are replaced by their OCR'd version.
+    #[must_use]
+    pub(crate) fn replace_original(&self) -> bool {
+        self.policy.replace_original()
     }
 
     /// Returns the injected availability probe result.
@@ -943,6 +968,7 @@ mod tests {
                     root_id: claimed.targets[0].root_id,
                     location: claimed.targets[0].location.clone(),
                     outcome: OcrRemediationOutcome::Succeeded,
+                    replacement: None,
                 },
             )
             .unwrap();
@@ -967,6 +993,7 @@ mod tests {
                     outcome: OcrRemediationOutcome::PostOcrNoText {
                         detail: "no searchable text".to_owned(),
                     },
+                    replacement: None,
                 },
             )
             .unwrap();
@@ -1033,6 +1060,7 @@ mod tests {
                         root_id: claimed.targets[0].root_id,
                         location: claimed.targets[0].location.clone(),
                         outcome: OcrRemediationOutcome::Succeeded,
+                        replacement: None,
                     },
                 )
                 .unwrap();

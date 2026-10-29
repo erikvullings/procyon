@@ -212,7 +212,10 @@ impl DeveloperSemanticBundle {
                 .to_path_buf(),
             active_model_pack,
             original_model,
-            ocr: SemanticOcrService::load(ocr_directory, ocr_policy, ocr_probe),
+            ocr: SemanticOcrService::load(ocr_directory, ocr_policy, ocr_probe)
+                .with_retention_directory(super::semantic_production::ocr_retention_directory(
+                    &data_root,
+                )),
             ocr_resolvers,
         })
     }
