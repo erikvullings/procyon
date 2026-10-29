@@ -27,7 +27,7 @@ use fm_semantic_conversion::{
     ConversionWarning, ConvertedDocument, DocumentConverter, DocumentMetadata, FormatKind,
     Omission, OptionalConverter, Provenance, ProvenancePrecision, SourceContent, SourceMap,
     StructuralUnit, TopLevelBoundary, UnitKind, clean_pdf_toc_text, instruction_like_excerpt,
-    is_pdf_toc_section, repair_spaced_elsevier_doi, sanitize,
+    is_pdf_toc_section, is_references_section, repair_spaced_elsevier_doi, sanitize,
 };
 
 const OCR_REQUIRED_GUIDANCE: &str = "This PDF has no searchable text layer and was excluded from \
@@ -1313,6 +1313,8 @@ struct Mapper<'a> {
     saturated: bool,
     stopped: Option<ConversionOutcome>,
     ocr_language: Option<OcrLanguage>,
+    /// Inside a bibliography: its entries are back matter, ranked like navigation.
+    in_references: bool,
 }
 
 impl<'a> Mapper<'a> {
@@ -1346,6 +1348,7 @@ impl<'a> Mapper<'a> {
             saturated: false,
             stopped: None,
             ocr_language,
+            in_references: false,
         }
     }
 
@@ -1485,6 +1488,29 @@ impl<'a> Mapper<'a> {
         }
     }
 
+    /// Whether a non-heading unit belongs to a bibliography. Structured headings (ML path) say so
+    /// through `section_path`; the text layer has no headings, so a bare "References" line opens a
+    /// run that lasts while units still look like entries (a year, or a short wrapped fragment)
+    /// and ends at the first long unit without one.
+    fn continues_references(&mut self, text: &str, section_path: &[String]) -> bool {
+        if is_references_section(section_path) {
+            return true;
+        }
+        let text = text.trim();
+        if is_references_section(&[text.to_owned()]) {
+            self.in_references = true;
+            return true;
+        }
+        if !self.in_references {
+            return false;
+        }
+        let length = text.chars().count();
+        let entry = length <= REFERENCE_FRAGMENT_CHARS
+            || publication_years(text) * REFERENCE_CHARS_PER_YEAR >= length;
+        self.in_references = entry;
+        entry
+    }
+
     fn heading(&mut self, level: u8, text: String) {
         let level = usize::from(level.clamp(1, 6));
         self.section_path.truncate(level.saturating_sub(1));
@@ -1494,6 +1520,7 @@ impl<'a> Mapper<'a> {
         {
             self.section_path.push(heading.text.clone());
         }
+        self.in_references = is_references_section(&self.section_path);
     }
 
     fn emit(&mut self, kind: UnitKind, text: String) {
@@ -1536,8 +1563,10 @@ impl<'a> Mapper<'a> {
         }
         let toc_marker = is_pdf_toc_section(std::slice::from_ref(&text))
             || reflow::is_bare_section_number(&text);
+        let reference =
+            kind != UnitKind::Heading && self.continues_references(&text, &section_path);
         let kind = if kind != UnitKind::Heading
-            && (has_leader || toc_marker || is_pdf_toc_section(&section_path))
+            && (has_leader || toc_marker || reference || is_pdf_toc_section(&section_path))
         {
             UnitKind::Navigation
         } else {
@@ -1645,6 +1674,27 @@ impl<'a> Mapper<'a> {
             self.omissions,
         ))
     }
+}
+
+/// Longest wrapped fragment that stays inside a bibliography without a year of its own.
+const REFERENCE_FRAGMENT_CHARS: usize = 250;
+/// A bibliography carries about one publication year per entry; text with fewer than one per this
+/// many characters is prose and ends the list. Entries merged by column wrapping stay dense.
+const REFERENCE_CHARS_PER_YEAR: usize = 450;
+
+/// Counts four-digit years from 1900 to 2099 standing alone in `text`.
+fn publication_years(text: &str) -> usize {
+    [b" ", text.as_bytes(), b" "]
+        .concat()
+        .windows(6)
+        .filter(|window| {
+            !window[0].is_ascii_digit()
+                && matches!(&window[1..3], b"19" | b"20")
+                && window[3].is_ascii_digit()
+                && window[4].is_ascii_digit()
+                && !window[5].is_ascii_digit()
+        })
+        .count()
 }
 
 fn table_text(table: &Table) -> String {
@@ -2065,6 +2115,83 @@ mod tests {
                 .map(|unit| unit.text.as_str())
                 .collect::<Vec<_>>(),
             ["A substantive passage."]
+        );
+    }
+
+    #[test]
+    fn bibliography_entries_rank_as_navigation_and_prose_after_them_does_not() {
+        let paragraph = |text: &str| Node::Paragraph { text: text.into() };
+        let prose = "Findings were consistent across all included studies and across a range of \
+                     measures, which suggests that the association is robust to the way the outcome \
+                     was operationalised, although the heterogeneity between samples remained large \
+                     and the moderator analyses should be read with caution. ".repeat(3);
+        let document = DoclingDocument {
+            name: "fixture".into(),
+            nodes: vec![
+                paragraph("Body text before the list."),
+                paragraph("References"),
+                paragraph("Smith, J. (2001). A study of things. Journal of Studies, 4, 1-20."),
+                paragraph("Jones, K., & Lee, M. (1999). Another study. Review of"),
+                paragraph("Things, 2, 3-9."),
+                paragraph("Brown, A. (2010). Third study. Studies Quarterly, 7, 44-61."),
+                paragraph(&prose),
+            ],
+            ..DoclingDocument::new("fixture")
+        };
+        let context = ConversionContext::new();
+        let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 1, 1, None);
+        mapper.map_document(document);
+        let kinds: Vec<UnitKind> = mapper.units.iter().map(|unit| unit.kind).collect();
+
+        assert_eq!(
+            kinds,
+            vec![
+                UnitKind::Paragraph,
+                UnitKind::Navigation,
+                UnitKind::Navigation,
+                UnitKind::Navigation,
+                UnitKind::Navigation,
+                UnitKind::Navigation,
+                UnitKind::Paragraph,
+            ]
+        );
+    }
+
+    #[test]
+    fn a_references_heading_marks_its_section_and_the_next_heading_ends_it() {
+        let document = DoclingDocument {
+            name: "fixture".into(),
+            nodes: vec![
+                Node::Heading {
+                    level: 1,
+                    text: "References".into(),
+                },
+                Node::Paragraph {
+                    text: "Smith, J. (2001). Title.".into(),
+                },
+                Node::Heading {
+                    level: 1,
+                    text: "Appendix A".into(),
+                },
+                Node::Paragraph {
+                    text: "Appendix prose.".into(),
+                },
+            ],
+            ..DoclingDocument::new("fixture")
+        };
+        let context = ConversionContext::new();
+        let mut mapper = Mapper::new(DOCLING_PDF_CONVERTER_VERSION, &context, 1, 1, None);
+        mapper.map_document(document);
+        let kinds: Vec<UnitKind> = mapper.units.iter().map(|unit| unit.kind).collect();
+
+        assert_eq!(
+            kinds,
+            vec![
+                UnitKind::Heading,
+                UnitKind::Navigation,
+                UnitKind::Heading,
+                UnitKind::Paragraph
+            ]
         );
     }
 

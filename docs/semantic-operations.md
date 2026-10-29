@@ -574,6 +574,12 @@ replacement instead of publishing only readable pages. The prior complete genera
 searchable, and the failed job names the unreadable page. This does not make pages with no
 extractable text searchable or lift the 64 MiB production source limit.
 
+PDF bibliographies are classified as navigation too. A References/Bibliography heading (structured
+conversion) or a bare "References" line (text layer, which has no headings) opens a run whose
+entries, wrapped fragments, and merged entry blocks are back matter, so they rank at the same
+quarter weight as contents lines; the run ends at the first prose paragraph or next heading.
+Bibliography text stays searchable.
+
 PDF text-layer conversion removes whitespace-delimited dot leaders of at least four dots before
 embedding and labels the affected blocks (and recognized Contents sections) as navigation;
 ordinary three-dot ellipses in prose remain unchanged. Knowledge fusion and file-primary semantic
