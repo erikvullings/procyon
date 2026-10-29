@@ -1435,7 +1435,8 @@ impl<'a> Mapper<'a> {
     /// Maps a PDF conversion, consulting the PDF's word cells only when Docling split brackets
     /// off their lines.
     fn map_pdf_document(&mut self, document: DoclingDocument, pdf: &[u8]) {
-        let pages = if reflow::has_stray_brackets(&document.nodes) {
+        // Word cells repair stray brackets and split two-column rows (text layer only).
+        let pages = if reflow::has_stray_brackets(&document.nodes) || self.ocr_language.is_none() {
             reflow::page_words(pdf)
         } else {
             Vec::new()
@@ -1460,7 +1461,8 @@ impl<'a> Mapper<'a> {
                 mean_confidence_basis_points: confidence,
             });
         }
-        for node in reflow::reflow_lines(document.nodes, pages) {
+        for node in reflow::reflow_lines_ordered(document.nodes, pages, self.ocr_language.is_none())
+        {
             if self.saturated || self.checkpoint().is_err() {
                 break;
             }

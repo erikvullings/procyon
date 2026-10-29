@@ -76,7 +76,37 @@ class _Html(HTMLParser):
         (self._cell if self._cell is not None else self.loose).append(data)
 
 
+OTSL_BLOCK = re.compile(r"<otsl>(.*?)(?:</otsl>|$)", re.DOTALL)
+OTSL_TAG = re.compile(r"<(fcel|ecel|lcel|ucel|xcel|ched|rhed|srow|nl)>")
+
+
+def otsl_rows(block: str) -> list[list[str]]:
+    """Rows of cell texts from an OTSL table (`<fcel>text<ecel><nl>...`).
+
+    MiniCPM-OCR answers table pages in OTSL; spanned and empty cells (`ecel`, `lcel`, `ucel`,
+    `xcel`) become empty strings so column positions stay aligned.
+    """
+    rows: list[list[str]] = [[]]
+    parts = OTSL_TAG.split(block)  # text, tag, text, tag, ...
+    for tag, text in zip(parts[1::2], parts[2::2], strict=False):
+        if tag == "nl":
+            rows.append([])
+        else:
+            rows[-1].append(
+                " ".join(text.split())
+                if tag in ("fcel", "ched", "rhed", "srow")
+                else ""
+            )
+    return [row for row in rows if any(cell for cell in row)]
+
+
+def otsl_tables(markup: str) -> list[list[list[str]]]:
+    return [rows for block in OTSL_BLOCK.findall(markup) if (rows := otsl_rows(block))]
+
+
 def html_rows(markup: str) -> list[list[str]]:
+    if "<otsl>" in markup:
+        return [row for table in otsl_tables(markup) for row in table]
     parser = _Html()
     parser.feed(markup)
     return [row for row in parser.rows if any(cell for cell in row)]
@@ -84,6 +114,12 @@ def html_rows(markup: str) -> list[list[str]]:
 
 def gold_text(markup: str) -> str:
     """Plain text of a gold page: tables flattened row by row, tags dropped."""
+    markup = OTSL_BLOCK.sub(
+        lambda match: (
+            "\n" + "\n".join(" ".join(row) for row in otsl_rows(match.group(1))) + "\n"
+        ),
+        markup,
+    )
     parser = _Html()
     parser.feed(re.sub(r"<br\s*/?>", "\n", markup))
     table_text = "\n".join(" ".join(row) for row in parser.rows)
@@ -194,11 +230,9 @@ def load_dump(path: Path) -> dict[int, list[dict]]:
     return pages
 
 
-def load_gold_page(path: Path) -> str:
+def gold_source(path: Path) -> str:
     verified = path.with_suffix(".verified.txt")
-    return gold_text(
-        (verified if verified.exists() else path).read_text(encoding="utf-8")
-    )
+    return (verified if verified.exists() else path).read_text(encoding="utf-8")
 
 
 @dataclass
@@ -234,6 +268,10 @@ def main() -> int:
     methods = sorted(path.name for path in args.dump.iterdir() if path.is_dir())
     pages_all = {m: Report() for m in methods}
     pages_checked = {m: Report() for m in methods}
+    auto_tables: dict[str, list[TableScore]] = {m: [] for m in methods}
+    empty: dict[str, int] = {}
+    empty_docs: dict[str, set[str]] = {}
+    per_document: dict[tuple[str, str], list[PageScore]] = {}
 
     for folder in sorted(
         p for p in args.gold.iterdir() if p.is_dir() and p.name != "tables"
@@ -242,16 +280,31 @@ def main() -> int:
             if gold_file.name.endswith(".verified.txt"):
                 continue
             page = int(gold_file.stem.split("-")[1])
-            gold = load_gold_page(gold_file)
+            source = gold_source(gold_file)
+            gold = gold_text(source)
             if not words(gold):
                 continue
+            page_tables = [
+                t for t in otsl_tables(source) if len(t) >= 3 and max(map(len, t)) >= 2
+            ]
             for method in methods:
                 dump = args.dump / method / f"{folder.name}.jsonl"
                 units = load_dump(dump).get(page, []) if dump.exists() else []
+                if not units:
+                    # No output for this page (no text layer, or a failed conversion): counted
+                    # on its own, not as a zero that would drown the pages that did convert.
+                    empty[method] = empty.get(method, 0) + 1
+                    empty_docs.setdefault(method, set()).add(folder.name)
+                    continue
                 result = score_page(gold, units)
                 pages_all[method].pages.setdefault("all", []).append(result)
+                per_document.setdefault((folder.name, method), []).append(result)
                 if f"{folder.name}/{gold_file.stem}" in verified:
                     pages_checked[method].pages.setdefault("all", []).append(result)
+                for rows in page_tables:
+                    auto_tables[method].append(
+                        score_table(rows, best_candidate(rows, units))
+                    )
 
     table_reports = {m: [] for m in methods}
     if args.tables:
@@ -288,10 +341,49 @@ def main() -> int:
                 f"{fmt([r.order for r in rows])} | {fmt([r.para_precision for r in rows])} | "
                 f"{fmt([r.para_recall for r in rows])} | {fmt([r.units_per_gold for r in rows])} |"
             )
+    lines += [
+        "",
+        "Pages with no output are excluded from the averages above and counted here:",
+        "",
+    ]
+    for method in methods:
+        documents = ", ".join(sorted(empty_docs.get(method, set()))) or "none"
+        lines.append(f"- {method}: {empty.get(method, 0)} empty pages ({documents})")
+    lines += [
+        "",
+        "## Per document (words F1 / reading order / units per gold paragraph)",
+        "",
+        "| document | " + " | ".join(methods) + " |",
+        "|---|" + "---|" * len(methods),
+    ]
+    for document in sorted({name for name, _ in per_document}):
+        cells = []
+        for method in methods:
+            rows = per_document.get((document, method), [])
+            cells.append(
+                f"{fmt([r.words_f1 for r in rows])} / {fmt([r.order for r in rows])} / "
+                f"{fmt([r.units_per_gold for r in rows])}"
+                if rows
+                else "-"
+            )
+        lines.append(f"| {document[:60]} | " + " | ".join(cells) + " |")
+    lines += [
+        "",
+        "## Tables the model found on whole pages (OTSL, 3+ rows)",
+        "",
+        "| method | tables | cell F1 | rows found |",
+        "|---|---|---|---|",
+    ]
+    for method in methods:
+        rows = auto_tables[method]
+        lines.append(
+            f"| {method} | {len(rows)} | {fmt([r.cell_f1 for r in rows])} | "
+            f"{fmt([r.rows_found for r in rows])} |"
+        )
     if args.tables:
         lines += [
             "",
-            "## Tables",
+            "## Tables from the manifest",
             "",
             "| method | tables | cell F1 | rows found |",
             "|---|---|---|---|",

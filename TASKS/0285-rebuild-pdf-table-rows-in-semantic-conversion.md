@@ -95,3 +95,15 @@ changelog for table or text-layer changes before deciding.
   Remaining short units: stray table remnants, headings, page-top labels, merged column text
   ("Author. Banducci" - two entries in one text-layer line, unfixable at this layer). Next ideas: a
   gold standard (hand-labelled tables + page-level transcription) before deciding on the ML pack.
+- 2026-10-29 (gold standard, `scripts/eval/pdf-gold`, MiniCPM-OCR 1.0 AD-Q5_K_M via llama.cpp 0.8.0,
+  207 pages of the corpus incl. all table pages, 7.8 s/page): on pages both methods converted,
+  words F1 text-layer 0.90 / ML 0.90 (content survives equally); reading order 0.68 / 0.78;
+  paragraph precision 0.36 / 0.61; units per gold paragraph 6.6 / 1.35; model-found tables (13):
+  cell F1 0.30 / 0.64. The text layer produced nothing for 29 pages (5 PDFs, scans or partly
+  scanned), ML read all but one. Found and fixed: on two-column pages the text layer's cells carry
+  words of both columns, so `reflow.rs` now rebuilds such pages' lines from the word boxes (gutter
+  from word coverage, rows cut at the gutter, spanning titles kept whole, tables and running
+  headers preserved). Reading order 0.66 -> 0.68. Biggest remaining text-layer gap: text-heavy
+  tables (e.g. continued multi-column review tables) are read column by column because the table
+  gate only accepts datum-like cells. MiniCPM is a second opinion, not ground truth: hand-verify
+  a sample before trusting small differences.

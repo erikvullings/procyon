@@ -106,7 +106,18 @@ pub(crate) fn has_stray_brackets(nodes: &[Node]) -> bool {
 
 /// Joins wrapped lines into paragraphs and restores stray brackets, leaving every other node
 /// untouched. `pages` holds the word cells per page (index 0 is page 1); it may be empty.
+#[cfg(test)]
 pub(crate) fn reflow_lines(nodes: Vec<Node>, pages: &[PageWords]) -> Vec<Node> {
+    reflow_lines_ordered(nodes, pages, true)
+}
+
+/// As [`reflow_lines`]; `order_columns` re-reads two-column pages column by column. Layout-model
+/// output is already in reading order and passes `false`.
+pub(crate) fn reflow_lines_ordered(
+    nodes: Vec<Node>,
+    pages: &[PageWords],
+    order_columns: bool,
+) -> Vec<Node> {
     let furniture = running_furniture(&nodes);
     let mut output = Vec::with_capacity(nodes.len());
     let mut run: Vec<Line> = Vec::new();
@@ -123,7 +134,13 @@ pub(crate) fn reflow_lines(nodes: Vec<Node>, pages: &[PageWords]) -> Vec<Node> {
                     }
                 }
                 inner => {
-                    flush(&mut run, &mut output, pages.get(page));
+                    flush(
+                        &mut run,
+                        &mut output,
+                        pages.get(page),
+                        order_columns,
+                        &furniture,
+                    );
                     output.push(Node::Located {
                         location,
                         inner: Box::new(inner),
@@ -131,7 +148,13 @@ pub(crate) fn reflow_lines(nodes: Vec<Node>, pages: &[PageWords]) -> Vec<Node> {
                 }
             },
             other => {
-                flush(&mut run, &mut output, pages.get(page));
+                flush(
+                    &mut run,
+                    &mut output,
+                    pages.get(page),
+                    order_columns,
+                    &furniture,
+                );
                 if let Node::PageInfo { page_no, .. } = &other {
                     page = page_no.saturating_sub(1);
                 }
@@ -139,7 +162,13 @@ pub(crate) fn reflow_lines(nodes: Vec<Node>, pages: &[PageWords]) -> Vec<Node> {
             }
         }
     }
-    flush(&mut run, &mut output, pages.get(page));
+    flush(
+        &mut run,
+        &mut output,
+        pages.get(page),
+        order_columns,
+        &furniture,
+    );
     output
 }
 
@@ -183,7 +212,13 @@ fn running_furniture(nodes: &[Node]) -> std::collections::HashSet<String> {
         .collect()
 }
 
-fn flush(run: &mut Vec<Line>, output: &mut Vec<Node>, page: Option<&PageWords>) {
+fn flush(
+    run: &mut Vec<Line>,
+    output: &mut Vec<Node>,
+    page: Option<&PageWords>,
+    order_columns: bool,
+    furniture: &std::collections::HashSet<String>,
+) {
     if run.is_empty() {
         return;
     }
@@ -196,6 +231,30 @@ fn flush(run: &mut Vec<Line>, output: &mut Vec<Node>, page: Option<&PageWords>) 
         })
         .collect();
     let mut tables = table_rows::find_tables(&cells);
+    if order_columns
+        && let Some(page) = page
+        && let Some(gutter) = word_gutter(page)
+    {
+        let boxes: Vec<[u16; 4]> = tables
+            .iter()
+            .filter_map(|block| block.table.location)
+            .collect();
+        let rebuilt = lines_from_words(page, gutter, median_height(&lines), &boxes);
+        let rebuilt: Vec<Line> = rebuilt
+            .into_iter()
+            .filter(|line| {
+                !(in_margin_band(line.location) && furniture.contains(&furniture_key(&line.text)))
+            })
+            .collect();
+        if !rebuilt.is_empty() {
+            let paragraphs = merge_lines(in_column_order(rebuilt, Some(gutter)))
+                .into_iter()
+                .filter(has_content)
+                .collect::<Vec<_>>();
+            emit_with_tables(paragraphs, tables, output);
+            return;
+        }
+    }
     // A table sits where its first cell was, splitting the paragraphs around it.
     let mut owner = vec![None; lines.len()];
     for (number, block) in tables.iter().enumerate() {
@@ -207,13 +266,16 @@ fn flush(run: &mut Vec<Line>, output: &mut Vec<Node>, page: Option<&PageWords>) 
     let mut emitted = vec![false; tables.len()];
     let emit_lines = |pending: &mut Vec<Line>, output: &mut Vec<Node>| {
         output.extend(
-            merge_lines(join_same_line(std::mem::take(pending)))
-                .into_iter()
-                .filter(has_content)
-                .map(|line| Node::Located {
-                    location: line.location,
-                    inner: Box::new(Node::Paragraph { text: line.text }),
-                }),
+            merge_lines(join_same_line(columns_in_order(
+                std::mem::take(pending),
+                order_columns,
+            )))
+            .into_iter()
+            .filter(has_content)
+            .map(|line| Node::Located {
+                location: line.location,
+                inner: Box::new(Node::Paragraph { text: line.text }),
+            }),
         );
     };
     for (index, line) in lines.into_iter().enumerate() {
@@ -444,6 +506,302 @@ fn continues(
     // Back at the margin after an indented first line, but only for the paragraph's first line;
     // later lines at a different edge belong to something else.
     (previous.count == 1 && !previous.hanging).then_some(Continuation::Returning)
+}
+
+/// Widest crossing share of lines tolerated at the gutter (titles, captions spanning both columns).
+const MAX_SPANNING_SHARE: f32 = 0.12;
+/// Fewest word cells that make word-based column detection meaningful.
+const MIN_WORDS_FOR_COLUMNS: usize = 80;
+/// Smallest gap, in page units, between the last word of a left column and the first of the right
+/// for a spanning cell to be split there rather than kept as one line.
+const MIN_SPLIT_GAP: f32 = 4.0;
+/// Narrowest empty strip, in page units, that separates two columns.
+const MIN_GUTTER: u16 = 5;
+/// Share of the lines each column must hold.
+const MIN_COLUMN_SHARE: f32 = 0.25;
+/// Fewest lines that make column detection meaningful.
+const MIN_LINES_FOR_COLUMNS: usize = 12;
+
+/// Finds the x position of a gutter splitting `lines` into a left and a right column, if any.
+fn find_gutter(lines: &[Line]) -> Option<u16> {
+    if lines.len() < MIN_LINES_FOR_COLUMNS {
+        return None;
+    }
+    let left_edge = lines.iter().map(|line| line.location[0]).min()?;
+    let right_edge = lines.iter().map(|line| line.location[2]).max()?;
+    let width = right_edge.saturating_sub(left_edge);
+    if width < 100 {
+        return None;
+    }
+    let allowed = (lines.len() as f32 * MAX_SPANNING_SHARE) as usize;
+    // Candidate strips lie in the middle half of the text block.
+    let from = left_edge + width / 4;
+    let to = right_edge - width / 4;
+    let crossing = |x: u16| {
+        lines
+            .iter()
+            .filter(|line| line.location[0] + 2 < x && x + 2 < line.location[2])
+            .count()
+    };
+    let mut best: Option<(u16, u16)> = None; // (start, width) of the widest strip
+    let mut run_start: Option<u16> = None;
+    for x in from..=to {
+        if crossing(x) <= allowed {
+            run_start.get_or_insert(x);
+        } else if let Some(start) = run_start.take()
+            && best.is_none_or(|(_, w)| x - start > w)
+        {
+            best = Some((start, x - start));
+        }
+    }
+    if let Some(start) = run_start
+        && best.is_none_or(|(_, w)| to - start + 1 > w)
+    {
+        best = Some((start, to - start + 1));
+    }
+    let (start, strip) = best?;
+    if strip < MIN_GUTTER {
+        return None;
+    }
+    let gutter = start + strip / 2;
+    let left = lines
+        .iter()
+        .filter(|line| line.location[2] <= gutter + 2)
+        .count();
+    let right = lines
+        .iter()
+        .filter(|line| line.location[0] + 2 >= gutter)
+        .count();
+    let minimum = (lines.len() as f32 * MIN_COLUMN_SHARE) as usize;
+    (left >= minimum && right >= minimum).then_some(gutter)
+}
+
+/// Typical line height of a page, in page units; the unit of row grouping for word rebuilds.
+fn median_height(lines: &[Line]) -> f32 {
+    let mut heights: Vec<u16> = lines
+        .iter()
+        .map(|line| line.location[3].saturating_sub(line.location[1]))
+        .filter(|height| *height > 0)
+        .collect();
+    heights.sort_unstable();
+    heights
+        .get(heights.len() / 2)
+        .map_or(6.0, |height| f32::from(*height).max(3.0))
+}
+
+/// Emits paragraphs in order with each table placed before the first paragraph that starts at or
+/// below it; leftover tables follow the text.
+fn emit_with_tables(
+    paragraphs: Vec<Line>,
+    mut tables: Vec<table_rows::TableBlock>,
+    output: &mut Vec<Node>,
+) {
+    let mut pending: Vec<Option<table_rows::TableBlock>> = tables.drain(..).map(Some).collect();
+    let emit_table = |slot: &mut Option<table_rows::TableBlock>, output: &mut Vec<Node>| {
+        if let Some(block) = slot.take() {
+            output.push(Node::Table(block.table));
+        }
+    };
+    for paragraph in paragraphs {
+        for slot in &mut pending {
+            let above = slot
+                .as_ref()
+                .and_then(|block| block.table.location)
+                .is_some_and(|location| location[1] <= paragraph.location[1]);
+            if above {
+                emit_table(slot, output);
+            }
+        }
+        output.push(Node::Located {
+            location: paragraph.location,
+            inner: Box::new(Node::Paragraph {
+                text: paragraph.text,
+            }),
+        });
+    }
+    for slot in &mut pending {
+        emit_table(slot, output);
+    }
+}
+
+/// Puts a page's lines in column reading order when no word cells can rebuild them.
+fn columns_in_order(lines: Vec<Line>, order_columns: bool) -> Vec<Line> {
+    if order_columns {
+        in_column_order(lines, None)
+    } else {
+        lines
+    }
+}
+
+fn to_units(value: f32, extent: f32) -> f32 {
+    if extent <= 0.0 {
+        0.0
+    } else {
+        value / extent * GRID
+    }
+}
+
+/// Finds the gutter between two text columns from the page's word boxes: a strip of the middle
+/// half of the text block that almost no word touches, with a good share of the words each side.
+fn word_gutter(page: &PageWords) -> Option<u16> {
+    let words = &page.words;
+    if words.len() < MIN_WORDS_FOR_COLUMNS {
+        return None;
+    }
+    let spans: Vec<(f32, f32)> = words
+        .iter()
+        .map(|word| {
+            (
+                to_units(word.left, page.width),
+                to_units(word.right, page.width),
+            )
+        })
+        .collect();
+    let left_edge = spans.iter().map(|span| span.0).fold(f32::MAX, f32::min);
+    let right_edge = spans.iter().map(|span| span.1).fold(f32::MIN, f32::max);
+    let width = right_edge - left_edge;
+    if width < 100.0 {
+        return None;
+    }
+    let mut coverage = vec![0_u32; GRID as usize + 2];
+    for (left, right) in &spans {
+        let last = (right.max(0.0) as usize).min(GRID as usize + 1);
+        for count in &mut coverage[left.max(0.0) as usize..=last] {
+            *count += 1;
+        }
+    }
+    let allowed = (words.len() as f32 * 0.01).max(1.0) as u32;
+    let from = (left_edge + width / 4.0) as usize;
+    let to = (right_edge - width / 4.0) as usize;
+    let mut best: Option<(usize, usize)> = None;
+    let mut run: Option<usize> = None;
+    for (bin, &count) in coverage.iter().enumerate().take(to + 1).skip(from) {
+        if count <= allowed {
+            run.get_or_insert(bin);
+        } else if let Some(start) = run.take()
+            && best.is_none_or(|(_, w)| bin - start > w)
+        {
+            best = Some((start, bin - start));
+        }
+    }
+    if let Some(start) = run
+        && best.is_none_or(|(_, w)| to - start + 1 > w)
+    {
+        best = Some((start, to - start + 1));
+    }
+    let (start, strip) = best?;
+    if strip < usize::from(MIN_GUTTER) {
+        return None;
+    }
+    let gutter = (start + strip / 2) as f32;
+    let left = spans.iter().filter(|span| span.1 <= gutter + 2.0).count();
+    let right = spans.iter().filter(|span| span.0 + 2.0 >= gutter).count();
+    let minimum = (words.len() as f32 * MIN_COLUMN_SHARE) as usize;
+    (left >= minimum && right >= minimum).then_some(gutter as u16)
+}
+
+/// A word as `(left, right, top, text)` in page units.
+type Word<'a> = (f32, f32, f32, &'a str);
+
+/// Rebuilds a two-column page's lines from its word boxes. On such pages the text layer's cells
+/// carry words from both columns (a left-hand box holding left and right text alike), so lines
+/// cannot be trusted and are re-derived: words are grouped into rows, each row is cut at the
+/// gutter into a left and a right line, and a row whose words run continuously across the gutter
+/// (a title) stays whole. Words inside `exclude` (tables) are left to their own rendering.
+fn lines_from_words(page: &PageWords, gutter: u16, height: f32, exclude: &[[u16; 4]]) -> Vec<Line> {
+    let gutter = f32::from(gutter);
+    let mut words: Vec<Word> = page
+        .words
+        .iter()
+        .map(|word| {
+            (
+                to_units(word.left, page.width),
+                to_units(word.right, page.width),
+                to_units(word.top, page.height),
+                word.text.as_str(),
+            )
+        })
+        .filter(|(left, right, top, _)| {
+            let (centre_x, centre_y) = ((left + right) / 2.0, top + height / 2.0);
+            !exclude.iter().any(|b| {
+                centre_x >= f32::from(b[0]) - 1.0
+                    && centre_x <= f32::from(b[2]) + 1.0
+                    && centre_y >= f32::from(b[1]) - 1.0
+                    && centre_y <= f32::from(b[3]) + 1.0
+            })
+        })
+        .filter(|word| !word.3.trim().is_empty())
+        .collect();
+    words.sort_by(|a, b| a.2.total_cmp(&b.2).then(a.0.total_cmp(&b.0)));
+
+    let mut lines = Vec::new();
+    let mut start = 0;
+    while start < words.len() {
+        let row_top = words[start].2;
+        let mut end = start + 1;
+        while end < words.len() && words[end].2 - row_top <= height * 0.6 {
+            end += 1;
+        }
+        let mut row = words[start..end].to_vec();
+        row.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let (west, east): (Vec<&Word>, Vec<&Word>) = row
+            .iter()
+            .partition(|word| (word.0 + word.1) / 2.0 < gutter);
+        let gap = match (west.last(), east.first()) {
+            (Some(w), Some(e)) => e.0 - w.1,
+            _ => f32::MAX,
+        };
+        let sides: Vec<Vec<&Word>> = if gap < MIN_SPLIT_GAP {
+            vec![row.iter().collect()]
+        } else {
+            vec![west, east]
+                .into_iter()
+                .filter(|side| !side.is_empty())
+                .collect()
+        };
+        for side in sides {
+            let text = side.iter().map(|word| word.3).collect::<Vec<_>>().join(" ");
+            let left = side.iter().map(|word| word.0).fold(f32::MAX, f32::min);
+            let right = side.iter().map(|word| word.1).fold(f32::MIN, f32::max);
+            let top = row_top.max(0.0) as u16;
+            lines.push(Line::new(
+                [left as u16, top, right as u16, top + height as u16],
+                text,
+            ));
+        }
+        start = end;
+    }
+    lines
+}
+
+/// Re-reads a two-column page column by column. The text layer can hand the lines over row by
+/// row (left line, right line, ...), which would weave the columns into one paragraph. Lines that
+/// span the gutter (titles, abstracts) stay where they are and separate the column blocks.
+fn in_column_order(lines: Vec<Line>, known_gutter: Option<u16>) -> Vec<Line> {
+    let Some(gutter) = known_gutter.or_else(|| find_gutter(&lines)) else {
+        return lines;
+    };
+    let mut ordered: Vec<Line> = Vec::with_capacity(lines.len());
+    let (mut left, mut right): (Vec<Line>, Vec<Line>) = (Vec::new(), Vec::new());
+    let mut by_top = lines;
+    by_top.sort_by_key(|line| (line.location[1], line.location[0]));
+    let flush_columns = |left: &mut Vec<Line>, right: &mut Vec<Line>, ordered: &mut Vec<Line>| {
+        ordered.append(left);
+        ordered.append(right);
+    };
+    for line in by_top {
+        let [l, _, r, _] = line.location;
+        if l + 2 < gutter && gutter + 2 < r {
+            flush_columns(&mut left, &mut right, &mut ordered);
+            ordered.push(line);
+        } else if u32::from(l) + u32::from(r) < 2 * u32::from(gutter) {
+            left.push(line);
+        } else {
+            right.push(line);
+        }
+    }
+    flush_columns(&mut left, &mut right, &mut ordered);
+    ordered
 }
 
 /// Joins fragments the text layer painted on one line (an italic abbreviation, a lone `=`).
@@ -712,6 +1070,59 @@ mod tests {
         assert_eq!(out.len(), 5, "{out:?}");
         assert!(out.iter().all(|text| !text.contains("ZYCH")));
         assert!(out.iter().any(|text| text == "Chapter Two"));
+    }
+
+    #[test]
+    fn a_two_column_page_is_read_column_by_column() {
+        // Lines arrive row by row: left column line, right column line, next row...
+        let mut nodes = vec![line(
+            [60, 20, 460, 26],
+            "A title spanning both columns of the page",
+        )];
+        let left = [
+            "Left column opens a paragraph that",
+            "continues down the left side of the",
+            "page and ends at the bottom of it.",
+            "Left second paragraph begins here and",
+            "runs on for a few more lines of text",
+            "before the column finally comes to an end.",
+        ];
+        let right = [
+            "Right column starts its own paragraph",
+            "which continues in the right hand side",
+            "of the page until it reaches its end.",
+            "Right second paragraph begins here and",
+            "also runs on for several more lines of",
+            "text before the right column stops too.",
+        ];
+        for (index, (l, r)) in left.iter().zip(right.iter()).enumerate() {
+            let top = 40 + 8 * index as u16;
+            nodes.push(line([60, top, 250, top + 6], l));
+            nodes.push(line([270, top, 460, top + 6], r));
+        }
+        let out: Vec<String> = texts(&reflow_lines(nodes, &[]))
+            .into_iter()
+            .filter(|text| !text.is_empty())
+            .collect();
+        let joined = out.join(" | ");
+        let left_end = joined.find("comes to an end").expect("left text");
+        let right_start = joined.find("Right column starts").expect("right text");
+        assert!(left_end < right_start, "{joined}");
+        assert!(!joined.contains("of the Right"), "{joined}");
+    }
+
+    #[test]
+    fn a_single_column_page_keeps_its_order() {
+        let mut nodes = Vec::new();
+        for index in 0..14 {
+            let top = 40 + 8 * index as u16;
+            nodes.push(line(
+                [60, top, 460, top + 6],
+                &format!("Line number {index} of one wide column"),
+            ));
+        }
+        let out = texts(&reflow_lines(nodes, &[]));
+        assert!(out[0].starts_with("Line number 0"), "{out:?}");
     }
 
     #[test]
