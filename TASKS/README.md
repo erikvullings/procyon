@@ -489,5 +489,5 @@ content streaming, and mapping concerns live in dedicated modules with interface
   table cell; related to 0284)*
 - [x] 0286 OCR: opt-in replace original PDF with OCR'd version *(done — local writable files only,
   verified replace, original to trash; builds on 0197; real OCRmyPDF + OS trash not run end-to-end)*
-- [ ] 0287 Chunk size range 256-1000 estimated tokens *(open — model-derived, not user-adjustable;
-  measure retrieval first; related to 0285)*
+- [ ] 0287 Chunk size range 256-1000 estimated tokens *(in_progress — `for_model_input_limit` added but
+  not wired; no retrieval eval possible, defaults kept; stats in task notes)*
