@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 
 use docling_core::{DoclingDocument, FieldItem, Node, Table};
 mod reflow;
+mod table_rows;
 
 use docling_pdf::{PdfError, convert_text_layer_pages};
 use fm_semantic_conversion::{
@@ -43,7 +44,7 @@ pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
 /// included: enabling it retries only previously textless PDFs, while
 /// disabling it makes reconciliation remove their OCR-derived occurrences.
 /// OCR-derived documents carry [`OCRMYPDF_CONVERTER_VERSION`] themselves.
-pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2052009+baseline/9";
+pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2052009+baseline/10";
 /// Version of the optional OCRmyPDF plus deterministic Docling composition.
 pub const OCRMYPDF_CONVERTER_VERSION: ComponentVersion =
     ComponentVersion::new("ocrmypdf-docling", 2);

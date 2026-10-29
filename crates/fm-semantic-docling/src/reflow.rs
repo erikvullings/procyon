@@ -8,6 +8,8 @@
 
 use docling_core::Node;
 
+use crate::table_rows;
+
 /// Horizontal tolerance, in Docling's 0–511 page units, for "same left edge" and "reaches the
 /// right edge".
 const EDGE_TOLERANCE: u16 = 3;
@@ -114,11 +116,46 @@ fn flush(run: &mut Vec<Line>, output: &mut Vec<Node>, page: Option<&PageWords>) 
     if run.is_empty() {
         return;
     }
-    let lines = merge_lines(restore_brackets(std::mem::take(run), page));
-    output.extend(lines.into_iter().map(|line| Node::Located {
-        location: line.location,
-        inner: Box::new(Node::Paragraph { text: line.text }),
-    }));
+    let lines = restore_brackets(std::mem::take(run), page);
+    let cells: Vec<table_rows::Cell<'_>> = lines
+        .iter()
+        .map(|line| table_rows::Cell {
+            location: line.location,
+            text: &line.text,
+        })
+        .collect();
+    let mut tables = table_rows::find_tables(&cells);
+    // A table sits where its first cell was, splitting the paragraphs around it.
+    let mut owner = vec![None; lines.len()];
+    for (number, block) in tables.iter().enumerate() {
+        for &member in &block.members {
+            owner[member] = Some(number);
+        }
+    }
+    let mut pending: Vec<Line> = Vec::new();
+    let mut emitted = vec![false; tables.len()];
+    let emit_lines = |pending: &mut Vec<Line>, output: &mut Vec<Node>| {
+        output.extend(
+            merge_lines(std::mem::take(pending))
+                .into_iter()
+                .map(|line| Node::Located {
+                    location: line.location,
+                    inner: Box::new(Node::Paragraph { text: line.text }),
+                }),
+        );
+    };
+    for (index, line) in lines.into_iter().enumerate() {
+        match owner[index] {
+            None => pending.push(line),
+            Some(number) if !emitted[number] => {
+                emitted[number] = true;
+                emit_lines(&mut pending, output);
+                output.push(Node::Table(std::mem::take(&mut tables[number].table)));
+            }
+            Some(_) => {}
+        }
+    }
+    emit_lines(&mut pending, output);
 }
 
 fn is_bracket(text: &str) -> Option<char> {

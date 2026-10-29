@@ -245,7 +245,7 @@ SHA-256 prefix; development IDs and the public developer key are never accepted 
 The production identity contract pins `intfloat/multilingual-e5-small` at revision
 `614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
 `xlm-roberta-sentencepiece.614241f6`, converter
-`docling-pdf/2052009+baseline/9`, chunker `structural/3`, worker protocol 1, and index schema 2.
+`docling-pdf/2052009+baseline/10`, chunker `structural/3`, worker protocol 1, and index schema 2.
 This converter revision repairs a narrowly identified PDF text-layout gap inside Elsevier DOI
 links; it invalidates derived PDF vectors and requires a new signed, measured qualification.
 The previously recorded `docling-pdf/1036000+baseline/2` evaluation remains historical evidence,

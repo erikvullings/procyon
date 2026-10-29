@@ -271,6 +271,39 @@ fn deterministic_docling_orders_positioned_columns_instead_of_operator_order() {
     );
 }
 
+#[test]
+fn statistics_table_cells_become_one_table_unit_with_whole_rows() {
+    let rows = [
+        ("Study", "d", "95% CI"),
+        ("Smith", ".070", "0.145 (0.021, 0.269)"),
+        ("Jones", ".120", "0.174 (0.011, 0.463)"),
+        ("Brown", ".095", "0.130 (0.002, 0.318)"),
+    ];
+    let mut content = String::from("BT /F1 10 Tf\n");
+    for (index, (study, effect, interval)) in rows.iter().enumerate() {
+        let y = 700 - index * 14;
+        content.push_str(&format!(
+            "1 0 0 1 72 {y} Tm ({study}) Tj\n1 0 0 1 200 {y} Tm ({effect}) Tj\n\
+             1 0 0 1 320 {y} Tm ({interval}) Tj\n"
+        ));
+    }
+    content.push_str("ET\n");
+    let bytes = positioned_pdf(&content);
+    let outcome = converter()
+        .convert(
+            SourceContent::Bytes(&bytes),
+            &DocumentMetadata::unknown().with_extension("pdf"),
+            &ConversionContext::new(),
+        )
+        .expect("Docling conversion");
+    let units = outcome.document().expect("Docling document").units();
+
+    assert_eq!(units.len(), 1, "{units:?}");
+    assert_eq!(units[0].kind, fm_semantic_conversion::UnitKind::Table);
+    assert!(units[0].text.contains("Smith\t.070\t0.145 (0.021, 0.269)"));
+    assert!(units[0].text.contains("Brown\t.095\t0.130 (0.002, 0.318)"));
+}
+
 #[cfg(unix)]
 mod ocrmypdf {
     use std::fs;

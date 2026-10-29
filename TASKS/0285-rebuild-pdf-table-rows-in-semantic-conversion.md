@@ -1,6 +1,6 @@
 # 0285 Rebuild PDF table rows in semantic conversion
 
-Status: open
+Status: in progress (text-layer fallback done; ML pack open)
 Priority: medium
 Subsystem: backend
 Depends on: none
@@ -63,3 +63,14 @@ changelog for table or text-layer changes before deciding.
   decimals like `25.1` (that split packing and gave 522 chunks, now 177), and empty units after
   dot-leader cleanup are dropped (they made the adapter reject the document and fall back to the
   baseline extractor). Not tried: docling-pdf 2.53.3, geometric reconstruction, the ML pipeline.
+- 2026-10-29: Added `fm-semantic-docling/src/table_rows.rs` (option 1, applied inside `reflow::flush`):
+  rows are clustered by vertical centre, a block needs >=3 multi-cell rows, >=8 cells and >=60%
+  datum-like cells (so prose and two-column text never qualify); tracks come from the widest row of
+  alphanumeric cells, stray marks (`*`, brackets) join their neighbour, gaps are padded with empty
+  cells (document_parsing_protocol rules: whitespace tables, never invent, header/body count
+  mismatch, marks in cells). Emits `Node::Table` -> `UnitKind::Table`. Pipeline identity bumped to
+  `docling-pdf/2052009+baseline/10`. Fixture-PDF regression test in `tests/docling_pdf_adapter.rs`.
+  **Still open:** option 3 (ML layout + TableFormer in the signed docling pack, catalog, download
+  size, licence disclosure) - needs model artifacts and pack signing; not started. Not verified on
+  the real juveniles PDF (not on this machine). Protocol ideas not yet used: multi-row header tiers,
+  total/subtotal rows, cross-page table continuation.
