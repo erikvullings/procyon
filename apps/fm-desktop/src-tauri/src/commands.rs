@@ -550,6 +550,13 @@ pub(crate) fn set_window_decorations<R: Runtime>(window: Window<R>, decorations:
     }
 }
 
+/// Opens the WebView developer console. The `devtools` Cargo feature keeps it available in
+/// release builds, where it is otherwise compiled out.
+#[tauri::command]
+pub(crate) fn open_devtools<R: Runtime>(webview_window: tauri::WebviewWindow<R>) {
+    webview_window.open_devtools();
+}
+
 /// Returns the desktop diagnostics snapshot without requiring an HTTP server in the Tauri host.
 #[tauri::command]
 pub(crate) async fn get_diagnostics(

@@ -1,9 +1,12 @@
 /** Diagnostics view component (spec §30). */
 
+import { invoke } from '@tauri-apps/api/core';
 import type { FactoryComponent, Vnode } from 'mithril';
 import m from 'mithril';
+import { toast } from 'mithril-materialized';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
+import { writeSystemClipboardText } from '../clipboard/copy-selection-actions';
 import type { DiagnosticsView } from './diagnostics';
 import { diagnosticsFromDto } from './diagnostics';
 
@@ -77,6 +80,16 @@ export const DiagnosticsViewComponent: FactoryComponent<DiagnosticsViewAttrs> = 
             },
             t('diagnostics', 'copyForBugReport'),
           ),
+          diag.runtimeCapabilities.runtime === 'tauri'
+            ? m(
+                'button.copy-btn',
+                {
+                  onclick: () => void openDevConsole(),
+                  title: t('diagnostics', 'openDevConsoleTitle'),
+                },
+                t('diagnostics', 'openDevConsole'),
+              )
+            : undefined,
         ]),
 
         m('section.diagnostics-section', [
@@ -227,6 +240,14 @@ export const DiagnosticsViewComponent: FactoryComponent<DiagnosticsViewAttrs> = 
           ? m('section.diagnostics-section', [
               m('h2', t('diagnostics', 'recentErrorsCount', { count: diag.recentErrors.length })),
               m(
+                'button.copy-btn',
+                {
+                  onclick: () => void copyToClipboard(formatRecentErrors(diag.recentErrors)),
+                  title: t('diagnostics', 'copyErrorsTitle'),
+                },
+                t('diagnostics', 'copyErrors'),
+              ),
+              m(
                 'div.errors-list',
                 diag.recentErrors.map((error) =>
                   m('div.error-entry', [
@@ -281,24 +302,50 @@ async function copyDiagnosticsToClipboard(
     ),
     '',
     `=== Recent Errors (${diag.recentErrors.length}) ===`,
-    ...diag.recentErrors.map(
-      (error) =>
-        `  [${error.timestamp}] ${error.code}: ${error.message}${
-          error.context === undefined ? '' : `\n    ${error.context.replaceAll('\n', '\n    ')}`
-        }`,
-    ),
+    formatRecentErrors(diag.recentErrors),
   ]
     .filter((l) => l !== null)
     .join('\n');
 
-  if (navigator.clipboard) {
-    await navigator.clipboard.writeText(lines);
-  } else {
-    const ta = document.createElement('textarea');
-    ta.value = lines;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
+  await copyToClipboard(lines);
+}
+
+function formatRecentErrors(errors: DiagnosticsView['recentErrors']): string {
+  return errors
+    .map(
+      (error) =>
+        `  [${error.timestamp}] ${error.code}: ${error.message}${
+          error.context === undefined ? '' : `\n    ${error.context.replaceAll('\n', '\n    ')}`
+        }`,
+    )
+    .join('\n');
+}
+
+/** Shows a toast whose text is set as text, never parsed as markup. */
+function toastText(text: string, warning = false): void {
+  const message = document.createElement('span');
+  message.textContent = text;
+  toast({ html: message.outerHTML, ...(warning ? { className: 'fm-toast-warning' } : {}) });
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Copies text and reports the outcome: a denied clipboard must not fail silently. */
+async function copyToClipboard(text: string): Promise<void> {
+  try {
+    await writeSystemClipboardText(text);
+    toastText(t('diagnostics', 'copiedToClipboard'));
+  } catch (error) {
+    toastText(t('diagnostics', 'copyFailed', { error: errorText(error) }), true);
+  }
+}
+
+async function openDevConsole(): Promise<void> {
+  try {
+    await invoke('open_devtools');
+  } catch (error) {
+    toastText(t('diagnostics', 'devConsoleFailed', { error: errorText(error) }), true);
   }
 }
