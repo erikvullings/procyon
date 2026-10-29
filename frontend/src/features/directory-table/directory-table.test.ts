@@ -343,6 +343,36 @@ describe('DirectoryTable rows', () => {
     });
   });
 
+  it('keeps rendering when a listing carries the same entry id twice', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const named = (id: string): EntrySummary =>
+      entry({ id, name: id, location: { providerId: 'file', uri: `mock:///${id}` } });
+    let entries = ['a'].map(named);
+    m.mount(root, {
+      view: () =>
+        m(DirectoryTable, {
+          state: { type: 'loaded' },
+          source: entryArraySource(entries),
+          viewportHeight: 200,
+        }),
+    });
+    m.redraw.sync();
+    for (const ids of [
+      ['f', 'a', 'f', 'b', 'b', 'f', 'a'],
+      ['b', 'a', 'a', 'f'],
+      ['x', 'y'],
+    ]) {
+      entries = ids.map(named);
+      m.redraw.sync();
+    }
+
+    expect(errors).not.toHaveBeenCalled();
+    expect(
+      [...root.querySelectorAll('.fm-directory-row')].map((row) => row.textContent?.slice(0, 1)),
+    ).toEqual(['x', 'y']);
+    errors.mockRestore();
+  });
+
   it('does not stripe the empty space after a short listing', () => {
     mount({
       state: { type: 'loaded' },

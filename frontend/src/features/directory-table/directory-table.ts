@@ -1029,6 +1029,10 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
       const now = Date.now();
       let sawUnloadedEntry = false;
       if (source !== undefined && window !== undefined && state === undefined) {
+        // A listing can briefly carry one entry twice (a refresh racing a page append). Mithril's
+        // keyed diff mutates its old children and then dereferences null for a repeated key, which
+        // aborts the patch and strands the previous listing's rows, so repeats get a distinct key.
+        const usedRowKeys = new Set<string>();
         for (let index = window.start; index < window.end; index += 1) {
           const displayRow = displayRows?.[index];
           if (displayRow?.type === 'group') {
@@ -1135,12 +1139,14 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
             entry.kind === 'directory'
               ? attrs.activeSourceStates?.get(`${entry.location.providerId}:${entry.location.uri}`)
               : undefined;
+          const repeated = usedRowKeys.has(entry.id);
+          usedRowKeys.add(entry.id);
           rows.push(
             m(
               '.fm-directory-row',
               {
-                key: entry.id,
-                id: rowId(entry.id),
+                key: repeated ? `${entry.id}#${index}` : entry.id,
+                id: repeated ? undefined : rowId(entry.id),
                 role: 'row',
                 'aria-rowindex': index + 2,
                 'aria-selected': selected ? 'true' : 'false',
