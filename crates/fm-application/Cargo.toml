@@ -85,6 +85,9 @@ zeroize.workspace = true
 [lints]
 workspace = true
 
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+fm-platform-macos.workspace = true
+
 [dev-dependencies]
 ed25519-dalek.workspace = true
 fm-ssh.workspace = true

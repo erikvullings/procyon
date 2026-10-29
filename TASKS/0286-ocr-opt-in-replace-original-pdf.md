@@ -70,4 +70,15 @@ original with the OCR'd version so OCR happens once.
   (non-remediation) OCR during indexing accumulates until the next remediation job ends; directory
   mtime/permission failures on the parent surface as `replaceFailed`; no cap on source size read for
   verification beyond the existing PDF ingest limit.
+- 2026-10-29 Real-flow check (macOS, real OCRmyPDF 17 at /opt/homebrew/bin, real `MacosPlatformAdapter`
+  trash) on COPIES of 4 PDFs from the Leiden corpus, via the ignored test
+  `real_ocrmypdf_replaces_scanned_pdf_copies` (`PROCYON_OCR_REPLACE_TEST_DIR=<dir with docs/>`, run with
+  `cargo test -p fm-application --test semantic_indexing -- --ignored real_ocrmypdf`). Result: the 3
+  image-only PDFs (early attachment 6p, peer victimization 9p, developmental assets 9p) were all
+  `Succeeded / Replaced`; afterwards pdftotext finds 29.7k / 37.3k / 14.0k chars and the page counts
+  are unchanged. Loeber (16p, 508 chars, partly scanned) is not reported as requiring OCR (it has a
+  text layer), so it was correctly left untouched. The first run showed `RetainedOutputMissing`, which
+  was a harness bug (default 30 s conversion budget starved OCR; the worker uses 4 min) - no product
+  bug found. The Trash contents could not be listed (~/.Trash is permission-protected for the agent),
+  so the trashed original is inferred from the adapter call succeeding. Windows/Linux still untested.
 

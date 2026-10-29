@@ -2899,6 +2899,7 @@ dependencies = [
  "fm-metadata",
  "fm-operations",
  "fm-platform",
+ "fm-platform-macos",
  "fm-plugin-api",
  "fm-plugin-runtime",
  "fm-pptx-renderer",
