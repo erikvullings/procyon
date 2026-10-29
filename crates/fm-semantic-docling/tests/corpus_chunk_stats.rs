@@ -101,3 +101,87 @@ fn chunk_statistics() {
         );
     }
 }
+
+fn json_string(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push('"');
+    for character in text.chars() {
+        match character {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push(' '),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// Writes the embedding input of every chunk, per candidate maximum, as JSON lines
+/// (`<out>/<max>/<pdf stem>.jsonl`) for `scripts/eval/retrieval`.
+#[test]
+#[ignore = "needs PROCYON_DUMP_DIR (a folder of PDFs) and PROCYON_CHUNK_OUT"]
+fn dump_chunks() {
+    let directory = PathBuf::from(std::env::var("PROCYON_DUMP_DIR").expect("PROCYON_DUMP_DIR"));
+    let out = PathBuf::from(std::env::var("PROCYON_CHUNK_OUT").expect("PROCYON_CHUNK_OUT"));
+    let maxima: Vec<u32> = std::env::var("PROCYON_CHUNK_MAXIMA")
+        .unwrap_or_else(|_| "256,384,512,768,1000".to_owned())
+        .split(',')
+        .map(|value| value.trim().parse().expect("numeric maximum"))
+        .collect();
+    let mut files: Vec<PathBuf> = fs::read_dir(&directory)
+        .expect("readable directory")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|extension| extension == "pdf"))
+        .collect();
+    files.sort();
+    let converter = converter_with_baseline_fallback();
+    for &maximum in &maxima {
+        fs::create_dir_all(out.join(maximum.to_string())).expect("create output directory");
+    }
+    for path in files {
+        let stem = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .expect("utf-8 file name")
+            .to_owned();
+        let bytes = fs::read(&path).expect("read PDF");
+        let context = ConversionContext::new().with_budgets(ConversionBudgets {
+            timeout: std::time::Duration::from_secs(1_800),
+            ..ConversionBudgets::default()
+        });
+        let outcome = converter
+            .convert(
+                SourceContent::Bytes(&bytes),
+                &DocumentMetadata::unknown().with_extension("pdf"),
+                &context,
+            )
+            .expect("conversion");
+        let Some(document) = outcome.document() else {
+            continue;
+        };
+        for &maximum in &maxima {
+            let chunker = chunker(maximum * 25 / 32, maximum, maximum * 3 / 32);
+            let mut lines = String::new();
+            for chunk in chunker.chunk(document) {
+                lines.push_str(&format!(
+                    "{{\"doc\":{},\"index\":{},\"tokens\":{},\"navigation\":{},\"text\":{}}}\n",
+                    json_string(&stem),
+                    chunk.index,
+                    chunk.estimated_tokens,
+                    chunk.is_navigation,
+                    json_string(&chunk.embedding_input),
+                ));
+            }
+            fs::write(
+                out.join(maximum.to_string()).join(format!("{stem}.jsonl")),
+                lines,
+            )
+            .expect("write chunks");
+        }
+    }
+}

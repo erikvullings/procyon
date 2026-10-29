@@ -1,0 +1,167 @@
+[
+  {
+    "q": "Why compare males and females on the childhood risk factors for life-course-persistent antisocial behavior?",
+    "doc": "Childhood predictors",
+    "evidence": "group-by-sex interaction"
+  },
+  {
+    "q": "How many childhood indicators were compared between child-onset and adolescent-onset study members in the Dunedin study?",
+    "doc": "Childhood predictors",
+    "evidence": "26 major childhood indicators"
+  },
+  {
+    "q": "What limitation does the FFP fidelity study mention about who rated program fidelity?",
+    "doc": "FFP method",
+    "evidence": "supervisors rated their own team members"
+  },
+  {
+    "q": "Why is more data needed on the reliability and validity of the FFP-GRM fidelity measure?",
+    "doc": "FFP method",
+    "evidence": "reliability and validity of the FFP-GRM are scarce"
+  },
+  {
+    "q": "What did Halleröd find about young people's own view of their future prospects and later labour market outcomes?",
+    "doc": "Future Prospects",
+    "evidence": "outside the labor market"
+  },
+  {
+    "q": "How can vested interests bias the way youth problems like adolescent drug abuse are defined?",
+    "doc": "Models of Youth",
+    "evidence": "vested interests"
+  },
+  {
+    "q": "How was early resilience research related to stress and coping research?",
+    "doc": "Models of Youth",
+    "evidence": "under the rubric of stress and coping"
+  },
+  {
+    "q": "Which family factors were significant risk factors for radicalization when effect sizes were compared?",
+    "doc": "Radicalisation",
+    "evidence": "extremist family members and family conflict"
+  },
+  {
+    "q": "What did Emmelkamp et al. conclude about negative parenting and radicalization?",
+    "doc": "Radicalisation",
+    "evidence": "negative parenting and radicalization was not statistically significant"
+  },
+  {
+    "q": "Is belonging to a cultural minority a risk factor for persistent offending?",
+    "doc": "Risk factors for persistent",
+    "evidence": "being non-caucasian"
+  },
+  {
+    "q": "How do secure caregiver relationships protect children from toxic stress?",
+    "doc": "The Impact of Attachment",
+    "evidence": "buffering effect against toxic stress"
+  },
+  {
+    "q": "Which experiences count as attachment-based adverse childhood experiences?",
+    "doc": "The Impact of Attachment",
+    "evidence": "psychological maltreatment, physical or emotional neglect"
+  },
+  {
+    "q": "How does Bronfenbrenner define a microsystem?",
+    "doc": "The_Bronfenbrenner",
+    "evidence": "pattern of activities, roles, and interpersonal relations"
+  },
+  {
+    "q": "Why is the relation between home and the child clinic or kindergarten relevant for socialization?",
+    "doc": "The_Bronfenbrenner",
+    "evidence": "home and mother and child clinic"
+  },
+  {
+    "q": "Were offenders more insecurely attached than non-offending controls across studies?",
+    "doc": "attachment and violent",
+    "evidence": "research question 1"
+  },
+  {
+    "q": "How did attachment styles of mentally disordered offenders compare with non-offenders with mental disorders?",
+    "doc": "attachment and violent",
+    "evidence": "timmerman and emmelkamp (2006)"
+  },
+  {
+    "q": "What attributions do abusive parents make about their children's behavior?",
+    "doc": "content",
+    "evidence": "internal/external, stable/unstable"
+  },
+  {
+    "q": "How were study results converted to correlation coefficients in the meta-analysis?",
+    "doc": "content",
+    "evidence": "lipsey and wilson (2001)"
+  },
+  {
+    "q": "Which informants reported less progress on problem behavior in interventions for multiproblem families?",
+    "doc": "context specific",
+    "evidence": "children often reported less progress"
+  },
+  {
+    "q": "Did randomized controlled trials find larger effect sizes than pretest-posttest studies?",
+    "doc": "context specific",
+    "evidence": "did not automatically result in higher effect sizes"
+  },
+  {
+    "q": "How can poor phonological processing affect learning in atypical development?",
+    "doc": "development of the a typical",
+    "evidence": "poor phonological processing could affect word decoding"
+  },
+  {
+    "q": "What is needed to ground arbitrary symbols such as letters in meaningful mental units?",
+    "doc": "development of the a typical",
+    "evidence": "grounding arbitrary symbols"
+  },
+  {
+    "q": "Is poor attachment to parents associated with delinquent behavior in the meta-analysis?",
+    "doc": "meta analyse hechting",
+    "evidence": "poor attachment to parents is associated with more delinquent behavior"
+  },
+  {
+    "q": "How do control theorists explain the gender gap in delinquency?",
+    "doc": "meta analyse hechting",
+    "evidence": "differences in the quality of bonds to parents"
+  },
+  {
+    "q": "Why do families with multiple deprivations have difficulties with social services?",
+    "doc": "multi problem families",
+    "evidence": "multiply-deprived life situations"
+  },
+  {
+    "q": "What are the core principles of social pedagogy in Germany?",
+    "doc": "multi problem families",
+    "evidence": "social pedagogy in germany"
+  },
+  {
+    "q": "Which conflict resolution strategies did parents report in Tanzanian pre-primary education?",
+    "doc": "ndijuye",
+    "evidence": "religious lessons (16.7%)"
+  },
+  {
+    "q": "How was the interview data analysed and what ethical permissions were obtained?",
+    "doc": "ndijuye",
+    "evidence": "confidentiality was observed"
+  },
+  {
+    "q": "What limitation does the review of parenting and internalizing problems mention about meta-analyses?",
+    "doc": "systematisch review",
+    "evidence": "57% of included associations"
+  },
+  {
+    "q": "Welke niet-justitiële interventies moeten externaliserende gedragsproblemen verminderen?",
+    "doc": "tk-bijlage",
+    "evidence": "36 niet-justitiële"
+  },
+  {
+    "q": "Is gespecialiseerd jongerenwerk effectief om afglijden naar criminaliteit te voorkomen?",
+    "doc": "tk-bijlage",
+    "evidence": "gespecialiseerd jongerenwerk"
+  },
+  {
+    "q": "How did PTSD mediate the link between sexual abuse and substance use in Latina women?",
+    "doc": "trauma en agressie",
+    "evidence": "latina women"
+  },
+  {
+    "q": "What does the self-medication hypothesis say about trauma and substance use?",
+    "doc": "trauma en agressie",
+    "evidence": "self-medication hypothesis"
+  }
+]

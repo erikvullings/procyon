@@ -42,3 +42,12 @@ maximum of ~1,000 tokens; do not make it user-adjustable (settings complexity).
   (queries + expected passages) with the real embedder, compare, then wire
   `for_model_input_limit(identity.max_input_tokens)` in `fm-semantic-worker/src/ingestion.rs` and bump
   `STRUCTURAL_CHUNKER_VERSION` to 6 (embedding cache keys include it, so documents rebuild).
+- 2026-10-29: Retrieval check with e5-small (`scripts/eval/retrieval`, 33 hand-written questions,
+  corpus chunks from the region-based converter `.../baseline/12`; maximum in estimated tokens):
+  256: MRR 0.380, hit@1 0.24; 384: 0.432 / 0.33; **512 (current): 0.492 / 0.42**; 768: 0.396 / 0.30
+  (24 chunks over the 512-token model limit, truncated); 1000: 0.345 / 0.24 (242 truncated).
+  Result: for e5-small keep 512 (smaller chunks lose, larger ones exceed the model). Since
+  `for_model_input_limit(512)` equals the current defaults, wiring it changes nothing for e5.
+  Not measured: any model above 512 (EmbeddingGemma weights are in `target/semantic-model-cache`
+  but no runner exists here). Leave `for_model_input_limit` unwired and keep chunker version 5
+  until a Gemma retrieval run shows larger chunks help. 33 questions is a small sample.
