@@ -111,6 +111,40 @@ struct RemediatingDocumentCapability {
     ingested_pdf_consents: Mutex<Vec<(String, bool)>>,
     /// Simulates the worker retaining OCR output: directory plus output bytes.
     retained_output: Option<(std::path::PathBuf, Vec<u8>)>,
+    /// Runs the real OCRmyPDF converter (retention directory, executable).
+    real_ocr: Option<(std::path::PathBuf, std::path::PathBuf)>,
+}
+
+impl RemediatingDocumentCapability {
+    /// Mirrors the semantic worker: the deterministic converter decides
+    /// whether OCR is needed and, once enabled, the real OCR converter runs
+    /// with output retention.
+    fn real_ocr_requires_ocr(&self, content: &[u8], ocr_enabled: bool) -> Option<bool> {
+        use fm_semantic_conversion::{
+            ConversionContext, ConversionOutcome, DocumentMetadata, SourceContent,
+        };
+
+        let (retention, executable) = self.real_ocr.as_ref()?;
+        let metadata = DocumentMetadata::unknown().with_media_type("application/pdf");
+        // The worker allows OCR four minutes per document.
+        let context =
+            ConversionContext::new().with_budgets(fm_semantic_conversion::ConversionBudgets {
+                timeout: Duration::from_secs(4 * 60),
+                ..Default::default()
+            });
+        let converter = if ocr_enabled {
+            fm_semantic_docling::converter_with_optional_ocr(Some(
+                fm_semantic_docling::OcrMyPdfConfiguration::new(executable)
+                    .with_retention_directory(retention),
+            ))
+        } else {
+            fm_semantic_docling::converter_with_optional_ocr(None)
+        };
+        let outcome = converter
+            .convert(SourceContent::Bytes(content), &metadata, &context)
+            .unwrap();
+        Some(matches!(outcome, ConversionOutcome::NoTextLayer { .. }))
+    }
 }
 
 /// Content the fake worker treats as a scan: legacy `scan-` fixtures and
@@ -132,6 +166,14 @@ impl RemediatingDocumentCapability {
             ingested_titles: Mutex::new(Vec::new()),
             ingested_pdf_consents: Mutex::new(Vec::new()),
             retained_output: None,
+            real_ocr: None,
+        }
+    }
+
+    fn real(retention: std::path::PathBuf, executable: std::path::PathBuf) -> Self {
+        Self {
+            real_ocr: Some((retention, executable)),
+            ..Self::new()
         }
     }
 
@@ -169,6 +211,16 @@ impl SemanticCapability for RemediatingDocumentCapability {
                 .expect("host supplies a real display title")
                 .clone(),
         );
+        let enabled = self.ocr_enabled.load(Ordering::Acquire);
+        if let Some(still_textless) = self.real_ocr_requires_ocr(&ingestion.content, enabled) {
+            if still_textless && !enabled {
+                return Ok(SemanticJobId::new(format!(
+                    "ocr-required-{}",
+                    ingestion.document_id.as_str()
+                )));
+            }
+            return self.inner.ingest(ingestion).await;
+        }
         if is_scan(&ingestion.content) && !self.ocr_enabled.load(Ordering::Acquire) {
             return Ok(SemanticJobId::new(format!(
                 "ocr-required-{}",
@@ -2736,6 +2788,114 @@ impl ReplaceHarness {
             .map(|entry| entry.unwrap().path())
             .collect()
     }
+}
+
+/// Real-flow check: `PROCYON_OCR_REPLACE_TEST_DIR` names a scratch directory
+/// holding COPIES of PDFs (never user originals). Needs OCRmyPDF and, for the
+/// OS trash, macOS. Run with `cargo test -p fm-application --test
+/// semantic_indexing -- --ignored real_ocrmypdf`.
+#[cfg(target_os = "macos")]
+#[ignore = "needs OCRmyPDF and a scratch directory of PDF copies"]
+#[tokio::test]
+async fn real_ocrmypdf_replaces_scanned_pdf_copies() {
+    let scratch = std::path::PathBuf::from(
+        std::env::var("PROCYON_OCR_REPLACE_TEST_DIR").expect("scratch directory"),
+    );
+    let root = scratch.join("docs");
+    let before = std::fs::read_dir(&root)
+        .unwrap()
+        .map(|entry| {
+            let path = entry.unwrap().path();
+            (path.clone(), std::fs::read(&path).unwrap())
+        })
+        .collect::<Vec<_>>();
+    let state = project_temp_dir("ocr-real-state-");
+    let retention = state.path().join("retention");
+    std::fs::create_dir_all(&retention).unwrap();
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x2861));
+    let library = library(&state);
+    let root_id = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(&root).unwrap(),
+    );
+    let capability = Arc::new(RemediatingDocumentCapability::real(
+        retention.clone(),
+        std::path::PathBuf::from("/opt/homebrew/bin/ocrmypdf"),
+    ));
+    let service = Arc::new(
+        FileManagerService::with_platform_adapter(
+            RuntimeKindDto::Tauri,
+            state.path().join("workspaces"),
+            state.path().join("settings"),
+            fm_events::EventBus::default(),
+            Arc::new(fm_platform_macos::MacosPlatformAdapter::new()),
+        )
+        .with_semantic_library_service(library)
+        .with_semantic_capability(capability)
+        .with_semantic_ocr_service(
+            SemanticOcrService::load(
+                state.path().join("ocr"),
+                Arc::new(OcrPolicyStore::load(state.path().join("ocr"))),
+                Arc::new(AvailableOcrProbe),
+            )
+            .with_retention_directory(retention),
+        ),
+    );
+    let report = service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    println!("reported as needing OCR: {:#?}", report.ocr_required_files);
+    service.set_semantic_ocr_consent(true).await.unwrap();
+    service
+        .set_semantic_ocr_replace_original(true)
+        .await
+        .unwrap();
+    let job = service
+        .start_semantic_ocr_remediation(OcrRemediationScope::AllRequired)
+        .unwrap();
+    let shutdown = CancellationToken::new();
+    let runner =
+        tokio::spawn(Arc::clone(&service).run_semantic_ocr_remediation_jobs(shutdown.clone()));
+    let finished = tokio::time::timeout(Duration::from_secs(1500), async {
+        loop {
+            let current = service
+                .semantic_ocr_status()
+                .jobs
+                .into_iter()
+                .find(|candidate| candidate.id == job.id)
+                .unwrap();
+            if current.state != OcrRemediationState::Queued
+                && current.state != OcrRemediationState::Running
+            {
+                return current;
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    })
+    .await
+    .expect("remediation finished");
+    shutdown.cancel();
+    runner.await.unwrap();
+    for file in &finished.files {
+        println!(
+            "{} => {:?} / {:?}",
+            file.location.uri, file.outcome, file.replacement
+        );
+    }
+    for (path, original) in &before {
+        let now = std::fs::read(path).unwrap();
+        println!("{}: replaced={}", path.display(), &now != original);
+    }
+    assert!(
+        finished
+            .files
+            .iter()
+            .all(|file| file.replacement == Some(OcrReplacementOutcome::Replaced)),
+        "{:#?}",
+        finished.files
+    );
 }
 
 #[tokio::test]
