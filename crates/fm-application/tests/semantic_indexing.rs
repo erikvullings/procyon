@@ -170,6 +170,7 @@ impl RemediatingDocumentCapability {
         }
     }
 
+    #[cfg(target_os = "macos")]
     fn real(retention: std::path::PathBuf, executable: std::path::PathBuf) -> Self {
         Self {
             real_ocr: Some((retention, executable)),
