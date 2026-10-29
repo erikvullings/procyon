@@ -262,10 +262,19 @@ def main() -> int:
     parser.add_argument(
         "--report", type=Path, help="also write the Markdown report here"
     )
+    parser.add_argument(
+        "--page-scores",
+        type=Path,
+        help="write one JSON line per scored page (method, pdf, page, scores) here",
+    )
     args = parser.parse_args()
 
     verified = set(args.verified.read_text().split()) if args.verified else set()
-    methods = sorted(path.name for path in args.dump.iterdir() if path.is_dir())
+    methods = sorted(
+        path.name
+        for path in args.dump.iterdir()
+        if path.is_dir() and path.name != "confidence"
+    )
     pages_all = {m: Report() for m in methods}
     pages_checked = {m: Report() for m in methods}
     auto_tables: dict[str, list[TableScore]] = {m: [] for m in methods}
@@ -273,6 +282,7 @@ def main() -> int:
     empty_docs: dict[str, set[str]] = {}
     per_document: dict[tuple[str, str], list[PageScore]] = {}
 
+    page_rows: list[dict] = []
     for folder in sorted(
         p for p in args.gold.iterdir() if p.is_dir() and p.name != "tables"
     ):
@@ -297,6 +307,16 @@ def main() -> int:
                     empty_docs.setdefault(method, set()).add(folder.name)
                     continue
                 result = score_page(gold, units)
+                page_rows.append(
+                    {
+                        "method": method,
+                        "pdf": folder.name,
+                        "page": page,
+                        "order": result.order,
+                        "words_f1": result.words_f1,
+                        "para_precision": result.para_precision,
+                    }
+                )
                 pages_all[method].pages.setdefault("all", []).append(result)
                 per_document.setdefault((folder.name, method), []).append(result)
                 if f"{folder.name}/{gold_file.stem}" in verified:
@@ -305,6 +325,11 @@ def main() -> int:
                     auto_tables[method].append(
                         score_table(rows, best_candidate(rows, units))
                     )
+
+    if args.page_scores:
+        args.page_scores.write_text(
+            "".join(json.dumps(row) + "\n" for row in page_rows), encoding="utf-8"
+        )
 
     table_reports = {m: [] for m in methods}
     if args.tables:

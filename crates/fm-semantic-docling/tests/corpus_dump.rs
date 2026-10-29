@@ -129,3 +129,38 @@ fn dump_ml() {
         }
     }
 }
+
+/// Writes the per-page layout confidence as JSON lines to `<out>/confidence/<pdf stem>.jsonl`.
+#[test]
+#[ignore = "needs PROCYON_DUMP_DIR (a folder of PDFs) and PROCYON_DUMP_OUT"]
+fn dump_confidence() {
+    let directory = PathBuf::from(std::env::var("PROCYON_DUMP_DIR").expect("PROCYON_DUMP_DIR"));
+    let out = PathBuf::from(std::env::var("PROCYON_DUMP_OUT").expect("PROCYON_DUMP_OUT"))
+        .join("confidence");
+    fs::create_dir_all(&out).expect("create output directory");
+    for path in pdfs(&directory) {
+        let stem = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .expect("utf-8 file name");
+        let bytes = fs::read(&path).expect("read PDF");
+        let mut lines = String::new();
+        for (index, page) in fm_semantic_docling::page_confidence(&bytes)
+            .iter()
+            .enumerate()
+        {
+            writeln!(
+                lines,
+                "{{\"page\":{},\"score\":{:.4},\"rows\":{},\"unresolved\":{},\"cuts\":{},\"weak\":{}}}",
+                index + 1,
+                page.score,
+                page.rows,
+                page.unresolved_rows,
+                page.cuts,
+                page.weak_cuts
+            )
+            .expect("write to string");
+        }
+        fs::write(out.join(format!("{stem}.jsonl")), lines).expect("write confidence");
+    }
+}

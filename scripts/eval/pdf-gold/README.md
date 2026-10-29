@@ -68,3 +68,15 @@ Paragraph metrics depend on how the model separates paragraphs (blank lines, els
 treat them as relative between methods, not absolute. Tests were run with a stub server and with
 `pdftotext` output as pseudo-gold only: the pipeline is exercised, but no real MiniCPM run has been
 scored yet.
+
+## Page confidence
+
+`dump_confidence` (same test binary as the dumps) writes `<dump>/confidence/<pdf>.jsonl`, the
+geometric reconstruction's own trust score per page. Check that it predicts quality:
+
+```bash
+uv run score.py --gold /tmp/gold --dump /tmp/dump --page-scores /tmp/pages.jsonl
+uv run confidence.py --dump /tmp/dump --page-scores /tmp/pages.jsonl
+```
+
+Pages whose gold and output disagree on the words themselves (`--min-words-f1`) are skipped.

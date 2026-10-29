@@ -135,3 +135,13 @@ changelog for table or text-layer changes before deciding.
   0.522 -> 0.494, Radicalisation 0.620 -> 0.610. Units keep their line box and tables their
   region box (page + location) for later crops. Not done: spanning titles closer than 0.6 line
   height to the columns stay in the left column; ruling-line grids; per-page confidence.
+- 2026-10-29: Per-page confidence (`fm-semantic-docling/src/confidence.rs`, public
+  `page_confidence(pdf) -> Vec<PageConfidence>`, no output change so no identity bump). Score =
+  (1 - share of rows still holding a gap >= 1.2 line heights after segmentation) x (1 - 0.5 x
+  share of column cuts resting on a corridor < 1.6 line heights). Checked against the gold
+  (`scripts/eval/pdf-gold/confidence.py`, 171 pages with words F1 >= 0.5): Spearman 0.47 with
+  reading order; mean reading order by band 0.56 (score < 0.6, 37% of pages under 0.5) / 0.55 /
+  0.68 / 0.84 / 0.89 (>= 0.97, 8% under 0.5). A usable triage signal, not a guarantee: 8% of the
+  top band still reads badly. Not yet used by the converter; next use is "ML first, geometric
+  fallback" or flagging low-confidence pages for the ML pack. Gold pages with words F1 < 0.5
+  (e.g. attachment-and-violent-offending p7/9/18) disagree on the content itself and are skipped.

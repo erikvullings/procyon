@@ -17,6 +17,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use docling_core::{DoclingDocument, FieldItem, Node, Table};
+mod confidence;
+pub use confidence::{PageConfidence, page_confidence};
 mod reflow;
 mod regions;
 mod table_rows;

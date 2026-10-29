@@ -557,6 +557,22 @@ fn find_gutter(lines: &[Line]) -> Option<u16> {
     (left >= minimum && right >= minimum).then_some(gutter)
 }
 
+/// Typical line height of a page estimated from its words alone: 0.85 of the median distance
+/// between consecutive text rows.
+pub(crate) fn median_gap_height(words: &[regions::Word<'_>]) -> f32 {
+    let mut tops: Vec<f32> = words.iter().map(|word| word.top).collect();
+    tops.sort_by(f32::total_cmp);
+    tops.dedup_by(|a, b| (*a - *b).abs() < 1.0);
+    let mut gaps: Vec<f32> = tops
+        .windows(2)
+        .map(|pair| pair[1] - pair[0])
+        .filter(|gap| *gap > 2.0)
+        .collect();
+    gaps.sort_by(f32::total_cmp);
+    gaps.get(gaps.len() / 2)
+        .map_or(6.0, |gap| (gap * 0.85).max(3.0))
+}
+
 /// Typical line height of a page, in page units; the unit of row grouping for word rebuilds.
 fn median_height(lines: &[Line]) -> f32 {
     let mut heights: Vec<u16> = lines
