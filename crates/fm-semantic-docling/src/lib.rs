@@ -973,7 +973,34 @@ fn sanitized_executable_path(executable: &Path) -> Option<std::ffi::OsString> {
         directories.retain(|directory| directory != &parent);
         directories.insert(0, parent);
     }
+    append_missing(&mut directories, fixed_tool_directories());
     std::env::join_paths(directories).ok()
+}
+
+/// Appends the `extra` directories that `directories` does not hold yet.
+fn append_missing(directories: &mut Vec<PathBuf>, extra: Vec<PathBuf>) {
+    for directory in extra {
+        if !directories.contains(&directory) {
+            directories.push(directory);
+        }
+    }
+}
+
+/// Where OCRmyPDF finds its helper programs (Tesseract, Ghostscript, ...): a desktop app started
+/// from the Finder or a launcher carries a minimal `PATH` without the package manager's directory.
+#[cfg(not(windows))]
+fn fixed_tool_directories() -> Vec<PathBuf> {
+    fixed_ocrmypdf_locations()
+        .iter()
+        .filter_map(|location| location.parent())
+        .filter_map(|directory| directory.canonicalize().ok())
+        .filter(|directory| directory.is_dir())
+        .collect()
+}
+
+#[cfg(windows)]
+fn fixed_tool_directories() -> Vec<PathBuf> {
+    Vec::new()
 }
 
 #[cfg(unix)]
@@ -1846,6 +1873,23 @@ fn is_pdf(bytes: &[u8], metadata: &DocumentMetadata) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn missing_tool_directories_are_appended_once_after_the_existing_path() {
+        let mut directories = vec![PathBuf::from("/a"), PathBuf::from("/b")];
+        append_missing(
+            &mut directories,
+            vec![PathBuf::from("/b"), PathBuf::from("/c")],
+        );
+        assert_eq!(
+            directories,
+            [
+                PathBuf::from("/a"),
+                PathBuf::from("/b"),
+                PathBuf::from("/c")
+            ]
+        );
+    }
+
     use super::*;
     use docling_core::Table;
     use lopdf::{Object, Stream, dictionary};
