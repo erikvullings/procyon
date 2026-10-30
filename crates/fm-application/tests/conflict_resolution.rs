@@ -290,29 +290,29 @@ async fn a_destination_appearing_after_planning_is_resolved_like_an_initial_conf
     let root = tempfile::tempdir().unwrap();
     let destination = root.path().join("destination");
     fs::create_dir(&destination).unwrap();
+    // The big tree keeps the operation busy, so the conflicting `late` source is still unexecuted
+    // when the destination appears, however quickly planning finishes.
+    let big = root.path().join("big");
+    fs::create_dir(&big).unwrap();
+    for index in 0..4_000 {
+        fs::write(big.join(format!("{index:04}.txt")), b"data").unwrap();
+    }
     let source = root.path().join("late");
     fs::create_dir(&source).unwrap();
-    for index in 0..4_000 {
-        fs::write(source.join(format!("{index:04}.txt")), b"data").unwrap();
-    }
+    fs::write(source.join("0000.txt"), b"data").unwrap();
     let service = service(&root);
     let operation = start_copy(
         &service,
-        &[&source],
+        &[&big, &source],
         &destination,
         OperationConflictPolicyDto::Ask,
     );
-    for _ in 0..4_000 {
-        if service.get_operation(operation.id.into()).unwrap().state == OperationStateDto::Planning
-        {
+    for _ in 0..10_000 {
+        if service.get_operation(operation.id.into()).unwrap().state != OperationStateDto::Queued {
             break;
         }
         tokio::task::yield_now().await;
     }
-    assert_eq!(
-        service.get_operation(operation.id.into()).unwrap().state,
-        OperationStateDto::Planning
-    );
     fs::create_dir(destination.join("late")).unwrap();
     fs::write(destination.join("late/appeared.txt"), b"appeared late").unwrap();
 
@@ -332,8 +332,5 @@ async fn a_destination_appearing_after_planning_is_resolved_like_an_initial_conf
         )
         .unwrap();
     wait_for_state(&service, operation.id, OperationStateDto::Completed).await;
-    assert_eq!(
-        fs::read_dir(destination.join("late")).unwrap().count(),
-        4_001
-    );
+    assert_eq!(fs::read_dir(destination.join("late")).unwrap().count(), 2);
 }
