@@ -427,6 +427,23 @@ describe('SemanticComponentManagement', () => {
     },
   );
 
+  it('offers the previously chosen model again when an upgrade removed its components', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    const installed = await client.getSemanticComponentStatus();
+    vi.spyOn(client, 'getSemanticComponentStatus').mockResolvedValue({
+      ...installed,
+      lifecycle: { state: 'absent' },
+    });
+    const offer = vi.spyOn(client, 'createSemanticComponentInstallationOffer');
+
+    mountComponent(client);
+    await waitForLoaded();
+
+    await vi.waitFor(() => expect(root.querySelector('.fm-semantic-offer')).not.toBeNull());
+    expect(offer).toHaveBeenCalledTimes(1);
+    expect(root.querySelector('.fm-semantic-accept')).not.toBeNull();
+  });
+
   it('shows a load error with a working retry and an empty-profile state', async () => {
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'getSemanticComponentCapabilities').mockRejectedValueOnce(

@@ -803,6 +803,15 @@ export const SemanticComponentManagement: FactoryComponent<SemanticComponentMana
       loaded = { capabilities, status, profiles, gemmaSetup };
       onStatusChange?.(status);
       loadState = 'loaded';
+      // A model chosen earlier whose components are gone (an upgrade replaced them) shows its
+      // install offer straight away; installing still needs the user's acceptance.
+      if (
+        status.activeModel != null &&
+        status.lifecycle.state === 'absent' &&
+        capabilities.operations.includes('createInstallationOffer')
+      ) {
+        createOffer();
+      }
     } catch (error: unknown) {
       if (loadController.signal.aborted) return;
       loadError = errorMessage(error);
