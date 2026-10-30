@@ -33,6 +33,9 @@ pub enum CorpusThemeCapabilityError {
     /// The worker refused or failed the request.
     #[error(transparent)]
     Worker(#[from] CorpusThemeError),
+    /// The request did not reach the worker or its answer was refused.
+    #[error("corpus theme request failed: {0}")]
+    Transport(String),
 }
 
 /// Worker-side operations needed by the host.
@@ -186,7 +189,10 @@ impl SemanticCorpusThemeCapability {
             Err(crate::semantic::SemanticError::Unavailable) => {
                 Err(CorpusThemeCapabilityError::Unavailable)
             }
-            Err(_) => Err(CorpusThemeError::Remote.into()),
+            Err(error) => {
+                tracing::error!(%error, "corpus theme request failed");
+                Err(CorpusThemeCapabilityError::Transport(error.to_string()))
+            }
         }
     }
 }
@@ -353,9 +359,22 @@ fn status_to_dto(status: CorpusThemeStatus) -> CorpusThemeStatusDto {
     }
 }
 
+fn theme_failed(detail: impl Into<String>) -> ApplicationError {
+    let detail = detail.into();
+    tracing::error!(%detail, "corpus themes failed");
+    ApplicationError::from(
+        Rejection::new(
+            reason::CORPUS_THEMES_FAILED,
+            "the corpus themes could not be computed",
+        )
+        .with("detail", detail.chars().take(200).collect::<String>()),
+    )
+}
+
 pub(crate) fn theme_error_to_application(error: CorpusThemeCapabilityError) -> ApplicationError {
     match error {
         CorpusThemeCapabilityError::Unavailable => ApplicationError::ProviderUnavailable,
+        CorpusThemeCapabilityError::Transport(detail) => theme_failed(detail),
         CorpusThemeCapabilityError::Worker(error) => match error {
             CorpusThemeError::Cancelled => ApplicationError::OperationCancelled,
             CorpusThemeError::ProfileMismatch => ApplicationError::from(Rejection::new(
@@ -370,12 +389,12 @@ pub(crate) fn theme_error_to_application(error: CorpusThemeCapabilityError) -> A
                 ApplicationError::InvalidRequest(error.to_string())
             }
             CorpusThemeError::ProfileTooWeak { .. }
-            | CorpusThemeError::Remote
             | CorpusThemeError::EmptyScope
-            | CorpusThemeError::InsufficientContent { .. }
+            | CorpusThemeError::InsufficientContent { .. } => ApplicationError::Internal,
+            CorpusThemeError::Remote
             | CorpusThemeError::InvalidEmbeddings
             | CorpusThemeError::CorruptRun
-            | CorpusThemeError::Storage(_) => ApplicationError::Internal,
+            | CorpusThemeError::Storage(_) => theme_failed(error.to_string()),
         },
     }
 }

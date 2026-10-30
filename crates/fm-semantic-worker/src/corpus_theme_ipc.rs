@@ -245,6 +245,10 @@ pub fn failure_of(error: CorpusThemeError) -> Result<ThemeFailure, ThemeWireErro
         CorpusThemeError::InvalidEmbeddings => ThemeFailure::InvalidEmbeddings,
         CorpusThemeError::ThemesStale => ThemeFailure::ThemesStale,
         CorpusThemeError::CorruptRun => ThemeFailure::CorruptRun,
-        CorpusThemeError::Storage(_) | CorpusThemeError::Remote => ThemeFailure::Other,
+        CorpusThemeError::Storage(error) => {
+            eprintln!("Procyon semantic worker: corpus themes storage failure: {error}");
+            ThemeFailure::Other
+        }
+        CorpusThemeError::Remote => ThemeFailure::Other,
     })
 }
