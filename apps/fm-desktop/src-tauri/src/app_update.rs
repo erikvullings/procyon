@@ -48,12 +48,18 @@ pub(crate) enum AppUpdateDownloadEvent {
     Finished,
 }
 
+/// A pre-release build (`0.7.0-6`) always follows the beta channel: the stable channel only offers
+/// older versions, which would strand a beta tester without ever reporting a newer build.
+fn use_beta_channel(include_beta: bool, current: &str) -> bool {
+    include_beta || current.contains('-')
+}
+
 fn updater_builder<R: Runtime>(
     app: &AppHandle<R>,
     include_beta: bool,
 ) -> Result<UpdaterBuilder, CommandFailure> {
     let mut builder = app.updater_builder().timeout(CHECK_TIMEOUT);
-    if include_beta {
+    if use_beta_channel(include_beta, &app.package_info().version.to_string()) {
         let endpoint = BETA_ENDPOINT
             .parse::<tauri::Url>()
             .map_err(CommandFailure::platform)?;
@@ -160,4 +166,20 @@ fn poisoned() -> CommandFailure {
         "appUpdateStateUnavailable",
         "application update state is unavailable",
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::use_beta_channel;
+    #[test]
+    fn pre_release_builds_follow_the_beta_channel_even_when_not_opted_in() {
+        assert!(use_beta_channel(false, "0.7.0-5"));
+        assert!(use_beta_channel(true, "0.7.0-5"));
+    }
+
+    #[test]
+    fn stable_builds_follow_the_beta_channel_only_when_opted_in() {
+        assert!(!use_beta_channel(false, "0.7.0"));
+        assert!(use_beta_channel(true, "0.7.0"));
+    }
 }
