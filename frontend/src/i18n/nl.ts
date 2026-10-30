@@ -1923,7 +1923,9 @@ export const nl = {
     consentLabel: 'OCRmyPDF toestaan voor geselecteerde PDF’s',
     reportedFiles: 'Gescande PDF’s zonder doorzoekbare tekst',
     noReportedFiles: 'Geen gescande PDF’s waarvoor nu tekstherkenning nodig is.',
-    rootLabel: 'Ingeschreven hoofdmap {root}',
+    rootLabel: 'Map {root}',
+    reportedHint:
+      'OCRmyPDF toestaan start niets automatisch. Gebruik de knop bij één bestand of bij een map, of vink bestanden aan en gebruik de knop voor de selectie.',
     runFile: 'Deze PDF doorzoekbaar maken',
     runFileFor: '{file} doorzoekbaar maken',
     runSelected: 'Geselecteerde PDF’s doorzoekbaar maken',

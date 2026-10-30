@@ -52,6 +52,26 @@ function decodedLocation(uri: string): string {
   }
 }
 
+/** A file URI as a plain path: no scheme, percent-escapes decoded. */
+function displayPath(uri: string): string {
+  const path = decodedLocation(uri);
+  return path.startsWith('file://') ? path.slice('file://'.length) : path;
+}
+
+/** The deepest folder that holds every file of `files`. */
+function commonFolder(files: readonly SemanticOcrTarget[]): string {
+  const folders = files.map((file) => displayPath(file.location.uri).split('/').slice(0, -1));
+  const [first, ...rest] = folders;
+  if (first === undefined) return '';
+  let length = first.length;
+  for (const folder of rest) {
+    let shared = 0;
+    while (shared < length && folder[shared] === first[shared]) shared += 1;
+    length = shared;
+  }
+  return first.slice(0, length).join('/');
+}
+
 function unavailableReason(reason: SemanticOcrUnavailableReason): string {
   switch (reason.code) {
     case 'hostUnavailable':
@@ -288,9 +308,10 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
     const selectedFiles = current.reportedFiles.filter((target) => selected.has(targetKey(target)));
     return m('section.fm-semantic-ocr-reported', { 'aria-labelledby': 'semantic-ocr-files' }, [
       m('h5#semantic-ocr-files', t('semanticOcr', 'reportedFiles')),
+      m('p.fm-semantic-ocr-note', t('semanticOcr', 'reportedHint')),
       ...[...groups.entries()].map(([rootId, files], rootIndex) =>
         m('fieldset.fm-semantic-ocr-root', [
-          m('legend', t('semanticOcr', 'rootLabel', { root: rootId })),
+          m('legend', t('semanticOcr', 'rootLabel', { root: commonFolder(files) })),
           m(
             'ul',
             files.map((file, fileIndex) => {
@@ -308,14 +329,14 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
                       else selected.delete(key);
                     },
                   }),
-                  m('span', decodedLocation(file.location.uri)),
+                  m('span', displayPath(file.location.uri)),
                 ]),
                 m(
                   'button.fm-semantic-ocr-action',
                   {
                     type: 'button',
                     'aria-label': t('semanticOcr', 'runFileFor', {
-                      file: decodedLocation(file.location.uri),
+                      file: displayPath(file.location.uri),
                     }),
                     ...busyButtonAttrs(busyTarget === `file:${key}`),
                     disabled: controlsDisabled,
@@ -331,7 +352,7 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
             {
               type: 'button',
               'data-ocr-root': rootId,
-              'aria-label': t('semanticOcr', 'runRootFor', { root: rootId }),
+              'aria-label': t('semanticOcr', 'runRootFor', { root: commonFolder(files) }),
               ...busyButtonAttrs(busyTarget === `root:${rootId}`),
               disabled: controlsDisabled,
               onclick: () => void start(attrs, { scope: 'enrolledRoot', rootId }, `root:${rootId}`),
@@ -405,7 +426,7 @@ export const SemanticOcrManagement: FactoryComponent<SemanticOcrManagementAttrs>
                           .slice(0, VISIBLE_OUTCOME_LIMIT)
                           .map((file) =>
                             m('li', { key: targetKey(file) }, [
-                              m('span.fm-semantic-ocr-path', decodedLocation(file.location.uri)),
+                              m('span.fm-semantic-ocr-path', displayPath(file.location.uri)),
                               outcomeView(file.outcome),
                               replacementView(file.replacement),
                             ]),

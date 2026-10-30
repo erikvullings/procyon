@@ -1573,7 +1573,9 @@ export const de = {
     consentLabel: 'OCRmyPDF für ausgewählte PDFs erlauben',
     reportedFiles: 'Gescannte PDFs ohne durchsuchbaren Text',
     noReportedFiles: 'Derzeit benötigt kein gescanntes PDF durchsuchbaren Text.',
-    rootLabel: 'Eingebundene Wurzel {root}',
+    rootLabel: 'Ordner {root}',
+    reportedHint:
+      'Die Erlaubnis für OCRmyPDF startet nichts von selbst. Wähle „Diese PDF durchsuchbar machen“ für eine Datei, „PDFs in diesem Ordner durchsuchbar machen“ für einen Ordner, oder markiere Dateien und nutze „Ausgewählte PDFs durchsuchbar machen“.',
     runFile: 'Dieses PDF durchsuchbar machen',
     runFileFor: '{file} durchsuchbar machen',
     runSelected: 'Ausgewählte PDFs durchsuchbar machen',

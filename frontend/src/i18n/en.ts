@@ -1895,7 +1895,9 @@ export const en = {
     consentLabel: 'Allow OCRmyPDF for selected PDFs',
     reportedFiles: 'Scanned PDFs without searchable text',
     noReportedFiles: 'No scanned PDFs need searchable text right now.',
-    rootLabel: 'Enrolled root {root}',
+    rootLabel: 'Folder {root}',
+    reportedHint:
+      'Allowing OCRmyPDF does not start anything by itself. Press "Make this PDF searchable" for one file, "Make PDFs in this folder searchable" for a folder, or tick files and use "Make selected PDFs searchable".',
     runFile: 'Make this PDF searchable',
     runFileFor: 'Make {file} searchable',
     runSelected: 'Make selected PDFs searchable',

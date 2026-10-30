@@ -1559,7 +1559,9 @@ export const pt = {
     consentLabel: 'Permitir o OCRmyPDF nos PDFs selecionados',
     reportedFiles: 'PDFs digitalizados sem texto pesquisável',
     noReportedFiles: 'Neste momento, nenhum PDF digitalizado precisa de texto pesquisável.',
-    rootLabel: 'Raiz inscrita {root}',
+    rootLabel: 'Pasta {root}',
+    reportedHint:
+      'Permitir o OCRmyPDF não inicia nada sozinho. Usa o botão de um ficheiro ou de uma pasta, ou seleciona ficheiros e usa o botão dos selecionados.',
     runFile: 'Tornar este PDF pesquisável',
     runFileFor: 'Tornar {file} pesquisável',
     runSelected: 'Tornar os PDFs selecionados pesquisáveis',

@@ -27,7 +27,7 @@ use super::{OcrAvailability, OcrExecutableProbe, OcrPolicyStore, OcrUnavailableR
 use crate::semantic_indexing::EntryIngestReport;
 
 const JOBS_FILE_NAME: &str = "jobs.json";
-const MAX_RETAINED_JOBS: usize = 200;
+const MAX_RETAINED_JOBS: usize = 20;
 const MAX_ACTIVE_JOBS: usize = 32;
 const MAX_FILES_PER_JOB: usize = 100_000;
 const AVAILABILITY_CACHE_TTL: Duration = Duration::from_secs(30);

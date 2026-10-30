@@ -712,6 +712,52 @@ main.fm-workspace {
 
 .fm-semantic-ocr-action {
   margin: 0.2rem 0.5rem 0.2rem 0;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  color: var(--fm-text);
+}
+
+.fm-semantic-ocr-action:disabled {
+  color: var(--fm-text-muted);
+}
+
+/* mm's checkbox, sized like the conflict dialog's (the label is a flex row here). */
+.fm-app-shell .fm-semantic-ocr-management input[type="checkbox"] + span:not(.lever) {
+  min-height: 20px;
+  padding-left: 28px;
+}
+
+.fm-app-shell .fm-semantic-ocr-management input[type="checkbox"] + span:not(.lever)::before {
+  box-sizing: border-box;
+  border-color: var(--fm-border);
+}
+
+.fm-app-shell
+  .fm-semantic-ocr-management
+  input[type="checkbox"]:checked
+  + span:not(.lever)::before {
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 2px solid var(--fm-accent);
+  background-color: var(--fm-accent);
+  transform: none;
+}
+
+.fm-app-shell .fm-semantic-ocr-management input[type="checkbox"]:checked + span:not(.lever)::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 6px;
+  width: 6px;
+  height: 10px;
+  border: solid var(--fm-surface);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 .fm-semantic-ocr-success {
@@ -727,8 +773,18 @@ main.fm-workspace {
   color: var(--fm-error);
 }
 
+.fm-semantic-ocr-job ul > li {
+  display: block;
+}
+
+.fm-semantic-ocr-job ul > li > span {
+  display: block;
+}
+
 .fm-semantic-ocr-job small {
   display: block;
+  font-size: 0.9rem;
+  margin-top: 0.15rem;
 }
 
 @media (width <= 600px) {
@@ -1249,7 +1305,7 @@ main.fm-workspace {
 
 .fm-settings-editor-panel {
   width: min(64rem, calc(100vw - 2rem));
-  height: min(50rem, calc(100vh - 3rem));
+  height: min(max(50rem, 90vh), calc(100vh - 3rem));
   max-height: calc(100vh - 3rem);
   overflow-y: auto;
   border: 1px solid var(--fm-border);
@@ -1506,8 +1562,11 @@ main.fm-workspace {
   color: var(--fm-text);
 }
 
-.fm-semantic-lifecycle[role="alert"] {
+.fm-semantic-lifecycle[role="alert"],
+.fm-semantic-lifecycle[data-state="absent"] {
   color: var(--fm-warning);
+  font-size: 1.05rem;
+  font-weight: 600;
 }
 
 .fm-semantic-status-detail {

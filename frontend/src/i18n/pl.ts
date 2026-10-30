@@ -1553,7 +1553,9 @@ export const pl = {
     consentLabel: 'Zezwól na OCRmyPDF dla wybranych plików PDF',
     reportedFiles: 'Zeskanowane pliki PDF bez przeszukiwalnego tekstu',
     noReportedFiles: 'Żaden zeskanowany plik PDF nie wymaga teraz przeszukiwalnego tekstu.',
-    rootLabel: 'Zarejestrowany katalog główny {root}',
+    rootLabel: 'Katalog {root}',
+    reportedHint:
+      'Zezwolenie na OCRmyPDF niczego nie uruchamia samo. Użyj przycisku przy pliku lub folderze albo zaznacz pliki i użyj przycisku dla zaznaczonych.',
     runFile: 'Umożliw wyszukiwanie w tym pliku PDF',
     runFileFor: 'Umożliw wyszukiwanie w pliku {file}',
     runSelected: 'Umożliw wyszukiwanie w zaznaczonych plikach PDF',

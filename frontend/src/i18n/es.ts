@@ -1556,7 +1556,9 @@ export const es = {
     consentLabel: 'Permitir OCRmyPDF para los PDF seleccionados',
     reportedFiles: 'PDF escaneados sin texto buscable',
     noReportedFiles: 'Ningún PDF escaneado necesita texto buscable por ahora.',
-    rootLabel: 'Raíz inscrita {root}',
+    rootLabel: 'Carpeta {root}',
+    reportedHint:
+      'Permitir OCRmyPDF no inicia nada por sí solo. Usa el botón de un archivo o de una carpeta, o marca archivos y usa el botón de los seleccionados.',
     runFile: 'Hacer buscable este PDF',
     runFileFor: 'Hacer buscable {file}',
     runSelected: 'Hacer buscables los PDF seleccionados',

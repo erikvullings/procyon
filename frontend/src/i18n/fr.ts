@@ -1560,7 +1560,9 @@ export const fr = {
     consentLabel: 'Autoriser OCRmyPDF pour les PDF sélectionnés',
     reportedFiles: 'PDF numérisés sans texte consultable',
     noReportedFiles: 'Aucun PDF numérisé ne nécessite de texte consultable pour le moment.',
-    rootLabel: 'Racine inscrite {root}',
+    rootLabel: 'Dossier {root}',
+    reportedHint:
+      "Autoriser OCRmyPDF ne lance rien automatiquement. Utilisez le bouton d'un fichier, celui d'un dossier, ou cochez des fichiers puis lancez la reconnaissance pour la sélection.",
     runFile: 'Rendre ce PDF consultable',
     runFileFor: 'Rendre {file} consultable',
     runSelected: 'Rendre les PDF sélectionnés consultables',

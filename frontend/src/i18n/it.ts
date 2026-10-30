@@ -1553,7 +1553,9 @@ export const it = {
     consentLabel: 'Consenti OCRmyPDF per i PDF selezionati',
     reportedFiles: 'PDF scansionati senza testo ricercabile',
     noReportedFiles: 'Al momento nessun PDF scansionato richiede testo ricercabile.',
-    rootLabel: 'Radice registrata {root}',
+    rootLabel: 'Cartella {root}',
+    reportedHint:
+      'Consentire OCRmyPDF non avvia nulla da solo. Usa il pulsante di un file o di una cartella, oppure seleziona i file e usa il pulsante per la selezione.',
     runFile: 'Rendi ricercabile questo PDF',
     runFileFor: 'Rendi ricercabile {file}',
     runSelected: 'Rendi ricercabili i PDF selezionati',
