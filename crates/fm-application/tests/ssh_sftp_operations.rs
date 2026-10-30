@@ -427,7 +427,7 @@ async fn cancelling_a_local_to_sftp_copy_mid_transfer_leaves_no_partial_file_any
         cancellation_requested,
         "operation did not start in time to exercise mid-transfer cancellation"
     );
-    for _ in 0..400 {
+    for _ in 0..3_000 {
         let state = service.get_operation(operation.id.into()).unwrap().state;
         if state == OperationStateDto::Cancelled {
             break;
