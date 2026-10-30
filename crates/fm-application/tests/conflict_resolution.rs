@@ -292,7 +292,7 @@ async fn a_destination_appearing_after_planning_is_resolved_like_an_initial_conf
     fs::create_dir(&destination).unwrap();
     let source = root.path().join("late");
     fs::create_dir(&source).unwrap();
-    for index in 0..2_000 {
+    for index in 0..4_000 {
         fs::write(source.join(format!("{index:04}.txt")), b"data").unwrap();
     }
     let service = service(&root);
@@ -302,7 +302,7 @@ async fn a_destination_appearing_after_planning_is_resolved_like_an_initial_conf
         &destination,
         OperationConflictPolicyDto::Ask,
     );
-    for _ in 0..10_000 {
+    for _ in 0..4_000 {
         if service.get_operation(operation.id.into()).unwrap().state == OperationStateDto::Planning
         {
             break;
@@ -334,6 +334,6 @@ async fn a_destination_appearing_after_planning_is_resolved_like_an_initial_conf
     wait_for_state(&service, operation.id, OperationStateDto::Completed).await;
     assert_eq!(
         fs::read_dir(destination.join("late")).unwrap().count(),
-        2_001
+        4_001
     );
 }
