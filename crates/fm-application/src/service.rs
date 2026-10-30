@@ -145,6 +145,8 @@ use crate::structured_view::StructuredViewService;
 use crate::thumbnails::ThumbnailService;
 use crate::workspace::{JsonFileWorkspaceRepository, WorkspaceService, WorkspaceSummary};
 
+/// How often allowed OCR looks for newly reported scanned PDFs.
+const AUTOMATIC_OCR_INTERVAL: Duration = Duration::from_secs(30);
 const MAX_SUMMARY_IMAGES: usize = 8;
 const MAX_SUMMARY_SOURCE_IMAGE_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_SUMMARY_TOTAL_IMAGE_BYTES: usize = 12 * 1024 * 1024;
@@ -1594,6 +1596,37 @@ impl FileManagerService {
         self.semantic_components.install_or_enable(consent).await
     }
 
+    /// Reinstalls the model the user chose earlier when an upgrade replaced its components.
+    ///
+    /// The earlier installation was the user's consent to that profile; Gemma additionally needs
+    /// its locked library setup. Returns whether an installation ran.
+    ///
+    /// # Errors
+    ///
+    /// Returns the component capability's failure.
+    pub async fn restore_remembered_semantic_model(&self) -> Result<bool, SemanticComponentError> {
+        let status = self.semantic_components.status().await?;
+        let Some(active) = status.active_model() else {
+            return Ok(false);
+        };
+        if !matches!(
+            status.lifecycle(),
+            crate::semantic_components::SemanticComponentLifecycle::Absent
+        ) {
+            return Ok(false);
+        }
+        let profile = active.profile();
+        if profile == SemanticProfile::EmbeddingGemma2
+            && !matches!(self.semantic_gemma_library_setup().await, Ok(Some(_)))
+        {
+            return Ok(false);
+        }
+        let offer = self.semantic_component_installation_offer(profile).await?;
+        self.semantic_component_install_or_enable(offer.consent())
+            .await?;
+        Ok(true)
+    }
+
     /// Applies the newest compatible signed worker patch, if available.
     pub async fn semantic_component_install_compatible_worker_patch(
         &self,
@@ -1868,11 +1901,30 @@ impl FileManagerService {
         self.semantic_ocr.recover()
     }
 
+    /// Makes allowed OCRmyPDF queue every reported scanned PDF by itself (trusted desktop hosts).
+    pub fn enable_automatic_semantic_ocr(&self) {
+        self.semantic_ocr.enable_automatic();
+    }
+
     /// Runs the single-consumer OCR remediation queue until host shutdown.
     pub async fn run_semantic_ocr_remediation_jobs(
         self: Arc<Self>,
         shutdown: tokio_util::sync::CancellationToken,
     ) {
+        // Allowing OCRmyPDF means scanned PDFs are queued as they are reported.
+        let scanner = Arc::clone(&self);
+        let scanner_shutdown = shutdown.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    () = scanner_shutdown.cancelled() => break,
+                    () = tokio::time::sleep(AUTOMATIC_OCR_INTERVAL) => {}
+                }
+                if let Err(error) = scanner.semantic_ocr.auto_enqueue() {
+                    tracing::debug!(%error, "automatic OCR has nothing to queue");
+                }
+            }
+        });
         loop {
             let claimed = tokio::select! {
                 () = shutdown.cancelled() => break,

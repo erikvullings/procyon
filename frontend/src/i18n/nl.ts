@@ -1900,7 +1900,7 @@ export const nl = {
   semanticOcr: {
     title: 'Gescande PDF’s doorzoekbaar maken',
     description:
-      'Een gescande PDF is een afbeelding, waardoor de tekst niet doorzoekbaar is. Procyon kan met OCRmyPDF doorzoekbare tekst toevoegen aan bestanden die u kiest.',
+      'Een gescande pdf is een afbeelding, dus de woorden zijn niet doorzoekbaar. Procyon kan OCRmyPDF gebruiken om doorzoekbare tekst toe te voegen.',
     loading: 'Tekstherkenning voor PDF’s controleren…',
     retry: 'Opnieuw',
     unknownError: 'Tekstherkenning voor PDF’s kon niet worden gecontroleerd',
@@ -1919,13 +1919,13 @@ export const nl = {
     outputTooLarge: 'OCRmyPDF-versie-uitvoer overschreed {limit} bytes',
     installationDocs: 'Installatiehandleiding voor OCRmyPDF openen',
     consentDisclosure:
-      'Procyon voert OCRmyPDF alleen uit voor bestanden die u expliciet kiest. Uw originele PDF wordt alleen vervangen als u de vervangoptie hieronder inschakelt.',
-    consentLabel: 'OCRmyPDF toestaan voor geselecteerde PDF’s',
+      "Als dit is toegestaan, voert Procyon OCRmyPDF op de achtergrond uit op gescande pdf's in je geïndexeerde mappen. Je originele pdf wordt nooit overschreven, tenzij je hieronder de vervangoptie inschakelt.",
+    consentLabel: "Gescande pdf's automatisch doorzoekbaar maken",
     reportedFiles: 'Gescande PDF’s zonder doorzoekbare tekst',
     noReportedFiles: 'Geen gescande PDF’s waarvoor nu tekstherkenning nodig is.',
     rootLabel: 'Map {root}',
     reportedHint:
-      'OCRmyPDF toestaan start niets automatisch. Gebruik de knop bij één bestand of bij een map, of vink bestanden aan en gebruik de knop voor de selectie.',
+      'Deze bestanden worden automatisch in de wachtrij gezet zolang OCRmyPDF is toegestaan. Een mislukt bestand wordt niet vanzelf opnieuw geprobeerd: gebruik de knop ervan om het opnieuw te proberen.',
     runFile: 'Deze PDF doorzoekbaar maken',
     runFileFor: '{file} doorzoekbaar maken',
     runSelected: 'Geselecteerde PDF’s doorzoekbaar maken',
@@ -2628,6 +2628,7 @@ export const nl = {
     summaryTokenBudget: 'De invoergrootte van de samenvatting valt buiten het ondersteunde bereik.',
     corpusThemeProfileMismatch:
       'De index is met een ander embeddingmodel opgebouwd. Bouw de index opnieuw op om thema’s te zien.',
+    corpusThemesFailed: 'De corpusthema’s konden niet worden berekend: {detail}.',
     corpusThemesStale: 'Deze thema’s zijn verouderd. Analyseer opnieuw om verder te gaan.',
     conversationImmutable:
       'Het profiel, het bereik en de kennismodus van een gesprek kunnen niet wijzigen.',

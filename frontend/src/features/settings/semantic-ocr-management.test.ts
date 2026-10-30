@@ -124,7 +124,9 @@ describe('SemanticOcrManagement', () => {
     expect(button('Make this PDF searchable').getAttribute('aria-label')).toContain(
       '/Documents/Invoice 1.pdf',
     );
-    expect(consent?.closest('label')?.textContent).toContain('Allow OCRmyPDF for selected PDFs');
+    expect(consent?.closest('label')?.textContent).toContain(
+      'Make scanned PDFs searchable automatically',
+    );
     const accessibility = await axe(root, {
       rules: {
         'color-contrast': { enabled: false },

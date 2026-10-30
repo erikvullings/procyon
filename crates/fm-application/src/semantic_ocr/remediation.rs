@@ -498,6 +498,29 @@ impl SemanticOcrService {
 
     /// Returns a snapshot of one job.
     #[must_use]
+    /// Whether a queued or running job exists.
+    pub(crate) fn has_active_job(&self) -> bool {
+        self.lock()
+            .jobs
+            .values()
+            .any(|entry| !entry.job.state.is_terminal())
+    }
+
+    /// The `targets` that no retained job has handled yet: a file that failed stays out, so
+    /// automatic OCR never retries it in a loop.
+    pub(crate) fn untried(&self, targets: Vec<OcrRemediationTarget>) -> Vec<OcrRemediationTarget> {
+        let state = self.lock();
+        let tried: HashSet<&OcrRemediationTarget> = state
+            .jobs
+            .values()
+            .flat_map(|entry| entry.targets.iter())
+            .collect();
+        targets
+            .into_iter()
+            .filter(|target| !tried.contains(target))
+            .collect()
+    }
+
     pub(crate) fn job(&self, id: &OcrRemediationJobId) -> Option<OcrRemediationJob> {
         self.lock().jobs.get(&id.0).map(|entry| entry.job.clone())
     }
@@ -944,6 +967,19 @@ mod tests {
         service.recover().unwrap();
 
         assert!(!directory.path().join(JOBS_FILE_NAME).exists());
+    }
+
+    #[test]
+    fn automatic_ocr_skips_targets_a_retained_job_already_handled() {
+        let directory = temp_dir();
+        let service = service(directory.path(), true);
+        assert!(!service.has_active_job());
+        service.enqueue(vec![target(1), target(2)]).unwrap();
+        assert!(service.has_active_job());
+
+        let untried = service.untried(vec![target(1), target(3)]);
+
+        assert_eq!(untried, vec![target(3)]);
     }
 
     #[tokio::test]

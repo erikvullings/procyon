@@ -1537,7 +1537,7 @@ export const fr = {
   semanticOcr: {
     title: 'Rendre les PDF numérisés consultables',
     description:
-      'Un PDF numérisé est une image : ses mots ne peuvent pas être recherchés. Procyon peut utiliser OCRmyPDF pour ajouter du texte consultable lorsque vous choisissez un fichier.',
+      'Un PDF numérisé est une image, ses mots ne sont donc pas consultables. Procyon peut utiliser OCRmyPDF pour ajouter du texte consultable.',
     loading: 'Vérification de la reconnaissance de texte PDF…',
     retry: 'Réessayer',
     unknownError: 'Impossible de vérifier la reconnaissance de texte PDF',
@@ -1556,13 +1556,13 @@ export const fr = {
     outputTooLarge: "La sortie de version d'OCRmyPDF dépasse {limit} octets",
     installationDocs: "Ouvrir le guide d'installation d'OCRmyPDF",
     consentDisclosure:
-      "Procyon n'exécute OCRmyPDF que pour les fichiers que vous choisissez explicitement. Il ne remplace votre PDF d'origine que si vous activez l'option de remplacement ci-dessous.",
-    consentLabel: 'Autoriser OCRmyPDF pour les PDF sélectionnés',
+      "Lorsque c'est autorisé, Procyon exécute OCRmyPDF en arrière-plan sur les PDF numérisés de vos dossiers indexés. Votre PDF d'origine n'est jamais écrasé, sauf si vous activez l'option de remplacement ci-dessous.",
+    consentLabel: 'Rendre les PDF numérisés consultables automatiquement',
     reportedFiles: 'PDF numérisés sans texte consultable',
     noReportedFiles: 'Aucun PDF numérisé ne nécessite de texte consultable pour le moment.',
     rootLabel: 'Dossier {root}',
     reportedHint:
-      "Autoriser OCRmyPDF ne lance rien automatiquement. Utilisez le bouton d'un fichier, celui d'un dossier, ou cochez des fichiers puis lancez la reconnaissance pour la sélection.",
+      "Ces fichiers sont mis en file automatiquement tant qu'OCRmyPDF est autorisé. Un fichier en échec n'est pas réessayé seul : utilisez son bouton pour réessayer.",
     runFile: 'Rendre ce PDF consultable',
     runFileFor: 'Rendre {file} consultable',
     runSelected: 'Rendre les PDF sélectionnés consultables',
@@ -2641,6 +2641,7 @@ export const fr = {
     summaryTokenBudget: 'La taille d’entrée du résumé est hors de la plage prise en charge.',
     corpusThemeProfileMismatch:
       'L’index a été créé avec un autre modèle d’embedding. Reconstruisez l’index pour voir les thèmes.',
+    corpusThemesFailed: 'Les thèmes du corpus n’ont pas pu être calculés : {detail}.',
     corpusThemesStale: 'Ces thèmes sont obsolètes. Analysez à nouveau pour continuer.',
     conversationImmutable:
       'Le profil, la portée et le mode de connaissances d’une conversation ne peuvent pas changer.',

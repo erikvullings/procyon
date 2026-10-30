@@ -1530,7 +1530,7 @@ export const it = {
   semanticOcr: {
     title: 'Rendere ricercabili i PDF scansionati',
     description:
-      "Un PDF scansionato è un'immagine, quindi le sue parole non sono ricercabili. Procyon può usare OCRmyPDF per aggiungere testo ricercabile quando scegli un file.",
+      "Un PDF scansionato è un'immagine, quindi le sue parole non sono ricercabili. Procyon può usare OCRmyPDF per aggiungere testo ricercabile.",
     loading: 'Verifica del riconoscimento del testo nei PDF…',
     retry: 'Riprova',
     unknownError: 'Impossibile verificare il riconoscimento del testo nei PDF',
@@ -1549,13 +1549,13 @@ export const it = {
     outputTooLarge: "L'output della versione di OCRmyPDF ha superato {limit} byte",
     installationDocs: "Apri la guida all'installazione di OCRmyPDF",
     consentDisclosure:
-      "Procyon esegue OCRmyPDF solo sui file che scegli esplicitamente. Sostituisce il PDF originale solo se attivi l'opzione di sostituzione qui sotto.",
-    consentLabel: 'Consenti OCRmyPDF per i PDF selezionati',
+      "Se consentito, Procyon esegue OCRmyPDF in background sui PDF scansionati nelle tue cartelle indicizzate. Non sovrascrive mai il PDF originale a meno che tu non attivi l'opzione di sostituzione qui sotto.",
+    consentLabel: 'Rendi ricercabili automaticamente i PDF scansionati',
     reportedFiles: 'PDF scansionati senza testo ricercabile',
     noReportedFiles: 'Al momento nessun PDF scansionato richiede testo ricercabile.',
     rootLabel: 'Cartella {root}',
     reportedHint:
-      'Consentire OCRmyPDF non avvia nulla da solo. Usa il pulsante di un file o di una cartella, oppure seleziona i file e usa il pulsante per la selezione.',
+      'Questi file vengono messi in coda automaticamente finché OCRmyPDF è consentito. Un file fallito non viene ritentato da solo: usa il suo pulsante per riprovare.',
     runFile: 'Rendi ricercabile questo PDF',
     runFileFor: 'Rendi ricercabile {file}',
     runSelected: 'Rendi ricercabili i PDF selezionati',
@@ -2616,6 +2616,7 @@ export const it = {
     summaryTokenBudget: 'La dimensione di input del riepilogo è fuori dall’intervallo supportato.',
     corpusThemeProfileMismatch:
       'L’indice è stato creato con un altro modello di embedding. Ricostruisci l’indice per vedere i temi.',
+    corpusThemesFailed: 'Non è stato possibile calcolare i temi del corpus: {detail}.',
     corpusThemesStale: 'Questi temi sono obsoleti. Analizza di nuovo per continuare.',
     conversationImmutable:
       'Profilo, ambito e modalità di conoscenza di una conversazione non possono cambiare.',

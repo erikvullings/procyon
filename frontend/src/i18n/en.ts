@@ -1872,7 +1872,7 @@ export const en = {
   semanticOcr: {
     title: 'Make scanned PDFs searchable',
     description:
-      'A scanned PDF is an image, so its words cannot be searched. Procyon can use OCRmyPDF to add searchable text when you choose a file.',
+      'A scanned PDF is an image, so its words cannot be searched. Procyon can use OCRmyPDF to add searchable text.',
     loading: 'Checking PDF text recognition…',
     retry: 'Retry',
     unknownError: 'Could not check PDF text recognition',
@@ -1891,13 +1891,13 @@ export const en = {
     outputTooLarge: 'OCRmyPDF version output exceeded {limit} bytes',
     installationDocs: 'Open OCRmyPDF installation guide',
     consentDisclosure:
-      'Procyon runs OCRmyPDF only for files you explicitly choose. It never overwrites your original PDF unless you turn on the replace option below.',
-    consentLabel: 'Allow OCRmyPDF for selected PDFs',
+      'When allowed, Procyon runs OCRmyPDF in the background on scanned PDFs in your indexed folders. It never overwrites your original PDF unless you turn on the replace option below.',
+    consentLabel: 'Make scanned PDFs searchable automatically',
     reportedFiles: 'Scanned PDFs without searchable text',
     noReportedFiles: 'No scanned PDFs need searchable text right now.',
     rootLabel: 'Folder {root}',
     reportedHint:
-      'Allowing OCRmyPDF does not start anything by itself. Press "Make this PDF searchable" for one file, "Make PDFs in this folder searchable" for a folder, or tick files and use "Make selected PDFs searchable".',
+      'These files are queued automatically while OCRmyPDF is allowed. A file that failed is not retried by itself: use its button to try again.',
     runFile: 'Make this PDF searchable',
     runFileFor: 'Make {file} searchable',
     runSelected: 'Make selected PDFs searchable',
@@ -2567,6 +2567,7 @@ export const en = {
     summaryTokenBudget: 'The summary input size is outside the supported range.',
     corpusThemeProfileMismatch:
       'The index was built with a different embedding model. Rebuild the index to see themes.',
+    corpusThemesFailed: 'The corpus themes could not be computed: {detail}.',
     corpusThemesStale: 'These themes are out of date. Analyse again to continue.',
     conversationImmutable: 'The profile, scope and knowledge mode of a conversation cannot change.',
     scopeInvalid: 'The selected files are not a valid scope.',

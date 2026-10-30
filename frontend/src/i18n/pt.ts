@@ -1536,7 +1536,7 @@ export const pt = {
   semanticOcr: {
     title: 'Tornar PDFs digitalizados pesquisáveis',
     description:
-      'Um PDF digitalizado é uma imagem, pelo que as suas palavras não podem ser pesquisadas. O Procyon pode usar o OCRmyPDF para adicionar texto pesquisável quando escolhe um ficheiro.',
+      'Um PDF digitalizado é uma imagem, por isso as suas palavras não são pesquisáveis. O Procyon pode usar o OCRmyPDF para adicionar texto pesquisável.',
     loading: 'A verificar o reconhecimento de texto em PDF…',
     retry: 'Tentar novamente',
     unknownError: 'Não foi possível verificar o reconhecimento de texto em PDF',
@@ -1555,13 +1555,13 @@ export const pt = {
     outputTooLarge: 'A saída da versão do OCRmyPDF excedeu {limit} bytes',
     installationDocs: 'Abrir o guia de instalação do OCRmyPDF',
     consentDisclosure:
-      'O Procyon executa o OCRmyPDF apenas nos ficheiros que escolher explicitamente. Só substitui o PDF original se ativar a opção de substituição abaixo.',
-    consentLabel: 'Permitir o OCRmyPDF nos PDFs selecionados',
+      'Quando permitido, o Procyon executa o OCRmyPDF em segundo plano nos PDFs digitalizados das tuas pastas indexadas. Nunca substitui o PDF original, a não ser que atives a opção de substituição abaixo.',
+    consentLabel: 'Tornar os PDFs digitalizados pesquisáveis automaticamente',
     reportedFiles: 'PDFs digitalizados sem texto pesquisável',
     noReportedFiles: 'Neste momento, nenhum PDF digitalizado precisa de texto pesquisável.',
     rootLabel: 'Pasta {root}',
     reportedHint:
-      'Permitir o OCRmyPDF não inicia nada sozinho. Usa o botão de um ficheiro ou de uma pasta, ou seleciona ficheiros e usa o botão dos selecionados.',
+      'Estes ficheiros são colocados em fila automaticamente enquanto o OCRmyPDF estiver permitido. Um ficheiro que falhou não é repetido sozinho: usa o seu botão para tentar de novo.',
     runFile: 'Tornar este PDF pesquisável',
     runFileFor: 'Tornar {file} pesquisável',
     runSelected: 'Tornar os PDFs selecionados pesquisáveis',
@@ -2634,6 +2634,7 @@ export const pt = {
     summaryTokenBudget: 'O tamanho de entrada do resumo está fora do intervalo suportado.',
     corpusThemeProfileMismatch:
       'O índice foi criado com outro modelo de embeddings. Recrie o índice para ver os temas.',
+    corpusThemesFailed: 'Não foi possível calcular os temas do corpus: {detail}.',
     corpusThemesStale: 'Estes temas estão desatualizados. Analise novamente para continuar.',
     conversationImmutable:
       'O perfil, o âmbito e o modo de conhecimento de uma conversa não podem mudar.',

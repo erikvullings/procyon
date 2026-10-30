@@ -376,6 +376,16 @@ pub fn run() {
                 tracing::error!(%error, "OCR remediation recovery failed");
             }
             if semantic_managed_components {
+                let restore_service = Arc::clone(&service);
+                tauri::async_runtime::spawn(async move {
+                    match restore_service.restore_remembered_semantic_model().await {
+                        Ok(true) => tracing::info!("restored the remembered semantic model"),
+                        Ok(false) => {}
+                        Err(error) => {
+                            tracing::warn!(%error, "restoring the remembered semantic model failed");
+                        }
+                    }
+                });
                 let residency_service = Arc::clone(&service);
                 let residency_shutdown = semantic_ocr_shutdown.clone();
                 tauri::async_runtime::spawn(async move {
@@ -384,6 +394,7 @@ pub fn run() {
                         .await;
                 });
             }
+            service.enable_automatic_semantic_ocr();
             tauri::async_runtime::spawn(
                 Arc::clone(&service)
                     .run_semantic_ocr_remediation_jobs(semantic_ocr_shutdown),

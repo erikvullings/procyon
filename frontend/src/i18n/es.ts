@@ -1533,7 +1533,7 @@ export const es = {
   semanticOcr: {
     title: 'Hacer buscables los PDF escaneados',
     description:
-      'Un PDF escaneado es una imagen, por lo que no se pueden buscar sus palabras. Procyon puede usar OCRmyPDF para añadir texto buscable cuando eliges un archivo.',
+      'Un PDF escaneado es una imagen, por lo que sus palabras no se pueden buscar. Procyon puede usar OCRmyPDF para añadir texto buscable.',
     loading: 'Comprobando el reconocimiento de texto en PDF…',
     retry: 'Reintentar',
     unknownError: 'No se pudo comprobar el reconocimiento de texto en PDF',
@@ -1552,13 +1552,13 @@ export const es = {
     outputTooLarge: 'La salida de versión de OCRmyPDF superó {limit} bytes',
     installationDocs: 'Abrir la guía de instalación de OCRmyPDF',
     consentDisclosure:
-      'Procyon ejecuta OCRmyPDF solo en los archivos que eliges explícitamente. Solo sustituye tu PDF original si activas la opción de sustitución de abajo.',
-    consentLabel: 'Permitir OCRmyPDF para los PDF seleccionados',
+      'Si se permite, Procyon ejecuta OCRmyPDF en segundo plano sobre los PDF escaneados de tus carpetas indexadas. Nunca sobrescribe el PDF original salvo que actives la opción de reemplazo de abajo.',
+    consentLabel: 'Hacer buscables los PDF escaneados automáticamente',
     reportedFiles: 'PDF escaneados sin texto buscable',
     noReportedFiles: 'Ningún PDF escaneado necesita texto buscable por ahora.',
     rootLabel: 'Carpeta {root}',
     reportedHint:
-      'Permitir OCRmyPDF no inicia nada por sí solo. Usa el botón de un archivo o de una carpeta, o marca archivos y usa el botón de los seleccionados.',
+      'Estos archivos se ponen en cola automáticamente mientras OCRmyPDF esté permitido. Un archivo que falló no se reintenta solo: usa su botón para volver a intentarlo.',
     runFile: 'Hacer buscable este PDF',
     runFileFor: 'Hacer buscable {file}',
     runSelected: 'Hacer buscables los PDF seleccionados',
@@ -2627,6 +2627,7 @@ export const es = {
     summaryTokenBudget: 'El tamaño de entrada del resumen está fuera del rango admitido.',
     corpusThemeProfileMismatch:
       'El índice se creó con otro modelo de embeddings. Reconstruya el índice para ver los temas.',
+    corpusThemesFailed: 'No se pudieron calcular los temas del corpus: {detail}.',
     corpusThemesStale: 'Estos temas están desactualizados. Analice de nuevo para continuar.',
     conversationImmutable:
       'El perfil, el alcance y el modo de conocimiento de una conversación no pueden cambiar.',

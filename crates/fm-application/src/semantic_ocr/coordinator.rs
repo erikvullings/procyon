@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use fm_platform::PlatformAdapter;
@@ -27,6 +28,8 @@ pub(crate) struct SemanticOcrCoordinator {
     jobs: Arc<SemanticOcrService>,
     indexing: Arc<SemanticIndexingService>,
     trash: Arc<dyn OcrOriginalTrash>,
+    /// Whether allowed OCR queues reported files by itself (a host opt-in).
+    automatic: Arc<AtomicBool>,
 }
 
 /// What the replace-original step needs, captured before the worker reads
@@ -46,6 +49,7 @@ impl SemanticOcrCoordinator {
             jobs,
             indexing,
             trash: Arc::new(PlatformOriginalTrash(platform)),
+            automatic: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -54,6 +58,7 @@ impl SemanticOcrCoordinator {
             jobs: Arc::new(jobs),
             indexing: Arc::clone(&self.indexing),
             trash: Arc::clone(&self.trash),
+            automatic: Arc::clone(&self.automatic),
         }
     }
 
@@ -109,6 +114,9 @@ impl SemanticOcrCoordinator {
                 .map_err(|error| SemanticOcrError::WorkerRestart(error.to_string()))?;
         }
         update?;
+        if enabled && let Err(error) = self.auto_enqueue() {
+            tracing::warn!(%error, "automatic OCR could not queue the reported files");
+        }
         Ok(self.status())
     }
 
@@ -156,12 +164,33 @@ impl SemanticOcrCoordinator {
         self.jobs.job(&id).ok_or(SemanticOcrError::NotFound)
     }
 
+    /// Queues OCR for the reported files no job has handled yet, when the user allowed OCRmyPDF
+    /// and no job is running. Returns the job, or `None` when there was nothing to do.
+    pub(crate) fn auto_enqueue(&self) -> Result<Option<OcrRemediationJob>, SemanticOcrError> {
+        if !self.automatic.load(Ordering::Relaxed)
+            || !self.jobs.consent()
+            || self.jobs.has_active_job()
+        {
+            return Ok(None);
+        }
+        let targets = self.jobs.untried(self.reported_targets());
+        if targets.is_empty() {
+            return Ok(None);
+        }
+        let id = self.jobs.enqueue(targets)?;
+        Ok(self.jobs.job(&id))
+    }
+
     pub(crate) fn cancel(
         &self,
         id: &OcrRemediationJobId,
     ) -> Result<OcrRemediationJob, SemanticOcrError> {
         self.jobs.cancel(id)?;
         self.jobs.job(id).ok_or(SemanticOcrError::NotFound)
+    }
+
+    pub(crate) fn enable_automatic(&self) {
+        self.automatic.store(true, Ordering::Relaxed);
     }
 
     pub(crate) fn recover(&self) -> Result<(), SemanticOcrError> {

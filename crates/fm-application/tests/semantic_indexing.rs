@@ -3011,6 +3011,60 @@ async fn replace_original_opt_in_requires_consent_and_restarts_the_worker() {
 }
 
 #[tokio::test]
+async fn allowing_ocr_queues_every_reported_scan_when_the_host_enables_automatic_ocr() {
+    let root = project_temp_dir("ocr-automatic-root-");
+    for (name, content) in [("one.pdf", "scan-one"), ("two.pdf", "scan-two")] {
+        std::fs::write(root.path().join(name), content).unwrap();
+    }
+    let state = project_temp_dir("ocr-automatic-state-");
+    let library = library(&state);
+    let root_id = enrol(
+        &library,
+        WorkspaceId::from(Uuid::from_u128(0x1972)),
+        Location::from_native_path(root.path()).unwrap(),
+    );
+    let capability = Arc::new(RemediatingDocumentCapability::new());
+    let policy = Arc::new(OcrPolicyStore::load(state.path().join("ocr")));
+    let service = Arc::new(
+        FileManagerService::new(
+            RuntimeKindDto::Tauri,
+            state.path().join("workspaces"),
+            state.path().join("settings"),
+        )
+        .with_semantic_library_service(library)
+        .with_semantic_capability(capability.clone())
+        .with_semantic_ocr_service(SemanticOcrService::load(
+            state.path().join("ocr"),
+            policy,
+            Arc::new(AvailableOcrProbe),
+        )),
+    );
+    service
+        .semantic_reconcile_enrolled_root(&HOST, root_id, CancellationToken::new())
+        .await
+        .unwrap();
+    service.enable_automatic_semantic_ocr();
+
+    let status = service.set_semantic_ocr_consent(true).await.unwrap();
+
+    assert_eq!(status.jobs.len(), 1);
+    assert_eq!(status.jobs[0].total_files, 2);
+    let shutdown = CancellationToken::new();
+    let runner =
+        tokio::spawn(Arc::clone(&service).run_semantic_ocr_remediation_jobs(shutdown.clone()));
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while service.semantic_ocr_status().jobs[0].state != OcrRemediationState::Completed {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("automatic remediation completed");
+    shutdown.cancel();
+    runner.await.unwrap();
+    assert_eq!(capability.remediated_contents.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
 async fn successful_ocr_reingests_only_selected_files_and_updates_reported_state() {
     let root = project_temp_dir("ocr-remediation-root-");
     for (name, content) in [

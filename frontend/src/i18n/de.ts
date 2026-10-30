@@ -1550,7 +1550,7 @@ export const de = {
   semanticOcr: {
     title: 'Gescannte PDFs durchsuchbar machen',
     description:
-      'Ein gescanntes PDF ist ein Bild, daher lassen sich seine Wörter nicht durchsuchen. Procyon kann mit OCRmyPDF durchsuchbaren Text hinzufügen, wenn Sie eine Datei auswählen.',
+      'Eine gescannte PDF ist ein Bild, deshalb sind ihre Wörter nicht durchsuchbar. Procyon kann mit OCRmyPDF durchsuchbaren Text hinzufügen.',
     loading: 'PDF-Texterkennung wird geprüft…',
     retry: 'Erneut versuchen',
     unknownError: 'Die PDF-Texterkennung konnte nicht geprüft werden',
@@ -1569,13 +1569,13 @@ export const de = {
     outputTooLarge: 'Die OCRmyPDF-Versionsausgabe überschritt {limit} Bytes',
     installationDocs: 'OCRmyPDF-Installationsanleitung öffnen',
     consentDisclosure:
-      'Procyon führt OCRmyPDF nur für Dateien aus, die Sie ausdrücklich auswählen. Ihr ursprüngliches PDF wird nur ersetzt, wenn Sie die Option zum Ersetzen unten aktivieren.',
-    consentLabel: 'OCRmyPDF für ausgewählte PDFs erlauben',
+      'Wenn erlaubt, führt Procyon OCRmyPDF im Hintergrund für gescannte PDFs in Ihren indizierten Ordnern aus. Ihre Original-PDF wird nur überschrieben, wenn Sie unten die Ersetzen-Option aktivieren.',
+    consentLabel: 'Gescannte PDFs automatisch durchsuchbar machen',
     reportedFiles: 'Gescannte PDFs ohne durchsuchbaren Text',
     noReportedFiles: 'Derzeit benötigt kein gescanntes PDF durchsuchbaren Text.',
     rootLabel: 'Ordner {root}',
     reportedHint:
-      'Die Erlaubnis für OCRmyPDF startet nichts von selbst. Wähle „Diese PDF durchsuchbar machen“ für eine Datei, „PDFs in diesem Ordner durchsuchbar machen“ für einen Ordner, oder markiere Dateien und nutze „Ausgewählte PDFs durchsuchbar machen“.',
+      'Diese Dateien werden automatisch eingereiht, solange OCRmyPDF erlaubt ist. Eine fehlgeschlagene Datei wird nicht von selbst wiederholt: Nutzen Sie ihre Schaltfläche für einen neuen Versuch.',
     runFile: 'Dieses PDF durchsuchbar machen',
     runFileFor: '{file} durchsuchbar machen',
     runSelected: 'Ausgewählte PDFs durchsuchbar machen',
@@ -2661,6 +2661,7 @@ export const de = {
       'Die Eingabegröße der Zusammenfassung liegt außerhalb des unterstützten Bereichs.',
     corpusThemeProfileMismatch:
       'Der Index wurde mit einem anderen Embedding-Modell erstellt. Erstellen Sie den Index neu, um Themen zu sehen.',
+    corpusThemesFailed: 'Die Korpusthemen konnten nicht berechnet werden: {detail}.',
     corpusThemesStale: 'Diese Themen sind veraltet. Analysieren Sie erneut, um fortzufahren.',
     conversationImmutable:
       'Profil, Umfang und Wissensmodus einer Unterhaltung können nicht geändert werden.',

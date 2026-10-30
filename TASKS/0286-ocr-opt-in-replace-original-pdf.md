@@ -82,3 +82,5 @@ original with the OCR'd version so OCR happens once.
   bug found. The Trash contents could not be listed (~/.Trash is permission-protected for the agent),
   so the trashed original is inferred from the adapter call succeeding. Windows/Linux still untested.
 
+
+- Allowing OCRmyPDF now runs in the background (desktop host opt-in `enable_automatic_semantic_ocr`): a 30 s scanner and `set_consent(true)` queue the reported files no retained job has handled; failed files are not retried automatically (the per-file/folder/all buttons remain for retries). Retained jobs capped at 20. Root cause of "exit status 3" for every file: the child `PATH` lacked Tesseract's directory when the app starts from the Finder; fixed in `fm-semantic-docling` (`fixed_tool_directories`). Files that failed before that fix are in the job history, so they need one manual "Make all reported PDFs searchable".

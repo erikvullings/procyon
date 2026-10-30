@@ -1530,7 +1530,7 @@ export const pl = {
   semanticOcr: {
     title: 'Umożliw wyszukiwanie w zeskanowanych plikach PDF',
     description:
-      'Zeskanowany plik PDF jest obrazem, więc nie można przeszukiwać jego słów. Procyon może użyć OCRmyPDF, aby dodać przeszukiwalny tekst po wybraniu pliku.',
+      'Zeskanowany PDF to obraz, więc jego słów nie można przeszukiwać. Procyon może użyć OCRmyPDF, aby dodać przeszukiwalny tekst.',
     loading: 'Sprawdzanie rozpoznawania tekstu w plikach PDF…',
     retry: 'Ponów',
     unknownError: 'Nie udało się sprawdzić rozpoznawania tekstu w plikach PDF',
@@ -1549,13 +1549,13 @@ export const pl = {
     outputTooLarge: 'Dane wyjściowe wersji OCRmyPDF przekroczyły {limit} bajtów',
     installationDocs: 'Otwórz instrukcję instalacji OCRmyPDF',
     consentDisclosure:
-      'Procyon uruchamia OCRmyPDF tylko dla plików wybranych jawnie przez Ciebie. Oryginalny plik PDF zastępuje tylko wtedy, gdy włączysz poniższą opcję zastępowania.',
-    consentLabel: 'Zezwól na OCRmyPDF dla wybranych plików PDF',
+      'Po zezwoleniu Procyon uruchamia OCRmyPDF w tle dla zeskanowanych plików PDF w indeksowanych folderach. Oryginalny PDF nigdy nie jest nadpisywany, chyba że włączysz poniżej opcję zastępowania.',
+    consentLabel: 'Automatycznie umożliwiaj przeszukiwanie zeskanowanych PDF',
     reportedFiles: 'Zeskanowane pliki PDF bez przeszukiwalnego tekstu',
     noReportedFiles: 'Żaden zeskanowany plik PDF nie wymaga teraz przeszukiwalnego tekstu.',
     rootLabel: 'Katalog {root}',
     reportedHint:
-      'Zezwolenie na OCRmyPDF niczego nie uruchamia samo. Użyj przycisku przy pliku lub folderze albo zaznacz pliki i użyj przycisku dla zaznaczonych.',
+      'Te pliki są kolejkowane automatycznie, dopóki OCRmyPDF jest dozwolony. Plik, który się nie powiódł, nie jest ponawiany sam: użyj jego przycisku, aby spróbować ponownie.',
     runFile: 'Umożliw wyszukiwanie w tym pliku PDF',
     runFileFor: 'Umożliw wyszukiwanie w pliku {file}',
     runSelected: 'Umożliw wyszukiwanie w zaznaczonych plikach PDF',
@@ -2615,6 +2615,7 @@ export const pl = {
     summaryTokenBudget: 'Rozmiar danych wejściowych podsumowania jest poza obsługiwanym zakresem.',
     corpusThemeProfileMismatch:
       'Indeks utworzono innym modelem osadzeń. Odbuduj indeks, aby zobaczyć tematy.',
+    corpusThemesFailed: 'Nie udało się obliczyć tematów korpusu: {detail}.',
     corpusThemesStale: 'Te tematy są nieaktualne. Przeanalizuj ponownie, aby kontynuować.',
     conversationImmutable: 'Profil, zakres i tryb wiedzy rozmowy nie mogą się zmienić.',
     scopeInvalid: 'Zaznaczone pliki nie tworzą prawidłowego zakresu.',
