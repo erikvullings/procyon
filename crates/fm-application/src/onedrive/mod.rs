@@ -598,7 +598,7 @@ where
                 let connection_status = self.shared.connections.status(connection_id).await?;
                 let last_error = self.shared.connections.last_error(connection_id).await?;
                 OneDriveAuthorizationStatusDto::Succeeded {
-                    connection: Box::new(crate::connection_dto::connection_dto(
+                    connection: Box::new(crate::connection_facade::connection_dto(
                         profile,
                         connection_status,
                         last_error,

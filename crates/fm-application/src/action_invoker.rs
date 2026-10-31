@@ -11,8 +11,8 @@ use fm_transport_dto::{
 
 use crate::action::ActionRegistry;
 use crate::error::ApplicationError;
-use crate::operation_requests::mutating_operation_kind;
 use crate::operations_coordinator::OperationsCoordinator;
+use crate::operations_coordinator::mutating_operation_kind;
 use crate::platform_mapping::{PlatformActionKind, map_platform_error, platform_action_kind};
 use crate::plugin_manager::PluginManager;
 

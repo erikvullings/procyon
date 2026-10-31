@@ -649,7 +649,7 @@ pub(crate) fn answer_to_dto(
         evidence_fingerprint: answer.evidence_fingerprint,
         profile_id: answer.profile_id,
         profile_name: answer.profile_name,
-        locality: crate::llm_profile_mapping::locality_to_dto(answer.locality),
+        locality: crate::llm_profiles::locality_to_dto(answer.locality),
         text: answer.text,
         citations: answer
             .citations

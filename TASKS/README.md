@@ -508,8 +508,8 @@ previous pass stopped where it did.
   per-capability `*-wiring.ts` modules; proposed order: operations, workspace, navigation, settings)*
 - [ ] 0291 Split knowledge-search-dialog.ts monolith *(frontend, high — 3,234 → < 500 lines into
   search controller / evidence renderer / answer generator / citation resolver / scope classifier)*
-- [ ] 0292 Fold Rust pass-through mapping modules into owning crates *(backend, medium — ≥8 of the
-  15 thin `fm-application` mapping modules folded in, remaining ones < 50 lines each)*
+- [~] 0292 Fold Rust pass-through mapping modules into owning crates *(backend, medium — 8 of 15
+  folded; remaining 7 are 160–990 lines, so the "< 50 lines" criterion is not met)*
 - [ ] 0293 Reduce FileManagerService composition root from 95 public methods *(backend, medium —
   < 50 public methods plus one `ServiceConfig` replacing the 10+ `with_*` builders; high risk,
   check every removed method has a capability-module path)*

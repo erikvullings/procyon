@@ -1,6 +1,6 @@
 # 0292 Fold Rust pass-through mapping modules into owning crates
 
-Status: open
+Status: partial (8 of 15 folded; criterion 1 met, criterion 5 not)
 Priority: medium
 Subsystem: backend
 Depends on: none
@@ -45,3 +45,15 @@ Depends on: none
 - After folding, run `cargo clippy` to make sure no `pub` exports are accidentally removed
 - The `fm-transport-dto` crate owns the DTO types — mapping functions that just convert DTO fields can be private within the owning module
 - Update any tests that import from the removed mapping modules to import from the new location instead
+- **Done:** folded `checksum_mapping`, `comparison_mapping`, `rag_mapping`, `document_summary_mapping`,
+  `semantic_vocabulary_mapping`, `operation_requests`, `llm_profile_mapping`, `connection_dto` into
+  their owners (`checksum_coordinator`, `search_comparison_coordinator`, `rag`, `document_summary`,
+  `semantic_vocabulary`, `operations_coordinator`, `llm_profiles`, `connection_facade`). Mapping
+  tests kept as `<name>_tests` modules. Visibility unchanged (`pub(crate)`) because `service.rs` and
+  sibling services still consume them. `cargo clippy -p fm-application --all-targets -D warnings` and
+  `cargo nextest run -p fm-application` (1185) pass.
+- **Not done:** the "remaining modules < 50 lines" criterion is unrealistic: the leftovers are
+  `knowledge_mapping` 701, `platform_mapping` 667, `semantic_component_mapping` 987,
+  `semantic_library_mapping` 774, `semantic_ocr_mapping` 262 (`pub mod`, external consumers),
+  `settings_mapping` 668, `sync_profile_mapping` 161. The Context claim "most under 200 lines" was
+  wrong; folding these would bloat their owners. Revisit the criterion rather than force it.

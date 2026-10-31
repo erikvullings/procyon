@@ -66,9 +66,7 @@ use crate::document_summary::{
     DocumentSummaryCapability, DocumentSummaryCoordinator, DocumentSummaryImages,
     GenerateDocumentSummary, UnavailableDocumentSummaryCapability,
 };
-use crate::document_summary_mapping::{
-    preview_to_dto, summary_error_to_application, summary_to_dto,
-};
+use crate::document_summary::{preview_to_dto, summary_error_to_application, summary_to_dto};
 use crate::docx_preview::DocxPreviewService;
 use crate::error::ApplicationError;
 use crate::file_diff::FileDiffService;
@@ -78,17 +76,17 @@ use crate::knowledge_search::{
     KnowledgeRetrievalCapability, UnavailableKnowledgeRetrievalCapability,
 };
 use crate::knowledge_service::KnowledgeService;
-use crate::llm_profile_mapping::{
-    disposition_from_dto, draft_from_dto, model_limits_to_dto, preset_to_profile_dto,
-    profile_to_dto, profile_to_export_dto, test_result_to_dto,
-};
 use crate::llm_profiles::{
     LlmHostPolicy, LlmImageAttachment, LlmProfileService, ReqwestLlmProbeTransport,
 };
+use crate::llm_profiles::{
+    disposition_from_dto, draft_from_dto, model_limits_to_dto, preset_to_profile_dto,
+    profile_to_dto, profile_to_export_dto, test_result_to_dto,
+};
 use crate::operation_history::{ApplicationOperationObserver, OperationHistory};
 use crate::operation_planner::OperationPlanner;
-use crate::operation_requests::map_scheduler_error;
 use crate::operations_coordinator::OperationsCoordinator;
+use crate::operations_coordinator::map_scheduler_error;
 use crate::platform_mapping::{
     self, action_capabilities_for_runtime, discover_system_locations, discover_volumes,
     map_platform_error, runtime_capabilities_dto, runtime_capabilities_dto_with_semantic,
@@ -101,7 +99,7 @@ use crate::rag::{
     RagCoverage, RagHistoryTurn, RagRetrievalCapability, RagSourceDisplay, SavedRagConversation,
     SavedRagTurn, SemanticRagRetrievalCapability, UnavailableRagRetrievalCapability,
 };
-use crate::rag_mapping::{
+use crate::rag::{
     events_to_dto, preview_to_dto as rag_preview_to_dto, rag_error_to_application, saved_to_dto,
     scope_from_dto, strategy_from_dto,
 };
@@ -790,17 +788,17 @@ impl FileManagerService {
         self.semantic_library()
             .await
             .status(access)
-            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+            .map_err(crate::semantic_vocabulary::library_error)?;
         crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
-            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+            .map_err(crate::semantic_vocabulary::vocabulary_error)?
             .list()
             .map(|items| {
                 items
                     .into_iter()
-                    .map(crate::semantic_vocabulary_mapping::vocabulary_to_dto)
+                    .map(crate::semantic_vocabulary::vocabulary_to_dto)
                     .collect()
             })
-            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)
+            .map_err(crate::semantic_vocabulary::vocabulary_error)
     }
 
     /// Imports one validated deterministic SKOS JSON source.
@@ -813,12 +811,12 @@ impl FileManagerService {
         self.semantic_library()
             .await
             .status(access)
-            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+            .map_err(crate::semantic_vocabulary::library_error)?;
         crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
-            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+            .map_err(crate::semantic_vocabulary::vocabulary_error)?
             .import(&request.skos_json)
-            .map(crate::semantic_vocabulary_mapping::vocabulary_to_dto)
-            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)
+            .map(crate::semantic_vocabulary::vocabulary_to_dto)
+            .map_err(crate::semantic_vocabulary::vocabulary_error)
     }
 
     /// Exports the authoritative source and accepted edits without derived annotations.
@@ -830,15 +828,15 @@ impl FileManagerService {
         self.semantic_library()
             .await
             .status(access)
-            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+            .map_err(crate::semantic_vocabulary::library_error)?;
         let vocabulary =
             crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
-                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+                .map_err(crate::semantic_vocabulary::vocabulary_error)?
                 .get(vocabulary_id)
-                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+                .map_err(crate::semantic_vocabulary::vocabulary_error)?;
         Ok(fm_transport_dto::ExportSemanticVocabularyResponseDto {
             skos_json: crate::semantic_vocabulary::export_skos_json(&vocabulary)
-                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?,
+                .map_err(crate::semantic_vocabulary::vocabulary_error)?,
         })
     }
 
@@ -853,7 +851,7 @@ impl FileManagerService {
             .semantic_library()
             .await
             .status(access)
-            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+            .map_err(crate::semantic_vocabulary::library_error)?;
         if request
             .root_id
             .as_ref()
@@ -869,12 +867,12 @@ impl FileManagerService {
             return Err(ApplicationError::PermissionDenied);
         }
         crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
-            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+            .map_err(crate::semantic_vocabulary::vocabulary_error)?
             .update(&request.vocabulary_id, |vocabulary| {
                 vocabulary.attach(request.workspace_id, request.root_id)
             })
-            .map(crate::semantic_vocabulary_mapping::vocabulary_to_dto)
-            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)
+            .map(crate::semantic_vocabulary::vocabulary_to_dto)
+            .map_err(crate::semantic_vocabulary::vocabulary_error)
     }
 
     /// Applies an explicit accept/edit/reject decision to a review-only candidate.
@@ -887,7 +885,7 @@ impl FileManagerService {
         self.semantic_library()
             .await
             .status(access)
-            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+            .map_err(crate::semantic_vocabulary::library_error)?;
         use fm_transport_dto::ReviewConceptCandidateActionDto;
         let decision = match request.action {
             ReviewConceptCandidateActionDto::Accept => {
@@ -914,12 +912,12 @@ impl FileManagerService {
             }
         };
         crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
-            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?
+            .map_err(crate::semantic_vocabulary::vocabulary_error)?
             .update(&request.vocabulary_id, |vocabulary| {
                 vocabulary.review_candidate(&request.candidate_id, decision)
             })
-            .map(crate::semantic_vocabulary_mapping::vocabulary_to_dto)
-            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)
+            .map(crate::semantic_vocabulary::vocabulary_to_dto)
+            .map_err(crate::semantic_vocabulary::vocabulary_error)
     }
 
     /// Previews or confirms vocabulary deletion, reporting every affected attachment.
@@ -932,13 +930,13 @@ impl FileManagerService {
         self.semantic_library()
             .await
             .status(access)
-            .map_err(crate::semantic_vocabulary_mapping::library_error)?;
+            .map_err(crate::semantic_vocabulary::library_error)?;
         let store =
             crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
-                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+                .map_err(crate::semantic_vocabulary::vocabulary_error)?;
         let vocabulary = store
             .get(&request.vocabulary_id)
-            .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+            .map_err(crate::semantic_vocabulary::vocabulary_error)?;
         let requires_confirmation =
             !vocabulary.workspace_ids.is_empty() || !vocabulary.root_ids.is_empty();
         let impact = fm_transport_dto::DeleteSemanticVocabularyImpactDto {
@@ -951,7 +949,7 @@ impl FileManagerService {
         if impact.deleted {
             store
                 .delete(&request.vocabulary_id)
-                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+                .map_err(crate::semantic_vocabulary::vocabulary_error)?;
         }
         Ok(impact)
     }
@@ -2377,11 +2375,11 @@ impl FileManagerService {
             full: generated.full_text,
             title: generated
                 .title
-                .map(crate::document_summary_mapping::attribution_to_dto),
+                .map(crate::document_summary::attribution_to_dto),
             authors: generated
                 .authors
                 .into_iter()
-                .map(crate::document_summary_mapping::attribution_to_dto)
+                .map(crate::document_summary::attribution_to_dto)
                 .collect(),
             stale: false,
         })
@@ -3809,7 +3807,7 @@ impl FileManagerService {
         let semantic_library = self.semantic_library().await;
         let vocabulary_store =
             crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
-                .map_err(crate::semantic_vocabulary_mapping::vocabulary_error)?;
+                .map_err(crate::semantic_vocabulary::vocabulary_error)?;
         self.search_comparison
             .start_search(request, Some(&semantic_library), Some(&vocabulary_store))
             .await
