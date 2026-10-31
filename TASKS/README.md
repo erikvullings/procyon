@@ -491,3 +491,28 @@ content streaming, and mapping concerns live in dedicated modules with interface
   verified replace, original to trash; builds on 0197; real OCRmyPDF + OS trash not run end-to-end)*
 - [x] 0287 Chunk size range 256-1000 estimated tokens *(done — 400/512 defaults kept; `for_model_input_limit`
   left unwired)*
+
+**Incremental deepening epic (0288)** — six deepening candidates found by the
+`improve-codebase-architecture` skill. 0288 is the parent: tick it only when all six subtasks
+close. Every subtask is `Depends on: none`, so they are independently pickable in any order —
+use `Priority` to sequence: 0289–0291 are `high`, 0292–0294 are `medium`. 0289, 0290, 0291 and
+0294 are frontend; 0292 and 0293 are backend. 0290 and 0293 both target files that earlier tasks
+in this section already shrank once (0153's controller seam, 0119–0123's capability decomposition)
+and have since regrown — read 0153's and 0119's Agent Notes before starting, they record why the
+previous pass stopped where it did.
+
+- [ ] 0288 Incremental architecture deepening *(parent — tracks 0289–0294, no code of its own)*
+- [ ] 0289 Decompose FileManagerClient god interface *(frontend, high — 1,195-line interface /
+  100+ methods; 4–6 sub-clusters assembled in `createClient.ts`; mock adapter 6,504 → −30%)*
+- [ ] 0290 Extract feature wiring from app-shell.ts *(frontend, high — 7,978 → < 4,800 lines;
+  per-capability `*-wiring.ts` modules; proposed order: operations, workspace, navigation, settings)*
+- [ ] 0291 Split knowledge-search-dialog.ts monolith *(frontend, high — 3,234 → < 500 lines into
+  search controller / evidence renderer / answer generator / citation resolver / scope classifier)*
+- [ ] 0292 Fold Rust pass-through mapping modules into owning crates *(backend, medium — ≥8 of the
+  15 thin `fm-application` mapping modules folded in, remaining ones < 50 lines each)*
+- [ ] 0293 Reduce FileManagerService composition root from 95 public methods *(backend, medium —
+  < 50 public methods plus one `ServiceConfig` replacing the 10+ `with_*` builders; high risk,
+  check every removed method has a capability-module path)*
+- [ ] 0294 Move operations confirmation/guard helpers inside the controller *(frontend, medium —
+  the three standalone `with*` helpers become private to `createOperationsController`; interface
+  unchanged)*
