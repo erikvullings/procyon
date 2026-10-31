@@ -2243,6 +2243,7 @@ export const es = {
     drawer: 'Panel de terminal',
     selectDirectory: 'Seleccione un directorio para abrir un terminal.',
     sessionEnded: 'Sesión de terminal finalizada',
+    close: 'Cerrar terminal',
   },
   contextMenu: {
     directoryActions: 'Acciones de directorio',

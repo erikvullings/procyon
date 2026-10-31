@@ -2203,6 +2203,7 @@ export const en = {
     drawer: 'Terminal drawer',
     selectDirectory: 'Select a directory to open a terminal.',
     sessionEnded: 'Terminal session ended',
+    close: 'Close terminal',
   },
   contextMenu: {
     directoryActions: 'Directory actions',

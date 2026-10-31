@@ -2236,6 +2236,7 @@ export const it = {
     drawer: 'Pannello del terminale',
     selectDirectory: 'Seleziona una cartella per aprire un terminale.',
     sessionEnded: 'Sessione del terminale terminata',
+    close: 'Chiudi terminale',
   },
   contextMenu: {
     directoryActions: 'Azioni cartella',

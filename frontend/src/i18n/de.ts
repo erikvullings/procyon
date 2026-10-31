@@ -2259,6 +2259,7 @@ export const de = {
     drawer: 'Terminal-Leiste',
     selectDirectory: 'Wählen Sie ein Verzeichnis aus, um ein Terminal zu öffnen.',
     sessionEnded: 'Terminalsitzung beendet',
+    close: 'Terminal schließen',
   },
   contextMenu: {
     directoryActions: 'Verzeichnisaktionen',

@@ -2249,6 +2249,7 @@ export const pt = {
     drawer: 'Painel do terminal',
     selectDirectory: 'Selecione uma pasta para abrir um terminal.',
     sessionEnded: 'Sessão do terminal terminada',
+    close: 'Fechar terminal',
   },
   contextMenu: {
     directoryActions: 'Ações de pasta',

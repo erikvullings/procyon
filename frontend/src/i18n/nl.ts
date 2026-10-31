@@ -2238,6 +2238,7 @@ export const nl = {
     drawer: 'Terminalvenster',
     selectDirectory: 'Selecteer een map om een terminal te openen.',
     sessionEnded: 'Terminalsessie beëindigd',
+    close: 'Terminal sluiten',
   },
   contextMenu: {
     directoryActions: 'Mapacties',

@@ -71,6 +71,31 @@ export function handleTerminalKeyEvent(
   return false;
 }
 
+const ANSI_COLORS = [
+  ['red', '--fm-error'],
+  ['green', '--fm-success'],
+  ['yellow', '--fm-warning'],
+  ['blue', '--fm-accent'],
+] as const;
+
+/**
+ * Theme-aware ANSI colours so `ls --color`, git, compiler output and shell-side syntax
+ * highlighters (zsh-syntax-highlighting, fish) stay legible in both light and dark themes.
+ * Colours come from the app's semantic tokens; anything unresolved falls back to xterm's default.
+ */
+export function ansiPalette(style: CSSStyleDeclaration): Record<string, string> {
+  const palette: Record<string, string> = {};
+  for (const [name, token] of ANSI_COLORS) {
+    const value = style.getPropertyValue(token).trim();
+    if (value === '') continue;
+    palette[name] = value;
+    palette[`bright${name[0]?.toUpperCase()}${name.slice(1)}`] = value;
+  }
+  const muted = style.getPropertyValue('--fm-text-muted').trim();
+  if (muted !== '') palette.brightBlack = muted;
+  return palette;
+}
+
 /** Shows one location-owned terminal surface without confusing it with the shared drawer host. */
 export function showTerminalSurface(host: HTMLElement, surface: HTMLElement): void {
   if (host.childElementCount !== 1 || host.firstElementChild !== surface) {
@@ -106,6 +131,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           foreground: style.getPropertyValue('--fm-text').trim(),
           cursor: style.getPropertyValue('--fm-accent').trim(),
           selectionBackground: style.getPropertyValue('--fm-selection').trim(),
+          ...ansiPalette(style),
         },
       });
       const fit = new FitAddon();
@@ -214,6 +240,16 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
               window.addEventListener('pointerup', up);
             },
           }),
+          m(
+            'button.fm-terminal-close',
+            {
+              type: 'button',
+              title: t('terminal', 'close'),
+              'aria-label': t('terminal', 'close'),
+              onclick: () => attrs.onToggle(),
+            },
+            '×',
+          ),
           attrs.location === undefined
             ? m('.fm-terminal-unavailable', t('terminal', 'selectDirectory'))
             : m('.fm-terminal-host', {

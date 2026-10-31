@@ -2240,6 +2240,7 @@ export const pl = {
     drawer: 'Panel terminala',
     selectDirectory: 'Wybierz katalog, aby otworzyć terminal.',
     sessionEnded: 'Sesja terminala zakończona',
+    close: 'Zamknij terminal',
   },
   contextMenu: {
     directoryActions: 'Akcje katalogu',

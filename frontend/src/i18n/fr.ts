@@ -2254,6 +2254,7 @@ export const fr = {
     drawer: 'Tiroir de terminal',
     selectDirectory: 'Sélectionnez un répertoire pour ouvrir un terminal.',
     sessionEnded: 'Session de terminal terminée',
+    close: 'Fermer le terminal',
   },
   contextMenu: {
     directoryActions: 'Actions de répertoire',
