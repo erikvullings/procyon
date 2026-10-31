@@ -512,3 +512,5 @@ previous pass stopped where it did.
   folded; remaining 7 are 160–990 lines, so the "< 50 lines" criterion is not met)*
 - [x] 0293 Replace the FileManagerService constructor chain with ServiceConfig *(backend, medium —
   `ServiceConfig` + `from_config`; capability injectors and public-method count deliberately left)*
+- [x] 0295 Document-graph layout experiment *(eval, low — graph ≈ current path on prose; typographic
+  gates help paragraph recall; not ported)*
