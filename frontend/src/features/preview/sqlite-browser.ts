@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { errorText, viewerWarningText } from '../../i18n';
 import type {
   OpenSqliteViewRequest,
@@ -40,7 +40,7 @@ export interface SqliteResultState {
 }
 
 export type SqliteClient = Pick<
-  FileManagerClient,
+  WorkspaceClient,
   'openSqliteView' | 'querySqliteView' | 'closeSqliteView'
 >;
 

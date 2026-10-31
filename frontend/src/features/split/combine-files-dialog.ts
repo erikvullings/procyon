@@ -1,6 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { errorText, reasonText, t } from '../../i18n';
 import type { InspectSplitSetResult, Location } from '../../models';
 
@@ -13,7 +13,7 @@ export interface CombineFilesRequest {
 
 export interface CombineFilesDialogAttrs {
   readonly request: CombineFilesRequest | undefined;
-  readonly client: Pick<FileManagerClient, 'inspectSplitSet'>;
+  readonly client: Pick<WorkspaceClient, 'inspectSplitSet'>;
   /** `name` is set only when the user changed the proposed output name. */
   readonly onCombine: (destination: Location | undefined, name: string | undefined) => void;
   readonly onCancel: () => void;

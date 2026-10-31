@@ -1,4 +1,5 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { OperationClient } from '../../api/client/operation-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { errorText } from '../../i18n';
 import type { Location, PaneId, SyncPlanItem, SyncProfile } from '../../models';
 import { isPlanStale, operationConflictPolicy } from './sync-profile';
@@ -37,7 +38,7 @@ export interface PreparedPlan {
 }
 
 export interface RunContext {
-  readonly client: FileManagerClient;
+  readonly client: OperationClient & WorkspaceClient;
   readonly workspaceId: string;
   /** A pane id used only to satisfy the listing request; no pane is navigated. */
   readonly paneId: PaneId;

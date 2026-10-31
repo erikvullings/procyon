@@ -1,6 +1,6 @@
 # 0289 Decompose FileManagerClient god interface
 
-Status: open
+Status: done
 Priority: high
 Subsystem: frontend
 Depends on: none
@@ -95,3 +95,16 @@ Depends on: none
   remains a valid, backward-compatible import for callers that legitimately span clusters (per the
   task's own Implementation Note), and the sub-interfaces are already exported and usable. Status
   left `open` until criterion (2) is completed.
+
+- 2026-10-31 agent: **Part 3/3 done — criterion (2) feature import migration.** 61 feature/app files
+  that previously imported the composite `FileManagerClient` now import only the focused
+  sub-interface(s) they use (`ConnectionClient`/`WorkspaceClient`/`OperationClient`/`SemanticClient`/
+  `PluginClient`), single-cluster files typing the client as that one sub-interface and 2-3 cluster
+  files as an intersection `(A & B)`. Migration was driven by a tsc-gated script: any file whose
+  narrowing broke a cross-file consumer (its exported type was still taken as `FileManagerClient`)
+  was reverted to the composite. Files that genuinely span the whole surface keep the composite —
+  `app-shell.ts`, the pane/tab controllers and a few others whose exported signatures are consumed
+  as the full client (per the task's Implementation Note allowing the composite for full-surface
+  callers). Verified: `tsc --noEmit` clean, `biome check` clean (only pre-existing CSS warnings),
+  full frontend suite green (3322 tests), and `pnpm api:check`'s generated artifacts byte-identical.
+  All 5 acceptance criteria are now met. **Status -> done.**

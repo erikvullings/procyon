@@ -1,4 +1,5 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
+import type { OperationClient } from '../../api/client/operation-client.ts';
 import type { EntrySummary, Location } from '../../models';
 import { resolveTargetLocation } from '../playlist/playlist-resolver';
 import type { DetectedLink } from './link-detection';
@@ -50,7 +51,7 @@ function expandHome(path: string, home: string | undefined): string | undefined 
 export async function resolveDetectedLink(
   link: DetectedLink,
   base: Location,
-  client: Pick<FileManagerClient, 'resolveLinkTarget' | 'getHomeDirectory'>,
+  client: Pick<ConnectionClient & OperationClient, 'resolveLinkTarget' | 'getHomeDirectory'>,
   signal?: AbortSignal,
 ): Promise<ResolvedLink | undefined> {
   if (link.kind === 'url') {

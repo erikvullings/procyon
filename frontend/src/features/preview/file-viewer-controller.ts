@@ -1,4 +1,6 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { OperationClient } from '../../api/client/operation-client.ts';
+import type { PluginClient } from '../../api/client/plugin-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { ApiError } from '../../api/fetch-mutator';
 import { errorText, t, viewerWarningText } from '../../i18n';
 import type {
@@ -80,7 +82,7 @@ import {
 /** Client surface required to drive a Lister-style large-file viewer. `listDirectory` is only
  * used for comic (.cbz/.cbr) page listing. */
 export type FileViewerClient = Pick<
-  FileManagerClient,
+  OperationClient & PluginClient & WorkspaceClient,
   | 'readFileRange'
   | 'readGeoFile'
   | 'mediaUrl'
@@ -209,7 +211,7 @@ export interface FileViewerImageContent {
  * reports its own duration/position, so no metadata needs fetching separately. */
 export interface FileViewerAudioContent {
   readonly kind: 'audio';
-  /** Seekable streaming URL from {@link FileManagerClient.mediaUrl} (task 0260). */
+  /** Seekable streaming URL from {@link (OperationClient & PluginClient & WorkspaceClient).mediaUrl} (task 0260). */
   readonly src: string;
 }
 

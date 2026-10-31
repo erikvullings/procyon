@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary } from '../../models';
 import { ThumbnailLoader } from './thumbnail-loader';
 
@@ -19,14 +19,14 @@ function entry(name: string, extension: string, kind: EntrySummary['kind'] = 'fi
   };
 }
 
-function noopReadFileRange(): ReturnType<FileManagerClient['readFileRange']> {
+function noopReadFileRange(): ReturnType<WorkspaceClient['readFileRange']> {
   return Promise.reject(new Error('readFileRange not stubbed for this test'));
 }
 
 describe('ThumbnailLoader', () => {
   it('loads lazily and caches interleaved entries by uri and size', async () => {
     const getThumbnail = vi
-      .fn<FileManagerClient['getThumbnail']>()
+      .fn<WorkspaceClient['getThumbnail']>()
       .mockResolvedValue(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]));
     const redraw = vi.fn();
     const loader = new ThumbnailLoader({ getThumbnail, readFileRange: noopReadFileRange }, redraw);
@@ -59,7 +59,7 @@ describe('ThumbnailLoader', () => {
 
   it('fetches the same file again for a different requested size', async () => {
     const getThumbnail = vi
-      .fn<FileManagerClient['getThumbnail']>()
+      .fn<WorkspaceClient['getThumbnail']>()
       .mockResolvedValue(new Uint8Array([1, 2, 3, 4]));
     const loader = new ThumbnailLoader({ getThumbnail, readFileRange: noopReadFileRange }, vi.fn());
     const file = entry('photo.png', 'png');
@@ -85,7 +85,7 @@ describe('ThumbnailLoader', () => {
   });
 
   it('does not fetch for a directory or an unsupported extension', () => {
-    const getThumbnail = vi.fn<FileManagerClient['getThumbnail']>();
+    const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>();
     const loader = new ThumbnailLoader({ getThumbnail, readFileRange: noopReadFileRange }, vi.fn());
 
     expect(loader.thumbnailDataUri(entry('folder', '', 'directory'), 'small')).toBeUndefined();
@@ -94,7 +94,7 @@ describe('ThumbnailLoader', () => {
   });
 
   it('caches an unavailable thumbnail and keeps returning the icon fallback path', async () => {
-    const getThumbnail = vi.fn<FileManagerClient['getThumbnail']>().mockResolvedValue(undefined);
+    const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>().mockResolvedValue(undefined);
     const loader = new ThumbnailLoader({ getThumbnail, readFileRange: noopReadFileRange }, vi.fn());
     const file = entry('broken.png', 'png');
 
@@ -107,7 +107,7 @@ describe('ThumbnailLoader', () => {
 
   it('resolves to undefined if the client rejects, instead of throwing', async () => {
     const getThumbnail = vi
-      .fn<FileManagerClient['getThumbnail']>()
+      .fn<WorkspaceClient['getThumbnail']>()
       .mockRejectedValue(new Error('boom'));
     const loader = new ThumbnailLoader({ getThumbnail, readFileRange: noopReadFileRange }, vi.fn());
     const file = entry('flaky.png', 'png');
@@ -119,7 +119,7 @@ describe('ThumbnailLoader', () => {
   });
 
   it('treats cbz and cbr archives as thumbnailable', () => {
-    const getThumbnail = vi.fn<FileManagerClient['getThumbnail']>().mockResolvedValue(undefined);
+    const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>().mockResolvedValue(undefined);
     const loader = new ThumbnailLoader({ getThumbnail, readFileRange: noopReadFileRange }, vi.fn());
 
     loader.thumbnailDataUri(entry('issue.cbz', 'cbz'), 'medium');
@@ -129,7 +129,7 @@ describe('ThumbnailLoader', () => {
   });
 
   it('treats mp4/m4v/mov video and pdf as thumbnailable', () => {
-    const getThumbnail = vi.fn<FileManagerClient['getThumbnail']>().mockResolvedValue(undefined);
+    const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>().mockResolvedValue(undefined);
     const loader = new ThumbnailLoader({ getThumbnail, readFileRange: noopReadFileRange }, vi.fn());
 
     loader.thumbnailDataUri(entry('clip.mp4', 'mp4'), 'medium');
@@ -141,8 +141,8 @@ describe('ThumbnailLoader', () => {
   });
 
   it('renders an svg by reading its raw markup, never through the JPEG thumbnail endpoint', async () => {
-    const getThumbnail = vi.fn<FileManagerClient['getThumbnail']>();
-    const readFileRange = vi.fn<FileManagerClient['readFileRange']>().mockResolvedValue({
+    const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>();
+    const readFileRange = vi.fn<WorkspaceClient['readFileRange']>().mockResolvedValue({
       data: [60, 115, 118, 103, 62, 60, 47, 115, 118, 103, 62], // "<svg></svg>"
       eof: true,
       length: 11,
@@ -176,9 +176,9 @@ describe('ThumbnailLoader', () => {
   });
 
   it('skips an svg thumbnail when the file is over the size limit or the read is truncated', async () => {
-    const getThumbnail = vi.fn<FileManagerClient['getThumbnail']>();
+    const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>();
     const readFileRange = vi
-      .fn<FileManagerClient['readFileRange']>()
+      .fn<WorkspaceClient['readFileRange']>()
       .mockResolvedValue({ data: [], eof: false, length: 3 * 1024, offset: 0 });
     const loader = new ThumbnailLoader({ getThumbnail, readFileRange }, vi.fn());
 
@@ -195,8 +195,8 @@ describe('ThumbnailLoader', () => {
   });
 
   it('does not read an oversized svg even at grid thumbnail sizes', () => {
-    const getThumbnail = vi.fn<FileManagerClient['getThumbnail']>();
-    const readFileRange = vi.fn<FileManagerClient['readFileRange']>();
+    const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>();
+    const readFileRange = vi.fn<WorkspaceClient['readFileRange']>();
     const loader = new ThumbnailLoader({ getThumbnail, readFileRange }, vi.fn());
     const oversized = entry('huge.svg', 'svg');
     oversized.size = 512 * 1024 + 1;
@@ -206,7 +206,7 @@ describe('ThumbnailLoader', () => {
   });
 
   it('skips large raster images in list rows but loads them for the thumbnail grid', () => {
-    const getThumbnail = vi.fn<FileManagerClient['getThumbnail']>().mockResolvedValue(undefined);
+    const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>().mockResolvedValue(undefined);
     const loader = new ThumbnailLoader({ getThumbnail, readFileRange: noopReadFileRange }, vi.fn());
 
     const bigPng = entry('photo.png', 'png');
@@ -224,7 +224,7 @@ describe('ThumbnailLoader', () => {
   });
 
   it('always thumbnails an ico file, unlike other images, regardless of size', () => {
-    const getThumbnail = vi.fn<FileManagerClient['getThumbnail']>().mockResolvedValue(undefined);
+    const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>().mockResolvedValue(undefined);
     const loader = new ThumbnailLoader({ getThumbnail, readFileRange: noopReadFileRange }, vi.fn());
 
     const bigIco = entry('huge.ico', 'ico');
@@ -242,7 +242,7 @@ describe('ThumbnailLoader', () => {
 
   it('cancels queued and active viewport requests after their tiles leave the viewport', async () => {
     const requests: Array<{ signal: AbortSignal; resolve: () => void }> = [];
-    const getThumbnail = vi.fn<FileManagerClient['getThumbnail']>(
+    const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>(
       (_uri, _size, signal) =>
         new Promise((resolve, reject) => {
           if (signal === undefined) throw new Error('missing abort signal');
@@ -274,7 +274,7 @@ describe('ThumbnailLoader', () => {
 
   it('keeps a shared request alive when only its grid tile leaves the viewport', () => {
     let signal: AbortSignal | undefined;
-    const getThumbnail = vi.fn<FileManagerClient['getThumbnail']>(
+    const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>(
       (_uri, _size, requestSignal) =>
         new Promise(() => {
           signal = requestSignal;

@@ -1,4 +1,5 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { OperationClient } from '../../api/client/operation-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { errorText, t } from '../../i18n';
 import type { EntrySummary } from '../../models';
 import type { OperationsController } from '../operations/operations-controller';
@@ -16,7 +17,7 @@ export interface ImageMapSource {
 }
 
 export interface ImageMapControllerContext {
-  getClient(): Pick<FileManagerClient, 'readImageGps' | 'listOperations'>;
+  getClient(): Pick<OperationClient & WorkspaceClient, 'readImageGps' | 'listOperations'>;
   getOpsController(): Pick<OperationsController, 'editImageMetadata'>;
   getState(): ImageMapState;
   setState(state: ImageMapState): void;

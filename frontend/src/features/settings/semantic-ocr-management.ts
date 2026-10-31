@@ -1,6 +1,7 @@
 import m, { type FactoryComponent, type Vnode } from 'mithril';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
+import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { t } from '../../i18n';
 import type {
   SemanticOcrJob,
@@ -15,7 +16,7 @@ import type {
 import { busyButtonAttrs } from './busy-button';
 
 export interface SemanticOcrManagementAttrs {
-  readonly client: FileManagerClient;
+  readonly client: ConnectionClient & SemanticClient;
   readonly hideHeading?: boolean;
   readonly onStatusChange?: (status: SemanticOcrStatus) => void;
 }

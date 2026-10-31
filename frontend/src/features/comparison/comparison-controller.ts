@@ -1,4 +1,5 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { OperationClient } from '../../api/client/operation-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { t } from '../../i18n';
 import type { ComparisonCriteria, ComparisonEntry, WorkspaceProjection } from '../../models';
 import {
@@ -15,7 +16,7 @@ export interface ComparisonControllerContext {
   getState(): ComparisonState;
   setState(next: ComparisonState): void;
   getWorkspace(): WorkspaceProjection | undefined;
-  getClient(): FileManagerClient;
+  getClient(): OperationClient & WorkspaceClient;
   redraw(): void;
 }
 

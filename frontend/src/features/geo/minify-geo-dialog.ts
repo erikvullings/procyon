@@ -1,6 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { errorText, geoMessageText, t } from '../../i18n';
 import type {
   GeoDocument,
@@ -31,7 +32,7 @@ export interface MinifyGeoRequest {
 export interface MinifyGeoDialogAttrs {
   readonly request: MinifyGeoRequest | undefined;
   readonly client: Pick<
-    FileManagerClient,
+    ConnectionClient & WorkspaceClient,
     'previewGeoMinify' | 'readGeoFile' | 'getSettings' | 'mapTileUrlTemplate' | 'mediaUrl'
   >;
   readonly onApply: (transform: GeoTransform) => void;

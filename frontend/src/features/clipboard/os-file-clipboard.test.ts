@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
 import type { ClipboardState, Location } from '../../models';
 import { createOsFileClipboard } from './os-file-clipboard';
 
@@ -18,7 +18,7 @@ function fakeClient(options: { supported?: boolean; initial?: Location[] } = {})
     getRuntimeCapabilities: vi.fn(async () => ({ osFileClipboard: options.supported ?? true })),
     writeOsClipboardFiles,
     readOsClipboardFiles,
-  } as unknown as FileManagerClient;
+  } as unknown as ConnectionClient;
   return {
     client,
     writeOsClipboardFiles,

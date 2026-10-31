@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { ApiError } from '../../api/fetch-mutator';
 import type { WorkspaceCommand, WorkspaceProjection } from '../../models';
 import {
@@ -45,13 +45,13 @@ function projection(revision: number, name = 'Workspace'): WorkspaceProjection {
 }
 
 function clientWith(
-  dispatch: FileManagerClient['dispatchWorkspaceCommand'],
-  getWorkspace: FileManagerClient['getWorkspace'],
-): FileManagerClient {
+  dispatch: WorkspaceClient['dispatchWorkspaceCommand'],
+  getWorkspace: WorkspaceClient['getWorkspace'],
+): WorkspaceClient {
   return {
     dispatchWorkspaceCommand: dispatch,
     getWorkspace,
-  } as FileManagerClient;
+  } as WorkspaceClient;
 }
 
 describe('dispatchWorkspaceCommand', () => {
@@ -86,10 +86,10 @@ describe('dispatchWorkspaceCommand', () => {
     const latest = projection(5);
     const changed = projection(6, 'Renamed');
     const dispatch = vi
-      .fn<FileManagerClient['dispatchWorkspaceCommand']>()
+      .fn<WorkspaceClient['dispatchWorkspaceCommand']>()
       .mockRejectedValueOnce(conflict)
       .mockResolvedValueOnce(changed);
-    const getWorkspace = vi.fn<FileManagerClient['getWorkspace']>().mockResolvedValue(latest);
+    const getWorkspace = vi.fn<WorkspaceClient['getWorkspace']>().mockResolvedValue(latest);
     const command: WorkspaceCommand = {
       type: 'renameWorkspace',
       workspaceId: 'workspace-1',
@@ -118,9 +118,9 @@ describe('dispatchWorkspaceCommand', () => {
     });
     const latest = projection(5);
     const dispatch = vi
-      .fn<FileManagerClient['dispatchWorkspaceCommand']>()
+      .fn<WorkspaceClient['dispatchWorkspaceCommand']>()
       .mockRejectedValue(conflict);
-    const getWorkspace = vi.fn<FileManagerClient['getWorkspace']>().mockResolvedValue(latest);
+    const getWorkspace = vi.fn<WorkspaceClient['getWorkspace']>().mockResolvedValue(latest);
     const command: WorkspaceCommand = {
       type: 'addTab',
       workspaceId: 'workspace-1',

@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary } from '../../models';
 import {
   AUDIO_EXTENSIONS,
@@ -164,7 +164,7 @@ export function bytesToDataUri(bytes: Uint8Array, mimeType: string): string {
 export const IMAGE_RANGE_CHUNK_BYTES = 1024 * 1024;
 
 /** Client surface required to read a file's full bytes in range-sized chunks. */
-export type ImageRangeClient = Pick<FileManagerClient, 'readFileRange'>;
+export type ImageRangeClient = Pick<WorkspaceClient, 'readFileRange'>;
 
 /**
  * Reads an entire file as range-sized chunks (respecting the backend's per-request byte cap).

@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
 import type { ClipboardState, Location } from '../../models';
 
 /**
@@ -32,7 +32,7 @@ function sameFiles(left: readonly Location[], right: readonly Location[]): boole
   return keys.size === new Set(right.map(fileKey)).size && right.every((l) => keys.has(fileKey(l)));
 }
 
-export function createOsFileClipboard(getClient: () => FileManagerClient): OsFileClipboard {
+export function createOsFileClipboard(getClient: () => ConnectionClient): OsFileClipboard {
   let supported: Promise<boolean> | undefined;
   let pending: Promise<void> = Promise.resolve();
   /** The OS clipboard's file references right after Procyon's last copy or cut, `undefined`

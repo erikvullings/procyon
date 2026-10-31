@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { Connection, ConnectionConfiguration } from '../../models';
 import {
   connectionForLocation,
@@ -364,13 +365,15 @@ describe('validateConnectionDraft', () => {
 });
 
 function mockClient(
-  overrides: Partial<Pick<FileManagerClient, 'createConnection' | 'updateConnection'>> = {},
-): FileManagerClient {
+  overrides: Partial<
+    Pick<ConnectionClient & WorkspaceClient, 'createConnection' | 'updateConnection'>
+  > = {},
+): ConnectionClient & WorkspaceClient {
   return {
     createConnection: vi.fn().mockResolvedValue(sampleConnection({ id: 'new-id' })),
     updateConnection: vi.fn().mockResolvedValue(sampleConnection({ id: 'existing-id' })),
     ...overrides,
-  } as unknown as FileManagerClient;
+  } as unknown as ConnectionClient & WorkspaceClient;
 }
 
 function validDraft() {

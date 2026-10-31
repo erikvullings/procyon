@@ -4,7 +4,7 @@
  * provider resolves through the same provider. Remote (`http(s)` and other streaming) entries
  * are classified but never fetched here.
  */
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { OperationClient } from '../../api/client/operation-client.ts';
 import type { Location } from '../../models/location';
 import type { PlaylistTrack } from './playlist-parser';
 
@@ -103,7 +103,7 @@ const PROGRESS_BATCH = 25;
  * rows every batch so a long playlist fills in progressively. Stops quietly when aborted.
  */
 export async function checkPlaylistRows(
-  client: Pick<FileManagerClient, 'resolveLinkTarget'>,
+  client: Pick<OperationClient, 'resolveLinkTarget'>,
   rows: readonly ResolvedPlaylistTrack[],
   signal: AbortSignal,
   onProgress: (rows: readonly ResolvedPlaylistTrack[]) => void,

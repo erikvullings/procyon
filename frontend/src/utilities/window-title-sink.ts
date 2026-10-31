@@ -1,11 +1,11 @@
-import type { FileManagerClient } from '../api/client/file-manager-client';
+import type { ConnectionClient } from '../api/client/connection-client.ts';
 
 /** Applies a title to the host window; implementations never throw. */
 export type WindowTitleSink = (title: string) => void;
 
 /** Routes titles through the runtime client (native title on desktop, `document.title` elsewhere). */
 export function createWindowTitleSink(
-  client: Pick<FileManagerClient, 'setWindowTitle'>,
+  client: Pick<ConnectionClient, 'setWindowTitle'>,
 ): WindowTitleSink {
   return (title) => {
     void client.setWindowTitle?.(title).catch(() => undefined);

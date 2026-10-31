@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { errorText, t } from '../../i18n';
 import type {
   DirectorySnapshot,
@@ -18,7 +18,7 @@ import { dispatchWorkspaceCommand } from '../workspace/dispatch-workspace-comman
 
 /** Client surface required by directory navigation. */
 export type NavigationClient = Pick<
-  FileManagerClient,
+  WorkspaceClient,
   'dispatchWorkspaceCommand' | 'getWorkspace' | 'listDirectory' | 'navigatePane'
 >;
 

@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary, ImageGpsEntry } from '../../models';
 
 /** Images are sent to the backend in batches of this many (the backend accepts up to 100). */
@@ -74,7 +74,7 @@ export class GpsCache {
 }
 
 export interface GpsScanOptions {
-  readonly client: Pick<FileManagerClient, 'readImageGps'>;
+  readonly client: Pick<WorkspaceClient, 'readImageGps'>;
   readonly entries: readonly EntrySummary[];
   readonly cache: GpsCache;
   readonly signal: AbortSignal;

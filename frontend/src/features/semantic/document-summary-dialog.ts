@@ -1,7 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel, Skeleton } from 'mithril-materialized';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { t } from '../../i18n';
 import type {
   DocumentSummary,
@@ -15,7 +15,7 @@ import type {
 
 export interface DocumentSummaryDialogAttrs {
   readonly open: boolean;
-  readonly client: FileManagerClient;
+  readonly client: SemanticClient;
   readonly workspaceId: WorkspaceId | string;
   readonly entry: EntrySummary | undefined;
   readonly onClose: () => void;

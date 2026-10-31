@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { OperationClient } from '../../api/client/operation-client.ts';
 import { errorText, t } from '../../i18n';
 import type { SnapshotDiffEntry, StartSnapshotJobRequest } from '../../models';
 import { INITIAL_SNAPSHOT_PANEL_STATE, type SnapshotPanelState } from './snapshot-state';
@@ -8,7 +8,7 @@ const MAX_ENTRIES = 20_000;
 const POLL_INTERVAL_MS = 700;
 
 export interface SnapshotControllerContext {
-  getClient(): Pick<FileManagerClient, 'startSnapshotJob' | 'getSnapshotJob' | 'cancelSnapshotJob'>;
+  getClient(): Pick<OperationClient, 'startSnapshotJob' | 'getSnapshotJob' | 'cancelSnapshotJob'>;
   getState(): SnapshotPanelState;
   setState(state: SnapshotPanelState): void;
   toast(message: string): void;

@@ -1,7 +1,7 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary } from '../../models';
 
-type ThumbnailSource = Pick<FileManagerClient, 'getThumbnail'>;
+type ThumbnailSource = Pick<WorkspaceClient, 'getThumbnail'>;
 type Size = 'small' | 'medium' | 'large';
 
 const MAX_CONCURRENT = 4;

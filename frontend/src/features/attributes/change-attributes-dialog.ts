@@ -1,6 +1,6 @@
 import m, { type FactoryComponent, type Vnode, type VnodeDOM } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { errorText, t } from '../../i18n';
 import type {
   AttributeChangePreview,
@@ -32,7 +32,7 @@ export interface ChangeAttributesRequest {
 
 export interface ChangeAttributesDialogAttrs {
   readonly request: ChangeAttributesRequest | undefined;
-  readonly client: Pick<FileManagerClient, 'inspectAttributes' | 'previewAttributeChange'>;
+  readonly client: Pick<WorkspaceClient, 'inspectAttributes' | 'previewAttributeChange'>;
   readonly onApply: (change: ChangeAttributes, count: number) => void;
   readonly onCancel: () => void;
 }

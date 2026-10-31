@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
 import type { EntrySummary } from '../../models';
 
 /** Query parameter that makes the frontend mount only the F3 viewer for one file. */
@@ -88,7 +88,7 @@ export function decodeViewerRequest(search: string): ViewerWindowRequest | undef
  * can fall back to the in-pane viewer.
  */
 export async function openViewerWindow(
-  client: Pick<FileManagerClient, 'openViewerWindow'>,
+  client: Pick<ConnectionClient, 'openViewerWindow'>,
   request: ViewerWindowRequest,
 ): Promise<boolean> {
   const token = encodeViewerRequest(request);

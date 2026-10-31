@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { OperationClient } from '../../api/client/operation-client.ts';
 import type {
   ChangeAttributes,
   GeoTransform,
@@ -232,8 +232,8 @@ export function withActiveSourceGuard(
   };
 }
 
-export function createOperationsController(rawClient: FileManagerClient): OperationsController {
-  const client: Pick<FileManagerClient, 'startOperation'> = {
+export function createOperationsController(rawClient: OperationClient): OperationsController {
+  const client: Pick<OperationClient, 'startOperation'> = {
     async startOperation(request, signal) {
       perfMark('op-start-request', { type: request.type });
       const operation = await rawClient.startOperation(request, signal);

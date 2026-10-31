@@ -1,12 +1,12 @@
 import m, { type FactoryComponent } from 'mithril';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { t } from '../../i18n';
 import type { SemanticVocabulary, WorkspaceId } from '../../models';
 import { busyButtonAttrs } from './busy-button';
 
 export interface SemanticVocabularyManagementAttrs {
-  readonly client: FileManagerClient;
+  readonly client: SemanticClient;
   readonly workspaceId?: WorkspaceId;
 }
 
@@ -25,7 +25,7 @@ export const SemanticVocabularyManagement: FactoryComponent<
   let error: string | undefined;
   let pendingDelete: string | undefined;
 
-  const load = async (client: FileManagerClient): Promise<void> => {
+  const load = async (client: SemanticClient): Promise<void> => {
     loading = true;
     error = undefined;
     try {
@@ -38,10 +38,7 @@ export const SemanticVocabularyManagement: FactoryComponent<
     }
   };
 
-  const importVocabulary = async (
-    client: FileManagerClient,
-    skosJson: string,
-  ): Promise<boolean> => {
+  const importVocabulary = async (client: SemanticClient, skosJson: string): Promise<boolean> => {
     busy = true;
     importing = true;
     error = undefined;

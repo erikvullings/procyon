@@ -1,7 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { FlatButton, IconButton, ModalPanel, ToggleButton } from 'mithril-materialized';
 import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import {
   browserPlusIcon,
   chevronRightIcon,
@@ -63,7 +63,7 @@ export interface FindFilesSearchParams {
 /** The F7/Alt+F7 search dialog's props (task 0089). */
 export interface FindFilesDialogAttrs {
   readonly open: boolean;
-  readonly client?: FileManagerClient;
+  readonly client?: SemanticClient;
   readonly workspaceId?: string | undefined;
   /** Read-only context shown above the query field, e.g. the active directory's path. */
   readonly scopeLabel: string;

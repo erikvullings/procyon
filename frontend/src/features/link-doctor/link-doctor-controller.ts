@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { OperationClient } from '../../api/client/operation-client.ts';
 import { errorText, t } from '../../i18n';
 import type { LinkProblem, LinkReplacementCandidate, Location, Operation } from '../../models';
 import { parentLocation } from '../navigation/navigation';
@@ -20,7 +20,7 @@ const OPERATION_TIMEOUT_MS = 20_000;
 
 export interface LinkDoctorControllerContext {
   getClient(): Pick<
-    FileManagerClient,
+    OperationClient,
     | 'startLinkDoctorScan'
     | 'getLinkDoctorScan'
     | 'cancelLinkDoctorScan'

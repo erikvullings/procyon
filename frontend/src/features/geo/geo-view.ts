@@ -1,5 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { tooltip } from '../../components/tooltip';
 import { geoMessageText, t } from '../../i18n';
 import type {
@@ -22,7 +23,10 @@ import { layersOf, visibleFeatures } from './geo-layers';
 import { formatDistance, formatDuration, formatElevation, formatSpeed } from './track-format';
 
 export interface GeoViewAttrs {
-  readonly client: Pick<FileManagerClient, 'mapTileUrlTemplate' | 'mediaUrl' | 'getSettings'>;
+  readonly client: Pick<
+    ConnectionClient & WorkspaceClient,
+    'mapTileUrlTemplate' | 'mediaUrl' | 'getSettings'
+  >;
   readonly name: string;
   readonly document: GeoDocument;
   readonly selectedIndex: number | undefined;

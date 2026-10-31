@@ -1,5 +1,5 @@
 import m from 'mithril';
-import type { FileManagerClient } from '../api/client/file-manager-client';
+import type { PluginClient } from '../api/client/plugin-client.ts';
 import type { IconAttrs } from '../components/icons';
 import {
   type EntryIconRegistry,
@@ -59,7 +59,7 @@ function rendererFromSvgMarkup(markup: string, extraClass: string): EntryIconRen
  * pattern used elsewhere in this codebase.
  */
 export async function installPluginIconTheme(
-  client: FileManagerClient,
+  client: PluginClient,
   pluginId: PluginId,
   iconTheme: PluginIconTheme,
   registry: EntryIconRegistry = entryIconRegistry,

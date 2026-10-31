@@ -1,6 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { EntrySummary, MapSettings } from '../../models';
@@ -13,7 +13,7 @@ import { thumbnailImage } from './thumbnail-image';
 
 export interface ImageMapPanelAttrs {
   readonly state: ImageMapState;
-  readonly client: MapViewClient & Pick<FileManagerClient, 'getThumbnail'>;
+  readonly client: MapViewClient & Pick<WorkspaceClient, 'getThumbnail'>;
   readonly settings: MapSettings;
   readonly dark: boolean;
   /** Entry ids selected in the active pane; their markers are highlighted. */

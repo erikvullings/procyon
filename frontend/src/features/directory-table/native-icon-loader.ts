@@ -1,11 +1,11 @@
 import m from 'mithril';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary } from '../../models';
 import { isParentEntry } from '../panes/parent-entry';
 import { hasSpecificEntryIcon } from './entry-icons';
 
-type IconClient = Pick<FileManagerClient, 'getFileIcon'>;
+type IconClient = Pick<WorkspaceClient, 'getFileIcon'>;
 
 function cacheKey(entry: EntrySummary): string | undefined {
   if (isParentEntry(entry.id)) return undefined;

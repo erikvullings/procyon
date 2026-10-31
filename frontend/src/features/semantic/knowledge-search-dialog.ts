@@ -2,7 +2,9 @@ import m, { type FactoryComponent } from 'mithril';
 import { FlatButton, IconButton, ModalPanel, Skeleton } from 'mithril-materialized';
 
 import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
+import type { SemanticClient } from '../../api/client/semantic-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import {
   brainIcon,
   checkIcon,
@@ -56,7 +58,7 @@ import { mediaDescription, mediaKind, mediaLabel, mediaModifiedLabel } from './m
 /** Everything the shell knows about the default scope when the dialog opens. */
 export interface KnowledgeSearchDialogAttrs {
   readonly open: boolean;
-  readonly client: FileManagerClient;
+  readonly client: ConnectionClient & SemanticClient & WorkspaceClient;
   readonly workspaceId: string;
   /** Active directory, offered as the default scope when it is indexed. */
   readonly currentFolder: Location | undefined;
@@ -97,7 +99,7 @@ const SCOPE_KINDS: readonly KnowledgeScopeKind[] = [
 const PREFERENCES_STORAGE_KEY = 'procyon.knowledgeSearch.preferences.v1';
 
 interface KnowledgeImagePreviewAttrs {
-  readonly client: FileManagerClient;
+  readonly client: ConnectionClient & SemanticClient & WorkspaceClient;
   readonly workspaceId: string;
   readonly evidence: KnowledgeEvidence;
   readonly title: string;
@@ -256,7 +258,7 @@ const KNOWLEDGE_COPY_IMAGE_LIMIT = 8 * 1024 * 1024;
 const KNOWLEDGE_COPY_READ_LENGTH = 1024 * 1024;
 
 const KnowledgeMediaCopy: FactoryComponent<{
-  readonly client: FileManagerClient;
+  readonly client: ConnectionClient & SemanticClient & WorkspaceClient;
   readonly workspaceId: string;
   readonly evidence: KnowledgeEvidence;
   readonly title: string;
@@ -269,7 +271,7 @@ const KnowledgeMediaCopy: FactoryComponent<{
   let busy = false;
 
   async function copy(attrs: {
-    readonly client: FileManagerClient;
+    readonly client: ConnectionClient & SemanticClient & WorkspaceClient;
     readonly workspaceId: string;
     readonly evidence: KnowledgeEvidence;
     readonly title: string;

@@ -1,6 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { errorText, geoMessageText, t } from '../../i18n';
 import type { GeoConversionReport, GeoTargetFormat, GeoTransform, Location } from '../../models';
 
@@ -11,7 +11,7 @@ export interface ConvertGeoRequest {
 
 export interface ConvertGeoDialogAttrs {
   readonly request: ConvertGeoRequest | undefined;
-  readonly client: Pick<FileManagerClient, 'previewGeoConversion'>;
+  readonly client: Pick<WorkspaceClient, 'previewGeoConversion'>;
   readonly onConvert: (transform: GeoTransform) => void;
   readonly onCancel: () => void;
 }

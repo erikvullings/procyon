@@ -1,7 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { NumberInput, Select, Switch, TextInput } from 'mithril-materialized';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { getLocale, t } from '../../i18n';
 import type {
   LlmApiCapability,
@@ -13,7 +13,7 @@ import type {
 } from '../../models';
 
 export interface LlmProfileManagementAttrs {
-  readonly client: FileManagerClient;
+  readonly client: SemanticClient;
   readonly onSaveHandlerChange?: (handler: (() => Promise<boolean>) | undefined) => void;
 }
 
@@ -152,7 +152,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     modelLimits = undefined;
   }
 
-  async function load(client: FileManagerClient): Promise<void> {
+  async function load(client: SemanticClient): Promise<void> {
     loading = true;
     error = undefined;
     try {
@@ -193,7 +193,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     error = undefined;
   }
 
-  function discoverModels(client: FileManagerClient, profile: LlmProfile): void {
+  function discoverModels(client: SemanticClient, profile: LlmProfile): void {
     if (
       profile.locality !== 'loopback' ||
       !profile.capabilities.includes('modelDiscovery') ||
@@ -213,7 +213,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     }, isCurrent);
   }
 
-  function discoverDraftModels(client: FileManagerClient): void {
+  function discoverDraftModels(client: SemanticClient): void {
     if (
       editor === undefined ||
       !editor.request.capabilities.includes('modelDiscovery') ||
@@ -242,7 +242,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     }, isCurrent);
   }
 
-  function discoverLimits(client: FileManagerClient): void {
+  function discoverLimits(client: SemanticClient): void {
     if (editor === undefined || editor.request.model.trim() === '') return;
     if (
       editor.profileId !== undefined &&
@@ -289,7 +289,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     }, isCurrent);
   }
 
-  function choosePreset(client: FileManagerClient, presetId: string): void {
+  function choosePreset(client: SemanticClient, presetId: string): void {
     const preset = presets.find((candidate) => candidate.preset === presetId);
     if (preset === undefined) return;
     selectedId = undefined;
@@ -322,7 +322,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     }
   }
 
-  async function save(client: FileManagerClient): Promise<boolean> {
+  async function save(client: SemanticClient): Promise<boolean> {
     if (editor === undefined || !dirty) return true;
     const payload: SaveLlmProfileRequest = {
       ...editor.request,

@@ -1,12 +1,12 @@
 import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
 import { t } from '../../i18n';
 import type { AppUpdateInfo, AppUpdateProgress } from '../../models';
 import { busyButtonAttrs } from './busy-button';
 
 export interface AppUpdateDialogAttrs {
-  readonly client: FileManagerClient;
+  readonly client: ConnectionClient;
   readonly update?: AppUpdateInfo;
   readonly onLater: () => void;
 }

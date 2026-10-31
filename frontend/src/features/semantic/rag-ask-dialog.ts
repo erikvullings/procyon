@@ -2,7 +2,7 @@ import m, { type FactoryComponent } from 'mithril';
 import { IconButton, ModalPanel } from 'mithril-materialized';
 
 import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { copyIcon, plusIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
@@ -24,7 +24,7 @@ import { decodeEvidenceTitle } from './evidence-title';
 
 export interface RagAskDialogAttrs {
   readonly open: boolean;
-  readonly client: FileManagerClient;
+  readonly client: SemanticClient;
   readonly workspaceId: string;
   readonly currentFolder: Location | undefined;
   readonly selectedEntries: readonly EntrySummary[];

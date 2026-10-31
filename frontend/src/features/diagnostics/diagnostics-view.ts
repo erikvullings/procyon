@@ -4,14 +4,14 @@ import { invoke } from '@tauri-apps/api/core';
 import type { FactoryComponent, Vnode } from 'mithril';
 import m from 'mithril';
 import { toast } from 'mithril-materialized';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
 import { t } from '../../i18n';
 import { writeSystemClipboardText } from '../clipboard/copy-selection-actions';
 import type { DiagnosticsView } from './diagnostics';
 import { diagnosticsFromDto } from './diagnostics';
 
 interface DiagnosticsViewAttrs {
-  readonly client: FileManagerClient;
+  readonly client: ConnectionClient;
   /** Whether this install also checks for beta releases (Settings → Updates). */
   readonly betaUpdates?: boolean;
 }
@@ -23,7 +23,7 @@ interface DiagnosticsState {
 }
 
 /** Diagnostics view component for troubleshooting and bug reports. Goes through the
- * runtime-selected {@link FileManagerClient} (Tauri IPC on desktop, HTTP elsewhere) rather than a
+ * runtime-selected {@link ConnectionClient} (Tauri IPC on desktop, HTTP elsewhere) rather than a
  * raw `fetch`, so it works when there's no separately-running `fm-server` to proxy to. */
 export const DiagnosticsViewComponent: FactoryComponent<DiagnosticsViewAttrs> = ({ attrs }) => {
   const { client } = attrs;

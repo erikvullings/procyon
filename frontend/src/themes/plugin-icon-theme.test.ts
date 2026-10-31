@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { FileManagerClient } from '../api/client/file-manager-client';
+import type { PluginClient } from '../api/client/plugin-client.ts';
 import {
   createDefaultEntryIconRegistry,
   type EntryIconRegistry,
@@ -17,13 +17,13 @@ function freshRegistry(): EntryIconRegistry {
   return createDefaultEntryIconRegistry();
 }
 
-function stubClient(assetsByPath: Readonly<Record<string, string>>): FileManagerClient {
+function stubClient(assetsByPath: Readonly<Record<string, string>>): PluginClient {
   const getPluginIconThemeAsset = vi.fn(async (_pluginId: string, path: string) => {
     const markup = assetsByPath[path];
     if (markup === undefined) throw new Error(`unknown asset path ${path}`);
     return markup;
   });
-  return { getPluginIconThemeAsset } as unknown as FileManagerClient;
+  return { getPluginIconThemeAsset } as unknown as PluginClient;
 }
 
 const SAMPLE_THEME: PluginIconTheme = {

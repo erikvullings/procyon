@@ -1,4 +1,5 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { PluginClient } from '../../api/client/plugin-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { t } from '../../i18n';
 import type {
   ActionDescriptor,
@@ -60,7 +61,7 @@ export interface ActionCommandControllerContext {
   getSelections(): Map<string, SelectionState>;
   getDirectories(): Map<string, PaneDirectoryView>;
   getCurrentSettings(): Settings | undefined;
-  getClient(): FileManagerClient;
+  getClient(): PluginClient & WorkspaceClient;
   openPluginPane(
     paneId: PaneId,
     plugin: PluginDescriptor,

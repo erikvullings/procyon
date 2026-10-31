@@ -1,12 +1,12 @@
 import m from 'mithril';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary } from '../../models';
 import { isParentEntry } from '../panes/parent-entry';
 
 export type ThumbnailSize = 'small' | 'medium' | 'large';
 
-type ThumbnailClient = Pick<FileManagerClient, 'getThumbnail' | 'readFileRange'>;
+type ThumbnailClient = Pick<WorkspaceClient, 'getThumbnail' | 'readFileRange'>;
 
 /** Extensions the backend can generate a preview for (task 0134): plain images
  * (including `ico`) directly, CBZ/CBR comic archives via their first page,

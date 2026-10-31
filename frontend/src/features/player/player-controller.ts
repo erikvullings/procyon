@@ -4,7 +4,7 @@
  * element (source, play/pause, volume, seek) and the Media Session. The element's own events
  * (progress, ended, error) feed back as transitions, so the tree stays authoritative.
  */
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { Location } from '../../models/location';
 import {
   advance,
@@ -58,7 +58,7 @@ export interface MediaSessionLike {
 }
 
 export interface PlayerControllerOptions {
-  readonly client: Pick<FileManagerClient, 'mediaUrl'>;
+  readonly client: Pick<WorkspaceClient, 'mediaUrl'>;
   readonly getState: () => PlayerState;
   readonly update: (state: PlayerState) => void;
   readonly createAudio?: () => PlayerAudio;

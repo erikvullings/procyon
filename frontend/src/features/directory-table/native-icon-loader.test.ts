@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary } from '../../models';
 import { entryIconRegistry, restoreDefaultIconTheme } from './entry-icons';
 import { NativeIconLoader } from './native-icon-loader';
@@ -23,7 +23,7 @@ function entry(name: string, extension: string): EntrySummary {
 describe('NativeIconLoader', () => {
   it('loads lazily and caches interleaved entries by normalized extension', async () => {
     const getFileIcon = vi
-      .fn<FileManagerClient['getFileIcon']>()
+      .fn<WorkspaceClient['getFileIcon']>()
       .mockResolvedValue(new Uint8Array([137, 80, 78, 71]));
     const redraw = vi.fn();
     const loader = new NativeIconLoader({ getFileIcon }, redraw);
@@ -42,7 +42,7 @@ describe('NativeIconLoader', () => {
   });
 
   it('does not fetch a native icon when the theme has an extension-specific icon', () => {
-    const getFileIcon = vi.fn<FileManagerClient['getFileIcon']>();
+    const getFileIcon = vi.fn<WorkspaceClient['getFileIcon']>();
     const loader = new NativeIconLoader({ getFileIcon }, vi.fn());
 
     expect(loader.iconDataUri(entry('document.pdf', 'pdf'))).toBeUndefined();
@@ -50,7 +50,7 @@ describe('NativeIconLoader', () => {
   });
 
   it('does not fetch a native icon when the theme overrides the generic folder icon', () => {
-    const getFileIcon = vi.fn<FileManagerClient['getFileIcon']>();
+    const getFileIcon = vi.fn<WorkspaceClient['getFileIcon']>();
     const loader = new NativeIconLoader({ getFileIcon }, vi.fn());
     entryIconRegistry.kindIcons.set('directory', () => 'themed-folder');
     const folder = { ...entry('folder', ''), kind: 'directory' as const };
@@ -64,7 +64,7 @@ describe('NativeIconLoader', () => {
   });
 
   it('caches an unavailable icon and keeps returning the themed fallback path', async () => {
-    const getFileIcon = vi.fn<FileManagerClient['getFileIcon']>().mockResolvedValue(undefined);
+    const getFileIcon = vi.fn<WorkspaceClient['getFileIcon']>().mockResolvedValue(undefined);
     const loader = new NativeIconLoader({ getFileIcon }, vi.fn());
     const textFile = entry('notes.unknown', 'unknown');
 

@@ -5,7 +5,7 @@
  * pane's real locations, so search results, the collection basket and other virtual folders work
  * the same as ordinary directories.
  */
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary } from '../../models';
 import type { ListDirectoryRequest } from '../../models/requests';
 import { AUDIO_EXTENSIONS, VIDEO_EXTENSIONS } from '../directory-table/entry-icons';
@@ -20,7 +20,7 @@ const MAX_FOLDER_DEPTH = 8;
 export type QueueMode = 'play' | 'enqueue' | 'next';
 
 export interface PlaySelectionOptions {
-  readonly client: Pick<FileManagerClient, 'listDirectory'>;
+  readonly client: Pick<WorkspaceClient, 'listDirectory'>;
   readonly workspaceId: string;
   /** The pane tab's view settings (sort, hidden files, folders first). */
   readonly view: Pick<ListDirectoryRequest, 'sort' | 'showHidden' | 'foldersFirst'>;

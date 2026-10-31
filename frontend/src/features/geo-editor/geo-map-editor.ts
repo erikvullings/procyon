@@ -1,6 +1,7 @@
 import type * as MapLibre from 'maplibre-gl';
 import m, { type FactoryComponent } from 'mithril';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { errorText, geoMessageText, t } from '../../i18n';
 import type { GeoMessage, GeoTargetFormat, MapSettings } from '../../models';
 import { resolvedTheme } from '../../utilities/resolved-theme';
@@ -21,7 +22,7 @@ import './geo-editor.css';
 
 export interface GeoMapEditorAttrs {
   readonly client: Pick<
-    FileManagerClient,
+    ConnectionClient & WorkspaceClient,
     'parseGeoText' | 'convertGeoText' | 'getSettings' | 'mapTileUrlTemplate' | 'mediaUrl'
   >;
   /** The text of the file editor; the map editor reads and writes it. */

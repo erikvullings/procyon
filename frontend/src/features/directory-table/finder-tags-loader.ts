@@ -1,10 +1,10 @@
 import m from 'mithril';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary, FinderTags } from '../../models';
 import { isParentEntry } from '../panes/parent-entry';
 
-type FinderTagsClient = Pick<FileManagerClient, 'getFinderTags'>;
+type FinderTagsClient = Pick<WorkspaceClient, 'getFinderTags'>;
 
 /** Lazily resolves and caches an entry's Finder tags without delaying directory row rendering
  * (task 0136) - mirrors {@link ThumbnailLoader}'s lazy/dedup/cache shape, keyed per entry uri

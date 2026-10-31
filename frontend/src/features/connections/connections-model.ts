@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { ApiError } from '../../api/fetch-mutator';
 import { t } from '../../i18n';
 import type {
@@ -259,7 +259,7 @@ export function validateConnectionDraft(
   return errors;
 }
 
-// Wrappers over the shared `FileManagerClient` (spec §12): components must
+// Wrappers over the shared `WorkspaceClient` (spec §12): components must
 // depend only on this module for connection CRUD/lifecycle, never call
 // `client.*Connection*` directly.
 
@@ -278,7 +278,7 @@ function mapConnectionError(error: unknown): string {
  * need their own try/catch patterns.
  */
 export async function saveConnection(
-  client: FileManagerClient,
+  client: WorkspaceClient,
   draft: ConnectionSaveDraft,
   editingId?: ConnectionId,
 ): Promise<ConnectionSaveResult> {
@@ -309,14 +309,14 @@ export async function saveConnection(
 
 /** Lists every stored connection profile with its current runtime status. */
 export function loadConnections(
-  client: FileManagerClient,
+  client: WorkspaceClient,
   signal?: AbortSignal,
 ): Promise<Connection[]> {
   return client.listConnections(signal);
 }
 
 /** Deletes a connection profile and its stored credential, if any. */
-export function deleteConnection(client: FileManagerClient, id: ConnectionId): Promise<void> {
+export function deleteConnection(client: WorkspaceClient, id: ConnectionId): Promise<void> {
   return client.deleteConnection(id);
 }
 
@@ -325,29 +325,26 @@ export function deleteConnection(client: FileManagerClient, id: ConnectionId): P
  * for the honest scope of this operation before task 0104/0106 register a
  * real protocol dialer.
  */
-export function connectConnection(
-  client: FileManagerClient,
-  id: ConnectionId,
-): Promise<Connection> {
+export function connectConnection(client: WorkspaceClient, id: ConnectionId): Promise<Connection> {
   return client.connectConnection(id);
 }
 
 /** Marks a connection as disconnected. */
 export function disconnectConnection(
-  client: FileManagerClient,
+  client: WorkspaceClient,
   id: ConnectionId,
 ): Promise<Connection> {
   return client.disconnectConnection(id);
 }
 
 /** Checks whether a connection's configuration/credential are currently usable. */
-export function testConnection(client: FileManagerClient, id: ConnectionId): Promise<Connection> {
+export function testConnection(client: WorkspaceClient, id: ConnectionId): Promise<Connection> {
   return client.testConnection(id);
 }
 
 /** Starts browser-based Microsoft authorization without exposing OAuth secrets to the UI. */
 export function beginOneDriveAuthorization(
-  client: FileManagerClient,
+  client: WorkspaceClient,
   id: ConnectionId,
 ): Promise<BeginOneDriveAuthorizationResponse> {
   return client.beginOneDriveAuthorization(id);
@@ -355,7 +352,7 @@ export function beginOneDriveAuthorization(
 
 /** Polls one backend-owned OneDrive authorization attempt. */
 export function getOneDriveAuthorizationAttempt(
-  client: FileManagerClient,
+  client: WorkspaceClient,
   attemptId: string,
 ): Promise<OneDriveAuthorizationAttempt> {
   return client.getOneDriveAuthorizationAttempt(attemptId);
@@ -363,7 +360,7 @@ export function getOneDriveAuthorizationAttempt(
 
 /** Cancels one backend-owned OneDrive authorization attempt. */
 export function cancelOneDriveAuthorization(
-  client: FileManagerClient,
+  client: WorkspaceClient,
   attemptId: string,
 ): Promise<OneDriveAuthorizationAttempt> {
   return client.cancelOneDriveAuthorization(attemptId);
@@ -375,10 +372,7 @@ export function cancelOneDriveAuthorization(
  * report a `hostKeyUnverified`/`hostKeyMismatch` status, to fetch the
  * fingerprint(s) to show the user before deciding whether to accept it.
  */
-export function probeSshHostKey(
-  client: FileManagerClient,
-  id: ConnectionId,
-): Promise<HostKeyProbe> {
+export function probeSshHostKey(client: WorkspaceClient, id: ConnectionId): Promise<HostKeyProbe> {
   return client.probeSshHostKey(id);
 }
 
@@ -388,7 +382,7 @@ export function probeSshHostKey(
  * explicitly confirmed - never silently, even on a first connection.
  */
 export function acceptSshHostKey(
-  client: FileManagerClient,
+  client: WorkspaceClient,
   id: ConnectionId,
   fingerprint: string,
 ): Promise<void> {

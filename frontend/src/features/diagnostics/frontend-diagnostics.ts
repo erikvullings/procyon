@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
 import type { FrontendDiagnostic } from '../../models';
 
 type DiagnosticCode =
@@ -13,7 +13,7 @@ export interface FrontendDiagnosticsReporter {
 
 /** Installs release-safe frontend error reporting. HTTP startup can defer until authentication. */
 export function installFrontendDiagnostics(
-  client: FileManagerClient,
+  client: ConnectionClient,
   options: { readonly deferUntilReady?: boolean } = {},
 ): FrontendDiagnosticsReporter {
   const originalConsoleError = console.error;

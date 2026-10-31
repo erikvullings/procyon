@@ -1,12 +1,12 @@
 import m, { type FactoryComponent } from 'mithril';
 import { Switch } from 'mithril-materialized';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
 import { t } from '../../i18n';
 import type { AppUpdateInfo, AppUpdateProgress } from '../../models';
 import { busyButtonAttrs } from './busy-button';
 
 export interface AppUpdateSettingsAttrs {
-  readonly client: FileManagerClient;
+  readonly client: ConnectionClient;
   readonly automaticChecks: boolean;
   readonly onAutomaticChecksChange: (enabled: boolean) => void;
   readonly includeBeta: boolean;
@@ -33,7 +33,7 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
   let removePhase: RemovePhase = 'idle';
   let removeError: string | undefined;
 
-  async function check(client: FileManagerClient, includeBeta: boolean): Promise<void> {
+  async function check(client: ConnectionClient, includeBeta: boolean): Promise<void> {
     phase = 'checking';
     update = undefined;
     latestVersion = undefined;
@@ -52,7 +52,7 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
     m.redraw();
   }
 
-  async function install(client: FileManagerClient): Promise<void> {
+  async function install(client: ConnectionClient): Promise<void> {
     phase = 'installing';
     error = undefined;
     downloadedBytes = 0;
@@ -71,7 +71,7 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
     }
   }
 
-  async function removeData(client: FileManagerClient): Promise<void> {
+  async function removeData(client: ConnectionClient): Promise<void> {
     removePhase = 'removing';
     removeError = undefined;
     m.redraw();
@@ -84,7 +84,7 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
     }
   }
 
-  function removeDataControls(client: FileManagerClient): m.Children {
+  function removeDataControls(client: ConnectionClient): m.Children {
     return m('.fm-remove-data', [
       m('h5', t('settings', 'removeDataHeading')),
       m('p.fm-settings-help', t('settings', 'removeDataHint')),

@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { OperationClient } from '../../api/client/operation-client.ts';
 import { errorText, t } from '../../i18n';
 import type { Location, MusicDuplicateGroup, MusicDuplicatePage } from '../../models';
 import type { OperationsController } from '../operations/operations-controller';
@@ -16,7 +16,7 @@ const POLL_INTERVAL_MS = 700;
 
 export interface MusicDuplicatesControllerContext {
   getClient(): Pick<
-    FileManagerClient,
+    OperationClient,
     'startMusicDuplicateScan' | 'getMusicDuplicateScan' | 'cancelMusicDuplicateScan'
   >;
   getOpsController(): Pick<OperationsController, 'trash'>;

@@ -1,4 +1,5 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { OperationClient } from '../../api/client/operation-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { t } from '../../i18n';
 import type { Location, PaneId, SavedSearch, SearchQuery, WorkspaceProjection } from '../../models';
 import type { FindFilesSearchParams } from './find-files-dialog';
@@ -32,7 +33,7 @@ export interface FindFilesControllerContext {
   // Dependencies
   getActiveDirectory(): { paneId: PaneId; location: Location } | undefined;
   getWorkspace(): WorkspaceProjection | undefined;
-  getClient(): FileManagerClient;
+  getClient(): OperationClient & WorkspaceClient;
   getPaneLocationUri(paneId: PaneId): string | undefined;
   redraw(): void;
   openTabAt(paneId: PaneId, location: Location, historyOrigin?: Location): void;

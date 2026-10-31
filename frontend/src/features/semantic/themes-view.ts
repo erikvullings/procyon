@@ -1,7 +1,7 @@
 import m, { type FactoryComponent, type Vnode, type VnodeDOM } from 'mithril';
 import { Skeleton } from 'mithril-materialized';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { chevronDownIcon, chevronUpIcon } from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import type {
@@ -35,7 +35,7 @@ import {
 } from './themes-model';
 
 export interface ThemesViewAttrs {
-  readonly client: FileManagerClient;
+  readonly client: SemanticClient;
   /** Scopes offered to analyse, widest first; the backend re-authorizes each request. */
   readonly scopes: readonly RagScope[];
   /** Opens the source of a passage, at its line when the provenance has one. A click on a
@@ -324,7 +324,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
   async function resolveScopes(attrs: ThemesViewAttrs): Promise<readonly RagScope[]> {
     const folderScopes = attrs.scopes.filter((scope) => scope.kind === 'currentFolder');
     if (folderScopes.length === 0) return attrs.scopes;
-    let roots: Awaited<ReturnType<FileManagerClient['listKnowledgeRoots']>> = [];
+    let roots: Awaited<ReturnType<SemanticClient['listKnowledgeRoots']>> = [];
     try {
       roots = await attrs.client.listKnowledgeRoots({
         workspaceId: folderScopes[0]?.workspaceId ?? '',

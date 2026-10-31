@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { Location } from '../../models';
 import { applicationErrorCode } from '../navigation/navigation';
 
@@ -6,7 +6,7 @@ import { applicationErrorCode } from '../navigation/navigation';
 export type PrepareMedia = (location: Location, signal?: AbortSignal) => Promise<void>;
 
 export interface MediaAccessOptions {
-  readonly client: Pick<FileManagerClient, 'readFileRange'>;
+  readonly client: Pick<WorkspaceClient, 'readFileRange'>;
   /**
    * Asks the user for an archive password and caches it on the backend; resolves `false` when the
    * user cancels. Absent where no password UI exists, in which case the error simply propagates.

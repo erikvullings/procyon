@@ -1,6 +1,7 @@
 import m, { type FactoryComponent, type Vnode } from 'mithril';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
+import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { semanticUnavailableText, t } from '../../i18n';
 import type {
   KnowledgeRoot,
@@ -20,13 +21,13 @@ import type {
 import { busyButtonAttrs } from './busy-button';
 
 export interface SemanticLibraryManagementAttrs {
-  readonly client: FileManagerClient;
+  readonly client: ConnectionClient & SemanticClient;
   readonly workspaceId?: WorkspaceId;
   readonly location?: Location;
 }
 
 export interface SemanticFolderEnrolmentPromptAttrs {
-  readonly client: FileManagerClient;
+  readonly client: ConnectionClient & SemanticClient;
   readonly workspaceId: WorkspaceId;
   readonly location: Location;
   readonly onEnrolled: () => void;

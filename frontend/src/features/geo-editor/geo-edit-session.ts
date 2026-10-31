@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { byteCount, geoMessageText, t } from '../../i18n';
 import type { GeoError, GeoIssue } from '../../models';
 import { GeoEditHistory } from './geo-edit-history';
@@ -35,7 +35,7 @@ export interface GeoEditSessionContext {
   getContent(): string;
   /** Writes the edited document back; the file editor tracks unsaved changes and saving. */
   setContent(text: string): void;
-  readonly client: Pick<FileManagerClient, 'parseGeoText'>;
+  readonly client: Pick<WorkspaceClient, 'parseGeoText'>;
   /** Called after asynchronous state changes, so the view redraws. */
   changed(): void;
 }

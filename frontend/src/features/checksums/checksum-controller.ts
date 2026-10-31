@@ -1,4 +1,5 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { OperationClient } from '../../api/client/operation-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { t } from '../../i18n';
 import type {
   ChecksumAlgorithm,
@@ -33,7 +34,7 @@ export interface ChecksumControllerContext {
   getDuplicateState(): DuplicateState;
   setDuplicateState(next: DuplicateState): void;
   getWorkspace(): WorkspaceProjection | undefined;
-  getClient(): FileManagerClient;
+  getClient(): OperationClient & WorkspaceClient;
   /** The entries currently selected in the active pane. */
   getSelectedEntries(): readonly EntrySummary[];
   /** The active pane's current directory, used as the duplicate-scan root. */

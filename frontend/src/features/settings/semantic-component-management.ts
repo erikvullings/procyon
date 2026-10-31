@@ -1,6 +1,8 @@
 import m, { type FactoryComponent, type Vnode, type VnodeDOM } from 'mithril';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { ConnectionClient } from '../../api/client/connection-client.ts';
+import type { SemanticClient } from '../../api/client/semantic-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { t } from '../../i18n';
 import type {
   ImportSemanticLocalModelRequest,
@@ -36,7 +38,7 @@ import {
 import { busyButtonAttrs } from './busy-button';
 
 export interface SemanticComponentManagementAttrs {
-  readonly client: FileManagerClient;
+  readonly client: ConnectionClient & SemanticClient & WorkspaceClient;
   readonly onStatusChange?: (status: SemanticComponentStatus) => void;
   readonly onInstallationChange?: (
     state: 'installing' | 'succeeded' | 'failed',

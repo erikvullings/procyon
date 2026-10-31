@@ -1,6 +1,6 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { OperationClient } from '../../api/client/operation-client.ts';
 import { errorText, t } from '../../i18n';
 import type { DiffRow, DiffSegment, FileDiffResult, Location } from '../../models';
 import { calculateVisibleWindow, scrollOffsetForIndex } from '../directory-table/windowing';
@@ -15,7 +15,7 @@ export interface FileDiffRequest {
 
 export interface FileDiffDialogAttrs {
   readonly request: FileDiffRequest | undefined;
-  readonly client: Pick<FileManagerClient, 'diffFiles'>;
+  readonly client: Pick<OperationClient, 'diffFiles'>;
   readonly onClose: () => void;
 }
 

@@ -1,4 +1,4 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { t } from '../../i18n';
 import type { EntrySummary } from '../../models';
 import { type EditableLanguage, editableLanguageForExtension } from './editor-language';
@@ -63,7 +63,7 @@ function loadErrorMessage(error: unknown): string {
 }
 
 export function createFileEditorController(options: {
-  client: Pick<FileManagerClient, 'loadEditableFile' | 'saveEditableFile'>;
+  client: Pick<WorkspaceClient, 'loadEditableFile' | 'saveEditableFile'>;
   entry: EntrySummary;
   /** One-based line to select when the file first loads (task 0271). */
   initialLine?: number;

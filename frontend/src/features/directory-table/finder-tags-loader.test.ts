@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary } from '../../models';
 import { FinderTagsLoader } from './finder-tags-loader';
 
@@ -21,7 +21,7 @@ function entry(name: string, id = name, kind: EntrySummary['kind'] = 'file'): En
 describe('FinderTagsLoader', () => {
   it('loads lazily and caches interleaved entries by uri', async () => {
     const getFinderTags = vi
-      .fn<FileManagerClient['getFinderTags']>()
+      .fn<WorkspaceClient['getFinderTags']>()
       .mockResolvedValue({ tags: [{ name: 'Work', color: 'blue' }] });
     const redraw = vi.fn();
     const loader = new FinderTagsLoader({ getFinderTags }, redraw);
@@ -43,9 +43,7 @@ describe('FinderTagsLoader', () => {
   });
 
   it('applies to directories as well as files', async () => {
-    const getFinderTags = vi
-      .fn<FileManagerClient['getFinderTags']>()
-      .mockResolvedValue({ tags: [] });
+    const getFinderTags = vi.fn<WorkspaceClient['getFinderTags']>().mockResolvedValue({ tags: [] });
     const loader = new FinderTagsLoader({ getFinderTags }, vi.fn());
 
     loader.finderTags(entry('folder', 'folder', 'directory'));
@@ -55,7 +53,7 @@ describe('FinderTagsLoader', () => {
   });
 
   it('never fetches for a synthetic parent-navigation entry', () => {
-    const getFinderTags = vi.fn<FileManagerClient['getFinderTags']>();
+    const getFinderTags = vi.fn<WorkspaceClient['getFinderTags']>();
     const loader = new FinderTagsLoader({ getFinderTags }, vi.fn());
 
     expect(loader.finderTags(entry('..', 'fm:parent:file:///tmp'))).toBeUndefined();
@@ -63,7 +61,7 @@ describe('FinderTagsLoader', () => {
   });
 
   it('caches an unsupported/failed lookup and keeps returning no badge', async () => {
-    const getFinderTags = vi.fn<FileManagerClient['getFinderTags']>().mockResolvedValue(undefined);
+    const getFinderTags = vi.fn<WorkspaceClient['getFinderTags']>().mockResolvedValue(undefined);
     const loader = new FinderTagsLoader({ getFinderTags }, vi.fn());
     const file = entry('untagged.txt');
 
@@ -76,7 +74,7 @@ describe('FinderTagsLoader', () => {
 
   it('resolves to undefined if the client rejects, instead of throwing', async () => {
     const getFinderTags = vi
-      .fn<FileManagerClient['getFinderTags']>()
+      .fn<WorkspaceClient['getFinderTags']>()
       .mockRejectedValue(new Error('boom'));
     const loader = new FinderTagsLoader({ getFinderTags }, vi.fn());
     const file = entry('flaky.txt');
@@ -88,7 +86,7 @@ describe('FinderTagsLoader', () => {
   });
 
   it('setCached seeds the cache immediately after a successful edit, without a refetch', async () => {
-    const getFinderTags = vi.fn<FileManagerClient['getFinderTags']>();
+    const getFinderTags = vi.fn<WorkspaceClient['getFinderTags']>();
     const redraw = vi.fn();
     const loader = new FinderTagsLoader({ getFinderTags }, redraw);
     const uri = 'file:///tmp/edited.txt';

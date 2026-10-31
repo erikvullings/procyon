@@ -1,10 +1,10 @@
-import type { FileManagerClient } from '../../api/client/file-manager-client';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { ApiError } from '../../api/fetch-mutator';
 import type { WorkspaceCommand, WorkspaceProjection } from '../../models';
 
 /** Client surface required to dispatch and, on conflict, reconcile a workspace command. */
 export type WorkspaceCommandClient = Pick<
-  FileManagerClient,
+  WorkspaceClient,
   'dispatchWorkspaceCommand' | 'getWorkspace'
 >;
 
