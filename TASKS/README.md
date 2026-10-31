@@ -504,7 +504,7 @@ previous pass stopped where it did.
 - [ ] 0288 Incremental architecture deepening *(parent — tracks 0289–0293, no code of its own)*
 - [ ] 0289 Decompose FileManagerClient god interface *(frontend, high — 1,195-line interface /
   100+ methods; 4–6 sub-clusters assembled in `createClient.ts`; mock adapter 6,504 → −30%)*
-- [ ] 0290 Extract feature wiring from app-shell.ts *(frontend, high — 7,978 → < 4,800 lines;
+- [x] 0290 Extract feature wiring from app-shell.ts *(frontend, high — 7,978 → < 4,800 lines;
   per-capability `*-wiring.ts` modules; proposed order: operations, workspace, navigation, settings)*
 - [ ] 0291 Split knowledge-search-dialog.ts monolith *(frontend, high — 3,234 → < 500 lines into
   search controller / evidence renderer / answer generator / citation resolver / scope classifier)*

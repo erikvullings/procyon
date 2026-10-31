@@ -1,6 +1,6 @@
 # 0290 Extract feature wiring from app-shell.ts
 
-Status: open
+Status: done
 Priority: high
 Subsystem: frontend
 Depends on: none
