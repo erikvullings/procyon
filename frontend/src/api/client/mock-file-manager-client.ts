@@ -226,10 +226,10 @@ import type {
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
 import { MockConnectionClient } from './mock-connection-client';
 import { MockContext } from './mock-context';
-import type { MockFileManagerClientOptions } from './mock-shared';
 import { MockOperationClient } from './mock-operation-client';
 import { MockPluginClient } from './mock-plugin-client';
 import { MockSemanticClient } from './mock-semantic-client';
+import type { MockFileManagerClientOptions } from './mock-shared';
 import { MockWorkspaceClient } from './mock-workspace-client';
 
 export type {

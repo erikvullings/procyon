@@ -61,6 +61,9 @@ import {
   planMockKnowledgeSearch,
   resolveMockKnowledgeScope,
 } from './mock-knowledge-search';
+import type { MockOperationClient } from './mock-operation-client';
+import type { MockPluginClient } from './mock-plugin-client';
+import type { MockSemanticClient } from './mock-semantic-client';
 import type { MockClientMethod, MockFileManagerClientOptions } from './mock-shared';
 import {
   aggregateTotals,
@@ -79,9 +82,6 @@ import {
   semanticLocationContains,
   syntheticFileContent,
 } from './mock-shared';
-import type { MockOperationClient } from './mock-operation-client';
-import type { MockPluginClient } from './mock-plugin-client';
-import type { MockSemanticClient } from './mock-semantic-client';
 import type { MockSqliteDatabase } from './mock-sqlite-database';
 import type { MockWorkspaceClient } from './mock-workspace-client';
 
