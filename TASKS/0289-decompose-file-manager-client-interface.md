@@ -65,3 +65,23 @@ Depends on: none
   `FileManagerClient`; migrate each to the focused sub-interface(s) it actually uses (mechanical,
   type-only). Note the spec §3 rule 1 wording ("components depend only on `FileManagerClient`")
   should be updated to reference the sub-interfaces, per the task's own Implementation Note.
+
+- 2026-10-31 agent: **Part 2/3 done — mock adapter split into a composed sub-clients (target met, ~80%
+  reduction).** The 6504-line monolithic `MockFileManagerClient` is replaced by:
+  - `mock-mock-shared.ts` — the module-level fixtures/helpers/constants, now exported;
+  - `mock-context.ts` — a `MockContext` holding all ~71 state fields + ~34 helper methods
+    (`perform`, `emit*`, `require*`, `directorySnapshot`, …) behind a single shared instance;
+  - `mock-{connection,workspace,operation,semantic,plugin}-client.ts` — five capability classes,
+    each `implements` its sub-interface and holds `ctx: MockContext`;
+  - `mock-file-manager-client.ts` — a thin composite that assembles `MockContext` + the five
+    capability clients and forwards every one of the 222 members. `createFileManagerClient`
+    (create-client.ts) returns this composite, satisfying the "composite at the seam assembles
+    sub-clients" criterion. The main adapter file went 6504 -> ~1320 lines.
+  Method bodies were moved out verbatim with `this.` rewritten to `this.ctx.` (fields/helpers) or
+  `this.ctx.<capability>Client.` (cross-calls between interface methods), so behaviour is
+  unchanged. Verified: `tsc --noEmit` clean, `biome check` clean, the full frontend suite
+  (3322 tests across 242 files) green, `import-boundaries` green, and `pnpm api:check`'s generated
+  artifacts (openapi.json + orval client) byte-identical.
+  Implementation detail: a codegen script (`/tmp/gen3.mjs` + a depth-aware, string/comment-safe
+  class-member splitter) drove the mechanical extraction; the generated files are checked in and
+  hand-verifiable, not build-time generated.

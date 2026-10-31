@@ -1,8 +1,3 @@
-import actionFixtures from '../../../../fixtures/mock-responses/actions.json';
-import directoryFixtures from '../../../../fixtures/mock-responses/directories.json';
-import pluginFixtures from '../../../../fixtures/mock-responses/plugins.json';
-import { DEFAULT_MAP_SETTINGS } from '../../features/map/map-settings';
-import { apiErrorMessage, errorText } from '../../i18n';
 import type {
   AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
@@ -24,14 +19,9 @@ import type {
   CancelKnowledgeSearchRequest,
   CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
-  ChecksumEntry,
   ChecksumFile,
   ChecksumPage,
-  ComparisonCriteria,
-  ComparisonEntry,
-  ComparisonEntrySide,
   ComparisonPage,
-  ComparisonStatus,
   CompleteSemanticModelMigrationRequest,
   ConfirmSemanticEnrolmentRequest,
   ConfirmSemanticExclusionRequest,
@@ -58,7 +48,6 @@ import type {
   DocxPreview,
   DocxPreviewResource,
   DocxPreviewSessionRequest,
-  DuplicateGroup,
   DuplicatePage,
   EditableFile,
   EditableFileSave,
@@ -102,7 +91,6 @@ import type {
   KnowledgeCapabilities,
   KnowledgeQueryInterpretation,
   KnowledgeRoot,
-  KnowledgeScope,
   KnowledgeSearchPlan,
   KnowledgeSearchResult,
   KnowledgeSourceLocation,
@@ -142,7 +130,6 @@ import type {
   PreviewRagRequest,
   PreviewSemanticEnrolmentRequest,
   QuerySqliteViewRequest,
-  RagAnswer,
   RagPreview,
   ReadDocxPreviewResourceRequest,
   ReadFileRangeRequest,
@@ -167,23 +154,15 @@ import type {
   SaveLlmProfileRequest,
   SaveRagConversationRequest,
   ScanDiskUsageRequest,
-  ScanDiskUsageResult,
-  SearchInFileMatch,
   SearchInFileRequest,
   SearchInFileResult,
-  SearchQuery,
   SearchStructuredRowsRequest,
   SemanticComponentCapabilities,
-  SemanticComponentLifecycle,
-  SemanticComponentOperation,
   SemanticComponentStatus,
   SemanticDataMoveReceipt,
-  SemanticDeletionCategoryStatus,
-  SemanticDiskUse,
   SemanticEnrolmentPreview,
   SemanticExclusionPlan,
   SemanticFolderStatus,
-  SemanticIndexRecordCounts,
   SemanticIndexRemovalPlan,
   SemanticIndexRemovalReceipt,
   SemanticInstallationOffer,
@@ -191,16 +170,12 @@ import type {
   SemanticLibraryCapabilities,
   SemanticLibraryRevisionRequest,
   SemanticLibraryStatus,
-  SemanticModelIdentity,
   SemanticModelMigrationPlan,
   SemanticModelMigrationProgress,
   SemanticModelProfile,
   SemanticModelSelection,
   SemanticOcrJob,
   SemanticOcrStatus,
-  SemanticOcrTarget,
-  SemanticProfile,
-  SemanticRootStatus,
   SemanticUninstallReceipt,
   SemanticVocabulary,
   SemanticWorkerPatchResponse,
@@ -242,3888 +217,659 @@ import type {
   UpdateSemanticEligibilityOverridesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
-  VerificationResult,
   Volume,
   WorkspaceCommand,
   WorkspaceId,
   WorkspaceProjection,
   WorkspaceSummary,
 } from '../../models';
-import {
-  defaultKnowledgeSearchOptions,
-  encodeDiskUsageTree,
-  sanitizeFrontendDiagnostic,
-} from '../../models';
-import { bindLocalisedMessage } from '../error-localiser';
-import { EventStreamSignalRegistry, MutableEventStreamStatus } from '../events/event-stream';
-import { ApiError, desktopHostRequiredError } from '../fetch-mutator';
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
-import { mockCorpusThemeStatus, mockCorpusThemes } from './mock-corpus-themes';
-import {
-  createGeneratedDirectory,
-  GENERATED_DIRECTORY_SIZES,
-  type GeneratedDirectorySize,
-} from './mock-directory-generator';
-import { mockFileDiff } from './mock-file-diff';
-import {
-  buildMockKnowledgeAnswer,
-  executeMockKnowledgeSearch,
-  MockKnowledgeEvidenceCache,
-  MockKnowledgeScopeError,
-  mockKnowledgeCapabilities,
-  mockKnowledgeRoots,
-  mockKnowledgeRouteUnavailable,
-  parseMockKnowledgeQuery,
-  planMockKnowledgeSearch,
-  resolveMockKnowledgeScope,
-  resolveMockKnowledgeSource,
-} from './mock-knowledge-search';
-import { MockSqliteDatabase } from './mock-sqlite-database';
-import { admitsPath } from './sync-path-filter';
+import { MockConnectionClient } from './mock-connection-client';
+import { MockContext } from './mock-context';
+import type { MockFileManagerClientOptions } from './mock-mock-shared';
+import { MockOperationClient } from './mock-operation-client';
+import { MockPluginClient } from './mock-plugin-client';
+import { MockSemanticClient } from './mock-semantic-client';
+import { MockWorkspaceClient } from './mock-workspace-client';
 
-interface FixtureEntry {
-  name: string;
-  kind: 'file' | 'directory' | 'symlink';
-  size?: number;
-  hidden?: boolean;
-  readable?: boolean;
-}
+export type {
+  MockClientMethod,
+  MockFileManagerClientOptions,
+  MockSemanticLifecycle,
+} from './mock-mock-shared';
+export { MockClientError } from './mock-mock-shared';
 
-const directories = directoryFixtures as Record<string, FixtureEntry[]>;
-const actions = actionFixtures as ActionDescriptor[];
-const plugins = pluginFixtures as PluginDescriptor[];
-
-/** Extensions {@link MockFileManagerClient.getThumbnail} fakes a preview for (task 0134). */
-const THUMBNAILABLE_MOCK_EXTENSIONS = new Set([
-  'jpg',
-  'jpeg',
-  'png',
-  'gif',
-  'webp',
-  'ico',
-  'cbz',
-  'cbr',
-  'mp4',
-  'm4v',
-  'mov',
-  'pdf',
-]);
-
-export type MockClientMethod =
-  | 'getRuntimeCapabilities'
-  | 'getSemanticComponentCapabilities'
-  | 'getSemanticComponentStatus'
-  | 'listSemanticComponentProfiles'
-  | 'initializeGemmaLibrary'
-  | 'getGemmaLibrarySetup'
-  | 'createSemanticComponentInstallationOffer'
-  | 'acceptSemanticComponentInstallationOffer'
-  | 'pauseSemanticComponentIndexing'
-  | 'resumeSemanticComponentIndexing'
-  | 'createSemanticComponentIndexRemovalPlan'
-  | 'confirmSemanticComponentIndexRemoval'
-  | 'moveSemanticComponentData'
-  | 'uninstallSemanticComponents'
-  | 'installSemanticComponentWorkerPatch'
-  | 'importSemanticComponentLocalModel'
-  | 'planSemanticComponentModelMigration'
-  | 'confirmSemanticComponentModelMigration'
-  | 'checkpointSemanticComponentModelMigration'
-  | 'completeSemanticComponentModelMigration'
-  | 'getSemanticOcrStatus'
-  | 'setSemanticOcrConsent'
-  | 'setSemanticOcrReplaceOriginal'
-  | 'startSemanticOcrRemediation'
-  | 'cancelSemanticOcrRemediation'
-  | 'getSemanticLibraryCapabilities'
-  | 'getSemanticLibraryStatus'
-  | 'updateGemmaMedia'
-  | 'listSemanticVocabularies'
-  | 'importSemanticVocabulary'
-  | 'exportSemanticVocabulary'
-  | 'attachSemanticVocabulary'
-  | 'reviewSemanticConceptCandidate'
-  | 'deleteSemanticVocabulary'
-  | 'getSemanticFolderStatus'
-  | 'previewSemanticEnrolment'
-  | 'confirmSemanticEnrolment'
-  | 'planSemanticExclusion'
-  | 'confirmSemanticExclusion'
-  | 'resumeSemanticCleanup'
-  | 'pauseSemanticLibrary'
-  | 'resumeSemanticLibrary'
-  | 'updateSemanticEligibilityOverrides'
-  | 'getDiagnostics'
-  | 'recordFrontendDiagnostic'
-  | 'getSystemLocations'
-  | 'getVolumes'
-  | 'getHomeDirectory'
-  | 'startNativeDrag'
-  | 'writeOsClipboardFiles'
-  | 'readOsClipboardFiles'
-  | 'showPlatformContextMenu'
-  | 'getSettings'
-  | 'updateSettings'
-  | 'getWorkspace'
-  | 'listWorkspaces'
-  | 'startWorkspace'
-  | 'createWorkspace'
-  | 'renameWorkspace'
-  | 'deleteWorkspace'
-  | 'openWorkspace'
-  | 'dispatchWorkspaceCommand'
-  | 'navigatePane'
-  | 'listDirectory'
-  | 'listDirectoryChildren'
-  | 'getEntryMetadata'
-  | 'setPaneActivity'
-  | 'getFileIcon'
-  | 'getThumbnail'
-  | 'getFinderTags'
-  | 'setFinderTags'
-  | 'getSpotlightComment'
-  | 'setSpotlightComment'
-  | 'cacheArchivePassword'
-  | 'readFileRange'
-  | 'previewGeoConversion'
-  | 'previewGeoMinify'
-  | 'convertGeoText'
-  | 'parseGeoText'
-  | 'readGeoFile'
-  | 'readImageGps'
-  | 'readImageMetadata'
-  | 'inspectAttributes'
-  | 'inspectSplitSet'
-  | 'diffFiles'
-  | 'previewAttributeChange'
-  | 'resolveMetadataTokens'
-  | 'openDocxPreview'
-  | 'readDocxPreviewResource'
-  | 'closeDocxPreview'
-  | 'openPptxPreview'
-  | 'readPptxPreviewPdf'
-  | 'closePptxPreview'
-  | 'searchInFile'
-  | 'calculateFolderSize'
-  | 'archiveSummary'
-  | 'scanDiskUsage'
-  | 'cancelDiskUsage'
-  | 'discoverApplicationUninstallCandidates'
-  | 'removeApplicationDockIcon'
-  | 'gitFileHistory'
-  | 'startOperation'
-  | 'getLinkOptions'
-  | 'resolveLinkTarget'
-  | 'listOperations'
-  | 'cancelOperation'
-  | 'undoOperation'
-  | 'pauseOperation'
-  | 'resumeOperation'
-  | 'resolveConflict'
-  | 'listActions'
-  | 'invokeAction'
-  | 'listPlugins'
-  | 'setPluginEnabled'
-  | 'getPluginLogs'
-  | 'renderPluginPreview'
-  | 'getPluginIconThemeAsset'
-  | 'startSearch'
-  | 'cancelSearch'
-  | 'startComparison'
-  | 'getComparison'
-  | 'cancelComparison'
-  | 'startChecksums'
-  | 'getChecksums'
-  | 'cancelChecksums'
-  | 'renderChecksumFile'
-  | 'saveChecksumFile'
-  | 'verifyChecksumFile'
-  | 'startDuplicateScan'
-  | 'getDuplicateScan'
-  | 'cancelDuplicateScan'
-  | 'startMusicDuplicateScan'
-  | 'getMusicDuplicateScan'
-  | 'cancelMusicDuplicateScan'
-  | 'forgetFolderView'
-  | 'startSnapshotJob'
-  | 'getSnapshotJob'
-  | 'cancelSnapshotJob'
-  | 'startLinkDoctorScan'
-  | 'getLinkDoctorScan'
-  | 'cancelLinkDoctorScan'
-  | 'findLinkReplacements'
-  | 'listLlmProfilePresets'
-  | 'listLlmProfiles'
-  | 'createLlmProfile'
-  | 'updateLlmProfile'
-  | 'deleteLlmProfile'
-  | 'cloneLlmProfile'
-  | 'exportLlmProfile'
-  | 'activateLlmProfile'
-  | 'testLlmProfile'
-  | 'discoverLlmProfileModels'
-  | 'discoverLlmProfileDraftModels'
-  | 'discoverLlmProfileDraftModelLimits'
-  | 'previewDocumentSummary'
-  | 'generateDocumentSummary'
-  | 'getDocumentSummary'
-  | 'getCorpusThemeStatus'
-  | 'analyzeCorpusThemes'
-  | 'getCorpusThemeSources'
-  | 'previewRag'
-  | 'generateRagAnswer'
-  | 'saveRagConversation'
-  | 'listSavedRagConversations'
-  | 'deleteRagConversation'
-  | 'resolveRagCitation'
-  | 'getKnowledgeCapabilities'
-  | 'listKnowledgeRoots'
-  | 'parseKnowledgeQuery'
-  | 'planKnowledgeSearch'
-  | 'executeKnowledgeSearch'
-  | 'cancelKnowledgeSearch'
-  | 'resolveKnowledgeSource'
-  | 'generateKnowledgeAnswer'
-  | 'cancelKnowledgeAnswer'
-  | 'generateSyncPlan'
-  | 'applySyncPlan'
-  | 'listConnections'
-  | 'createConnection'
-  | 'getConnection'
-  | 'updateConnection'
-  | 'deleteConnection'
-  | 'connectConnection'
-  | 'disconnectConnection'
-  | 'testConnection'
-  | 'probeSshHostKey'
-  | 'acceptSshHostKey'
-  | 'beginOneDriveAuthorization'
-  | 'getOneDriveAuthorizationAttempt'
-  | 'cancelOneDriveAuthorization';
-
-export type MockSemanticLifecycle =
-  | 'unavailable'
-  | 'absent'
-  | 'offered'
-  | 'downloading'
-  | 'downloadingResumable'
-  | 'installedEnabled'
-  | 'paused'
-  | 'migrating'
-  | 'updateFailedRolledBack'
-  | 'lowDisk'
-  | 'uninstalledRetain'
-  | 'uninstalledDelete';
-
-export interface MockFileManagerClientOptions {
-  pageSize?: number;
-  seed?: number;
-  loadingLocations?: readonly string[];
-  latencyMs?: number;
-  failures?: Partial<Record<MockClientMethod, Error>>;
-  nativeIconExtensions?: readonly string[];
-  semanticLifecycle?: MockSemanticLifecycle;
-  semanticOcrStatus?: SemanticOcrStatus;
-}
-
-function fixtureEntry(
-  parentUri: string,
-  fixture: FixtureEntry,
-): import('../../models').EntrySummary {
-  const uri = `${parentUri === 'mock:///' ? parentUri : `${parentUri}/`}${encodeURIComponent(fixture.name)}`;
-  const extension =
-    fixture.kind === 'file' && fixture.name.includes('.')
-      ? fixture.name.slice(fixture.name.lastIndexOf('.') + 1)
-      : undefined;
-
-  return {
-    id: uri,
-    location: { providerId: 'file', uri },
-    name: fixture.name,
-    kind: fixture.kind,
-    ...(fixture.size === undefined ? {} : { size: fixture.size }),
-    hidden: fixture.hidden ?? false,
-    readOnly: fixture.readable === false,
-    ...(extension === undefined ? {} : { extension }),
-    metadataRevision: 1,
-  };
-}
-
-/** Sums the byte size and counts the files/symlinks (directories excluded) across a directory's
- * entries, mirroring `fm_application::directory::aggregate_totals` so mock-mode status-bar
- * totals behave like a real backend. */
-function aggregateTotals(entries: Iterable<import('../../models').EntrySummary>): {
-  size: number;
-  fileCount: number;
-} {
-  let size = 0;
-  let fileCount = 0;
-  for (const entry of entries) {
-    if (entry.kind !== 'directory') {
-      size += entry.size ?? 0;
-      fileCount += 1;
-    }
-  }
-  return { size, fileCount };
-}
-
-/** Matches a filename using the structured predicate, or legacy auto-detected semantics. */
-function matchesQuery(name: string, query: string, predicate?: SearchQuery['name']): boolean {
-  const mode =
-    predicate?.mode ?? (query.includes('*') || query.includes('?') ? 'glob' : 'substring');
-  const caseSensitive = predicate?.caseSensitive ?? false;
-  const candidate = caseSensitive ? name : name.toLowerCase();
-  const pattern = caseSensitive ? query : query.toLowerCase();
-  if (mode === 'substring') {
-    return candidate.includes(pattern);
-  }
-  return pattern
-    .split(',')
-    .map((alternative) => alternative.trim())
-    .filter((alternative) => alternative.length > 0)
-    .some((alternative) => {
-      const escaped = alternative
-        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-        .replace(/\*/g, '.*')
-        .replace(/\?/g, '.');
-      return new RegExp(`^${escaped}$`, 'u').test(candidate);
-    });
-}
-
-function firstContentMatch(
-  text: string,
-  query: string,
-  predicate?: SearchQuery['content'],
-): { index: number; length: number } | undefined {
-  if (predicate?.regex) {
-    const match = new RegExp(query, predicate.caseSensitive ? 'mu' : 'imu').exec(text);
-    return match?.index === undefined
-      ? undefined
-      : { index: match.index, length: match[0]?.length ?? 0 };
-  }
-  if (predicate?.wholeWord) {
-    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const match = new RegExp(`\\b${escaped}\\b`, predicate.caseSensitive ? 'mu' : 'imu').exec(text);
-    return match?.index === undefined
-      ? undefined
-      : { index: match.index, length: match[0]?.length ?? 0 };
-  }
-  const haystack = predicate?.caseSensitive ? text : text.toLowerCase();
-  const needle = predicate?.caseSensitive ? query : query.toLowerCase();
-  const index = haystack.indexOf(needle);
-  return index === -1 ? undefined : { index, length: query.length };
-}
-
-/**
- * Deterministically generates plausible multi-line text content for a mock file uri, so the
- * in-app large file viewer (task 0088) has something non-trivial to lazily fetch and search over
- * without real file bytes existing anywhere in the fixture tree.
- */
-function syntheticFileContent(uri: string): Uint8Array {
-  let seed = 0;
-  for (let index = 0; index < uri.length; index += 1) {
-    seed = (seed * 31 + uri.charCodeAt(index)) >>> 0;
-  }
-  const lineCount = 2_000 + (seed % 3_000);
-  const lines: string[] = [];
-  for (let index = 0; index < lineCount; index += 1) {
-    const marker = index % 97 === 0 ? ' ERROR' : '';
-    lines.push(`line ${index} of ${uri}${marker}`);
-  }
-  return new TextEncoder().encode(`${lines.join('\n')}\n`);
-}
-
-/**
- * Recursively walks the fixture directory tree from `rootUri` (reduced
- * fidelity vs. the real `fm-search` traversal), silently skipping the
- * `Unreadable` fixture directory the same way `directorySnapshot` treats it.
- *
- * When `contentQuery` is given, only files matching BOTH the filename query and the content
- * query are returned (mirroring the real backend's content-search-with-filename-filter AND
- * semantics), and matching entries get a synthetic `contentMatches` entry pointing at the first
- * match within the file's (deterministic, synthetic) content - see `syntheticFileContent`.
- */
-function collectMatches(
-  rootUri: string,
-  query: string,
-  contentQuery: string | undefined,
-  showHidden: boolean,
-  getContent: (uri: string) => Uint8Array,
-  structuredQuery?: SearchQuery,
-): import('../../models').EntrySummary[] {
-  const results: import('../../models').EntrySummary[] = [];
-  const pending = [rootUri];
-  while (pending.length > 0) {
-    const uri = pending.pop();
-    if (uri === undefined || uri === 'mock:///Unreadable') continue;
-    const fixtures = directories[uri];
-    if (fixtures === undefined) continue;
-    for (const fixture of fixtures) {
-      const entry = fixtureEntry(uri, fixture);
-      if (entry.hidden && !showHidden) continue;
-      if (fixture.kind === 'directory') {
-        if (structuredQuery?.scope.recurse ?? true) pending.push(entry.location.uri);
-      }
-      if (
-        structuredQuery !== undefined &&
-        ((structuredQuery.entryKinds.length > 0 &&
-          !structuredQuery.entryKinds.includes(entry.kind)) ||
-          (structuredQuery.minSizeBytes !== undefined &&
-            (entry.size === undefined || entry.size < structuredQuery.minSizeBytes)) ||
-          (structuredQuery.maxSizeBytes !== undefined &&
-            (entry.size === undefined || entry.size > structuredQuery.maxSizeBytes)) ||
-          (structuredQuery.modifiedAfter !== undefined &&
-            (entry.modifiedAt === undefined ||
-              entry.modifiedAt.localeCompare(structuredQuery.modifiedAfter) < 0)) ||
-          (structuredQuery.modifiedBefore !== undefined &&
-            (entry.modifiedAt === undefined ||
-              entry.modifiedAt.localeCompare(structuredQuery.modifiedBefore) > 0)) ||
-          (structuredQuery.mimeTypes.length > 0 &&
-            (entry.mimeType === undefined ||
-              !structuredQuery.mimeTypes.some((mime) =>
-                mime.endsWith('/*')
-                  ? entry.mimeType?.startsWith(mime.slice(0, -1))
-                  : entry.mimeType === mime,
-              ))))
-      ) {
-        continue;
-      }
-      if (contentQuery !== undefined && contentQuery !== '') {
-        if (fixture.kind !== 'file' || !matchesQuery(fixture.name, query, structuredQuery?.name)) {
-          continue;
-        }
-        const text = new TextDecoder().decode(getContent(entry.location.uri));
-        const match = firstContentMatch(text, contentQuery, structuredQuery?.content);
-        if (match === undefined) continue;
-        const lineNumber = text.slice(0, match.index).split('\n').length;
-        results.push({
-          ...entry,
-          contentMatches: [{ lineNumber, offset: match.index, length: match.length }],
-        });
-        continue;
-      }
-      if (matchesQuery(fixture.name, query, structuredQuery?.name)) {
-        results.push(entry);
-      }
-    }
-  }
-  return results;
-}
-
-/**
- * Recursively walks a fixture subtree from `rootUri`, keyed by path relative
- * to that root (task 0075). Reduced fidelity vs. the real `fm-comparison`
- * traversal, same trade-off `collectMatches` above documents for search.
- */
-function walkFixtureTree(rootUri: string, showHidden: boolean): Map<string, EntrySummary> {
-  const result = new Map<string, EntrySummary>();
-  const pending: { uri: string; relativePath: string }[] = [{ uri: rootUri, relativePath: '' }];
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (current === undefined || current.uri === 'mock:///Unreadable') continue;
-    const fixtures = directories[current.uri];
-    if (fixtures === undefined) continue;
-    for (const fixture of fixtures) {
-      const entry = fixtureEntry(current.uri, fixture);
-      if (entry.hidden && !showHidden) continue;
-      const relativePath =
-        current.relativePath === '' ? fixture.name : `${current.relativePath}/${fixture.name}`;
-      result.set(relativePath, entry);
-      if (fixture.kind === 'directory') {
-        pending.push({ uri: entry.location.uri, relativePath });
-      }
-    }
-  }
-  return result;
-}
-
-function comparisonEntrySideFor(entry: EntrySummary): ComparisonEntrySide {
-  return {
-    kind: entry.kind,
-    ...(entry.size === undefined ? {} : { size: entry.size }),
-  };
-}
-
-/** The last `/`-separated segment of a URI, percent-decoded. */
-function lastSegment(uri: string): string {
-  const trimmed = uri.endsWith('/') ? uri.slice(0, -1) : uri;
-  const index = trimmed.lastIndexOf('/');
-  return decodeURIComponent(index === -1 ? trimmed : trimmed.slice(index + 1));
-}
-
-function mockSummaryVisualCount(uri: string): number {
-  const name = lastSegment(uri.split(/[?#]/, 1)[0] ?? '').toLowerCase();
-  return new Set([
-    'report.docx',
-    'illustrated.pdf',
-    'presentation.pptx',
-    'book.epub',
-    'figures.xlsx',
-  ]).has(name)
-    ? 1
-    : 0;
-}
-
-/**
- * A deterministic, plausible-looking digest for the mock runtime.
- *
- * Deliberately *not* a real hash: the mock never reads file bytes, and a
- * digest that merely looks right is enough to exercise the UI. It is stable
- * for a given (uri, algorithm) pair so repeated runs and the verify flow
- * agree with themselves.
- */
-function mockDigest(uri: string, algorithm: ChecksumAlgorithm): string {
-  const width = algorithm === 'crc32' ? 8 : algorithm === 'md5' ? 32 : 64;
-  let hash = 0x811c9dc5;
-  const seed = `${algorithm}:${uri}`;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  let digest = '';
-  let state = hash;
-  while (digest.length < width) {
-    state = (Math.imul(state, 0x01000193) ^ digest.length) >>> 0;
-    digest += state.toString(16).padStart(8, '0');
-  }
-  return digest.slice(0, width);
-}
-
-/**
- * Builds a plausible duplicate-scan result: one group of two byte-identical
- * files with distinct inodes, plus one hardlink cluster, so the review UI can
- * exercise both categories without a real filesystem.
- */
-function buildMockDuplicateGroups(roots: readonly Location[]): DuplicateGroup[] {
-  const root = roots[0];
-  if (root === undefined) return [];
-  const base = root.uri.endsWith('/') ? root.uri.slice(0, -1) : root.uri;
-  const at = (name: string): Location => ({ providerId: root.providerId, uri: `${base}/${name}` });
-  return [
-    {
-      fullHash: mockDigest(`${base}/duplicate-content`, 'sha256'),
-      size: 20_480,
-      hardlinkClusters: [],
-      distinctLocations: [at('report-copy.pdf'), at('archive/report.pdf')],
-      reclaimableBytes: 20_480,
-    },
-    {
-      fullHash: mockDigest(`${base}/hardlinked-content`, 'sha256'),
-      size: 4_096,
-      hardlinkClusters: [
-        {
-          device: 16_777_233,
-          inode: 4_242_424,
-          locations: [at('notes.md'), at('archive/notes-link.md')],
-        },
-      ],
-      distinctLocations: [],
-      // A hardlink cluster is one file: deleting a path frees nothing.
-      reclaimableBytes: 0,
-    },
-  ];
-}
-
-/**
- * Builds a plausible comparison between two fixture subtrees. Directories
- * are always reported identical (matching the real engine's rule that a
- * matched directory pair defers entirely to its children); matched files
- * compare by size once `criteria` is not `nameOnly`.
- */
-function buildMockComparisonEntries(
-  leftRootUri: string,
-  rightRootUri: string,
-  criteria: ComparisonCriteria,
-  showHidden: boolean,
-): ComparisonEntry[] {
-  const left = walkFixtureTree(leftRootUri, showHidden);
-  const right = walkFixtureTree(rightRootUri, showHidden);
-  const relativePaths = [...new Set([...left.keys(), ...right.keys()])].sort();
-  return relativePaths.map((relativePath) => {
-    const leftEntry = left.get(relativePath);
-    const rightEntry = right.get(relativePath);
-    let status: ComparisonStatus;
-    if (leftEntry === undefined) {
-      status = 'onlyRight';
-    } else if (rightEntry === undefined) {
-      status = 'onlyLeft';
-    } else if (leftEntry.kind !== rightEntry.kind) {
-      status = 'typeMismatch';
-    } else if (leftEntry.kind === 'directory' || criteria === 'nameOnly') {
-      status = 'identical';
-    } else {
-      status = (leftEntry.size ?? 0) === (rightEntry.size ?? 0) ? 'identical' : 'differentSize';
-    }
-    return {
-      relativePath,
-      ...(leftEntry === undefined ? {} : { left: comparisonEntrySideFor(leftEntry) }),
-      ...(rightEntry === undefined ? {} : { right: comparisonEntrySideFor(rightEntry) }),
-      status,
-    };
-  });
-}
-
-/** Mirrors `fm_comparison::sync::default_action`'s per-status proposal rules. */
-function defaultSyncAction(
-  status: ComparisonStatus,
-  mode: GenerateSyncPlanRequest['mode'],
-): SyncPlan['items'][number]['action'] {
-  if (mode === 'mirrorLeftToRight') {
-    if (status === 'onlyRight') return 'deleteRight';
-    if (
-      status === 'onlyLeft' ||
-      status === 'newer' ||
-      status === 'older' ||
-      status === 'differentSize'
-    )
-      return 'copyLeftToRight';
-    return 'skip';
-  }
-  if (mode === 'mirrorRightToLeft') {
-    if (status === 'onlyLeft') return 'deleteLeft';
-    if (
-      status === 'onlyRight' ||
-      status === 'newer' ||
-      status === 'older' ||
-      status === 'differentSize'
-    )
-      return 'copyRightToLeft';
-    return 'skip';
-  }
-  // twoWayUpdate
-  if (status === 'onlyLeft' || status === 'newer') return 'copyLeftToRight';
-  if (status === 'onlyRight' || status === 'older') return 'copyRightToLeft';
-  return 'skip';
-}
-
-function createMockWorkspace(id: WorkspaceId, name = 'Mock Workspace'): WorkspaceProjection {
-  return {
-    id,
-    name,
-    revision: 1,
-    paneOrder: ['left', 'right'],
-    panesById: {
-      left: {
-        id: 'left',
-        tabOrder: ['left-tab'],
-        tabsById: {
-          'left-tab': {
-            id: 'left-tab',
-            title: 'Mock files',
-            location: { providerId: 'file', uri: 'mock:///' },
-            canNavigateBack: false,
-            canNavigateForward: false,
-            view: {
-              sort: [],
-              columns: [],
-              showHidden: false,
-              foldersFirst: true,
-              quickFilter: null,
-            },
-          },
-        },
-        activeTabId: 'left-tab',
-      },
-      right: {
-        id: 'right',
-        tabOrder: ['right-tab'],
-        tabsById: {
-          'right-tab': {
-            id: 'right-tab',
-            title: 'Documents',
-            location: { providerId: 'file', uri: 'mock:///Documents' },
-            canNavigateBack: false,
-            canNavigateForward: false,
-            view: {
-              sort: [],
-              columns: [],
-              showHidden: false,
-              foldersFirst: true,
-              quickFilter: null,
-            },
-          },
-        },
-        activeTabId: 'right-tab',
-      },
-    },
-    activePaneId: 'left',
-    layout: {
-      type: 'split',
-      axis: 'horizontal',
-      ratio: 0.5,
-      first: { type: 'pane', paneId: 'left' },
-      second: { type: 'pane', paneId: 'right' },
-    },
-    operationCentre: { visible: false, height: 180 },
-    ephemeral: false,
-  };
-}
-
-/**
- * Mirrors the backend's honest, pre-0104/0106 `connect`/`test` scope (see
- * `fm_connections::ConnectionService`'s documentation): with no real
- * protocol dialer, a connection is "usable" once its typed configuration is
- * well-formed and, for an SSH configuration whose authentication method
- * needs one, a credential is stored.
- */
-function evaluateMockConnectionStatus(connection: Connection): Connection['status'] {
-  if (connection.configuration.kind === 'ssh') {
-    const needsStoredCredential =
-      connection.configuration.authentication === 'password' ||
-      connection.configuration.authentication === 'privateKey';
-    if (needsStoredCredential && !connection.hasCredential) {
-      return 'authenticationRequired';
-    }
-  }
-  return 'connected';
-}
-
-const SEMANTIC_OPERATIONS: readonly SemanticComponentOperation[] = [
-  'viewStatus',
-  'viewCatalog',
-  'createInstallationOffer',
-  'installOrEnable',
-  'installWorkerPatch',
-  'pauseIndexing',
-  'resumeIndexing',
-  'removeIndex',
-  'moveData',
-  'uninstallComponents',
-  'importLocalModel',
-  'planModelMigration',
-  'confirmModelMigration',
-  'checkpointModelMigration',
-  'completeModelMigration',
-];
-
-const MOCK_SEMANTIC_ENROLMENT_INVENTORY: Readonly<Record<string, SemanticIndexRecordCounts>> = {
-  'enrolment-1': {
-    indexRecords: 3,
-    extractedFiles: 2,
-    zvecVectors: 3,
-    cacheEntries: 1,
-    conversationEvidence: 2,
-  },
-  'library-1': {
-    indexRecords: 7,
-    extractedFiles: 6,
-    zvecVectors: 5,
-    cacheEntries: 4,
-    conversationEvidence: 3,
-  },
-};
-
-function sameSemanticIndexCounts(
-  left: SemanticIndexRecordCounts,
-  right: SemanticIndexRecordCounts,
-): boolean {
-  return (
-    left.indexRecords === right.indexRecords &&
-    left.extractedFiles === right.extractedFiles &&
-    left.zvecVectors === right.zvecVectors &&
-    left.cacheEntries === right.cacheEntries &&
-    left.conversationEvidence === right.conversationEvidence
-  );
-}
-
-function mockSemanticIdentity(profile: SemanticProfile): SemanticModelIdentity {
-  const suffix = {
-    compactMultilingual: 'compact-multilingual',
-    compactEnglish: 'compact-english',
-    multilingualQuality: 'multilingual-quality',
-    embeddingGemma2: 'embeddinggemma-2',
-  }[profile];
-  return {
-    modelId: `mock-${suffix}`,
-    revision: `mock-${suffix}-revision`,
-  };
-}
-
-function mockSemanticSelection(profile: SemanticProfile): SemanticModelSelection {
-  return { profile, identity: mockSemanticIdentity(profile) };
-}
-
-function mockSemanticProfiles(): SemanticModelProfile[] {
-  const profiles: readonly SemanticProfile[] = [
-    'compactMultilingual',
-    'compactEnglish',
-    'multilingualQuality',
-  ];
-  return profiles.map((profile) => {
-    const identity = mockSemanticIdentity(profile);
-    return {
-      profile,
-      recommended: profile === 'compactMultilingual',
-      explanation: `Deterministic ${profile} mock profile.`,
-      resolvedModel: identity,
-      metadata: {
-        identity,
-        license: {
-          spdx: 'MIT',
-          notice: 'Deterministic mock model; no package is downloaded.',
-        },
-        tokenizer: `mock-${profile}-tokenizer`,
-        dimensions: profile === 'multilingualQuality' ? 768 : 384,
-        normalization: 'unitLength',
-        runtimeComponentId: 'mock-runtime',
-        runtimeVersionRequirement: '^1.0',
-        languageCoverage: profile === 'compactEnglish' ? ['en'] : ['en', 'nl'],
-        estimatedDiskBytes: profile === 'multilingualQuality' ? 600 : 300,
-        estimatedRamBytes: profile === 'multilingualQuality' ? 800 : 400,
-      },
-    };
-  });
-}
-
-function mockSemanticInstalledComponents(): SemanticComponentStatus['components'] {
-  return [
-    {
-      artifactId: 'mock-worker-artifact',
-      componentId: 'mock-worker',
-      kind: 'worker',
-      version: '1.0.0',
-      state: 'active',
-      installedBytes: 60,
-    },
-    {
-      artifactId: 'mock-runtime-artifact',
-      componentId: 'mock-runtime',
-      kind: 'runtime',
-      version: '1.0.0',
-      state: 'active',
-      installedBytes: 70,
-    },
-    {
-      artifactId: 'mock-model-artifact',
-      componentId: 'mock-model',
-      kind: 'model',
-      version: '1.0.0',
-      state: 'active',
-      installedBytes: 300,
-    },
-  ];
-}
-
-function emptySemanticDiskUse(): SemanticDiskUse {
-  return {
-    categories: [
-      { category: 'catalog', bytes: 0 },
-      { category: 'extracted', bytes: 0 },
-      { category: 'zvec', bytes: 0 },
-      { category: 'embeddingCache', bytes: 0 },
-      { category: 'models', bytes: 0 },
-      { category: 'workers', bytes: 0 },
-    ],
-    totalBytes: 0,
-  };
-}
-
-function installedSemanticDiskUse(): SemanticDiskUse {
-  return {
-    categories: [
-      { category: 'catalog', bytes: 1 },
-      { category: 'extracted', bytes: 0 },
-      { category: 'zvec', bytes: 0 },
-      { category: 'embeddingCache', bytes: 0 },
-      { category: 'models', bytes: 300 },
-      { category: 'workers', bytes: 130 },
-    ],
-    totalBytes: 431,
-  };
-}
-
-function retainedSemanticDiskUse(): SemanticDiskUse {
-  return {
-    categories: [
-      { category: 'catalog', bytes: 1 },
-      { category: 'extracted', bytes: 10 },
-      { category: 'zvec', bytes: 30 },
-      { category: 'embeddingCache', bytes: 10 },
-      { category: 'models', bytes: 0 },
-      { category: 'workers', bytes: 0 },
-    ],
-    totalBytes: 51,
-  };
-}
-
-function mockSemanticMigrationProgress(
-  migrationId = 'mock-scenario-migration',
-  completedDocuments = 4,
-  estimate = { documents: 10, sourceBytes: 100 },
-  target = mockSemanticSelection('multilingualQuality'),
-  resumeCursor: string | null = 'mock-resume-cursor',
-): SemanticModelMigrationProgress {
-  return {
-    migrationId,
-    completedDocuments,
-    estimate,
-    target,
-    reason: { reason: 'modelChanged' },
-    resumeCursor,
-  };
-}
-
-function mockSemanticStatus(lifecycleName: MockSemanticLifecycle): SemanticComponentStatus {
-  const installed =
-    lifecycleName === 'installedEnabled' ||
-    lifecycleName === 'paused' ||
-    lifecycleName === 'migrating' ||
-    lifecycleName === 'updateFailedRolledBack';
-  const progress = lifecycleName === 'migrating' ? mockSemanticMigrationProgress() : undefined;
-  const lifecycle: SemanticComponentLifecycle = (() => {
-    switch (lifecycleName) {
-      case 'unavailable':
-        return { state: 'unavailable' };
-      case 'absent':
-        return { state: 'absent' };
-      case 'offered':
-        return { state: 'offered', offerId: 'mock-scenario-offer' };
-      case 'downloading':
-        return {
-          state: 'downloading',
-          downloadedBytes: 160,
-          totalBytes: 400,
-          resumable: false,
-        };
-      case 'downloadingResumable':
-        return {
-          state: 'downloading',
-          downloadedBytes: 160,
-          totalBytes: 400,
-          resumable: true,
-        };
-      case 'installedEnabled':
-        return { state: 'installedEnabled' };
-      case 'paused':
-        return { state: 'paused' };
-      case 'migrating':
-        return { state: 'migrating', progress: progress as SemanticModelMigrationProgress };
-      case 'updateFailedRolledBack':
-        return {
-          state: 'updateFailedRolledBack',
-          failedVersion: '1.0.1',
-          activeVersion: '1.0.0',
-        };
-      case 'lowDisk':
-        return { state: 'lowDisk', availableBytes: 512, requiredBytes: 1_024 };
-      case 'uninstalledRetain':
-        return { state: 'uninstalled', indexDecision: 'retain' };
-      case 'uninstalledDelete':
-        return { state: 'uninstalled', indexDecision: 'delete' };
-    }
-  })();
-  const retainsIndex = lifecycleName === 'uninstalledRetain';
-  return {
-    lifecycle,
-    dataRoot: lifecycleName === 'unavailable' ? null : 'mock/semantic',
-    activeModel: installed || retainsIndex ? mockSemanticSelection('compactMultilingual') : null,
-    migration: progress ?? null,
-    components: installed ? mockSemanticInstalledComponents() : [],
-    diskUse: installed
-      ? installedSemanticDiskUse()
-      : retainsIndex
-        ? retainedSemanticDiskUse()
-        : emptySemanticDiskUse(),
-  };
-}
-
-function mockSemanticOffer(offerId: string, profile: SemanticProfile): SemanticInstallationOffer {
-  const resolvedModel = mockSemanticIdentity(profile);
-  const license = {
-    spdx: 'MIT',
-    notice: 'Deterministic mock component; no package is downloaded.',
-  };
-  return {
-    offerId,
-    catalogRevision: 'mock-signed-catalog-revision',
-    profile,
-    resolvedModel,
-    components: [
-      {
-        artifactId: 'mock-worker-artifact',
-        componentId: 'mock-worker',
-        kind: 'worker',
-        model: null,
-        version: '1.0.0',
-        license,
-        downloadBytes: 100,
-        estimatedInstalledBytes: 200,
-        estimatedRamBytes: 50,
-      },
-      {
-        artifactId: 'mock-runtime-artifact',
-        componentId: 'mock-runtime',
-        kind: 'runtime',
-        model: null,
-        version: '1.0.0',
-        license,
-        downloadBytes: 100,
-        estimatedInstalledBytes: 200,
-        estimatedRamBytes: 100,
-      },
-      {
-        artifactId: 'mock-model-artifact',
-        componentId: 'mock-model',
-        kind: 'model',
-        model: resolvedModel,
-        version: '1.0.0',
-        license,
-        downloadBytes: 200,
-        estimatedInstalledBytes: 300,
-        estimatedRamBytes: 400,
-      },
-    ],
-    embeddingsStayLocal: true,
-    localOnlyDisclosure: 'Embedding inference and semantic index data stay on this device.',
-    dataRoot: 'mock/semantic',
-    minimumFreeSpaceReserveBytes: 1_024,
-  };
-}
-
-const MOCK_SEMANTIC_DELETION_CATEGORIES = [
-  'occurrences',
-  'extractedContent',
-  'summaries',
-  'labels',
-  'orphanVectors',
-  'conversationEvidencePins',
-] as const;
-
-function mockSemanticLibraryStatus(): SemanticLibraryStatus {
-  return {
-    available: true,
-    revision: 1,
-    paused: false,
-    library: {
-      libraryId: '00000000-0000-0000-0000-000000000179',
-      model: {
-        modelId: 'mock-semantic-model',
-        revision: 'mock-revision-1',
-        dimensions: 384,
-        embeddingSpace: 'mock-embedding-space',
-      },
-    },
-    resourceProfile: {
-      kind: 'balanced',
-      budgets: {
-        maxDocuments: 1_000_000,
-        maxSourceBytesPerDocument: 512 * 1_024 * 1_024,
-        maxTotalSourceBytes: 4 * 1_024 * 1_024 * 1_024 * 1_024,
-        maxTotalExtractedBytes: 1_024 * 1_024 * 1_024 * 1_024,
-        maxTotalVectorBytes: 1_024 * 1_024 * 1_024 * 1_024,
-      },
-    },
-    reconciliationIntervalSeconds: 1_800,
-    roots: [],
-    normalizedExcerptsRetainedLocally: true,
-  };
-}
-
-function mockSemanticOcrStatus(): SemanticOcrStatus {
-  return {
-    enabled: false,
-    replaceOriginal: false,
-    availability: {
-      state: 'available',
-      executable: '/usr/local/bin/ocrmypdf',
-      version: '16.10.4',
-    },
-    reportedFiles: [
-      {
-        rootId: 'mock-ocr-root',
-        location: { providerId: 'file', uri: 'file:///Documents/scanned-invoice.pdf' },
-      },
-      {
-        rootId: 'mock-ocr-root',
-        location: { providerId: 'file', uri: 'file:///Documents/scanned-notes.pdf' },
-      },
-    ],
-    jobs: [],
-  };
-}
-
-function sameSemanticOcrTarget(left: SemanticOcrTarget, right: SemanticOcrTarget): boolean {
-  return (
-    left.rootId === right.rootId &&
-    left.location.providerId === right.location.providerId &&
-    left.location.uri === right.location.uri
-  );
-}
-
-function semanticLocationContains(root: Location, candidate: Location): boolean {
-  if (root.providerId !== candidate.providerId) return false;
-  if (root.uri === candidate.uri) return true;
-  const prefix = root.uri.endsWith('/') ? root.uri : `${root.uri}/`;
-  return candidate.uri.startsWith(prefix);
-}
-
-function mockCleanupCategories(complete: boolean): SemanticDeletionCategoryStatus[] {
-  return MOCK_SEMANTIC_DELETION_CATEGORIES.map((category, index) => ({
-    category,
-    totalItems: index + 1,
-    completedItems: complete ? index + 1 : 0,
-    complete,
-    lastError: null,
-  }));
-}
-
-/** Strictly typed controls for the deterministic in-memory frontend adapter. */
 export class MockFileManagerClient implements FileManagerClient {
-  readonly connection = new MutableEventStreamStatus();
-  readonly supportsAppUpdates = false;
-  readonly supportsAppDataRemoval = false;
-  private readonly frontendDiagnostics: FrontendDiagnostic[] = [];
-
-  async setWindowTitle(title: string): Promise<void> {
-    document.title = title;
+  private readonly ctx: MockContext;
+  private readonly connectionClient: MockConnectionClient;
+  private readonly workspaceClient: MockWorkspaceClient;
+  private readonly operationClient: MockOperationClient;
+  private readonly semanticClient: MockSemanticClient;
+  private readonly pluginClient: MockPluginClient;
+  constructor(options?: MockFileManagerClientOptions) {
+    this.ctx = new MockContext(options);
+    this.connectionClient = new MockConnectionClient(this.ctx);
+    this.workspaceClient = new MockWorkspaceClient(this.ctx);
+    this.operationClient = new MockOperationClient(this.ctx);
+    this.semanticClient = new MockSemanticClient(this.ctx);
+    this.pluginClient = new MockPluginClient(this.ctx);
+    this.ctx.connectionClient = this.connectionClient;
+    this.ctx.workspaceClient = this.workspaceClient;
+    this.ctx.operationClient = this.operationClient;
+    this.ctx.semanticClient = this.semanticClient;
+    this.ctx.pluginClient = this.pluginClient;
   }
-
-  async openExternalUrl(url: string): Promise<void> {
-    const opened = globalThis.open(url, '_blank', 'noopener,noreferrer');
-    if (opened === null) {
-      throw new ApiError(0, {
-        code: 'externalLinkBlocked',
-        message: 'The browser blocked the external link.',
-      });
-    }
-    opened.opener = null;
+  get connection() {
+    return this.ctx.connection;
   }
-
+  get supportsAppUpdates(): boolean {
+    return this.ctx.supportsAppUpdates;
+  }
+  get supportsAppDataRemoval(): boolean {
+    return this.ctx.supportsAppDataRemoval;
+  }
+  setWindowTitle(title: string): Promise<void> {
+    return this.connectionClient.setWindowTitle(title);
+  }
+  openExternalUrl(url: string): Promise<void> {
+    return this.connectionClient.openExternalUrl(url);
+  }
   cacheArchivePassword(_request: ArchiveCredentialRequest, signal?: AbortSignal): Promise<void> {
-    return this.perform('cacheArchivePassword', signal, () => undefined);
+    return this.workspaceClient.cacheArchivePassword(_request, signal);
   }
-  private readonly resynchronise = new EventStreamSignalRegistry();
-  private readonly pageSize: number;
-  private readonly seed: number;
-  private readonly loadingLocations: ReadonlySet<string>;
-  private readonly latencyMs: number;
-  private readonly failures: Partial<Record<MockClientMethod, Error>>;
-  private readonly nativeIconExtensions: ReadonlySet<string>;
-  private semanticStatus: SemanticComponentStatus;
-  private semanticOcrStatus: SemanticOcrStatus;
-  private readonly semanticOcrAutoAdvance: boolean;
-  private semanticOcrJobSequence = 0;
-  private readonly semanticOcrJobTargets = new Map<string, readonly SemanticOcrTarget[]>();
-  private semanticOfferSequence = 0;
-  private semanticIndexRemovalSequence = 0;
-  private semanticMigrationSequence = 0;
-  private readonly semanticOffers = new Map<string, SemanticInstallationOffer>();
-  private readonly semanticEnrolmentInventory = new Map(
-    Object.entries(MOCK_SEMANTIC_ENROLMENT_INVENTORY).map(([enrolmentId, counts]) => [
-      enrolmentId,
-      structuredClone(counts),
-    ]),
-  );
-  private readonly semanticIndexRemovalPlans = new Map<string, SemanticIndexRemovalPlan>();
-  private readonly semanticMigrationPlans = new Map<string, SemanticModelMigrationPlan>();
-  private semanticLibrary = mockSemanticLibraryStatus();
-  private semanticVocabularies: SemanticVocabulary[] = [];
-  private semanticLibrarySequence = 0;
-  private readonly semanticEnrolmentPreviews = new Map<
-    string,
-    PreviewSemanticEnrolmentRequest & { readonly policyRevision: number }
-  >();
-  private readonly semanticExclusionPlans = new Map<
-    string,
-    PlanSemanticExclusionRequest & { readonly rootId: string }
-  >();
-  private readonly finderTagsByUri = new Map<string, FinderTags>();
-  private readonly spotlightCommentsByUri = new Map<string, SpotlightComment>();
-  private readonly listeners = new Set<(event: BackendEvent) => void>();
-  private readonly scriptedEvents: BackendEvent[] = [];
-  private readonly operations = new Map<OperationId, Operation>();
-  private readonly navigationHistory = new Map<string, { back: Location[]; forward: Location[] }>();
-  private readonly workspaces = new Map<WorkspaceId, WorkspaceProjection>();
-  private readonly connections = new Map<ConnectionId, Connection>();
-  private readonly llmProfiles = new Map<string, LlmProfile>();
-  private readonly documentSummaries = new Map<string, DocumentSummary>();
-  private readonly ragConversations = new Map<string, SavedRagConversation>();
-  private readonly knowledgeSearches = new Map<string, AbortController>();
-  private readonly knowledgeAnswers = new Map<string, AbortController>();
-  /** Inspected evidence sets an optional answer may be generated from. */
-  private readonly knowledgeEvidence = new MockKnowledgeEvidenceCache();
-  private readonly ephemeralRagConversations = new Map<string, SavedRagConversation>();
-  private readonly oneDriveAuthorizations = new Map<
-    string,
-    { readonly connectionId: ConnectionId; attempt: OneDriveAuthorizationAttempt }
-  >();
-  private pluginState: PluginDescriptor[] = structuredClone(plugins);
-  private settings: Settings = {
-    schemaVersion: 8,
-    theme: 'auto',
-    language: 'en',
-    fontSize: 13,
-    rowHeight: 20,
-    dateFormat: 'medium',
-    sizeFormat: 'binary',
-    showHiddenFiles: false,
-    confirmPermanentDelete: true,
-    confirmFileOperations: true,
-    defaultConflictPolicy: 'ask',
-    operationConcurrency: 2,
-    defaultPaneLayout: 'dual',
-    defaultColumns: ['core.name', 'core.extension', 'core.size', 'core.modified'],
-    columnWidths: {},
-    keybindings: {},
-    enabledPlugins: [],
-    pluginSettings: {},
-    terminalCommand: null,
-    editorCommand: null,
-    defaultStartLocations: [],
-    favouriteLocations: [],
-    recentLocationsByWorkspace: {},
-    multiRenamePresets: [],
-    filterPresets: [],
-    syncProfiles: [],
-    savedSearches: [],
-    iconTheme: 'generic',
-    checkForUpdatesAutomatically: true,
-    checkForBetaUpdates: false,
-    viewerInSeparateWindow: false,
-    rememberFolderViews: true,
-    map: DEFAULT_MAP_SETTINGS,
-  };
-  private operationSequence = 0;
-  private tabSequence = 0;
-  private workspaceSequence = 0;
-  private connectionSequence = 0;
-  private llmProfileSequence = 0;
-  /** Mirrors the backend: the first profile saved becomes active until another is activated. */
-  private activeLlmProfileId: string | undefined;
-  private oneDriveAuthorizationSequence = 0;
-  private searchSequence = 0;
-  private eventSequence = 0;
-  private readonly searches = new Map<
-    string,
-    { cancelled: boolean; entries: readonly EntrySummary[] }
-  >();
-  private comparisonSequence = 0;
-  private readonly comparisons = new Map<
-    string,
-    {
-      cancelled: boolean;
-      entries: readonly ComparisonEntry[];
-      left: Location;
-      right: Location;
-      criteria: ComparisonCriteria;
-    }
-  >();
-  private checksumSequence = 0;
-  private readonly checksumJobs = new Map<
-    string,
-    {
-      cancelled: boolean;
-      entries: readonly ChecksumEntry[];
-      algorithms: readonly ChecksumAlgorithm[];
-    }
-  >();
-  private readonly snapshotJobs = new Map<string, StartSnapshotJobRequest>();
-  private readonly linkScans = new Map<
-    string,
-    { readonly roots: readonly Location[]; cancelled: boolean }
-  >();
-  private readonly musicScans = new Map<
-    string,
-    { readonly roots: readonly Location[]; cancelled: boolean }
-  >();
-  private duplicateScanSequence = 0;
-  private readonly duplicateScans = new Map<
-    string,
-    { cancelled: boolean; groups: readonly DuplicateGroup[]; roots: readonly Location[] }
-  >();
-  private readonly fileContents = new Map<string, Uint8Array>();
-  private readonly docxSessions = new Map<string, Map<string, DocxPreviewResource>>();
-  private readonly pptxSessions = new Map<string, Uint8Array>();
-  private readonly sqliteSessions = new Map<string, MockSqliteDatabase>();
-  private readonly structuredSessions = new Map<
-    string,
-    {
-      uri: string;
-      format: OpenStructuredViewRequest['format'];
-      delimiter: string;
-      headerMode: NonNullable<OpenStructuredViewRequest['headerMode']>;
-      selectedSheet: string;
-    }
-  >();
-  // Generated directories are recreated per request, but their aggregate totals are a pure
-  // function of (size, seed) — cache them instead of resumming up to 1,000,000 entries on every
-  // paginated fetch.
-  private readonly generatedTotalsCache = new Map<
-    GeneratedDirectorySize,
-    { readonly size: number; readonly fileCount: number }
-  >();
-
-  constructor(options: MockFileManagerClientOptions = {}) {
-    this.pageSize = options.pageSize ?? 100;
-    this.seed = options.seed ?? 13;
-    this.loadingLocations = new Set(options.loadingLocations);
-    this.latencyMs = options.latencyMs ?? 0;
-    this.failures = options.failures ?? {};
-    this.nativeIconExtensions = new Set(
-      options.nativeIconExtensions?.map((extension) => extension.toLowerCase()),
-    );
-    const semanticLifecycle = options.semanticLifecycle ?? 'absent';
-    this.semanticStatus = mockSemanticStatus(semanticLifecycle);
-    this.semanticOcrStatus = structuredClone(options.semanticOcrStatus ?? mockSemanticOcrStatus());
-    this.semanticOcrAutoAdvance = options.semanticOcrStatus === undefined;
-    if (semanticLifecycle === 'offered') {
-      this.semanticOffers.set(
-        'mock-scenario-offer',
-        mockSemanticOffer('mock-scenario-offer', 'compactMultilingual'),
-      );
-    }
-    if (semanticLifecycle === 'migrating') {
-      const progress = this.semanticStatus.migration;
-      if (progress !== null && progress !== undefined) {
-        this.semanticMigrationPlans.set(progress.migrationId, {
-          migrationId: progress.migrationId,
-          from: mockSemanticSelection('compactMultilingual'),
-          target: progress.target,
-          estimate: progress.estimate,
-          reason: progress.reason,
-          fullReindex: true,
-          requiresConfirmation: true,
-          resumable: true,
-        });
-      }
-    }
-  }
-
   getRuntimeCapabilities(signal?: AbortSignal): Promise<RuntimeCapabilities> {
-    return this.perform('getRuntimeCapabilities', signal, () => ({
-      clipboard: false,
-      extendedAttributes: true,
-      finderAliases: false,
-      osFileClipboard: false,
-      finderTags: true,
-      nativeDragOut: false,
-      nativeFileIcons: this.nativeIconExtensions.size > 0,
-      nativeMenus: false,
-      platformContextMenu: false,
-      nativeThumbnails: false,
-      openTerminal: false,
-      platform: 'linux',
-      plugins: true,
-      revealInSystemFileManager: false,
-      runtime: 'mock',
-      freshInstall: false,
-      semanticComponentAuthority:
-        this.semanticStatus.lifecycle.state === 'unavailable' ? 'unavailable' : 'deterministicMock',
-      semanticRuntimeExecutableDownload:
-        this.semanticStatus.lifecycle.state === 'unavailable' ? 'unavailable' : 'simulated',
-      serverAdministration: false,
-      systemTrash: false,
-    }));
+    return this.connectionClient.getRuntimeCapabilities(signal);
   }
-
   getSemanticComponentCapabilities(signal?: AbortSignal): Promise<SemanticComponentCapabilities> {
-    return this.perform('getSemanticComponentCapabilities', signal, () =>
-      this.semanticStatus.lifecycle.state === 'unavailable'
-        ? {
-            authority: 'unavailable',
-            operations: [],
-            runtimeExecutableDownload: 'unavailable',
-          }
-        : {
-            authority: 'deterministicMock',
-            operations: [...SEMANTIC_OPERATIONS],
-            runtimeExecutableDownload: 'simulated',
-          },
-    );
+    return this.semanticClient.getSemanticComponentCapabilities(signal);
   }
-
   getSemanticOcrStatus(signal?: AbortSignal): Promise<SemanticOcrStatus> {
-    return this.perform('getSemanticOcrStatus', signal, () => {
-      if (this.semanticOcrAutoAdvance) this.advanceSemanticOcrJobs();
-      return structuredClone(this.semanticOcrStatus);
-    });
+    return this.semanticClient.getSemanticOcrStatus(signal);
   }
-
   setSemanticOcrConsent(enabled: boolean, signal?: AbortSignal): Promise<SemanticOcrStatus> {
-    return this.perform('setSemanticOcrConsent', signal, () => {
-      if (enabled && this.semanticOcrStatus.availability.state !== 'available') {
-        throw new MockClientError('unavailable', 'OCRmyPDF is unavailable');
-      }
-      this.semanticOcrStatus = {
-        ...this.semanticOcrStatus,
-        enabled,
-        replaceOriginal: enabled && this.semanticOcrStatus.replaceOriginal,
-        jobs: enabled
-          ? this.semanticOcrStatus.jobs
-          : this.semanticOcrStatus.jobs.map((job) =>
-              job.state === 'queued' || job.state === 'running'
-                ? { ...job, state: 'cancelled', updatedAtMs: Date.now() }
-                : job,
-            ),
-      };
-      return structuredClone(this.semanticOcrStatus);
-    });
+    return this.semanticClient.setSemanticOcrConsent(enabled, signal);
   }
-
   setSemanticOcrReplaceOriginal(
     enabled: boolean,
     signal?: AbortSignal,
   ): Promise<SemanticOcrStatus> {
-    return this.perform('setSemanticOcrReplaceOriginal', signal, () => {
-      if (enabled && !this.semanticOcrStatus.enabled) {
-        throw new MockClientError('disabled', 'OCR remediation is disabled');
-      }
-      this.semanticOcrStatus = { ...this.semanticOcrStatus, replaceOriginal: enabled };
-      return structuredClone(this.semanticOcrStatus);
-    });
+    return this.semanticClient.setSemanticOcrReplaceOriginal(enabled, signal);
   }
-
   startSemanticOcrRemediation(
     request: StartSemanticOcrRemediationRequest,
     signal?: AbortSignal,
   ): Promise<SemanticOcrJob> {
-    return this.perform('startSemanticOcrRemediation', signal, () => {
-      if (!this.semanticOcrStatus.enabled) {
-        throw new MockClientError('disabled', 'OCR remediation is disabled');
-      }
-      if (this.semanticOcrStatus.availability.state !== 'available') {
-        throw new MockClientError('unavailable', 'OCRmyPDF is unavailable');
-      }
-      const reported = this.semanticOcrStatus.reportedFiles;
-      let targets: readonly SemanticOcrTarget[];
-      switch (request.scope) {
-        case 'oneFile':
-          targets = [request.file];
-          break;
-        case 'selectedFiles':
-          targets = request.files;
-          break;
-        case 'enrolledRoot':
-          targets = reported.filter((target) => target.rootId === request.rootId);
-          break;
-        case 'allReported':
-          targets = reported;
-          break;
-      }
-      if (targets.length === 0) {
-        throw new MockClientError('nothingToRemediate', 'No files currently require OCR');
-      }
-      if (
-        targets.some(
-          (target) => !reported.some((candidate) => sameSemanticOcrTarget(candidate, target)),
-        )
-      ) {
-        throw new MockClientError(
-          'unreportedTarget',
-          'The requested file is not currently reported as requiring OCR',
-        );
-      }
-      const unique = targets.filter(
-        (target, index) =>
-          targets.findIndex((candidate) => sameSemanticOcrTarget(candidate, target)) === index,
-      );
-      this.semanticOcrJobSequence += 1;
-      const now = Date.now();
-      const job: SemanticOcrJob = {
-        id: `00000000-0000-4000-8000-${String(this.semanticOcrJobSequence).padStart(12, '0')}`,
-        state: 'queued',
-        createdAtMs: now,
-        updatedAtMs: now,
-        totalFiles: unique.length,
-        processedFiles: 0,
-        files: [],
-        availabilityFailure: null,
-      };
-      this.semanticOcrJobTargets.set(job.id, structuredClone(unique));
-      this.semanticOcrStatus = {
-        ...this.semanticOcrStatus,
-        jobs: [job, ...this.semanticOcrStatus.jobs],
-      };
-      return structuredClone(job);
-    });
+    return this.semanticClient.startSemanticOcrRemediation(request, signal);
   }
-
   cancelSemanticOcrRemediation(jobId: string, signal?: AbortSignal): Promise<SemanticOcrJob> {
-    return this.perform('cancelSemanticOcrRemediation', signal, () => {
-      const job = this.semanticOcrStatus.jobs.find((candidate) => candidate.id === jobId);
-      if (job === undefined) throw new MockClientError('notFound', 'OCR job was not found');
-      const cancelled: SemanticOcrJob =
-        job.state === 'queued' || job.state === 'running'
-          ? { ...job, state: 'cancelled', updatedAtMs: Date.now() }
-          : job;
-      this.semanticOcrJobTargets.delete(jobId);
-      this.semanticOcrStatus = {
-        ...this.semanticOcrStatus,
-        jobs: this.semanticOcrStatus.jobs.map((candidate) =>
-          candidate.id === jobId ? cancelled : candidate,
-        ),
-      };
-      return structuredClone(cancelled);
-    });
+    return this.semanticClient.cancelSemanticOcrRemediation(jobId, signal);
   }
-
   getSemanticComponentStatus(signal?: AbortSignal): Promise<SemanticComponentStatus> {
-    return this.perform('getSemanticComponentStatus', signal, () =>
-      structuredClone(this.semanticStatus),
-    );
+    return this.semanticClient.getSemanticComponentStatus(signal);
   }
-
   listSemanticComponentProfiles(signal?: AbortSignal): Promise<SemanticModelProfile[]> {
-    return this.perform('listSemanticComponentProfiles', signal, () => {
-      this.requireSemanticAvailable();
-      return mockSemanticProfiles();
-    });
+    return this.semanticClient.listSemanticComponentProfiles(signal);
   }
-
   getGemmaLibrarySetup(
     signal?: AbortSignal,
   ): Promise<import('../../models/semantic-components').GemmaLibrarySetup | null> {
-    return this.perform('getGemmaLibrarySetup', signal, () => null);
+    return this.semanticClient.getGemmaLibrarySetup(signal);
   }
-
   initializeGemmaLibrary(
     _request: import('../../models/semantic-components').InitializeGemmaLibraryRequest,
     signal?: AbortSignal,
   ): Promise<void> {
-    return this.perform('initializeGemmaLibrary', signal, () => {
-      throw new MockClientError(
-        'unavailable',
-        'The mock host does not include a signed Gemma package.',
-      );
-    });
+    return this.semanticClient.initializeGemmaLibrary(_request, signal);
   }
-
   createSemanticComponentInstallationOffer(
     request: CreateSemanticInstallationOfferRequest,
     signal?: AbortSignal,
   ): Promise<SemanticInstallationOffer> {
-    return this.perform('createSemanticComponentInstallationOffer', signal, () => {
-      this.requireSemanticAvailable();
-      this.semanticOfferSequence += 1;
-      const offerId = `mock-offer-${this.semanticOfferSequence}`;
-      const offer = mockSemanticOffer(offerId, request.profile);
-      this.semanticOffers.set(offerId, offer);
-      this.semanticStatus = {
-        ...this.semanticStatus,
-        lifecycle: { state: 'offered', offerId },
-      };
-      return structuredClone(offer);
-    });
+    return this.semanticClient.createSemanticComponentInstallationOffer(request, signal);
   }
-
   acceptSemanticComponentInstallationOffer(
     request: AcceptSemanticInstallationOfferRequest,
     signal?: AbortSignal,
   ): Promise<SemanticInstallReceipt> {
-    return this.perform('acceptSemanticComponentInstallationOffer', signal, () => {
-      this.requireSemanticAvailable();
-      const offer = this.semanticOffers.get(request.offerId);
-      if (offer === undefined) {
-        throw new MockClientError('consentRequired', 'A reviewed installation offer is required');
-      }
-      this.semanticOffers.delete(request.offerId);
-      this.semanticStatus = {
-        lifecycle: { state: 'installedEnabled' },
-        dataRoot: offer.dataRoot,
-        activeModel: { profile: offer.profile, identity: offer.resolvedModel },
-        migration: null,
-        components: mockSemanticInstalledComponents(),
-        diskUse: installedSemanticDiskUse(),
-      };
-      return {
-        installedArtifactIds: offer.components.map(({ artifactId }) => artifactId),
-      };
-    });
+    return this.semanticClient.acceptSemanticComponentInstallationOffer(request, signal);
   }
-
   pauseSemanticComponentIndexing(signal?: AbortSignal): Promise<void> {
-    return this.perform('pauseSemanticComponentIndexing', signal, () => {
-      this.requireSemanticLifecycle('installedEnabled');
-      this.semanticStatus = { ...this.semanticStatus, lifecycle: { state: 'paused' } };
-    });
+    return this.semanticClient.pauseSemanticComponentIndexing(signal);
   }
-
   resumeSemanticComponentIndexing(signal?: AbortSignal): Promise<void> {
-    return this.perform('resumeSemanticComponentIndexing', signal, () => {
-      this.requireSemanticLifecycle('paused');
-      this.semanticStatus = {
-        ...this.semanticStatus,
-        lifecycle: { state: 'installedEnabled' },
-      };
-    });
+    return this.semanticClient.resumeSemanticComponentIndexing(signal);
   }
-
   createSemanticComponentIndexRemovalPlan(
     request: CreateSemanticIndexRemovalPlanRequest,
     signal?: AbortSignal,
   ): Promise<SemanticIndexRemovalPlan> {
-    return this.perform('createSemanticComponentIndexRemovalPlan', signal, () => {
-      this.requireSemanticAvailable();
-      if (!/^[A-Za-z0-9._-]+$/u.test(request.enrolmentId)) {
-        throw new MockClientError('invalidEnrolment', 'The enrolment identifier is invalid');
-      }
-      const expected = this.semanticEnrolmentInventory.get(request.enrolmentId);
-      if (expected === undefined) {
-        throw new MockClientError('invalidEnrolment', 'The enrolment identifier is unknown');
-      }
-      this.semanticIndexRemovalSequence += 1;
-      const plan: SemanticIndexRemovalPlan = {
-        planId: `mock-index-removal-${this.semanticIndexRemovalSequence}`,
-        enrolmentId: request.enrolmentId,
-        expected: structuredClone(expected),
-      };
-      this.semanticIndexRemovalPlans.set(plan.planId, plan);
-      return structuredClone(plan);
-    });
+    return this.semanticClient.createSemanticComponentIndexRemovalPlan(request, signal);
   }
-
   confirmSemanticComponentIndexRemoval(
     request: ConfirmSemanticIndexRemovalRequest,
     signal?: AbortSignal,
   ): Promise<SemanticIndexRemovalReceipt> {
-    return this.perform('confirmSemanticComponentIndexRemoval', signal, () => {
-      this.requireSemanticAvailable();
-      const plan = this.semanticIndexRemovalPlans.get(request.planId);
-      if (plan === undefined) {
-        throw new MockClientError('indexRemoval', 'The index removal plan is stale or unknown');
-      }
-      this.semanticIndexRemovalPlans.delete(request.planId);
-      const inventory = this.semanticEnrolmentInventory.get(plan.enrolmentId);
-      if (inventory === undefined || !sameSemanticIndexCounts(inventory, plan.expected)) {
-        throw new MockClientError('indexRemoval', 'The index removal plan is stale or unknown');
-      }
-      this.semanticEnrolmentInventory.delete(plan.enrolmentId);
-      for (const [planId, candidate] of this.semanticIndexRemovalPlans) {
-        if (candidate.enrolmentId === plan.enrolmentId) {
-          this.semanticIndexRemovalPlans.delete(planId);
-        }
-      }
-      return {
-        enrolmentId: plan.enrolmentId,
-        deleted: structuredClone(inventory),
-        conversationEvidenceDeleted: true,
-      };
-    });
+    return this.semanticClient.confirmSemanticComponentIndexRemoval(request, signal);
   }
-
   moveSemanticComponentData(
     request: MoveSemanticDataRequest,
     signal?: AbortSignal,
   ): Promise<SemanticDataMoveReceipt> {
-    return this.perform('moveSemanticComponentData', signal, () => {
-      this.requireSemanticAvailable();
-      if (request.destination.trim().length === 0) {
-        throw new MockClientError('dataMigration', 'A destination is required');
-      }
-      const source = this.semanticStatus.dataRoot ?? 'mock/semantic';
-      this.semanticStatus = { ...this.semanticStatus, dataRoot: request.destination };
-      return {
-        source,
-        destination: request.destination,
-        verifiedBytes: this.semanticStatus.diskUse.totalBytes,
-        verifiedFileCount: this.semanticStatus.components.length,
-      };
-    });
+    return this.semanticClient.moveSemanticComponentData(request, signal);
   }
-
   uninstallSemanticComponents(
     request: UninstallSemanticComponentsRequest,
     signal?: AbortSignal,
   ): Promise<SemanticUninstallReceipt> {
-    return this.perform('uninstallSemanticComponents', signal, () => {
-      this.requireSemanticAvailable();
-      const removedComponentCount = this.semanticStatus.components.length;
-      this.semanticStatus = {
-        ...this.semanticStatus,
-        lifecycle: { state: 'uninstalled', indexDecision: request.indexDecision },
-        components: [],
-        migration: null,
-        ...(request.indexDecision === 'delete'
-          ? { activeModel: null, diskUse: emptySemanticDiskUse() }
-          : { diskUse: retainedSemanticDiskUse() }),
-      };
-      return { indexDecision: request.indexDecision, removedComponentCount };
-    });
+    return this.semanticClient.uninstallSemanticComponents(request, signal);
   }
-
   installSemanticComponentWorkerPatch(
     _request: InstallSemanticWorkerPatchRequest,
     signal?: AbortSignal,
   ): Promise<SemanticWorkerPatchResponse> {
-    return this.perform('installSemanticComponentWorkerPatch', signal, () => {
-      this.requireSemanticAvailable();
-      return { receipt: null };
-    });
+    return this.semanticClient.installSemanticComponentWorkerPatch(_request, signal);
   }
-
   importSemanticComponentLocalModel(
     request: ImportSemanticLocalModelRequest,
     signal?: AbortSignal,
   ): Promise<SemanticModelMigrationPlan> {
-    return this.perform('importSemanticComponentLocalModel', signal, () => {
-      this.requireSemanticAvailable();
-      if (
-        request.sourcePath.trim().length === 0 ||
-        /^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(request.sourcePath.trim()) ||
-        request.modelId.trim().length === 0 ||
-        request.upstreamRevision.trim().length === 0 ||
-        request.licenseSpdx.trim().length === 0 ||
-        request.licenseNotice.trim().length === 0 ||
-        request.tokenizer.trim().length === 0 ||
-        request.dimensions <= 0 ||
-        request.normalization == null ||
-        request.runtimeComponentId.trim().length === 0 ||
-        request.runtimeVersionRequirement.trim().length === 0 ||
-        request.languageCoverage.length === 0 ||
-        request.languageCoverage.some((language) => language.trim().length === 0) ||
-        request.estimatedDiskBytes <= 0 ||
-        request.estimatedRamBytes <= 0
-      ) {
-        throw new MockClientError(
-          'invalidLocalModelMetadata',
-          'Complete local model metadata is required',
-        );
-      }
-      return this.createSemanticMigrationPlan(
-        request.profile,
-        {
-          modelId: request.modelId,
-          revision: request.upstreamRevision,
-        },
-        request.estimate,
-      );
-    });
+    return this.semanticClient.importSemanticComponentLocalModel(request, signal);
   }
-
   planSemanticComponentModelMigration(
     request: PlanSemanticModelMigrationRequest,
     signal?: AbortSignal,
   ): Promise<SemanticModelMigrationPlan> {
-    return this.perform('planSemanticComponentModelMigration', signal, () => {
-      this.requireSemanticAvailable();
-      return this.createSemanticMigrationPlan(
-        request.profile,
-        mockSemanticIdentity(request.profile),
-        request.estimate,
-      );
-    });
+    return this.semanticClient.planSemanticComponentModelMigration(request, signal);
   }
-
   confirmSemanticComponentModelMigration(
     request: ConfirmSemanticModelMigrationRequest,
     signal?: AbortSignal,
   ): Promise<SemanticModelMigrationProgress> {
-    return this.perform('confirmSemanticComponentModelMigration', signal, () => {
-      this.requireSemanticAvailable();
-      const plan = this.semanticMigrationPlan(request.migrationId);
-      const progress = mockSemanticMigrationProgress(
-        plan.migrationId,
-        0,
-        plan.estimate,
-        plan.target,
-        null,
-      );
-      this.semanticStatus = {
-        ...this.semanticStatus,
-        lifecycle: { state: 'migrating', progress },
-        migration: progress,
-      };
-      return structuredClone(progress);
-    });
+    return this.semanticClient.confirmSemanticComponentModelMigration(request, signal);
   }
-
   checkpointSemanticComponentModelMigration(
     request: CheckpointSemanticModelMigrationRequest,
     signal?: AbortSignal,
   ): Promise<SemanticModelMigrationProgress> {
-    return this.perform('checkpointSemanticComponentModelMigration', signal, () => {
-      this.requireSemanticAvailable();
-      const plan = this.semanticMigrationPlan(request.migrationId);
-      const previous = this.semanticStatus.migration;
-      if (
-        previous == null ||
-        previous.migrationId !== request.migrationId ||
-        request.completedDocuments < previous.completedDocuments ||
-        request.completedDocuments > plan.estimate.documents
-      ) {
-        throw new MockClientError('invalidMigrationProgress', 'Migration progress is invalid');
-      }
-      const progress = mockSemanticMigrationProgress(
-        plan.migrationId,
-        request.completedDocuments,
-        plan.estimate,
-        plan.target,
-        request.resumeCursor ?? null,
-      );
-      this.semanticStatus = {
-        ...this.semanticStatus,
-        lifecycle: { state: 'migrating', progress },
-        migration: progress,
-      };
-      return structuredClone(progress);
-    });
+    return this.semanticClient.checkpointSemanticComponentModelMigration(request, signal);
   }
-
   completeSemanticComponentModelMigration(
     request: CompleteSemanticModelMigrationRequest,
     signal?: AbortSignal,
   ): Promise<SemanticModelSelection> {
-    return this.perform('completeSemanticComponentModelMigration', signal, () => {
-      this.requireSemanticAvailable();
-      const plan = this.semanticMigrationPlan(request.migrationId);
-      if (
-        this.semanticStatus.migration?.migrationId !== request.migrationId ||
-        this.semanticStatus.migration.completedDocuments < plan.estimate.documents
-      ) {
-        throw new MockClientError('invalidMigrationProgress', 'Migration is not complete');
-      }
-      this.semanticMigrationPlans.delete(request.migrationId);
-      this.semanticStatus = {
-        ...this.semanticStatus,
-        lifecycle: { state: 'installedEnabled' },
-        activeModel: plan.target,
-        migration: null,
-      };
-      return structuredClone(plan.target);
-    });
+    return this.semanticClient.completeSemanticComponentModelMigration(request, signal);
   }
-
   getSemanticLibraryCapabilities(signal?: AbortSignal): Promise<SemanticLibraryCapabilities> {
-    return this.perform('getSemanticLibraryCapabilities', signal, () => ({
-      authority: 'deterministicMock',
-      operations: [
-        'viewStatus',
-        'viewFolderStatus',
-        'previewEnrolment',
-        'enrol',
-        'planExclusion',
-        'confirmExclusion',
-        'resumeCleanup',
-        'pause',
-        'resume',
-        'updateEligibilityOverrides',
-        ...(this.semanticLibrary.gemmaMedia ? (['updateGemmaMedia'] as const) : []),
-      ],
-    }));
+    return this.semanticClient.getSemanticLibraryCapabilities(signal);
   }
-
   getSemanticLibraryStatus(signal?: AbortSignal): Promise<SemanticLibraryStatus> {
-    return this.perform('getSemanticLibraryStatus', signal, () =>
-      structuredClone(this.semanticLibrary),
-    );
+    return this.semanticClient.getSemanticLibraryStatus(signal);
   }
-
   updateGemmaMedia(
     request: UpdateGemmaMediaRequest,
     signal?: AbortSignal,
   ): Promise<SemanticLibraryStatus> {
-    return this.perform('updateGemmaMedia', signal, () => {
-      this.requireSemanticLibraryRevision(request.policyRevision);
-      const previous = this.semanticLibrary.gemmaMedia;
-      if (!previous) throw new MockClientError('unavailable', 'A Gemma library is required');
-      if (
-        !request.confirmRemoval &&
-        ((previous.images && !request.images) ||
-          (previous.audio && !request.audio) ||
-          (previous.video && !request.video))
-      ) {
-        throw new MockClientError('staleConfirmation', 'Removing media requires confirmation');
-      }
-      this.semanticLibrary.gemmaMedia = {
-        images: request.images,
-        audio: request.audio,
-        video: request.video,
-      };
-      this.advanceSemanticLibraryRevision();
-      return structuredClone(this.semanticLibrary);
-    });
+    return this.semanticClient.updateGemmaMedia(request, signal);
   }
-
   listSemanticVocabularies(signal?: AbortSignal): Promise<readonly SemanticVocabulary[]> {
-    return this.perform('listSemanticVocabularies', signal, () =>
-      structuredClone(this.semanticVocabularies),
-    );
+    return this.semanticClient.listSemanticVocabularies(signal);
   }
-
   importSemanticVocabulary(skosJson: string, signal?: AbortSignal): Promise<SemanticVocabulary> {
-    return this.perform('importSemanticVocabulary', signal, () => {
-      const parsed = JSON.parse(skosJson) as {
-        id: string;
-        name: string;
-        concepts?: SemanticVocabulary['concepts'];
-      };
-      const vocabulary: SemanticVocabulary = {
-        id: parsed.id,
-        name: parsed.name,
-        concepts: parsed.concepts ?? [],
-        workspaceIds: [],
-        rootIds: [],
-        reviewQueue: [],
-        revision: 0,
-      };
-      this.semanticVocabularies.push(vocabulary);
-      return structuredClone(vocabulary);
-    });
+    return this.semanticClient.importSemanticVocabulary(skosJson, signal);
   }
-
   exportSemanticVocabulary(vocabularyId: string, signal?: AbortSignal): Promise<string> {
-    return this.perform('exportSemanticVocabulary', signal, () => {
-      const vocabulary = this.semanticVocabularies.find(({ id }) => id === vocabularyId);
-      if (!vocabulary) throw new MockClientError('notFound', 'Vocabulary not found');
-      return JSON.stringify({ format: 'procyon-skos-1', ...vocabulary });
-    });
+    return this.semanticClient.exportSemanticVocabulary(vocabularyId, signal);
   }
-
   attachSemanticVocabulary(
     request: AttachSemanticVocabularyRequest,
     signal?: AbortSignal,
   ): Promise<SemanticVocabulary> {
-    return this.perform('attachSemanticVocabulary', signal, () => {
-      const index = this.semanticVocabularies.findIndex(({ id }) => id === request.vocabularyId);
-      const current = this.semanticVocabularies[index];
-      if (!current) throw new MockClientError('notFound', 'Vocabulary not found');
-      const updated: SemanticVocabulary = {
-        ...current,
-        workspaceIds: request.workspaceId
-          ? [...new Set([...current.workspaceIds, request.workspaceId])]
-          : current.workspaceIds,
-        rootIds: request.rootId
-          ? [...new Set([...current.rootIds, request.rootId])]
-          : current.rootIds,
-        revision: current.revision + 1,
-      };
-      this.semanticVocabularies[index] = updated;
-      return structuredClone(updated);
-    });
+    return this.semanticClient.attachSemanticVocabulary(request, signal);
   }
-
   reviewSemanticConceptCandidate(
     request: ReviewConceptCandidateRequest,
     signal?: AbortSignal,
   ): Promise<SemanticVocabulary> {
-    return this.perform('reviewSemanticConceptCandidate', signal, () => {
-      const index = this.semanticVocabularies.findIndex(({ id }) => id === request.vocabularyId);
-      const current = this.semanticVocabularies[index];
-      if (!current) throw new MockClientError('notFound', 'Vocabulary not found');
-      const updated: SemanticVocabulary = {
-        ...current,
-        reviewQueue: current.reviewQueue.map((candidate) =>
-          candidate.id === request.candidateId
-            ? { ...candidate, status: request.action === 'reject' ? 'rejected' : 'accepted' }
-            : candidate,
-        ),
-        revision: current.revision + 1,
-      };
-      this.semanticVocabularies[index] = updated;
-      return structuredClone(updated);
-    });
+    return this.semanticClient.reviewSemanticConceptCandidate(request, signal);
   }
-
   deleteSemanticVocabulary(
     vocabularyId: string,
     confirmAffected: boolean,
     signal?: AbortSignal,
   ): Promise<DeleteSemanticVocabularyImpact> {
-    return this.perform('deleteSemanticVocabulary', signal, () => {
-      const vocabulary = this.semanticVocabularies.find(({ id }) => id === vocabularyId);
-      if (!vocabulary) throw new MockClientError('notFound', 'Vocabulary not found');
-      const requiresConfirmation =
-        vocabulary.workspaceIds.length > 0 || vocabulary.rootIds.length > 0;
-      const deleted = confirmAffected || !requiresConfirmation;
-      if (deleted) {
-        this.semanticVocabularies = this.semanticVocabularies.filter(
-          ({ id }) => id !== vocabularyId,
-        );
-      }
-      return {
-        vocabularyId,
-        affectedWorkspaceIds: vocabulary.workspaceIds,
-        affectedRootIds: vocabulary.rootIds,
-        requiresConfirmation,
-        deleted,
-      };
-    });
+    return this.semanticClient.deleteSemanticVocabulary(vocabularyId, confirmAffected, signal);
   }
-
   getSemanticFolderStatus(
     request: GetSemanticFolderStatusRequest,
     signal?: AbortSignal,
   ): Promise<SemanticFolderStatus> {
-    return this.perform('getSemanticFolderStatus', signal, () => {
-      this.requireActiveSemanticFolder(request.workspaceId, request.location);
-      const matchingExclusions = this.semanticLibrary.roots
-        .flatMap((root) =>
-          root.exclusions
-            .filter((exclusion) => semanticLocationContains(exclusion.location, request.location))
-            .map((exclusion) => ({ root, exclusion })),
-        )
-        .sort(
-          (left, right) => left.exclusion.location.uri.length - right.exclusion.location.uri.length,
-        );
-      const excluded = matchingExclusions.at(-1);
-      if (excluded !== undefined) {
-        return {
-          consent: 'excluded',
-          rootId: excluded.root.id,
-          exclusionId: excluded.exclusion.id,
-          workspaceReferenced: excluded.root.workspaceReferences.includes(request.workspaceId),
-          sourceAvailable: excluded.root.availability.state === 'available',
-          unavailableReason:
-            excluded.root.availability.state === 'temporarilyUnavailable'
-              ? excluded.root.availability.reason
-              : null,
-        };
-      }
-      const matchingRoots = this.semanticLibrary.roots
-        .filter(
-          (root) =>
-            root.location.providerId === request.location.providerId &&
-            (root.location.uri === request.location.uri ||
-              (root.recursive && semanticLocationContains(root.location, request.location))),
-        )
-        .sort((left, right) => left.location.uri.length - right.location.uri.length);
-      const root = matchingRoots.at(-1);
-      if (root === undefined) {
-        return {
-          consent: 'notIncluded',
-          rootId: null,
-          exclusionId: null,
-          workspaceReferenced: false,
-          sourceAvailable: true,
-          unavailableReason: null,
-        };
-      }
-      return {
-        consent:
-          root.location.uri === request.location.uri ? 'includedHere' : 'inheritedFromParent',
-        rootId: root.id,
-        exclusionId: null,
-        workspaceReferenced: root.workspaceReferences.includes(request.workspaceId),
-        sourceAvailable: root.availability.state === 'available',
-        unavailableReason:
-          root.availability.state === 'temporarilyUnavailable' ? root.availability.reason : null,
-      };
-    });
+    return this.semanticClient.getSemanticFolderStatus(request, signal);
   }
-
   previewSemanticEnrolment(
     request: PreviewSemanticEnrolmentRequest,
     signal?: AbortSignal,
   ): Promise<SemanticEnrolmentPreview> {
-    return this.perform('previewSemanticEnrolment', signal, () => {
-      this.requireActiveSemanticFolder(request.workspaceId, request.location);
-      this.semanticLibrarySequence += 1;
-      const confirmationId = `mock-enrol-confirmation-${this.semanticLibrarySequence}`;
-      this.semanticEnrolmentPreviews.set(confirmationId, {
-        ...structuredClone(request),
-        policyRevision: this.semanticLibrary.revision,
-      });
-      return {
-        confirmationId,
-        policyRevision: this.semanticLibrary.revision,
-        location: structuredClone(request.location),
-        recursive: request.recursive,
-        pdfImagesEnabled: request.pdfImagesEnabled ?? false,
-        pdfImagePageBudget: request.pdfImagePageBudget ?? null,
-        normalizedExcerptsRetainedLocally: true,
-        estimate: {
-          completeness: 'partial',
-          estimatedFiles: 42,
-          estimatedSourceBytes: 4_200,
-          estimatedExtractedBytes: 1_200,
-          estimatedVectorBytes: 800,
-          estimatedAdditionalLocalBytes: 2_500,
-          missingModelDownloadBytes: 500,
-          skippedReasonCounts: [
-            { reason: 'hidden', count: 1 },
-            { reason: 'unsupportedMime', count: 1 },
-          ],
-          exceededBudgets: [],
-          unavailableReason: null,
-        },
-      };
-    });
+    return this.semanticClient.previewSemanticEnrolment(request, signal);
   }
-
   confirmSemanticEnrolment(
     request: ConfirmSemanticEnrolmentRequest,
     signal?: AbortSignal,
   ): Promise<SemanticLibraryStatus> {
-    return this.perform('confirmSemanticEnrolment', signal, () => {
-      this.requireActiveSemanticFolder(request.workspaceId, request.location);
-      this.requireSemanticLibraryRevision(request.policyRevision);
-      const preview = this.semanticEnrolmentPreviews.get(request.confirmationId);
-      if (
-        preview === undefined ||
-        preview.policyRevision !== request.policyRevision ||
-        preview.workspaceId !== request.workspaceId ||
-        preview.location.providerId !== request.location.providerId ||
-        preview.location.uri !== request.location.uri
-      ) {
-        throw new MockClientError(
-          'staleConfirmation',
-          'Semantic library confirmation is stale or invalid',
-        );
-      }
-      this.semanticEnrolmentPreviews.delete(request.confirmationId);
-      const existing = this.semanticLibrary.roots.find(
-        (root) =>
-          root.location.providerId === request.location.providerId &&
-          root.location.uri === request.location.uri,
-      );
-      if (existing === undefined) {
-        this.semanticLibrarySequence += 1;
-        this.semanticLibrary.roots.push({
-          id: `00000000-0000-0000-0000-${String(this.semanticLibrarySequence).padStart(12, '0')}`,
-          location: structuredClone(request.location),
-          recursive: preview.recursive,
-          pdfImagesEnabled: preview.pdfImagesEnabled ?? false,
-          pdfImagePageBudget: preview.pdfImagePageBudget ?? null,
-          stableIdentityVerified: true,
-          workspaceReferences: [request.workspaceId],
-          eligibilityOverrides: [],
-          attachedVocabularyIds: [],
-          eligibilityReasonCounts: [
-            { reason: 'hidden', count: 1 },
-            { reason: 'unsupportedMime', count: 1 },
-          ],
-          ocrRequiredFiles: [],
-          availability: { state: 'available' },
-          reconciliationGeneration: 0,
-          indexedGeneration: 0,
-          exclusions: [],
-        });
-      } else {
-        existing.pdfImagesEnabled = preview.pdfImagesEnabled ?? false;
-        existing.pdfImagePageBudget = preview.pdfImagePageBudget ?? null;
-        if (!existing.workspaceReferences.includes(request.workspaceId)) {
-          existing.workspaceReferences.push(request.workspaceId);
-        }
-      }
-      this.advanceSemanticLibraryRevision();
-      return structuredClone(this.semanticLibrary);
-    });
+    return this.semanticClient.confirmSemanticEnrolment(request, signal);
   }
-
   planSemanticExclusion(
     request: PlanSemanticExclusionRequest,
     signal?: AbortSignal,
   ): Promise<SemanticExclusionPlan> {
-    return this.perform('planSemanticExclusion', signal, () => {
-      this.requireActiveOrEnrolledSemanticRoot(request.workspaceId, request.location);
-      this.requireSemanticLibraryRevision(request.policyRevision);
-      const root = this.semanticRootFor(request.location);
-      if (root === undefined) {
-        throw new MockClientError('notEnrolled', 'The folder is not included');
-      }
-      if (!root.workspaceReferences.includes(request.workspaceId)) {
-        throw new MockClientError('workspaceRequired', 'An active workspace/root is required');
-      }
-      this.semanticLibrarySequence += 1;
-      const confirmationId = `mock-exclusion-confirmation-${this.semanticLibrarySequence}`;
-      this.semanticExclusionPlans.set(confirmationId, {
-        ...structuredClone(request),
-        rootId: root.id,
-      });
-      return {
-        confirmationId,
-        policyRevision: request.policyRevision,
-        rootId: root.id,
-        location: structuredClone(request.location),
-        categories: mockCleanupCategories(false),
-      };
-    });
+    return this.semanticClient.planSemanticExclusion(request, signal);
   }
-
   confirmSemanticExclusion(
     request: ConfirmSemanticExclusionRequest,
     signal?: AbortSignal,
   ): Promise<SemanticLibraryStatus> {
-    return this.perform('confirmSemanticExclusion', signal, () => {
-      this.requireActiveOrEnrolledSemanticRoot(request.workspaceId, request.location);
-      this.requireSemanticLibraryRevision(request.policyRevision);
-      const plan = this.semanticExclusionPlans.get(request.confirmationId);
-      if (
-        plan === undefined ||
-        plan.policyRevision !== request.policyRevision ||
-        plan.workspaceId !== request.workspaceId ||
-        plan.location.providerId !== request.location.providerId ||
-        plan.location.uri !== request.location.uri
-      ) {
-        throw new MockClientError(
-          'staleConfirmation',
-          'Semantic library confirmation is stale or invalid',
-        );
-      }
-      const root = this.semanticLibrary.roots.find((candidate) => candidate.id === plan.rootId);
-      if (root === undefined) throw new MockClientError('notFound', 'Semantic root not found');
-      this.semanticLibrarySequence += 1;
-      root.exclusions.push({
-        id: `00000000-0000-0000-0001-${String(this.semanticLibrarySequence).padStart(12, '0')}`,
-        location: structuredClone(request.location),
-        cleanup: {
-          planId: `00000000-0000-0000-0002-${String(this.semanticLibrarySequence).padStart(12, '0')}`,
-          status: 'complete',
-          categories: mockCleanupCategories(true),
-        },
-      });
-      this.semanticExclusionPlans.delete(request.confirmationId);
-      this.advanceSemanticLibraryRevision();
-      return structuredClone(this.semanticLibrary);
-    });
+    return this.semanticClient.confirmSemanticExclusion(request, signal);
   }
-
   resumeSemanticCleanup(
     request: ResumeSemanticCleanupRequest,
     signal?: AbortSignal,
   ): Promise<SemanticLibraryStatus> {
-    return this.perform('resumeSemanticCleanup', signal, () => {
-      this.requireSemanticLibraryRevision(request.policyRevision);
-      const cleanup = this.semanticLibrary.roots
-        .flatMap((root) => root.exclusions)
-        .map((exclusion) => exclusion.cleanup)
-        .find((candidate) => candidate.planId === request.planId);
-      if (cleanup === undefined) throw new MockClientError('notFound', 'Cleanup plan not found');
-      cleanup.status = 'complete';
-      cleanup.categories = mockCleanupCategories(true);
-      this.advanceSemanticLibraryRevision();
-      return structuredClone(this.semanticLibrary);
-    });
+    return this.semanticClient.resumeSemanticCleanup(request, signal);
   }
-
   pauseSemanticLibrary(
     request: SemanticLibraryRevisionRequest,
     signal?: AbortSignal,
   ): Promise<SemanticLibraryStatus> {
-    return this.perform('pauseSemanticLibrary', signal, () => {
-      this.requireSemanticLibraryRevision(request.policyRevision);
-      this.semanticLibrary.paused = true;
-      this.advanceSemanticLibraryRevision();
-      return structuredClone(this.semanticLibrary);
-    });
+    return this.semanticClient.pauseSemanticLibrary(request, signal);
   }
-
   resumeSemanticLibrary(
     request: SemanticLibraryRevisionRequest,
     signal?: AbortSignal,
   ): Promise<SemanticLibraryStatus> {
-    return this.perform('resumeSemanticLibrary', signal, () => {
-      this.requireSemanticLibraryRevision(request.policyRevision);
-      this.semanticLibrary.paused = false;
-      this.advanceSemanticLibraryRevision();
-      return structuredClone(this.semanticLibrary);
-    });
+    return this.semanticClient.resumeSemanticLibrary(request, signal);
   }
-
   updateSemanticEligibilityOverrides(
     request: UpdateSemanticEligibilityOverridesRequest,
     signal?: AbortSignal,
   ): Promise<SemanticLibraryStatus> {
-    return this.perform('updateSemanticEligibilityOverrides', signal, () => {
-      this.requireSemanticLibraryRevision(request.policyRevision);
-      const root = this.semanticLibrary.roots.find((candidate) => candidate.id === request.rootId);
-      if (root === undefined) throw new MockClientError('notFound', 'Semantic root not found');
-      if (!root.workspaceReferences.includes(request.workspaceId)) {
-        throw new MockClientError('workspaceRequired', 'An active workspace/root is required');
-      }
-      const safeReasons = new Set([
-        'hidden',
-        'system',
-        'applicationOrPackageBundle',
-        'dependencyDirectory',
-        'buildDirectory',
-        'cacheDirectory',
-        'gitIgnored',
-      ]);
-      if (
-        request.overrides.some(
-          (override) => override.action === 'include' && !safeReasons.has(override.reason),
-        )
-      ) {
-        throw new MockClientError(
-          'unsafeEligibilityOverride',
-          'This eligibility reason cannot be overridden',
-        );
-      }
-      root.eligibilityOverrides = structuredClone(request.overrides);
-      this.advanceSemanticLibraryRevision();
-      return structuredClone(this.semanticLibrary);
-    });
+    return this.semanticClient.updateSemanticEligibilityOverrides(request, signal);
   }
-
   getSystemLocations(signal?: AbortSignal): Promise<SystemLocation[]> {
-    return this.perform('getSystemLocations', signal, () => []);
+    return this.connectionClient.getSystemLocations(signal);
   }
-
   getDiagnostics(signal?: AbortSignal): Promise<DiagnosticsResult> {
-    return this.perform('getDiagnostics', signal, () => ({
-      frontendVersion: '0.1.0',
-      backendVersion: '0.1.0',
-      platform: 'Mock',
-      runtimeCapabilities: {
-        clipboard: false,
-        freshInstall: false,
-        extendedAttributes: true,
-        finderAliases: false,
-        osFileClipboard: false,
-        finderTags: true,
-        nativeDragOut: false,
-        nativeFileIcons: this.nativeIconExtensions.size > 0,
-        nativeMenus: false,
-        platformContextMenu: false,
-        nativeThumbnails: false,
-        openTerminal: false,
-        platform: 'linux',
-        plugins: true,
-        revealInSystemFileManager: false,
-        runtime: 'mock',
-        semanticComponentAuthority:
-          this.semanticStatus.lifecycle.state === 'unavailable'
-            ? 'unavailable'
-            : 'deterministicMock',
-        semanticRuntimeExecutableDownload:
-          this.semanticStatus.lifecycle.state === 'unavailable' ? 'unavailable' : 'simulated',
-        serverAdministration: false,
-        systemTrash: false,
-      },
-      connectionState: {
-        connected: true,
-        uptimeSeconds: 0,
-        eventsReceived: 0,
-        statusMessage: 'Mock',
-      },
-      loadedPlugins: [],
-      recentErrors: structuredClone(this.frontendDiagnostics),
-      operationQueueStatus: {
-        queuedCount: 0,
-        runningCount: 0,
-        pausedCount: 0,
-        completedCount: 0,
-        totalPendingSize: 0,
-      },
-    }));
+    return this.connectionClient.getDiagnostics(signal);
   }
-
   recordFrontendDiagnostic(error: FrontendDiagnostic, signal?: AbortSignal): Promise<void> {
-    return this.perform('recordFrontendDiagnostic', signal, () => {
-      this.frontendDiagnostics.unshift(sanitizeFrontendDiagnostic(error));
-      this.frontendDiagnostics.splice(50);
-    });
+    return this.connectionClient.recordFrontendDiagnostic(error, signal);
   }
-
   getVolumes(signal?: AbortSignal): Promise<Volume[]> {
-    return this.perform('getVolumes', signal, () => [
-      { name: 'Macintosh HD', location: { providerId: 'file', uri: 'mock:///' } },
-      { name: 'Empty Drive', location: { providerId: 'file', uri: 'mock:///Empty' } },
-    ]);
+    return this.connectionClient.getVolumes(signal);
   }
-
   getHomeDirectory(signal?: AbortSignal): Promise<string | undefined> {
-    return this.perform('getHomeDirectory', signal, () => '/Users/mock');
+    return this.connectionClient.getHomeDirectory(signal);
   }
-
   startNativeDrag(_locations: readonly Location[], signal?: AbortSignal): Promise<void> {
-    return this.perform('startNativeDrag', signal, () => undefined);
+    return this.connectionClient.startNativeDrag(_locations, signal);
   }
-
-  /** The mock host has no OS file clipboard (`osFileClipboard: false`). */
   writeOsClipboardFiles(_locations: readonly Location[], signal?: AbortSignal): Promise<boolean> {
-    return this.perform('writeOsClipboardFiles', signal, () => false);
+    return this.connectionClient.writeOsClipboardFiles(_locations, signal);
   }
-
   readOsClipboardFiles(signal?: AbortSignal): Promise<Location[]> {
-    return this.perform('readOsClipboardFiles', signal, () => []);
+    return this.connectionClient.readOsClipboardFiles(signal);
   }
-
   showPlatformContextMenu(_locations: readonly Location[], signal?: AbortSignal): Promise<void> {
-    return this.perform('showPlatformContextMenu', signal, () => undefined);
+    return this.connectionClient.showPlatformContextMenu(_locations, signal);
   }
-
   listOpenWithApplications(
     _location: Location,
   ): Promise<import('./file-manager-client').OpenWithApplication[]> {
-    return Promise.reject(desktopHostRequiredError());
+    return this.connectionClient.listOpenWithApplications(_location);
   }
-
   openWithApplication(_location: Location, _applicationPath: string): Promise<void> {
-    return Promise.reject(desktopHostRequiredError());
+    return this.connectionClient.openWithApplication(_location, _applicationPath);
   }
-
   openWithAnyApplication(_location: Location): Promise<void> {
-    return Promise.reject(desktopHostRequiredError());
+    return this.connectionClient.openWithAnyApplication(_location);
   }
-
   subscribeNativeFileDrops(_listener: (drop: NativeFileDrop) => void): Promise<Unsubscribe> {
-    return Promise.resolve(() => undefined);
+    return this.connectionClient.subscribeNativeFileDrops(_listener);
   }
-
   getSettings(signal?: AbortSignal): Promise<Settings> {
-    return this.perform('getSettings', signal, () => structuredClone(this.settings));
+    return this.connectionClient.getSettings(signal);
   }
-
   getFileIcon(sampleLocationUri: string, signal?: AbortSignal): Promise<Uint8Array | undefined> {
-    return this.perform('getFileIcon', signal, () => {
-      const pathname = new URL(sampleLocationUri).pathname;
-      const name = pathname.slice(pathname.lastIndexOf('/') + 1);
-      const extension = name.includes('.')
-        ? name.slice(name.lastIndexOf('.') + 1).toLowerCase()
-        : '';
-      if (!this.nativeIconExtensions.has(extension)) return undefined;
-      return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    });
+    return this.workspaceClient.getFileIcon(sampleLocationUri, signal);
   }
-
   getThumbnail(
     locationUri: string,
     _size: 'small' | 'medium' | 'large',
     signal?: AbortSignal,
   ): Promise<Uint8Array | undefined> {
-    return this.perform('getThumbnail', signal, () => {
-      const pathname = new URL(locationUri).pathname;
-      const name = pathname.slice(pathname.lastIndexOf('/') + 1);
-      const extension = name.includes('.')
-        ? name.slice(name.lastIndexOf('.') + 1).toLowerCase()
-        : '';
-      if (!THUMBNAILABLE_MOCK_EXTENSIONS.has(extension)) return undefined;
-      // JPEG magic bytes - just needs to look like an image, not decode as one.
-      return new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
-    });
+    return this.workspaceClient.getThumbnail(locationUri, _size, signal);
   }
-
   getFinderTags(locationUri: string, signal?: AbortSignal): Promise<FinderTags | undefined> {
-    return this.perform(
-      'getFinderTags',
-      signal,
-      () => this.finderTagsByUri.get(locationUri) ?? { tags: [] },
-    );
+    return this.workspaceClient.getFinderTags(locationUri, signal);
   }
-
   setFinderTags(locationUri: string, tags: FinderTags, signal?: AbortSignal): Promise<FinderTags> {
-    return this.perform('setFinderTags', signal, () => {
-      const persisted = structuredClone(tags);
-      this.finderTagsByUri.set(locationUri, persisted);
-      return structuredClone(persisted);
-    });
+    return this.workspaceClient.setFinderTags(locationUri, tags, signal);
   }
-
   getSpotlightComment(
     locationUri: string,
     signal?: AbortSignal,
   ): Promise<SpotlightComment | undefined> {
-    return this.perform(
-      'getSpotlightComment',
-      signal,
-      () => this.spotlightCommentsByUri.get(locationUri) ?? { comment: null },
-    );
+    return this.workspaceClient.getSpotlightComment(locationUri, signal);
   }
-
   setSpotlightComment(
     locationUri: string,
     comment: SpotlightComment,
     signal?: AbortSignal,
   ): Promise<SpotlightComment> {
-    return this.perform('setSpotlightComment', signal, () => {
-      const persisted = structuredClone(comment);
-      this.spotlightCommentsByUri.set(locationUri, persisted);
-      return structuredClone(persisted);
-    });
+    return this.workspaceClient.setSpotlightComment(locationUri, comment, signal);
   }
-
   updateSettings(settings: Settings, signal?: AbortSignal): Promise<Settings> {
-    return this.perform('updateSettings', signal, () => {
-      this.settings = structuredClone(settings);
-      return structuredClone(this.settings);
-    });
+    return this.connectionClient.updateSettings(settings, signal);
   }
-
   getAppVersion(_signal?: AbortSignal): Promise<undefined> {
-    return Promise.resolve(undefined);
+    return this.connectionClient.getAppVersion(_signal);
   }
-
   checkForAppUpdate(_signal?: AbortSignal): Promise<never> {
-    return Promise.reject(desktopHostRequiredError());
+    return this.connectionClient.checkForAppUpdate(_signal);
   }
-
   removeApplicationData(): Promise<void> {
-    return Promise.reject(desktopHostRequiredError());
+    return this.connectionClient.removeApplicationData();
   }
-
   installAppUpdate(): Promise<void> {
-    return Promise.reject(desktopHostRequiredError());
+    return this.connectionClient.installAppUpdate();
   }
-
   listWorkspaces(signal?: AbortSignal): Promise<WorkspaceSummary[]> {
-    return this.perform('listWorkspaces', signal, () =>
-      [...this.workspaces.values()].map(({ id, name, revision, ephemeral }) => ({
-        id,
-        name,
-        revision,
-        ephemeral,
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      })),
-    );
+    return this.workspaceClient.listWorkspaces(signal);
   }
-
   createWorkspace(
     request: CreateWorkspaceRequest,
     signal?: AbortSignal,
   ): Promise<WorkspaceProjection> {
-    return this.perform('createWorkspace', signal, () => {
-      this.workspaceSequence += 1;
-      const workspace = createMockWorkspace(
-        `mock-workspace-${this.workspaceSequence}`,
-        request.name ?? 'Default',
-      );
-      this.workspaces.set(workspace.id, workspace);
-      return structuredClone(workspace);
-    });
+    return this.workspaceClient.createWorkspace(request, signal);
   }
-
   startWorkspace(workspaceId?: WorkspaceId, signal?: AbortSignal): Promise<WorkspaceProjection> {
-    return this.perform('startWorkspace', signal, () => {
-      const existing = workspaceId === undefined ? undefined : this.workspaces.get(workspaceId);
-      if (existing !== undefined) return structuredClone(existing);
-      const [first] = this.workspaces.values();
-      if (first !== undefined) return structuredClone(first);
-      this.workspaceSequence += 1;
-      const workspace = createMockWorkspace(`mock-workspace-${this.workspaceSequence}`, 'Default');
-      this.workspaces.set(workspace.id, workspace);
-      return structuredClone(workspace);
-    });
+    return this.workspaceClient.startWorkspace(workspaceId, signal);
   }
-
   getWorkspace(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<WorkspaceProjection> {
-    return this.perform('getWorkspace', signal, () => {
-      const workspace = this.workspaces.get(workspaceId) ?? createMockWorkspace(workspaceId);
-      this.workspaces.set(workspaceId, workspace);
-      return structuredClone(workspace);
-    });
+    return this.workspaceClient.getWorkspace(workspaceId, signal);
   }
-
   renameWorkspace(
     workspaceId: WorkspaceId,
     name: string,
     expectedRevision: number,
     signal?: AbortSignal,
   ): Promise<WorkspaceProjection> {
-    return this.dispatchWorkspaceCommand(
-      { type: 'renameWorkspace', workspaceId, name, expectedRevision },
-      signal,
-    );
+    return this.workspaceClient.renameWorkspace(workspaceId, name, expectedRevision, signal);
   }
-
   deleteWorkspace(
     workspaceId: WorkspaceId,
     expectedRevision?: number,
     signal?: AbortSignal,
   ): Promise<void> {
-    return this.perform('deleteWorkspace', signal, () => {
-      const workspace = this.workspaces.get(workspaceId);
-      if (workspace !== undefined && expectedRevision !== undefined) {
-        this.requireWorkspaceRevision(workspace, expectedRevision);
-      }
-      this.workspaces.delete(workspaceId);
-      let changed = false;
-      for (const root of this.semanticLibrary.roots) {
-        const remaining = root.workspaceReferences.filter((id) => id !== workspaceId);
-        if (remaining.length !== root.workspaceReferences.length) {
-          root.workspaceReferences = remaining;
-          changed = true;
-        }
-      }
-      if (changed) this.advanceSemanticLibraryRevision();
-    });
+    return this.workspaceClient.deleteWorkspace(workspaceId, expectedRevision, signal);
   }
-
   openWorkspace(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<WorkspaceProjection> {
-    return this.perform('openWorkspace', signal, () => {
-      const workspace = this.workspaces.get(workspaceId) ?? createMockWorkspace(workspaceId);
-      this.workspaces.set(workspaceId, workspace);
-      return structuredClone(workspace);
-    });
+    return this.workspaceClient.openWorkspace(workspaceId, signal);
   }
-
   dispatchWorkspaceCommand(
     command: WorkspaceCommand,
     signal?: AbortSignal,
   ): Promise<WorkspaceProjection> {
-    return this.perform('dispatchWorkspaceCommand', signal, () => {
-      const current =
-        this.workspaces.get(command.workspaceId) ?? createMockWorkspace(command.workspaceId);
-      this.requireWorkspaceRevision(current, command.expectedRevision);
-      let changed: WorkspaceProjection;
-      switch (command.type) {
-        case 'renameWorkspace':
-          changed = { ...current, name: command.name, revision: current.revision + 1 };
-          break;
-        case 'setActivePane':
-          changed = {
-            ...current,
-            activePaneId: command.paneId,
-            revision: current.revision + 1,
-          };
-          break;
-        case 'updateLayout':
-          changed = { ...current, layout: command.layout, revision: current.revision + 1 };
-          break;
-        case 'updateOperationCentre':
-          changed = {
-            ...current,
-            operationCentre: command.preferences,
-            revision: current.revision + 1,
-          };
-          break;
-        case 'addTab':
-        case 'addTransientTab': {
-          const pane = current.panesById[command.paneId];
-          if (pane === undefined) {
-            throw new MockClientError('paneNotFound', `No mock pane with id ${command.paneId}`);
-          }
-          this.tabSequence += 1;
-          const tabId = `mock-tab-${this.tabSequence}`;
-          const tab = {
-            id: tabId,
-            title: command.location.uri.split('/').at(-1) || command.location.uri,
-            location: command.location,
-            canNavigateBack: false,
-            canNavigateForward: false,
-            view: {
-              sort: [],
-              columns: [],
-              showHidden: false,
-              foldersFirst: true,
-              quickFilter: null,
-            },
-          };
-          changed = {
-            ...current,
-            revision: current.revision + 1,
-            panesById: {
-              ...current.panesById,
-              [pane.id]: {
-                ...pane,
-                tabOrder: [...pane.tabOrder, tabId],
-                tabsById: { ...pane.tabsById, [tabId]: tab },
-                activeTabId: tabId,
-              },
-            },
-          };
-          break;
-        }
-        case 'moveTab': {
-          const source = current.panesById[command.sourcePaneId];
-          const target = current.panesById[command.targetPaneId];
-          const tab = source?.tabsById[command.tabId];
-          if (source === undefined || target === undefined) {
-            throw new MockClientError('paneNotFound', 'No mock source or target pane');
-          }
-          if (tab === undefined) {
-            throw new MockClientError('tabNotFound', `No mock tab with id ${command.tabId}`);
-          }
-          const sourceOrder = source.tabOrder.filter((tabId) => tabId !== command.tabId);
-          const sourceTabs = { ...source.tabsById };
-          delete sourceTabs[command.tabId];
-          let sourceActiveTabId = source.activeTabId;
-          if (source.id !== target.id && sourceOrder.length === 0) {
-            this.tabSequence += 1;
-            const replacementId = `mock-tab-${this.tabSequence}`;
-            sourceOrder.push(replacementId);
-            sourceTabs[replacementId] = {
-              id: replacementId,
-              title: 'Mock files',
-              location: { providerId: 'file', uri: 'mock:///' },
-              canNavigateBack: false,
-              canNavigateForward: false,
-              view: {
-                sort: [],
-                columns: [],
-                showHidden: false,
-                foldersFirst: true,
-                quickFilter: null,
-              },
-            };
-            sourceActiveTabId = replacementId;
-          } else if (source.id !== target.id && source.activeTabId === command.tabId) {
-            sourceActiveTabId = sourceOrder[0] ?? source.activeTabId;
-          }
-          const targetOrder =
-            source.id === target.id
-              ? sourceOrder
-              : target.tabOrder.filter((tabId) => tabId !== command.tabId);
-          targetOrder.splice(Math.min(command.targetIndex, targetOrder.length), 0, command.tabId);
-          changed = {
-            ...current,
-            activePaneId: source.id === target.id ? current.activePaneId : target.id,
-            revision: current.revision + 1,
-            panesById: {
-              ...current.panesById,
-              [source.id]: {
-                ...source,
-                tabOrder: source.id === target.id ? targetOrder : sourceOrder,
-                tabsById: source.id === target.id ? source.tabsById : sourceTabs,
-                activeTabId: sourceActiveTabId,
-              },
-              ...(source.id === target.id
-                ? {}
-                : {
-                    [target.id]: {
-                      ...target,
-                      tabOrder: targetOrder,
-                      tabsById: { ...target.tabsById, [command.tabId]: tab },
-                      activeTabId: command.tabId,
-                    },
-                  }),
-            },
-          };
-          break;
-        }
-        case 'closeTab':
-        case 'activateTab':
-        case 'navigateTab':
-        case 'updateView': {
-          const pane = current.panesById[command.paneId];
-          if (pane === undefined) {
-            throw new MockClientError('paneNotFound', `No mock pane with id ${command.paneId}`);
-          }
-          if (command.type === 'closeTab') {
-            const tabsById = { ...pane.tabsById };
-            delete tabsById[command.tabId];
-            const tabOrder = pane.tabOrder.filter((tabId) => tabId !== command.tabId);
-            changed = {
-              ...current,
-              revision: current.revision + 1,
-              panesById: {
-                ...current.panesById,
-                [pane.id]: {
-                  ...pane,
-                  tabOrder,
-                  tabsById,
-                  activeTabId: tabOrder[0] ?? pane.activeTabId,
-                },
-              },
-            };
-            break;
-          }
-          const tab = pane.tabsById[command.tabId];
-          if (tab === undefined) {
-            throw new MockClientError('tabNotFound', `No mock tab with id ${command.tabId}`);
-          }
-          const historyKey = `${current.id}:${pane.id}:${tab.id}`;
-          const history = this.navigationHistory.get(historyKey) ?? { back: [], forward: [] };
-          let navigatedLocation = tab.location;
-          if (command.type === 'navigateTab') {
-            if (command.navigationMode === 'push' && command.location != null) {
-              if (command.location.uri !== tab.location.uri) {
-                history.back.push(tab.location);
-              }
-              history.forward = [];
-              navigatedLocation = command.location;
-            } else if (command.navigationMode === 'back') {
-              const target = history.back.pop();
-              if (target !== undefined) {
-                history.forward.push(tab.location);
-                navigatedLocation = target;
-              }
-            } else if (command.navigationMode === 'forward') {
-              const target = history.forward.pop();
-              if (target !== undefined) {
-                history.back.push(tab.location);
-                navigatedLocation = target;
-              }
-            } else if (command.navigationMode === 'refresh' && command.location != null) {
-              navigatedLocation = command.location;
-            }
-            this.navigationHistory.set(historyKey, history);
-          }
-          const nextTab =
-            command.type === 'navigateTab'
-              ? {
-                  ...tab,
-                  location: navigatedLocation,
-                  canNavigateBack: history.back.length > 0,
-                  canNavigateForward: history.forward.length > 0,
-                }
-              : command.type === 'updateView'
-                ? {
-                    ...tab,
-                    view: {
-                      ...tab.view,
-                      ...Object.fromEntries(
-                        Object.entries(command.patch).filter(
-                          ([key, value]) => key !== 'quickFilter' && value !== null,
-                        ),
-                      ),
-                      ...(command.patch.quickFilter === undefined
-                        ? {}
-                        : {
-                            quickFilter:
-                              command.patch.quickFilter === null ||
-                              command.patch.quickFilter.type === 'clear'
-                                ? null
-                                : command.patch.quickFilter.filter,
-                          }),
-                    },
-                  }
-                : tab;
-          changed = {
-            ...current,
-            revision: current.revision + 1,
-            panesById: {
-              ...current.panesById,
-              [pane.id]: {
-                ...pane,
-                activeTabId: command.type === 'activateTab' ? command.tabId : pane.activeTabId,
-                tabsById: { ...pane.tabsById, [tab.id]: nextTab },
-              },
-            },
-          };
-          break;
-        }
-      }
-      this.workspaces.set(changed.id, changed);
-      return structuredClone(changed);
-    });
+    return this.workspaceClient.dispatchWorkspaceCommand(command, signal);
   }
-
-  private requireWorkspaceRevision(workspace: WorkspaceProjection, expectedRevision: number): void {
-    if (workspace.revision !== expectedRevision) {
-      throw new MockClientError(
-        'workspaceRevisionConflict',
-        'The workspace changed after this view was loaded.',
-      );
-    }
-  }
-
   navigatePane(request: NavigateRequest, signal?: AbortSignal): Promise<DirectorySnapshot> {
-    return this.directorySnapshot(request, signal, 'navigatePane');
+    return this.workspaceClient.navigatePane(request, signal);
   }
-
   listDirectory(request: ListDirectoryRequest, signal?: AbortSignal): Promise<DirectorySnapshot> {
-    return this.directorySnapshot(request, signal, 'listDirectory');
+    return this.workspaceClient.listDirectory(request, signal);
   }
-
   listDirectoryChildren(
     location: Location,
     showHidden: boolean,
     signal?: AbortSignal,
   ): Promise<readonly EntrySummary[]> {
-    return this.perform('listDirectoryChildren', signal, () => {
-      const fixtures = directories[location.uri] ?? [];
-      return fixtures
-        .map((fixture) => fixtureEntry(location.uri, fixture))
-        .filter((entry) => entry.kind === 'directory' && (showHidden || !entry.hidden));
-    });
+    return this.workspaceClient.listDirectoryChildren(location, showHidden, signal);
   }
-
   getEntryMetadata(request: EntryMetadataRequest, signal?: AbortSignal): Promise<EntryMetadata> {
-    return this.perform('getEntryMetadata', signal, () => {
-      if (request.verifyIdentity) {
-        const actual = Object.entries(directories)
-          .flatMap(([parent, fixtures]) => fixtures.map((fixture) => fixtureEntry(parent, fixture)))
-          .find((entry) => entry.location.uri === request.location.uri);
-        if (actual === undefined) throw new MockClientError('notFound', 'Entry no longer exists.');
-        if (actual.id !== request.entryId) {
-          throw new MockClientError('invalidRequest', 'Entry identity changed.', {
-            reason: 'entryIdentityChanged',
-          });
-        }
-        if (
-          (request.expectedSize !== undefined && actual.size !== request.expectedSize) ||
-          (request.expectedModifiedAt !== undefined &&
-            actual.modifiedAt !== request.expectedModifiedAt)
-        ) {
-          throw new MockClientError('invalidRequest', 'Entry metadata changed.', {
-            reason: 'entryMetadataChanged',
-          });
-        }
-      }
-      return {
-        entryId: request.entryId,
-        permissions: { readable: true, writable: true, executable: false },
-        ownership: { owner: 'mock-user', group: 'mock-group' },
-        extendedAttributes: {},
-        checksums: {},
-        pluginFields: {},
-      };
-    });
+    return this.workspaceClient.getEntryMetadata(request, signal);
   }
-
   setPaneActivity(_request: SetPaneActivityRequest, signal?: AbortSignal): Promise<void> {
-    return this.perform('setPaneActivity', signal, () => undefined);
+    return this.workspaceClient.setPaneActivity(_request, signal);
   }
-
   previewGeoConversion(
     locations: readonly Location[],
     format: GeoTargetFormat,
     _csvWkt: boolean,
     signal?: AbortSignal,
   ): Promise<GeoConversionReport[]> {
-    return this.perform('previewGeoConversion', signal, () =>
-      locations.map((location) => ({
-        location,
-        outputName: `converted.${format}`,
-        notes:
-          format === 'gpx'
-            ? [{ code: 'polygonsNotInGpx', message: 'Polygons cannot be stored in GPX.' }]
-            : [],
-      })),
-    );
+    return this.workspaceClient.previewGeoConversion(locations, format, _csvWkt, signal);
   }
-
   previewGeoMinify(
     _location: Location,
     minify: GeoMinify,
     signal?: AbortSignal,
   ): Promise<GeoMinifyPreview> {
-    return this.perform('previewGeoMinify', signal, () => ({
-      originalBytes: 1000,
-      minifiedBytes: minify.precision === undefined ? 900 : 400,
-      featuresBefore: 1,
-      featuresAfter: 1,
-      positionsBefore: 10,
-      positionsAfter: 5,
-      distanceBeforeMeters: 1000,
-      distanceAfterMeters: 990,
-      notes: [],
-    }));
+    return this.workspaceClient.previewGeoMinify(_location, minify, signal);
   }
-
   convertGeoText(
     text: string,
     format: GeoTargetFormat,
     _csvWkt: boolean,
     signal?: AbortSignal,
   ): Promise<{ content: string; extension: string; notes: GeoMessage[] }> {
-    return this.perform('convertGeoText', signal, () => ({
-      content: text,
-      extension: format,
-      notes: [],
-    }));
+    return this.workspaceClient.convertGeoText(text, format, _csvWkt, signal);
   }
-
   parseGeoText(text: string, signal?: AbortSignal): Promise<GeoDocument> {
-    return this.perform('parseGeoText', signal, () => {
-      const empty = { type: 'FeatureCollection' as const, features: [] };
-      try {
-        const value = JSON.parse(text) as { type?: string; features?: unknown[] };
-        const features = (
-          value.type === 'FeatureCollection' ? (value.features ?? []) : [value]
-        ) as GeoJSON.Feature[];
-        return {
-          format: 'geojson',
-          collection: { type: 'FeatureCollection' as const, features },
-          totalFeatures: features.length,
-          displayedFeatures: features.length,
-          truncated: false,
-          warnings: [],
-          skipped: [],
-        };
-      } catch (error) {
-        return {
-          format: 'geojson',
-          collection: empty,
-          totalFeatures: 0,
-          displayedFeatures: 0,
-          truncated: false,
-          warnings: [],
-          skipped: [],
-          error: {
-            code: 'jsonSyntax',
-            message: errorText(error),
-            params: { line: '1', column: '1', detail: errorText(error) },
-          },
-        };
-      }
-    });
+    return this.workspaceClient.parseGeoText(text, signal);
   }
-
   readGeoFile(_location: Location, signal?: AbortSignal): Promise<GeoDocument> {
-    return this.perform('readGeoFile', signal, () => ({
-      format: 'geojson',
-      collection: {
-        type: 'FeatureCollection',
-        features: [
-          {
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [4.9, 52.37] },
-            properties: { name: 'Amsterdam' },
-          },
-        ],
-      },
-      totalFeatures: 1,
-      displayedFeatures: 1,
-      truncated: false,
-      bounds: [4.9, 52.37, 4.9, 52.37],
-      warnings: [],
-      skipped: [],
-    }));
+    return this.workspaceClient.readGeoFile(_location, signal);
   }
-
   readImageGps(locations: readonly Location[], signal?: AbortSignal): Promise<ImageGpsEntry[]> {
-    // Deterministic fake: every second image is geotagged around Amsterdam.
-    return this.perform('readImageGps', signal, () =>
-      locations.map((location, index) =>
-        index % 2 === 0
-          ? { location, gps: { latitude: 52.37 + index * 0.001, longitude: 4.89 + index * 0.001 } }
-          : { location },
-      ),
-    );
+    return this.workspaceClient.readImageGps(locations, signal);
   }
-
   inspectAttributes(
     locations: readonly Location[],
     signal?: AbortSignal,
   ): Promise<InspectAttributesResult> {
-    return this.perform('inspectAttributes', signal, () => ({
-      support: { mode: true, ownership: true, windowsAttributes: false },
-      entries: locations.map((location) => ({
-        location,
-        kind: 'file' as const,
-        attributes: { mode: 0o644, uid: 501, gid: 20 },
-      })),
-    }));
+    return this.workspaceClient.inspectAttributes(locations, signal);
   }
-
   diffFiles(
     left: Location,
     right: Location,
     options?: FileDiffOptions,
     signal?: AbortSignal,
   ): Promise<FileDiffResult> {
-    return this.perform('diffFiles', signal, () =>
-      mockFileDiff(this.fileContentFor(left.uri), this.fileContentFor(right.uri), options),
-    );
+    return this.operationClient.diffFiles(left, right, options, signal);
   }
-
   inspectSplitSet(
     locations: readonly Location[],
     signal?: AbortSignal,
   ): Promise<InspectSplitSetResult> {
-    return this.perform('inspectSplitSet', signal, () => {
-      const names = locations.map(
-        (location) => decodeURIComponent(location.uri).split('/').pop() ?? '',
-      );
-      const base = (names[0] ?? '').replace(/\.\d{3,}$/, '');
-      if (names.length === 0 || base === names[0]) {
-        return {
-          outputName: base,
-          parts: [],
-          totalSize: 0,
-          hasManifest: false,
-          error: `${names[0] ?? ''} is not a numbered part (.001, .002, ...)`,
-          errorCode: 'splitNotAPart',
-          errorParams: { name: names[0] ?? '' },
-        };
-      }
-      const parts = [1, 2, 3].map((index) => ({
-        name: `${base}.${String(index).padStart(3, '0')}`,
-        size: 1_048_576,
-      }));
-      return { outputName: base, parts, totalSize: 3 * 1_048_576, hasManifest: true };
-    });
+    return this.workspaceClient.inspectSplitSet(locations, signal);
   }
-
   previewAttributeChange(
     locations: readonly Location[],
     recursive: boolean,
     scope: AttributeScope,
     signal?: AbortSignal,
   ): Promise<AttributeChangePreview> {
-    return this.perform('previewAttributeChange', signal, () => {
-      const folders = recursive && scope !== 'filesOnly' ? locations.length * 3 : 0;
-      const files = scope === 'foldersOnly' ? 0 : locations.length * (recursive ? 12 : 1);
-      return { total: files + folders, files, folders, skippedSymlinks: 0, truncated: false };
-    });
+    return this.workspaceClient.previewAttributeChange(locations, recursive, scope, signal);
   }
-
   readImageMetadata(_location: Location, signal?: AbortSignal): Promise<ImageMetadata> {
-    return this.perform('readImageMetadata', signal, () => ({
-      format: 'JPEG',
-      supported: true,
-      editableFields: [
-        'dateTaken',
-        'gps',
-        'description',
-        'copyright',
-        'author',
-        'orientation',
-        'title',
-        'keywords',
-        'rating',
-      ],
-      groups: [
-        {
-          namespace: 'EXIF',
-          tags: [
-            { name: 'Make', value: 'Mock Camera Co.' },
-            { name: 'Model', value: 'Mock 9000' },
-          ],
-        },
-      ],
-    }));
+    return this.workspaceClient.readImageMetadata(_location, signal);
   }
-
   resolveMetadataTokens(
     request: ResolveMetadataTokensRequest,
     signal?: AbortSignal,
   ): Promise<ResolveMetadataTokensResult> {
-    return this.perform('resolveMetadataTokens', signal, () => {
-      const known = new Set(['artist', 'album', 'title', 'track', 'year']);
-      const unknownTokens = request.tokens.filter(
-        (token) => !known.has(token) && !token.startsWith('exif:'),
-      );
-      return {
-        entries: request.locations.map((location, index) => ({
-          location,
-          values: Object.fromEntries(
-            request.tokens
-              .filter((token) => known.has(token))
-              .map((token) => [
-                token,
-                token === 'track' ? String(index + 1).padStart(2, '0') : `Mock ${token}`,
-              ]),
-          ),
-        })),
-        unknownTokens,
-      };
-    });
+    return this.workspaceClient.resolveMetadataTokens(request, signal);
   }
-
   mapTileUrlTemplate(): Promise<string> {
-    // A flat grey tile: the mock runtime has no backend to proxy a provider.
-    return Promise.resolve(
-      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mO89OLFfwAJVwP8GZfV0AAAAABJRU5ErkJggg==',
-    );
+    return this.workspaceClient.mapTileUrlTemplate();
   }
-
   mediaUrl(location: Location, signal?: AbortSignal): Promise<string> {
-    return this.perform('readFileRange', signal, () => {
-      const bytes = this.fileContentFor(location.uri);
-      if (typeof URL.createObjectURL === 'function') {
-        return URL.createObjectURL(new Blob([bytes as BlobPart]));
-      }
-      let binary = '';
-      for (const byte of bytes) binary += String.fromCharCode(byte);
-      return `data:application/octet-stream;base64,${btoa(binary)}`;
-    });
+    return this.workspaceClient.mediaUrl(location, signal);
   }
-
   readFileRange(request: ReadFileRangeRequest, signal?: AbortSignal): Promise<FileRangeChunk> {
-    return this.perform('readFileRange', signal, () => {
-      if (request.length <= 0) {
-        throw new MockClientError('invalidRequest', 'length must be a positive number of bytes', {
-          reason: 'invalidRangeLength',
-          maxBytes: 1_048_576,
-        });
-      }
-      const bytes = this.fileContentFor(request.location.uri);
-      const end = Math.min(bytes.length, request.offset + request.length);
-      const slice = bytes.slice(request.offset, Math.max(request.offset, end));
-      return {
-        data: Array.from(slice),
-        offset: request.offset,
-        length: slice.length,
-        eof: end >= bytes.length,
-        ...(request.offset === 0 ? { probablyBinary: false } : {}),
-      };
-    });
+    return this.workspaceClient.readFileRange(request, signal);
   }
-
   openDocxPreview(request: OpenDocxPreviewRequest, signal?: AbortSignal): Promise<DocxPreview> {
-    return this.perform('openDocxPreview', signal, () => {
-      const sessionId = crypto.randomUUID();
-      const resourceId = crypto.randomUUID();
-      this.docxSessions.set(
-        sessionId,
-        new Map([
-          [
-            resourceId,
-            {
-              data: [137, 80, 78, 71, 13, 10, 26, 10],
-              mediaType: 'image/png',
-            },
-          ],
-        ]),
-      );
-      return {
-        sessionId,
-        sourceRevision: `mock:${request.location.uri}`,
-        sourceBytes: 1024,
-        html: '<h1>Mock document</h1><p>Content-oriented DOCX preview.</p><img src="media/image1.png" alt="Mock image">',
-        resources: [
-          {
-            resourceId,
-            source: 'media/image1.png',
-            mediaType: 'image/png',
-            byteLength: 8,
-          },
-        ],
-        omittedFeatures: ['exact pagination', 'floating objects', 'headers and footers'],
-      };
-    });
+    return this.workspaceClient.openDocxPreview(request, signal);
   }
-
   readDocxPreviewResource(
     request: ReadDocxPreviewResourceRequest,
     signal?: AbortSignal,
   ): Promise<DocxPreviewResource> {
-    return this.perform('readDocxPreviewResource', signal, () => {
-      const resource = this.docxSessions.get(request.sessionId)?.get(request.resourceId);
-      if (resource === undefined) {
-        throw new MockClientError('notFound', 'DOCX preview resource not found');
-      }
-      return structuredClone(resource);
-    });
+    return this.workspaceClient.readDocxPreviewResource(request, signal);
   }
-
   closeDocxPreview(request: DocxPreviewSessionRequest, signal?: AbortSignal): Promise<void> {
-    return this.perform('closeDocxPreview', signal, () => {
-      if (!this.docxSessions.delete(request.sessionId)) {
-        throw new MockClientError('notFound', 'DOCX preview session not found');
-      }
-    });
+    return this.workspaceClient.closeDocxPreview(request, signal);
   }
-
   openPptxPreview(request: OpenPptxPreviewRequest, signal?: AbortSignal): Promise<PptxPreview> {
-    return this.perform('openPptxPreview', signal, () => {
-      const sessionId = crypto.randomUUID();
-      const pdf = new TextEncoder().encode(
-        '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n' +
-          '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
-          '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R>>endobj\n' +
-          '4 0 obj<</Length 0>>stream\nendstream\nendobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
-      );
-      this.pptxSessions.set(sessionId, pdf);
-      return {
-        sessionId,
-        sourceRevision: `mock:${request.location.uri}`,
-        sourceBytes: 2048,
-        firstPagePdf: Array.from(pdf),
-      };
-    });
+    return this.workspaceClient.openPptxPreview(request, signal);
   }
-
   readPptxPreviewPdf(
     request: ReadPptxPreviewPdfRequest,
     signal?: AbortSignal,
   ): Promise<FileRangeChunk> {
-    return this.perform('readPptxPreviewPdf', signal, () => {
-      if (request.length <= 0) {
-        throw new MockClientError('invalidRequest', 'length must be a positive number of bytes', {
-          reason: 'invalidRangeLength',
-          maxBytes: 1_048_576,
-        });
-      }
-      const pdf = this.pptxSessions.get(request.sessionId);
-      if (pdf === undefined) {
-        throw new MockClientError('notFound', 'PPTX preview session not found');
-      }
-      const end = Math.min(pdf.length, request.offset + request.length);
-      const slice = pdf.slice(request.offset, Math.max(request.offset, end));
-      return {
-        data: Array.from(slice),
-        offset: request.offset,
-        length: slice.length,
-        eof: end >= pdf.length,
-        ...(request.offset === 0 ? { probablyBinary: true } : {}),
-      };
-    });
+    return this.workspaceClient.readPptxPreviewPdf(request, signal);
   }
-
   closePptxPreview(request: PptxPreviewSessionRequest, signal?: AbortSignal): Promise<void> {
-    return this.perform('closePptxPreview', signal, () => {
-      if (!this.pptxSessions.delete(request.sessionId)) {
-        throw new MockClientError('notFound', 'PPTX preview session not found');
-      }
-    });
+    return this.workspaceClient.closePptxPreview(request, signal);
   }
-
   openStructuredView(
     request: OpenStructuredViewRequest,
     signal?: AbortSignal,
   ): Promise<StructuredView> {
-    return this.perform('readFileRange', signal, () => {
-      const sessionId = crypto.randomUUID();
-      const delimiter = request.delimiter ?? (request.format === 'tsv' ? '\t' : ',');
-      this.structuredSessions.set(sessionId, {
-        uri: request.location.uri,
-        format: request.format,
-        delimiter,
-        headerMode: request.headerMode ?? 'auto',
-        selectedSheet: 'Summary',
-      });
-      return this.mockStructuredView(sessionId);
-    });
+    return this.workspaceClient.openStructuredView(request, signal);
   }
-
   getStructuredViewStatus(
     request: StructuredViewSessionRequest,
     signal?: AbortSignal,
   ): Promise<StructuredViewStatus> {
-    return this.perform('readFileRange', signal, () => {
-      const view = this.mockStructuredView(request.sessionId);
-      return {
-        indexedBytes: view.sourceBytes,
-        indexedRows: view.indexedRows,
-        totalRows: view.totalRows ?? null,
-        indexingComplete: true,
-      };
-    });
+    return this.workspaceClient.getStructuredViewStatus(request, signal);
   }
-
   updateStructuredView(
     request: UpdateStructuredViewRequest,
     signal?: AbortSignal,
   ): Promise<StructuredView> {
-    return this.perform('readFileRange', signal, () => {
-      const session = this.structuredSession(request.sessionId);
-      if (request.delimiter != null) session.delimiter = request.delimiter;
-      if (request.headerMode != null) session.headerMode = request.headerMode;
-      if (request.selectedSheet != null) session.selectedSheet = request.selectedSheet;
-      return this.mockStructuredView(request.sessionId);
-    });
+    return this.workspaceClient.updateStructuredView(request, signal);
   }
-
   readStructuredRows(
     request: ReadStructuredRowsRequest,
     signal?: AbortSignal,
   ): Promise<StructuredRows> {
-    return this.perform('readFileRange', signal, () => {
-      const view = this.mockStructuredView(request.sessionId);
-      return {
-        rows: view.rows.slice(request.startRow, request.startRow + request.count),
-        indexedRows: view.indexedRows,
-        totalRows: view.totalRows ?? null,
-        indexingComplete: true,
-      };
-    });
+    return this.workspaceClient.readStructuredRows(request, signal);
   }
-
   readStructuredJsonWindow(
     request: ReadStructuredJsonWindowRequest,
     signal?: AbortSignal,
   ): Promise<StructuredJsonWindow> {
-    return this.perform('readFileRange', signal, () => {
-      const session = this.structuredSession(request.sessionId);
-      const bytes = this.fileContentFor(session.uri);
-      const data = bytes.slice(request.offset, request.offset + request.length);
-      return {
-        data: Array.from(data),
-        offset: request.offset,
-        eof: request.offset + data.length >= bytes.length,
-        tokens: [],
-      };
-    });
+    return this.workspaceClient.readStructuredJsonWindow(request, signal);
   }
-
   searchStructuredRows(
     request: SearchStructuredRowsRequest,
     signal?: AbortSignal,
   ): Promise<StructuredRowSearch> {
-    return this.perform('readFileRange', signal, () => {
-      const rows = this.mockStructuredView(request.sessionId).rows;
-      const matches = rows
-        .slice(request.cursor)
-        .filter((row) =>
-          row.cells.some((cell) => cell.toLowerCase().includes(request.query.toLowerCase())),
-        )
-        .slice(0, request.limit);
-      const last = matches.at(-1)?.index;
-      return {
-        matches,
-        nextCursor: last === undefined || last + 1 >= rows.length ? null : last + 1,
-        indexingComplete: true,
-      };
-    });
+    return this.workspaceClient.searchStructuredRows(request, signal);
   }
-
   closeStructuredView(request: StructuredViewSessionRequest, signal?: AbortSignal): Promise<void> {
-    return this.perform('readFileRange', signal, () => {
-      if (!this.structuredSessions.delete(request.sessionId)) {
-        throw new MockClientError('notFound', 'structured viewer session not found');
-      }
-    });
+    return this.workspaceClient.closeStructuredView(request, signal);
   }
-
   openSqliteView(request: OpenSqliteViewRequest, signal?: AbortSignal): Promise<SqliteView> {
-    return this.perform('readFileRange', signal, () => {
-      const sessionId = crypto.randomUUID();
-      const database = new MockSqliteDatabase();
-      this.sqliteSessions.set(sessionId, database);
-      return {
-        sessionId,
-        sourceBytes: this.fileContentFor(request.location.uri).length,
-        sqliteVersion: 'mock',
-        objects: [...database.objects],
-      };
-    });
+    return this.workspaceClient.openSqliteView(request, signal);
   }
-
   querySqliteView(
     request: QuerySqliteViewRequest,
     signal?: AbortSignal,
   ): Promise<SqliteQueryResult> {
-    return this.perform('readFileRange', signal, () => {
-      const database = this.sqliteSessions.get(request.sessionId);
-      if (database === undefined) {
-        throw new MockClientError('notFound', 'SQLite viewer session not found');
-      }
-      try {
-        return database.query(request.source, request.offset ?? 0, request.limit);
-      } catch (error) {
-        throw new MockClientError(
-          'invalidRequest',
-          error instanceof Error ? error.message : 'query failed',
-        );
-      }
-    });
+    return this.workspaceClient.querySqliteView(request, signal);
   }
-
   closeSqliteView(request: SqliteViewSessionRequest, signal?: AbortSignal): Promise<void> {
-    return this.perform('readFileRange', signal, () => {
-      if (!this.sqliteSessions.delete(request.sessionId)) {
-        throw new MockClientError('notFound', 'SQLite viewer session not found');
-      }
-    });
+    return this.workspaceClient.closeSqliteView(request, signal);
   }
-
   loadEditableFile(request: LoadEditableFileRequest, signal?: AbortSignal): Promise<EditableFile> {
-    return this.perform('readFileRange', signal, () => {
-      const bytes = this.fileContentFor(request.location.uri);
-      return {
-        content: new TextDecoder().decode(bytes),
-        revision: String(bytes.length),
-        size: bytes.length,
-      };
-    });
+    return this.workspaceClient.loadEditableFile(request, signal);
   }
-
   saveEditableFile(
     request: SaveEditableFileRequest,
     signal?: AbortSignal,
   ): Promise<EditableFileSave> {
-    return this.perform('readFileRange', signal, () => {
-      const existing = this.fileContentFor(request.location.uri);
-      if (!request.overwriteConflict && request.expectedRevision !== String(existing.length)) {
-        throw new MockClientError('fileRevisionConflict', 'The file changed after it was loaded.');
-      }
-      const bytes = new TextEncoder().encode(request.content);
-      this.fileContents.set(request.destination?.uri ?? request.location.uri, bytes);
-      return {
-        revision: String(bytes.length),
-        size: bytes.length,
-        overwroteConflict: request.overwriteConflict,
-      };
-    });
+    return this.workspaceClient.saveEditableFile(request, signal);
   }
-
   searchInFile(request: SearchInFileRequest, signal?: AbortSignal): Promise<SearchInFileResult> {
-    return this.perform('searchInFile', signal, () => {
-      if (request.query.length === 0) {
-        throw new MockClientError('invalidRequest', 'search query must not be empty', {
-          reason: 'searchQueryInvalid',
-        });
-      }
-      const matchesOnLine = this.buildLineMatcher(request);
-      const text = new TextDecoder().decode(this.fileContentFor(request.location.uri));
-      const lines = text.split('\n');
-      const matches: SearchInFileMatch[] = [];
-      let truncated = false;
-      let fileOffset = 0;
-      for (let lineIndex = 0; lineIndex < lines.length && !truncated; lineIndex += 1) {
-        const line = lines[lineIndex] ?? '';
-        for (const [start, end] of matchesOnLine(line)) {
-          if (matches.length >= 5_000) {
-            truncated = true;
-            break;
-          }
-          matches.push({
-            lineNumber: lineIndex + 1,
-            offset: fileOffset + start,
-            length: end - start,
-          });
-        }
-        fileOffset += line.length + 1;
-      }
-      return { matches, truncated };
-    });
+    return this.workspaceClient.searchInFile(request, signal);
   }
-
   calculateFolderSize(
     request: CalculateFolderSizeRequest,
     signal?: AbortSignal,
   ): Promise<CalculateFolderSizeResult> {
-    return this.perform('calculateFolderSize', signal, () => {
-      if (directories[request.location.uri] === undefined) {
-        throw new MockClientError('notFound', `No mock directory at ${request.location.uri}`);
-      }
-
-      let totalBytes = 0;
-      let fileCount = 0;
-      const stack = [request.location.uri];
-      while (stack.length > 0) {
-        const uri = stack.pop() as string;
-        for (const fixture of directories[uri] ?? []) {
-          const entry = fixtureEntry(uri, fixture);
-          if (entry.kind === 'directory') {
-            stack.push(entry.location.uri);
-          } else {
-            totalBytes += entry.size ?? 0;
-            fileCount += 1;
-          }
-        }
-      }
-      return { totalBytes, fileCount };
-    });
+    return this.workspaceClient.calculateFolderSize(request, signal);
   }
-
   archiveSummary(
     request: ArchiveSummaryRequest,
     signal?: AbortSignal,
   ): Promise<ArchiveSummaryResult> {
-    return this.perform('archiveSummary', signal, () => {
-      const archiveRootUri = request.location.uri.startsWith('file://')
-        ? `archive://${request.location.uri.slice('file://'.length)}!/`
-        : request.location.uri;
-      const rootEntries = directories[archiveRootUri];
-      if (rootEntries === undefined) {
-        throw new MockClientError('notFound', `No mock archive at ${request.location.uri}`);
-      }
-      let uncompressedSize = 0;
-      let fileCount = 0;
-      let directoryCount = 0;
-      const stack = [archiveRootUri];
-      while (stack.length > 0) {
-        const uri = stack.pop() as string;
-        for (const fixture of directories[uri] ?? []) {
-          const entry = fixtureEntry(uri, fixture);
-          if (entry.kind === 'directory') {
-            directoryCount += 1;
-            stack.push(entry.location.uri);
-          } else {
-            fileCount += 1;
-            uncompressedSize += entry.size ?? 0;
-          }
-        }
-      }
-      const outerName = request.location.uri.toLowerCase();
-      const format = outerName.endsWith('.7z')
-        ? '7z'
-        : outerName.endsWith('.rar')
-          ? 'rar'
-          : outerName.endsWith('.tar.gz') || outerName.endsWith('.tgz')
-            ? 'tar.gz'
-            : outerName.endsWith('.tar.bz2') ||
-                outerName.endsWith('.tbz2') ||
-                outerName.endsWith('.tbz')
-              ? 'tar.bz2'
-              : outerName.endsWith('.tar.xz') || outerName.endsWith('.txz')
-                ? 'tar.xz'
-                : outerName.endsWith('.gz')
-                  ? 'gzip'
-                  : outerName.endsWith('.tar')
-                    ? 'tar'
-                    : 'zip';
-      return {
-        format,
-        fileCount,
-        directoryCount,
-        uncompressedSize,
-        compressedSize: format === 'tar' ? null : Math.max(1, Math.floor(uncompressedSize / 2)),
-      };
-    });
+    return this.workspaceClient.archiveSummary(request, signal);
   }
-
   scanDiskUsage(request: ScanDiskUsageRequest, signal?: AbortSignal): Promise<void> {
-    return this.perform('scanDiskUsage', signal, () => {
-      const fixtures = directories[request.location.uri];
-      if (fixtures === undefined) {
-        throw new MockClientError('notFound', `No mock directory at ${request.location.uri}`);
-      }
-      const collapsedNames = new Set(['.git', '.hg', '.svn', 'node_modules']);
-      const build = (uri: string, name: string, isRoot = false): ScanDiskUsageResult['root'] => {
-        const children = (directories[uri] ?? []).map((fixture) => {
-          const entry = fixtureEntry(uri, fixture);
-          if (entry.kind === 'directory') return build(entry.location.uri, entry.name);
-          return {
-            name: entry.name,
-            location: entry.location,
-            kind: entry.kind,
-            logicalBytes: entry.size ?? 0,
-            physicalBytes: entry.size ?? 0,
-            collapsed: false,
-            children: [],
-          };
-        });
-        const physicalBytes = children.reduce((sum, child) => sum + child.physicalBytes, 0);
-        const collapsed = collapsedNames.has(name) && !(isRoot && request.expandRoot === true);
-        return {
-          name,
-          location: { providerId: request.location.providerId, uri },
-          kind: 'directory',
-          logicalBytes: physicalBytes,
-          physicalBytes,
-          collapsed,
-          children: collapsed ? [] : children,
-        };
-      };
-      const name = decodeURIComponent(
-        request.location.uri.replace(/\/+$/u, '').split('/').at(-1) ?? '/',
-      );
-      const root = build(request.location.uri, name, true);
-      // Mirrors the backend's clean-up heuristics for the one rule the fixtures can exercise; the
-      // backend's 50 MB threshold is ignored because fixture sizes are tiny.
-      const cleanupCandidates: NonNullable<ScanDiskUsageResult['cleanupCandidates']> = [];
-      const collectCandidates = (node: ScanDiskUsageResult['root']): void => {
-        for (const child of node.children) {
-          if (child.kind !== 'directory') continue;
-          if (child.name === 'node_modules') {
-            cleanupCandidates.push({
-              location: child.location,
-              kind: 'nodeModules',
-              logicalBytes: child.logicalBytes,
-              physicalBytes: child.physicalBytes,
-            });
-          } else {
-            collectCandidates(child);
-          }
-        }
-      };
-      collectCandidates(root);
-      cleanupCandidates.sort((left, right) => right.physicalBytes - left.physicalBytes);
-      const result = {
-        root,
-        unreadableEntries: 0,
-        unreadable: [],
-        scannedEntries: 1,
-      };
-      const first = result.root.children.at(0);
-      if (first !== undefined) {
-        this.eventSequence += 1;
-        this.emit({
-          eventId: this.eventSequence,
-          timestamp: new Date().toISOString(),
-          workspaceId: request.workspaceId as WorkspaceId,
-          payload: {
-            type: 'diskUsage.progress',
-            scanId: request.scanId,
-            tree: encodeDiskUsageTree({
-              ...result.root,
-              logicalBytes: first.logicalBytes,
-              physicalBytes: first.physicalBytes,
-              children: [first],
-            }),
-            unreadableEntries: 0,
-            unreadable: [],
-            scannedEntries: 1,
-            isComplete: false,
-          },
-        });
-      }
-      this.eventSequence += 1;
-      this.emit({
-        eventId: this.eventSequence,
-        timestamp: new Date().toISOString(),
-        workspaceId: request.workspaceId as WorkspaceId,
-        payload: {
-          type: 'diskUsage.progress',
-          scanId: request.scanId,
-          tree: encodeDiskUsageTree(result.root),
-          unreadableEntries: 0,
-          unreadable: [],
-          scannedEntries: 1,
-          cleanupCandidates,
-          isComplete: true,
-        },
-      });
-      return undefined;
-    });
+    return this.workspaceClient.scanDiskUsage(request, signal);
   }
-
   cancelDiskUsage(_scanId: string, signal?: AbortSignal): Promise<void> {
-    return this.perform('cancelDiskUsage', signal, () => undefined);
+    return this.workspaceClient.cancelDiskUsage(_scanId, signal);
   }
-
   discoverApplicationUninstallCandidates(
     request: DiscoverApplicationUninstallCandidatesRequest,
     signal?: AbortSignal,
   ): Promise<DiscoverApplicationUninstallCandidatesResult> {
-    return this.perform('discoverApplicationUninstallCandidates', signal, () => {
-      const segments = request.location.uri.split('/');
-      const rawName = segments[segments.length - 1] ?? '';
-      const name = decodeURIComponent(rawName);
-      if (!name.toLowerCase().endsWith('.app')) {
-        throw new MockClientError(
-          'notFound',
-          `No mock application bundle at ${request.location.uri}`,
-        );
-      }
-      const productName = name.slice(0, -'.app'.length);
-      return {
-        bundleIdentifier: `com.example.${productName.replace(/\s+/g, '')}`,
-        productName,
-        relatedFiles: [],
-      };
-    });
+    return this.workspaceClient.discoverApplicationUninstallCandidates(request, signal);
   }
-
   removeApplicationDockIcon(
     request: RemoveApplicationDockIconRequest,
     signal?: AbortSignal,
   ): Promise<RemoveApplicationDockIconResult> {
-    // The mock world has no Dock to pin an icon to, so there is never anything to remove -
-    // matching a real host's own normal "nothing was pinned" outcome, not an error.
-    void request;
-    return this.perform('removeApplicationDockIcon', signal, () => ({ removed: false }));
+    return this.workspaceClient.removeApplicationDockIcon(request, signal);
   }
-
   gitFileHistory(
     request: GitFileHistoryRequest,
     signal?: AbortSignal,
   ): Promise<GitFileHistoryResult> {
-    // The mock fixtures have no notion of a git working tree, so every file simply has no
-    // history to show - the same outcome a real backend reports for a non-git directory.
-    void request;
-    return this.perform('gitFileHistory', signal, () => ({ commits: [] }));
+    return this.workspaceClient.gitFileHistory(request, signal);
   }
-
   startOperation(request: StartOperationRequest, signal?: AbortSignal): Promise<Operation> {
-    return this.perform('startOperation', signal, () => {
-      this.operationSequence += 1;
-      const operation: Operation = {
-        id: `mock-operation-${this.seed}-${this.operationSequence}`,
-        kind: request.type,
-        state: 'running',
-        sources: request.sources.map((location) => ({ id: location.uri, location })),
-        ...(request.destination === undefined ? {} : { destination: request.destination }),
-        progress: { completedItems: 0, completedBytes: 0 },
-        conflictPolicy: request.conflictPolicy,
-        createdAt: '2026-01-01T00:00:00.000Z',
-        startedAt: '2026-01-01T00:00:00.000Z',
-      };
-      this.operations.set(operation.id, operation);
-      return operation;
-    });
+    return this.operationClient.startOperation(request, signal);
   }
-
   resolveLinkTarget(location: Location, signal?: AbortSignal): Promise<EntrySummary> {
-    return this.perform('resolveLinkTarget', signal, () => {
-      const separator = location.uri.lastIndexOf('/');
-      const rawParent = location.uri.slice(0, separator);
-      const parentUri = rawParent === 'mock://' ? 'mock:///' : rawParent;
-      const name = decodeURIComponent(location.uri.slice(separator + 1));
-      const fixture = (directories[parentUri] ?? []).find((candidate) => candidate.name === name);
-      if (fixture === undefined) {
-        throw new MockClientError('notFound', `no mock entry at ${location.uri}`);
-      }
-      // Mock links have no stored target; they resolve to a file with the link's own name.
-      return fixtureEntry(
-        parentUri,
-        fixture.kind === 'symlink' ? { ...fixture, kind: 'file' } : fixture,
-      );
-    });
+    return this.operationClient.resolveLinkTarget(location, signal);
   }
-
   getLinkOptions(request: LinkOptionsRequest, signal?: AbortSignal): Promise<LinkOptions> {
-    return this.perform('getLinkOptions', signal, () => {
-      const sameProvider = request.target.providerId === request.destination.providerId;
-      const name = request.target.uri.split('/').filter(Boolean).at(-1) ?? 'link';
-      return {
-        kinds: sameProvider
-          ? [
-              {
-                kind: 'symbolicLink',
-                supportsRelative: true,
-                requirements: [],
-                suggestedName: decodeURIComponent(name),
-              },
-            ]
-          : [],
-      };
-    });
+    return this.operationClient.getLinkOptions(request, signal);
   }
-
   listOperations(signal?: AbortSignal): Promise<Operation[]> {
-    return this.perform('listOperations', signal, () =>
-      [...this.operations.values()].map((operation) => structuredClone(operation)),
-    );
+    return this.operationClient.listOperations(signal);
   }
-
   cancelOperation(operationId: OperationId, signal?: AbortSignal): Promise<void> {
-    return this.perform('cancelOperation', signal, () => {
-      const operation = this.requireOperation(operationId);
-      this.operations.set(operationId, { ...operation, state: 'cancelled' });
-    });
+    return this.operationClient.cancelOperation(operationId, signal);
   }
-
   undoOperation(operationId: OperationId, signal?: AbortSignal): Promise<Operation> {
-    return this.perform('undoOperation', signal, () => {
-      const original = this.requireOperation(operationId);
-      if (original.undo?.available !== true) {
-        throw new MockClientError(
-          original.undo?.reasonCode ?? 'undoUnsafe',
-          original.undo?.reason ?? 'This operation cannot be undone.',
-          { reason: original.undo?.reasonCode ?? 'undoUnsafe' },
-        );
-      }
-      this.operationSequence += 1;
-      const undo: Operation = {
-        id: `mock-operation-${this.seed}-${this.operationSequence}`,
-        kind: 'undo',
-        state: 'running',
-        sources: original.sources,
-        progress: { completedItems: 0, completedBytes: 0 },
-        conflictPolicy: 'ask',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        startedAt: '2026-01-01T00:00:00.000Z',
-        undo: {
-          available: false,
-          reason: 'Undo operations cannot themselves be undone.',
-          reasonCode: 'undoOfUndo',
-        },
-        undoOf: operationId,
-      };
-      this.operations.set(operationId, {
-        ...original,
-        undo: {
-          available: false,
-          reason: 'Undo is already in progress for this operation.',
-          reasonCode: 'undoInProgress',
-          operationId: undo.id,
-        },
-      });
-      this.operations.set(undo.id, undo);
-      return undo;
-    });
+    return this.operationClient.undoOperation(operationId, signal);
   }
-
   pauseOperation(operationId: OperationId, signal?: AbortSignal): Promise<void> {
-    return this.perform('pauseOperation', signal, () => {
-      const operation = this.requireOperation(operationId);
-      this.operations.set(operationId, { ...operation, state: 'paused' });
-    });
+    return this.operationClient.pauseOperation(operationId, signal);
   }
-
   resumeOperation(operationId: OperationId, signal?: AbortSignal): Promise<void> {
-    return this.perform('resumeOperation', signal, () => {
-      const operation = this.requireOperation(operationId);
-      this.operations.set(operationId, { ...operation, state: 'running' });
-    });
+    return this.operationClient.resumeOperation(operationId, signal);
   }
-
   resolveConflict(request: ResolveConflictRequest, signal?: AbortSignal): Promise<void> {
-    return this.perform('resolveConflict', signal, () => {
-      const operation = this.requireOperation(request.operationId);
-      this.operations.set(request.operationId, {
-        ...operation,
-        ...(request.resolution === 'cancelOperation'
-          ? { state: 'cancelled' as const }
-          : request.resolution === 'confirm'
-            ? { state: 'running' as const }
-            : { conflictPolicy: request.resolution, state: 'running' as const }),
-      });
-    });
+    return this.operationClient.resolveConflict(request, signal);
   }
-
   listActions(signal?: AbortSignal): Promise<ActionDescriptor[]> {
-    return this.perform('listActions', signal, () => structuredClone(actions));
+    return this.pluginClient.listActions(signal);
   }
-
   openPluginPanel(
     _pluginId: PluginId,
     _actionId: string,
@@ -4131,2374 +877,444 @@ export class MockFileManagerClient implements FileManagerClient {
     _bounds: import('./file-manager-client').PluginPanelBounds,
     _theme: 'light' | 'dark',
   ): Promise<string> {
-    return Promise.reject(desktopHostRequiredError());
+    return this.pluginClient.openPluginPanel(_pluginId, _actionId, _location, _bounds, _theme);
   }
-
   updatePluginPanelBounds(): Promise<void> {
-    return Promise.reject(desktopHostRequiredError());
+    return this.pluginClient.updatePluginPanelBounds();
   }
-
   setPluginPanelVisible(): Promise<void> {
-    return Promise.reject(desktopHostRequiredError());
+    return this.pluginClient.setPluginPanelVisible();
   }
-
   setPluginPanelTheme(): Promise<void> {
-    return Promise.reject(desktopHostRequiredError());
+    return this.pluginClient.setPluginPanelTheme();
   }
-
   closePluginPanel(): Promise<void> {
-    return Promise.reject(desktopHostRequiredError());
+    return this.pluginClient.closePluginPanel();
   }
-
   invokeAction(request: InvokeActionRequest, signal?: AbortSignal): Promise<ActionResult> {
-    return this.perform('invokeAction', signal, () => {
-      if (!actions.some((action) => action.id === request.actionId)) {
-        throw new MockClientError('actionNotFound', `No mock action with id ${request.actionId}`);
-      }
-      return { actionId: request.actionId, invoked: true };
-    });
+    return this.pluginClient.invokeAction(request, signal);
   }
-
   listPlugins(signal?: AbortSignal): Promise<PluginDescriptor[]> {
-    return this.perform('listPlugins', signal, () => structuredClone(this.pluginState));
+    return this.pluginClient.listPlugins(signal);
   }
-
   setPluginEnabled(pluginId: PluginId, enabled: boolean, signal?: AbortSignal): Promise<void> {
-    return this.perform('setPluginEnabled', signal, () => {
-      if (!this.pluginState.some((plugin) => plugin.id === pluginId)) {
-        throw new MockClientError('notFound', `No mock plugin with id ${pluginId}`);
-      }
-      this.pluginState = this.pluginState.map((plugin) =>
-        plugin.id === pluginId ? { ...plugin, enabled } : plugin,
-      );
-    });
+    return this.pluginClient.setPluginEnabled(pluginId, enabled, signal);
   }
-
   renderPluginPreview(
     pluginId: PluginId,
     location: Location,
     signal?: AbortSignal,
   ): Promise<PluginPreviewResult> {
-    return this.perform('renderPluginPreview', signal, () => {
-      const plugin = this.pluginState.find((candidate) => candidate.id === pluginId);
-      if (plugin?.enabled !== true || plugin.preview === undefined) {
-        throw new MockClientError('notFound', `No enabled mock preview plugin ${pluginId}`);
-      }
-      return {
-        kind: 'text' as const,
-        body: `${pluginId} previewed ${location.uri}`,
-        truncated: false,
-      };
-    });
+    return this.pluginClient.renderPluginPreview(pluginId, location, signal);
   }
-
   getPluginLogs(pluginId: PluginId, signal?: AbortSignal): Promise<PluginLogEntry[]> {
-    return this.perform('getPluginLogs', signal, () => {
-      if (!this.pluginState.some((plugin) => plugin.id === pluginId)) {
-        throw new MockClientError('notFound', `No mock plugin with id ${pluginId}`);
-      }
-      return [];
-    });
+    return this.pluginClient.getPluginLogs(pluginId, signal);
   }
-
   getPluginIconThemeAsset(
     pluginId: PluginId,
     assetPath: string,
     signal?: AbortSignal,
   ): Promise<string> {
-    return this.perform('getPluginIconThemeAsset', signal, () => {
-      const plugin = this.pluginState.find((candidate) => candidate.id === pluginId);
-      const isDeclared = Object.values(plugin?.iconTheme?.iconDefinitions ?? {}).some(
-        (definition) => definition.iconPath === assetPath,
-      );
-      if (!isDeclared) {
-        throw new MockClientError(
-          'notFound',
-          `No icon theme asset ${assetPath} for plugin ${pluginId}`,
-        );
-      }
-      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"></svg>';
-    });
+    return this.pluginClient.getPluginIconThemeAsset(pluginId, assetPath, signal);
   }
-
   startSearch(request: StartSearchRequest, signal?: AbortSignal): Promise<StartSearchResult> {
-    return this.perform('startSearch', signal, () => {
-      this.searchSequence += 1;
-      const searchId = `mock-search-${this.seed}-${this.searchSequence}`;
-      const location: Location = { providerId: 'local', uri: `search://local/${searchId}` };
-      const roots = request.structuredQuery?.scope.locations ?? request.roots;
-      const filenameQuery = request.structuredQuery?.name?.pattern ?? request.query;
-      const semanticQuery = request.structuredQuery?.semantic?.query;
-      const contentQuery =
-        request.structuredQuery?.content?.query ?? semanticQuery ?? request.contentQuery;
-      const semanticMode = request.structuredQuery?.mode === 'semantic';
-      const entries = roots.flatMap((root) =>
-        collectMatches(
-          root.uri,
-          filenameQuery,
-          contentQuery,
-          request.structuredQuery?.scope.showHidden ?? request.showHidden ?? true,
-          (uri) => this.fileContentFor(uri),
-          request.structuredQuery,
-        ),
-      );
-      this.searches.set(searchId, { cancelled: false, entries });
-      // Deferred with a macrotask (rather than a microtask) so it always runs
-      // after this method's own promise has resolved and the caller has
-      // recorded `searchId`, avoiding a race against the resultsBatch handler
-      // matching events by searchId.
-      setTimeout(() => {
-        if (this.searches.get(searchId)?.cancelled ?? true) return;
-        this.eventSequence += 1;
-        this.emit({
-          eventId: this.eventSequence,
-          timestamp: '2026-01-01T00:00:00.000Z',
-          workspaceId: request.workspaceId,
-          payload: {
-            type: 'search.resultsBatch',
-            searchId,
-            entries,
-            isComplete: true,
-            warningsCount: 0,
-            executionMode: semanticMode ? 'semantic' : 'liveRecursive',
-          },
-        });
-      }, 0);
-      const unsupported = [
-        ...(request.structuredQuery?.gitStatuses.length ? (['gitStatus'] as const) : []),
-        ...(request.structuredQuery?.tags.length ? (['tags'] as const) : []),
-        ...(Object.keys(request.structuredQuery?.metadata ?? {}).length
-          ? (['metadata'] as const)
-          : []),
-      ];
-      return {
-        searchId,
-        location,
-        limitations:
-          unsupported.length === 0
-            ? []
-            : [{ providerId: 'local', unevaluatedPredicates: unsupported }],
-        executionMode: semanticMode ? 'semantic' : 'liveRecursive',
-        ...(semanticMode
-          ? {
-              semanticResults: entries.map((entry, index) => ({
-                entryId: entry.id,
-                location: entry.location,
-                score: 1 - index * 0.05,
-                bestEvidence: {
-                  recordId: `mock-record-${index}`,
-                  sourceId: entry.id,
-                  score: 1 - index * 0.05,
-                  chunkKind: 'chunk',
-                  excerpt: contentQuery ?? '',
-                  provenanceJson: JSON.stringify({
-                    kind: 'exact',
-                    value: { kind: 'textLines', startLine: 1, endLine: 3 },
-                  }),
-                  indexedContentHash: `mock-hash-${entry.id}`,
-                  generation: 1,
-                  available: true,
-                  stale: false,
-                  generated: false,
-                  sourcePosition: 0,
-                },
-                additionalEvidence: [],
-                additionalSourceIds: [],
-              })),
-            }
-          : {}),
-        ...(semanticMode
-          ? {
-              semanticCoverage: {
-                eligible: entries.length,
-                indexed: entries.length,
-                stale: 0,
-                pending: 0,
-                excluded: 0,
-                skipped: 0,
-                failed: 0,
-                unavailable: 0,
-                partial: false,
-              },
-            }
-          : {}),
-      };
-    });
+    return this.operationClient.startSearch(request, signal);
   }
-
   cancelSearch(searchId: string, signal?: AbortSignal): Promise<void> {
-    return this.perform('cancelSearch', signal, () => {
-      const search = this.searches.get(searchId);
-      if (search === undefined) {
-        throw new MockClientError('notFound', `No mock search with id ${searchId}`);
-      }
-      search.cancelled = true;
-    });
+    return this.operationClient.cancelSearch(searchId, signal);
   }
-
   startComparison(
     request: StartComparisonRequest,
     signal?: AbortSignal,
   ): Promise<StartComparisonResult> {
-    return this.perform('startComparison', signal, () => {
-      this.comparisonSequence += 1;
-      const comparisonId = `mock-comparison-${this.seed}-${this.comparisonSequence}`;
-      const entries = buildMockComparisonEntries(
-        request.left.uri,
-        request.right.uri,
-        request.criteria,
-        request.showHidden ?? false,
-      );
-      this.comparisons.set(comparisonId, {
-        cancelled: false,
-        entries,
-        left: request.left,
-        right: request.right,
-        criteria: request.criteria,
-      });
-      // Deferred with a macrotask so it always runs after this method's own
-      // promise resolves and the caller has recorded `comparisonId`,
-      // mirroring `startSearch`'s race-avoidance for its results-batch event.
-      setTimeout(() => {
-        if (this.comparisons.get(comparisonId)?.cancelled ?? true) return;
-        this.eventSequence += 1;
-        this.emit({
-          eventId: this.eventSequence,
-          timestamp: '2026-01-01T00:00:00.000Z',
-          workspaceId: request.workspaceId,
-          payload: {
-            type: 'comparison.resultsBatch',
-            comparisonId,
-            entries,
-            isComplete: true,
-            warningsCount: 0,
-          },
-        });
-      }, 0);
-      return { comparisonId };
-    });
+    return this.operationClient.startComparison(request, signal);
   }
-
   getComparison(
     comparisonId: string,
     options?: { offset?: number; limit?: number; differencesOnly?: boolean },
     signal?: AbortSignal,
   ): Promise<ComparisonPage> {
-    return this.perform('getComparison', signal, () => {
-      const comparison = this.requireComparison(comparisonId);
-      const offset = options?.offset ?? 0;
-      const limit = options?.limit ?? 200;
-      const filtered =
-        (options?.differencesOnly ?? false)
-          ? comparison.entries.filter((entry) => entry.status !== 'identical')
-          : comparison.entries;
-      return {
-        comparisonId,
-        left: comparison.left,
-        right: comparison.right,
-        criteria: comparison.criteria,
-        offset,
-        limit,
-        total: filtered.length,
-        entries: filtered.slice(offset, offset + limit),
-        isComplete: true,
-        warningsCount: 0,
-      };
-    });
+    return this.operationClient.getComparison(comparisonId, options, signal);
   }
-
   cancelComparison(comparisonId: string, signal?: AbortSignal): Promise<void> {
-    return this.perform('cancelComparison', signal, () => {
-      this.requireComparison(comparisonId).cancelled = true;
-    });
+    return this.operationClient.cancelComparison(comparisonId, signal);
   }
-
   startChecksums(
     request: StartChecksumRequest,
     signal?: AbortSignal,
   ): Promise<StartChecksumResult> {
-    return this.perform('startChecksums', signal, () => {
-      this.checksumSequence += 1;
-      const jobId = `mock-checksum-${this.seed}-${this.checksumSequence}`;
-      const entries: ChecksumEntry[] = request.entries.map((location) => {
-        const content = this.fileContentFor(location.uri);
-        const checksums: Record<string, string> = {};
-        for (const algorithm of request.algorithms) {
-          checksums[algorithm] = mockDigest(location.uri, algorithm);
-        }
-        return {
-          location,
-          relativePath: lastSegment(location.uri),
-          size: content.byteLength,
-          checksums,
-        };
-      });
-      this.checksumJobs.set(jobId, {
-        cancelled: false,
-        entries,
-        algorithms: request.algorithms,
-      });
-      // Deferred with a macrotask for the same reason as `startComparison`:
-      // the caller must have recorded `jobId` before the batch arrives.
-      setTimeout(() => {
-        if (this.checksumJobs.get(jobId)?.cancelled ?? true) return;
-        this.eventSequence += 1;
-        this.emit({
-          eventId: this.eventSequence,
-          timestamp: '2026-01-01T00:00:00.000Z',
-          workspaceId: request.workspaceId,
-          payload: {
-            type: 'checksum.resultsBatch',
-            jobId,
-            entries,
-            isComplete: true,
-            isCancelled: false,
-          },
-        });
-      }, 0);
-      return { jobId };
-    });
+    return this.operationClient.startChecksums(request, signal);
   }
-
   getChecksums(
     jobId: string,
     options?: { offset?: number; limit?: number },
     signal?: AbortSignal,
   ): Promise<ChecksumPage> {
-    return this.perform('getChecksums', signal, () => {
-      const job = this.requireChecksumJob(jobId);
-      const offset = options?.offset ?? 0;
-      const limit = options?.limit ?? 200;
-      return {
-        jobId,
-        algorithms: job.algorithms,
-        offset,
-        limit,
-        total: job.entries.length,
-        totalEntries: job.entries.length,
-        entries: job.entries.slice(offset, offset + limit),
-        isComplete: true,
-        isCancelled: job.cancelled,
-        hasMore: offset + limit < job.entries.length,
-      };
-    });
+    return this.operationClient.getChecksums(jobId, options, signal);
   }
-
   cancelChecksums(jobId: string, signal?: AbortSignal): Promise<void> {
-    return this.perform('cancelChecksums', signal, () => {
-      this.requireChecksumJob(jobId).cancelled = true;
-    });
+    return this.operationClient.cancelChecksums(jobId, signal);
   }
-
   renderChecksumFile(
     jobId: string,
     algorithm: ChecksumAlgorithm,
     signal?: AbortSignal,
   ): Promise<ChecksumFile> {
-    return this.perform('renderChecksumFile', signal, () => {
-      const job = this.requireChecksumJob(jobId);
-      const lines = job.entries
-        .filter((entry) => entry.checksums[algorithm] !== undefined)
-        .map((entry) => `${entry.checksums[algorithm]}  ${entry.relativePath}`);
-      return {
-        suggestedName: `checksums.${algorithm}`,
-        content: `# ${algorithm}\n${lines.join('\n')}\n`,
-      };
-    });
+    return this.operationClient.renderChecksumFile(jobId, algorithm, signal);
   }
-
   saveChecksumFile(
     jobId: string,
     request: SaveChecksumFileRequest,
     signal?: AbortSignal,
   ): Promise<SavedChecksumFile> {
-    return this.perform('saveChecksumFile', signal, () => {
-      const job = this.requireChecksumJob(jobId);
-      const lines = job.entries
-        .filter((entry) => entry.checksums[request.algorithm] !== undefined)
-        .map((entry) => `${entry.checksums[request.algorithm]}  ${entry.relativePath}`);
-      const content = `# ${request.algorithm}\n${lines.join('\n')}\n`;
-      // The mock has no real filesystem; recording the bytes it would have
-      // written is enough to exercise the UI's save flow.
-      this.fileContents.set(request.destination.uri, new TextEncoder().encode(content));
-      return { location: request.destination, bytesWritten: content.length };
-    });
+    return this.operationClient.saveChecksumFile(jobId, request, signal);
   }
-
   verifyChecksumFile(
     jobId: string,
     content: string,
     signal?: AbortSignal,
   ): Promise<VerificationReport> {
-    return this.perform('verifyChecksumFile', signal, () => {
-      const job = this.requireChecksumJob(jobId);
-      const results: VerificationResult[] = [];
-      let matched = 0;
-      let mismatched = 0;
-      let missing = 0;
-      for (const line of content.split('\n')) {
-        const trimmed = line.trim();
-        if (trimmed === '' || trimmed.startsWith('#')) continue;
-        const [digest, ...rest] = trimmed.split(/ {2}| \*/);
-        const path = rest.join('  ');
-        if (digest === undefined || path === '') continue;
-        const entry = job.entries.find((candidate) => candidate.relativePath === path);
-        const actual = entry === undefined ? undefined : Object.values(entry.checksums)[0];
-        if (actual === undefined) {
-          missing += 1;
-          results.push({ path, status: 'missing' });
-        } else if (actual.toLowerCase() === digest.toLowerCase()) {
-          matched += 1;
-          results.push({ path, status: 'match' });
-        } else {
-          mismatched += 1;
-          results.push({ path, status: 'mismatch', expected: digest, actual });
-        }
-      }
-      return { jobId, results, matched, mismatched, missing };
-    });
+    return this.operationClient.verifyChecksumFile(jobId, content, signal);
   }
-
   startDuplicateScan(
     request: StartDuplicateScanRequest,
     signal?: AbortSignal,
   ): Promise<StartDuplicateScanResult> {
-    return this.perform('startDuplicateScan', signal, () => {
-      this.duplicateScanSequence += 1;
-      const scanId = `mock-duplicate-scan-${this.seed}-${this.duplicateScanSequence}`;
-      const groups = buildMockDuplicateGroups(request.roots);
-      this.duplicateScans.set(scanId, { cancelled: false, groups, roots: request.roots });
-      setTimeout(() => {
-        if (this.duplicateScans.get(scanId)?.cancelled ?? true) return;
-        this.eventSequence += 1;
-        this.emit({
-          eventId: this.eventSequence,
-          timestamp: '2026-01-01T00:00:00.000Z',
-          workspaceId: request.workspaceId,
-          payload: {
-            type: 'duplicates.resultsReady',
-            scanId,
-            groups,
-            isCancelled: false,
-            warningsCount: 0,
-          },
-        });
-      }, 0);
-      return { scanId };
-    });
+    return this.operationClient.startDuplicateScan(request, signal);
   }
-
   getDuplicateScan(
     scanId: string,
     options?: { offset?: number; limit?: number },
     signal?: AbortSignal,
   ): Promise<DuplicatePage> {
-    return this.perform('getDuplicateScan', signal, () => {
-      const scan = this.requireDuplicateScan(scanId);
-      const offset = options?.offset ?? 0;
-      const limit = options?.limit ?? 200;
-      const fullyHashed = scan.groups.reduce(
-        (total, group) => total + group.distinctLocations.length + group.hardlinkClusters.length,
-        0,
-      );
-      return {
-        scanId,
-        roots: scan.roots,
-        offset,
-        limit,
-        total: scan.groups.length,
-        groups: scan.groups.slice(offset, offset + limit),
-        isComplete: true,
-        isCancelled: scan.cancelled,
-        hasMore: offset + limit < scan.groups.length,
-        stats: {
-          candidates: fullyHashed + 2,
-          sizeSurvivors: fullyHashed,
-          partiallyHashed: fullyHashed,
-          fullyHashed,
-          bytesHashed: scan.groups.reduce(
-            (total, group) => total + group.size * group.distinctLocations.length,
-            0,
-          ),
-          failed: 0,
-        },
-        warningsCount: 0,
-      };
-    });
+    return this.operationClient.getDuplicateScan(scanId, options, signal);
   }
-
   cancelDuplicateScan(scanId: string, signal?: AbortSignal): Promise<void> {
-    return this.perform('cancelDuplicateScan', signal, () => {
-      this.requireDuplicateScan(scanId).cancelled = true;
-    });
+    return this.operationClient.cancelDuplicateScan(scanId, signal);
   }
-
   startMusicDuplicateScan(
     request: StartMusicDuplicateScanRequest,
     signal?: AbortSignal,
   ): Promise<StartMusicDuplicateScanResult> {
-    return this.perform('startMusicDuplicateScan', signal, () => {
-      const scanId = `mock-music-scan-${this.seed}-${this.musicScans.size + 1}`;
-      this.musicScans.set(scanId, { roots: request.roots, cancelled: false });
-      return { scanId };
-    });
+    return this.operationClient.startMusicDuplicateScan(request, signal);
   }
-
   getMusicDuplicateScan(
     scanId: string,
     options?: { offset?: number; limit?: number },
     signal?: AbortSignal,
   ): Promise<MusicDuplicatePage> {
-    return this.perform('getMusicDuplicateScan', signal, () => {
-      const scan = this.musicScans.get(scanId);
-      if (scan === undefined) throw new MockClientError('notFound', 'Unknown music scan');
-      const root = scan.roots[0]?.uri.replace(/\/$/, '') ?? 'file:///music';
-      const file = (name: string, lossless: boolean, bitrate: number, size: number) => ({
-        location: { providerId: scan.roots[0]?.providerId ?? 'local', uri: `${root}/${name}` },
-        size,
-        format: lossless ? 'flac' : 'mpeg',
-        lossless,
-        bitrateKbps: bitrate,
-        durationSeconds: 215,
-        artist: 'Example Artist',
-        title: 'Example Song',
-      });
-      const groups = [
-        {
-          confidence: 'likely' as const,
-          files: [
-            file('song.flac', true, 900, 30_000_000),
-            file('song.mp3', false, 192, 5_000_000),
-          ],
-          keepIndex: 0,
-          reclaimableBytes: 5_000_000,
-        },
-      ];
-      const offset = options?.offset ?? 0;
-      const limit = options?.limit ?? 200;
-      return {
-        scanId,
-        roots: scan.roots.map((location) => ({ ...location })),
-        phase: 'done' as const,
-        filesFound: 2,
-        filesProcessed: 2,
-        unreadableTags: 0,
-        offset,
-        limit,
-        total: groups.length,
-        groups: groups.slice(offset, offset + limit),
-        isComplete: true,
-        isCancelled: scan.cancelled,
-        hasMore: false,
-      };
-    });
+    return this.operationClient.getMusicDuplicateScan(scanId, options, signal);
   }
-
   cancelMusicDuplicateScan(scanId: string, signal?: AbortSignal): Promise<void> {
-    return this.perform('cancelMusicDuplicateScan', signal, () => {
-      const scan = this.musicScans.get(scanId);
-      if (scan === undefined) throw new MockClientError('notFound', 'Unknown music scan');
-      scan.cancelled = true;
-    });
+    return this.operationClient.cancelMusicDuplicateScan(scanId, signal);
   }
-
   forgetFolderView(_location: Location, signal?: AbortSignal): Promise<void> {
-    return this.perform('forgetFolderView', signal, () => undefined);
+    return this.operationClient.forgetFolderView(_location, signal);
   }
-
   startSnapshotJob(
     request: StartSnapshotJobRequest,
     signal?: AbortSignal,
   ): Promise<StartSnapshotJobResult> {
-    return this.perform('startSnapshotJob', signal, () => {
-      const jobId = `mock-snapshot-${this.seed}-${this.snapshotJobs.size + 1}`;
-      this.snapshotJobs.set(jobId, request);
-      return { jobId };
-    });
+    return this.operationClient.startSnapshotJob(request, signal);
   }
-
   getSnapshotJob(
     jobId: string,
     options?: { offset?: number; limit?: number },
     signal?: AbortSignal,
   ): Promise<SnapshotJobPage> {
-    return this.perform('getSnapshotJob', signal, () => {
-      const request = this.snapshotJobs.get(jobId);
-      if (request === undefined) throw new MockClientError('notFound', 'Unknown snapshot job');
-      const create = request.type === 'create';
-      const root = create ? request.root : request.target;
-      const entries = create
-        ? []
-        : [
-            {
-              kind: 'changed' as const,
-              path: 'docs/notes.txt',
-              location: {
-                providerId: root.providerId,
-                uri: `${root.uri.replace(/\/$/, '')}/docs/notes.txt`,
-              },
-              snapshotSize: 10,
-              currentSize: 12,
-              isDirectory: false,
-            },
-          ];
-      const offset = options?.offset ?? 0;
-      const limit = options?.limit ?? 200;
-      return {
-        jobId,
-        kind: create ? ('create' as const) : ('compare' as const),
-        phase: 'done' as const,
-        entriesFound: 3,
-        filesProcessed: 3,
-        bytesHashed: 0,
-        hasChecksums: create ? request.withChecksums : true,
-        ...(create ? { snapshot: request.destination } : {}),
-        root,
-        counts: { added: 0, removed: 0, changed: entries.length, corrupted: 0, unchanged: 2 },
-        offset,
-        limit,
-        total: entries.length,
-        entries: entries.slice(offset, offset + limit),
-        isComplete: true,
-        isCancelled: false,
-        hasMore: false,
-      };
-    });
+    return this.operationClient.getSnapshotJob(jobId, options, signal);
   }
-
   cancelSnapshotJob(jobId: string, signal?: AbortSignal): Promise<void> {
-    return this.perform('cancelSnapshotJob', signal, () => {
-      if (!this.snapshotJobs.has(jobId))
-        throw new MockClientError('notFound', 'Unknown snapshot job');
-    });
+    return this.operationClient.cancelSnapshotJob(jobId, signal);
   }
-
   startLinkDoctorScan(
     request: StartLinkDoctorScanRequest,
     signal?: AbortSignal,
   ): Promise<StartLinkDoctorScanResult> {
-    return this.perform('startLinkDoctorScan', signal, () => {
-      const scanId = `mock-link-scan-${this.seed}-${this.linkScans.size + 1}`;
-      this.linkScans.set(scanId, { roots: request.roots, cancelled: false });
-      return { scanId };
-    });
+    return this.operationClient.startLinkDoctorScan(request, signal);
   }
-
   getLinkDoctorScan(
     scanId: string,
     options?: { offset?: number; limit?: number },
     signal?: AbortSignal,
   ): Promise<LinkDoctorPage> {
-    return this.perform('getLinkDoctorScan', signal, () => {
-      const scan = this.linkScans.get(scanId);
-      if (scan === undefined) throw new MockClientError('notFound', 'Unknown link scan');
-      const root = scan.roots[0]?.uri.replace(/\/$/, '') ?? 'file:///docs';
-      const providerId = scan.roots[0]?.providerId ?? 'local';
-      const problems = [
-        {
-          kind: 'missingDocumentLink' as const,
-          source: { providerId, uri: `${root}/readme.md` },
-          target: 'docs/missing.md',
-          resolved: { providerId, uri: `${root}/docs/missing.md` },
-          line: 3,
-        },
-      ];
-      const offset = options?.offset ?? 0;
-      const limit = options?.limit ?? 200;
-      return {
-        scanId,
-        roots: scan.roots.map((location) => ({ ...location })),
-        entriesScanned: 12,
-        linksChecked: 7,
-        offset,
-        limit,
-        total: problems.length,
-        problems: problems.slice(offset, offset + limit),
-        isComplete: true,
-        isCancelled: scan.cancelled,
-        hasMore: false,
-      };
-    });
+    return this.operationClient.getLinkDoctorScan(scanId, options, signal);
   }
-
   cancelLinkDoctorScan(scanId: string, signal?: AbortSignal): Promise<void> {
-    return this.perform('cancelLinkDoctorScan', signal, () => {
-      const scan = this.linkScans.get(scanId);
-      if (scan === undefined) throw new MockClientError('notFound', 'Unknown link scan');
-      scan.cancelled = true;
-    });
+    return this.operationClient.cancelLinkDoctorScan(scanId, signal);
   }
-
   findLinkReplacements(
     request: FindLinkReplacementsRequest,
     signal?: AbortSignal,
   ): Promise<FindLinkReplacementsResult> {
-    return this.perform('findLinkReplacements', signal, () => {
-      const root = request.roots[0];
-      return {
-        candidates:
-          root === undefined
-            ? []
-            : [
-                {
-                  location: {
-                    providerId: root.providerId,
-                    uri: `${root.uri.replace(/\/$/, '')}/moved/${request.targetName}`,
-                  },
-                  size: request.expectedSize ?? 100,
-                  sameSize: true,
-                  exactName: true,
-                },
-              ],
-        truncated: false,
-      };
-    });
+    return this.operationClient.findLinkReplacements(request, signal);
   }
-
   generateSyncPlan(
     comparisonId: string,
     request: GenerateSyncPlanRequest,
     signal?: AbortSignal,
   ): Promise<SyncPlan> {
-    return this.perform('generateSyncPlan', signal, () => {
-      const comparison = this.requireComparison(comparisonId);
-      const items = comparison.entries
-        .filter((entry) => entry.status !== 'identical')
-        .filter((entry) => admitsPath(entry.relativePath, request.include, request.exclude))
-        .map((entry) => ({
-          relativePath: entry.relativePath,
-          status: entry.status,
-          action: defaultSyncAction(entry.status, request.mode),
-          ...(entry.left === undefined ? {} : { left: entry.left }),
-          ...(entry.right === undefined ? {} : { right: entry.right }),
-        }));
-      return { comparisonId, items };
-    });
+    return this.operationClient.generateSyncPlan(comparisonId, request, signal);
   }
-
   applySyncPlan(
     comparisonId: string,
     request: ApplySyncPlanRequest,
     signal?: AbortSignal,
   ): Promise<ApplySyncPlanResult> {
-    return this.perform('applySyncPlan', signal, () => {
-      const comparison = this.requireComparison(comparisonId);
-      const operationIds: OperationId[] = [];
-      for (const item of request.items) {
-        if (item.action === 'skip') continue;
-        this.operationSequence += 1;
-        const operationId = `mock-operation-${this.seed}-${this.operationSequence}`;
-        const isDelete = item.action === 'deleteLeft' || item.action === 'deleteRight';
-        const sourceRoot =
-          item.action === 'copyRightToLeft' || item.action === 'deleteRight'
-            ? comparison.right
-            : comparison.left;
-        const source: Location = {
-          providerId: sourceRoot.providerId,
-          uri: `${sourceRoot.uri}/${item.relativePath}`,
-        };
-        this.operations.set(operationId, {
-          id: operationId,
-          kind: isDelete ? 'delete' : 'copy',
-          state: 'completed',
-          sources: [{ id: source.uri, location: source }],
-          progress: { completedItems: 1, completedBytes: 0 },
-          conflictPolicy: request.conflictPolicy ?? 'overwrite',
-          createdAt: '2026-01-01T00:00:00.000Z',
-          startedAt: '2026-01-01T00:00:00.000Z',
-        });
-        operationIds.push(operationId);
-      }
-      return { operationIds };
-    });
+    return this.operationClient.applySyncPlan(comparisonId, request, signal);
   }
-
   subscribe(listener: (event: BackendEvent) => void): Promise<Unsubscribe> {
-    this.connection.set('open');
-    this.listeners.add(listener);
-    return Promise.resolve(() => {
-      this.listeners.delete(listener);
-    });
+    return this.connectionClient.subscribe(listener);
   }
-
   disconnect(): void {
-    this.connection.set('closed');
+    this.connectionClient.disconnect();
   }
-
   onResynchronise(listener: () => void): Unsubscribe {
-    return this.resynchronise.subscribe(listener);
+    return this.connectionClient.onResynchronise(listener);
   }
-
-  /** Simulates a replay gap requiring affected panes to refetch. */
-  emitResynchronise(): void {
-    this.resynchronise.dispatch();
-  }
-
-  /** Replaces the pending event script; call {@link emitNextEvent} to advance it. */
-  scriptEvents(events: readonly BackendEvent[]): void {
-    this.scriptedEvents.splice(0, this.scriptedEvents.length, ...structuredClone(events));
-  }
-
-  /** Delivers one pending scripted event to every active subscriber. */
-  emitNextEvent(): boolean {
-    const event = this.scriptedEvents.shift();
-    if (event === undefined) {
-      return false;
-    }
-    this.emit(event);
-    return true;
-  }
-
-  /** Delivers an event immediately to every active subscriber. */
-  emit(event: BackendEvent): void {
-    for (const listener of this.listeners) {
-      listener(structuredClone(event));
-    }
-  }
-
   listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]> {
-    return this.perform('listLlmProfilePresets', signal, () => {
-      const defaults: Pick<LlmProfilePreset, 'model' | 'advanced' | 'capabilities'> = {
-        model: '',
-        advanced: {
-          contextWindow: 8192,
-          maximumAnswerTokens: 1024,
-          temperature: 0.2,
-          timeoutSeconds: 30,
-          tlsPolicy: 'requireValidCertificate' as const,
-          customHeaders: {},
-        },
-        capabilities: ['chatCompletions', 'modelDiscovery'],
-      };
-      return [
-        {
-          ...defaults,
-          name: 'Ollama',
-          preset: 'ollama',
-          baseUrl: 'http://127.0.0.1:11434',
-          redactFilenames: false,
-        },
-        {
-          ...defaults,
-          name: 'LM Studio',
-          preset: 'lmStudio',
-          baseUrl: 'http://127.0.0.1:1234',
-          redactFilenames: false,
-        },
-        {
-          ...defaults,
-          name: 'vLLM',
-          preset: 'vllm',
-          baseUrl: 'http://127.0.0.1:8000',
-          redactFilenames: false,
-        },
-        {
-          ...defaults,
-          name: 'SGLang',
-          preset: 'sglang',
-          baseUrl: 'http://127.0.0.1:30000',
-          redactFilenames: false,
-        },
-        {
-          ...defaults,
-          name: 'OMLX',
-          preset: 'omlx',
-          baseUrl: 'http://127.0.0.1:8080',
-          redactFilenames: false,
-        },
-        {
-          ...defaults,
-          name: 'mlx-serve',
-          preset: 'mlxServe',
-          baseUrl: 'http://127.0.0.1:11234',
-          redactFilenames: false,
-        },
-        {
-          ...defaults,
-          name: 'OpenAI-compatible',
-          preset: 'openAiCompatible',
-          baseUrl: 'https://api.openai.com',
-          redactFilenames: true,
-        },
-        {
-          ...defaults,
-          name: 'Azure OpenAI',
-          preset: 'azureOpenAi',
-          baseUrl: 'https://example.openai.azure.com',
-          apiVersion: '2024-10-21',
-          redactFilenames: true,
-        },
-      ];
-    });
+    return this.semanticClient.listLlmProfilePresets(signal);
   }
-
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
-    return this.perform('listLlmProfiles', signal, () =>
-      [...this.llmProfiles.values()]
-        .sort(
-          (left, right) =>
-            Number(right.id === this.activeLlmProfileId) -
-            Number(left.id === this.activeLlmProfileId),
-        )
-        .map((profile) => structuredClone(profile)),
-    );
+    return this.semanticClient.listLlmProfiles(signal);
   }
-
   createLlmProfile(request: SaveLlmProfileRequest, signal?: AbortSignal): Promise<LlmProfile> {
-    return this.perform('createLlmProfile', signal, () => {
-      this.llmProfileSequence += 1;
-      const host = new URL(request.baseUrl).hostname.toLowerCase();
-      const profile: LlmProfile = {
-        ...structuredClone(request),
-        id: `00000000-0000-4000-8000-${String(this.llmProfileSequence).padStart(12, '0')}`,
-        hasCredential: request.credential != null,
-        locality:
-          host === 'localhost' || host === '127.0.0.1' || host === '::1' ? 'loopback' : 'cloud',
-        consentedHost: null,
-      };
-      this.llmProfiles.set(profile.id, profile);
-      this.activeLlmProfileId ??= profile.id;
-      return structuredClone(profile);
-    });
+    return this.semanticClient.createLlmProfile(request, signal);
   }
-
   updateLlmProfile(
     profileId: string,
     request: SaveLlmProfileRequest,
     signal?: AbortSignal,
   ): Promise<LlmProfile> {
-    return this.perform('updateLlmProfile', signal, () => {
-      const current = this.requireLlmProfile(profileId);
-      const host = new URL(request.baseUrl).hostname.toLowerCase();
-      const endpoint = new URL(request.baseUrl).href.replace(/\/$/u, '');
-      const oldEndpoint = new URL(current.baseUrl).href.replace(/\/$/u, '');
-      const profile: LlmProfile = {
-        ...structuredClone(request),
-        id: profileId,
-        hasCredential: request.credential != null || current.hasCredential,
-        locality:
-          host === 'localhost' || host === '127.0.0.1' || host === '::1' ? 'loopback' : 'cloud',
-        consentedHost: endpoint === oldEndpoint ? (current.consentedHost ?? null) : null,
-      };
-      this.llmProfiles.set(profileId, profile);
-      return structuredClone(profile);
-    });
+    return this.semanticClient.updateLlmProfile(profileId, request, signal);
   }
-
   deleteLlmProfile(
     profileId: string,
     _request: DeleteLlmProfileRequest,
     signal?: AbortSignal,
   ): Promise<void> {
-    return this.perform('deleteLlmProfile', signal, () => {
-      this.requireLlmProfile(profileId);
-      this.llmProfiles.delete(profileId);
-      if (this.activeLlmProfileId === profileId) {
-        this.activeLlmProfileId = this.llmProfiles.keys().next().value;
-      }
-    });
+    return this.semanticClient.deleteLlmProfile(profileId, _request, signal);
   }
-
   cloneLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfile> {
-    return this.perform('cloneLlmProfile', signal, () => {
-      const source = this.requireLlmProfile(profileId);
-      this.llmProfileSequence += 1;
-      const clone: LlmProfile = {
-        ...structuredClone(source),
-        id: `00000000-0000-4000-8000-${String(this.llmProfileSequence).padStart(12, '0')}`,
-        name: `${source.name} copy`,
-        hasCredential: false,
-        consentedHost: null,
-      };
-      this.llmProfiles.set(clone.id, clone);
-      return structuredClone(clone);
-    });
+    return this.semanticClient.cloneLlmProfile(profileId, signal);
   }
-
   exportLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileExport> {
-    return this.perform('exportLlmProfile', signal, () => {
-      const profile = this.requireLlmProfile(profileId);
-      return structuredClone({
-        name: profile.name,
-        preset: profile.preset,
-        baseUrl: profile.baseUrl,
-        deployment: profile.deployment ?? null,
-        apiVersion: profile.apiVersion ?? null,
-        model: profile.model,
-        advanced: profile.advanced,
-        capabilities: profile.capabilities,
-        redactFilenames: profile.redactFilenames,
-      });
-    });
+    return this.semanticClient.exportLlmProfile(profileId, signal);
   }
-
   activateLlmProfile(
     profileId: string,
     consent: boolean,
     signal?: AbortSignal,
   ): Promise<LlmProfile> {
-    return this.perform('activateLlmProfile', signal, () => {
-      const profile = this.requireLlmProfile(profileId);
-      const endpoint = new URL(profile.baseUrl).href.replace(/\/$/u, '');
-      if (profile.locality === 'cloud' && !consent && profile.consentedHost !== endpoint) {
-        throw new MockClientError('invalidRequest', 'Cloud consent is required', {
-          reason: 'cloudConsentRequired',
-          host: new URL(profile.baseUrl).host,
-        });
-      }
-      const activated: LlmProfile = {
-        ...profile,
-        consentedHost: profile.locality === 'cloud' ? endpoint : null,
-      };
-      this.llmProfiles.set(profileId, activated);
-      this.activeLlmProfileId = profileId;
-      return structuredClone(activated);
-    });
+    return this.semanticClient.activateLlmProfile(profileId, consent, signal);
   }
-
   testLlmProfile(profileId: string, signal?: AbortSignal): Promise<LlmProfileTestResult> {
-    return this.perform('testLlmProfile', signal, () => {
-      const profile = this.requireLlmProfile(profileId);
-      const success = profile.model.trim().length > 0;
-      const availableModels =
-        profile.capabilities.includes('modelDiscovery') && profile.preset !== 'azureOpenAi'
-          ? [profile.model, 'model-b']
-          : null;
-      return {
-        profileId,
-        provider: profile.preset,
-        locality: profile.locality,
-        success,
-        category: success ? null : 'modelUnavailable',
-        durationMs: 1,
-        modelAvailable: success,
-        availableModels,
-        capabilities: [...profile.capabilities],
-      };
-    });
+    return this.semanticClient.testLlmProfile(profileId, signal);
   }
-
   discoverLlmProfileModels(profileId: string, signal?: AbortSignal): Promise<string[]> {
-    return this.perform('discoverLlmProfileModels', signal, () => {
-      const profile = this.requireLlmProfile(profileId);
-      return profile.capabilities.includes('modelDiscovery') && profile.preset !== 'azureOpenAi'
-        ? [profile.model, 'model-b']
-        : [];
-    });
+    return this.semanticClient.discoverLlmProfileModels(profileId, signal);
   }
-
   discoverLlmProfileDraftModels(
     request: SaveLlmProfileRequest,
     signal?: AbortSignal,
   ): Promise<string[]> {
-    return this.perform('discoverLlmProfileDraftModels', signal, () =>
-      request.capabilities.includes('modelDiscovery') && request.preset !== 'azureOpenAi'
-        ? ['model-a', 'model-b']
-        : [],
-    );
+    return this.semanticClient.discoverLlmProfileDraftModels(request, signal);
   }
-
   discoverLlmProfileDraftModelLimits(
     request: SaveLlmProfileRequest,
     signal?: AbortSignal,
   ): Promise<LlmModelLimits> {
-    return this.perform('discoverLlmProfileDraftModelLimits', signal, () => ({
-      contextWindow: request.model === 'model-a' ? 131_072 : null,
-      maximumAnswerTokens: request.model === 'model-a' ? 8_192 : null,
-      contextWindowCap: 1_048_576,
-      maximumAnswerTokensCap: 16_384,
-    }));
+    return this.semanticClient.discoverLlmProfileDraftModelLimits(request, signal);
   }
-
   previewDocumentSummary(
     request: PreviewDocumentSummaryRequest,
     signal?: AbortSignal,
   ): Promise<DocumentSummaryPreview> {
-    return this.perform('previewDocumentSummary', signal, () => {
-      const profile =
-        request.profileId == null ? undefined : this.requireLlmProfile(request.profileId);
-      const visualCount = mockSummaryVisualCount(request.target.location.uri);
-      const imageInputAvailable = profile?.preset === 'ollama' && visualCount > 0;
-      return {
-        selectionFingerprint: `mock-summary-${request.target.entryId}`,
-        representativeTokens: Math.min(request.inputTokenBudget, 72),
-        sourceTokens: request.target.location.uri.includes('large-report') ? 12_288 : 72,
-        textPreview: 'Overview\n\nA representative passage from the selected document.',
-        textPreviewTruncated: request.target.location.uri.includes('large-report'),
-        selectionMode:
-          request.inputTokenBudget > 4_096 && !request.target.location.uri.includes('large-report')
-            ? 'fullDocument'
-            : 'representativePassages',
-        sourcePassCount: request.target.location.uri.includes('large-report') ? 2 : 1,
-        effectiveContextWindow: profile?.advanced.contextWindow ?? null,
-        providerLimitVerified: profile?.preset === 'ollama',
-        imageInputAvailable,
-        includedImageCount: request.includeImages && imageInputAvailable ? visualCount : 0,
-        omittedImageCount: 0,
-        keyPassages: [
-          {
-            label: 'S1',
-            chunkId: `mock-chunk-${request.target.entryId}`,
-            content: 'Overview\n\nA representative passage from the selected document.',
-            sectionPath: ['Overview'],
-            provenance: '{"kind":"textLines","start_line":1,"end_line":3}',
-            clusterPopulation: 1,
-            weight: 1,
-            structuralAnchor: true,
-          },
-        ],
-        profile:
-          profile === undefined
-            ? null
-            : {
-                profileId: profile.id,
-                profileName: profile.name,
-                modelId: profile.model,
-                locality: profile.locality,
-              },
-        reusedSelection: this.documentSummaries.has(request.target.entryId),
-      };
-    });
+    return this.semanticClient.previewDocumentSummary(request, signal);
   }
-
   generateDocumentSummary(
     request: GenerateDocumentSummaryRequest,
     signal?: AbortSignal,
   ): Promise<DocumentSummary> {
-    return this.perform('generateDocumentSummary', signal, () => {
-      const profile = this.requireLlmProfile(request.profileId);
-      const expected = `mock-summary-${request.target.entryId}`;
-      if (request.expectedSelectionFingerprint !== expected) {
-        throw new MockClientError('invalidRequest', 'Document summary confirmation is stale', {
-          reason: 'summaryConfirmationStale',
-        });
-      }
-      const summary: DocumentSummary = {
-        recordId: `mock-generated-${request.target.entryId}`,
-        sourceGeneration: 1,
-        profileId: profile.id,
-        modelId: profile.model,
-        supportingChunkIds: [`mock-chunk-${request.target.entryId}`],
-        supportingWeights: [1],
-        createdAtMs: Date.now(),
-        brief: 'A concise document summary.',
-        full: 'A fuller summary grounded in the selected document evidence.',
-        stale: false,
-      };
-      this.documentSummaries.set(request.target.entryId, summary);
-      return structuredClone(summary);
-    });
+    return this.semanticClient.generateDocumentSummary(request, signal);
   }
-
   getDocumentSummary(
     request: GetDocumentSummaryRequest,
     signal?: AbortSignal,
   ): Promise<DocumentSummary | null> {
-    return this.perform('getDocumentSummary', signal, () => {
-      const summary = this.documentSummaries.get(request.target.entryId);
-      return summary === undefined ? null : structuredClone(summary);
-    });
+    return this.semanticClient.getDocumentSummary(request, signal);
   }
-
   getCorpusThemeStatus(
     _request: GetCorpusThemeStatusRequest,
     signal?: AbortSignal,
   ): Promise<CorpusThemeStatus> {
-    return this.perform('getCorpusThemeStatus', signal, () => mockCorpusThemeStatus());
+    return this.semanticClient.getCorpusThemeStatus(_request, signal);
   }
-
   analyzeCorpusThemes(
     _request: AnalyzeCorpusThemesRequest,
     signal?: AbortSignal,
   ): Promise<CorpusThemesResponse> {
-    return this.perform('analyzeCorpusThemes', signal, () => ({
-      outcome: 'ready',
-      modelId: 'mock-embedding-model',
-      themes: mockCorpusThemes(),
-    }));
+    return this.semanticClient.analyzeCorpusThemes(_request, signal);
   }
-
   getCorpusThemeSources(
     request: GetCorpusThemeSourcesRequest,
     signal?: AbortSignal,
   ): Promise<CorpusThemeSources> {
-    return this.perform('getCorpusThemeSources', signal, () => {
-      const themes = mockCorpusThemes();
-      if (request.fingerprint !== themes.fingerprint) {
-        throw new MockClientError('invalidRequest', 'the corpus themes are out of date', {
-          reason: 'corpusThemesStale',
-        });
-      }
-      const sourceIds = themes.documentMixtures
-        .filter((mixture) =>
-          mixture.shares.some((share) => (share.theme ?? null) === (request.theme ?? null)),
-        )
-        .map((mixture) => mixture.sourceId);
-      return { sourceIds, truncated: false };
-    });
+    return this.semanticClient.getCorpusThemeSources(request, signal);
   }
-
   previewRag(request: PreviewRagRequest, signal?: AbortSignal): Promise<RagPreview> {
-    return this.perform('previewRag', signal, () => {
-      const requestedStrategy = request.retrievalStrategy ?? 'singleQuery';
-      const plannedQueries =
-        requestedStrategy === 'multiQuery'
-          ? [
-              request.question,
-              `${request.question} key facts`,
-              `${request.question} supporting details`,
-            ]
-          : [request.question];
-      return {
-        appliedStrategy: requestedStrategy,
-        coverage: {
-          eligible: 3,
-          indexed: 3,
-          pending: 0,
-          failed: 0,
-          excluded: 0,
-          stale: 0,
-          unavailable: 0,
-        },
-        evidence: [
-          {
-            available: true,
-            excerpt: `Mock indexed evidence relevant to "${request.question}".`,
-            generated: false,
-            label: 'C1',
-            sourceId: 'mock-source-1',
-            provenance: 'section 1',
-            score: 0.91,
-            sectionPath: ['Overview'],
-            stale: false,
-            title: 'Example indexed document',
-          },
-        ],
-        evidenceTokens: 18,
-        fallbackReason: null,
-        fusionVersion: requestedStrategy === 'multiQuery' ? 'reciprocal-rank-fusion/1' : null,
-        insufficient: false,
-        locality: 'loopback',
-        plannedQueries,
-        plannerVersion: requestedStrategy === 'multiQuery' ? 'grounded-rag-query-planner/1' : null,
-        profileId: request.profileId,
-        profileName: 'Local mock profile',
-        requestedStrategy,
-        retrievalFingerprint: `mock-rag-${request.profileId}-${requestedStrategy}-${request.question}`,
-        scope: structuredClone(request.scope),
-      };
-    });
+    return this.semanticClient.previewRag(request, signal);
   }
-
   generateRagAnswer(
     request: GenerateRagAnswerRequest,
     signal?: AbortSignal,
   ): Promise<GenerateRagAnswerResponse> {
-    return this.perform('generateRagAnswer', signal, () => {
-      const requestedStrategy = request.retrievalStrategy ?? 'singleQuery';
-      const expectedFingerprint = `mock-rag-${request.profileId}-${requestedStrategy}-${request.question}`;
-      if (request.expectedRetrievalFingerprint !== expectedFingerprint) {
-        throw new MockClientError(
-          'knowledgeEvidenceRefreshRequired',
-          'Ask evidence confirmation is stale',
-        );
-      }
-      const preview: RagPreview = {
-        appliedStrategy: requestedStrategy,
-        coverage: {
-          eligible: 3,
-          indexed: 3,
-          pending: 0,
-          failed: 0,
-          excluded: 0,
-          stale: 0,
-          unavailable: 0,
-        },
-        evidence: [
-          {
-            available: true,
-            excerpt: `Mock indexed evidence relevant to "${request.question}".`,
-            generated: false,
-            label: 'C1',
-            sourceId: 'mock-source-1',
-            provenance: 'section 1',
-            score: 0.91,
-            sectionPath: ['Overview'],
-            stale: false,
-            title: 'Example indexed document',
-          },
-        ],
-        evidenceTokens: 18,
-        fallbackReason: null,
-        fusionVersion: requestedStrategy === 'multiQuery' ? 'reciprocal-rank-fusion/1' : null,
-        insufficient: false,
-        locality: 'loopback',
-        plannedQueries:
-          requestedStrategy === 'multiQuery'
-            ? [
-                request.question,
-                `${request.question} key facts`,
-                `${request.question} supporting details`,
-              ]
-            : [request.question],
-        plannerVersion: requestedStrategy === 'multiQuery' ? 'grounded-rag-query-planner/1' : null,
-        profileId: request.profileId,
-        profileName: 'Local mock profile',
-        requestedStrategy,
-        retrievalFingerprint: expectedFingerprint,
-        scope: structuredClone(request.scope),
-      };
-      const answer: RagAnswer = {
-        text: 'This answer is grounded in the selected local evidence [C1].',
-        citations: [
-          {
-            generated: false,
-            label: 'C1',
-            provenance: 'section 1',
-            sourceId: 'mock-source-1',
-            stale: false,
-            unavailable: false,
-          },
-        ],
-        modelKnowledgeAllowed: request.allowModelKnowledge,
-      };
-      const conversationId =
-        request.conversationId ?? `rag-${this.ephemeralRagConversations.size + 1}`;
-      const existing = this.ephemeralRagConversations.get(conversationId);
-      if (
-        existing !== undefined &&
-        (existing.profileId !== request.profileId ||
-          existing.scope.kind !== request.scope.kind ||
-          existing.modelKnowledgeAllowed !== request.allowModelKnowledge ||
-          existing.retrievalStrategy !== requestedStrategy)
-      ) {
-        throw new MockClientError(
-          'invalidRequest',
-          'Conversation profile, scope, and knowledge mode cannot change',
-          { reason: 'conversationImmutable' },
-        );
-      }
-      this.ephemeralRagConversations.set(conversationId, {
-        id: conversationId,
-        modelKnowledgeAllowed: request.allowModelKnowledge,
-        profileId: request.profileId,
-        retrievalStrategy: requestedStrategy,
-        scope: structuredClone(request.scope),
-        storageBytes: 0,
-        turns: [...(existing?.turns ?? []), { question: request.question, answer }],
-      });
-      return {
-        conversationId,
-        events: [
-          { type: 'retrieval', preview },
-          { type: 'token', text: answer.text },
-          { type: 'done', answer },
-        ],
-      };
-    });
+    return this.semanticClient.generateRagAnswer(request, signal);
   }
-
   saveRagConversation(
     request: SaveRagConversationRequest,
     signal?: AbortSignal,
   ): Promise<SavedRagConversation> {
-    return this.perform('saveRagConversation', signal, () => {
-      const conversation = this.ephemeralRagConversations.get(request.conversationId);
-      if (conversation === undefined || conversation.scope.workspaceId !== request.workspaceId) {
-        throw new MockClientError('notFound', 'Ask conversation not found');
-      }
-      const saved = {
-        ...structuredClone(conversation),
-        storageBytes: JSON.stringify(conversation).length,
-      };
-      this.ragConversations.set(saved.id, saved);
-      return structuredClone(saved);
-    });
+    return this.semanticClient.saveRagConversation(request, signal);
   }
-
   listSavedRagConversations(
     workspaceId: WorkspaceId,
     signal?: AbortSignal,
   ): Promise<SavedRagConversation[]> {
-    return this.perform('listSavedRagConversations', signal, () =>
-      [...this.ragConversations.values()]
-        .filter((conversation) => conversation.scope.workspaceId === workspaceId)
-        .map((conversation) => structuredClone(conversation)),
-    );
+    return this.semanticClient.listSavedRagConversations(workspaceId, signal);
   }
-
   deleteRagConversation(
     request: DeleteRagConversationRequest,
     signal?: AbortSignal,
   ): Promise<void> {
-    return this.perform('deleteRagConversation', signal, () => {
-      const conversation = this.ragConversations.get(request.conversationId);
-      if (conversation === undefined) {
-        throw new MockClientError('notFound', 'Ask conversation not found');
-      }
-      this.ragConversations.delete(request.conversationId);
-    });
+    return this.semanticClient.deleteRagConversation(request, signal);
   }
-
   resolveRagCitation(
     request: ResolveRagCitationRequest,
     signal?: AbortSignal,
   ): Promise<ResolvedRagCitation> {
-    return this.perform('resolveRagCitation', signal, () => {
-      if (request.sourceId !== 'mock-source-1') {
-        throw new MockClientError('notFound', 'Citation not found');
-      }
-      return {
-        entryId: '11111111-1111-4111-8111-111111111111',
-        location: { providerId: 'local', uri: 'file:///documents/report.txt' },
-        available: true,
-      };
-    });
+    return this.semanticClient.resolveRagCitation(request, signal);
   }
-
-  /**
-   * Reports full-text retrieval, no query embeddings, and answer generation
-   * only when this host has a saved generation profile (task 0207). Search
-   * never depends on the answer capability.
-   */
   getKnowledgeCapabilities(signal?: AbortSignal): Promise<KnowledgeCapabilities> {
-    return this.perform('getKnowledgeCapabilities', signal, () =>
-      mockKnowledgeCapabilities(this.llmProfiles.size > 0),
-    );
+    return this.semanticClient.getKnowledgeCapabilities(signal);
   }
-
   listKnowledgeRoots(
     request: ListKnowledgeRootsRequest,
     signal?: AbortSignal,
   ): Promise<KnowledgeRoot[]> {
-    return this.perform('listKnowledgeRoots', signal, () => {
-      if (request.workspaceId.length === 0) {
-        throw new MockClientError('workspaceRequired', 'Knowledge roots require a workspace');
-      }
-      return mockKnowledgeRoots();
-    });
+    return this.semanticClient.listKnowledgeRoots(request, signal);
   }
-
   parseKnowledgeQuery(
     request: ParseKnowledgeQueryRequest,
     signal?: AbortSignal,
   ): Promise<KnowledgeQueryInterpretation> {
-    return this.perform('parseKnowledgeQuery', signal, () => parseMockKnowledgeQuery(request.text));
+    return this.semanticClient.parseKnowledgeQuery(request, signal);
   }
-
   planKnowledgeSearch(
     request: PlanKnowledgeSearchRequest,
     signal?: AbortSignal,
   ): Promise<KnowledgeSearchPlan> {
-    return this.perform('planKnowledgeSearch', signal, () => this.knowledgePlan(request));
+    return this.semanticClient.planKnowledgeSearch(request, signal);
   }
-
-  /**
-   * Runs the deterministic no-LLM search. Cancellation is honoured both ways:
-   * an aborted `signal` rejects, and a `cancelKnowledgeSearch` for the same
-   * `requestId` (which is how the Tauri host cancels) makes the in-flight
-   * search reject with the same `AbortError`.
-   *
-   * An already-aborted signal rejects before anything else is inspected, so a
-   * cancelled request never reports a capability or validation failure the
-   * caller did not actually wait for - the same order the desktop host uses.
-   */
-  async executeKnowledgeSearch(
+  executeKnowledgeSearch(
     request: ExecuteKnowledgeSearchRequest,
     signal?: AbortSignal,
   ): Promise<KnowledgeSearchResult> {
-    if (signal?.aborted === true) {
-      throw new DOMException('The operation was aborted.', 'AbortError');
-    }
-    if (mockKnowledgeRouteUnavailable(request.mode ?? 'hybrid')) {
-      throw new MockClientError('unavailable', 'Semantic retrieval is unavailable');
-    }
-    const controller = new AbortController();
-    const forward = (): void => controller.abort();
-    signal?.addEventListener('abort', forward, { once: true });
-    this.knowledgeSearches.set(request.requestId, controller);
-    try {
-      const result = await this.perform('executeKnowledgeSearch', controller.signal, () =>
-        executeMockKnowledgeSearch(
-          request.requestId,
-          this.knowledgePlan(request),
-          this.llmProfiles.size > 0,
-        ),
-      );
-      if (controller.signal.aborted) {
-        throw new DOMException('The operation was aborted.', 'AbortError');
-      }
-      // Retaining the displayed set is the only bridge to an optional answer:
-      // answering later reads this, never a fresh retrieval (task 0207).
-      this.knowledgeEvidence.record(result.evidenceFingerprint, {
-        workspaceId: request.scope.workspaceId,
-        evidence: result.evidence.map((row) => structuredClone(row)),
-      });
-      return result;
-    } finally {
-      signal?.removeEventListener('abort', forward);
-      this.knowledgeSearches.delete(request.requestId);
-    }
+    return this.semanticClient.executeKnowledgeSearch(request, signal);
   }
-
-  /**
-   * Cancellation is applied immediately rather than behind the simulated
-   * latency, because a cancel that arrives after the work it cancels would
-   * never be observable - the desktop host registers the same `requestId` with
-   * its coordinator before the search starts.
-   */
   cancelKnowledgeSearch(
     request: CancelKnowledgeSearchRequest,
     signal?: AbortSignal,
   ): Promise<void> {
-    this.knowledgeSearches.get(request.requestId)?.abort();
-    this.knowledgeSearches.delete(request.requestId);
-    return this.perform('cancelKnowledgeSearch', signal, () => undefined);
+    return this.semanticClient.cancelKnowledgeSearch(request, signal);
   }
-
   resolveKnowledgeSource(
     request: ResolveKnowledgeSourceRequest,
     signal?: AbortSignal,
   ): Promise<KnowledgeSourceLocation> {
-    return this.perform('resolveKnowledgeSource', signal, () => {
-      if (request.workspaceId.length === 0) {
-        throw new MockClientError('workspaceRequired', 'Knowledge sources require a workspace');
-      }
-      const resolved = resolveMockKnowledgeSource(request.sourceId);
-      if (resolved === undefined) {
-        throw new MockClientError('notFound', 'Knowledge source not found');
-      }
-      return resolved;
-    });
+    return this.semanticClient.resolveKnowledgeSource(request, signal);
   }
-
-  /**
-   * Answers from an evidence set an earlier search already displayed (task
-   * 0207). Nothing here retrieves: an unknown, evicted, or differently
-   * authorized fingerprint is refused with `knowledgeEvidenceRefreshRequired`,
-   * so the user must run Search again rather than have retrieval reappear.
-   *
-   * Cancellation is honoured both ways, exactly like a knowledge search: an
-   * aborted `signal` rejects, and a `cancelKnowledgeAnswer` for the same
-   * `requestId` (which is how the desktop host cancels) makes the in-flight
-   * generation reject with the same `AbortError`.
-   */
-  async generateKnowledgeAnswer(
+  generateKnowledgeAnswer(
     request: GenerateKnowledgeAnswerRequest,
     signal?: AbortSignal,
   ): Promise<KnowledgeAnswer> {
-    if (signal?.aborted === true) {
-      throw new DOMException('The operation was aborted.', 'AbortError');
-    }
-    const controller = new AbortController();
-    const forward = (): void => controller.abort();
-    signal?.addEventListener('abort', forward, { once: true });
-    this.knowledgeAnswers.set(request.requestId, controller);
-    try {
-      const answer = await this.perform('generateKnowledgeAnswer', controller.signal, () => {
-        const retained = this.knowledgeEvidence.get(
-          request.evidenceFingerprint,
-          request.workspaceId,
-        );
-        if (retained === undefined) {
-          throw new MockClientError(
-            'knowledgeEvidenceRefreshRequired',
-            'The inspected evidence set is no longer available; search again to answer.',
-          );
-        }
-        const profile = this.llmProfiles.get(request.profileId);
-        if (profile === undefined) {
-          throw new MockClientError('unavailable', 'No generation profile is configured');
-        }
-        return buildMockKnowledgeAnswer({
-          requestId: request.requestId,
-          evidenceFingerprint: request.evidenceFingerprint,
-          profileId: profile.id,
-          profileName: profile.name,
-          locality: profile.locality,
-          allowModelKnowledge: request.allowModelKnowledge ?? false,
-          evidence: retained.evidence,
-        });
-      });
-      if (controller.signal.aborted) {
-        throw new DOMException('The operation was aborted.', 'AbortError');
-      }
-      return answer;
-    } finally {
-      signal?.removeEventListener('abort', forward);
-      this.knowledgeAnswers.delete(request.requestId);
-    }
+    return this.semanticClient.generateKnowledgeAnswer(request, signal);
   }
-
-  /**
-   * Cancellation is applied immediately rather than behind the simulated
-   * latency, mirroring {@link cancelKnowledgeSearch}: the desktop host
-   * registers the same `requestId` before generation starts.
-   */
   cancelKnowledgeAnswer(
     request: CancelKnowledgeAnswerRequest,
     signal?: AbortSignal,
   ): Promise<void> {
-    this.knowledgeAnswers.get(request.requestId)?.abort();
-    this.knowledgeAnswers.delete(request.requestId);
-    return this.perform('cancelKnowledgeAnswer', signal, () => undefined);
+    return this.semanticClient.cancelKnowledgeAnswer(request, signal);
   }
-
-  private knowledgePlan(
-    request: PlanKnowledgeSearchRequest | ExecuteKnowledgeSearchRequest,
-  ): KnowledgeSearchPlan {
-    if ((request.draft.about ?? []).filter((subject) => subject.trim().length > 0).length === 0) {
-      throw new MockClientError('invalidRequest', 'A knowledge search needs at least one subject', {
-        reason: 'semanticQueryEmpty',
-      });
-    }
-    return planMockKnowledgeSearch(
-      request.draft,
-      this.knowledgeScope(request),
-      request.mode ?? 'hybrid',
-      request.options ?? defaultKnowledgeSearchOptions(),
-    );
-  }
-
-  /** Resolves the visible scope, refusing exactly what the backend refuses. */
-  private knowledgeScope(
-    request: PlanKnowledgeSearchRequest | ExecuteKnowledgeSearchRequest,
-  ): KnowledgeScope {
-    try {
-      return resolveMockKnowledgeScope(request.scope, request.draft);
-    } catch (error) {
-      if (error instanceof MockKnowledgeScopeError) {
-        throw new MockClientError(error.code, error.message);
-      }
-      throw error;
-    }
-  }
-
   listConnections(signal?: AbortSignal): Promise<Connection[]> {
-    return this.perform('listConnections', signal, () =>
-      [...this.connections.values()].map((connection) => structuredClone(connection)),
-    );
+    return this.workspaceClient.listConnections(signal);
   }
-
   createConnection(request: CreateConnectionRequest, signal?: AbortSignal): Promise<Connection> {
-    return this.perform('createConnection', signal, () => {
-      this.connectionSequence += 1;
-      const now = '2026-01-01T00:00:00.000Z';
-      const connection: Connection = {
-        id: `mock-connection-${this.connectionSequence}`,
-        name: request.name,
-        kind: request.kind,
-        configuration: request.configuration,
-        hasCredential: request.secret != null,
-        status: 'disconnected',
-        rootLocation:
-          request.kind === 'oneDrive'
-            ? `onedrive://mock-connection-${this.connectionSequence}/`
-            : null,
-        createdAt: now,
-        updatedAt: now,
-      };
-      this.connections.set(connection.id, connection);
-      return structuredClone(connection);
-    });
+    return this.workspaceClient.createConnection(request, signal);
   }
-
   getConnection(connectionId: ConnectionId, signal?: AbortSignal): Promise<Connection> {
-    return this.perform('getConnection', signal, () =>
-      structuredClone(this.requireConnection(connectionId)),
-    );
+    return this.workspaceClient.getConnection(connectionId, signal);
   }
-
   updateConnection(
     connectionId: ConnectionId,
     request: UpdateConnectionRequest,
     signal?: AbortSignal,
   ): Promise<Connection> {
-    return this.perform('updateConnection', signal, () => {
-      const existing = this.requireConnection(connectionId);
-      const updated: Connection = {
-        ...existing,
-        name: request.name,
-        kind: request.kind,
-        configuration: request.configuration,
-        hasCredential: request.secret != null ? true : existing.hasCredential,
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      };
-      this.connections.set(connectionId, updated);
-      return structuredClone(updated);
-    });
+    return this.workspaceClient.updateConnection(connectionId, request, signal);
   }
-
   deleteConnection(connectionId: ConnectionId, signal?: AbortSignal): Promise<void> {
-    return this.perform('deleteConnection', signal, () => {
-      this.requireConnection(connectionId);
-      this.connections.delete(connectionId);
-    });
+    return this.workspaceClient.deleteConnection(connectionId, signal);
   }
-
   connectConnection(connectionId: ConnectionId, signal?: AbortSignal): Promise<Connection> {
-    return this.perform('connectConnection', signal, () => {
-      const connection = this.requireConnection(connectionId);
-      const updated: Connection = {
-        ...connection,
-        status: evaluateMockConnectionStatus(connection),
-      };
-      this.connections.set(connectionId, updated);
-      return structuredClone(updated);
-    });
+    return this.workspaceClient.connectConnection(connectionId, signal);
   }
-
   disconnectConnection(connectionId: ConnectionId, signal?: AbortSignal): Promise<Connection> {
-    return this.perform('disconnectConnection', signal, () => {
-      const connection = this.requireConnection(connectionId);
-      const updated: Connection = { ...connection, status: 'disconnected' };
-      this.connections.set(connectionId, updated);
-      return structuredClone(updated);
-    });
+    return this.workspaceClient.disconnectConnection(connectionId, signal);
   }
-
-  /** Evaluates status without persisting it, mirroring the backend's `test` semantics. */
   testConnection(connectionId: ConnectionId, signal?: AbortSignal): Promise<Connection> {
-    return this.perform('testConnection', signal, () => {
-      const connection = this.requireConnection(connectionId);
-      return structuredClone({ ...connection, status: evaluateMockConnectionStatus(connection) });
-    });
+    return this.workspaceClient.testConnection(connectionId, signal);
   }
-
   beginOneDriveAuthorization(
     connectionId: ConnectionId,
     signal?: AbortSignal,
   ): Promise<BeginOneDriveAuthorizationResponse> {
-    return this.perform('beginOneDriveAuthorization', signal, () => {
-      const connection = this.requireConnection(connectionId);
-      if (connection.configuration.kind !== 'oneDrive') {
-        throw new MockClientError('invalidRequest', 'Only OneDrive connections can be authorized', {
-          reason: 'notOnedriveConnection',
-        });
-      }
-      this.oneDriveAuthorizationSequence += 1;
-      const attemptId = `mock-onedrive-authorization-${this.oneDriveAuthorizationSequence}`;
-      this.oneDriveAuthorizations.set(attemptId, {
-        connectionId,
-        attempt: { id: attemptId, status: { state: 'pending' } },
-      });
-      return {
-        attemptId,
-        authorizationUrl: `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?state=${attemptId}`,
-      };
-    });
+    return this.workspaceClient.beginOneDriveAuthorization(connectionId, signal);
   }
-
   getOneDriveAuthorizationAttempt(
     attemptId: string,
     signal?: AbortSignal,
   ): Promise<OneDriveAuthorizationAttempt> {
-    return this.perform('getOneDriveAuthorizationAttempt', signal, () => {
-      const authorization = this.oneDriveAuthorizations.get(attemptId);
-      if (authorization === undefined) {
-        throw new MockClientError('notFound', `No mock OneDrive authorization ${attemptId}`);
-      }
-      if (authorization.attempt.status.state === 'pending') {
-        const connection = this.requireConnection(authorization.connectionId);
-        if (connection.configuration.kind !== 'oneDrive') {
-          throw new MockClientError(
-            'invalidRequest',
-            'Connection kind changed during authorization',
-            { reason: 'notOnedriveConnection' },
-          );
-        }
-        const email = connection.configuration.accountHint ?? 'mock.user@example.test';
-        const authorized: Connection = {
-          ...connection,
-          configuration: {
-            ...connection.configuration,
-            displayName: 'Mock Microsoft User',
-            email,
-            driveType: connection.configuration.accountHint === null ? 'personal' : 'business',
-          },
-          hasCredential: true,
-          status: 'connected',
-          rootLocation: `onedrive://${connection.id}/`,
-          updatedAt: '2026-01-01T00:00:00.000Z',
-        };
-        this.connections.set(connection.id, authorized);
-        authorization.attempt = {
-          id: attemptId,
-          status: { state: 'succeeded', connection: authorized },
-        };
-      }
-      return structuredClone(authorization.attempt);
-    });
+    return this.workspaceClient.getOneDriveAuthorizationAttempt(attemptId, signal);
   }
-
   cancelOneDriveAuthorization(
     attemptId: string,
     signal?: AbortSignal,
   ): Promise<OneDriveAuthorizationAttempt> {
-    return this.perform('cancelOneDriveAuthorization', signal, () => {
-      const authorization = this.oneDriveAuthorizations.get(attemptId);
-      if (authorization === undefined) {
-        throw new MockClientError('notFound', `No mock OneDrive authorization ${attemptId}`);
-      }
-      if (authorization.attempt.status.state === 'pending') {
-        authorization.attempt = { id: attemptId, status: { state: 'cancelled' } };
-      }
-      return structuredClone(authorization.attempt);
-    });
+    return this.workspaceClient.cancelOneDriveAuthorization(attemptId, signal);
   }
-
-  /**
-   * Mock mode never performs a real network dial, so there is no host key to
-   * present - every connection reports as already trusted, matching
-   * `evaluateMockConnectionStatus` never producing `hostKeyUnverified`/
-   * `hostKeyMismatch`.
-   */
   probeSshHostKey(connectionId: ConnectionId, signal?: AbortSignal): Promise<HostKeyProbe> {
-    return this.perform('probeSshHostKey', signal, () => {
-      this.requireConnection(connectionId);
-      return { status: 'trusted', fingerprint: 'SHA256:mock-fingerprint' };
-    });
+    return this.workspaceClient.probeSshHostKey(connectionId, signal);
   }
-
   acceptSshHostKey(
     connectionId: ConnectionId,
     _fingerprint: string,
     signal?: AbortSignal,
   ): Promise<void> {
-    return this.perform('acceptSshHostKey', signal, () => {
-      this.requireConnection(connectionId);
-    });
+    return this.workspaceClient.acceptSshHostKey(connectionId, _fingerprint, signal);
   }
-
-  private requireConnection(connectionId: ConnectionId): Connection {
-    const connection = this.connections.get(connectionId);
-    if (connection === undefined) {
-      throw new MockClientError('notFound', `No mock connection with id ${connectionId}`);
-    }
-    return connection;
-  }
-
-  private requireLlmProfile(profileId: string): LlmProfile {
-    const profile = this.llmProfiles.get(profileId);
-    if (profile === undefined) {
-      throw new MockClientError('notFound', `No mock LLM profile with id ${profileId}`);
-    }
-    return profile;
-  }
-
-  /** Returns the current in-memory state for a mock operation. */
   getOperation(operationId: OperationId): Operation | undefined {
-    const operation = this.operations.get(operationId);
-    return operation === undefined ? undefined : structuredClone(operation);
+    return this.ctx.getOperation(operationId);
   }
-
-  private structuredSession(sessionId: string) {
-    const session = this.structuredSessions.get(sessionId);
-    if (session === undefined) {
-      throw new MockClientError('notFound', 'structured viewer session not found');
-    }
-    return session;
+  scriptEvents(events: readonly BackendEvent[]): void {
+    this.ctx.scriptEvents(events);
   }
-
-  private mockStructuredView(sessionId: string): StructuredView {
-    const session = this.structuredSession(sessionId);
-    const bytes = this.fileContentFor(session.uri);
-    const externalFallback = session.format === 'excel' && bytes.length > 16 * 1024 * 1024;
-    const jsonText = session.format === 'json';
-    const workbookRecords =
-      session.selectedSheet === 'Details'
-        ? [['Details'], [], ['Sparse row']]
-        : [
-            ['Label', 'Cached formula'],
-            ['Summary', '84'],
-          ];
-    const records =
-      session.format === 'excel' && !externalFallback
-        ? workbookRecords
-        : externalFallback || jsonText
-          ? []
-          : session.format === 'ndjson'
-            ? new TextDecoder()
-                .decode(bytes)
-                .split(/\r?\n/)
-                .filter(Boolean)
-                .map((line) => [line])
-            : parseMockDelimited(
-                new TextDecoder().decode(bytes).replace(/^\uFEFF/, ''),
-                session.delimiter,
-              );
-    const useHeader =
-      session.format !== 'excel' &&
-      (session.headerMode === 'firstRow' || session.headerMode === 'auto');
-    const headers = useHeader
-      ? (records[0] ?? [])
-      : (records[0]?.map((_, index) => `Column ${index + 1}`) ?? []);
-    const dataRecords = useHeader ? records.slice(1) : records;
-    const rows = dataRecords.slice(0, 500).map((cells, index) => ({
-      index,
-      cells,
-      ...(session.format === 'excel' && session.selectedSheet === 'Summary' && index === 1
-        ? {
-            cellDetails: [
-              {
-                column: 1,
-                display: '84',
-                valueType: 'number' as const,
-                formula: 'B1*2',
-              },
-            ],
-          }
-        : {}),
-    }));
-    return {
-      sessionId,
-      kind: externalFallback ? 'externalFallback' : jsonText ? 'jsonText' : 'table',
-      sourceRevision: String(bytes.length),
-      sourceBytes: bytes.length,
-      randomAccess: true,
-      delimiter:
-        externalFallback || jsonText || session.format === 'ndjson' ? null : session.delimiter,
-      headerMode: session.headerMode,
-      headers,
-      rows,
-      ...(session.format === 'excel' && !externalFallback
-        ? {
-            sheets: [
-              { name: 'Summary', rowCount: 2, columnCount: 2 },
-              { name: 'Details', rowCount: 3, columnCount: 1 },
-            ],
-            selectedSheet: session.selectedSheet,
-          }
-        : {}),
-      indexedBytes: bytes.length,
-      indexedRows: dataRecords.length,
-      totalRows: dataRecords.length,
-      indexingComplete: true,
-      warning: externalFallback
-        ? "This workbook cannot be opened within the viewer's bounded-memory budget. Open it in an external spreadsheet application."
-        : null,
-    };
+  emitNextEvent(): boolean {
+    return this.ctx.emitNextEvent();
   }
-
-  private directorySnapshot(
-    request: ListDirectoryRequest,
-    signal: AbortSignal | undefined,
-    method: 'navigatePane' | 'listDirectory',
-  ): Promise<DirectorySnapshot> {
-    const fixtures = directories[request.location.uri];
-    const generatedSize = this.generatedSize(request.location.uri);
-    const searchId = request.location.uri.startsWith('search://local/')
-      ? request.location.uri.slice('search://local/'.length)
-      : undefined;
-    const searchEntries = searchId === undefined ? undefined : this.searches.get(searchId)?.entries;
-    if (fixtures === undefined && generatedSize === undefined && searchEntries === undefined) {
-      return Promise.reject(
-        new MockClientError('notFound', `No mock directory at ${request.location.uri}`),
-      );
-    }
-
-    const offset = this.parseContinuationToken(request.continuationToken);
-    const entries =
-      searchEntries !== undefined
-        ? searchEntries.slice(offset, offset + this.pageSize)
-        : generatedSize === undefined
-          ? (fixtures ?? []).map((fixture) => fixtureEntry(request.location.uri, fixture))
-          : createGeneratedDirectory(generatedSize, this.seed).page(offset, this.pageSize);
-    const totalEntries = searchEntries?.length ?? generatedSize ?? fixtures?.length ?? 0;
-    const { size: totalKnownSize, fileCount: totalKnownFileCount } =
-      generatedSize === undefined
-        ? aggregateTotals(entries)
-        : this.generatedDirectoryTotals(generatedSize);
-    const nextOffset = offset + entries.length;
-    const isUnreadable = request.location.uri === 'mock:///Unreadable';
-    const loadingState = isUnreadable
-      ? ({
-          type: 'error',
-          message: apiErrorMessage('permissionDenied') ?? 'Permission denied.',
-        } as const)
-      : this.loadingLocations.has(request.location.uri)
-        ? ({ type: 'loading' } as const)
-        : ({ type: 'loaded' } as const);
-    // A plausible synthetic capacity so the status bar's "available" segment is
-    // exercisable in mock mode; omitted for search results, which mirror the real
-    // backend's non-local-provider gap (no backing volume to report).
-    const volumeCapacity =
-      searchId === undefined
-        ? { totalBytes: 2_000_000_000_000, availableBytes: 616_040_000_000 }
-        : undefined;
-
-    return this.perform(method, signal, () => ({
-      paneId: request.paneId,
-      requestId: request.requestId,
-      revision: 1,
-      location: request.location,
-      writable: request.location.uri !== 'mock:///Read-only',
-      entries: isUnreadable ? [] : entries,
-      totalKnownEntries: totalEntries,
-      totalKnownSize,
-      totalKnownFileCount,
-      hasMore: nextOffset < totalEntries,
-      ...(nextOffset < totalEntries ? { continuationToken: String(nextOffset) } : {}),
-      loadingState,
-      ...(volumeCapacity === undefined ? {} : { volumeCapacity }),
-    }));
+  emit(event: BackendEvent): void {
+    this.ctx.emit(event);
   }
-
-  private generatedDirectoryTotals(size: GeneratedDirectorySize): {
-    size: number;
-    fileCount: number;
-  } {
-    const cached = this.generatedTotalsCache.get(size);
-    if (cached !== undefined) {
-      return cached;
-    }
-    const totals = aggregateTotals(createGeneratedDirectory(size, this.seed).entries());
-    this.generatedTotalsCache.set(size, totals);
-    return totals;
-  }
-
-  private generatedSize(uri: string): GeneratedDirectorySize | undefined {
-    const match = /^mock:\/\/\/large\/(\d+)$/.exec(uri);
-    if (match?.[1] === undefined) {
-      return undefined;
-    }
-    const size = Number(match[1]);
-    return GENERATED_DIRECTORY_SIZES.find((candidate) => candidate === size);
-  }
-
-  private parseContinuationToken(token: string | undefined): number {
-    if (token === undefined) {
-      return 0;
-    }
-    const offset = Number(token);
-    if (!Number.isSafeInteger(offset) || offset < 0) {
-      throw new MockClientError('invalidContinuationToken', `Invalid continuation token: ${token}`);
-    }
-    return offset;
-  }
-
-  private requireOperation(operationId: OperationId): Operation {
-    const operation = this.operations.get(operationId);
-    if (operation === undefined) {
-      throw new MockClientError('notFound', `No mock operation with id ${operationId}`);
-    }
-    return operation;
-  }
-
-  private requireChecksumJob(jobId: string): {
-    cancelled: boolean;
-    entries: readonly ChecksumEntry[];
-    algorithms: readonly ChecksumAlgorithm[];
-  } {
-    const job = this.checksumJobs.get(jobId);
-    if (job === undefined) {
-      throw new MockClientError('notFound', `No mock checksum job with id ${jobId}`);
-    }
-    return job;
-  }
-
-  private requireDuplicateScan(scanId: string): {
-    cancelled: boolean;
-    groups: readonly DuplicateGroup[];
-    roots: readonly Location[];
-  } {
-    const scan = this.duplicateScans.get(scanId);
-    if (scan === undefined) {
-      throw new MockClientError('notFound', `No mock duplicate scan with id ${scanId}`);
-    }
-    return scan;
-  }
-
-  private requireComparison(comparisonId: string): {
-    cancelled: boolean;
-    entries: readonly ComparisonEntry[];
-    left: Location;
-    right: Location;
-    criteria: ComparisonCriteria;
-  } {
-    const comparison = this.comparisons.get(comparisonId);
-    if (comparison === undefined) {
-      throw new MockClientError('notFound', `No mock comparison with id ${comparisonId}`);
-    }
-    return comparison;
-  }
-
-  private fileContentFor(uri: string): Uint8Array {
-    let content = this.fileContents.get(uri);
-    if (content === undefined) {
-      content = syntheticFileContent(uri);
-      this.fileContents.set(uri, content);
-    }
-    return content;
-  }
-
-  /** Builds a per-line match finder for a search request, mirroring the backend's
-   * substring/regex, case-(in)sensitive `ContentQuery` semantics closely enough for mock/dev use. */
-  private buildLineMatcher(request: SearchInFileRequest): (line: string) => [number, number][] {
-    if (request.regex) {
-      const source = request.wholeWord ? `\\b(?:${request.query})\\b` : request.query;
-      let pattern: RegExp;
-      try {
-        pattern = new RegExp(source, request.caseSensitive ? 'gu' : 'giu');
-      } catch (error) {
-        throw new MockClientError(
-          'invalidRequest',
-          `invalid regular expression: ${(error as Error).message}`,
-          { detail: (error as Error).message },
-        );
-      }
-      return (line) => {
-        const found: [number, number][] = [];
-        pattern.lastIndex = 0;
-        let match = pattern.exec(line);
-        while (match !== null) {
-          found.push([match.index, match.index + match[0].length]);
-          pattern.lastIndex = match[0].length === 0 ? match.index + 1 : pattern.lastIndex;
-          match = pattern.exec(line);
-        }
-        return found;
-      };
-    }
-    const needle = request.caseSensitive ? request.query : request.query.toLowerCase();
-    const isWordChar = (char: string | undefined): boolean =>
-      char !== undefined && /[A-Za-z0-9_]/u.test(char);
-    return (line) => {
-      const haystack = request.caseSensitive ? line : line.toLowerCase();
-      const found: [number, number][] = [];
-      let from = 0;
-      let index = haystack.indexOf(needle, from);
-      while (index !== -1) {
-        const boundaryOk =
-          !request.wholeWord ||
-          (!isWordChar(line[index - 1]) && !isWordChar(line[index + needle.length]));
-        if (boundaryOk) {
-          found.push([index, index + needle.length]);
-        }
-        from = index + needle.length;
-        index = haystack.indexOf(needle, from);
-      }
-      return found;
-    };
-  }
-
-  private requireActiveSemanticFolder(workspaceId: WorkspaceId, location: Location): void {
-    const workspace = this.workspaces.get(workspaceId);
-    const pane = workspace === undefined ? undefined : workspace.panesById[workspace.activePaneId];
-    const tab = pane === undefined ? undefined : pane.tabsById[pane.activeTabId];
-    if (
-      tab === undefined ||
-      tab.location.providerId !== location.providerId ||
-      tab.location.uri !== location.uri
-    ) {
-      throw new MockClientError('workspaceRequired', 'An active workspace/root is required');
-    }
-  }
-
-  private requireActiveOrEnrolledSemanticRoot(workspaceId: WorkspaceId, location: Location): void {
-    if (
-      this.workspaces.has(workspaceId) &&
-      this.semanticLibrary.roots.some(
-        (root) =>
-          root.location.providerId === location.providerId &&
-          root.location.uri === location.uri &&
-          root.workspaceReferences.includes(workspaceId),
-      )
-    ) {
-      return;
-    }
-    this.requireActiveSemanticFolder(workspaceId, location);
-  }
-
-  private requireSemanticLibraryRevision(expected: number): void {
-    if (this.semanticLibrary.revision !== expected) {
-      throw new MockClientError(
-        'staleRevision',
-        `Semantic policy changed from revision ${expected} to ${this.semanticLibrary.revision}`,
-      );
-    }
-  }
-
-  private semanticRootFor(location: Location): SemanticRootStatus | undefined {
-    const matching = this.semanticLibrary.roots
-      .filter(
-        (root) =>
-          root.location.providerId === location.providerId &&
-          (root.location.uri === location.uri ||
-            (root.recursive && semanticLocationContains(root.location, location))),
-      )
-      .sort((left, right) => left.location.uri.length - right.location.uri.length);
-    const root = matching.at(-1);
-    if (
-      root?.exclusions.some((exclusion) =>
-        semanticLocationContains(exclusion.location, location),
-      ) === true
-    ) {
-      throw new MockClientError('alreadyExcluded', 'The folder is already excluded');
-    }
-    return root;
-  }
-
-  private advanceSemanticOcrJobs(): void {
-    const active = this.semanticOcrStatus.jobs.find(
-      (job) => job.state === 'queued' || job.state === 'running',
-    );
-    if (active === undefined) return;
-    if (active.state === 'queued') {
-      this.semanticOcrStatus = {
-        ...this.semanticOcrStatus,
-        jobs: this.semanticOcrStatus.jobs.map((job) =>
-          job.id === active.id ? { ...job, state: 'running', updatedAtMs: Date.now() } : job,
-        ),
-      };
-      return;
-    }
-    const targets = this.semanticOcrJobTargets.get(active.id) ?? [];
-    const completed: SemanticOcrJob = {
-      ...active,
-      state: 'completed',
-      updatedAtMs: Date.now(),
-      processedFiles: targets.length,
-      files: targets.map((target) => ({
-        ...target,
-        outcome: { outcome: 'succeeded' as const },
-      })),
-    };
-    this.semanticOcrJobTargets.delete(active.id);
-    this.semanticOcrStatus = {
-      ...this.semanticOcrStatus,
-      reportedFiles: this.semanticOcrStatus.reportedFiles.filter(
-        (reported) => !targets.some((target) => sameSemanticOcrTarget(reported, target)),
-      ),
-      jobs: this.semanticOcrStatus.jobs.map((job) => (job.id === active.id ? completed : job)),
-    };
-  }
-
-  private advanceSemanticLibraryRevision(): void {
-    this.semanticLibrary.revision += 1;
-    this.semanticEnrolmentPreviews.clear();
-    this.semanticExclusionPlans.clear();
-  }
-
-  private requireSemanticAvailable(): void {
-    if (this.semanticStatus.lifecycle.state === 'unavailable') {
-      throw new MockClientError('unavailable', 'Semantic components are unavailable');
-    }
-  }
-
-  private requireSemanticLifecycle(expected: SemanticComponentLifecycle['state']): void {
-    this.requireSemanticAvailable();
-    if (this.semanticStatus.lifecycle.state !== expected) {
-      throw new MockClientError(
-        'invalidLifecycle',
-        `Expected semantic lifecycle ${expected}, got ${this.semanticStatus.lifecycle.state}`,
-      );
-    }
-  }
-
-  private createSemanticMigrationPlan(
-    profile: SemanticProfile,
-    identity: SemanticModelIdentity,
-    estimate: SemanticModelMigrationPlan['estimate'],
-  ): SemanticModelMigrationPlan {
-    this.semanticMigrationSequence += 1;
-    const plan: SemanticModelMigrationPlan = {
-      migrationId: `mock-migration-${this.semanticMigrationSequence}`,
-      from: this.semanticStatus.activeModel ?? null,
-      target: { profile, identity },
-      estimate: structuredClone(estimate),
-      reason: { reason: 'modelChanged' },
-      fullReindex: true,
-      requiresConfirmation: true,
-      resumable: true,
-    };
-    this.semanticMigrationPlans.set(plan.migrationId, plan);
-    return structuredClone(plan);
-  }
-
-  private semanticMigrationPlan(migrationId: string): SemanticModelMigrationPlan {
-    const plan = this.semanticMigrationPlans.get(migrationId);
-    if (plan === undefined) {
-      throw new MockClientError('invalidMigrationPlan', 'The migration plan is no longer valid');
-    }
-    return plan;
-  }
-
-  private async perform<T>(
-    method: MockClientMethod,
-    signal: AbortSignal | undefined,
-    createValue: () => T,
-  ): Promise<T> {
-    if (signal?.aborted === true) {
-      throw new DOMException('The operation was aborted.', 'AbortError');
-    }
-    const failure = this.failures[method];
-    if (failure !== undefined) {
-      throw failure;
-    }
-    if (this.latencyMs > 0) {
-      await this.delay(signal);
-    }
-    return createValue();
-  }
-
-  private delay(signal: AbortSignal | undefined): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const abort = (): void => {
-        clearTimeout(timer);
-        reject(new DOMException('The operation was aborted.', 'AbortError'));
-      };
-      const timer = setTimeout(() => {
-        signal?.removeEventListener('abort', abort);
-        resolve();
-      }, this.latencyMs);
-      signal?.addEventListener('abort', abort, { once: true });
-    });
-  }
-}
-
-function parseMockDelimited(text: string, delimiter: string): string[][] {
-  const records: string[][] = [];
-  let record: string[] = [];
-  let field = '';
-  let quoted = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const character = text[index];
-    if (character === '"') {
-      if (quoted && text[index + 1] === '"') {
-        field += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (character === delimiter && !quoted) {
-      record.push(field);
-      field = '';
-    } else if ((character === '\n' || character === '\r') && !quoted) {
-      if (character === '\r' && text[index + 1] === '\n') index += 1;
-      record.push(field);
-      records.push(record);
-      record = [];
-      field = '';
-    } else {
-      field += character;
-    }
-  }
-  if (field.length > 0 || record.length > 0) {
-    record.push(field);
-    records.push(record);
-  }
-  return records;
-}
-
-/** A deterministic error raised by an injected or fixture-backed mock failure. */
-export class MockClientError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly details?: Readonly<Record<string, unknown>>,
-  ) {
-    super(message);
-    this.name = 'MockClientError';
-    bindLocalisedMessage(this, code, details, message);
+  emitResynchronise(): void {
+    this.ctx.emitResynchronise();
   }
 }
