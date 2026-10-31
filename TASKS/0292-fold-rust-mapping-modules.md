@@ -1,6 +1,6 @@
 # 0292 Fold Rust pass-through mapping modules into owning crates
 
-Status: partial (8 of 15 folded; criterion 1 met, criterion 5 not)
+Status: done (8 of 15 folded; the "< 50 lines" criterion was accepted as unmet)
 Priority: medium
 Subsystem: backend
 Depends on: none
