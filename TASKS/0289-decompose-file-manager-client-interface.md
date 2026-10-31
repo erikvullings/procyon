@@ -85,3 +85,13 @@ Depends on: none
   Implementation detail: a codegen script (`/tmp/gen3.mjs` + a depth-aware, string/comment-safe
   class-member splitter) drove the mechanical extraction; the generated files are checked in and
   hand-verifiable, not build-time generated.
+
+- 2026-10-31 agent: **Criterion status.** Met: (1) five focused sub-interfaces; (3) mock adapter cut
+  ~80%; (4) composite assembled at the createClient.ts seam; (5) `pnpm api:check` generated
+  artifacts byte-identical. **Remaining — criterion (2): migrate the ~101 feature files that still
+  import the composite `FileManagerClient` to the specific sub-interface(s) they use.** This is a
+  large, purely type-level migration best done as its own focused, per-file pass (each file's client
+  method usage must be mapped to clusters); it is deliberately NOT rushed here because the composite
+  remains a valid, backward-compatible import for callers that legitimately span clusters (per the
+  task's own Implementation Note), and the sub-interfaces are already exported and usable. Status
+  left `open` until criterion (2) is completed.
