@@ -21,12 +21,14 @@ async fn spawn() -> (TestServer, tempfile::TempDir) {
         dev_mode_auth_disabled: true,
         ..ServerConfig::default()
     };
-    let service = Arc::new(FileManagerService::with_platform_adapter(
-        RuntimeKindDto::BrowserServer,
-        config.workspace_directory.clone(),
-        config.settings_directory.clone(),
-        EventBus::default(),
-        Arc::new(fm_platform::FallbackPlatformAdapter),
+    let service = Arc::new(FileManagerService::from_config(
+        fm_application::ServiceConfig::new(
+            RuntimeKindDto::BrowserServer,
+            config.workspace_directory.clone(),
+            config.settings_directory.clone(),
+        )
+        .events(EventBus::default())
+        .platform(Arc::new(fm_platform::FallbackPlatformAdapter)),
     ));
     (
         TestServer::spawn_with_service(config, service, workspace_directory).await,

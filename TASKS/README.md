@@ -510,9 +510,7 @@ previous pass stopped where it did.
   search controller / evidence renderer / answer generator / citation resolver / scope classifier)*
 - [x] 0292 Fold Rust pass-through mapping modules into owning crates *(backend, medium — 8 of 15
   folded; remaining 7 are 160–990 lines, so the "< 50 lines" criterion is not met)*
-- [ ] 0293 Reduce FileManagerService composition root from 95 public methods *(backend, medium —
-  < 50 public methods plus one `ServiceConfig` replacing the 10+ `with_*` builders; high risk,
-  check every removed method has a capability-module path)*
-- [ ] 0294 Move operations confirmation/guard helpers inside the controller *(frontend, medium —
-  the three standalone `with*` helpers become private to `createOperationsController`; interface
-  unchanged)*
+- [x] 0293 Replace the FileManagerService constructor chain with ServiceConfig *(backend, medium —
+  `ServiceConfig` + `from_config`; capability injectors and public-method count deliberately left)*
+- [-] 0294 Operations confirmation/guard decorators *(frontend — dropped: decorators have one call
+  site and belong outside the controller; revisit inside 0290 if needed)*

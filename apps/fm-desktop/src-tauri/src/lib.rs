@@ -253,15 +253,7 @@ pub fn run() {
                 .into());
             }
             let mut service =
-                FileManagerService::with_platform_adapter_and_credential_store_and_search_accelerator(
-                RuntimeKindDto::Tauri,
-                workspace_directory,
-                app_data_directory.clone(),
-                EventBus::default(),
-                platform::build_platform_adapter(),
-                credentials::build_credential_store(),
-                platform::build_search_accelerator(),
-            );
+                FileManagerService::from_config(fm_application::ServiceConfig::new(RuntimeKindDto::Tauri, workspace_directory, app_data_directory.clone()).events(EventBus::default()).platform(platform::build_platform_adapter()).credential_store(credentials::build_credential_store()).search_accelerator(platform::build_search_accelerator()));
             stamp("service-constructed");
             let mut semantic_managed_components = false;
             let mut semantic_reindex_pending_marker = None;
@@ -967,15 +959,7 @@ mod tests {
         builder
             .manage(AppState {
                 service: Arc::new(
-                    FileManagerService::with_platform_adapter_and_credential_store_and_search_accelerator(
-                        RuntimeKindDto::Tauri,
-                        workspace_directory,
-                        settings_directory,
-                        EventBus::default(),
-                        platform::build_platform_adapter(),
-                        credentials::build_credential_store(),
-                        platform::build_search_accelerator(),
-                    )
+                    FileManagerService::from_config(fm_application::ServiceConfig::new(RuntimeKindDto::Tauri, workspace_directory, settings_directory).events(EventBus::default()).platform(platform::build_platform_adapter()).credential_store(credentials::build_credential_store()).search_accelerator(platform::build_search_accelerator()))
                     .with_semantic_component_capability(Arc::new(
                         fm_application::semantic_components::FakeSemanticComponentCapability::new(),
                     ))

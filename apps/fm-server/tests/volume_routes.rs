@@ -40,12 +40,14 @@ async fn spawn(adapter: Arc<dyn PlatformAdapter>) -> TestServer {
         dev_mode_auth_disabled: true,
         ..ServerConfig::default()
     };
-    let service = Arc::new(FileManagerService::with_platform_adapter(
-        RuntimeKindDto::BrowserServer,
-        config.workspace_directory.clone(),
-        config.settings_directory.clone(),
-        EventBus::default(),
-        adapter,
+    let service = Arc::new(FileManagerService::from_config(
+        fm_application::ServiceConfig::new(
+            RuntimeKindDto::BrowserServer,
+            config.workspace_directory.clone(),
+            config.settings_directory.clone(),
+        )
+        .events(EventBus::default())
+        .platform(adapter),
     ));
     TestServer::spawn_with_service(config, service, root).await
 }

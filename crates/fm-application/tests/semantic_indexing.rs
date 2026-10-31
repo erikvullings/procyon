@@ -2705,14 +2705,16 @@ impl ReplaceHarness {
             ocr_output.to_vec(),
         ));
         let service = Arc::new(
-            FileManagerService::with_platform_adapter(
-                RuntimeKindDto::Tauri,
-                state.path().join("workspaces"),
-                state.path().join("settings"),
-                fm_events::EventBus::default(),
-                Arc::new(FolderTrashPlatform {
+            FileManagerService::from_config(
+                fm_application::ServiceConfig::new(
+                    RuntimeKindDto::Tauri,
+                    state.path().join("workspaces"),
+                    state.path().join("settings"),
+                )
+                .events(fm_events::EventBus::default())
+                .platform(Arc::new(FolderTrashPlatform {
                     folder: trash.path().to_owned(),
-                }),
+                })),
             )
             .with_semantic_library_service(library)
             .with_semantic_capability(capability.clone())
@@ -2825,12 +2827,14 @@ async fn real_ocrmypdf_replaces_scanned_pdf_copies() {
         std::path::PathBuf::from("/opt/homebrew/bin/ocrmypdf"),
     ));
     let service = Arc::new(
-        FileManagerService::with_platform_adapter(
-            RuntimeKindDto::Tauri,
-            state.path().join("workspaces"),
-            state.path().join("settings"),
-            fm_events::EventBus::default(),
-            Arc::new(fm_platform_macos::MacosPlatformAdapter::new()),
+        FileManagerService::from_config(
+            fm_application::ServiceConfig::new(
+                RuntimeKindDto::Tauri,
+                state.path().join("workspaces"),
+                state.path().join("settings"),
+            )
+            .events(fm_events::EventBus::default())
+            .platform(Arc::new(fm_platform_macos::MacosPlatformAdapter::new())),
         )
         .with_semantic_library_service(library)
         .with_semantic_capability(capability)

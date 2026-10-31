@@ -422,16 +422,17 @@ pub fn openapi_document() -> utoipa::openapi::OpenApi {
 pub fn build_router(config: &ServerConfig) -> Router {
     // Browser clients browse the server process's filesystem, so discovery and
     // platform actions describe that machine rather than the browser device.
-    let service =
-        FileManagerService::with_platform_adapter_and_credential_store_and_search_accelerator(
+    let service = FileManagerService::from_config(
+        fm_application::ServiceConfig::new(
             RuntimeKindDto::BrowserServer,
             config.workspace_directory.clone(),
             config.settings_directory.clone(),
-            EventBus::default(),
-            platform::build_platform_adapter(),
-            credentials::build_credential_store(),
-            platform::build_search_accelerator(),
-        );
+        )
+        .events(EventBus::default())
+        .platform(platform::build_platform_adapter())
+        .credential_store(credentials::build_credential_store())
+        .search_accelerator(platform::build_search_accelerator()),
+    );
     let service = match config.semantic_desktop_attachment() {
         Ok(Some(attachment)) => service.with_attached_desktop_semantic_library(
             &attachment.profile_directory,

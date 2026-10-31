@@ -54,11 +54,13 @@ impl TestServer {
             ..ServerConfig::default()
         };
         let event_bus = EventBus::new(8);
-        let service = Arc::new(FileManagerService::with_event_bus(
-            RuntimeKindDto::BrowserServer,
-            config.workspace_directory.clone(),
-            config.settings_directory.clone(),
-            event_bus.clone(),
+        let service = Arc::new(FileManagerService::from_config(
+            fm_application::ServiceConfig::new(
+                RuntimeKindDto::BrowserServer,
+                config.workspace_directory.clone(),
+                config.settings_directory.clone(),
+            )
+            .events(event_bus.clone()),
         ));
         Self::spawn_with_service(config, service, workspace_directory).await
     }

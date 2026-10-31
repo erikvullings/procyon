@@ -145,11 +145,13 @@ async fn creation_refreshes_an_open_directory_through_an_added_delta() {
     let root = tempfile::tempdir().expect("temporary directory");
     let location = Location::from_native_path(root.path()).expect("location");
     let events = EventBus::new(32);
-    let service = FileManagerService::with_event_bus(
-        RuntimeKindDto::BrowserServer,
-        root.path().join("workspaces"),
-        root.path().join("settings"),
-        events.clone(),
+    let service = FileManagerService::from_config(
+        fm_application::ServiceConfig::new(
+            RuntimeKindDto::BrowserServer,
+            root.path().join("workspaces"),
+            root.path().join("settings"),
+        )
+        .events(events.clone()),
     );
     let workspace_id = fm_domain::WorkspaceId::new();
     let pane_id = fm_domain::PaneId::new();

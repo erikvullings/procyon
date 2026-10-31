@@ -311,11 +311,13 @@ mod http_security_tests {
         config.port = 0;
         config.workspace_directory = workspace_directory.path().to_path_buf();
         config.settings_directory = workspace_directory.path().join("config");
-        let service = Arc::new(FileManagerService::with_event_bus(
-            RuntimeKindDto::BrowserServer,
-            config.workspace_directory.clone(),
-            config.settings_directory.clone(),
-            EventBus::new(8),
+        let service = Arc::new(FileManagerService::from_config(
+            fm_application::ServiceConfig::new(
+                RuntimeKindDto::BrowserServer,
+                config.workspace_directory.clone(),
+                config.settings_directory.clone(),
+            )
+            .events(EventBus::new(8)),
         ));
         TestServer::spawn_with_service(config, service, workspace_directory).await
     }

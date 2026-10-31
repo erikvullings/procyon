@@ -12,17 +12,16 @@ use fm_archive::ArchiveFileSystemProvider;
 use fm_checksum::{ChecksumEngine, ChecksumResultsStore, DuplicateResultsStore};
 use fm_comparison::{ComparisonEngine, ComparisonResultsStore};
 use fm_connections::{ConnectionService, JsonFileConnectionRepository};
-use fm_credentials::{CredentialStore, InMemoryCredentialStore, SessionCredentialStore};
+use fm_credentials::{CredentialStore, SessionCredentialStore};
 use fm_domain::OperationId;
 use fm_domain::{ActionId, DirectorySnapshot, EntryMetadata, Location, PaneId};
 use fm_events::{
     BackendEventPayload, EventAudience, EventBus, NotificationLevelPayload, NotificationPayload,
 };
 use fm_operations::{Scheduler, SchedulerError};
-use fm_platform::{FallbackPlatformAdapter, PlatformAdapter};
+use fm_platform::PlatformAdapter;
 use fm_plugin_runtime::{PluginDiscovery, PluginRuntime};
 use fm_search::{SearchEngine, SearchFileSystemProvider, SearchResultsStore};
-use fm_search_acceleration::{SearchAcceleration, UnsupportedSearchAccelerator};
 use fm_settings::{Settings, SettingsError, SettingsStore};
 use fm_transport_dto::{
     ActionDescriptorDto, ActionResultDto, ApplicationUninstallCandidateDto,
@@ -137,6 +136,7 @@ use crate::semantic_ocr::{
     SemanticOcrCoordinator, SemanticOcrError, SemanticOcrService, SemanticOcrStatus,
     UnavailableOcrExecutableProbe,
 };
+use crate::service_config::ServiceConfig;
 use crate::settings_mapping::{settings_from_dto, settings_to_dto};
 use crate::sqlite_view::SqliteViewService;
 use crate::structured_view::StructuredViewService;
@@ -298,116 +298,34 @@ impl FileManagerService {
         dirs::home_dir().map(|path| path.to_string_lossy().into_owned())
     }
 
-    /// Builds a service for the given host runtime, persisting workspaces
-    /// under `workspace_directory`.
+    /// Builds a service for the given host runtime with the default (fallback)
+    /// platform adapter, in-memory credential store and no native search
+    /// acceleration. Hosts with real native integration use [`Self::from_config`].
     pub fn new(
         runtime: RuntimeKindDto,
         workspace_directory: impl Into<PathBuf>,
         settings_directory: impl Into<PathBuf>,
     ) -> Self {
-        Self::with_event_bus(
+        Self::from_config(ServiceConfig::new(
             runtime,
             workspace_directory,
             settings_directory,
-            EventBus::default(),
-        )
+        ))
     }
 
-    /// Builds a service using a caller-provided event bus.
-    ///
-    /// Uses [`FallbackPlatformAdapter`]; hosts with real native integration
-    /// available should call [`Self::with_platform_adapter`] instead.
-    pub fn with_event_bus(
-        runtime: RuntimeKindDto,
-        workspace_directory: impl Into<PathBuf>,
-        settings_directory: impl Into<PathBuf>,
-        events: EventBus,
-    ) -> Self {
-        Self::with_platform_adapter(
-            runtime,
-            workspace_directory,
-            settings_directory,
-            events,
-            Arc::new(FallbackPlatformAdapter),
-        )
-    }
-
-    /// Builds a service using a caller-provided event bus and platform
-    /// adapter.
-    ///
-    /// [`Self::runtime_capabilities`] derives its native-integration flags
-    /// from `platform`, so the frontend responds to capabilities rather than
-    /// detecting the operating system itself (spec §21). Browser/server mode
-    /// should pass [`FallbackPlatformAdapter`] (it has no native access to a
-    /// remote client's OS); a desktop host should pass a real per-OS adapter
-    /// once one exists.
-    ///
-    /// Credentials are stored through [`InMemoryCredentialStore`] - a real
-    /// host on macOS/Windows must call
-    /// [`Self::with_platform_adapter_and_credential_store`] instead to get
-    /// Keychain/Credential Manager-backed storage (task 0103's acceptance
-    /// criterion); this constructor exists for callers (mainly this crate's
-    /// own tests) that do not care which credential store is used.
-    pub fn with_platform_adapter(
-        runtime: RuntimeKindDto,
-        workspace_directory: impl Into<PathBuf>,
-        settings_directory: impl Into<PathBuf>,
-        events: EventBus,
-        platform: Arc<dyn PlatformAdapter>,
-    ) -> Self {
-        Self::with_platform_adapter_and_credential_store(
-            runtime,
-            workspace_directory,
-            settings_directory,
-            events,
-            platform,
-            Arc::new(InMemoryCredentialStore::new()),
-        )
-    }
-
-    /// Builds a service using a caller-provided event bus, platform adapter
-    /// and credential store.
-    ///
-    /// Every real host (`apps/fm-server`, `apps/fm-desktop`) should call this
-    /// constructor with the OS-appropriate [`CredentialStore`] (`dev.fm`'s
-    /// `fm-credentials-macos`/`fm-credentials-windows`, selected the same way
-    /// each host already selects its [`PlatformAdapter`] - see each host's
-    /// `credentials` module), not [`Self::with_platform_adapter`], which
-    /// defaults to the non-protected in-memory store.
-    pub fn with_platform_adapter_and_credential_store(
-        runtime: RuntimeKindDto,
-        workspace_directory: impl Into<PathBuf>,
-        settings_directory: impl Into<PathBuf>,
-        events: EventBus,
-        platform: Arc<dyn PlatformAdapter>,
-        credential_store: Arc<dyn CredentialStore>,
-    ) -> Self {
-        Self::with_platform_adapter_and_credential_store_and_search_accelerator(
+    /// Builds a service from an explicit [`ServiceConfig`]: the single place a host
+    /// injects its event bus, platform adapter, credential store and native-search
+    /// accelerator.
+    pub fn from_config(config: ServiceConfig) -> Self {
+        let ServiceConfig {
             runtime,
             workspace_directory,
             settings_directory,
             events,
             platform,
             credential_store,
-            Arc::new(UnsupportedSearchAccelerator),
-        )
-    }
-
-    /// Builds a service with separately injected platform and native-search
-    /// adapters. The accelerator is intentionally not part of
-    /// [`PlatformAdapter`]: index search is a narrow optional optimization,
-    /// not a VFS or general platform capability.
-    pub fn with_platform_adapter_and_credential_store_and_search_accelerator(
-        runtime: RuntimeKindDto,
-        workspace_directory: impl Into<PathBuf>,
-        settings_directory: impl Into<PathBuf>,
-        events: EventBus,
-        platform: Arc<dyn PlatformAdapter>,
-        credential_store: Arc<dyn CredentialStore>,
-        search_accelerator: Arc<dyn SearchAcceleration>,
-    ) -> Self {
-        let workspace_directory = workspace_directory.into();
-        let settings_directory = settings_directory.into();
+            search_accelerator,
+        } = config;
         let fresh_install =
             [&workspace_directory, &settings_directory]
                 .into_iter()
@@ -6537,11 +6455,13 @@ mod tests {
     async fn disk_usage_scan_streams_workspace_scoped_ordered_snapshots() {
         let dir = tempfile::tempdir().expect("must create a temp dir");
         let events = EventBus::default();
-        let service = FileManagerService::with_event_bus(
-            RuntimeKindDto::BrowserServer,
-            dir.path(),
-            dir.path().join("settings"),
-            events.clone(),
+        let service = FileManagerService::from_config(
+            ServiceConfig::new(
+                RuntimeKindDto::BrowserServer,
+                dir.path(),
+                dir.path().join("settings"),
+            )
+            .events(events.clone()),
         );
         let root = dir.path().join("progressive-usage");
         std::fs::create_dir(&root).expect("create fixture directory");
@@ -6681,11 +6601,13 @@ mod tests {
     async fn empty_disk_usage_scan_emits_only_its_final_snapshot() {
         let dir = tempfile::tempdir().expect("must create a temp dir");
         let events = EventBus::default();
-        let service = FileManagerService::with_event_bus(
-            RuntimeKindDto::BrowserServer,
-            dir.path(),
-            dir.path().join("settings"),
-            events.clone(),
+        let service = FileManagerService::from_config(
+            ServiceConfig::new(
+                RuntimeKindDto::BrowserServer,
+                dir.path(),
+                dir.path().join("settings"),
+            )
+            .events(events.clone()),
         );
         let root = dir.path().join("empty-usage");
         std::fs::create_dir(&root).expect("create empty fixture directory");
@@ -6746,12 +6668,14 @@ mod tests {
     #[test]
     fn runtime_capabilities_are_derived_from_the_injected_platform_adapter() {
         let dir = tempfile::tempdir().expect("must create a temp dir");
-        let service = FileManagerService::with_platform_adapter(
-            RuntimeKindDto::Tauri,
-            dir.path(),
-            dir.path().join("settings"),
-            EventBus::default(),
-            Arc::new(StubPlatformAdapter),
+        let service = FileManagerService::from_config(
+            ServiceConfig::new(
+                RuntimeKindDto::Tauri,
+                dir.path(),
+                dir.path().join("settings"),
+            )
+            .events(EventBus::default())
+            .platform(Arc::new(StubPlatformAdapter)),
         );
         let capabilities = service.runtime_capabilities();
 
@@ -6806,14 +6730,16 @@ mod tests {
     #[tokio::test]
     async fn list_directory_attaches_volume_capacity_when_the_platform_adapter_supports_it() {
         let dir = tempfile::tempdir().expect("must create a temp dir");
-        let service = FileManagerService::with_platform_adapter(
-            RuntimeKindDto::BrowserServer,
-            dir.path(),
-            dir.path().join("settings"),
-            EventBus::default(),
-            Arc::new(VolumeCapacityPlatformAdapter {
+        let service = FileManagerService::from_config(
+            ServiceConfig::new(
+                RuntimeKindDto::BrowserServer,
+                dir.path(),
+                dir.path().join("settings"),
+            )
+            .events(EventBus::default())
+            .platform(Arc::new(VolumeCapacityPlatformAdapter {
                 capabilities: PlatformCapabilities::VOLUME_CAPACITY,
-            }),
+            })),
         );
         let location = Location::from_native_path(dir.path()).expect("native path location");
 
@@ -6832,14 +6758,16 @@ mod tests {
     #[tokio::test]
     async fn list_directory_omits_volume_capacity_when_the_adapter_lacks_the_capability() {
         let dir = tempfile::tempdir().expect("must create a temp dir");
-        let service = FileManagerService::with_platform_adapter(
-            RuntimeKindDto::BrowserServer,
-            dir.path(),
-            dir.path().join("settings"),
-            EventBus::default(),
-            Arc::new(VolumeCapacityPlatformAdapter {
+        let service = FileManagerService::from_config(
+            ServiceConfig::new(
+                RuntimeKindDto::BrowserServer,
+                dir.path(),
+                dir.path().join("settings"),
+            )
+            .events(EventBus::default())
+            .platform(Arc::new(VolumeCapacityPlatformAdapter {
                 capabilities: PlatformCapabilities::empty(),
-            }),
+            })),
         );
         let location = Location::from_native_path(dir.path()).expect("native path location");
 
@@ -6854,14 +6782,16 @@ mod tests {
     #[tokio::test]
     async fn list_directory_omits_volume_capacity_for_a_non_local_location() {
         let dir = tempfile::tempdir().expect("must create a temp dir");
-        let service = FileManagerService::with_platform_adapter(
-            RuntimeKindDto::BrowserServer,
-            dir.path(),
-            dir.path().join("settings"),
-            EventBus::default(),
-            Arc::new(VolumeCapacityPlatformAdapter {
+        let service = FileManagerService::from_config(
+            ServiceConfig::new(
+                RuntimeKindDto::BrowserServer,
+                dir.path(),
+                dir.path().join("settings"),
+            )
+            .events(EventBus::default())
+            .platform(Arc::new(VolumeCapacityPlatformAdapter {
                 capabilities: PlatformCapabilities::VOLUME_CAPACITY,
-            }),
+            })),
         );
         // A search location has no backing native path, so capacity lookup must
         // degrade gracefully rather than erroring the whole listing.
@@ -6934,14 +6864,16 @@ mod tests {
     #[tokio::test]
     async fn volumes_are_surfaced_when_the_platform_adapter_supports_it() {
         let dir = tempfile::tempdir().expect("must create a temp dir");
-        let service = FileManagerService::with_platform_adapter(
-            RuntimeKindDto::BrowserServer,
-            dir.path(),
-            dir.path().join("settings"),
-            EventBus::default(),
-            Arc::new(MountedVolumesPlatformAdapter {
+        let service = FileManagerService::from_config(
+            ServiceConfig::new(
+                RuntimeKindDto::BrowserServer,
+                dir.path(),
+                dir.path().join("settings"),
+            )
+            .events(EventBus::default())
+            .platform(Arc::new(MountedVolumesPlatformAdapter {
                 capabilities: PlatformCapabilities::MOUNTED_VOLUMES,
-            }),
+            })),
         );
 
         let volumes = service.volumes().await.expect("volumes discovered");
@@ -6954,14 +6886,16 @@ mod tests {
     #[tokio::test]
     async fn volumes_are_empty_when_the_adapter_lacks_the_capability() {
         let dir = tempfile::tempdir().expect("must create a temp dir");
-        let service = FileManagerService::with_platform_adapter(
-            RuntimeKindDto::BrowserServer,
-            dir.path(),
-            dir.path().join("settings"),
-            EventBus::default(),
-            Arc::new(MountedVolumesPlatformAdapter {
+        let service = FileManagerService::from_config(
+            ServiceConfig::new(
+                RuntimeKindDto::BrowserServer,
+                dir.path(),
+                dir.path().join("settings"),
+            )
+            .events(EventBus::default())
+            .platform(Arc::new(MountedVolumesPlatformAdapter {
                 capabilities: PlatformCapabilities::empty(),
-            }),
+            })),
         );
 
         let volumes = service.volumes().await.expect("volumes discovered");
@@ -7207,12 +7141,14 @@ mod tests {
                 | PlatformCapabilities::TRASH
                 | PlatformCapabilities::QUICK_LOOK,
         ));
-        let service = FileManagerService::with_platform_adapter(
-            RuntimeKindDto::Tauri,
-            dir.path(),
-            dir.path().join("settings"),
-            EventBus::default(),
-            adapter.clone(),
+        let service = FileManagerService::from_config(
+            ServiceConfig::new(
+                RuntimeKindDto::Tauri,
+                dir.path(),
+                dir.path().join("settings"),
+            )
+            .events(EventBus::default())
+            .platform(adapter.clone()),
         );
         (dir, service, adapter)
     }
@@ -7580,14 +7516,16 @@ mod tests {
             .permissions();
         permissions.set_readonly(true);
         std::fs::set_permissions(&file, permissions).expect("make fixture read-only");
-        let service = FileManagerService::with_platform_adapter(
-            RuntimeKindDto::Tauri,
-            dir.path().join("workspaces"),
-            dir.path().join("settings"),
-            EventBus::default(),
-            Arc::new(RestorableTrashAdapter {
+        let service = FileManagerService::from_config(
+            ServiceConfig::new(
+                RuntimeKindDto::Tauri,
+                dir.path().join("workspaces"),
+                dir.path().join("settings"),
+            )
+            .events(EventBus::default())
+            .platform(Arc::new(RestorableTrashAdapter {
                 directory: dir.path().join("trash"),
-            }),
+            })),
         );
 
         let started = service

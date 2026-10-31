@@ -83,6 +83,7 @@ pub mod semantic_production_evaluation;
 mod semantic_residency;
 pub mod semantic_vocabulary;
 mod service;
+mod service_config;
 mod settings_mapping;
 mod snapshot_format;
 mod snapshots;
@@ -102,3 +103,4 @@ pub use fm_ssh::{RemoteShellChannel, RemoteShellEvent, RemoteShellReader, Remote
 pub use plugin_manager::PluginPanel;
 pub use rejection::Rejection;
 pub use service::FileManagerService;
+pub use service_config::ServiceConfig;
