@@ -1,7 +1,7 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import m, { type FactoryComponent } from 'mithril';
-import { IconButton, ModalPanel, type Theme, ThemeManager, toast } from 'mithril-materialized';
+import { IconButton, ModalPanel, ThemeManager, toast } from 'mithril-materialized';
 
 import packageJson from '../../package.json' with { type: 'json' };
 
@@ -28,44 +28,17 @@ import {
 } from '../components/tabler-icons';
 import { tooltip } from '../components/tooltip';
 import {
-  type ActionCommandController,
   type ActionCommandControllerContext,
   createActionCommandController,
 } from '../features/actions/action-command-controller';
-import { CHANGE_ATTRIBUTES_ACTION_ID } from '../features/attributes/attribute-form';
+import { ChangeAttributesDialog } from '../features/attributes/change-attributes-dialog';
 import {
-  ChangeAttributesDialog,
-  type ChangeAttributesRequest,
-} from '../features/attributes/change-attributes-dialog';
-import {
-  addToBasket,
-  type BasketState,
-  basketItemFromEntry,
-  basketSummary,
-  classifyBasketAbsence,
-  emptyBasket,
-  loadBasket,
-  refreshBasket,
-  saveBasket,
-  withBasketFolderSize,
-} from '../features/basket/basket';
-import {
-  type ChecksumController,
   type ChecksumControllerContext,
   createChecksumController,
 } from '../features/checksums/checksum-controller';
 import { ChecksumResultsView } from '../features/checksums/checksum-results-view';
-import {
-  type ChecksumState,
-  type DuplicateState,
-  initialChecksumState,
-  initialDuplicateState,
-  totalReclaimableBytes,
-  wouldDeleteEveryCopy,
-} from '../features/checksums/checksum-state';
+import { totalReclaimableBytes, wouldDeleteEveryCopy } from '../features/checksums/checksum-state';
 import { DuplicateReviewView } from '../features/checksums/duplicate-review-view';
-import { type ClipboardState, emptyClipboard } from '../features/clipboard/clipboard';
-import { createOsFileClipboard } from '../features/clipboard/os-file-clipboard';
 import { CommandPalette } from '../features/command-palette/command-palette';
 import {
   evaluateActionAvailability,
@@ -73,105 +46,36 @@ import {
 } from '../features/commands/availability';
 import { ContextMenu as DirectoryContextMenu } from '../features/commands/context-menu';
 import {
-  type ComparisonController,
   type ComparisonControllerContext,
   createComparisonController,
 } from '../features/comparison/comparison-controller';
-import {
-  type ComparisonState,
-  differingEntryIds,
-  initialComparisonState,
-} from '../features/comparison/comparison-state';
+import { differingEntryIds } from '../features/comparison/comparison-state';
 import { SyncPlanDialog } from '../features/comparison/sync-plan-dialog';
 import { type AppDialogsContext, renderAppDialogs } from '../features/dialogs/app-dialogs';
-import { createDialogUIController } from '../features/dialogs/dialog-ui-controller';
-import type { FinderTagsLoader } from '../features/directory-table/finder-tags-loader';
-import type { NativeIconLoader } from '../features/directory-table/native-icon-loader';
-import type { ThumbnailLoader } from '../features/directory-table/thumbnail-loader';
 import { DirectoryTree, type DirectoryTreeAttrs } from '../features/directory-tree/directory-tree';
-import {
-  ancestorChain,
-  createTreeChildrenState,
-  flattenVisibleTree,
-  type TreeChildrenState,
-  withChildren,
-  withError,
-  withExpanded,
-  withLoading,
-} from '../features/directory-tree/directory-tree-state';
-import { mergeCleanupCandidates } from '../features/disk-usage/cleanup-candidates';
-import type { DiskUsageViewState } from '../features/disk-usage/disk-usage-view';
 import {
   type DropModifiers,
   operationForDrop,
   validateDropTarget,
 } from '../features/drag-drop/drag-drop';
-import {
-  createFileEditorController,
-  type FileEditorController,
-  type FileEditorState,
-} from '../features/editor/file-editor-controller';
-import type { EditorLinkHandlers } from '../features/editor/link-actions';
-import { isSafeExternalUrl, resolveDetectedLink } from '../features/editor/link-actions';
-import {
-  DEFAULT_ENTRY_FORMAT_SETTINGS,
-  type EntryFormatSettings,
-} from '../features/entry-formatting/entry-formatting';
+import type { EntryFormatSettings } from '../features/entry-formatting/entry-formatting';
 import {
   type BackendEventContext,
   createBackendEventHandler,
 } from '../features/events/backend-event-handler';
 import { recordRecentLocation } from '../features/favourites/favourites';
-import {
-  COMPARE_BY_CONTENT_ACTION_ID,
-  COMPARE_FILES_ACTION_ID,
-  COMPARE_FILES_SHORTCUT,
-  resolveDiffPair,
-} from '../features/file-diff/file-diff-actions';
-import { FileDiffDialog, type FileDiffRequest } from '../features/file-diff/file-diff-dialog';
-import { CONVERT_GEO_ACTION_ID, isConvertibleGeoFile } from '../features/geo/convert-geo-actions';
-import { ConvertGeoDialog, type ConvertGeoRequest } from '../features/geo/convert-geo-dialog';
-import { MINIFY_GEO_ACTION_ID } from '../features/geo/minify-geo-actions';
-import { MinifyGeoDialog, type MinifyGeoRequest } from '../features/geo/minify-geo-dialog';
-import { isGeoCandidate } from '../features/image-map/gps-scan';
-import { SHOW_ON_MAP_ACTION_ID } from '../features/image-map/image-map-actions';
-import {
-  createImageMapController,
-  type ImageMapController,
-} from '../features/image-map/image-map-controller';
-import { ImageMapPanel } from '../features/image-map/image-map-panel';
-import { type ImageMapState, INITIAL_IMAGE_MAP_STATE } from '../features/image-map/image-map-state';
-import {
-  EditImageMetadataDialog,
-  type EditImageMetadataRequest,
-} from '../features/image-metadata/edit-image-metadata-dialog';
-import {
-  EDIT_IMAGE_METADATA_ACTION_ID,
-  isMetadataEditable,
-  supportsRichFields,
-} from '../features/image-metadata/image-metadata-edit';
+import { FileDiffDialog } from '../features/file-diff/file-diff-dialog';
+import { ConvertGeoDialog } from '../features/geo/convert-geo-dialog';
+import { MinifyGeoDialog } from '../features/geo/minify-geo-dialog';
+import { EditImageMetadataDialog } from '../features/image-metadata/edit-image-metadata-dialog';
 import {
   createGlobalKeydownHandler,
   type GlobalKeydownContext,
 } from '../features/keybindings/global-keydown-handler';
 import { ShortcutsHelpDialog } from '../features/keybindings/shortcuts-help-dialog';
-import {
-  createLinkDoctorController,
-  type LinkDoctorController,
-} from '../features/link-doctor/link-doctor-controller';
-import {
-  INITIAL_LINK_DOCTOR_STATE,
-  type LinkDoctorState,
-} from '../features/link-doctor/link-doctor-state';
+import { createLinkDoctorController } from '../features/link-doctor/link-doctor-controller';
 import { LinkDoctorView } from '../features/link-doctor/link-doctor-view';
-import {
-  createMusicDuplicatesController,
-  type MusicDuplicatesController,
-} from '../features/music-duplicates/music-duplicates-controller';
-import {
-  INITIAL_MUSIC_DUPLICATES_STATE,
-  type MusicDuplicatesState,
-} from '../features/music-duplicates/music-duplicates-state';
+import { createMusicDuplicatesController } from '../features/music-duplicates/music-duplicates-controller';
 import { MusicDuplicatesView } from '../features/music-duplicates/music-duplicates-view';
 import { replayEditCommand } from '../features/native-menu/edit-command';
 import {
@@ -183,14 +87,11 @@ import { WindowsNativeMenu } from '../features/native-menu/windows-native-menu';
 import {
   createNavigationController,
   type NavigationController,
-  type PaneDirectoryView,
   parentLocation,
 } from '../features/navigation/navigation';
-import { rootLocationFor } from '../features/navigation/root-location';
 import {
   createLocalStorageSyncStore,
   createSyncedBrowsing,
-  type SyncedBrowsingController,
 } from '../features/navigation/synced-browsing';
 import {
   requestSkippingSpaceCheck,
@@ -202,117 +103,48 @@ import {
   createOperationsState,
   dismissOperation,
   isActiveOperation,
-  mergeOperationHistory,
   shouldAutoDismissOperation,
   summariseActiveOperations,
 } from '../features/operations/operation-state';
 import {
   createOperationsController,
-  type OperationConfirmationRequest,
-  type OperationsController,
   withActiveSourceGuard,
   withOperationConfirmation,
   withPermanentDeleteConfirmation,
 } from '../features/operations/operations-controller';
-import type { PaneRenameRequest } from '../features/panes/pane';
 import { isParentEntry } from '../features/panes/parent-entry';
-import {
-  createTabController,
-  type TabController,
-  type TabControllerContext,
-} from '../features/panes/tab-controller';
+import { createTabController, type TabControllerContext } from '../features/panes/tab-controller';
 import { createMediaAccess, type PrepareMedia } from '../features/player/media-access';
 import { MiniPlayer } from '../features/player/mini-player';
-import {
-  collectMedia,
-  MAX_QUEUED_TRACKS,
-  type QueueMode,
-  queueItemsFromEntries,
-  queueTitle,
-} from '../features/player/play-selection';
-import {
-  COMPARE_SNAPSHOT_ACTION_ID,
-  FIND_BROKEN_LINKS_ACTION_ID,
-  FIND_MUSIC_DUPLICATES_ACTION_ID,
-  MEDIA_QUEUE_ACTIONS,
-  OPEN_LINK_AT_CURSOR_ACTION_ID,
-  PLAYER_CLIENT_ACTIONS,
-  REVEAL_LINK_AT_CURSOR_ACTION_ID,
-  SAVE_PLAYLIST_ACTION_ID,
-  SAVE_SNAPSHOT_ACTION_ID,
-} from '../features/player/player-actions';
-import {
-  createPlayerController,
-  type PlayerController,
-} from '../features/player/player-controller';
-import { createInitialPlayerState, type PlayerState } from '../features/player/player-state';
-import {
-  type PlaylistExportFormat,
-  type PlaylistPathStyle,
-  writePlaylist,
-} from '../features/playlist/playlist-writer';
-import {
-  SavePlaylistDialog,
-  type SavePlaylistRequest,
-} from '../features/playlist/save-playlist-dialog';
-import type { PluginPaneState } from '../features/plugins/plugin-panel-host';
-import {
-  createFileViewerController,
-  type FileViewerController,
-  type FileViewerState,
-} from '../features/preview/file-viewer-controller';
-import { previewPluginRoutes } from '../features/preview/plugin-preview';
-import { openViewerWindow } from '../features/preview/viewer-window';
-import {
-  type AdvancedFilterCriteria,
-  filterEntriesAdvanced,
-} from '../features/quick-filter/advanced-filter';
-import { AdvancedFilterStore } from '../features/quick-filter/advanced-filter-store';
+import { createPlayerController } from '../features/player/player-controller';
+import type { PlayerState } from '../features/player/player-state';
+import { SavePlaylistDialog } from '../features/playlist/save-playlist-dialog';
+import { filterEntriesAdvanced } from '../features/quick-filter/advanced-filter';
 import { filterEntries } from '../features/quick-filter/quick-filter';
 import {
   createFindFilesController,
-  type FindFilesController,
   type FindFilesControllerContext,
 } from '../features/search/find-files-controller';
-import type { FindFilesSearchParams } from '../features/search/find-files-dialog';
-import type { SearchPresentation } from '../features/search/search-presentation';
-import type { SelectionPlatform } from '../features/selection/keybindings';
 import {
   emptySelection,
   getSelectedEntries,
   getSelectedEntriesOrCursor,
   reduceSelection,
-  type SelectionState,
 } from '../features/selection/selection';
 import {
-  knowledgeEvidencePage,
   pdfImageProvenance,
   pdfPageRenderProvenance,
 } from '../features/semantic/evidence-provenance';
-import { provenanceLine } from '../features/semantic/themes-model';
 import { AppUpdateDialog } from '../features/settings/app-update-dialog';
 import { SemanticFolderEnrolmentPrompt } from '../features/settings/semantic-library-management';
 import {
   createSettingsController,
-  type SettingsController,
   type SettingsControllerContext,
 } from '../features/settings/settings-controller';
-import { SettingsEditor, type SettingsSection } from '../features/settings/settings-editor';
-import {
-  SaveSnapshotDialog,
-  type SaveSnapshotRequest,
-} from '../features/snapshots/save-snapshot-dialog';
-import {
-  createSnapshotController,
-  type SnapshotController,
-} from '../features/snapshots/snapshot-controller';
-import {
-  childLocation,
-  defaultSnapshotName,
-  INITIAL_SNAPSHOT_PANEL_STATE,
-  isSnapshotFileName,
-  type SnapshotPanelState,
-} from '../features/snapshots/snapshot-state';
+import { SettingsEditor } from '../features/settings/settings-editor';
+import { SaveSnapshotDialog } from '../features/snapshots/save-snapshot-dialog';
+import { createSnapshotController } from '../features/snapshots/snapshot-controller';
+import { childLocation } from '../features/snapshots/snapshot-state';
 import { SnapshotView } from '../features/snapshots/snapshot-view';
 import {
   type SortColumn,
@@ -320,24 +152,11 @@ import {
   sortEntries,
   sortEntriesResponsive,
 } from '../features/sorting/sorting';
-import {
-  CombineFilesDialog,
-  type CombineFilesRequest,
-} from '../features/split/combine-files-dialog';
-import {
-  COMBINE_FILES_ACTION_ID,
-  isCombinablePart,
-  isSplittable,
-  SPLIT_FILE_ACTION_ID,
-} from '../features/split/split-actions';
-import { SplitFileDialog, type SplitFileRequest } from '../features/split/split-file-dialog';
-import {
-  SYNC_PROFILES_ACTION_ID,
-  SYNC_SCHEDULE_TICK_MS,
-} from '../features/sync-profiles/sync-profile-actions';
+import { CombineFilesDialog } from '../features/split/combine-files-dialog';
+import { SplitFileDialog } from '../features/split/split-file-dialog';
+import { SYNC_SCHEDULE_TICK_MS } from '../features/sync-profiles/sync-profile-actions';
 import {
   createSyncProfileController,
-  type SyncProfileController,
   type SyncProfileControllerContext,
 } from '../features/sync-profiles/sync-profile-controller';
 import { SyncProfilesDialog } from '../features/sync-profiles/sync-profiles-dialog';
@@ -345,7 +164,6 @@ import { tauriTerminalClient } from '../features/terminal/terminal-client';
 import { TerminalDrawer } from '../features/terminal/terminal-drawer';
 import { focusOpenedTerminal, isTerminalVisible } from '../features/terminal/terminal-state';
 import { WalkthroughPanel } from '../features/walkthroughs/walkthrough-panel';
-import type { WalkthroughId } from '../features/walkthroughs/walkthroughs';
 import { formatWindowTitle } from '../features/window-title/window-title';
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
 import {
@@ -354,70 +172,35 @@ import {
 } from '../features/workspace/pane-content-builder';
 import {
   createWorkspaceController,
-  type WorkspaceController,
   type WorkspaceControllerContext,
 } from '../features/workspace/workspace-controller';
-import {
-  pathFromUri,
-  WorkspaceLayoutView,
-  type WorkspacePaneContent,
-} from '../features/workspace/workspace-layout';
+import { WorkspaceLayoutView } from '../features/workspace/workspace-layout';
 import { sortWorkspaceSummaries } from '../features/workspace/workspace-manager';
 import { WorkspaceSwitcher } from '../features/workspace/workspace-switcher';
-import { actionTitle, errorText, t } from '../i18n';
-import {
-  type FunctionKeyModifiers,
-  footerFunctionKeyBindings,
-  getLiveBindings,
-  hasPrimaryModifier,
-  type KeybindingRuntime,
-  usesLiteralControl,
-} from '../keybindings/dispatcher';
+import { errorText, t } from '../i18n';
+import { footerFunctionKeyBindings, getLiveBindings } from '../keybindings/dispatcher';
 import type {
-  ActionDescriptor,
   ActionInvocationContext,
-  AppUpdateInfo,
-  BackendEvent,
-  ChangeAttributes,
-  Connection,
   DirectoryDelta,
   EntrySummary,
-  GeoTransform,
-  ImageMetadataEdit,
-  KnowledgeEvidence,
   Location,
   NativeMenuSpec,
   Operation,
-  OperationConflict,
-  OperationId,
   PaneId,
-  PluginDescriptor,
   PluginId,
   PluginLogEntry,
-  RagScope,
-  ScanDiskUsageResult,
-  SearchExecutionMode,
-  SearchQuery,
   SemanticComponentStatus,
   Settings,
   SortDescriptor,
-  SplitFile,
-  SystemLocation,
   TabId,
   TabProjection,
-  ThemePassage,
-  Volume,
   WorkspaceId,
   WorkspaceLayout,
   WorkspaceProjection,
-  WorkspaceSummary,
 } from '../models';
 import {
-  type AppState,
   applyAppPatches,
-  basketPatch,
   cacheContentMatchesPatch,
-  clipboardPatch,
   connectionPatch,
   createInitialAppState,
   deleteQuickFilterDraftPatch,
@@ -425,10 +208,29 @@ import {
   setQuickFilterDraftPatch,
 } from '../state';
 import { perfEndAfterPaint, perfStart } from '../utilities/perf';
-import { resolvedTheme } from '../utilities/resolved-theme';
 import type { RuntimeKind } from '../utilities/runtime';
 import { createWindowTitleSink, dedupeWindowTitleSink } from '../utilities/window-title-sink';
+import { createActionsWiring } from './actions-wiring';
+import { createBasketWiring } from './basket-wiring';
 import { buildControllers } from './controller-registry';
+import { createDialogWiring } from './dialogs-wiring';
+import { createImageMapWiring } from './image-map-wiring';
+import { createKnowledgeWiring } from './knowledge-wiring';
+import { createMiscWiring } from './misc-wiring';
+import { createOperationsWiring } from './operations-wiring';
+import { createPreviewWiring } from './preview-wiring';
+import { createSettingsWiring } from './settings-wiring';
+import { locationForPath, respectSystemLocationReadOnly, windowControlIcon } from './shell-helpers';
+import type { DiskUsageTabEntry, KnowledgeSearchTabEntry, ThemesTabEntry } from './shell-state';
+import { createShellState } from './shell-state';
+import { createTreeWiring } from './tree-wiring';
+
+export { knowledgeEvidencePage } from '../features/semantic/evidence-provenance';
+export {
+  locationForPath,
+  removeDiskUsageNodes,
+  respectSystemLocationReadOnly,
+} from './shell-helpers';
 
 /** Attributes of the application shell. */
 export interface AppShellAttrs {
@@ -440,1305 +242,101 @@ export interface AppShellAttrs {
   entryFormatSettings?: EntryFormatSettings;
 }
 
-interface DiskUsageTabEntry {
-  key: string;
-  paneId: PaneId;
-  readonly tabId: TabId;
-  readonly location: Location;
-  abort: AbortController;
-  scanId: string;
-  progressComplete: boolean;
-  expansionLocation: Location | undefined;
-  expansionBaseResult: ScanDiskUsageResult | undefined;
-  state: DiskUsageViewState;
-}
-
-interface KnowledgeSearchTabEntry {
-  key: string;
-  paneId: PaneId;
-  readonly tabId: TabId;
-  readonly workspaceId: WorkspaceId;
-  readonly currentFolder: Location | undefined;
-  readonly semanticSourceIds: readonly string[];
-  readonly initialSubject: string | undefined;
-}
-
-interface ThemesTabEntry {
-  key: string;
-  paneId: PaneId;
-  readonly tabId: TabId;
-  readonly scopes: readonly RagScope[];
-}
-
-export { knowledgeEvidencePage } from '../features/semantic/evidence-provenance';
-
-const DEFAULT_THEME: Theme = 'auto';
-
-/** Applies host-detected mount access metadata to a directory view. */
-export function respectSystemLocationReadOnly(
-  view: PaneDirectoryView,
-  locations: readonly SystemLocation[],
-): PaneDirectoryView {
-  if (
-    view.location === undefined ||
-    !locations.some(
-      ({ location, readOnly }) =>
-        readOnly === true &&
-        location.providerId === view.location?.providerId &&
-        (location.uri === view.location.uri ||
-          view.location.uri.startsWith(
-            location.uri.endsWith('/') ? location.uri : `${location.uri}/`,
-          )),
-    )
-  ) {
-    return view;
-  }
-  return { ...view, writable: false };
-}
-
-const DISMISSED_OPERATIONS_STORAGE_KEY = 'fm.dismissedOperationIds';
-const MAX_DISMISSED_OPERATIONS = 500;
-
-function loadDismissedOperationIds(): Set<OperationId> {
-  try {
-    const raw = globalThis.localStorage?.getItem(DISMISSED_OPERATIONS_STORAGE_KEY);
-    if (raw === null) return new Set();
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((value): value is OperationId => typeof value === 'string'));
-  } catch {
-    return new Set();
-  }
-}
-
-function persistDismissedOperationIds(ids: ReadonlySet<OperationId>): void {
-  try {
-    const recent = [...ids].slice(-MAX_DISMISSED_OPERATIONS);
-    globalThis.localStorage?.setItem(DISMISSED_OPERATIONS_STORAGE_KEY, JSON.stringify(recent));
-  } catch {
-    // localStorage can be unavailable in some runtimes; in-memory dismissal still works.
-  }
-}
-
-/**
- * Converts a displayed breadcrumb path back to its provider-specific location.
- *
- * `homeDirectory` (the native home-directory path, when known - see `getHomeDirectory` on
- * `FileManagerClient`) lets a leading `~`/`~/...` expand the same way a shell would, for the
- * local provider only: other providers (e.g. SFTP) may have their own, server-side `~`
- * convention keyed to a different home directory, so a bare/unexpandable `~` is passed through
- * unchanged rather than guessing.
- */
-export function locationForPath(current: Location, path: string, homeDirectory?: string): Location {
-  if (current.providerId === 'archive') {
-    const archiveSeparator = path.indexOf('!');
-    const outerPath = archiveSeparator < 0 ? path : path.slice(0, archiveSeparator);
-    const outerUrl = new URL('file:///');
-    outerUrl.pathname = outerPath.replaceAll('\\', '/');
-    if (archiveSeparator < 0) {
-      return { providerId: 'local', uri: outerUrl.toString() };
-    }
-    const innerPath = path.slice(archiveSeparator + 1).replace(/^\/+/, '');
-    return {
-      providerId: 'archive',
-      uri: `archive://${outerUrl.toString().slice('file://'.length)}!/${innerPath}`,
-    };
-  }
-  const url = new URL(current.uri);
-  const canExpandTilde = current.providerId === 'local' && homeDirectory !== undefined;
-  const expandedPath =
-    canExpandTilde && path === '~'
-      ? homeDirectory
-      : canExpandTilde && path.startsWith('~/')
-        ? `${homeDirectory.replace(/\/+$/, '')}/${path.slice(2)}`
-        : path.startsWith('~')
-          ? path
-          : path.replaceAll('\\', '/');
-  url.pathname = expandedPath.replaceAll('\\', '/');
-  return { ...current, uri: url.toString() };
-}
-
-export function removeDiskUsageNodes(
-  node: ScanDiskUsageResult['root'],
-  sourceUris: ReadonlySet<string>,
-): ScanDiskUsageResult['root'] | undefined {
-  if (sourceUris.has(node.location.uri)) return undefined;
-  let changed = false;
-  const children = node.children.flatMap((child) => {
-    const next = removeDiskUsageNodes(child, sourceUris);
-    changed ||= next !== child;
-    return next === undefined ? [] : [next];
-  });
-  if (!changed) return node;
-  const previousLogicalBytes = node.children.reduce(
-    (total, child) => total + child.logicalBytes,
-    0,
-  );
-  const previousPhysicalBytes = node.children.reduce(
-    (total, child) => total + child.physicalBytes,
-    0,
-  );
-  const nextLogicalBytes = children.reduce((total, child) => total + child.logicalBytes, 0);
-  const nextPhysicalBytes = children.reduce((total, child) => total + child.physicalBytes, 0);
-  return {
-    ...node,
-    logicalBytes: Math.max(0, node.logicalBytes - previousLogicalBytes + nextLogicalBytes),
-    physicalBytes: Math.max(0, node.physicalBytes - previousPhysicalBytes + nextPhysicalBytes),
-    children,
-  };
-}
-
-/**
- * A factory component so that per-instance state lives in the closure rather
- * than on a shared module-level object.
- */
-/** Windows-style caption-button glyph; text glyphs (−, □, ×) render far smaller than native ones. */
-function windowControlIcon(path: string): m.Vnode {
-  return m(
-    'svg.fm-windows-titlebar-glyph',
-    { viewBox: '0 0 12 12', 'aria-hidden': 'true', focusable: 'false' },
-    m('path', { d: path }),
-  );
-}
-
-export const AppShell: FactoryComponent<AppShellAttrs> = () => {
-  let theme: Theme = DEFAULT_THEME;
-  let currentSettings: Settings | undefined;
-  let settingsUpdateQueue = Promise.resolve();
-  let settingsDisclosureElement: HTMLDetailsElement | undefined;
-  let settingsDialogOpen = false;
-  let semanticInstallation:
-    | { state: 'installing' | 'succeeded' | 'failed'; message: string }
-    | undefined;
-  let activityOpen = false;
-  function closeActivityOnOutsidePointer(event: PointerEvent): void {
-    if (!activityOpen || (event.target as Element).closest('.fm-activity-anchor')) return;
-    activityOpen = false;
-    m.redraw();
-  }
-  const semanticJobs = new Map<
-    string,
-    Extract<BackendEvent['payload'], { type: 'semantic.ingestionProgress' }>
-  >();
-  let settingsInitialSection: SettingsSection = 'appearance';
-  let availableAppUpdate: AppUpdateInfo | undefined;
-  let aboutDialogOpen = false;
-  let workspaceDisclosureElement: HTMLDetailsElement | undefined;
-  let registeredActions: readonly ActionDescriptor[] = [];
-  let systemLocations: readonly SystemLocation[] = [];
-  let systemLocationsError: string | undefined;
-  let volumes: readonly Volume[] = [];
-  let volumesError: string | undefined;
-  /** Native home-directory path, for expanding a leading `~` typed into an address bar. */
-  let homeDirectory: string | undefined;
-  const unavailableLocations = new Set<string>();
-  let plugins: readonly PluginDescriptor[] = [];
-  let connections: readonly Connection[] = [];
-  let connectionsManagerOpen = false;
-  let shortcutsHelpOpen = false;
-  let walkthroughsOpen = false;
-  let walkthroughInvitationVisible = false;
-  let selectedWalkthrough: WalkthroughId = 'basics';
-  let semanticAssistantAvailable = false;
-  let knowledgeSearchAvailable = false;
-  /** Themes cluster embeddings, so full-text alone cannot serve them. */
-  let themesAvailable = false;
-  let knowledgeSearchChecked = false;
-  let knowledgeAnswerRevision = 0;
-  let semanticEnrolmentRequest:
-    | { readonly workspaceId: WorkspaceId; readonly location: Location }
-    | undefined;
-  let semanticEnrolmentReturnToAsk = false;
-  let functionKeyModifiers: FunctionKeyModifiers = {};
-  /** Last non-empty Quick Filter query per tab key, for the Ctrl+Shift+S "reactivate" shortcut. */
-  const lastQuickFilterQueryByTabKey = new Map<string, string>();
-
-  function favouriteActions(): readonly ActionDescriptor[] {
-    const favourites = currentSettings?.favouriteLocations ?? [];
-    return [
-      {
-        id: 'core.favourites',
-        title: t('action', 'openFavourites'),
-        description: t('action', 'showSavedLocations'),
-        category: 'navigation',
-        defaultShortcuts: [{ key: 'h', ctrl: true, shift: true }],
-        contextRequirements: {},
-        source: { kind: 'core' },
+export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
+  const shellState = createShellState(vnode.attrs.client);
+  /** Unlocks encrypted archive entries before they are streamed (task 0269). */
+  const prepareMedia: PrepareMedia = (location, signal) =>
+    createMediaAccess({ client: shellState.client, requestArchivePassword })(location, signal);
+  let opsWiring: ReturnType<typeof createOperationsWiring>;
+  let basketWiring: ReturnType<typeof createBasketWiring>;
+  let imageMapWiring: ReturnType<typeof createImageMapWiring>;
+  let dialogWiring: ReturnType<typeof createDialogWiring>;
+  let actionsWiring: ReturnType<typeof createActionsWiring>;
+  let previewWiring: ReturnType<typeof createPreviewWiring>;
+  let knowledgeWiring: ReturnType<typeof createKnowledgeWiring>;
+  let treeWiring: ReturnType<typeof createTreeWiring>;
+  let settingsWiring: ReturnType<typeof createSettingsWiring>;
+  let miscWiring: ReturnType<typeof createMiscWiring>;
+  const core = {
+    activeTabKey,
+    entriesSortedFor,
+    entriesFilteredFor,
+    quickFilterQueryFor,
+    activeDirectory,
+    selectTab,
+    activatePane,
+    replaceWorkspace,
+    refetchAffectedPanes,
+    prepareMedia,
+    openViewer: (
+      client: FileManagerClient,
+      paneId: PaneId,
+      entry: EntrySummary,
+      initialSearch?: {
+        readonly query: string;
+        readonly regex: boolean;
+        readonly caseSensitive: boolean;
+        readonly wholeWord: boolean;
       },
-      ...favourites.map((favourite, index) => ({
-        id: `core.favourite.${index}`,
-        title: t('action', 'openFavourite', { name: favourite.label }),
-        description: favourite.location.uri,
-        category: 'navigation',
-        // TC-style quick-switch-to-saved-location: Ctrl/Cmd+1..9 for the first nine favourites
-        // (task 0129's Alt+F1/Alt+F2 "switch panel to a different drive" row — fm has no drive
-        // concept, but jumping to a saved favourite location is the closest equivalent).
-        defaultShortcuts: index < 9 ? [{ key: String(index + 1), ctrl: true }] : [],
-        contextRequirements: {},
-        source: { kind: 'core' as const },
-      })),
-    ];
+      openMetadata?: boolean,
+      initialPage?: number,
+      knowledgeSourceId?: string,
+    ) =>
+      previewWiring.openViewer(
+        client,
+        paneId,
+        entry,
+        initialSearch,
+        openMetadata,
+        initialPage,
+        knowledgeSourceId,
+      ),
+    openEditor: (
+      client: FileManagerClient,
+      paneId: PaneId,
+      entry: EntrySummary,
+      initialLine?: number,
+    ) => previewWiring.openEditor(client, paneId, entry, initialLine),
+    actOnLinkAtCursor: (mode: 'open' | 'reveal') => previewWiring.actOnLinkAtCursor(mode),
+    beginShowOnMap: (invocation: ActionInvocationContext | undefined) =>
+      imageMapWiring.beginShowOnMap(invocation),
+    refreshSemanticAssistantAvailability: (currentComponents?: SemanticComponentStatus) =>
+      knowledgeWiring.refreshSemanticAssistantAvailability(currentComponents),
+    refreshKnowledgeSearchAvailability: () => knowledgeWiring.refreshKnowledgeSearchAvailability(),
+  };
+  opsWiring = createOperationsWiring(shellState, core);
+  basketWiring = createBasketWiring(shellState, core);
+  imageMapWiring = createImageMapWiring(shellState, core);
+  dialogWiring = createDialogWiring(shellState, core);
+  actionsWiring = createActionsWiring(shellState);
+  previewWiring = createPreviewWiring(shellState, core);
+  knowledgeWiring = createKnowledgeWiring(shellState, core);
+  treeWiring = createTreeWiring(shellState, core);
+  settingsWiring = createSettingsWiring(shellState, core);
+  miscWiring = createMiscWiring(shellState, core);
+  function closeActivityOnOutsidePointer(event: PointerEvent): void {
+    if (!shellState.activityOpen || (event.target as Element).closest('.fm-activity-anchor'))
+      return;
+    shellState.activityOpen = false;
+    m.redraw();
   }
 
   /** Opens the archive password prompt; resolves `false` when the user cancels. */
   function requestArchivePassword(location: Location, invalid: boolean): Promise<boolean> {
-    dialogs.getState().pendingArchiveCredential?.resolve(false);
-    dialogs.clearArchiveCredential();
+    shellState.dialogs.getState().pendingArchiveCredential?.resolve(false);
+    shellState.dialogs.clearArchiveCredential();
     return new Promise<boolean>((resolve) => {
-      dialogs.setPendingArchiveCredential({ location, invalid, resolve });
+      shellState.dialogs.setPendingArchiveCredential({ location, invalid, resolve });
       m.redraw();
     });
   }
 
-  /** Unlocks encrypted archive entries before they are streamed (task 0269). */
-  const prepareMedia: PrepareMedia = (location, signal) =>
-    createMediaAccess({ client: attrsClient, requestArchivePassword })(location, signal);
-
-  /** Selection-driven audio actions: Play, Play next, Add to queue and Save as playlist. */
-  function mediaQueueActions(): readonly ActionDescriptor[] {
-    const descriptor = (
-      id: string,
-      title: string,
-      contextRequirements: ActionDescriptor['contextRequirements'],
-      description?: string,
-    ): ActionDescriptor => ({
-      id,
-      title,
-      ...(description === undefined ? {} : { description }),
-      category: 'tools',
-      defaultShortcuts: [],
-      contextRequirements,
-      source: { kind: 'core' },
-    });
-    return [
-      ...MEDIA_QUEUE_ACTIONS.map(({ id, title }) =>
-        descriptor(id, t('player', title), { requiresSelection: true }),
-      ),
-      descriptor(SAVE_PLAYLIST_ACTION_ID, t('playlistExport', 'action'), {}),
-      descriptor(EDIT_IMAGE_METADATA_ACTION_ID, t('imageEdit', 'action'), {
-        requiresSelection: true,
-      }),
-      descriptor(CHANGE_ATTRIBUTES_ACTION_ID, t('attributes', 'action'), {
-        requiresSelection: true,
-      }),
-      descriptor(
-        SHOW_ON_MAP_ACTION_ID,
-        t('imageMap', 'action'),
-        {},
-        t('imageMap', 'actionDescription'),
-      ),
-      {
-        // Shift+F2 is taken by core.compareDirectories (Total Commander's own binding) and
-        // Ctrl+F1..F7 by view/sort; Alt+Shift+F2 is the closest free Shift+F2-family chord.
-        ...descriptor(COMPARE_FILES_ACTION_ID, t('fileDiff', 'compareAction'), {
-          requiresSelection: true,
-        }),
-        defaultShortcuts: [COMPARE_FILES_SHORTCUT],
-      },
-      descriptor(COMPARE_BY_CONTENT_ACTION_ID, t('fileDiff', 'compareByContentAction'), {}),
-      descriptor(SYNC_PROFILES_ACTION_ID, t('syncProfiles', 'action'), {}),
-      descriptor(SPLIT_FILE_ACTION_ID, t('splitCombine', 'splitAction'), {
-        requiresSelection: true,
-      }),
-      descriptor(COMBINE_FILES_ACTION_ID, t('splitCombine', 'combineAction'), {
-        requiresSelection: true,
-      }),
-      descriptor(CONVERT_GEO_ACTION_ID, t('geoConvert', 'action'), { requiresSelection: true }),
-      descriptor(MINIFY_GEO_ACTION_ID, t('geoMinify', 'action'), { requiresSelection: true }),
-    ];
-  }
-
-  /** Opens "Save snapshot…" for the selected folder, or the active folder (task 0268). */
-  function beginSaveSnapshot(invocation: ActionInvocationContext | undefined): void {
-    const paneId = invocation?.paneId ?? workspace?.activePaneId;
-    if (paneId === undefined) return;
-    const directory = directories.get(activeTabKey(paneId));
-    const ids = new Set(
-      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
-    );
-    const selectedFolders = (directory?.entries ?? []).filter(
-      (entry) => ids.has(entry.id) && entry.kind === 'directory',
-    );
-    const folder = selectedFolders.length === 1 ? selectedFolders[0] : undefined;
-    const root =
-      folder?.location ??
-      (directory?.location?.providerId === 'basket' ? undefined : directory?.location);
-    if (root === undefined) {
-      toast({ html: t('snapshots', 'selectFolder') });
-      return;
-    }
-    const name =
-      folder?.name ?? decodeURIComponent(root.uri.replace(/\/+$/u, '').split('/').pop() ?? '');
-    saveSnapshotRequest = {
-      root,
-      directory: parentLocation(root),
-      defaultName: defaultSnapshotName(name),
-    };
-    m.redraw();
-  }
-
-  /** Compares the other pane's folder (or the active one) against the selected snapshot file. */
-  function beginSnapshotComparison(invocation: ActionInvocationContext | undefined): void {
-    const paneId = invocation?.paneId ?? workspace?.activePaneId;
-    if (workspace === undefined || paneId === undefined || snapshotController === undefined) return;
-    const directory = directories.get(activeTabKey(paneId));
-    const ids = new Set(
-      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
-    );
-    const snapshot = (directory?.entries ?? []).find(
-      (entry) => ids.has(entry.id) && entry.kind === 'file' && isSnapshotFileName(entry.name),
-    );
-    if (snapshot === undefined) {
-      toast({ html: t('snapshots', 'selectSnapshot') });
-      return;
-    }
-    const otherPaneId = workspace.paneOrder.find((candidate) => candidate !== paneId);
-    const target =
-      (otherPaneId === undefined
-        ? undefined
-        : directories.get(activeTabKey(otherPaneId))?.location) ?? directory?.location;
-    if (target === undefined || target.providerId === 'basket') {
-      toast({ html: t('snapshots', 'noTarget') });
-      return;
-    }
-    void snapshotController.start({ type: 'compare', snapshot: snapshot.location, target });
-  }
-
-  /** Scans the selected folders, or the active folder, for broken links (task 0266). */
-  function beginLinkDoctorScan(invocation: ActionInvocationContext | undefined): void {
-    const paneId = invocation?.paneId ?? workspace?.activePaneId;
-    if (linkDoctorController === undefined || paneId === undefined) return;
-    const directory = directories.get(activeTabKey(paneId));
-    const ids = new Set(
-      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
-    );
-    const folders = (directory?.entries ?? [])
-      .filter((entry) => ids.has(entry.id) && entry.kind === 'directory')
-      .map((entry) => entry.location);
-    const roots =
-      folders.length > 0
-        ? folders
-        : directory?.location === undefined || directory.location.providerId === 'basket'
-          ? []
-          : [directory.location];
-    if (roots.length === 0) {
-      toast({ html: t('linkDoctor', 'noFolder') });
-      return;
-    }
-    void linkDoctorController.start(roots);
-  }
-
-  /** Scans the selected folders, or the active folder, for duplicate and near-duplicate music. */
-  function beginMusicDuplicateScan(invocation: ActionInvocationContext | undefined): void {
-    const paneId = invocation?.paneId ?? workspace?.activePaneId;
-    if (musicDuplicatesController === undefined || paneId === undefined) return;
-    const directory = directories.get(activeTabKey(paneId));
-    const ids = new Set(
-      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
-    );
-    const folders = (directory?.entries ?? [])
-      .filter((entry) => ids.has(entry.id) && entry.kind === 'directory')
-      .map((entry) => entry.location);
-    const roots =
-      folders.length > 0
-        ? folders
-        : directory?.location === undefined || directory.location.providerId === 'basket'
-          ? []
-          : [directory.location];
-    if (roots.length === 0) {
-      toast({ html: t('musicDuplicates', 'noFolder') });
-      return;
-    }
-    void musicDuplicatesController.start(roots);
-  }
-
-  /** Opens "Save as playlist…" for the selection, or every entry of the collection basket. */
-  function beginSavePlaylist(invocation: ActionInvocationContext | undefined): void {
-    const paneId = invocation?.paneId ?? workspace?.activePaneId;
-    if (workspace === undefined || paneId === undefined) return;
-    const directory = directories.get(activeTabKey(paneId));
-    const selection = selections.get(activeTabKey(paneId));
-    const ids = new Set(invocation?.selectedEntryIds ?? selection?.selectedEntryIds ?? []);
-    const inBasket = directory?.location?.providerId === 'basket';
-    const chosen = (directory?.entries ?? []).filter((entry) =>
-      ids.size > 0 ? ids.has(entry.id) : inBasket,
-    );
-    const writable = (
-      view: PaneDirectoryView | undefined,
-    ): view is PaneDirectoryView & {
-      readonly location: Location;
-    } =>
-      view?.location !== undefined &&
-      view.location.providerId !== 'basket' &&
-      view.writable !== false;
-    const otherPaneId = workspace.paneOrder.find((candidate) => candidate !== paneId);
-    const target = writable(directory)
-      ? directory
-      : otherPaneId === undefined
-        ? undefined
-        : directories.get(activeTabKey(otherPaneId));
-    if (!writable(target)) {
-      toast({ html: t('playlistExport', 'noDestination') });
-      return;
-    }
-    const pane = workspace.panesById[paneId];
-    const tab = pane?.tabsById[pane.activeTabId];
-    void collectMedia(chosen, {
-      client: attrsClient,
-      workspaceId: workspace.id,
-      view: {
-        ...(tab?.view.sort === undefined ? {} : { sort: tab.view.sort }),
-        ...(tab === undefined
-          ? {}
-          : { showHidden: tab.view.showHidden, foldersFirst: tab.view.foldersFirst }),
-      },
-      recursive: false,
-    })
-      .then(({ entries }) => {
-        if (entries.length === 0) {
-          toast({ html: t('playlistExport', 'nothingToSave') });
-          return;
-        }
-        savePlaylistRequest = {
-          tracks: entries.map((entry) => ({
-            location: entry.location,
-            title: queueTitle(entry),
-            durationSeconds: undefined,
-          })),
-          directory: target.location,
-        };
-        m.redraw();
-      })
-      .catch((error: unknown) => {
-        toast({ html: errorText(error) });
-      });
-  }
-
-  /** Opens "Minify geographic files…" for the selection (task 0282). */
-  function beginMinifyGeo(invocation: ActionInvocationContext | undefined): void {
-    const paneId = invocation?.paneId ?? workspace?.activePaneId;
-    if (paneId === undefined) return;
-    const ids = new Set(
-      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
-    );
-    const files = (directories.get(activeTabKey(paneId))?.entries ?? []).filter(
-      (entry) => ids.has(entry.id) && isConvertibleGeoFile(entry),
-    );
-    if (files.length === 0) {
-      toast({ html: t('geoConvert', 'noFiles') });
-      return;
-    }
-    minifyGeoRequest = {
-      files: files.map((entry) => ({ location: entry.location, name: entry.name })),
-    };
-    m.redraw();
-  }
-
-  function confirmMinifyGeo(transform: GeoTransform): void {
-    const request = minifyGeoRequest;
-    minifyGeoRequest = undefined;
-    if (request === undefined) return;
-    void opsController
-      .transformGeo(
-        request.files.map((file) => file.location),
-        transform,
-      )
-      .then(() => {
-        toast({ html: t('geoMinify', 'started', request.files.length) });
-        m.redraw();
-      })
-      .catch((error: unknown) => {
-        toast({
-          html: t('geoMinify', 'failed', {
-            message: errorText(error),
-          }),
-        });
-      });
-    m.redraw();
-  }
-
-  /** The selected entries of `paneId` and the folder shown in the other pane (task 0257). */
-  function selectionWithOtherFolder(
-    invocation: ActionInvocationContext | undefined,
-  ):
-    | { readonly selected: readonly EntrySummary[]; readonly otherPaneFolder?: Location }
-    | undefined {
-    const paneId = invocation?.paneId ?? workspace?.activePaneId;
-    if (paneId === undefined) return undefined;
-    const ids = new Set(
-      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
-    );
-    const selected = (directories.get(activeTabKey(paneId))?.entries ?? []).filter((entry) =>
-      ids.has(entry.id),
-    );
-    const otherPaneId = workspace?.paneOrder.find((candidate) => candidate !== paneId);
-    const other =
-      otherPaneId === undefined ? undefined : directories.get(activeTabKey(otherPaneId))?.location;
-    return other === undefined || other.providerId === 'basket'
-      ? { selected }
-      : { selected, otherPaneFolder: other };
-  }
-
-  /** Selected entries of a pane, in listing order. */
-  function selectedEntriesOf(
-    paneId: PaneId,
-    explicitIds?: readonly string[],
-  ): readonly EntrySummary[] {
-    const ids = new Set(
-      explicitIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
-    );
-    return (directories.get(activeTabKey(paneId))?.entries ?? []).filter((entry) =>
-      ids.has(entry.id),
-    );
-  }
-
-  /**
-   * Opens the side-by-side diff for exactly two selected files, or one selected file per pane
-   * (task 0256).
-   */
-  function beginCompareFiles(invocation: ActionInvocationContext | undefined): void {
-    const paneId = invocation?.paneId ?? workspace?.activePaneId;
-    if (paneId === undefined) return;
-    const otherPaneId = workspace?.paneOrder.find((candidate) => candidate !== paneId);
-    const pair = resolveDiffPair(
-      selectedEntriesOf(paneId, invocation?.selectedEntryIds),
-      otherPaneId === undefined ? [] : selectedEntriesOf(otherPaneId),
-      workspace?.paneOrder[0] === paneId,
-    );
-    if (pair === undefined) {
-      toast({ html: t('fileDiff', 'selectTwoFiles') });
-      return;
-    }
-    fileDiffRequest = {
-      left: { location: pair.left.location, name: pair.left.name },
-      right: { location: pair.right.location, name: pair.right.name },
-    };
-    m.redraw();
-  }
-
-  /** Opens "Split file…" for the selected files (task 0257). */
-  function beginSplitFile(invocation: ActionInvocationContext | undefined): void {
-    const context = selectionWithOtherFolder(invocation);
-    const files = (context?.selected ?? []).filter(isSplittable);
-    if (context === undefined || files.length === 0) {
-      toast({ html: t('splitCombine', 'noSelection') });
-      return;
-    }
-    splitFileRequest = {
-      files: files.map((entry) => ({
-        location: entry.location,
-        name: entry.name,
-        size: entry.size ?? 0,
-      })),
-      ...(context.otherPaneFolder === undefined
-        ? {}
-        : { otherPaneFolder: context.otherPaneFolder }),
-    };
-    m.redraw();
-  }
-
-  function confirmSplitFile(
-    split: SplitFile,
-    destination: Location | undefined,
-    count: number,
-  ): void {
-    const request = splitFileRequest;
-    splitFileRequest = undefined;
-    if (request === undefined) return;
-    void opsController
-      .splitFile(
-        request.files.map((file) => file.location),
-        split,
-        destination,
-      )
-      .then(() => {
-        toast({ html: t('splitCombine', 'splitStarted', count) });
-        m.redraw();
-      })
-      .catch((error: unknown) => {
-        toast({
-          html: t('splitCombine', 'failed', {
-            message: errorText(error),
-          }),
-        });
-      });
-    m.redraw();
-  }
-
-  /** Opens "Combine files…" for the selected numbered parts (task 0257). */
-  function beginCombineFiles(invocation: ActionInvocationContext | undefined): void {
-    const context = selectionWithOtherFolder(invocation);
-    const parts = (context?.selected ?? []).filter(isCombinablePart);
-    if (context === undefined || parts.length === 0) {
-      toast({ html: t('splitCombine', 'noParts') });
-      return;
-    }
-    combineFilesRequest = {
-      parts: parts.map((entry) => entry.location),
-      ...(context.otherPaneFolder === undefined
-        ? {}
-        : { otherPaneFolder: context.otherPaneFolder }),
-    };
-    m.redraw();
-  }
-
-  function confirmCombineFiles(destination: Location | undefined, name: string | undefined): void {
-    const request = combineFilesRequest;
-    combineFilesRequest = undefined;
-    if (request === undefined) return;
-    void opsController
-      .combineFiles(request.parts, destination, name)
-      .then(() => {
-        toast({ html: t('splitCombine', 'combineStarted') });
-        m.redraw();
-      })
-      .catch((error: unknown) => {
-        toast({
-          html: t('splitCombine', 'failed', {
-            message: errorText(error),
-          }),
-        });
-      });
-    m.redraw();
-  }
-
-  /** Opens "Convert geographic files…" for the selection (task 0281). */
-  function beginConvertGeo(invocation: ActionInvocationContext | undefined): void {
-    const paneId = invocation?.paneId ?? workspace?.activePaneId;
-    if (paneId === undefined) return;
-    const ids = new Set(
-      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
-    );
-    const files = (directories.get(activeTabKey(paneId))?.entries ?? []).filter(
-      (entry) => ids.has(entry.id) && isConvertibleGeoFile(entry),
-    );
-    if (files.length === 0) {
-      toast({ html: t('geoConvert', 'noFiles') });
-      return;
-    }
-    convertGeoRequest = {
-      files: files.map((entry) => ({ location: entry.location, name: entry.name })),
-    };
-    m.redraw();
-  }
-
-  function confirmConvertGeo(transform: GeoTransform): void {
-    const request = convertGeoRequest;
-    convertGeoRequest = undefined;
-    if (request === undefined) return;
-    void opsController
-      .transformGeo(
-        request.files.map((file) => file.location),
-        transform,
-      )
-      .then(() => {
-        toast({ html: t('geoConvert', 'started', request.files.length) });
-        m.redraw();
-      })
-      .catch((error: unknown) => {
-        toast({
-          html: t('geoConvert', 'failed', {
-            message: errorText(error),
-          }),
-        });
-      });
-    m.redraw();
-  }
-
-  /** Opens the "Show on map" panel for the selection, or for the whole active folder (task 0276). */
-  function beginShowOnMap(invocation: ActionInvocationContext | undefined): void {
-    const paneId = invocation?.paneId ?? workspace?.activePaneId;
-    if (workspace === undefined || paneId === undefined) return;
-    const directory = directories.get(activeTabKey(paneId));
-    const ids = new Set(
-      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
-    );
-    const chosen = (directory?.entries ?? []).filter(
-      (entry) => ids.has(entry.id) && !isParentEntry(entry.id),
-    );
-    const folderLocation = directory?.location;
-    if (
-      chosen.length === 0 &&
-      (folderLocation === undefined || folderLocation.providerId === 'basket')
-    ) {
-      toast({ html: t('imageMap', 'noImages') });
-      return;
-    }
-    // Without a selection the folder itself is the source, so every page of it is read.
-    const roots: readonly EntrySummary[] =
-      chosen.length > 0
-        ? chosen
-        : [
-            {
-              id: 'image-map-folder',
-              name: '',
-              kind: 'directory',
-              location: folderLocation,
-            } as EntrySummary,
-          ];
-    openImageMap(
-      paneId,
-      roots,
-      chosen.length === 0 || chosen.some((entry) => entry.kind === 'directory'),
-    );
-  }
-
-  /** The "Show photos on map" panel and the tab that hosts it, when it is open in `paneId`. */
-  function imageMapPane(paneId: PaneId): { tabId: TabId; content: m.Children } | undefined {
-    const tab = imageMapTab;
-    if (
-      !imageMapState.open ||
-      imageMapController === undefined ||
-      currentSettings === undefined ||
-      tab === undefined ||
-      tab.paneId !== paneId
-    ) {
-      return undefined;
-    }
-    return {
-      tabId: tab.tabId,
-      content: m(ImageMapPanel, {
-        state: imageMapState,
-        client: attrsClient,
-        settings: currentSettings.map,
-        dark: resolvedTheme() === 'dark',
-        selectedIds: new Set(
-          (imageMapPaneId === undefined ? undefined : selections.get(activeTabKey(imageMapPaneId)))
-            ?.selectedEntryIds ?? [],
-        ),
-        onReveal: revealMappedEntry,
-        onRecursive: (recursive) => void imageMapController?.setRecursive(recursive),
-        onCancel: () => imageMapController?.cancel(),
-        onBeginPlacing: (entry) => imageMapController?.beginPlacing(entry),
-        onStopPlacing: () => imageMapController?.stopPlacing(),
-        onPropose: (entry, latitude, longitude) =>
-          imageMapController?.proposePlacement(entry, latitude, longitude),
-        onConfirm: () => void imageMapController?.confirmPlacement(),
-        onCancelPlacement: () => imageMapController?.cancelPlacement(),
-      }),
-    };
-  }
-
-  /** Opens (or reuses) the tab that shows the photo map, in the pane opposite `sourcePaneId`. */
-  function ensureImageMapTab(sourcePaneId: PaneId): void {
-    const current = workspace;
-    if (current === undefined) return;
-    const existing = imageMapTab;
-    if (existing !== undefined && current.panesById[existing.paneId]?.tabsById[existing.tabId]) {
-      selectTab(attrsClient, existing.paneId, existing.tabId);
-      focusPane?.(existing.paneId);
-      return;
-    }
-    imageMapTab = undefined;
-    const targetPaneId = current.paneOrder.find((candidate) => candidate !== sourcePaneId);
-    const target = targetPaneId ?? sourcePaneId;
-    const sourcePane = current.panesById[sourcePaneId];
-    const location = sourcePane?.tabsById[sourcePane.activeTabId]?.location;
-    if (location === undefined || current.panesById[target] === undefined) return;
-    void dispatchWorkspaceCommand(
-      attrsClient,
-      {
-        type: 'addTransientTab',
-        workspaceId: current.id,
-        paneId: target,
-        location,
-        expectedRevision: current.revision,
-      },
-      replaceWorkspace,
-    )
-      .then((next) => {
-        const tabId = next.panesById[target]?.activeTabId;
-        if (tabId !== undefined) {
-          imageMapTab = { paneId: target, tabId };
-          focusPane?.(target);
-        }
-        m.redraw();
-      })
-      .catch((error: unknown) => {
-        toast({ html: workspaceErrorMessage(error, t('imageMap', 'failed', { message: '' })) });
-      });
-  }
-
-  /** Starts the map panel for `roots`; `folder` offers the "include subfolders" option. */
-  function openImageMap(paneId: PaneId, roots: readonly EntrySummary[], folder: boolean): void {
-    if (workspace === undefined) return;
-    const pane = workspace.panesById[paneId];
-    const tab = pane?.tabsById[pane.activeTabId];
-    const workspaceId = workspace.id;
-    imageMapPaneId = paneId;
-    ensureImageMapTab(paneId);
-    imageMapController ??= createImageMapController({
-      getClient: () => attrsClient,
-      getOpsController: () => opsController,
-      getState: () => imageMapState,
-      setState: (state) => {
-        imageMapState = state;
-      },
-      toast: (message) => toast({ html: message }),
-      redraw: () => m.redraw(),
-    });
-    void imageMapController.open({
-      folder,
-      collect: async (recursive, signal) => {
-        const { entries, truncated } = await collectMedia(roots, {
-          client: attrsClient,
-          workspaceId,
-          view: {
-            ...(tab?.view.sort === undefined ? {} : { sort: tab.view.sort }),
-            ...(tab === undefined
-              ? {}
-              : { showHidden: tab.view.showHidden, foldersFirst: tab.view.foldersFirst }),
-          },
-          recursive,
-          accept: isGeoCandidate,
-          signal,
-        });
-        return { entries, truncated };
-      },
-    });
-  }
-
-  /** "Open on map" of the F3 viewer: shows the viewed image on the map (task 0273/0276). */
-  function showEntryOnMap(paneId: PaneId, entry: EntrySummary): void {
-    openImageMap(paneId, [entry], false);
-  }
-
-  /** Selects an entry of the map panel in its pane when that folder is currently listed. */
-  function revealMappedEntry(entry: EntrySummary): void {
-    const paneId = imageMapPaneId;
-    if (paneId === undefined) return;
-    const key = activeTabKey(paneId);
-    const listed = (directories.get(key)?.entries ?? []).find(
-      (candidate) => candidate.location.uri === entry.location.uri,
-    );
-    if (listed === undefined) {
-      toast({ html: t('imageMap', 'notInFolder', { name: entry.name }) });
-      return;
-    }
-    selections.set(
-      key,
-      reduceSelection(emptySelection, { type: 'selectOnly', entryId: listed.id }, [listed.id]),
-    );
-    m.redraw();
-  }
-
-  /** Opens "Change attributes…" for the selected entries of the pane (task 0258). */
-  function beginChangeAttributes(invocation: ActionInvocationContext | undefined): void {
-    const paneId = invocation?.paneId ?? workspace?.activePaneId;
-    if (paneId === undefined) return;
-    const ids = new Set(
-      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
-    );
-    const selected = (directories.get(activeTabKey(paneId))?.entries ?? []).filter((entry) =>
-      ids.has(entry.id),
-    );
-    openChangeAttributes(selected);
-  }
-
-  function openChangeAttributes(entries: readonly EntrySummary[]): void {
-    if (entries.length === 0) {
-      toast({ html: t('attributes', 'noSelection') });
-      return;
-    }
-    changeAttributesRequest = { files: entries.map((entry) => entry.location) };
-    m.redraw();
-  }
-
-  function confirmChangeAttributes(change: ChangeAttributes, count: number): void {
-    const request = changeAttributesRequest;
-    changeAttributesRequest = undefined;
-    if (request === undefined) return;
-    void opsController
-      .changeAttributes(request.files, change)
-      .then(() => {
-        toast({ html: t('attributes', 'started', count) });
-        m.redraw();
-      })
-      .catch((error: unknown) => {
-        toast({
-          html: t('attributes', 'failed', {
-            message: errorText(error),
-          }),
-        });
-      });
-    m.redraw();
-  }
-
-  /** Opens "Edit image metadata…" for the editable images of the selection (task 0274). */
-  function beginEditImageMetadata(invocation: ActionInvocationContext | undefined): void {
-    const paneId = invocation?.paneId ?? workspace?.activePaneId;
-    if (paneId === undefined) return;
-    const ids = new Set(
-      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
-    );
-    const images = (directories.get(activeTabKey(paneId))?.entries ?? []).filter(
-      (entry) => ids.has(entry.id) && isMetadataEditable(entry),
-    );
-    if (images.length === 0) {
-      toast({ html: t('imageEdit', 'noEditableImages') });
-      return;
-    }
-    editImageMetadataRequest = {
-      files: images.map((entry) => entry.location),
-      richFields: supportsRichFields(images),
-    };
-    m.redraw();
-  }
-
-  function confirmEditImageMetadata(edit: ImageMetadataEdit): void {
-    const request = editImageMetadataRequest;
-    editImageMetadataRequest = undefined;
-    if (request === undefined) return;
-    void opsController
-      .editImageMetadata(request.files, edit)
-      .then(() => {
-        toast({ html: t('imageEdit', 'started', request.files.length) });
-        m.redraw();
-      })
-      .catch((error: unknown) => {
-        toast({
-          html: t('imageEdit', 'failed', {
-            message: errorText(error),
-          }),
-        });
-      });
-    m.redraw();
-  }
-
-  function confirmSavePlaylist(
-    fileName: string,
-    format: PlaylistExportFormat,
-    pathStyle: PlaylistPathStyle,
-  ): void {
-    const request = savePlaylistRequest;
-    savePlaylistRequest = undefined;
-    if (request === undefined) return;
-    const written = writePlaylist(format, request.tracks, request.directory, pathStyle);
-    void opsController
-      .createTextFile(request.directory, fileName, written.content)
-      .then(() => {
-        toast({ html: t('playlistExport', 'saved', { name: fileName }) });
-        if (written.fellBackToAbsolute) toast({ html: t('playlistExport', 'fellBackToAbsolute') });
-        for (const paneId of workspace?.paneOrder ?? []) refetchAffectedPanes(paneId);
-        m.redraw();
-      })
-      .catch((error: unknown) => {
-        toast({
-          html: t('playlistExport', 'failed', {
-            message: errorText(error),
-          }),
-        });
-      });
-    m.redraw();
-  }
-
-  /** Queues the selection (or cursor entry) of a pane: Play, Play next, Add to queue (task 0263). */
-  function queueSelection(
-    mode: QueueMode,
-    recursive: boolean,
-    invocation: ActionInvocationContext | undefined,
-  ): void {
-    const player = playerController;
-    const paneId = invocation?.paneId ?? workspace?.activePaneId;
-    if (player === undefined || workspace === undefined || paneId === undefined) return;
-    const directory = directories.get(activeTabKey(paneId));
-    const ids = new Set(
-      invocation?.selectedEntryIds ?? selections.get(activeTabKey(paneId))?.selectedEntryIds ?? [],
-    );
-    const cursorId =
-      invocation?.cursorEntryId ?? selections.get(activeTabKey(paneId))?.cursorEntryId;
-    const chosen = (directory?.entries ?? []).filter((entry) =>
-      ids.size > 0 ? ids.has(entry.id) : entry.id === cursorId,
-    );
-    const pane = workspace.panesById[paneId];
-    const tab = pane?.tabsById[pane.activeTabId];
-    void collectMedia(chosen, {
-      client: attrsClient,
-      workspaceId: workspace.id,
-      view: {
-        ...(tab?.view.sort === undefined ? {} : { sort: tab.view.sort }),
-        ...(tab === undefined
-          ? {}
-          : { showHidden: tab.view.showHidden, foldersFirst: tab.view.foldersFirst }),
-      },
-      recursive,
-    })
-      .then(({ entries, truncated }) => {
-        if (entries.length === 0) {
-          toast({ html: t('player', 'noPlayableTracks') });
-          return;
-        }
-        const items = queueItemsFromEntries(entries);
-        if (mode === 'play') player.playItems(items);
-        else if (mode === 'next') player.enqueueNext(items);
-        else player.enqueue(items);
-        if (mode !== 'play') toast({ html: t('player', 'queued', items.length) });
-        if (truncated) toast({ html: t('player', 'truncatedQueue', { n: MAX_QUEUED_TRACKS }) });
-        m.redraw();
-      })
-      .catch((error: unknown) => {
-        toast({ html: errorText(error) });
-      });
-  }
-
-  /** Dispatches frontend-only `client.*` actions that need shell state (the audio player). */
-  function invokeClientAction(actionId: string, invocation?: ActionInvocationContext): boolean {
-    const player = playerController;
-    if (player === undefined) return false;
-    if (actionId === SAVE_PLAYLIST_ACTION_ID) {
-      beginSavePlaylist(invocation);
-      return true;
-    }
-    if (actionId === MINIFY_GEO_ACTION_ID) {
-      beginMinifyGeo(invocation);
-      return true;
-    }
-    if (actionId === CONVERT_GEO_ACTION_ID) {
-      beginConvertGeo(invocation);
-      return true;
-    }
-    if (actionId === COMPARE_FILES_ACTION_ID) {
-      beginCompareFiles(invocation);
-      return true;
-    }
-    if (actionId === SYNC_PROFILES_ACTION_ID) {
-      syncProfilesDialogOpen = true;
-      return true;
-    }
-    if (actionId === COMPARE_BY_CONTENT_ACTION_ID) {
-      comparisonController.startComparison('content');
-      return true;
-    }
-    if (actionId === SPLIT_FILE_ACTION_ID) {
-      beginSplitFile(invocation);
-      return true;
-    }
-    if (actionId === COMBINE_FILES_ACTION_ID) {
-      beginCombineFiles(invocation);
-      return true;
-    }
-    if (actionId === SHOW_ON_MAP_ACTION_ID) {
-      beginShowOnMap(invocation);
-      return true;
-    }
-    if (actionId === EDIT_IMAGE_METADATA_ACTION_ID) {
-      beginEditImageMetadata(invocation);
-      return true;
-    }
-    if (actionId === CHANGE_ATTRIBUTES_ACTION_ID) {
-      beginChangeAttributes(invocation);
-      return true;
-    }
-    if (actionId === FIND_MUSIC_DUPLICATES_ACTION_ID) {
-      beginMusicDuplicateScan(invocation);
-      return true;
-    }
-    if (
-      actionId === OPEN_LINK_AT_CURSOR_ACTION_ID ||
-      actionId === REVEAL_LINK_AT_CURSOR_ACTION_ID
-    ) {
-      actOnLinkAtCursor(actionId === OPEN_LINK_AT_CURSOR_ACTION_ID ? 'open' : 'reveal');
-      return true;
-    }
-    if (actionId === SAVE_SNAPSHOT_ACTION_ID) {
-      beginSaveSnapshot(invocation);
-      return true;
-    }
-    if (actionId === COMPARE_SNAPSHOT_ACTION_ID) {
-      beginSnapshotComparison(invocation);
-      return true;
-    }
-    if (actionId === FIND_BROKEN_LINKS_ACTION_ID) {
-      beginLinkDoctorScan(invocation);
-      return true;
-    }
-    const queueAction = MEDIA_QUEUE_ACTIONS.find((candidate) => candidate.id === actionId);
-    if (queueAction !== undefined) {
-      queueSelection(queueAction.mode, queueAction.recursive, invocation);
-      return true;
-    }
-    if (actionId === 'client.playerTogglePlay') player.togglePlay();
-    else if (actionId === 'client.playerNext') player.next();
-    else if (actionId === 'client.playerPrevious') player.previous();
-    else return false;
-    m.redraw();
-    return true;
-  }
-
-  function localisedRegisteredActions(): readonly ActionDescriptor[] {
-    return registeredActions.map((action) => ({
-      ...action,
-      title: actionTitle(action.id, action.title),
-    }));
-  }
-
-  function keybindingActions(): readonly ActionDescriptor[] {
-    const actions = localisedRegisteredActions();
-    if (actions.some((action) => action.id === 'core.showShortcutsHelp')) return actions;
-    return [
-      ...actions,
-      {
-        id: 'core.showShortcutsHelp',
-        title: t('keybindingsHelp', 'title'),
-        category: 'navigation',
-        defaultShortcuts: [{ key: 'F1' }],
-        contextRequirements: {},
-        source: { kind: 'core' },
-      },
-    ];
-  }
-
-  /** Purely frontend UI actions with no backend action-registry counterpart,
-   * synthesized client-side the same way `favouriteActions` is - see `invokePaletteAction`'s
-   * `client.*` branches for the dispatch side. */
-  function clientOnlyActions(): readonly ActionDescriptor[] {
-    const hasQueue = (appState?.player.queue.length ?? 0) > 0;
-    const editorOpen = workspace !== undefined && editorByPane.has(workspace.activePaneId);
-    return [
-      ...(editorOpen
-        ? [
-            {
-              id: OPEN_LINK_AT_CURSOR_ACTION_ID,
-              title: t('editorLinks', 'openAtCursor'),
-              category: 'tools',
-              defaultShortcuts: [],
-              contextRequirements: {},
-              source: { kind: 'core' as const },
-            },
-            {
-              id: REVEAL_LINK_AT_CURSOR_ACTION_ID,
-              title: t('editorLinks', 'revealAtCursor'),
-              category: 'tools',
-              defaultShortcuts: [],
-              contextRequirements: {},
-              source: { kind: 'core' as const },
-            },
-          ]
-        : []),
-      ...mediaQueueActions(),
-      {
-        id: SAVE_SNAPSHOT_ACTION_ID,
-        title: t('snapshots', 'saveAction'),
-        category: 'tools',
-        defaultShortcuts: [],
-        contextRequirements: {},
-        source: { kind: 'core' as const },
-      },
-      {
-        id: COMPARE_SNAPSHOT_ACTION_ID,
-        title: t('snapshots', 'compareAction'),
-        category: 'tools',
-        defaultShortcuts: [],
-        contextRequirements: {},
-        source: { kind: 'core' as const },
-      },
-      {
-        id: FIND_BROKEN_LINKS_ACTION_ID,
-        title: t('linkDoctor', 'action'),
-        category: 'tools',
-        defaultShortcuts: [],
-        contextRequirements: {},
-        source: { kind: 'core' as const },
-      },
-      {
-        id: FIND_MUSIC_DUPLICATES_ACTION_ID,
-        title: t('musicDuplicates', 'action'),
-        category: 'tools',
-        defaultShortcuts: [],
-        contextRequirements: {},
-        source: { kind: 'core' as const },
-      },
-      ...(hasQueue
-        ? PLAYER_CLIENT_ACTIONS.map(({ id, title }) => ({
-            id,
-            title: t('player', title),
-            category: 'tools',
-            defaultShortcuts: [],
-            contextRequirements: {},
-            source: { kind: 'core' as const },
-          }))
-        : []),
-      {
-        id: 'client.toggleDirectoryTree',
-        title: t('tree', 'toggleSidebar'),
-        description: t('tree', 'directoryTree'),
-        category: 'navigation',
-        defaultShortcuts: [{ key: 'F10', alt: true }],
-        contextRequirements: {},
-        source: { kind: 'core' },
-      },
-      {
-        id: 'client.toggleOperationCentre',
-        title:
-          workspace?.operationCentre.visible === true
-            ? t('shell', 'hideOperationCentre')
-            : t('shell', 'showOperationCentre'),
-        category: 'navigation',
-        defaultShortcuts: [{ key: 'z', alt: true }],
-        contextRequirements: {},
-        source: { kind: 'core' },
-      },
-      {
-        id: 'client.diskUsage',
-        title: t('diskUsage', 'tabTitle'),
-        description: t('diskUsage', 'description'),
-        category: 'tools',
-        defaultShortcuts: [{ key: 'l', ctrl: true, shift: true }],
-        contextRequirements: {},
-        source: { kind: 'core' },
-      },
-      ...(knowledgeSearchAvailable
-        ? [
-            {
-              id: 'client.searchKnowledge',
-              title: t('knowledgeSearch', 'openTitle'),
-              description: t('knowledgeSearch', 'openDescription'),
-              category: 'tools',
-              defaultShortcuts: [{ key: 'k', ctrl: true, shift: true }],
-              contextRequirements: {},
-              source: { kind: 'core' as const },
-            },
-          ]
-        : []),
-      ...(themesAvailable
-        ? [
-            {
-              id: 'client.exploreThemes',
-              title: t('themes', 'openTitle'),
-              description: t('themes', 'openDescription'),
-              category: 'tools',
-              defaultShortcuts: [],
-              contextRequirements: {},
-              source: { kind: 'core' as const },
-            },
-          ]
-        : []),
-      ...(semanticAssistantAvailable
-        ? [
-            {
-              id: 'client.semanticAssistant',
-              title: t('ragAsk', 'title'),
-              description: t('ragAsk', 'openAssistant'),
-              category: 'tools',
-              defaultShortcuts: [{ key: 'f', ctrl: true, shift: true }],
-              contextRequirements: {},
-              source: { kind: 'core' as const },
-            },
-          ]
-        : []),
-    ];
-  }
-
-  function actionsWithFavourites(): readonly ActionDescriptor[] {
-    return [...localisedRegisteredActions(), ...clientOnlyActions(), ...favouriteActions()];
-  }
-
   /** Every open tab across every pane, flattened for the native Window menu (task 0133). */
   function nativeMenuWindowTabs(): readonly NativeMenuTab[] {
-    if (workspace === undefined) return [];
+    if (shellState.workspace === undefined) return [];
     const tabs: NativeMenuTab[] = [];
-    for (const paneId of workspace.paneOrder) {
-      const pane = workspace.panesById[paneId];
+    for (const paneId of shellState.workspace.paneOrder) {
+      const pane = shellState.workspace.panesById[paneId];
       if (pane === undefined) continue;
       for (const tabId of pane.tabOrder) {
         const projection = pane.tabsById[tabId];
@@ -1755,76 +353,57 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     return tabs;
   }
 
-  /** Serialized form of the last spec pushed to the native menu bar - `syncNativeMenu` diffs
-   * against this so an unchanged spec never re-triggers `set_native_menu` (the menu bar is
-   * desktop-only chrome, not app state, so a cheap `JSON.stringify` comparison is an acceptable
-   * fallback given there is no existing deep-equal utility in this codebase to reuse). */
-  let lastSentNativeMenuSpecJson: string | undefined;
-  let windowsNativeMenuSpec: NativeMenuSpec = { menus: [] };
-
-  /** Set once `subscribe_native_menu_actions` has actually resolved. `syncNativeMenu` must not
-   * push a spec before this: `set_native_menu` binds whatever channel is *currently* subscribed
-   * as the click callback, and installs are memoized by spec content - if the very first push
-   * raced ahead of the subscribe call, the backend would bind a no-op callback (nothing
-   * subscribed yet) and then never rebuild the menu again to pick up the real one, since nothing
-   * about the spec's content changes once subscribed. Every menu click would silently no-op. */
-  let nativeMenuChannelReady = false;
-
-  /** Pushes the full native menu bar spec to the backend whenever it might have changed. Called
-   * from the view rather than threaded through every individual mutation site (registered
-   * actions/settings/favourites/workspace tabs are each reassigned from several different
-   * closures across this file) - safe and cheap because of the diff above, and it can never miss
-   * a state change that affects the menu. */
-  /** Re-derives the native window title (the Dock menu entry) from the workspace each render;
-   * the sink only fires when the formatted title changes. */
-  let windowTitleSink = dedupeWindowTitleSink(() => undefined);
   function syncWindowTitle(): void {
-    windowTitleSink(formatWindowTitle({ workspace }));
+    shellState.windowTitleSink(formatWindowTitle({ workspace: shellState.workspace }));
   }
 
   function syncNativeMenu(): void {
-    if (runtimeKind !== 'tauri') return;
+    if (shellState.runtimeKind !== 'tauri') return;
     const spec: NativeMenuSpec = buildNativeMenuSpec({
       // Client-only actions (Search Knowledge, disk usage, ...) have no backend
       // registry entry, so the menu builder can only find them when they are
       // passed alongside the registered ones - exactly as the command palette
       // and the menu dispatch context already do.
-      actions: [...localisedRegisteredActions(), ...clientOnlyActions()],
-      favouriteActions: favouriteActions(),
+      actions: [
+        ...actionsWiring.localisedRegisteredActions(),
+        ...actionsWiring.clientOnlyActions(),
+      ],
+      favouriteActions: actionsWiring.favouriteActions(),
       tabs: nativeMenuWindowTabs(),
-      canOpenNewWindow: attrsClient.openWorkspaceWindow !== undefined,
-      macEditCommands: platform === 'macos',
-      workspaces: sortWorkspaceSummaries(workspaceSummaries),
-      currentWorkspaceId: workspace?.id,
-      volumes,
-      connections,
-      systemLocations,
-      unavailableLocations,
+      canOpenNewWindow: shellState.client.openWorkspaceWindow !== undefined,
+      macEditCommands: shellState.platform === 'macos',
+      workspaces: sortWorkspaceSummaries(shellState.workspaceSummaries),
+      currentWorkspaceId: shellState.workspace?.id,
+      volumes: shellState.volumes,
+      connections: shellState.connections,
+      systemLocations: shellState.systemLocations,
+      unavailableLocations: shellState.unavailableLocations,
     });
-    windowsNativeMenuSpec = spec;
-    if (isWindowsTauriHost() || !nativeMenuChannelReady) return;
+    shellState.windowsNativeMenuSpec = spec;
+    if (isWindowsTauriHost() || !shellState.nativeMenuChannelReady) return;
     const serialized = JSON.stringify(spec);
-    if (serialized === lastSentNativeMenuSpecJson) return;
-    lastSentNativeMenuSpecJson = serialized;
+    if (serialized === shellState.lastSentNativeMenuSpecJson) return;
+    shellState.lastSentNativeMenuSpecJson = serialized;
     void invoke('set_native_menu', { spec }).catch(() => {
       // The native menu bar is cosmetic desktop chrome; a failed push shouldn't surface an error.
     });
   }
 
   const nativeMenuDispatchContext: NativeMenuDispatchContext = {
-    findAction: (id) => actionsWithFavourites().find((candidate) => candidate.id === id),
+    findAction: (id) =>
+      actionsWiring.actionsWithFavourites().find((candidate) => candidate.id === id),
     openSettingsDialog: () => {
-      openSettingsDialog();
+      settingsWiring.openSettingsDialog();
     },
     openDiagnostics: () => {
-      openSettingsDialog('diagnostics');
+      settingsWiring.openSettingsDialog('diagnostics');
     },
     openShortcutsHelp: () => {
-      shortcutsHelpOpen = true;
+      shellState.shortcutsHelpOpen = true;
       m.redraw();
     },
     openWalkthroughs: () => {
-      walkthroughsOpen = true;
+      shellState.walkthroughsOpen = true;
       m.redraw();
     },
     activateTabByKey: (key) => {
@@ -1832,7 +411,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       if (separator < 0) return;
       const paneId = key.slice(0, separator);
       const tabId = key.slice(separator + 1);
-      if (workspace?.panesById[paneId]?.activeTabId === tabId) {
+      if (shellState.workspace?.panesById[paneId]?.activeTabId === tabId) {
         // The Window menu lists every open tab per pane, so clicking one that's already its
         // pane's active/displayed tab is a normal, common case: switching keyboard focus to
         // another pane without changing what it shows - there's no equivalent single click for
@@ -1841,24 +420,28 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         // a background reload without ever updating which pane has focus and can disturb that
         // pane's existing selection. activatePane is the lightweight, no-reload "just switch
         // focus" operation this needs instead.
-        void activatePane(attrsClient, paneId).catch(() => undefined);
+        void activatePane(shellState.client, paneId).catch(() => undefined);
         return;
       }
-      tabController.activateTab(paneId, tabId);
+      shellState.tabController.activateTab(paneId, tabId);
     },
     activePaneId: () => activeDirectory()?.paneId,
-    openNewTab: (paneId) => tabController.openTab(paneId),
+    openNewTab: (paneId) => shellState.tabController.openTab(paneId),
     closeActiveTab: (paneId) => {
       const focusedEditorPaneId = (
         document.activeElement?.closest('.fm-file-editor') as HTMLElement | null
       )?.dataset.editorPaneId as PaneId | undefined;
-      if (focusedEditorPaneId !== undefined && requestCloseEditor(focusedEditorPaneId)) return;
-      const activeTabId = workspace?.panesById[paneId]?.activeTabId;
-      if (activeTabId !== undefined) tabController.requestCloseTab(paneId, activeTabId);
+      if (
+        focusedEditorPaneId !== undefined &&
+        previewWiring.requestCloseEditor(focusedEditorPaneId)
+      )
+        return;
+      const activeTabId = shellState.workspace?.panesById[paneId]?.activeTabId;
+      if (activeTabId !== undefined) shellState.tabController.requestCloseTab(paneId, activeTabId);
     },
     setSort: (paneId, sort) => globalKeydownHandlerContext.setSort(paneId, sort),
     invokeAction: (action) => {
-      const actionContext = actionCommandController.actionContext();
+      const actionContext = shellState.actionCommandController.actionContext();
       if (
         (action.id === 'core.copyName' ||
           action.id === 'core.copyPath' ||
@@ -1869,19 +452,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         const cursorEntryId =
           active === undefined
             ? undefined
-            : selections.get(activeTabKey(active.paneId))?.cursorEntryId;
+            : shellState.selections.get(activeTabKey(active.paneId))?.cursorEntryId;
         if (cursorEntryId !== undefined) {
-          actionCommandController.invokePaletteAction(action, undefined, {
+          shellState.actionCommandController.invokePaletteAction(action, undefined, {
             ...actionContext,
             selectedEntryIds: [cursorEntryId],
           });
           return;
         }
       }
-      actionCommandController.invokePaletteAction(action, undefined, actionContext);
+      shellState.actionCommandController.invokePaletteAction(action, undefined, actionContext);
     },
     openNewWorkspaceWindow: () => {
-      if (workspace === undefined) return;
+      if (shellState.workspace === undefined) return;
       // An ephemeral window forks from the named workspace its own session came from - not from
       // `workspace.id` itself, which is this window's own (possibly unsynced) ephemeral copy.
       // `forkedFrom` is `undefined` for a from-scratch default session, meaning the new window
@@ -1889,23 +472,23 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       // non-ephemeral window (the main/dock window, which always loads the last-active named
       // workspace via `start_workspace`) IS itself the named workspace, so it forks from its own
       // id - otherwise "New Window" from the dock always fell back to the hardcoded default.
-      void attrsClient.openWorkspaceWindow?.(
-        workspace.ephemeral ? workspace.forkedFrom : workspace.id,
+      void shellState.client.openWorkspaceWindow?.(
+        shellState.workspace.ephemeral ? shellState.workspace.forkedFrom : shellState.workspace.id,
       );
     },
     openWorkspaceWindowById: (workspaceId) => {
-      void attrsClient.openWorkspaceWindow?.(workspaceId);
+      void shellState.client.openWorkspaceWindow?.(workspaceId);
     },
     resyncWorkspace: () => {
-      void resyncWorkspace(attrsClient);
+      void resyncWorkspace(shellState.client);
     },
-    getVolumes: () => volumes,
-    getConnections: () => connections,
-    getSystemLocations: () => systemLocations,
+    getVolumes: () => shellState.volumes,
+    getConnections: () => shellState.connections,
+    getSystemLocations: () => shellState.systemLocations,
     navigateToLocation: (location) => {
       const paneId = activeDirectory()?.paneId;
       if (paneId === undefined) return;
-      void navigation.navigate(paneId, location);
+      void shellState.navigation.navigate(paneId, location);
     },
     performEditCommand: (command) => {
       replayEditCommand(command, document.activeElement, (unhandled) => {
@@ -1913,11 +496,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       });
     },
   };
-  let installedIconThemeId: string | undefined;
-  let keybindingRuntime: KeybindingRuntime = 'browser';
-  let runtimeKind: RuntimeKind = 'http';
   const isWindowsTauriHost = (): boolean =>
-    runtimeKind === 'tauri' && /Windows/i.test(navigator.userAgent);
+    shellState.runtimeKind === 'tauri' && /Windows/i.test(navigator.userAgent);
   /** Manual drag start (Tauri's "Manual Implementation of data-tauri-drag-region" pattern)
    * instead of the declarative attribute: the declarative form left WebView2's mouse/pointer
    * capture in a bad state after a drag, so titlebar menu clicks stopped registering until a
@@ -1932,314 +512,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }
     void getCurrentWindow().startDragging();
   }
-  let loadedEntryFormatSettings: EntryFormatSettings = DEFAULT_ENTRY_FORMAT_SETTINGS;
-  let currentEntryFormatSettings: EntryFormatSettings = DEFAULT_ENTRY_FORMAT_SETTINGS;
-  let workspace: WorkspaceProjection | undefined;
-  let workspaceError: string | undefined;
-  let workspaceSummaries: readonly WorkspaceSummary[] = [];
-  let workspaceActionError: string | undefined;
-  let flushPendingLayoutUpdate: (() => void) | undefined;
-  const dialogs = createDialogUIController();
-  let findFilesOpen = false;
-  let findFilesRoot: Location | undefined;
-  let findFilesSearchId: string | undefined;
-  const findFilesTargetPaneBySearchId = new Map<string, PaneId>();
-  let findFilesError: string | undefined;
-  let findFilesGeneration = 0;
-  const findFilesRootsByLocationUri = new Map<string, Location>();
-  /** Friendly kind and term for each search location's tab and breadcrumb labels. */
-  const findFilesPresentationsByLocationUri = new Map<string, SearchPresentation>();
-  /** Full params are retained separately so F3 can initialize content highlighting. */
-  const findFilesParamsByLocationUri = new Map<string, FindFilesSearchParams>();
-  const findFilesQueriesByLocationUri = new Map<string, SearchQuery>();
-  const findFilesExecutionModesBySearchId = new Map<string, SearchExecutionMode>();
-  let pendingFindFilesStarts = 0;
-  const deferredSearchResultBatches = new Map<string, BackendEvent[]>();
-  /** Live directory-comparison overlay state (task 0075). Marks differing entries selected in
-   * both panes once a comparison completes, Total-Commander-style, rather than surfacing a
-   * separate review dialog. */
-  let comparisonState: ComparisonState = initialComparisonState();
-  /** Live checksum-job and duplicate-scan state (spec §18, task 0077). */
-  let checksumState: ChecksumState = initialChecksumState();
-  let duplicateState: DuplicateState = initialDuplicateState();
-  /** Registered by `WorkspaceLayoutView` (task 0089): moves DOM focus into a pane so keyboard
-   * cursor navigation works immediately, e.g. right after a filename search closes its dialog. */
-  let focusPane: ((paneId: PaneId) => void) | undefined;
-  let focusTerminal: (() => boolean) | undefined;
-  /** Registered by `DirectoryTree` (task 0139): moves DOM focus into the tree sidebar. */
-  let focusDirectoryTree: (() => boolean) | undefined;
-  let commandPaletteOpen = false;
-  /** Composite `paneId:tabId` keys of tabs with an open terminal drawer; a terminal stays bound
-   * to the tab that opened it, not the folder it happened to be showing at the time. */
-  const openTerminalTabKeys = new Set<string>();
-  const basketTabIds = new Set<TabId>();
-  let basketRefreshTimer: ReturnType<typeof setTimeout> | undefined;
-  let disposeTerminalTab: ((tabKey: string) => void) | undefined;
-  /** Directory-tree sidebar (task 0139): open/closed, lazily-fetched expansion/children cache,
-   * the provider root it is currently rooted at, and the active-pane location it was last
-   * synced to (so `syncDirectoryTreeToActiveLocation` only does work when that location
-   * actually changes, regardless of which action changed it - navigate, breadcrumb, favourite,
-   * history, tab switch, or pane switch). */
-  let treeSidebarOpen = false;
-  let treeState: TreeChildrenState = createTreeChildrenState();
-  let treeLoadGeneration = 0;
-  let treeNeedsRefresh = false;
-  let treeRootLocation: Location | undefined;
-  let treeSyncedLocationUri: string | undefined;
-  let openTerminalSupported = false;
-  let platformContextMenuSupported = false;
-  let nativeIconLoader: NativeIconLoader | undefined;
-  let nativeIconLoaderSource: NativeIconLoader | undefined;
-  let thumbnailLoader: ThumbnailLoader | undefined;
-  let finderTagsLoader: FinderTagsLoader | undefined;
-  let contextMenu:
-    | {
-        readonly paneId: PaneId;
-        readonly entries: readonly EntrySummary[];
-        readonly x: number;
-        readonly y: number;
-      }
-    | undefined;
-  const commandPaletteRecency = new Map<string, number>();
-  /**
-   * Every per-tab runtime cache below is keyed by a composite `${paneId}:${tabId}`
-   * string (see {@link tabKey}) rather than by `PaneId` alone, so switching tabs
-   * never bleeds one tab's directory/selection/sort/filter state into another's
-   * (spec §37).
-   */
-  const directories = new Map<string, PaneDirectoryView>();
-  const selections = new Map<string, SelectionState>();
-  const pendingCursorRestorations = new Map<
-    string,
-    {
-      providerId: string;
-      uri: string;
-      kind: EntrySummary['kind'];
-      fallbackCursorId: SelectionState['cursorEntryId'];
-      wasSelected: boolean;
-      wasAnchor: boolean;
-      expiresAt: number;
-    }
-  >();
-  /** The most recently started recursive folder-size walk (task 0071, Ctrl+.) - starting a new
-   * one aborts whatever the previous one was still doing, since only one result is ever shown. */
-  let folderSizeCalculation: AbortController | undefined;
-  /** Lister sessions are owned by tabs, so switching tabs never closes or obscures them. */
-  const viewerByTab = new Map<
-    string,
-    {
-      readonly paneId: PaneId;
-      readonly tabId: TabId;
-      readonly controller: FileViewerController;
-      readonly knowledgeSourceId?: string;
-      state: FileViewerState;
-    }
-  >();
-  const diskUsageByTab = new Map<string, DiskUsageTabEntry>();
-  const knowledgeSearchByTab = new Map<string, KnowledgeSearchTabEntry>();
-  const themesByTab = new Map<string, ThemesTabEntry>();
-  let themesOpening = false;
-  let knowledgeSearchOpening = false;
-  const editorByPane = new Map<
-    PaneId,
-    { readonly controller: FileEditorController; state: FileEditorState }
-  >();
-  const pluginByPane = new Map<PaneId, PluginPaneState>();
-  const openingPluginPanes = new Set<PaneId>();
-  let nextPluginPanelId = 0;
-  const sortedEntries = new Map<
-    string,
-    {
-      readonly input: readonly EntrySummary[];
-      readonly key: string;
-      readonly entries: readonly EntrySummary[];
-    }
-  >();
-  const sortRequests = new Map<string, object>();
-  // Tokens guarding the async "moveCursorTo last" flow (pane-content-builder's onSelectionAction):
-  // loading every page before landing the cursor takes real time, and if the user issues another
-  // selection action (e.g. presses Up) before it resolves, the stale resolution must not clobber
-  // whatever the newer action already set. Cleared/replaced by pane-content-builder itself.
-  const cursorLoadTokens = new Map<string, object>();
-  /** Whether the inline quick-filter box is shown for a pane, independent of a persisted query. */
-  const quickFilterOpen = new Map<string, boolean>();
-  /** Structured (advanced) filter criteria and panel state per tab (task 0169). */
-  const advancedFilters = new AdvancedFilterStore();
-  const filteredEntries = new Map<
-    string,
-    {
-      readonly input: readonly EntrySummary[];
-      readonly query: string;
-      readonly criteria: AdvancedFilterCriteria;
-      readonly entries: readonly EntrySummary[];
-    }
-  >();
-  /** Pending confirmation for closing a pane's only remaining tab (spec §37). */
-  let closeTabConfirmation: { readonly paneId: PaneId; readonly tabId: TabId } | undefined;
-  let platform: SelectionPlatform = 'unknown';
-  let nativeDragOutSupported = false;
-  let nativeDropInProgress = false;
-  let nativeDragSourceInternal = false;
-  let draggedLocations: readonly Location[] = [];
-  let workspaceRequest: AbortController | undefined;
-  let unsubscribeEvents: (() => void) | undefined;
-  let unsubscribeNativeFileDrops: (() => void) | undefined;
-  let unsubscribeConnection: (() => void) | undefined;
-  let unsubscribeResynchronise: (() => void) | undefined;
-  let appState: AppState | undefined;
-  let playerController: PlayerController | undefined;
-  let savePlaylistRequest: SavePlaylistRequest | undefined;
-  let editImageMetadataRequest: EditImageMetadataRequest | undefined;
-  let changeAttributesRequest: ChangeAttributesRequest | undefined;
-  let convertGeoRequest: ConvertGeoRequest | undefined;
-  let splitFileRequest: SplitFileRequest | undefined;
-  let fileDiffRequest: FileDiffRequest | undefined;
-  let syncProfilesDialogOpen = false;
-  let combineFilesRequest: CombineFilesRequest | undefined;
-  let minifyGeoRequest: MinifyGeoRequest | undefined;
-  let imageMapState: ImageMapState = INITIAL_IMAGE_MAP_STATE;
-  let imageMapController: ImageMapController | undefined;
-  /** The pane whose folder feeds the open map panel; used to reveal and highlight entries. */
-  let imageMapPaneId: PaneId | undefined;
-  /** The tab that hosts the map: a transient tab in the pane opposite the folder being mapped. */
-  let imageMapTab: { paneId: PaneId; tabId: TabId } | undefined;
-  let musicDuplicatesController: MusicDuplicatesController | undefined;
-  let linkDoctorController: LinkDoctorController | undefined;
-  let snapshotController: SnapshotController | undefined;
-  let snapshotState: SnapshotPanelState = INITIAL_SNAPSHOT_PANEL_STATE;
-  let saveSnapshotRequest: SaveSnapshotRequest | undefined;
-  let linkDoctorState: LinkDoctorState = INITIAL_LINK_DOCTOR_STATE;
-  let musicDuplicatesState: MusicDuplicatesState = INITIAL_MUSIC_DUPLICATES_STATE;
-  const emptyPlayerState = createInitialPlayerState();
-  let operations = createOperationsState();
-  /** Failed operations whose low-space dialog was already answered (task 0272). */
-  const answeredSpaceShortfalls = new Set<OperationId>();
-  let pendingConflict: OperationConflict | undefined;
-  let clipboardMessage: string | undefined;
-  let pendingOperationEvents: BackendEvent[] = [];
-  let operationFrame: number | undefined;
-  const autoDismissTimers = new Map<OperationId, ReturnType<typeof setTimeout>>();
-  const dismissedOperationIds = loadDismissedOperationIds();
-  let removed = false;
 
-  function rememberDismissedOperation(operationId: OperationId): void {
-    dismissedOperationIds.add(operationId);
-    persistDismissedOperationIds(dismissedOperationIds);
-  }
-
-  function clearDismissedOperation(operationId: OperationId): void {
-    if (!dismissedOperationIds.delete(operationId)) return;
-    persistDismissedOperationIds(dismissedOperationIds);
-  }
-
-  /** (Re)schedules an operation to auto-dismiss unless it's manually dismissed first. */
-  function scheduleAutoDismiss(operationId: OperationId, delayMs: number): void {
-    const existing = autoDismissTimers.get(operationId);
-    if (existing !== undefined) clearTimeout(existing);
-    autoDismissTimers.set(
-      operationId,
-      setTimeout(() => {
-        autoDismissTimers.delete(operationId);
-        const current = operations.byId[operationId];
-        if (current !== undefined && shouldAutoDismissOperation(current)) {
-          operations = dismissOperation(operations, operationId);
-          m.redraw();
-        }
-      }, delayMs),
-    );
-  }
-
-  /** Clears a pending auto-dismiss timer, e.g. once the user dismisses manually. */
-  function cancelAutoDismiss(operationId: OperationId): void {
-    const existing = autoDismissTimers.get(operationId);
-    if (existing === undefined) return;
-    clearTimeout(existing);
-    autoDismissTimers.delete(operationId);
-  }
-
-  function clearOperationSourceSelections(operation: Operation): void {
-    const sourceUris = new Set(operation.sources.map((source) => source.location.uri));
-    for (const [key, selection] of selections) {
-      const directory = directories.get(key);
-      if (directory === undefined || selection.selectedEntryIds.length === 0) continue;
-      const sourceIds = new Set(
-        directory.entries
-          .filter((entry) => sourceUris.has(entry.location.uri))
-          .map((entry) => entry.id),
-      );
-      const selectedEntryIds = selection.selectedEntryIds.filter((id) => !sourceIds.has(id));
-      if (selectedEntryIds.length !== selection.selectedEntryIds.length) {
-        selections.set(key, { ...selection, selectedEntryIds });
-      }
-    }
-  }
   const DEFAULT_SORT: readonly SortDescriptor[] = [
     { columnId: 'core.name', direction: 'ascending' },
   ];
 
-  /**
-   * Applies theme, font size, row height, date/size format and icon theme live (task 0083,
-   * extended by task 0092): shared by the initial settings load, the settings editor's live
-   * preview, a successful save, and reverting on cancel.
-   */
-  function applyAppearance(settings: Settings): void {
-    settingsController.applyAppearance(settings);
-  }
-
-  async function applyShowHiddenFilesToAllTabs(
-    client: FileManagerClient,
-    showHidden: boolean,
-  ): Promise<void> {
-    await settingsController.applyShowHiddenFilesToAllTabs(client, showHidden);
-  }
-
-  function closeSettingsDialog(): void {
-    const wasOpen = settingsDialogOpen;
-    settingsController.closeSettingsDialog();
-    if (wasOpen) settingsClosed();
-  }
-
-  function settingsClosed(): void {
-    knowledgeAnswerRevision++;
-    void refreshSemanticAssistantAvailability();
-    void refreshKnowledgeSearchAvailability();
-    m.redraw();
-  }
-
-  /** Opens the Settings dialog (Cmd+,/Ctrl+,) - mirrors the settings toolbar button's "open"
-   * branch (`settingsDisclosureElement.open = true`) rather than toggling, so pressing the
-   * shortcut again while already open is a harmless no-op instead of closing it. */
-  function openSettingsDialog(section: SettingsSection = 'appearance'): void {
-    settingsInitialSection = section;
-    if (settingsDisclosureElement === undefined) return;
-    if (settingsDialogOpen) {
-      m.redraw();
-      return;
-    }
-    settingsDisclosureElement.open = true;
-    settingsDialogOpen = true;
-    m.redraw();
-  }
-
-  function applyIconTheme(themeId: string): void {
-    settingsController.applyIconTheme(themeId);
-  }
-
-  const systemThemeQuery: MediaQueryList | undefined =
-    typeof window.matchMedia === 'function'
-      ? window.matchMedia('(prefers-color-scheme: dark)')
-      : undefined;
-  function handleSystemThemeChange(): void {
-    if (theme === 'auto') settingsController.syncTauriWindowBackground();
-  }
-
-  /** Restores real DOM keyboard focus to the active pane whenever the OS window regains it (e.g.
-   * alt-tabbing back into the app). Without this, `document.activeElement` is left wherever it was
-   * before the app lost focus (often nowhere useful), so the cursor row still *looks* highlighted
-   * but arrow keys silently do nothing until the user clicks a row to re-establish focus manually. */
   /** Minimum gap between focus-triggered revalidations (focus can fire in bursts). */
   const FOCUS_REVALIDATE_MIN_INTERVAL_MS = 2_000;
-  let lastFocusRevalidation = Number.NEGATIVE_INFINITY;
 
   /**
    * Safety net behind the filesystem watchers: events can be missed (coalesced FSEvents, a watcher
@@ -2248,11 +527,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    */
   function revalidateDirectoriesOnReturn(): void {
     const now = Date.now();
-    if (now - lastFocusRevalidation < FOCUS_REVALIDATE_MIN_INTERVAL_MS) return;
-    lastFocusRevalidation = now;
+    if (now - shellState.lastFocusRevalidation < FOCUS_REVALIDATE_MIN_INTERVAL_MS) return;
+    shellState.lastFocusRevalidation = now;
     refetchAffectedPanes(undefined, { background: true });
   }
 
+  /** Restores real DOM keyboard focus to the active pane whenever the OS window regains it (e.g.
+   * alt-tabbing back into the app). Without this, `document.activeElement` is left wherever it was
+   * before the app lost focus (often nowhere useful), so the cursor row still *looks* highlighted
+   * but arrow keys silently do nothing until the user clicks a row to re-establish focus manually. */
   function handleWindowFocus(): void {
     const openModals = document.querySelectorAll<HTMLElement>('.modal.active[aria-modal="true"]');
     const openModal = openModals.item(openModals.length - 1);
@@ -2269,31 +552,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       return;
     }
     revalidateDirectoriesOnReturn();
-    const activePaneId = workspace?.activePaneId;
+    const activePaneId = shellState.workspace?.activePaneId;
     if (activePaneId === undefined) return;
-    if (focusPane !== undefined) focusPane(activePaneId);
-    else void activatePane(attrsClient, activePaneId);
+    if (shellState.focusPane !== undefined) shellState.focusPane(activePaneId);
+    else void activatePane(shellState.client, activePaneId);
   }
 
   function handleVisibilityChange(): void {
     if (document.visibilityState === 'visible') revalidateDirectoriesOnReturn();
-  }
-
-  async function loadSettings(client: FileManagerClient): Promise<void> {
-    await settingsController.loadSettings(client);
-    if (currentSettings?.checkForUpdatesAutomatically !== true || !client.supportsAppUpdates) {
-      return;
-    }
-    try {
-      availableAppUpdate = (
-        await client.checkForAppUpdate(undefined, {
-          includeBeta: currentSettings.checkForBetaUpdates,
-        })
-      ).update;
-      m.redraw();
-    } catch (error) {
-      console.warn('Automatic application update check failed.', error);
-    }
   }
 
   function effectiveSort(sort: readonly SortDescriptor[]): readonly SortDescriptor[] {
@@ -2307,7 +573,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   /** The composite key for whichever tab is currently active in `paneId`. */
   function activeTabKey(paneId: PaneId): string {
-    const pane = workspace?.panesById[paneId];
+    const pane = shellState.workspace?.panesById[paneId];
     return tabKey(paneId, pane?.activeTabId ?? '');
   }
 
@@ -2346,23 +612,23 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     groupByParentPath = false,
   ): readonly EntrySummary[] {
     const cacheKey = JSON.stringify([sort, foldersFirst, groupByParentPath]);
-    const cached = sortedEntries.get(key);
+    const cached = shellState.sortedEntries.get(key);
     if (cached?.input === entries && cached.key === cacheKey) {
       return cached.entries;
     }
     const model = frontendSort(sort);
     if (entries.length < 10_000) {
       const sorted = sortEntries(entries, model, foldersFirst, { groupByParentPath });
-      sortedEntries.set(key, { input: entries, key: cacheKey, entries: sorted });
+      shellState.sortedEntries.set(key, { input: entries, key: cacheKey, entries: sorted });
       return sorted;
     }
     const request = {};
-    sortRequests.set(key, request);
+    shellState.sortRequests.set(key, request);
     void sortEntriesResponsive(entries, model, foldersFirst, { groupByParentPath }).then(
       (sorted) => {
-        if (sortRequests.get(key) === request) {
-          sortedEntries.set(key, { input: entries, key: cacheKey, entries: sorted });
-          sortRequests.delete(key);
+        if (shellState.sortRequests.get(key) === request) {
+          shellState.sortedEntries.set(key, { input: entries, key: cacheKey, entries: sorted });
+          shellState.sortRequests.delete(key);
           m.redraw();
         }
       },
@@ -2375,25 +641,27 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     entries: readonly EntrySummary[],
     query: string,
   ): readonly EntrySummary[] {
-    const criteria = advancedFilters.criteriaFor(key);
-    const cached = filteredEntries.get(key);
+    const criteria = shellState.advancedFilters.criteriaFor(key);
+    const cached = shellState.filteredEntries.get(key);
     if (cached?.input === entries && cached.query === query && cached.criteria === criteria) {
       return cached.entries;
     }
     const filtered = filterEntriesAdvanced(filterEntries(entries, query), criteria);
-    filteredEntries.set(key, { input: entries, query, criteria, entries: filtered });
+    shellState.filteredEntries.set(key, { input: entries, query, criteria, entries: filtered });
     return filtered;
   }
 
   function quickFilterQueryFor(key: string, tab: TabProjection | undefined): string {
-    return appState?.quickFilterDrafts.byTabKey[key] ?? tab?.view.quickFilter?.query ?? '';
+    return (
+      shellState.appState?.quickFilterDrafts.byTabKey[key] ?? tab?.view.quickFilter?.query ?? ''
+    );
   }
 
   function quickFilterOpenFor(key: string, tab: TabProjection | undefined): boolean {
     return (
-      quickFilterOpen.get(key) === true ||
+      shellState.quickFilterOpen.get(key) === true ||
       (tab?.view.quickFilter ?? null) !== null ||
-      advancedFilters.isActive(key)
+      shellState.advancedFilters.isActive(key)
     );
   }
 
@@ -2413,13 +681,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         readonly wholeWord: boolean;
       }
     | undefined {
-    const params = findFilesParamsByLocationUri.get(locationUri);
+    const params = shellState.findFilesParamsByLocationUri.get(locationUri);
     if (params?.contentQuery === undefined || params.contentQuery === '') return undefined;
     // A directory listing refetched via REST (`navigation.load()`, e.g. after a subsequent
     // search batch or a plain tab switch) never carries `contentMatches` - only the live
     // `search.resultsBatch` SSE event does (`EntrySummaryDto` has no such field) - so fall back
     // to whatever that event most recently cached for this entry's location.
-    const matches = entry.contentMatches ?? appState?.contentMatches.byEntryUri[entry.location.uri];
+    const matches =
+      entry.contentMatches ?? shellState.appState?.contentMatches.byEntryUri[entry.location.uri];
     if (matches === undefined || matches.length === 0) return undefined;
     return {
       query: params.contentQuery,
@@ -2433,7 +702,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     if (!locationUri.startsWith('search://') || entry.mimeType !== 'application/pdf') {
       return undefined;
     }
-    const result = findFilesPresentationsByLocationUri
+    const result = shellState.findFilesPresentationsByLocationUri
       .get(locationUri)
       ?.semanticResults?.find((candidate) => candidate.entryId === entry.id);
     const evidence = result?.bestEvidence;
@@ -2456,17 +725,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     paneId: PaneId,
     entry: EntrySummary,
   ): void {
-    folderSizeCalculation?.abort();
+    shellState.folderSizeCalculation?.abort();
     const controller = new AbortController();
-    folderSizeCalculation = controller;
+    shellState.folderSizeCalculation = controller;
     void client
       .calculateFolderSize({ location: entry.location }, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
         const key = activeTabKey(paneId);
-        const current = directories.get(key);
+        const current = shellState.directories.get(key);
         if (current === undefined) return;
-        directories.set(key, {
+        shellState.directories.set(key, {
           ...current,
           entries: current.entries.map((candidate) =>
             candidate.id === entry.id ? { ...candidate, size: result.totalBytes } : candidate,
@@ -2497,7 +766,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     void client
       .discoverApplicationUninstallCandidates({ location: entry.location })
       .then((result) => {
-        dialogs.openApplicationUninstallDialog({
+        shellState.dialogs.openApplicationUninstallDialog({
           bundle: entry,
           productName: result.productName,
           relatedFiles: result.relatedFiles,
@@ -2514,742 +783,67 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       });
   }
 
-  /** Opens the Lister-style viewer in a new tab in `paneId`. `openMetadata` shows the Alt+Space
-   * info panel immediately (used when Alt+Space is pressed with no viewer already open, so the
-   * shortcut works from the directory listing too, not just inside an already-open viewer). */
-  function openViewer(
-    client: FileManagerClient,
-    paneId: PaneId,
-    entry: EntrySummary,
-    initialSearch?: {
-      readonly query: string;
-      readonly regex: boolean;
-      readonly caseSensitive: boolean;
-      readonly wholeWord: boolean;
-    },
-    openMetadata?: boolean,
-    initialPage?: number,
-    knowledgeSourceId?: string,
-  ): void {
-    if (entry.kind === 'symlink') {
-      // View what the link points at: the target's kind and extension pick the viewer.
-      const unavailable = () => {
-        const message = document.createElement('span');
-        message.textContent = t('viewer', 'previewUnavailable', { name: entry.name });
-        toast({ html: message.outerHTML });
-      };
-      client
-        .resolveLinkTarget(entry.location)
-        .then((resolved) => {
-          if (resolved.kind !== 'file') {
-            // A link to a folder opens with the OS default application, as the folder itself would.
-            const osOpen = registeredActions.find((action) => action.id === 'core.open');
-            const parameters = actionCommandController.platformActionParameters(
-              'core.view',
-              [entry],
-              undefined,
-            );
-            if (
-              osOpen?.contextRequirements.featureAvailable === false ||
-              parameters === undefined
-            ) {
-              unavailable();
-              return;
-            }
-            actionCommandController.invokeActionById(
-              'core.view',
-              parameters,
-              actionCommandController.actionContext(),
-            );
-            return;
-          }
-          openViewer(
-            client,
-            paneId,
-            resolved,
-            initialSearch,
-            openMetadata,
-            initialPage,
-            knowledgeSourceId,
-          );
-        })
-        .catch(unavailable);
-      return;
-    }
-    // "Open viewer in a separate window": the Lister opens in its own window. Opens that rely on
-    // in-pane state (knowledge sources, the Alt+Space panel preset) stay in a pane tab, and so does
-    // the fallback when no window could be opened (e.g. a blocked browser popup).
-    if (
-      currentSettings?.viewerInSeparateWindow === true &&
-      knowledgeSourceId === undefined &&
-      openMetadata !== true
-    ) {
-      void openViewerWindow(client, {
-        entry,
-        ...(workspace ? { workspaceId: workspace.id } : {}),
-        ...(initialSearch ? { initialSearch } : {}),
-        ...(initialPage ? { initialPage } : {}),
-      }).then((opened) => {
-        if (!opened)
-          openViewerInPane(client, paneId, entry, initialSearch, openMetadata, initialPage);
-      });
-      return;
-    }
-    openViewerInPane(
-      client,
-      paneId,
-      entry,
-      initialSearch,
-      openMetadata,
-      initialPage,
-      knowledgeSourceId,
-    );
-  }
-
-  /** Opens `entry` in the in-pane viewer tab (replacing a viewer already open elsewhere). */
-  function openViewerInPane(
-    client: FileManagerClient,
-    paneId: PaneId,
-    entry: EntrySummary,
-    initialSearch?: {
-      readonly query: string;
-      readonly regex: boolean;
-      readonly caseSensitive: boolean;
-      readonly wholeWord: boolean;
-    },
-    openMetadata?: boolean,
-    initialPage?: number,
-    knowledgeSourceId?: string,
-  ): void {
-    const existingViewer = [...viewerByTab.entries()][0];
-    if (existingViewer !== undefined) {
-      const [key, viewer] = existingViewer;
-      if (viewer.state.entry.location.uri === entry.location.uri) {
-        if (initialPage === undefined) {
-          closeViewer(viewer.paneId, viewer.tabId);
-          return;
-        }
-        tabController.activateTab(viewer.paneId, viewer.tabId);
-        viewer.controller.goToPdfPage(initialPage);
-        return;
-      }
-      viewer.controller.dispose();
-      viewerByTab.delete(key);
-      const controller = createFileViewerController({
-        client,
-        entry,
-        ...(workspace ? { workspaceId: workspace.id } : {}),
-        previewPlugins: previewPluginRoutes(plugins),
-        ...(initialSearch ? { initialSearch } : {}),
-        ...(initialPage ? { initialPage } : {}),
-        initialMetadataPanelOpen: openMetadata === true,
-        prepareMedia,
-        update: (state) => {
-          const current = viewerByTab.get(key);
-          if (current === undefined) return;
-          current.state = state;
-          m.redraw();
-        },
-      });
-      viewerByTab.set(key, {
-        paneId: viewer.paneId,
-        tabId: viewer.tabId,
-        controller,
-        ...(knowledgeSourceId === undefined ? {} : { knowledgeSourceId }),
-        state: { status: 'loading', entry },
-      });
-      tabController.activateTab(viewer.paneId, viewer.tabId);
-      m.redraw();
-      return;
-    }
-    const currentWorkspace = workspace;
-    const pane = currentWorkspace?.panesById[paneId];
-    const activeTab = pane?.tabsById[pane.activeTabId];
-    if (currentWorkspace === undefined || activeTab === undefined) return;
-    void dispatchWorkspaceCommand(
-      client,
-      {
-        type: 'addTransientTab',
-        workspaceId: currentWorkspace.id,
-        paneId,
-        location: activeTab.location,
-        expectedRevision: currentWorkspace.revision,
-      },
-      (next) => {
-        replaceWorkspace(next);
-        const tabId = next.panesById[paneId]?.activeTabId;
-        if (tabId === undefined) return;
-        const key = tabKey(paneId, tabId);
-        const controller = createFileViewerController({
-          client,
-          entry,
-          workspaceId: currentWorkspace.id,
-          previewPlugins: previewPluginRoutes(plugins),
-          ...(initialSearch ? { initialSearch } : {}),
-          ...(initialPage ? { initialPage } : {}),
-          initialMetadataPanelOpen: openMetadata === true,
-          prepareMedia,
-          update: (state) => {
-            const existing = viewerByTab.get(key);
-            if (existing === undefined) return;
-            existing.state = state;
-            m.redraw();
-          },
-        });
-        viewerByTab.set(key, {
-          paneId,
-          tabId,
-          controller,
-          ...(knowledgeSourceId === undefined ? {} : { knowledgeSourceId }),
-          state: { status: 'loading', entry },
-        });
-        m.redraw();
-      },
-    ).catch((error: unknown) => {
-      console.error('openViewerInPane failed', error);
-      toast({ html: errorText(error) });
-    });
-  }
-
-  function closeViewer(paneId: PaneId, tabId?: TabId): void {
-    const resolvedTabId = tabId ?? workspace?.panesById[paneId]?.activeTabId;
-    if (resolvedTabId === undefined) return;
-    const key = tabKey(paneId, resolvedTabId);
-    const viewer = viewerByTab.get(key);
-    if (viewer === undefined) return;
-    viewer.controller.dispose();
-    viewerByTab.delete(key);
-    tabController.performCloseTab(paneId, resolvedTabId);
-  }
-
-  function openEditor(
-    client: FileManagerClient,
-    paneId: PaneId,
-    entry: EntrySummary,
-    initialLine?: number,
-  ): void {
-    pluginByPane.delete(paneId);
-    closeViewer(paneId);
-    editorByPane.get(paneId)?.controller.dispose();
-    const controller = createFileEditorController({
-      client,
-      entry,
-      ...(initialLine === undefined ? {} : { initialLine }),
-      update: (state) => {
-        const existing = editorByPane.get(paneId);
-        if (existing === undefined) return;
-        if (state.status === 'error') {
-          existing.controller.dispose();
-          editorByPane.delete(paneId);
-          toast({ html: state.message });
-        } else {
-          existing.state = state;
-        }
-        m.redraw();
-      },
-    });
-    editorByPane.set(paneId, { controller, state: { status: 'loading', entry } });
-    m.redraw();
-  }
-
-  /** True while the pane's editor holds unsaved changes that opening another file would drop. */
-  function editorIsDirty(paneId: PaneId): boolean {
-    const state = editorByPane.get(paneId)?.state;
-    return state?.status === 'ready' && state.dirty;
-  }
-
-  /** Actions for paths and URLs in the text of the file edited in `paneId` (task 0271). */
-  function editorLinkHandlers(paneId: PaneId, base: Location): EditorLinkHandlers {
-    /** Browsing goes to the other pane when there is one, so the editor stays untouched. */
-    const browsePane = (): PaneId | undefined => {
-      const other = workspace?.paneOrder.find((candidate) => candidate !== paneId);
-      if (other !== undefined) return other;
-      if (editorIsDirty(paneId)) {
-        toast({ html: t('editorLinks', 'saveFirst') });
-        return undefined;
-      }
-      const viewer = [...viewerByTab.values()].find((candidate) => candidate.paneId === paneId);
-      if (viewer !== undefined) closeViewer(viewer.paneId, viewer.tabId);
-      closeEditor(paneId);
-      return paneId;
-    };
-    return {
-      base,
-      resolve: (link) => resolveDetectedLink(link, base, attrsClient),
-      openUrl: (url) => {
-        if (isSafeExternalUrl(url)) void attrsClient.openExternalUrl(url);
-      },
-      openInPane: (link) => {
-        const target = browsePane();
-        if (target === undefined) return;
-        if (link.entry.kind === 'directory') void navigation.navigate(target, link.location);
-        else void navigation.navigate(target, parentLocation(link.location), link.entry.name);
-      },
-      reveal: (link) => {
-        void attrsClient
-          .invokeAction({
-            actionId: 'core.revealInSystemFileManager',
-            parameters: { uri: link.location.uri },
-            context: { paneId, selectedEntryIds: [link.entry.id] },
-          })
-          .catch((error: unknown) => {
-            toast({ html: errorText(error) });
-          });
-      },
-      editAt: (link) => {
-        if (editorIsDirty(paneId)) {
-          toast({ html: t('editorLinks', 'saveFirst') });
-          return;
-        }
-        openEditor(attrsClient, paneId, link.entry, link.line);
-      },
-    };
-  }
-
-  /** Runs the default action for the path or URL under the caret of the active pane's editor. */
-  function actOnLinkAtCursor(mode: 'open' | 'reveal'): void {
-    const paneId = workspace?.activePaneId;
-    const editor = paneId === undefined ? undefined : editorByPane.get(paneId);
-    const link = editor?.controller.linkAtCursor();
-    if (paneId === undefined || editor === undefined || link === undefined) {
-      toast({ html: t('editorLinks', 'nothingAtCursor') });
-      return;
-    }
-    const base = editor.state.entry.location;
-    const handlers = editorLinkHandlers(paneId, base);
-    void handlers.resolve(link).then((resolved) => {
-      if (resolved === undefined) {
-        toast({ html: t('editorLinks', link.kind === 'url' ? 'unsafeUrl' : 'notFound') });
-      } else if (resolved.kind === 'url') {
-        if (mode === 'open') handlers.openUrl(resolved.url);
-      } else if (mode === 'reveal') {
-        handlers.reveal(resolved);
-      } else {
-        handlers.openInPane(resolved);
-      }
-    });
-  }
-
-  function closeEditor(paneId: PaneId): void {
-    editorByPane.get(paneId)?.controller.dispose();
-    editorByPane.delete(paneId);
-    m.redraw();
-  }
-
-  function openPluginPane(
-    sourcePaneId: PaneId,
-    plugin: PluginDescriptor,
-    actionId: string,
-    entry: EntrySummary,
-  ): 'opened' | 'blocked' | 'unavailable' {
-    if (runtimeKind !== 'tauri') return 'unavailable';
-    const target = workspace?.paneOrder.find((paneId) => paneId !== sourcePaneId);
-    if (target === undefined) return 'unavailable';
-    if (openingPluginPanes.has(target)) return 'blocked';
-    const existing = pluginByPane.get(target);
-    if (
-      existing?.pluginId === plugin.id &&
-      existing.actionId === actionId &&
-      existing.location.providerId === entry.location.providerId &&
-      existing.location.uri === entry.location.uri
-    ) {
-      if (workspace?.panesById[target]?.activeTabId === existing.tabId) {
-        void activatePane(attrsClient, target).catch((error: unknown) => {
-          toast({ html: workspaceErrorMessage(error, t('action', 'unableToRun')) });
-        });
-      } else {
-        tabController.activateTab(target, existing.tabId);
-      }
-      return 'opened';
-    }
-    if (editorByPane.has(target)) {
-      requestCloseEditor(target);
-      if (editorByPane.has(target)) return 'blocked';
-    }
-    const current = workspace;
-    const activeTab = current?.panesById[target]?.tabsById[current.panesById[target].activeTabId];
-    if (current === undefined || activeTab === undefined) return 'unavailable';
-    const showPanel = (tabId: TabId) => {
-      const panel: PluginPaneState = {
-        panelId: ++nextPluginPanelId,
-        tabId,
-        client: attrsClient,
-        pluginId: plugin.id,
-        actionId,
-        location: entry.location,
-        title: `${plugin.name}: ${entry.name}`,
-        active: true,
-        onCloseRequest: () => {
-          if (
-            pluginByPane.get(target) === panel &&
-            workspace?.panesById[target]?.activeTabId === tabId
-          )
-            tabController.requestCloseTab(target, tabId);
-        },
-        onError: (error) => {
-          if (pluginByPane.get(target) !== panel) return;
-          const text = document.createElement('span');
-          text.textContent = workspaceErrorMessage(error, t('action', 'unableToRun'));
-          toast({ html: text.innerHTML });
-          tabController.performCloseTab(target, tabId);
-        },
-      };
-      pluginByPane.set(target, panel);
-      m.redraw();
-    };
-    if (existing !== undefined) {
-      showPanel(existing.tabId);
-      if (current.panesById[target]?.activeTabId === existing.tabId) {
-        void activatePane(attrsClient, target).catch((error: unknown) => {
-          toast({ html: workspaceErrorMessage(error, t('action', 'unableToRun')) });
-        });
-      } else {
-        tabController.activateTab(target, existing.tabId);
-      }
-      return 'opened';
-    }
-    openingPluginPanes.add(target);
-    void dispatchWorkspaceCommand(
-      attrsClient,
-      {
-        type: 'addTransientTab',
-        workspaceId: current.id,
-        paneId: target,
-        location: activeTab.location,
-        expectedRevision: current.revision,
-      },
-      (next) => {
-        replaceWorkspace(next);
-        const tabId = next.panesById[target]?.activeTabId;
-        if (tabId !== undefined) {
-          showPanel(tabId);
-          void activatePane(attrsClient, target).catch((error: unknown) => {
-            toast({ html: workspaceErrorMessage(error, t('action', 'unableToRun')) });
-          });
-        }
-      },
-    )
-      .catch((error: unknown) => {
-        toast({ html: workspaceErrorMessage(error, t('action', 'unableToRun')) });
-      })
-      .finally(() => openingPluginPanes.delete(target));
-    return 'opened';
-  }
-
-  function requestCloseEditor(paneId: PaneId): boolean {
-    const editor = editorByPane.get(paneId);
-    if (editor === undefined) return false;
-    if (editor.controller.requestClose()) closeEditor(paneId);
-    return true;
-  }
-
-  function diskUsageRootName(location: Location): string {
-    const segment = location.uri.replace(/\/+$/u, '').split('/').at(-1);
-    if (segment === undefined || segment === '') return '/';
-    try {
-      return decodeURIComponent(segment);
-    } catch {
-      return segment;
-    }
-  }
-
-  function replaceDiskUsageNode(
-    node: ScanDiskUsageResult['root'],
-    replacement: ScanDiskUsageResult['root'],
-  ): ScanDiskUsageResult['root'] {
-    if (node.location.uri === replacement.location.uri) return replacement;
-    let changed = false;
-    const children = node.children.map((child) => {
-      const next = replaceDiskUsageNode(child, replacement);
-      changed ||= next !== child;
-      return next;
-    });
-    if (!changed) return node;
-    const previousLogicalBytes = node.children.reduce(
-      (total, child) => total + child.logicalBytes,
-      0,
-    );
-    const previousPhysicalBytes = node.children.reduce(
-      (total, child) => total + child.physicalBytes,
-      0,
-    );
-    const nextLogicalBytes = children.reduce((total, child) => total + child.logicalBytes, 0);
-    const nextPhysicalBytes = children.reduce((total, child) => total + child.physicalBytes, 0);
-    return {
-      ...node,
-      logicalBytes: Math.max(0, node.logicalBytes - previousLogicalBytes + nextLogicalBytes),
-      physicalBytes: Math.max(0, node.physicalBytes - previousPhysicalBytes + nextPhysicalBytes),
-      children,
-    };
-  }
-
-  function applyDiskUsageProgress(
-    scanId: string,
-    result: ScanDiskUsageResult,
-    isComplete: boolean,
-  ): void {
-    const entry = [...diskUsageByTab.values()].find((candidate) => candidate.scanId === scanId);
-    if (entry === undefined || entry.progressComplete) return;
-    const currentResult = entry.state.type === 'loaded' ? entry.state.result : undefined;
-    const baseResult = entry.expansionBaseResult ?? currentResult;
-    const nextResult =
-      entry.expansionLocation === undefined || baseResult === undefined
-        ? result
-        : {
-            root: replaceDiskUsageNode(baseResult.root, result.root),
-            unreadableEntries: baseResult.unreadableEntries,
-            unreadable: baseResult.unreadable ?? [],
-            scannedEntries: result.scannedEntries ?? 0,
-            cleanupCandidates: mergeCleanupCandidates(
-              baseResult.cleanupCandidates ?? [],
-              result.cleanupCandidates ?? [],
-              entry.expansionLocation,
-            ),
-          };
-    entry.state = {
-      type: 'loaded',
-      result: nextResult,
-      scanning: !isComplete,
-      finalizing: false,
-    };
-    if (isComplete) {
-      entry.progressComplete = true;
-      entry.expansionLocation = undefined;
-      entry.expansionBaseResult = undefined;
-    }
-  }
-
-  function applyDiskUsageFailure(scanId: string, message: string): void {
-    const entry = [...diskUsageByTab.values()].find((candidate) => candidate.scanId === scanId);
-    if (entry === undefined || entry.progressComplete) return;
-    entry.progressComplete = true;
-    entry.state =
-      entry.state.type === 'loaded'
-        ? { ...entry.state, scanning: false, error: message }
-        : { type: 'error', message };
-  }
-
-  function applyDiskUsageFinalizing(scanId: string, scannedEntries: number): void {
-    const entry = [...diskUsageByTab.values()].find((candidate) => candidate.scanId === scanId);
-    if (entry === undefined || entry.progressComplete || entry.state.type !== 'loaded') return;
-    entry.state = {
-      ...entry.state,
-      scanning: true,
-      finalizing: true,
-      result: { ...entry.state.result, scannedEntries },
-    };
-  }
-
-  function startDiskUsageScan(
-    paneId: PaneId,
-    tabId: TabId,
-    location: Location,
-    expansionLocation?: Location,
-  ): void {
-    const key = tabKey(paneId, tabId);
-    const existing = diskUsageByTab.get(key);
-    existing?.abort.abort();
-    const currentWorkspace = workspace;
-    if (currentWorkspace === undefined) return;
-    const abort = new AbortController();
-    const scanId = crypto.randomUUID();
-    const entry: DiskUsageTabEntry =
-      existing === undefined
-        ? {
-            key,
-            paneId,
-            tabId,
-            location,
-            abort,
-            scanId,
-            progressComplete: false,
-            expansionLocation,
-            expansionBaseResult: undefined,
-            state: {
-              type: 'loading',
-              rootName: diskUsageRootName(location),
-            },
-          }
-        : {
-            ...existing,
-            location: expansionLocation === undefined ? location : existing.location,
-            abort,
-            scanId,
-            progressComplete: false,
-            expansionLocation,
-            expansionBaseResult:
-              expansionLocation !== undefined && existing.state.type === 'loaded'
-                ? existing.state.result
-                : undefined,
-            state:
-              expansionLocation === undefined
-                ? { type: 'loading', rootName: diskUsageRootName(location) }
-                : existing.state.type === 'loaded'
-                  ? { ...existing.state, scanning: true }
-                  : existing.state,
-          };
-    diskUsageByTab.set(key, entry);
-    m.redraw();
-    void attrsClient
-      .scanDiskUsage(
-        {
-          workspaceId: currentWorkspace.id,
-          scanId,
-          location,
-          expandRoot: expansionLocation !== undefined,
-        },
-        abort.signal,
-      )
-      .then(() => undefined)
-      .catch((error: unknown) => {
-        const current = diskUsageByTab.get(entry.key);
-        if (abort.signal.aborted || current?.scanId !== scanId || current.progressComplete) return;
-        const message = workspaceErrorMessage(error, t('diskUsage', 'scanFailed'));
-        current.progressComplete = true;
-        current.state =
-          current.state.type === 'loaded'
-            ? { ...current.state, scanning: false, error: message }
-            : { type: 'error', message };
-        m.redraw();
-      });
-  }
-
-  function expandDiskUsageFolder(key: string, location: Location): void {
-    const entry = diskUsageByTab.get(key);
-    if (entry === undefined) return;
-    startDiskUsageScan(entry.paneId, entry.tabId, location, location);
-  }
-
-  function scanDiskUsageFolder(key: string, location: Location): void {
-    const entry = diskUsageByTab.get(key);
-    if (entry === undefined) return;
-    startDiskUsageScan(entry.paneId, entry.tabId, location);
-  }
-
-  function stopDiskUsage(key: string): void {
-    const entry = diskUsageByTab.get(key);
-    if (entry === undefined || entry.progressComplete) return;
-    entry.abort.abort();
-    entry.progressComplete = true;
-    if (entry.state.type === 'loaded') {
-      entry.state = { ...entry.state, scanning: false };
-    } else {
-      entry.state = { type: 'cancelled', rootName: diskUsageRootName(entry.location) };
-    }
-    void attrsClient.cancelDiskUsage(entry.scanId).catch((error: unknown) => {
-      console.warn('Failed to cancel disk-usage scan', error);
-    });
-    m.redraw();
-  }
-
-  function openDiskUsage(): void {
-    const active = activeDirectory();
-    const currentWorkspace = workspace;
-    const targetPaneId = currentWorkspace?.paneOrder.find(
-      (candidate) => candidate !== active?.paneId,
-    );
-    if (
-      active === undefined ||
-      currentWorkspace === undefined ||
-      targetPaneId === undefined ||
-      currentWorkspace.panesById[targetPaneId] === undefined
-    )
-      return;
-    void dispatchWorkspaceCommand(
-      attrsClient,
-      {
-        type: 'addTransientTab',
-        workspaceId: currentWorkspace.id,
-        paneId: targetPaneId,
-        location: active.location,
-        expectedRevision: currentWorkspace.revision,
-      },
-      replaceWorkspace,
-    )
-      .then((next) => {
-        const tabId = next.panesById[targetPaneId]?.activeTabId;
-        if (tabId !== undefined) {
-          startDiskUsageScan(targetPaneId, tabId, active.location);
-          focusPane?.(targetPaneId);
-        }
-      })
-      .catch((error: unknown) => {
-        toast({ html: workspaceErrorMessage(error, t('diskUsage', 'scanFailed')) });
-      });
-  }
-
-  function openDiskUsageFolder(
-    paneId: PaneId,
-    location: Location,
-    preferredCursorName?: string,
-  ): void {
-    const oppositePaneId = workspace?.paneOrder.find((candidate) => candidate !== paneId);
-    if (oppositePaneId !== undefined)
-      void navigation.navigate(oppositePaneId, location, preferredCursorName);
-  }
-
-  let navigation: NavigationController;
-  let syncedBrowsing: SyncedBrowsingController | undefined;
-
   /** Finds the directory `name` directly inside `parent`, matching case-insensitively (task 0255). */
   async function resolveSyncChild(parent: Location, name: string): Promise<Location | undefined> {
     const wanted = name.toLowerCase();
-    const children = await attrsClient.listDirectoryChildren(parent, true);
+    const children = await shellState.client.listDirectoryChildren(parent, true);
     const exact = children.find((child) => child.name === name);
     return (exact ?? children.find((child) => child.name.toLowerCase() === wanted))?.location;
   }
 
   /** Mirrors user navigation between the panes while synchronized browsing is on (task 0255). */
   function wrapSyncedBrowsing(inner: NavigationController): NavigationController {
-    syncedBrowsing = createSyncedBrowsing({
+    shellState.syncedBrowsing = createSyncedBrowsing({
       navigation: inner,
-      getWorkspace: () => workspace,
+      getWorkspace: () => shellState.workspace,
       resolveChild: resolveSyncChild,
       store: createLocalStorageSyncStore(window.localStorage),
       onChange: () => m.redraw(),
     });
-    return syncedBrowsing.navigation;
+    return shellState.syncedBrowsing.navigation;
   }
 
   /** Clears every per-tab runtime cache for a closed tab, cancelling its in-flight request. */
   function clearTabState(paneId: PaneId, tabId: TabId): void {
-    if (pluginByPane.get(paneId)?.tabId === tabId) pluginByPane.delete(paneId);
-    basketTabIds.delete(tabId);
+    if (shellState.pluginByPane.get(paneId)?.tabId === tabId)
+      shellState.pluginByPane.delete(paneId);
+    shellState.basketTabIds.delete(tabId);
     const key = tabKey(paneId, tabId);
-    viewerByTab.get(key)?.controller.dispose();
-    viewerByTab.delete(key);
-    const diskUsage = diskUsageByTab.get(key);
+    shellState.viewerByTab.get(key)?.controller.dispose();
+    shellState.viewerByTab.delete(key);
+    const diskUsage = shellState.diskUsageByTab.get(key);
     if (diskUsage !== undefined && !diskUsage.progressComplete) {
       diskUsage.abort.abort();
-      void attrsClient.cancelDiskUsage(diskUsage.scanId).catch((error: unknown) => {
+      void shellState.client.cancelDiskUsage(diskUsage.scanId).catch((error: unknown) => {
         console.warn('Failed to cancel disk-usage scan while closing its tab', error);
       });
     }
-    diskUsageByTab.delete(key);
-    if (imageMapTab?.paneId === paneId && imageMapTab.tabId === tabId) {
-      imageMapTab = undefined;
-      imageMapController?.close();
+    shellState.diskUsageByTab.delete(key);
+    if (shellState.imageMapTab?.paneId === paneId && shellState.imageMapTab.tabId === tabId) {
+      shellState.imageMapTab = undefined;
+      shellState.imageMapController?.close();
     }
-    knowledgeSearchByTab.delete(key);
-    themesByTab.delete(key);
-    navigation.abort(paneId, tabId);
-    directories.delete(key);
-    selections.delete(key);
-    pendingCursorRestorations.delete(key);
-    sortedEntries.delete(key);
-    sortRequests.delete(key);
-    if (appState !== undefined)
-      appState = applyAppPatches(appState, deleteQuickFilterDraftPatch(key));
-    quickFilterOpen.delete(key);
-    advancedFilters.clear(key);
-    filteredEntries.delete(key);
-    if (openTerminalTabKeys.delete(key)) disposeTerminalTab?.(key);
+    shellState.knowledgeSearchByTab.delete(key);
+    shellState.themesByTab.delete(key);
+    shellState.navigation.abort(paneId, tabId);
+    shellState.directories.delete(key);
+    shellState.selections.delete(key);
+    shellState.pendingCursorRestorations.delete(key);
+    shellState.sortedEntries.delete(key);
+    shellState.sortRequests.delete(key);
+    if (shellState.appState !== undefined)
+      shellState.appState = applyAppPatches(shellState.appState, deleteQuickFilterDraftPatch(key));
+    shellState.quickFilterOpen.delete(key);
+    shellState.advancedFilters.clear(key);
+    shellState.filteredEntries.delete(key);
+    if (shellState.openTerminalTabKeys.delete(key)) shellState.disposeTerminalTab?.(key);
   }
 
   /** Preserves tab-owned UI state when the authoritative tab moves to another pane. */
   function moveTabState(sourcePaneId: PaneId, targetPaneId: PaneId, tabId: TabId): void {
     if (sourcePaneId === targetPaneId) return;
-    if (pluginByPane.get(sourcePaneId)?.tabId === tabId) pluginByPane.delete(sourcePaneId);
+    if (shellState.pluginByPane.get(sourcePaneId)?.tabId === tabId)
+      shellState.pluginByPane.delete(sourcePaneId);
     const sourceKey = tabKey(sourcePaneId, tabId);
     const targetKey = tabKey(targetPaneId, tabId);
     const rekey = <T>(values: Map<string, T>): void => {
@@ -3258,54 +852,55 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       values.delete(sourceKey);
       values.set(targetKey, value);
     };
-    rekey(directories);
-    rekey(selections);
-    rekey(pendingCursorRestorations);
-    rekey(sortedEntries);
-    rekey(sortRequests);
-    rekey(cursorLoadTokens);
-    rekey(quickFilterOpen);
-    advancedFilters.rekey(sourceKey, targetKey);
-    rekey(filteredEntries);
-    const viewer = viewerByTab.get(sourceKey);
+    rekey(shellState.directories);
+    rekey(shellState.selections);
+    rekey(shellState.pendingCursorRestorations);
+    rekey(shellState.sortedEntries);
+    rekey(shellState.sortRequests);
+    rekey(shellState.cursorLoadTokens);
+    rekey(shellState.quickFilterOpen);
+    shellState.advancedFilters.rekey(sourceKey, targetKey);
+    rekey(shellState.filteredEntries);
+    const viewer = shellState.viewerByTab.get(sourceKey);
     if (viewer !== undefined) {
-      viewerByTab.delete(sourceKey);
-      viewerByTab.set(targetKey, { ...viewer, paneId: targetPaneId });
+      shellState.viewerByTab.delete(sourceKey);
+      shellState.viewerByTab.set(targetKey, { ...viewer, paneId: targetPaneId });
     }
-    const diskUsage = diskUsageByTab.get(sourceKey);
+    const diskUsage = shellState.diskUsageByTab.get(sourceKey);
     if (diskUsage !== undefined) {
-      diskUsageByTab.delete(sourceKey);
+      shellState.diskUsageByTab.delete(sourceKey);
       diskUsage.key = targetKey;
       diskUsage.paneId = targetPaneId;
-      diskUsageByTab.set(targetKey, diskUsage);
+      shellState.diskUsageByTab.set(targetKey, diskUsage);
     }
-    if (imageMapTab?.paneId === sourcePaneId && imageMapTab.tabId === tabId) {
-      imageMapTab = { paneId: targetPaneId, tabId };
+    if (shellState.imageMapTab?.paneId === sourcePaneId && shellState.imageMapTab.tabId === tabId) {
+      shellState.imageMapTab = { paneId: targetPaneId, tabId };
     }
-    const knowledgeSearch = knowledgeSearchByTab.get(sourceKey);
+    const knowledgeSearch = shellState.knowledgeSearchByTab.get(sourceKey);
     if (knowledgeSearch !== undefined) {
-      knowledgeSearchByTab.delete(sourceKey);
+      shellState.knowledgeSearchByTab.delete(sourceKey);
       knowledgeSearch.key = targetKey;
       knowledgeSearch.paneId = targetPaneId;
-      knowledgeSearchByTab.set(targetKey, knowledgeSearch);
+      shellState.knowledgeSearchByTab.set(targetKey, knowledgeSearch);
     }
-    const themesTab = themesByTab.get(sourceKey);
+    const themesTab = shellState.themesByTab.get(sourceKey);
     if (themesTab !== undefined) {
-      themesByTab.delete(sourceKey);
+      shellState.themesByTab.delete(sourceKey);
       themesTab.key = targetKey;
       themesTab.paneId = targetPaneId;
-      themesByTab.set(targetKey, themesTab);
+      shellState.themesByTab.set(targetKey, themesTab);
     }
-    navigation.moveTab(sourcePaneId, targetPaneId, tabId);
-    const quickFilterDraft = appState?.quickFilterDrafts.byTabKey[sourceKey];
-    if (appState !== undefined && quickFilterDraft !== undefined) {
-      appState = applyAppPatches(
-        appState,
+    shellState.navigation.moveTab(sourcePaneId, targetPaneId, tabId);
+    const quickFilterDraft = shellState.appState?.quickFilterDrafts.byTabKey[sourceKey];
+    if (shellState.appState !== undefined && quickFilterDraft !== undefined) {
+      shellState.appState = applyAppPatches(
+        shellState.appState,
         deleteQuickFilterDraftPatch(sourceKey),
         setQuickFilterDraftPatch(targetKey, quickFilterDraft),
       );
     }
-    if (openTerminalTabKeys.delete(sourceKey)) openTerminalTabKeys.add(targetKey);
+    if (shellState.openTerminalTabKeys.delete(sourceKey))
+      shellState.openTerminalTabKeys.add(targetKey);
   }
 
   /** Releases every per-tab cache belonging to a workspace being switched away from. */
@@ -3314,16 +909,16 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       for (const tabId of outgoing.panesById[paneId]?.tabOrder ?? []) {
         clearTabState(paneId, tabId);
       }
-      editorByPane.get(paneId)?.controller.dispose();
-      editorByPane.delete(paneId);
+      shellState.editorByPane.get(paneId)?.controller.dispose();
+      shellState.editorByPane.delete(paneId);
     }
   }
 
   /** Loads every pane's active tab, the currently active pane first (task 0084). */
   function loadPanesActiveFirst(loaded: WorkspaceProjection): void {
-    void navigation.load(loaded.activePaneId);
+    void shellState.navigation.load(loaded.activePaneId);
     for (const paneId of loaded.paneOrder) {
-      if (paneId !== loaded.activePaneId) void navigation.load(paneId);
+      if (paneId !== loaded.activePaneId) void shellState.navigation.load(paneId);
     }
   }
 
@@ -3346,10 +941,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    * survive a switch untouched.
    */
   async function switchWorkspace(workspaceId: WorkspaceId): Promise<void> {
-    await workspaceController.switchWorkspace(workspaceId);
+    await shellState.workspaceController.switchWorkspace(workspaceId);
   }
-
-  const settledRefreshTimers = new Map<PaneId, ReturnType<typeof setTimeout>>();
 
   function refetchAffectedPanes(
     paneId?: PaneId,
@@ -3359,14 +952,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       readonly force?: boolean;
     },
   ): void {
-    refreshDirectoryTree();
-    scheduleBasketRefresh();
-    if (workspace === undefined) return;
+    treeWiring.refreshDirectoryTree();
+    basketWiring.scheduleBasketRefresh();
+    if (shellState.workspace === undefined) return;
     const background = options?.background ?? true;
-    for (const candidate of workspace.paneOrder) {
+    for (const candidate of shellState.workspace.paneOrder) {
       const activeTab =
-        workspace.panesById[candidate]?.tabsById[workspace.panesById[candidate]?.activeTabId ?? ''];
-      if (basketTabIds.has(workspace.panesById[candidate]?.activeTabId ?? '')) continue;
+        shellState.workspace.panesById[candidate]?.tabsById[
+          shellState.workspace.panesById[candidate]?.activeTabId ?? ''
+        ];
+      if (shellState.basketTabIds.has(shellState.workspace.panesById[candidate]?.activeTabId ?? ''))
+        continue;
       if (activeTab?.location.uri.startsWith('search://')) continue;
       if (paneId !== undefined && candidate !== paneId) continue;
       // Background refreshes are used for opportunistic reloads (e.g. deltas/watch events),
@@ -3376,7 +972,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         scheduleSettledRefresh(candidate, options.settleMs, background, options.force === true);
         continue;
       }
-      void navigation.load(candidate, background ? { background: true } : undefined);
+      void shellState.navigation.load(candidate, background ? { background: true } : undefined);
     }
   }
 
@@ -3392,78 +988,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     background: boolean,
     force: boolean,
   ): void {
-    const startingRevision = directories.get(activeTabKey(paneId))?.revision;
-    const pending = settledRefreshTimers.get(paneId);
+    const startingRevision = shellState.directories.get(activeTabKey(paneId))?.revision;
+    const pending = shellState.settledRefreshTimers.get(paneId);
     if (pending !== undefined) clearTimeout(pending);
-    settledRefreshTimers.set(
+    shellState.settledRefreshTimers.set(
       paneId,
       setTimeout(() => {
-        settledRefreshTimers.delete(paneId);
-        if (!force && directories.get(activeTabKey(paneId))?.revision !== startingRevision) return;
-        void navigation.load(paneId, background ? { background: true } : undefined);
+        shellState.settledRefreshTimers.delete(paneId);
+        if (
+          !force &&
+          shellState.directories.get(activeTabKey(paneId))?.revision !== startingRevision
+        )
+          return;
+        void shellState.navigation.load(paneId, background ? { background: true } : undefined);
       }, settleMs),
     );
-  }
-
-  function removeOperationSourcesFromSearchResults(operation: Operation): void {
-    if (workspace === undefined || operation.sources.length === 0) return;
-    const sourceUris = new Set(operation.sources.map((source) => source.location.uri));
-    for (const pane of Object.values(workspace.panesById)) {
-      for (const tabId of pane.tabOrder) {
-        const tab = pane.tabsById[tabId];
-        if (tab === undefined || !tab.location.uri.startsWith('search://')) continue;
-        const key = tabKey(pane.id, tabId);
-        const current = directories.get(key);
-        if (current === undefined) continue;
-        const removed = current.entries.filter((entry) => sourceUris.has(entry.location.uri));
-        if (removed.length === 0) continue;
-        directories.set(key, {
-          ...current,
-          entries: current.entries.filter((entry) => !sourceUris.has(entry.location.uri)),
-        });
-        const selection = selections.get(key);
-        if (selection !== undefined) {
-          selections.set(
-            key,
-            reduceSelection(
-              selection,
-              { type: 'prune', removedEntryIds: removed.map((entry) => entry.id) },
-              current.entries.map((entry) => entry.id),
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  function removeOperationSourcesFromDiskUsage(operation: Operation): void {
-    if (operation.sources.length === 0) return;
-    const sourceUris = new Set(operation.sources.map((source) => source.location.uri));
-    for (const entry of diskUsageByTab.values()) {
-      if (entry.state.type !== 'loaded') continue;
-      const root = removeDiskUsageNodes(entry.state.result.root, sourceUris);
-      if (root === entry.state.result.root) continue;
-      if (operation.state !== 'completed') {
-        // Some sources may remain, so their sizes are unknown: scan the tab's root again.
-        startDiskUsageScan(entry.paneId, entry.tabId, entry.location);
-        continue;
-      }
-      if (!entry.progressComplete) {
-        entry.abort.abort();
-        entry.progressComplete = true;
-        void attrsClient.cancelDiskUsage(entry.scanId).catch((error: unknown) => {
-          console.warn('Failed to cancel stale disk-usage scan', error);
-        });
-      }
-      entry.state =
-        root === undefined
-          ? { type: 'error', message: t('diskUsage', 'rootRemoved') }
-          : {
-              ...entry.state,
-              scanning: false,
-              result: { ...entry.state.result, root },
-            };
-    }
   }
 
   function applyDelta(paneId: PaneId, delta: DirectoryDelta): void {
@@ -3477,8 +1016,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   function applyDeltaUntimed(paneId: PaneId, delta: DirectoryDelta): void {
     const key = activeTabKey(paneId);
-    const current = directories.get(key);
-    scheduleBasketRefresh();
+    const current = shellState.directories.get(key);
+    basketWiring.scheduleBasketRefresh();
     const revision = delta.type === 'reset' ? delta.snapshot.revision : delta.revision;
     if (current === undefined || current.revision === undefined) {
       refetchAffectedPanes(paneId);
@@ -3500,10 +1039,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       if (delta.snapshot.hasMore && delta.snapshot.entries.length < current.entries.length) {
         // The backend already holds the fresh sorted listing, so only the later pages are
         // re-fetched from its cache - a plain reload would make it re-list and re-sort the folder.
-        void navigation.load(paneId, { background: true, firstSnapshot: delta.snapshot });
+        void shellState.navigation.load(paneId, {
+          background: true,
+          firstSnapshot: delta.snapshot,
+        });
         return;
       }
-      navigation.applySnapshot(paneId, delta.snapshot);
+      shellState.navigation.applySnapshot(paneId, delta.snapshot);
       m.redraw();
       return;
     }
@@ -3529,10 +1071,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       return [next];
     });
     const nextEntries = [...ordered, ...byId.values()];
-    directories.set(key, { ...current, revision, entries: nextEntries });
+    shellState.directories.set(key, { ...current, revision, entries: nextEntries });
     reconcileSelectionAfterEntryChange(
       paneId,
-      workspace?.panesById[paneId]?.activeTabId,
+      shellState.workspace?.panesById[paneId]?.activeTabId,
       current.entries,
       nextEntries,
     );
@@ -3547,29 +1089,29 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   ): void {
     if (tabId === undefined) return;
     const key = tabKey(paneId, tabId);
-    const pendingCreatedLocation = dialogs.getState().pendingCreatedLocation;
+    const pendingCreatedLocation = shellState.dialogs.getState().pendingCreatedLocation;
     const created =
       pendingCreatedLocation === undefined
         ? undefined
         : nextEntries.find((entry) => entry.location.uri === pendingCreatedLocation);
     if (created !== undefined) {
-      pendingCursorRestorations.delete(key);
-      selections.set(
+      shellState.pendingCursorRestorations.delete(key);
+      shellState.selections.set(
         key,
         reduceSelection(emptySelection, { type: 'selectOnly', entryId: created.id }, [created.id]),
       );
-      dialogs.setPendingCreatedLocation(undefined);
+      shellState.dialogs.setPendingCreatedLocation(undefined);
       return;
     }
 
-    const selection = selections.get(key);
+    const selection = shellState.selections.get(key);
     if (selection === undefined) return;
-    const pending = pendingCursorRestorations.get(key);
+    const pending = shellState.pendingCursorRestorations.get(key);
     if (
       pending !== undefined &&
       (Date.now() > pending.expiresAt || selection.cursorEntryId !== pending.fallbackCursorId)
     ) {
-      pendingCursorRestorations.delete(key);
+      shellState.pendingCursorRestorations.delete(key);
     }
     const nextIds = new Set(nextEntries.map((entry) => entry.id));
     const removedEntryIds = previousEntries
@@ -3578,7 +1120,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     const removedCursor = previousEntries.find(
       (entry) => entry.id === selection.cursorEntryId && removedEntryIds.includes(entry.id),
     );
-    const restoration = pendingCursorRestorations.get(key);
+    const restoration = shellState.pendingCursorRestorations.get(key);
     const candidate =
       removedCursor === undefined && restoration === undefined
         ? undefined
@@ -3591,7 +1133,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           );
     if (removedEntryIds.length === 0 && candidate === undefined) return;
 
-    const tab = workspace?.panesById[paneId]?.tabsById[tabId];
+    const tab = shellState.workspace?.panesById[paneId]?.tabsById[tabId];
     const previousVisibleEntries = entriesFilteredFor(
       key,
       entriesSortedFor(
@@ -3612,7 +1154,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             previousVisibleEntries.map((entry) => entry.id),
           );
     if (candidate !== undefined) {
-      pendingCursorRestorations.delete(key);
+      shellState.pendingCursorRestorations.delete(key);
       const wasSelected =
         removedCursor !== undefined
           ? selection.selectedEntryIds.includes(removedCursor.id)
@@ -3621,7 +1163,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         removedCursor !== undefined
           ? selection.anchorEntryId === removedCursor.id
           : restoration?.wasAnchor;
-      selections.set(key, {
+      shellState.selections.set(key, {
         ...nextSelection,
         cursorEntryId: candidate.id,
         ...(wasSelected
@@ -3632,7 +1174,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       return;
     }
     if (removedCursor !== undefined) {
-      pendingCursorRestorations.set(key, {
+      shellState.pendingCursorRestorations.set(key, {
         providerId: removedCursor.location.providerId,
         uri: removedCursor.location.uri,
         kind: removedCursor.kind,
@@ -3642,502 +1184,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         expiresAt: Date.now() + 3000,
       });
     }
-    selections.set(key, nextSelection);
+    shellState.selections.set(key, nextSelection);
   }
 
   function activeDirectory(): { paneId: PaneId; location: Location } | undefined {
-    const paneId = workspace?.activePaneId;
+    const paneId = shellState.workspace?.activePaneId;
     const location =
-      paneId === undefined ? undefined : directories.get(activeTabKey(paneId))?.location;
+      paneId === undefined ? undefined : shellState.directories.get(activeTabKey(paneId))?.location;
     return paneId === undefined || location === undefined ? undefined : { paneId, location };
-  }
-
-  function openRagAsk(): void {
-    openKnowledgeSearch();
-  }
-
-  /** Opens (or focuses) the Themes pane view over the whole library and, when a folder is shown, that folder. */
-  function openThemes(): void {
-    const currentWorkspace = workspace;
-    if (currentWorkspace === undefined || themesOpening) return;
-    const existing = [...themesByTab.values()].find(
-      (entry) => currentWorkspace.panesById[entry.paneId] !== undefined,
-    );
-    if (existing !== undefined) {
-      if (currentWorkspace.panesById[existing.paneId]?.activeTabId !== existing.tabId) {
-        tabController.activateTab(existing.paneId, existing.tabId);
-      } else if (currentWorkspace.activePaneId !== existing.paneId) {
-        void activatePane(attrsClient, existing.paneId).catch((error: unknown) => {
-          toast({ html: error instanceof Error ? error.message : t('themes', 'loadFailed') });
-        });
-      }
-      return;
-    }
-    const base = {
-      workspaceId: currentWorkspace.id,
-      selectedFiles: [],
-      semanticSourceIds: [],
-      enrolledRootIds: [],
-    };
-    const active = activeDirectory();
-    const scopes: RagScope[] = [
-      { ...base, kind: 'entireLibrary', label: t('themes', 'scopeLibrary') },
-      ...(active === undefined
-        ? []
-        : [
-            {
-              ...base,
-              kind: 'currentFolder' as const,
-              label: t('themes', 'scopeFolder'),
-              folder: active.location,
-            },
-          ]),
-    ];
-    const paneId = currentWorkspace.activePaneId;
-    const activeTab =
-      currentWorkspace.panesById[paneId]?.tabsById[
-        currentWorkspace.panesById[paneId]?.activeTabId ?? ''
-      ];
-    if (activeTab === undefined) return;
-    themesOpening = true;
-    void dispatchWorkspaceCommand(
-      attrsClient,
-      {
-        type: 'addTransientTab',
-        workspaceId: currentWorkspace.id,
-        paneId,
-        location: activeTab.location,
-        expectedRevision: currentWorkspace.revision,
-      },
-      (next) => {
-        replaceWorkspace(next);
-        const tabId = next.panesById[paneId]?.activeTabId;
-        if (tabId === undefined) return;
-        const key = tabKey(paneId, tabId);
-        themesByTab.set(key, { key, paneId, tabId, scopes });
-        m.redraw();
-      },
-    )
-      .catch((error: unknown) => {
-        toast({ html: error instanceof Error ? error.message : t('themes', 'loadFailed') });
-      })
-      .finally(() => {
-        themesOpening = false;
-      });
-  }
-
-  /** Opens the source of a theme passage, at its line for text and JSONL, at its page otherwise. */
-  async function openThemePassage(passage: ThemePassage): Promise<void> {
-    const currentWorkspace = workspace;
-    if (currentWorkspace === undefined) throw new Error(t('themes', 'openSourceFailed'));
-    const targetPaneId =
-      currentWorkspace.paneOrder.find((candidate) => candidate !== currentWorkspace.activePaneId) ??
-      currentWorkspace.activePaneId;
-    const source = await attrsClient.resolveKnowledgeSource({
-      workspaceId: currentWorkspace.id,
-      sourceId: passage.sourceId,
-    });
-    if (!source.available) throw new Error(t('themes', 'openSourceFailed'));
-    const rawName =
-      pathFromUri(source.location.uri).split(/[\\/]/).filter(Boolean).at(-1) ?? passage.title;
-    let name = rawName;
-    try {
-      name = decodeURIComponent(rawName);
-    } catch {
-      // Keep the provider's original path segment when it is not URI encoded.
-    }
-    const dot = name.lastIndexOf('.');
-    const entry: EntrySummary = {
-      id: source.entryId,
-      location: source.location,
-      name,
-      kind: 'file',
-      hidden: false,
-      readOnly: false,
-      ...(dot > 0 ? { extension: name.slice(dot + 1).toLowerCase() } : {}),
-      metadataRevision: 0,
-    };
-    const page = knowledgeEvidencePage(passage.provenance);
-    const line = provenanceLine(passage.provenance);
-    if (page === undefined && line !== undefined) {
-      openEditor(attrsClient, targetPaneId, entry, line);
-      return;
-    }
-    openViewer(attrsClient, targetPaneId, entry, undefined, false, page, passage.sourceId);
-  }
-
-  /** Focuses the existing Knowledge tab or opens a search-first session tab. */
-  function openKnowledgeSearch(): void {
-    openKnowledgeSearchTab();
-  }
-
-  function openKnowledgeSearchTab(scoped?: {
-    readonly semanticSourceIds: readonly string[];
-    readonly initialSubject: string;
-  }): void {
-    const active = activeDirectory();
-    const currentWorkspace = workspace;
-    if (currentWorkspace === undefined) return;
-    // A theme-scoped search always opens its own tab: an open session keeps the scope it started with.
-    const existing =
-      scoped === undefined
-        ? [...knowledgeSearchByTab.values()].find(
-            (entry) => entry.workspaceId === currentWorkspace.id,
-          )
-        : undefined;
-    if (existing !== undefined) {
-      if (currentWorkspace.panesById[existing.paneId]?.activeTabId !== existing.tabId) {
-        tabController.activateTab(existing.paneId, existing.tabId);
-      } else if (currentWorkspace.activePaneId !== existing.paneId) {
-        void activatePane(attrsClient, existing.paneId).catch((error: unknown) => {
-          toast({
-            html: error instanceof Error ? error.message : t('knowledgeSearch', 'loadFailed'),
-          });
-        });
-      }
-      return;
-    }
-    if (knowledgeSearchOpening) return;
-    const presentation =
-      active === undefined
-        ? undefined
-        : findFilesPresentationsByLocationUri.get(active.location.uri);
-    const semanticSourceIds = scoped?.semanticSourceIds ?? [
-      ...new Set(
-        (presentation?.semanticResults ?? []).flatMap((result) => [
-          result.bestEvidence.sourceId,
-          ...result.additionalSourceIds,
-        ]),
-      ),
-    ];
-    const paneId = currentWorkspace.activePaneId;
-    const pane = currentWorkspace.panesById[paneId];
-    const activeTab = pane?.tabsById[pane.activeTabId];
-    if (activeTab === undefined) return;
-    knowledgeSearchOpening = true;
-    void dispatchWorkspaceCommand(
-      attrsClient,
-      {
-        type: 'addTransientTab',
-        workspaceId: currentWorkspace.id,
-        paneId,
-        location: activeTab.location,
-        expectedRevision: currentWorkspace.revision,
-      },
-      (next) => {
-        replaceWorkspace(next);
-        const tabId = next.panesById[paneId]?.activeTabId;
-        if (tabId === undefined) return;
-        const key = tabKey(paneId, tabId);
-        knowledgeSearchByTab.set(key, {
-          key,
-          paneId,
-          tabId,
-          workspaceId: next.id,
-          currentFolder: active?.location,
-          semanticSourceIds,
-          initialSubject:
-            scoped !== undefined
-              ? scoped.initialSubject
-              : presentation?.kind === 'semantic' || presentation?.kind === 'content'
-                ? presentation.term
-                : undefined,
-        });
-        m.redraw();
-      },
-    )
-      .catch((error: unknown) => {
-        toast({
-          html: error instanceof Error ? error.message : t('knowledgeSearch', 'loadFailed'),
-        });
-      })
-      .finally(() => {
-        knowledgeSearchOpening = false;
-      });
-  }
-
-  async function openKnowledgeSource(
-    sourcePaneId: PaneId,
-    evidence: KnowledgeEvidence,
-  ): Promise<void> {
-    const currentWorkspace = workspace;
-    const targetPaneId = currentWorkspace?.paneOrder.find(
-      (candidate) => candidate !== sourcePaneId,
-    );
-    if (currentWorkspace === undefined || targetPaneId === undefined) {
-      throw new Error(t('knowledgeSearch', 'openSourceFailed'));
-    }
-    const source = await attrsClient.resolveKnowledgeSource({
-      workspaceId: currentWorkspace.id,
-      sourceId: evidence.sourceId,
-    });
-    if (!source.available) throw new Error(t('knowledgeSearch', 'openSourceFailed'));
-    const path = pathFromUri(source.location.uri);
-    const rawName = path.split(/[\\/]/).filter(Boolean).at(-1) ?? evidence.title;
-    let name = rawName;
-    try {
-      name = decodeURIComponent(rawName);
-    } catch {
-      // Keep the provider's original path segment when it is not URI encoded.
-    }
-    const dot = name.lastIndexOf('.');
-    const entry: EntrySummary = {
-      id: source.entryId,
-      location: source.location,
-      name,
-      kind: 'file',
-      hidden: false,
-      readOnly: false,
-      ...(dot > 0 ? { extension: name.slice(dot + 1).toLowerCase() } : {}),
-      ...(evidence.mediaType == null ? {} : { mimeType: evidence.mediaType }),
-      ...(evidence.modifiedAtMs == null
-        ? {}
-        : { modifiedAt: new Date(evidence.modifiedAtMs).toISOString() }),
-      metadataRevision: evidence.modifiedAtMs ?? 0,
-    };
-    openViewer(
-      attrsClient,
-      targetPaneId,
-      entry,
-      undefined,
-      false,
-      knowledgeEvidencePage(evidence.provenance),
-      evidence.sourceId,
-    );
-  }
-
-  /** Knowledge search stays usable without a generation profile, so its own
-   * availability only depends on the reported retrieval capabilities. */
-  async function refreshKnowledgeSearchAvailability(): Promise<void> {
-    try {
-      const capabilities = await attrsClient.getKnowledgeCapabilities();
-      knowledgeSearchAvailable = capabilities.fullText || capabilities.semantic;
-      themesAvailable = capabilities.semantic;
-    } catch {
-      knowledgeSearchAvailable = false;
-      themesAvailable = false;
-    } finally {
-      knowledgeSearchChecked = true;
-      m.redraw();
-    }
-  }
-
-  async function refreshSemanticAssistantAvailability(
-    currentComponents?: SemanticComponentStatus,
-  ): Promise<void> {
-    try {
-      const [components, library, profiles] = await Promise.all([
-        currentComponents ?? attrsClient.getSemanticComponentStatus(),
-        attrsClient.getSemanticLibraryStatus(),
-        attrsClient.listLlmProfiles(),
-      ]);
-      semanticAssistantAvailable =
-        components.lifecycle.state === 'installedEnabled' &&
-        components.activeModel != null &&
-        library.available &&
-        profiles.length > 0;
-    } catch {
-      semanticAssistantAvailable = false;
-    }
-    m.redraw();
-  }
-
-  function openSemanticAssistant(): void {
-    if (!semanticAssistantAvailable) return;
-    openRagAsk();
-  }
-
-  /** The composite `paneId:tabId` key of the active pane's active tab, for terminal binding. */
-  function activeTerminalTabKey(): string | undefined {
-    const active = activeDirectory();
-    return active === undefined ? undefined : activeTabKey(active.paneId);
-  }
-
-  /** Fetches and caches a tree node's children (directory-tree sidebar, task 0139), unless
-   * already cached or already in flight. */
-  function ensureTreeChildrenLoaded(location: Location): void {
-    if (location.uri in treeState.childrenByUri || treeState.loadingUris.has(location.uri)) return;
-    const generation = treeLoadGeneration;
-    treeState = withLoading(treeState, location.uri, true);
-    attrsClient
-      .listDirectoryChildren(location, false)
-      .then((children) => {
-        if (generation !== treeLoadGeneration) return;
-        treeState = withChildren(treeState, location.uri, children);
-        m.redraw();
-      })
-      .catch((error: unknown) => {
-        if (generation !== treeLoadGeneration) return;
-        treeState = withError(
-          treeState,
-          location.uri,
-          error instanceof Error ? error.message : t('tree', 'unableToLoad'),
-        );
-        m.redraw();
-      });
-  }
-
-  function refreshDirectoryTree(): void {
-    if (!treeSidebarOpen) {
-      treeNeedsRefresh = true;
-      return;
-    }
-    if (treeRootLocation === undefined) return;
-    treeNeedsRefresh = false;
-    const visible = flattenVisibleTree(
-      { location: treeRootLocation, name: treeRootName(treeRootLocation) },
-      treeState,
-    );
-    treeLoadGeneration += 1;
-    treeState = { ...treeState, childrenByUri: {}, loadingUris: new Set(), errorByUri: {} };
-    for (const row of visible) {
-      if (row.expanded) ensureTreeChildrenLoaded(row.location);
-    }
-  }
-
-  function treeDropWritable(location: Location): boolean {
-    if (
-      location.providerId === 'archive' ||
-      unavailableLocations.has(`${location.providerId}:${location.uri}`) ||
-      systemLocations.some(
-        (system) =>
-          system.readOnly === true &&
-          system.location.providerId === location.providerId &&
-          (location.uri === system.location.uri ||
-            location.uri.startsWith(
-              system.location.uri.endsWith('/') ? system.location.uri : `${system.location.uri}/`,
-            )),
-      )
-    )
-      return false;
-    const entry = treeState.childrenByUri[parentLocation(location).uri]?.find(
-      (child) =>
-        child.location.uri === location.uri && child.location.providerId === location.providerId,
-    );
-    if (entry?.readOnly === true) return false;
-    const loaded = [...directories.values()].find(
-      (directory) =>
-        directory.location?.uri === location.uri &&
-        directory.location.providerId === location.providerId,
-    );
-    return loaded?.writable !== false;
-  }
-
-  function dropOnTree(location: Location, modifiers: DropModifiers): void {
-    const validation = validateDropTarget(draggedLocations, location, treeDropWritable(location));
-    if (!validation.ok) {
-      if (!validation.noOp) clipboardMessage = validation.message;
-      return;
-    }
-    const sources = draggedLocations;
-    draggedLocations = [];
-    void (nativeDropInProgress || operationForDrop(platform, modifiers) === 'copy'
-      ? opsController.copy(sources, location)
-      : opsController.move(sources, location));
-  }
-
-  /** Expands (fetching children if not cached) or collapses a tree node. */
-  function toggleTreeNode(location: Location): void {
-    if (treeState.expanded.has(location.uri)) {
-      treeState = withExpanded(treeState, location.uri, false);
-      return;
-    }
-    if (location.uri in treeState.childrenByUri) {
-      treeState = withExpanded(treeState, location.uri, true);
-      return;
-    }
-    ensureTreeChildrenLoaded(location);
-  }
-
-  /** Keeps the directory-tree sidebar's expanded/highlighted path in sync with the active
-   * pane's current location, in both directions: called on every render (cheap - a single
-   * string comparison when nothing changed), so it catches every way the active location can
-   * change - `navigate()`, breadcrumbs, favourites, history, a tab switch, or a pane switch -
-   * without needing a bespoke hook into each one. */
-  function syncDirectoryTreeToActiveLocation(): void {
-    const active = activeDirectory();
-    if (active === undefined || active.location.uri === treeSyncedLocationUri) return;
-    treeSyncedLocationUri = active.location.uri;
-    const root = rootLocationFor(active.location);
-    if (treeRootLocation === undefined || treeRootLocation.uri !== root.uri) {
-      treeLoadGeneration += 1;
-      treeNeedsRefresh = false;
-      treeRootLocation = root;
-      treeState = createTreeChildrenState();
-    }
-    // `ancestorChain` excludes `root` itself (a direct child of root yields an empty chain), but
-    // the root row still must be expanded for that child to appear at all - so expand+load it
-    // explicitly whenever the active location is anywhere below it.
-    if (active.location.uri !== root.uri) {
-      treeState = withExpanded(treeState, root.uri, true);
-      ensureTreeChildrenLoaded(root);
-    }
-    for (const ancestor of ancestorChain(root, active.location)) {
-      treeState = withExpanded(treeState, ancestor.uri, true);
-      ensureTreeChildrenLoaded(ancestor);
-    }
-  }
-
-  /** Opens/closes the directory-tree sidebar (Alt+F10, and the command palette's "Toggle
-   * Directory Tree" entry, task 0139), moving DOM focus into it when it opens so arrow-key
-   * navigation works immediately without an extra click. */
-  function toggleDirectoryTree(): void {
-    treeSidebarOpen = !treeSidebarOpen;
-    if (treeSidebarOpen) {
-      syncDirectoryTreeToActiveLocation();
-      if (treeNeedsRefresh) refreshDirectoryTree();
-      requestAnimationFrame(() => focusDirectoryTree?.());
-    } else {
-      requestAnimationFrame(() => {
-        const activePaneId = workspace?.activePaneId;
-        if (activePaneId !== undefined) focusPane?.(activePaneId);
-      });
-    }
-  }
-
-  function setOperationCentreVisible(visible: boolean): void {
-    const previous = workspace;
-    if (previous === undefined || previous.operationCentre.visible === visible) return;
-    const preferences = {
-      ...previous.operationCentre,
-      visible,
-    };
-    replaceWorkspace({ ...previous, operationCentre: preferences });
-    void dispatchWorkspaceCommand(
-      attrsClient,
-      {
-        type: 'updateOperationCentre',
-        workspaceId: previous.id,
-        preferences,
-        expectedRevision: previous.revision,
-      },
-      replaceWorkspace,
-    ).catch((error: unknown) => {
-      if (workspace?.revision === previous.revision) replaceWorkspace(previous);
-      toast({
-        html: workspaceErrorMessage(error, t('shell', 'operationCentreUpdateFailed')),
-      });
-    });
-  }
-
-  function toggleOperationCentre(): void {
-    setOperationCentreVisible(workspace?.operationCentre.visible !== true);
-  }
-
-  function showAllOperations(): void {
-    void attrsClient
-      .listOperations()
-      .then((listed) => {
-        dismissedOperationIds.clear();
-        persistDismissedOperationIds(dismissedOperationIds);
-        operations = mergeOperationHistory(operations, listed);
-        m.redraw();
-      })
-      .catch((error: unknown) => {
-        toast({
-          html: workspaceErrorMessage(error, t('operation', 'historyLoadFailed')),
-        });
-      });
   }
 
   /** A short display label for the tree sidebar's root row - the host segment of a remote
@@ -4151,311 +1205,156 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     }
   }
 
-  const osFileClipboard = createOsFileClipboard(() => attrsClient);
-
-  function clipboard() {
-    return appState?.clipboard ?? emptyClipboard;
-  }
-
-  function replaceClipboard(next = emptyClipboard): void {
-    if (appState !== undefined) {
-      appState = applyAppPatches(appState, clipboardPatch(next));
-    }
-    osFileClipboard.mirror(next);
-  }
-
-  function resolvePasteClipboard(): Promise<ClipboardState> {
-    return osFileClipboard.resolvePasteClipboard(clipboard());
-  }
-
-  function selectedLocations(): readonly Location[] {
-    const active = activeDirectory();
-    const directory =
-      active === undefined ? undefined : directories.get(activeTabKey(active.paneId));
-    const selection =
-      active === undefined ? undefined : selections.get(activeTabKey(active.paneId));
-    return getSelectedEntriesOrCursor(selection, directory?.entries ?? []).map(
-      (entry) => entry.location,
-    );
-  }
-
-  /**
-   * Clicking a footer function-key hint re-triggers the exact same keydown
-   * path a real key press would (pane.ts's local handler, then this file's
-   * global keydown handler), instead of duplicating each action's dispatch
-   * logic here.
-   */
-  function invokeFunctionKeyShortcut(shortcut: string): void {
-    const parts = shortcut.split('+');
-    const key = parts.pop();
-    if (key === undefined) return;
-    const primary = parts.includes('CTRL');
-    const paneElement = document.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
-    paneElement?.dispatchEvent(
-      new KeyboardEvent('keydown', {
-        key,
-        ctrlKey: primary && platform !== 'macos',
-        metaKey: primary && platform === 'macos',
-        altKey: parts.includes('ALT'),
-        shiftKey: parts.includes('SHIFT'),
-        bubbles: true,
-      }),
-    );
-  }
-
-  function updateFunctionKeyModifiers(event: KeyboardEvent): void {
-    const next: FunctionKeyModifiers = {
-      primary: hasPrimaryModifier(event, platform),
-      alt: event.altKey,
-      shift: event.shiftKey,
-    };
-    if (
-      next.primary === functionKeyModifiers.primary &&
-      next.alt === functionKeyModifiers.alt &&
-      next.shift === functionKeyModifiers.shift
-    )
-      return;
-    functionKeyModifiers = next;
-    m.redraw();
-  }
-
-  function resetFunctionKeyModifiers(): void {
-    functionKeyModifiers = {};
-    m.redraw();
-  }
-
-  function functionKeyTitle(binding: {
-    readonly actionId: string;
-    readonly shortcut: string;
-    readonly title: string;
-  }): string {
-    if (binding.actionId === 'core.showShortcutsHelp') return t('menu', 'help');
-    if (binding.shortcut === 'ALT+F3') return t('action', 'openExternally');
-    if (binding.shortcut === 'ALT+SHIFT+F4') return t('action', 'externalEdit');
-    return binding.title;
-  }
-
-  function displayShortcut(shortcut: string): string {
-    const parts = shortcut.split('+');
-    const literalControl = usesLiteralControl({ key: parts.at(-1) ?? '', ctrl: true });
-    return parts
-      .map((part) => {
-        if (part === 'CTRL') return platform === 'macos' && !literalControl ? 'Cmd' : 'Ctrl';
-        if (part === 'ALT') return platform === 'macos' ? 'Option' : 'Alt';
-        if (part === 'SHIFT') return 'Shift';
-        return part.length === 1 ? part.toUpperCase() : part;
-      })
-      .join('+');
-  }
-
-  function labelWithShortcut(label: string, shortcut: string | undefined): string {
-    return shortcut === undefined ? label : `${label} (${displayShortcut(shortcut)})`;
-  }
-
-  /** The pane currently showing an open F3 viewer, if any - mirrors `globalKeydownHandlerContext
-   * .getViewer`'s per-pane lookup, just scanning every pane instead of one. There is only ever one
-   * viewer open app-wide (`openViewer` reuses/replaces the existing one). */
-  function openViewerPaneId(): PaneId | undefined {
-    if (workspace === undefined) return undefined;
-    for (const paneId of workspace.paneOrder) {
-      const tabId = workspace.panesById[paneId]?.activeTabId;
-      if (tabId !== undefined && viewerByTab.get(tabKey(paneId, tabId)) !== undefined) {
-        return paneId;
-      }
-    }
-    return undefined;
-  }
-
-  /** Moves keyboard focus into `paneId`'s open F3 viewer - see `GlobalKeydownContext.focusViewer`. */
-  function focusViewer(paneId: PaneId): void {
-    const root = document.querySelector<HTMLElement>(`[data-pane-id="${paneId}"]`);
-    const readingSurface = root?.querySelector<HTMLElement>('[data-viewer-focus-target]');
-    const searchInput = root?.querySelector<HTMLInputElement>('.fm-file-viewer-search-input');
-    const section = root?.querySelector<HTMLElement>('.fm-pane-viewer');
-    (readingSurface ?? searchInput ?? section)?.focus();
-  }
-
-  function focusViewerSearch(paneId: PaneId): void {
-    const root = document.querySelector<HTMLElement>(`[data-pane-id="${paneId}"]`);
-    root
-      ?.querySelector<HTMLElement>('.fm-file-viewer')
-      ?.dispatchEvent(new CustomEvent('fm-viewer-toggle-search'));
-    root?.querySelector<HTMLInputElement>('.fm-file-viewer-search-input')?.focus();
-  }
-
-  /** One `scrollViewer('line', ...)` step, in CSS pixels - roughly a text line or a comfortable
-   * image-pan increment. */
-  const VIEWER_SCROLL_LINE_STEP_PX = 48;
-  /** Fraction of the viewer body's own size scrolled per `scrollViewer('page', ...)` step - kept
-   * just under a full screenful (rather than exactly 1) so a little of the previous page stays
-   * visible as a reading anchor, matching most text editors' Page Up/Down. */
-  const VIEWER_SCROLL_PAGE_FRACTION = 0.9;
-
-  /** Scrolls/pages `paneId`'s open F3 viewer's scrollable body - see
-   * `GlobalKeydownContext.scrollViewer`. */
-  function scrollViewer(
-    paneId: PaneId,
-    dx: -1 | 0 | 1,
-    dy: -1 | 0 | 1,
-    unit: 'line' | 'page',
-  ): void {
-    const container = document.querySelector<HTMLElement>(
-      `[data-pane-id="${paneId}"] .fm-file-viewer-body`,
-    );
-    if (container === null) return;
-    const stepX =
-      unit === 'page'
-        ? container.clientWidth * VIEWER_SCROLL_PAGE_FRACTION
-        : VIEWER_SCROLL_LINE_STEP_PX;
-    const stepY =
-      unit === 'page'
-        ? container.clientHeight * VIEWER_SCROLL_PAGE_FRACTION
-        : VIEWER_SCROLL_LINE_STEP_PX;
-    container.scrollBy({ left: dx * stepX, top: dy * stepY });
-  }
-
   const backendEventContext: BackendEventContext = {
-    getWorkspaceId: () => workspace?.id,
-    getWorkspaceRevision: () => workspace?.revision,
+    getWorkspaceId: () => shellState.workspace?.id,
+    getWorkspaceRevision: () => shellState.workspace?.revision,
     replaceWorkspace: applyRemoteWorkspaceSnapshot,
-    refreshWorkspaceSummaries: () => workspaceController.refreshWorkspaceSummaries(),
+    refreshWorkspaceSummaries: () => shellState.workspaceController.refreshWorkspaceSummaries(),
     setWorkspaceSummaries: (summaries) => {
-      workspaceSummaries = summaries;
+      shellState.workspaceSummaries = summaries;
     },
     setWorkspaceActionError: (message) => {
-      workspaceActionError = message;
+      shellState.workspaceActionError = message;
     },
-    recoverActiveWorkspace: (summaries) => workspaceController.recoverActiveWorkspace(summaries),
-    listWorkspaces: () => attrsClient.listWorkspaces(),
-    getWorkspace: (id) => attrsClient.getWorkspace(id),
+    recoverActiveWorkspace: (summaries) =>
+      shellState.workspaceController.recoverActiveWorkspace(summaries),
+    listWorkspaces: () => shellState.client.listWorkspaces(),
+    getWorkspace: (id) => shellState.client.getWorkspace(id),
     setPendingConflict: (conflict) => {
-      pendingConflict = conflict;
+      shellState.pendingConflict = conflict;
     },
-    getPendingOperationEvents: () => pendingOperationEvents,
+    getPendingOperationEvents: () => shellState.pendingOperationEvents,
     pushPendingOperationEvent: (event) => {
-      pendingOperationEvents.push(event);
+      shellState.pendingOperationEvents.push(event);
     },
     clearPendingOperationEvents: () => {
-      const events = pendingOperationEvents;
-      pendingOperationEvents = [];
+      const events = shellState.pendingOperationEvents;
+      shellState.pendingOperationEvents = [];
       return events;
     },
-    getOperationFrame: () => operationFrame,
+    getOperationFrame: () => shellState.operationFrame,
     setOperationFrame: (frame) => {
-      operationFrame = frame;
+      shellState.operationFrame = frame;
     },
-    getOperations: () => operations,
+    getOperations: () => shellState.operations,
     setOperations: (next) => {
-      operations = next;
-      if (summariseActiveOperations(next) === undefined && semanticJobs.size === 0) {
-        activityOpen = false;
+      shellState.operations = next;
+      if (summariseActiveOperations(next) === undefined && shellState.semanticJobs.size === 0) {
+        shellState.activityOpen = false;
       }
     },
     onSemanticIngestionProgress: (progress) => {
       if (['complete', 'cancelled', 'skipped'].includes(progress.stage)) {
-        semanticJobs.delete(progress.jobId);
-        if (semanticJobs.size === 0 && summariseActiveOperations(operations) === undefined) {
-          activityOpen = false;
+        shellState.semanticJobs.delete(progress.jobId);
+        if (
+          shellState.semanticJobs.size === 0 &&
+          summariseActiveOperations(shellState.operations) === undefined
+        ) {
+          shellState.activityOpen = false;
         }
       } else {
-        semanticJobs.set(progress.jobId, progress);
+        shellState.semanticJobs.set(progress.jobId, progress);
       }
     },
-    getDismissedOperationIds: () => dismissedOperationIds,
-    clearDismissedOperation,
-    scheduleAutoDismiss,
-    clearOperationSourceSelections,
-    removeOperationSourcesFromSearchResults,
-    removeOperationSourcesFromDiskUsage,
-    getActiveDirectoryRevision: (paneId) => directories.get(activeTabKey(paneId))?.revision,
+    getDismissedOperationIds: () => shellState.dismissedOperationIds,
+    clearDismissedOperation: opsWiring.clearDismissedOperation,
+    scheduleAutoDismiss: opsWiring.scheduleAutoDismiss,
+    clearOperationSourceSelections: opsWiring.clearOperationSourceSelections,
+    removeOperationSourcesFromSearchResults: opsWiring.removeOperationSourcesFromSearchResults,
+    removeOperationSourcesFromDiskUsage: opsWiring.removeOperationSourcesFromDiskUsage,
+    getActiveDirectoryRevision: (paneId) =>
+      shellState.directories.get(activeTabKey(paneId))?.revision,
     applyDelta,
     refetchAffectedPanes,
-    getPlugins: () => plugins,
+    getPlugins: () => shellState.plugins,
     setPlugins: (next) => {
-      plugins = next;
-      for (const [paneId, panel] of pluginByPane) {
+      shellState.plugins = next;
+      for (const [paneId, panel] of shellState.pluginByPane) {
         if (!next.some((plugin) => plugin.id === panel.pluginId && plugin.enabled)) {
-          tabController.performCloseTab(paneId, panel.tabId);
+          shellState.tabController.performCloseTab(paneId, panel.tabId);
         }
       }
-      void attrsClient
+      void shellState.client
         .listActions()
         .then((actions) => {
-          registeredActions = actions;
+          shellState.registeredActions = actions;
           m.redraw();
         })
         .catch(() => {
           toast({ html: t('action', 'unableToRun') });
         });
     },
-    listPlugins: () => attrsClient.listPlugins(),
-    getCurrentIconThemeSetting: () => currentSettings?.iconTheme,
-    applyIconTheme,
-    getConnections: () => connections,
+    listPlugins: () => shellState.client.listPlugins(),
+    getCurrentIconThemeSetting: () => shellState.currentSettings?.iconTheme,
+    applyIconTheme: settingsWiring.applyIconTheme,
+    getConnections: () => shellState.connections,
     setConnections: (next) => {
-      connections = next;
+      shellState.connections = next;
     },
-    getConnection: (id) => attrsClient.getConnection(id),
-    getComparisonState: () => comparisonState,
+    getConnection: (id) => shellState.client.getConnection(id),
+    getComparisonState: () => shellState.comparisonState,
     setComparisonState: (next) => {
-      comparisonState = next;
+      shellState.comparisonState = next;
     },
-    getChecksumState: () => checksumState,
+    getChecksumState: () => shellState.checksumState,
     setChecksumState: (next) => {
-      checksumState = next;
+      shellState.checksumState = next;
     },
-    getDuplicateState: () => duplicateState,
+    getDuplicateState: () => shellState.duplicateState,
     setDuplicateState: (next) => {
-      duplicateState = next;
+      shellState.duplicateState = next;
     },
     markComparisonDifferences: (state) => {
       for (const paneId of [state.leftPaneId, state.rightPaneId]) {
         if (paneId === undefined) continue;
         const key = activeTabKey(paneId);
-        const directory = directories.get(key);
+        const directory = shellState.directories.get(key);
         if (directory === undefined) continue;
         const matchingIds = differingEntryIds(state, paneId, directory.entries);
         if (matchingIds.length === 0) continue;
         const orderedEntryIds = directory.entries.map((entry) => entry.id);
-        selections.set(
+        shellState.selections.set(
           key,
           reduceSelection(
-            selections.get(key) ?? emptySelection,
+            shellState.selections.get(key) ?? emptySelection,
             { type: 'restore', entryIds: matchingIds },
             orderedEntryIds,
           ),
         );
       }
     },
-    getFindFilesSearchId: () => findFilesSearchId,
-    getFindFilesTargetPane: (searchId) => findFilesTargetPaneBySearchId.get(searchId),
+    getFindFilesSearchId: () => shellState.findFilesSearchId,
+    getFindFilesTargetPane: (searchId) => shellState.findFilesTargetPaneBySearchId.get(searchId),
     clearFindFilesTargetPane: (searchId) => {
-      findFilesTargetPaneBySearchId.delete(searchId);
+      shellState.findFilesTargetPaneBySearchId.delete(searchId);
     },
-    hasPendingFindFilesStart: () => pendingFindFilesStarts > 0,
+    hasPendingFindFilesStart: () => shellState.pendingFindFilesStarts > 0,
     deferSearchResultBatch: (event) => {
       if (event.payload.type !== 'search.resultsBatch') return;
-      const pending = deferredSearchResultBatches.get(event.payload.searchId) ?? [];
+      const pending = shellState.deferredSearchResultBatches.get(event.payload.searchId) ?? [];
       pending.push(event);
-      deferredSearchResultBatches.set(event.payload.searchId, pending);
+      shellState.deferredSearchResultBatches.set(event.payload.searchId, pending);
     },
     setSearchExecutionMode: (uri, executionMode) => {
       const searchId = uri.slice('search://local/'.length);
-      findFilesExecutionModesBySearchId.set(searchId, executionMode);
-      const presentation = findFilesPresentationsByLocationUri.get(uri);
+      shellState.findFilesExecutionModesBySearchId.set(searchId, executionMode);
+      const presentation = shellState.findFilesPresentationsByLocationUri.get(uri);
       if (presentation !== undefined) {
-        findFilesPresentationsByLocationUri.set(uri, { ...presentation, executionMode });
+        shellState.findFilesPresentationsByLocationUri.set(uri, { ...presentation, executionMode });
       }
     },
     cacheContentMatches: (uri, matches) => {
-      if (appState !== undefined)
-        appState = applyAppPatches(appState, cacheContentMatchesPatch(uri, matches));
+      if (shellState.appState !== undefined)
+        shellState.appState = applyAppPatches(
+          shellState.appState,
+          cacheContentMatchesPatch(uri, matches),
+        );
     },
     findPanesWithUri: (uri) =>
-      workspace === undefined
+      shellState.workspace === undefined
         ? []
         : (
-            Object.entries(workspace.panesById) as Array<
+            Object.entries(shellState.workspace.panesById) as Array<
               [PaneId, WorkspaceProjection['panesById'][PaneId]]
             >
           )
@@ -4463,14 +1362,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             .map(([paneId]) => paneId),
     revealSearchResults: async (searchId) => {
       const searchUri = `search://local/${searchId}`;
-      const paneId = findFilesTargetPaneBySearchId.get(searchId);
+      const paneId = shellState.findFilesTargetPaneBySearchId.get(searchId);
       if (paneId === undefined) return [];
-      await navigation.navigate(paneId, { providerId: 'search', uri: searchUri });
-      focusPane?.(paneId);
+      await shellState.navigation.navigate(paneId, { providerId: 'search', uri: searchUri });
+      shellState.focusPane?.(paneId);
       m.redraw();
       return [paneId];
     },
-    loadPane: (paneId, options) => navigation.load(paneId, options),
+    loadPane: (paneId, options) => shellState.navigation.load(paneId, options),
     reportSearchCompletion: (paneId, searchId) => {
       const searchUri = `search://local/${searchId}`;
       const active = activeDirectory();
@@ -4479,760 +1378,295 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       if (active === undefined || active.paneId !== paneId || active.location.uri !== searchUri) {
         return;
       }
-      const entries = directories.get(activeTabKey(paneId))?.entries ?? [];
+      const entries = shellState.directories.get(activeTabKey(paneId))?.entries ?? [];
       if (entries.length > 0) return;
-      if (findFilesPresentationsByLocationUri.get(searchUri)?.conceptSearch) return;
+      if (shellState.findFilesPresentationsByLocationUri.get(searchUri)?.conceptSearch) return;
       toast({ html: t('search', 'noResultsToast') });
-      const root = findFilesRootsByLocationUri.get(searchUri);
-      if (root !== undefined) void navigation.navigate(paneId, root);
+      const root = shellState.findFilesRootsByLocationUri.get(searchUri);
+      if (root !== undefined) void shellState.navigation.navigate(paneId, root);
     },
     reportSearchWithoutResults: (searchId) => {
-      if (findFilesPresentationsByLocationUri.get(`search://local/${searchId}`)?.conceptSearch) {
+      if (
+        shellState.findFilesPresentationsByLocationUri.get(`search://local/${searchId}`)
+          ?.conceptSearch
+      ) {
         return;
       }
       toast({ html: t('search', 'noResultsToast') });
     },
-    applyDiskUsageProgress,
-    applyDiskUsageFinalizing,
-    applyDiskUsageFailure,
+    applyDiskUsageProgress: opsWiring.applyDiskUsageProgress,
+    applyDiskUsageFinalizing: opsWiring.applyDiskUsageFinalizing,
+    applyDiskUsageFailure: opsWiring.applyDiskUsageFailure,
     redraw: () => m.redraw(),
   };
   const handleBackendEvent = createBackendEventHandler(backendEventContext);
 
-  let attrsClient: FileManagerClient;
   /** `dispose()` of the `buildControllers` registry set up in `oninit` (controller-registry.ts). */
   let disposeShellControllers: (() => void) | undefined;
-  let rawOpsController: OperationsController;
-  let opsController: OperationsController;
-  let pendingOperationConfirmation:
-    | {
-        readonly request: OperationConfirmationRequest;
-        readonly resolve: (confirmed: boolean) => void;
-      }
-    | undefined;
-  let pendingPermanentDelete:
-    | {
-        readonly sources: readonly Location[];
-        readonly resolve: (confirmed: boolean) => void;
-      }
-    | undefined;
-  let workspaceController: WorkspaceController;
-  let tabController: TabController;
-  let settingsController: SettingsController;
-  let findFilesController: FindFilesController;
-  let comparisonController: ComparisonController;
-  let syncProfileController: SyncProfileController;
-  let syncScheduleTimer: ReturnType<typeof setInterval> | undefined;
-  let checksumController: ChecksumController;
-  function basketFor(workspaceId: string): BasketState {
-    if (appState === undefined) return emptyBasket;
-    const cached = appState.baskets[workspaceId];
-    if (cached !== undefined) return cached;
-    let restored = emptyBasket;
-    try {
-      restored = loadBasket(localStorage, workspaceId);
-    } catch (error) {
-      toast({ html: workspaceErrorMessage(error, t('basket', 'restoreFailed')) });
-    }
-    appState = applyAppPatches(appState, basketPatch(workspaceId, restored));
-    return restored;
-  }
-
-  function updateBasket(workspaceId: string, next: BasketState): void {
-    if (appState === undefined) return;
-    try {
-      saveBasket(localStorage, workspaceId, next);
-    } catch (error) {
-      toast({ html: workspaceErrorMessage(error, t('basket', 'saveFailed')) });
-      return;
-    }
-    appState = applyAppPatches(appState, basketPatch(workspaceId, next));
-    m.redraw();
-  }
-
-  function basketVirtualLocation(workspaceId: string): Location {
-    return { providerId: 'basket', uri: `basket://local/${encodeURIComponent(workspaceId)}` };
-  }
-
-  function basketEntries(state: BasketState): readonly EntrySummary[] {
-    return state.items.map((item) => ({
-      id: item.id,
-      location: item.location,
-      name: item.name,
-      kind: item.kind,
-      hidden: false,
-      readOnly: item.status !== 'ready',
-      metadataRevision: item.metadataRevision,
-      ...(item.kind === 'directory'
-        ? item.folderSize === undefined
-          ? {}
-          : { size: item.folderSize }
-        : item.size === undefined
-          ? {}
-          : { size: item.size }),
-      ...(item.modifiedAt === undefined ? {} : { modifiedAt: item.modifiedAt }),
-    }));
-  }
-
-  function syncBasketVirtualDirectory(paneId: PaneId, tabId: TabId, workspaceId: string): void {
-    const key = tabKey(paneId, tabId);
-    const basket = basketFor(workspaceId);
-    const entries = basketEntries(basket);
-    const summary = basketSummary(basket);
-    directories.set(key, {
-      state: { type: 'loaded' },
-      entries,
-      location: basketVirtualLocation(workspaceId),
-      writable: false,
-      hasMore: false,
-      totalKnownEntries: entries.length,
-      totalKnownSize: summary.knownSize,
-      totalKnownFileCount: summary.fileCount,
-    });
-    const selection = selections.get(key) ?? emptySelection;
-    if (entries.length === 0) {
-      selections.set(key, emptySelection);
-    } else if (!entries.some((entry) => entry.id === selection.cursorEntryId)) {
-      // A transient tab may still have its borrowed folder's cursor, or have opened empty.
-      const tab = workspace?.panesById[paneId]?.tabsById[tabId];
-      const sorted = entriesSortedFor(
-        key,
-        entries,
-        effectiveSort(tab?.view.sort ?? []),
-        tab?.view.foldersFirst ?? false,
-        true,
-      );
-      const first = entriesFilteredFor(key, sorted, quickFilterQueryFor(key, tab))[0];
-      if (first !== undefined) {
-        selections.set(
-          key,
-          reduceSelection(
-            selection,
-            { type: 'positionCursor', entryId: first.id },
-            entries.map((entry) => entry.id),
-          ),
-        );
-      }
-    }
-  }
-
-  function selectedBasketKeys(paneId: PaneId): readonly string[] {
-    const key = activeTabKey(paneId);
-    const directory = directories.get(key);
-    const basket = workspace === undefined ? emptyBasket : basketFor(workspace.id);
-    const selection = selections.get(key);
-    const selected = getSelectedEntriesOrCursor(selection, directory?.entries ?? []);
-    if (selected.length === 0) return [];
-    const selectedRefs = new Set(
-      selected.map((entry) => `${entry.location.providerId}\0${entry.id}`),
-    );
-    return basket.items
-      .filter((item) => selectedRefs.has(`${item.location.providerId}\0${item.id}`))
-      .map((item) => item.key);
-  }
-
-  function removeSelectedBasketItems(paneId: PaneId): boolean {
-    const current = workspace;
-    if (current === undefined || !basketTabIds.has(current.panesById[paneId]?.activeTabId ?? '')) {
-      return false;
-    }
-    const keys = new Set(selectedBasketKeys(paneId));
-    if (keys.size === 0) return true;
-    const before = basketFor(current.id);
-    const removedIds = new Set(
-      before.items.filter((item) => keys.has(item.key)).map((item) => item.id),
-    );
-    updateBasket(current.id, {
-      ...before,
-      items: before.items.filter((item) => !keys.has(item.key)),
-      selectedKeys: before.selectedKeys.filter((key) => !keys.has(key)),
-    });
-    const tabId = current.panesById[paneId]?.activeTabId;
-    if (tabId !== undefined) {
-      const key = tabKey(paneId, tabId);
-      const directory = directories.get(key);
-      const tab = current.panesById[paneId]?.tabsById[tabId];
-      const sorted = entriesSortedFor(
-        key,
-        directory?.entries ?? [],
-        effectiveSort(tab?.view.sort ?? []),
-        tab?.view.foldersFirst ?? false,
-        true,
-      );
-      const visible = entriesFilteredFor(key, sorted, quickFilterQueryFor(key, tab));
-      selections.set(
-        key,
-        reduceSelection(
-          selections.get(key) ?? emptySelection,
-          { type: 'prune', removedEntryIds: [...removedIds] },
-          visible.map((entry) => entry.id),
-        ),
-      );
-    }
-    return true;
-  }
-
-  async function prepareFileOperationEntries(
-    paneId: PaneId,
-    entries: readonly EntrySummary[],
-  ): Promise<readonly EntrySummary[] | undefined> {
-    const current = workspace;
-    if (current === undefined || !basketTabIds.has(current.panesById[paneId]?.activeTabId ?? '')) {
-      return entries;
-    }
-    await recheckBasket(current.id, true);
-    const tabId = current.panesById[paneId]?.activeTabId;
-    if (tabId !== undefined) syncBasketVirtualDirectory(paneId, tabId, current.id);
-    const key = activeTabKey(paneId);
-    const refreshed = getSelectedEntriesOrCursor(
-      selections.get(key),
-      directories.get(key)?.entries ?? [],
-    );
-    const unavailable = refreshed.filter((entry) => entry.readOnly);
-    if (unavailable.length > 0) {
-      toast({ html: t('basket', 'unavailableCount', unavailable.length) });
-      return undefined;
-    }
-    if (refreshed.length === 0) {
-      toast({ html: t('basket', 'noAvailable') });
-      return undefined;
-    }
-    return refreshed;
-  }
-
-  function basketVisible(): boolean {
-    return (
-      workspace?.paneOrder.some((paneId) =>
-        basketTabIds.has(workspace?.panesById[paneId]?.activeTabId ?? ''),
-      ) ?? false
-    );
-  }
-
-  function scheduleBasketRefresh(): void {
-    const workspaceId = workspace?.id;
-    if (workspaceId === undefined || !basketVisible()) return;
-    if (basketRefreshTimer !== undefined) clearTimeout(basketRefreshTimer);
-    basketRefreshTimer = setTimeout(() => {
-      basketRefreshTimer = undefined;
-      void recheckBasket(workspaceId)
-        .then(() => {
-          if (workspace?.id === workspaceId && basketVisible()) {
-            void calculateBasketFolderSizes(workspaceId, true).catch(() => undefined);
-          }
-        })
-        .catch((error: unknown) => {
-          toast({ html: workspaceErrorMessage(error, t('basket', 'checkFailed')) });
-        });
-    }, 150);
-  }
-
-  function basketSourcePaneId(): PaneId | undefined {
-    if (workspace === undefined) return undefined;
-    const active = workspace.activePaneId;
-    if (!basketTabIds.has(workspace.panesById[active]?.activeTabId ?? '')) return active;
-    return workspace.paneOrder.find(
-      (paneId) => !basketTabIds.has(workspace?.panesById[paneId]?.activeTabId ?? ''),
-    );
-  }
-
-  function collectSelection(): void {
-    const current = workspace;
-    const paneId = basketSourcePaneId();
-    if (current === undefined || paneId === undefined) return;
-    const tabId = current.panesById[paneId]?.activeTabId;
-    if (tabId === undefined || basketTabIds.has(tabId)) return;
-    const key = activeTabKey(paneId);
-    const selected = getSelectedEntriesOrCursor(
-      selections.get(key),
-      directories.get(key)?.entries ?? [],
-    ).filter((entry) => !isParentEntry(entry.id));
-    if (selected.length === 0) return;
-    try {
-      updateBasket(current.id, addToBasket(basketFor(current.id), selected));
-      if (basketVisible()) {
-        void calculateBasketFolderSizes(current.id).catch((error: unknown) => {
-          toast({
-            html: workspaceErrorMessage(error, t('basket', 'folderSizeFailed', 1)),
-          });
-        });
-      }
-    } catch (error) {
-      toast({ html: workspaceErrorMessage(error, t('basket', 'collectFailed')) });
-    }
-  }
-
-  function basketTabLocation(): { paneId: PaneId; tabId: TabId } | undefined {
-    const current = workspace;
-    if (current === undefined) return undefined;
-    for (const paneId of current.paneOrder) {
-      const tabId = current.panesById[paneId]?.tabOrder.find((id) => basketTabIds.has(id));
-      if (tabId !== undefined) return { paneId, tabId };
-    }
-    return undefined;
-  }
-
-  function toggleBasket(): void {
-    const open = basketTabLocation();
-    if (open === undefined) {
-      openBasket();
-      return;
-    }
-    tabController.requestCloseTab(open.paneId, open.tabId);
-  }
-
-  function openBasket(): void {
-    const current = workspace;
-    if (current === undefined) return;
-    for (const paneId of current.paneOrder) {
-      const tabId = current.panesById[paneId]?.tabOrder.find((id) => basketTabIds.has(id));
-      if (tabId !== undefined) {
-        selectTab(attrsClient, paneId, tabId);
-        inspectBasketOnOpen(current.id);
-        return;
-      }
-    }
-    const paneId = current.activePaneId;
-    const location =
-      current.panesById[paneId]?.tabsById[current.panesById[paneId]?.activeTabId ?? '']?.location;
-    if (location === undefined) return;
-    void dispatchWorkspaceCommand(
-      attrsClient,
-      {
-        type: 'addTransientTab',
-        workspaceId: current.id,
-        paneId,
-        location,
-        expectedRevision: current.revision,
-      },
-      (next) => {
-        workspace = next;
-        const tabId = next.panesById[paneId]?.activeTabId;
-        if (tabId !== undefined) basketTabIds.add(tabId);
-        basketFor(next.id);
-        inspectBasketOnOpen(next.id);
-        m.redraw();
-      },
-    ).catch((error: unknown) => {
-      toast({ html: workspaceErrorMessage(error, t('basket', 'openFailed')) });
-    });
-  }
-
-  async function recheckBasket(workspaceId: string, selectedOnly = false): Promise<BasketState> {
-    const before = basketFor(workspaceId);
-    const visibleEntries = [...directories.values()].flatMap((directory) => directory.entries);
-    const selected =
-      selectedOnly && workspace?.id === workspaceId
-        ? new Set(
-            workspace.paneOrder
-              .filter((paneId) => basketTabIds.has(workspace?.panesById[paneId]?.activeTabId ?? ''))
-              .flatMap((paneId) => selectedBasketKeys(paneId)),
-          )
-        : undefined;
-    const parentCache = new Map<string, Promise<readonly EntrySummary[]>>();
-    const entriesInParent = (location: Location): Promise<readonly EntrySummary[]> => {
-      const parent = parentLocation(location);
-      const cacheKey = `${parent.providerId}\0${parent.uri}`;
-      const cached = parentCache.get(cacheKey);
-      if (cached !== undefined) return cached;
-      const request = (async (): Promise<readonly EntrySummary[]> => {
-        const entries: EntrySummary[] = [];
-        // Listing sessions are UUID-keyed and cancel older requests sharing their pane ID.
-        const paneId = crypto.randomUUID();
-        let continuationToken: string | undefined;
-        do {
-          const snapshot = await attrsClient.listDirectory({
-            workspaceId,
-            paneId,
-            requestId: crypto.randomUUID(),
-            location: parent,
-            ...(continuationToken === undefined ? {} : { continuationToken }),
-            showHidden: true,
-          });
-          entries.push(...snapshot.entries);
-          continuationToken = snapshot.continuationToken;
-          if (!snapshot.hasMore) break;
-        } while (continuationToken !== undefined);
-        return entries;
-      })();
-      parentCache.set(cacheKey, request);
-      return request;
-    };
-    m.redraw();
-    try {
-      const checked = await refreshBasket(
-        before,
-        async (item) => {
-          try {
-            await attrsClient.getEntryMetadata({
-              entryId: item.id,
-              location: item.location,
-              verifyIdentity: true,
-            });
-            const fresh = (await entriesInParent(item.location)).find(
-              (entry) =>
-                entry.id === item.id &&
-                entry.location.providerId === item.location.providerId &&
-                entry.location.uri === item.location.uri,
-            );
-            return fresh === undefined
-              ? { ...item, status: 'ready' }
-              : basketItemFromEntry(fresh, item);
-          } catch (error) {
-            if (typeof error === 'object' && error !== null && 'code' in error) {
-              if (error.code === 'notFound') {
-                return classifyBasketAbsence(item, visibleEntries);
-              }
-              if (error.code === 'invalidRequest') return 'stale';
-            }
-            throw error;
-          }
-        },
-        selected,
-      );
-      if (basketFor(workspaceId) === before) updateBasket(workspaceId, checked);
-      return checked;
-    } finally {
-      m.redraw();
-    }
-  }
-
-  let basketFolderScan: AbortController | undefined;
-
-  async function calculateBasketFolderSizes(
-    workspaceId: string,
-    refreshKnownSizes = false,
-  ): Promise<void> {
-    basketFolderScan?.abort();
-    const controller = new AbortController();
-    basketFolderScan = controller;
-    const current = basketFor(workspaceId);
-    const folders = current.items.filter(
-      (item) =>
-        item.kind === 'directory' &&
-        item.status === 'ready' &&
-        (refreshKnownSizes || item.folderSize === undefined),
-    );
-    if (refreshKnownSizes && folders.some((item) => item.folderSize !== undefined)) {
-      const keys = new Set(folders.map((item) => item.key));
-      updateBasket(workspaceId, {
-        ...current,
-        items: current.items.map((item) => {
-          if (!keys.has(item.key)) return item;
-          const { folderSize: _previousSize, ...unmeasuredItem } = item;
-          return unmeasuredItem;
-        }),
-      });
-    }
-    m.redraw();
-    let index = 0;
-    let failures = 0;
-    try {
-      await Promise.all(
-        Array.from({ length: Math.min(2, folders.length) }, async () => {
-          while (!controller.signal.aborted && index < folders.length) {
-            const item = folders[index++];
-            if (item === undefined) continue;
-            let result: Awaited<ReturnType<typeof attrsClient.calculateFolderSize>>;
-            try {
-              result = await attrsClient.calculateFolderSize(
-                { location: item.location },
-                controller.signal,
-              );
-            } catch {
-              if (controller.signal.aborted) return;
-              failures += 1;
-              continue;
-            }
-            if (controller.signal.aborted) return;
-            const current = basketFor(workspaceId);
-            if (
-              current.items.some(
-                (candidate) => candidate.key === item.key && candidate.status === 'ready',
-              )
-            ) {
-              updateBasket(workspaceId, withBasketFolderSize(current, item.key, result.totalBytes));
-            }
-          }
-        }),
-      );
-      if (failures > 0 && !controller.signal.aborted) {
-        toast({ html: t('basket', 'folderSizeFailed', failures) });
-      }
-    } finally {
-      if (basketFolderScan === controller) {
-        basketFolderScan = undefined;
-        m.redraw();
-      }
-    }
-  }
-
-  function inspectBasketOnOpen(workspaceId: string): void {
-    void recheckBasket(workspaceId)
-      .then(() => {
-        if (workspace?.id === workspaceId && basketVisible()) {
-          void calculateBasketFolderSizes(workspaceId, true).catch((error: unknown) => {
-            toast({
-              html: workspaceErrorMessage(error, t('basket', 'folderSizeFailed', 1)),
-            });
-          });
-        }
-      })
-      .catch((error: unknown) => {
-        toast({ html: workspaceErrorMessage(error, t('basket', 'checkFailed')) });
-      });
-  }
-
-  let actionCommandController: ActionCommandController;
 
   const workspaceControllerContext: WorkspaceControllerContext = {
-    getWorkspace: () => workspace,
+    getWorkspace: () => shellState.workspace,
     onInitialWorkspaceReady: (freshInstall) => {
       if (!freshInstall) return;
       try {
         const key = 'procyon.walkthroughInvitationShown';
         if (localStorage.getItem(key) !== null) return;
         localStorage.setItem(key, '1');
-        walkthroughInvitationVisible = true;
+        shellState.walkthroughInvitationVisible = true;
       } catch (error: unknown) {
         console.warn('Could not persist the walkthrough invitation; it will not be shown.', error);
       }
     },
     setWorkspace: (ws) => {
-      workspace = ws;
+      shellState.workspace = ws;
     },
-    getWorkspaceError: () => workspaceError,
+    getWorkspaceError: () => shellState.workspaceError,
     setWorkspaceError: (msg) => {
-      workspaceError = msg;
+      shellState.workspaceError = msg;
     },
-    getWorkspaceSummaries: () => workspaceSummaries,
+    getWorkspaceSummaries: () => shellState.workspaceSummaries,
     setWorkspaceSummaries: (summaries) => {
-      workspaceSummaries = summaries;
+      shellState.workspaceSummaries = summaries;
     },
-    getWorkspaceActionError: () => workspaceActionError,
+    getWorkspaceActionError: () => shellState.workspaceActionError,
     setWorkspaceActionError: (msg) => {
-      workspaceActionError = msg;
+      shellState.workspaceActionError = msg;
     },
-    getWorkspaceRequest: () => workspaceRequest,
+    getWorkspaceRequest: () => shellState.workspaceRequest,
     setWorkspaceRequest: (ac) => {
-      workspaceRequest = ac;
+      shellState.workspaceRequest = ac;
     },
-    getPlatform: () => platform,
+    getPlatform: () => shellState.platform,
     setPlatform: (p) => {
-      platform = p;
+      shellState.platform = p;
     },
-    getNativeDragOutSupported: () => nativeDragOutSupported,
+    getNativeDragOutSupported: () => shellState.nativeDragOutSupported,
     setNativeDragOutSupported: (v) => {
-      nativeDragOutSupported = v;
+      shellState.nativeDragOutSupported = v;
     },
-    getUnsubscribeNativeFileDrops: () => unsubscribeNativeFileDrops,
+    getUnsubscribeNativeFileDrops: () => shellState.unsubscribeNativeFileDrops,
     setUnsubscribeNativeFileDrops: (fn) => {
-      unsubscribeNativeFileDrops = fn;
+      shellState.unsubscribeNativeFileDrops = fn;
     },
-    subscribeNativeFileDrops: (callback) => attrsClient.subscribeNativeFileDrops(callback),
-    getDraggedLocations: () => draggedLocations,
-    getNativeDragSourceInternal: () => nativeDragSourceInternal,
+    subscribeNativeFileDrops: (callback) => shellState.client.subscribeNativeFileDrops(callback),
+    getDraggedLocations: () => shellState.draggedLocations,
+    getNativeDragSourceInternal: () => shellState.nativeDragSourceInternal,
     setNativeDragSourceInternal: (v) => {
-      nativeDragSourceInternal = v;
+      shellState.nativeDragSourceInternal = v;
     },
     setOpenTerminalSupported: (v) => {
-      openTerminalSupported = v;
+      shellState.openTerminalSupported = v;
     },
     setPlatformContextMenuSupported: (v) => {
-      platformContextMenuSupported = v;
+      shellState.platformContextMenuSupported = v;
     },
     setNativeIconLoader: (loader) => {
-      nativeIconLoaderSource = loader;
-      nativeIconLoader = currentSettings?.iconTheme === 'native' ? loader : undefined;
+      shellState.nativeIconLoaderSource = loader;
+      shellState.nativeIconLoader =
+        shellState.currentSettings?.iconTheme === 'native' ? loader : undefined;
     },
     setThumbnailLoader: (loader) => {
-      thumbnailLoader = loader;
+      shellState.thumbnailLoader = loader;
     },
     setFinderTagsLoader: (loader) => {
-      finderTagsLoader = loader;
+      shellState.finderTagsLoader = loader;
     },
-    getSystemLocations: () => systemLocations,
+    getSystemLocations: () => shellState.systemLocations,
     setSystemLocations: (locs) => {
-      systemLocations = locs;
+      shellState.systemLocations = locs;
     },
     setSystemLocationsError: (msg) => {
-      systemLocationsError = msg;
+      shellState.systemLocationsError = msg;
     },
-    getVolumes: () => volumes,
+    getVolumes: () => shellState.volumes,
     setVolumes: (vols) => {
-      volumes = vols;
+      shellState.volumes = vols;
     },
     setVolumesError: (msg) => {
-      volumesError = msg;
+      shellState.volumesError = msg;
     },
     setHomeDirectory: (path) => {
-      homeDirectory = path;
+      shellState.homeDirectory = path;
     },
-    getConnections: () => connections,
+    getConnections: () => shellState.connections,
     setConnections: (conns) => {
-      connections = conns;
+      shellState.connections = conns;
     },
     setDraggedLocations: (locs) => {
-      draggedLocations = locs;
+      shellState.draggedLocations = locs;
     },
-    getNativeDropInProgress: () => nativeDropInProgress,
+    getNativeDropInProgress: () => shellState.nativeDropInProgress,
     setNativeDropInProgress: (v) => {
-      nativeDropInProgress = v;
+      shellState.nativeDropInProgress = v;
     },
     setClipboardMessage: (msg) => {
-      clipboardMessage = msg;
+      shellState.clipboardMessage = msg;
     },
-    getNavigation: () => navigation,
-    getFlushPendingLayoutUpdate: () => flushPendingLayoutUpdate,
+    getNavigation: () => shellState.navigation,
+    getFlushPendingLayoutUpdate: () => shellState.flushPendingLayoutUpdate,
     redraw: () => m.redraw(),
     releaseWorkspaceTabState: (outgoing) => releaseWorkspaceTabState(outgoing),
     loadPanesActiveFirst: (ws) => loadPanesActiveFirst(ws),
     syncWorkspaceViewSettings: () => {
-      if (currentSettings !== undefined) {
-        void settingsController.applyShowHiddenFilesToAllTabs(
-          attrsClient,
-          currentSettings.showHiddenFiles,
+      if (shellState.currentSettings !== undefined) {
+        void shellState.settingsController.applyShowHiddenFilesToAllTabs(
+          shellState.client,
+          shellState.currentSettings.showHiddenFiles,
         );
       }
     },
   };
 
   const tabControllerContext: TabControllerContext = {
-    getWorkspace: () => workspace,
+    getWorkspace: () => shellState.workspace,
     setWorkspace: (ws) => {
-      workspace = ws;
+      shellState.workspace = ws;
     },
-    getAppState: () => appState,
+    getAppState: () => shellState.appState,
     setAppState: (state) => {
-      appState = state;
+      shellState.appState = state;
     },
-    getNavigation: () => navigation,
+    getNavigation: () => shellState.navigation,
     redraw: () => m.redraw(),
     applyCurrentShowHiddenSetting: (client, workspaceId, paneId, tabId, rev) =>
-      settingsController.applyCurrentShowHiddenSetting(client, workspaceId, paneId, tabId, rev),
+      shellState.settingsController.applyCurrentShowHiddenSetting(
+        client,
+        workspaceId,
+        paneId,
+        tabId,
+        rev,
+      ),
     clearTabState,
-    getCloseTabConfirmation: () => closeTabConfirmation,
+    getCloseTabConfirmation: () => shellState.closeTabConfirmation,
     setCloseTabConfirmation: (conf) => {
-      closeTabConfirmation = conf;
+      shellState.closeTabConfirmation = conf;
     },
     hasCachedSnapshot: (paneId, tabId) =>
-      directories.get(tabKey(paneId, tabId))?.state.type === 'loaded',
+      shellState.directories.get(tabKey(paneId, tabId))?.state.type === 'loaded',
   };
 
   const settingsControllerContext: SettingsControllerContext = {
     setTheme: (t) => {
-      theme = t;
+      shellState.theme = t;
     },
     setLoadedEntryFormatSettings: (s) => {
-      loadedEntryFormatSettings = s;
+      shellState.loadedEntryFormatSettings = s;
     },
-    getSettingsDialogOpen: () => settingsDialogOpen,
+    getSettingsDialogOpen: () => shellState.settingsDialogOpen,
     setSettingsDialogOpen: (open) => {
-      settingsDialogOpen = open;
+      shellState.settingsDialogOpen = open;
     },
-    getSettingsDisclosureElement: () => settingsDisclosureElement,
-    getCurrentSettings: () => currentSettings,
+    getSettingsDisclosureElement: () => shellState.settingsDisclosureElement,
+    getCurrentSettings: () => shellState.currentSettings,
     setCurrentSettings: (s) => {
-      currentSettings = s;
+      shellState.currentSettings = s;
     },
-    getPlugins: () => plugins,
-    getInstalledIconThemeId: () => installedIconThemeId,
+    getPlugins: () => shellState.plugins,
+    getInstalledIconThemeId: () => shellState.installedIconThemeId,
     setInstalledIconThemeId: (id) => {
-      installedIconThemeId = id;
+      shellState.installedIconThemeId = id;
     },
     setNativeIconLoaderEnabled: (enabled) => {
-      nativeIconLoader = enabled ? nativeIconLoaderSource : undefined;
+      shellState.nativeIconLoader = enabled ? shellState.nativeIconLoaderSource : undefined;
     },
-    getRuntimeKind: () => runtimeKind,
-    getWorkspace: () => workspace,
+    getRuntimeKind: () => shellState.runtimeKind,
+    getWorkspace: () => shellState.workspace,
     setWorkspace: (ws) => {
-      workspace = ws;
+      shellState.workspace = ws;
     },
-    getDirectories: () => directories,
-    getNavigation: () => navigation,
-    getClient: () => attrsClient,
+    getDirectories: () => shellState.directories,
+    getNavigation: () => shellState.navigation,
+    getClient: () => shellState.client,
     redraw: () => m.redraw(),
   };
 
   const globalKeydownHandlerContext: GlobalKeydownContext = {
-    getCommandPaletteOpen: () => commandPaletteOpen,
-    getPlatform: () => platform,
-    getKeybindingRuntime: () => keybindingRuntime,
-    getCurrentSettings: () => currentSettings,
-    getWorkspace: () => workspace,
-    getSelections: () => selections,
-    getDirectories: () => directories,
-    getRegisteredActions: keybindingActions,
-    getPlugins: () => plugins,
+    getCommandPaletteOpen: () => shellState.commandPaletteOpen,
+    getPlatform: () => shellState.platform,
+    getKeybindingRuntime: () => shellState.keybindingRuntime,
+    getCurrentSettings: () => shellState.currentSettings,
+    getWorkspace: () => shellState.workspace,
+    getSelections: () => shellState.selections,
+    getDirectories: () => shellState.directories,
+    getRegisteredActions: actionsWiring.keybindingActions,
+    getPlugins: () => shellState.plugins,
     collectIntoBasketIfVisible: () => {
-      if (!basketVisible()) return false;
+      if (!basketWiring.basketVisible()) return false;
       if (
-        workspace !== undefined &&
-        basketTabIds.has(workspace.panesById[workspace.activePaneId]?.activeTabId ?? '')
+        shellState.workspace !== undefined &&
+        shellState.basketTabIds.has(
+          shellState.workspace.panesById[shellState.workspace.activePaneId]?.activeTabId ?? '',
+        )
       ) {
         return false;
       }
-      collectSelection();
+      basketWiring.collectSelection();
       return true;
     },
     removeFromBasketIfActive: () => {
-      if (workspace === undefined) return false;
-      return removeSelectedBasketItems(workspace.activePaneId);
+      if (shellState.workspace === undefined) return false;
+      return basketWiring.removeSelectedBasketItems(shellState.workspace.activePaneId);
     },
-    prepareFileOperationEntries,
-    clipboard,
-    getFindFilesOpen: () => findFilesOpen,
+    prepareFileOperationEntries: basketWiring.prepareFileOperationEntries,
+    clipboard: miscWiring.clipboard,
+    getFindFilesOpen: () => shellState.findFilesOpen,
     getViewer: (paneId) => {
-      const tabId = workspace?.panesById[paneId]?.activeTabId;
-      return tabId === undefined ? undefined : viewerByTab.get(tabKey(paneId, tabId));
+      const tabId = shellState.workspace?.panesById[paneId]?.activeTabId;
+      return tabId === undefined ? undefined : shellState.viewerByTab.get(tabKey(paneId, tabId));
     },
-    getArchiveCreateRequest: () => dialogs.getState().archiveCreateRequest,
-    getCreateDirectoryOpen: () => dialogs.getState().createDirectoryOpen,
-    getCreateFileOpen: () => dialogs.getState().createFileOpen,
-    getCreateLinkOpen: () => dialogs.getState().createLinkRequest !== undefined,
-    getAppState: () => appState,
-    getLastQuickFilterQuery: (paneId) => lastQuickFilterQueryByTabKey.get(activeTabKey(paneId)),
-    getShortcutsHelpOpen: () => shortcutsHelpOpen,
+    getArchiveCreateRequest: () => shellState.dialogs.getState().archiveCreateRequest,
+    getCreateDirectoryOpen: () => shellState.dialogs.getState().createDirectoryOpen,
+    getCreateFileOpen: () => shellState.dialogs.getState().createFileOpen,
+    getCreateLinkOpen: () => shellState.dialogs.getState().createLinkRequest !== undefined,
+    getAppState: () => shellState.appState,
+    getLastQuickFilterQuery: (paneId) =>
+      shellState.lastQuickFilterQueryByTabKey.get(activeTabKey(paneId)),
+    getShortcutsHelpOpen: () => shellState.shortcutsHelpOpen,
     setCommandPaletteOpen: (open) => {
-      commandPaletteOpen = open;
+      shellState.commandPaletteOpen = open;
     },
     setClipboardMessage: (msg) => {
-      clipboardMessage = msg;
+      shellState.clipboardMessage = msg;
     },
     setArchiveCreateRequest: (req) => {
-      if (req !== undefined) dialogs.openArchiveCreate(req);
+      if (req !== undefined) shellState.dialogs.openArchiveCreate(req);
     },
     setCreateDirectoryOpen: (open) => {
-      if (open) dialogs.openCreateDirectory();
-      else dialogs.cancelCreateDirectory();
+      if (open) shellState.dialogs.openCreateDirectory();
+      else shellState.dialogs.cancelCreateDirectory();
     },
     setCreateFileOpen: (open) => {
-      if (open) dialogs.openCreateFile();
-      else dialogs.cancelCreateFile();
+      if (open) shellState.dialogs.openCreateFile();
+      else shellState.dialogs.cancelCreateFile();
     },
-    openCreateLink: (target, destination) => dialogs.openCreateLink({ target, destination }),
+    openCreateLink: (target, destination) =>
+      shellState.dialogs.openCreateLink({ target, destination }),
     setAppState: (state) => {
-      appState = state;
+      shellState.appState = state;
     },
     setQuickFilterOpen: (key, open) => {
-      quickFilterOpen.set(key, open);
+      shellState.quickFilterOpen.set(key, open);
     },
     setActiveTabQuickFilter: (paneId, query) => {
-      const liveWorkspace = workspace;
+      const liveWorkspace = shellState.workspace;
       const pane = liveWorkspace?.panesById[paneId];
       const tab = pane === undefined ? undefined : pane.tabsById[pane.activeTabId];
       if (liveWorkspace === undefined || tab === undefined) return;
       const key = activeTabKey(paneId);
       const previous = tab.view.quickFilter?.query ?? '';
       if (query === undefined) {
-        if (previous.length > 0) lastQuickFilterQueryByTabKey.set(key, previous);
-        quickFilterOpen.set(key, false);
+        if (previous.length > 0) shellState.lastQuickFilterQueryByTabKey.set(key, previous);
+        shellState.quickFilterOpen.set(key, false);
       } else {
-        quickFilterOpen.set(key, true);
+        shellState.quickFilterOpen.set(key, true);
       }
-      if (appState !== undefined)
-        appState = applyAppPatches(appState, deleteQuickFilterDraftPatch(key));
+      if (shellState.appState !== undefined)
+        shellState.appState = applyAppPatches(
+          shellState.appState,
+          deleteQuickFilterDraftPatch(key),
+        );
       void dispatchWorkspaceCommand(
-        attrsClient,
+        shellState.client,
         {
           type: 'updateView',
           workspaceId: liveWorkspace.id,
@@ -5245,79 +1679,79 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           expectedRevision: liveWorkspace.revision,
         },
         (next) => {
-          workspace = next;
+          shellState.workspace = next;
         },
       ).catch(() => undefined);
     },
     setConnectionsManagerOpen: (open) => {
-      connectionsManagerOpen = open;
+      shellState.connectionsManagerOpen = open;
     },
     setShortcutsHelpOpen: (open) => {
-      shortcutsHelpOpen = open;
+      shellState.shortcutsHelpOpen = open;
     },
-    getTabController: () => tabController,
-    getOpsController: () => opsController,
-    getNavigation: () => navigation,
+    getTabController: () => shellState.tabController,
+    getOpsController: () => shellState.opsController,
+    getNavigation: () => shellState.navigation,
     activeDirectory,
     activeTabKey,
-    actionsWithFavourites,
-    openFindFiles: () => findFilesController.openFindFiles(),
-    toggleBranchView: () => findFilesController.toggleBranchView(),
-    toggleSyncBrowsing: () => syncedBrowsing?.toggle(),
-    replaceClipboard,
-    resolvePasteClipboard,
-    selectedLocations,
+    actionsWithFavourites: actionsWiring.actionsWithFavourites,
+    openFindFiles: () => shellState.findFilesController.openFindFiles(),
+    toggleBranchView: () => shellState.findFilesController.toggleBranchView(),
+    toggleSyncBrowsing: () => shellState.syncedBrowsing?.toggle(),
+    replaceClipboard: miscWiring.replaceClipboard,
+    resolvePasteClipboard: miscWiring.resolvePasteClipboard,
+    selectedLocations: miscWiring.selectedLocations,
     invokeActionById: (actionId, parameters, context) =>
-      actionCommandController.invokeActionById(actionId, parameters, context),
+      shellState.actionCommandController.invokeActionById(actionId, parameters, context),
     openViewer: (paneId, entry, initialSearch, openMetadata) =>
-      openViewer(attrsClient, paneId, entry, initialSearch, openMetadata),
-    openEditor: (paneId, entry) => openEditor(attrsClient, paneId, entry),
-    calculateFolderSize: (paneId, entry) => calculateFolderSize(attrsClient, paneId, entry),
-    uninstallApplication: (paneId, entry) => uninstallApplication(attrsClient, paneId, entry),
-    actionContext: () => actionCommandController.actionContext(),
+      previewWiring.openViewer(shellState.client, paneId, entry, initialSearch, openMetadata),
+    openEditor: (paneId, entry) => previewWiring.openEditor(shellState.client, paneId, entry),
+    calculateFolderSize: (paneId, entry) => calculateFolderSize(shellState.client, paneId, entry),
+    uninstallApplication: (paneId, entry) => uninstallApplication(shellState.client, paneId, entry),
+    actionContext: () => shellState.actionCommandController.actionContext(),
     commandAvailabilityContext: (selectedEntries, paneId) =>
-      actionCommandController.commandAvailabilityContext(selectedEntries, paneId),
+      shellState.actionCommandController.commandAvailabilityContext(selectedEntries, paneId),
     contentSearchInitialQuery,
     pdfImagePageForEntry,
     refetchAffectedPanes,
     platformActionParameters: (actionId, selectedEntries, directoryLocation) =>
-      actionCommandController.platformActionParameters(
+      shellState.actionCommandController.platformActionParameters(
         actionId,
         selectedEntries,
         directoryLocation,
       ),
-    activatePane: (paneId) => activatePane(attrsClient, paneId),
+    activatePane: (paneId) => activatePane(shellState.client, paneId),
     focusPane: (paneId) => {
-      if (focusPane !== undefined) focusPane(paneId);
-      else void activatePane(attrsClient, paneId);
+      if (shellState.focusPane !== undefined) shellState.focusPane(paneId);
+      else void activatePane(shellState.client, paneId);
     },
-    focusViewer,
-    focusViewerSearch,
-    scrollViewer,
+    focusViewer: miscWiring.focusViewer,
+    focusViewerSearch: miscWiring.focusViewerSearch,
+    scrollViewer: miscWiring.scrollViewer,
     toggleTerminal: () => {
-      if (runtimeKind !== 'tauri') return;
-      const key = activeTerminalTabKey();
+      if (shellState.runtimeKind !== 'tauri') return;
+      const key = treeWiring.activeTerminalTabKey();
       if (key === undefined) return;
-      if (openTerminalTabKeys.has(key)) {
-        openTerminalTabKeys.delete(key);
+      if (shellState.openTerminalTabKeys.has(key)) {
+        shellState.openTerminalTabKeys.delete(key);
       } else {
-        openTerminalTabKeys.add(key);
+        shellState.openTerminalTabKeys.add(key);
         focusOpenedTerminal(
           () => m.redraw.sync(),
-          () => focusTerminal?.() ?? false,
+          () => shellState.focusTerminal?.() ?? false,
         );
       }
     },
-    toggleDirectoryTree,
-    toggleOperationCentre,
+    toggleDirectoryTree: treeWiring.toggleDirectoryTree,
+    toggleOperationCentre: opsWiring.toggleOperationCentre,
     redraw: () => m.redraw(),
     setSort: (paneId, sort) => {
-      const liveWorkspace = workspace;
+      const liveWorkspace = shellState.workspace;
       const pane = liveWorkspace?.panesById[paneId];
       const tab = pane === undefined ? undefined : pane.tabsById[pane.activeTabId];
       if (liveWorkspace === undefined || tab === undefined) return;
       void dispatchWorkspaceCommand(
-        attrsClient,
+        shellState.client,
         {
           type: 'updateView',
           workspaceId: liveWorkspace.id,
@@ -5327,83 +1761,86 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           expectedRevision: liveWorkspace.revision,
         },
         (next) => {
-          workspace = next;
+          shellState.workspace = next;
         },
       )
         .then(() => {
-          if (workspace?.panesById[paneId]?.activeTabId === tab.id) {
-            void navigation.load(paneId, { background: true });
+          if (shellState.workspace?.panesById[paneId]?.activeTabId === tab.id) {
+            void shellState.navigation.load(paneId, { background: true });
           }
         })
         .catch(() => undefined);
     },
     swapPaneTabSets: (paneAId, paneBId) => {
-      const liveWorkspace = workspace;
+      const liveWorkspace = shellState.workspace;
       if (liveWorkspace === undefined) return;
       const paneA = liveWorkspace.panesById[paneAId];
       const paneB = liveWorkspace.panesById[paneBId];
       if (paneA === undefined || paneB === undefined) return;
-      if (imageMapTab?.paneId === paneAId) imageMapTab = { ...imageMapTab, paneId: paneBId };
-      else if (imageMapTab?.paneId === paneBId) imageMapTab = { ...imageMapTab, paneId: paneAId };
+      if (shellState.imageMapTab?.paneId === paneAId)
+        shellState.imageMapTab = { ...shellState.imageMapTab, paneId: paneBId };
+      else if (shellState.imageMapTab?.paneId === paneBId)
+        shellState.imageMapTab = { ...shellState.imageMapTab, paneId: paneAId };
       const movedDiskUsage = new Map<string, DiskUsageTabEntry>();
       for (const tabId of paneA.tabOrder) {
-        const entry = diskUsageByTab.get(tabKey(paneAId, tabId));
+        const entry = shellState.diskUsageByTab.get(tabKey(paneAId, tabId));
         if (entry !== undefined) {
-          diskUsageByTab.delete(tabKey(paneAId, tabId));
+          shellState.diskUsageByTab.delete(tabKey(paneAId, tabId));
           entry.key = tabKey(paneBId, tabId);
           entry.paneId = paneBId;
           movedDiskUsage.set(entry.key, entry);
         }
       }
       for (const tabId of paneB.tabOrder) {
-        const entry = diskUsageByTab.get(tabKey(paneBId, tabId));
+        const entry = shellState.diskUsageByTab.get(tabKey(paneBId, tabId));
         if (entry !== undefined) {
-          diskUsageByTab.delete(tabKey(paneBId, tabId));
+          shellState.diskUsageByTab.delete(tabKey(paneBId, tabId));
           entry.key = tabKey(paneAId, tabId);
           entry.paneId = paneAId;
           movedDiskUsage.set(entry.key, entry);
         }
       }
-      for (const [key, entry] of movedDiskUsage) diskUsageByTab.set(key, entry);
+      for (const [key, entry] of movedDiskUsage) shellState.diskUsageByTab.set(key, entry);
       const movedKnowledgeSearch = new Map<string, KnowledgeSearchTabEntry>();
       for (const tabId of paneA.tabOrder) {
-        const entry = knowledgeSearchByTab.get(tabKey(paneAId, tabId));
+        const entry = shellState.knowledgeSearchByTab.get(tabKey(paneAId, tabId));
         if (entry !== undefined) {
-          knowledgeSearchByTab.delete(entry.key);
+          shellState.knowledgeSearchByTab.delete(entry.key);
           entry.key = tabKey(paneBId, tabId);
           entry.paneId = paneBId;
           movedKnowledgeSearch.set(entry.key, entry);
         }
       }
       for (const tabId of paneB.tabOrder) {
-        const entry = knowledgeSearchByTab.get(tabKey(paneBId, tabId));
+        const entry = shellState.knowledgeSearchByTab.get(tabKey(paneBId, tabId));
         if (entry !== undefined) {
-          knowledgeSearchByTab.delete(entry.key);
+          shellState.knowledgeSearchByTab.delete(entry.key);
           entry.key = tabKey(paneAId, tabId);
           entry.paneId = paneAId;
           movedKnowledgeSearch.set(entry.key, entry);
         }
       }
-      for (const [key, entry] of movedKnowledgeSearch) knowledgeSearchByTab.set(key, entry);
+      for (const [key, entry] of movedKnowledgeSearch)
+        shellState.knowledgeSearchByTab.set(key, entry);
       const movedThemes = new Map<string, ThemesTabEntry>();
       for (const [paneId, otherPaneId, tabs] of [
         [paneAId, paneBId, paneA.tabOrder],
         [paneBId, paneAId, paneB.tabOrder],
       ] as const) {
         for (const tabId of tabs) {
-          const entry = themesByTab.get(tabKey(paneId, tabId));
+          const entry = shellState.themesByTab.get(tabKey(paneId, tabId));
           if (entry === undefined) continue;
-          themesByTab.delete(entry.key);
+          shellState.themesByTab.delete(entry.key);
           entry.key = tabKey(otherPaneId, tabId);
           entry.paneId = otherPaneId;
           movedThemes.set(entry.key, entry);
         }
       }
-      for (const [key, entry] of movedThemes) themesByTab.set(key, entry);
+      for (const [key, entry] of movedThemes) shellState.themesByTab.set(key, entry);
       // No backend command swaps a whole tab set atomically (task 0128 Agent Notes) - this
       // mutates the local projection directly, the same optimistic-update pattern
       // `activateTab` uses, rather than round-tripping through `dispatchWorkspaceCommand`.
-      workspace = {
+      shellState.workspace = {
         ...liveWorkspace,
         panesById: {
           ...liveWorkspace.panesById,
@@ -5421,17 +1858,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           },
         },
       };
-      void navigation.load(paneAId);
-      void navigation.load(paneBId);
+      void shellState.navigation.load(paneAId);
+      void shellState.navigation.load(paneBId);
     },
     requestLocationEdit: (paneId) => requestLocationEdit(paneId),
     openMultiRenameForActivePane: () => {
       const active = activeDirectory();
       if (active === undefined) return;
       const key = activeTabKey(active.paneId);
-      const directory = directories.get(key);
+      const directory = shellState.directories.get(key);
       if (directory === undefined) return;
-      const selection = selections.get(key);
+      const selection = shellState.selections.get(key);
       const selected = getSelectedEntries(selection, directory.entries).filter(
         (entry) => !isParentEntry(entry.id),
       );
@@ -5449,7 +1886,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         return parent.providerId === firstParent.providerId && parent.uri === firstParent.uri;
       });
       const selectedIds = new Set(entriesToRename.map((entry) => entry.id));
-      dialogs.openMultiRename(
+      shellState.dialogs.openMultiRename(
         entriesToRename,
         singleParent ? firstParent : undefined,
         new Set(
@@ -5466,109 +1903,113 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       const active = activeDirectory();
       if (active === undefined) return;
       const key = activeTabKey(active.paneId);
-      const directory = directories.get(key);
+      const directory = shellState.directories.get(key);
       if (directory === undefined) return;
-      const selection = selections.get(key);
+      const selection = shellState.selections.get(key);
       const entries = getSelectedEntriesOrCursor(selection, directory.entries).filter(
         (entry) => !isParentEntry(entry.id),
       );
       if (entries.length === 0) return;
-      dialogs.openProperties(entries);
+      shellState.dialogs.openProperties(entries);
       m.redraw();
     },
     quitApplication: () => {
-      if (keybindingRuntime !== 'desktop') return;
-      void attrsClient.quit?.();
+      if (shellState.keybindingRuntime !== 'desktop') return;
+      void shellState.client.quit?.();
     },
-    startComparison: () => comparisonController.startComparison('sizeAndTimestamp'),
-    calculateChecksums: () => checksumController.calculateChecksums(['sha256']),
-    findDuplicates: () => checksumController.findDuplicates(),
-    openDiskUsage,
-    invokeClientAction,
-    openSemanticAssistant,
-    openKnowledgeSearch,
-    openSettingsDialog,
+    startComparison: () => shellState.comparisonController.startComparison('sizeAndTimestamp'),
+    calculateChecksums: () => shellState.checksumController.calculateChecksums(['sha256']),
+    findDuplicates: () => shellState.checksumController.findDuplicates(),
+    openDiskUsage: opsWiring.openDiskUsage,
+    invokeClientAction: dialogWiring.invokeClientAction,
+    openSemanticAssistant: knowledgeWiring.openSemanticAssistant,
+    openKnowledgeSearch: knowledgeWiring.openKnowledgeSearch,
+    openSettingsDialog: settingsWiring.openSettingsDialog,
   };
 
   const findFilesControllerContext: FindFilesControllerContext = {
-    getFindFilesOpen: () => findFilesOpen,
+    getFindFilesOpen: () => shellState.findFilesOpen,
     setFindFilesOpen: (open) => {
-      findFilesOpen = open;
+      shellState.findFilesOpen = open;
     },
-    getFindFilesRoot: () => findFilesRoot,
+    getFindFilesRoot: () => shellState.findFilesRoot,
     setFindFilesRoot: (root) => {
-      findFilesRoot = root;
+      shellState.findFilesRoot = root;
     },
-    getFindFilesSearchId: () => findFilesSearchId,
+    getFindFilesSearchId: () => shellState.findFilesSearchId,
     setFindFilesSearchId: (searchId) => {
-      findFilesSearchId = searchId;
+      shellState.findFilesSearchId = searchId;
       if (searchId !== undefined) {
-        for (const event of deferredSearchResultBatches.get(searchId) ?? []) {
+        for (const event of shellState.deferredSearchResultBatches.get(searchId) ?? []) {
           handleBackendEvent(event);
         }
-        deferredSearchResultBatches.delete(searchId);
+        shellState.deferredSearchResultBatches.delete(searchId);
       }
     },
     setFindFilesTargetPane: (searchId, paneId) => {
-      findFilesTargetPaneBySearchId.set(searchId, paneId);
-      for (const event of deferredSearchResultBatches.get(searchId) ?? []) {
+      shellState.findFilesTargetPaneBySearchId.set(searchId, paneId);
+      for (const event of shellState.deferredSearchResultBatches.get(searchId) ?? []) {
         handleBackendEvent(event);
       }
-      deferredSearchResultBatches.delete(searchId);
+      shellState.deferredSearchResultBatches.delete(searchId);
     },
     clearFindFilesTargetPane: (searchId) => {
-      findFilesTargetPaneBySearchId.delete(searchId);
+      shellState.findFilesTargetPaneBySearchId.delete(searchId);
     },
     setFindFilesSearchStartPending: (pending) => {
-      pendingFindFilesStarts = Math.max(0, pendingFindFilesStarts + (pending ? 1 : -1));
-      if (pendingFindFilesStarts === 0) deferredSearchResultBatches.clear();
+      shellState.pendingFindFilesStarts = Math.max(
+        0,
+        shellState.pendingFindFilesStarts + (pending ? 1 : -1),
+      );
+      if (shellState.pendingFindFilesStarts === 0) shellState.deferredSearchResultBatches.clear();
       m.redraw();
     },
-    getFindFilesError: () => findFilesError,
+    getFindFilesError: () => shellState.findFilesError,
     setFindFilesError: (error) => {
-      findFilesError = error;
+      shellState.findFilesError = error;
     },
-    getFindFilesGeneration: () => findFilesGeneration,
+    getFindFilesGeneration: () => shellState.findFilesGeneration,
     setFindFilesGeneration: (generation) => {
-      findFilesGeneration = generation;
+      shellState.findFilesGeneration = generation;
     },
-    getFindFilesRootsByLocationUri: () => findFilesRootsByLocationUri,
-    getFindFilesPresentationsByLocationUri: () => findFilesPresentationsByLocationUri,
-    getFindFilesParamsByLocationUri: () => findFilesParamsByLocationUri,
-    getFindFilesQueriesByLocationUri: () => findFilesQueriesByLocationUri,
-    getSearchExecutionMode: (searchId) => findFilesExecutionModesBySearchId.get(searchId),
+    getFindFilesRootsByLocationUri: () => shellState.findFilesRootsByLocationUri,
+    getFindFilesPresentationsByLocationUri: () => shellState.findFilesPresentationsByLocationUri,
+    getFindFilesParamsByLocationUri: () => shellState.findFilesParamsByLocationUri,
+    getFindFilesQueriesByLocationUri: () => shellState.findFilesQueriesByLocationUri,
+    getSearchExecutionMode: (searchId) =>
+      shellState.findFilesExecutionModesBySearchId.get(searchId),
     getActiveDirectory: () => activeDirectory(),
-    getWorkspace: () => workspace,
-    getClient: () => attrsClient,
+    getWorkspace: () => shellState.workspace,
+    getClient: () => shellState.client,
     getPaneLocationUri: (paneId) => {
-      const pane = workspace?.panesById[paneId];
+      const pane = shellState.workspace?.panesById[paneId];
       return pane?.tabsById[pane.activeTabId]?.location.uri;
     },
     openTabAt: (paneId, location, historyOrigin) =>
-      tabController.openTabAt(paneId, location, historyOrigin),
-    navigateTo: (paneId, location) => void navigation.navigate(paneId, location),
+      shellState.tabController.openTabAt(paneId, location, historyOrigin),
+    navigateTo: (paneId, location) => void shellState.navigation.navigate(paneId, location),
     reportLimitations: (message) => toast({ html: t('search', 'filterLimitations', { message }) }),
     redraw: () => m.redraw(),
   };
 
   const comparisonControllerContext: ComparisonControllerContext = {
-    getState: () => comparisonState,
+    getState: () => shellState.comparisonState,
     setState: (next) => {
-      comparisonState = next;
+      shellState.comparisonState = next;
     },
-    getWorkspace: () => workspace,
-    getClient: () => attrsClient,
+    getWorkspace: () => shellState.workspace,
+    getClient: () => shellState.client,
     redraw: () => m.redraw(),
   };
 
   const syncProfileControllerContext: SyncProfileControllerContext = {
-    getClient: () => attrsClient,
-    getSettings: () => currentSettings,
-    updateSettings: (update) => updateLocationSettings(attrsClient, update),
+    getClient: () => shellState.client,
+    getSettings: () => shellState.currentSettings,
+    updateSettings: (update) => updateLocationSettings(shellState.client, update),
     getRunTarget: () =>
-      workspace === undefined
+      shellState.workspace === undefined
         ? undefined
-        : { workspaceId: workspace.id, paneId: workspace.activePaneId },
+        : { workspaceId: shellState.workspace.id, paneId: shellState.workspace.activePaneId },
     notify: (message) => toast({ html: message }),
     redraw: () => m.redraw(),
     newId: () => crypto.randomUUID(),
@@ -5578,7 +2019,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
 
   /** Folders of the first two panes, offered as roots when editing a synchronization profile. */
   function syncProfilePaneLocations(): { left?: Location; right?: Location } {
-    const current = workspace;
+    const current = shellState.workspace;
     if (current === undefined) return {};
     const locationOf = (index: number): Location | undefined => {
       const pane = current.panesById[current.paneOrder[index] ?? ''];
@@ -5593,21 +2034,24 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   const checksumControllerContext: ChecksumControllerContext = {
-    getChecksumState: () => checksumState,
+    getChecksumState: () => shellState.checksumState,
     setChecksumState: (next) => {
-      checksumState = next;
+      shellState.checksumState = next;
     },
-    getDuplicateState: () => duplicateState,
+    getDuplicateState: () => shellState.duplicateState,
     setDuplicateState: (next) => {
-      duplicateState = next;
+      shellState.duplicateState = next;
     },
-    getWorkspace: () => workspace,
-    getClient: () => attrsClient,
+    getWorkspace: () => shellState.workspace,
+    getClient: () => shellState.client,
     getSelectedEntries: () => {
       const active = activeDirectory();
       if (active === undefined) return [];
       const key = activeTabKey(active.paneId);
-      return getSelectedEntriesOrCursor(selections.get(key), directories.get(key)?.entries ?? []);
+      return getSelectedEntriesOrCursor(
+        shellState.selections.get(key),
+        shellState.directories.get(key)?.entries ?? [],
+      );
     },
     getActiveLocation: () => activeDirectory()?.location,
     // Reuses the same operation call `core.delete` makes, so duplicate
@@ -5615,166 +2059,165 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     // instead of introducing a second delete path (spec §35, task 0077).
     requestDelete: (locations) => {
       if (locations.length === 0) return;
-      void opsController.delete(
+      void shellState.opsController.delete(
         [...locations],
-        currentSettings?.confirmPermanentDelete === false,
+        shellState.currentSettings?.confirmPermanentDelete === false,
         false,
       );
     },
     redraw: () => m.redraw(),
   };
 
-  const renameRequests = new Map<PaneId, PaneRenameRequest>();
-  const locationEditRequests = new Map<PaneId, number>();
   const requestLocationEdit = (paneId: PaneId): void => {
-    locationEditRequests.set(paneId, (locationEditRequests.get(paneId) ?? 0) + 1);
+    shellState.locationEditRequests.set(
+      paneId,
+      (shellState.locationEditRequests.get(paneId) ?? 0) + 1,
+    );
     m.redraw();
   };
   const actionCommandControllerContext: ActionCommandControllerContext = {
-    getCommandPaletteOpen: () => commandPaletteOpen,
+    getCommandPaletteOpen: () => shellState.commandPaletteOpen,
     setCommandPaletteOpen: (open) => {
-      commandPaletteOpen = open;
+      shellState.commandPaletteOpen = open;
     },
-    getContextMenu: () => contextMenu,
+    getContextMenu: () => shellState.contextMenu,
     setContextMenu: (menu) => {
-      contextMenu = menu;
+      shellState.contextMenu = menu;
     },
-    getCommandPaletteRecency: () => commandPaletteRecency,
+    getCommandPaletteRecency: () => shellState.commandPaletteRecency,
     getActiveDirectory: () => activeDirectory(),
     getActiveTabKey: (paneId) => activeTabKey(paneId),
-    getSelections: () => selections,
-    getDirectories: () => directories,
-    getCurrentSettings: () => currentSettings,
-    getClient: () => attrsClient,
-    openPluginPane,
-    getRegisteredActions: () => [...registeredActions, ...mediaQueueActions()],
-    getPlugins: () => plugins,
-    getWorkspace: () => workspace,
-    getNavigation: () => navigation,
-    getOpsController: () => opsController,
+    getSelections: () => shellState.selections,
+    getDirectories: () => shellState.directories,
+    getCurrentSettings: () => shellState.currentSettings,
+    getClient: () => shellState.client,
+    openPluginPane: previewWiring.openPluginPane,
+    getRegisteredActions: () => [
+      ...shellState.registeredActions,
+      ...actionsWiring.mediaQueueActions(),
+    ],
+    getPlugins: () => shellState.plugins,
+    getWorkspace: () => shellState.workspace,
+    getNavigation: () => shellState.navigation,
+    getOpsController: () => shellState.opsController,
     getGetSelectedEntries: () => getSelectedEntriesOrCursor,
-    prepareFileOperationEntries,
-    getClipboard: () => clipboard(),
-    replaceClipboard: (next) => replaceClipboard(next),
-    resolvePasteClipboard,
+    prepareFileOperationEntries: basketWiring.prepareFileOperationEntries,
+    getClipboard: () => miscWiring.clipboard(),
+    replaceClipboard: (next) => miscWiring.replaceClipboard(next),
+    resolvePasteClipboard: miscWiring.resolvePasteClipboard,
     toast: (options) => toast(options),
-    getOpenTerminalSupported: () => openTerminalSupported,
-    openCreateDirectory: (location) => dialogs.openCreateDirectory(location),
-    openFinderTagsDialog: (request) => dialogs.openFinderTagsDialog(request),
-    openSpotlightCommentDialog: (request) => dialogs.openSpotlightCommentDialog(request),
-    setArchiveCreateRequest: (request) => dialogs.openArchiveCreate(request),
-    calculateChecksums: () => checksumController.calculateChecksums(['sha256']),
-    findDuplicates: () => checksumController.findDuplicates(),
-    openDiskUsage,
-    invokeClientAction,
+    getOpenTerminalSupported: () => shellState.openTerminalSupported,
+    openCreateDirectory: (location) => shellState.dialogs.openCreateDirectory(location),
+    openFinderTagsDialog: (request) => shellState.dialogs.openFinderTagsDialog(request),
+    openSpotlightCommentDialog: (request) => shellState.dialogs.openSpotlightCommentDialog(request),
+    setArchiveCreateRequest: (request) => shellState.dialogs.openArchiveCreate(request),
+    calculateChecksums: () => shellState.checksumController.calculateChecksums(['sha256']),
+    findDuplicates: () => shellState.checksumController.findDuplicates(),
+    openDiskUsage: opsWiring.openDiskUsage,
+    invokeClientAction: dialogWiring.invokeClientAction,
     openPropertiesForActivePane: () => globalKeydownHandlerContext.openPropertiesForActivePane(),
     openMultiRenameForActivePane: () => globalKeydownHandlerContext.openMultiRenameForActivePane(),
-    toggleBranchView: () => findFilesController.toggleBranchView(),
-    toggleSyncBrowsing: () => syncedBrowsing?.toggle(),
+    toggleBranchView: () => shellState.findFilesController.toggleBranchView(),
+    toggleSyncBrowsing: () => shellState.syncedBrowsing?.toggle(),
     openDocumentSummary: (_paneId, entry) => {
-      if (!semanticAssistantAvailable) return;
-      if (workspace === undefined) return;
-      dialogs.openDocumentSummaryDialog({ workspaceId: workspace.id, entry });
+      if (!shellState.semanticAssistantAvailable) return;
+      if (shellState.workspace === undefined) return;
+      shellState.dialogs.openDocumentSummaryDialog({ workspaceId: shellState.workspace.id, entry });
       m.redraw();
     },
-    openSemanticAssistant,
-    openKnowledgeSearch,
-    openThemes,
+    openSemanticAssistant: knowledgeWiring.openSemanticAssistant,
+    openKnowledgeSearch: knowledgeWiring.openKnowledgeSearch,
+    openThemes: knowledgeWiring.openThemes,
     uninstallApplication: (paneId, entry) =>
       globalKeydownHandlerContext.uninstallApplication(paneId, entry),
     requestRename: (paneId, entryIds) => {
-      const revision = (renameRequests.get(paneId)?.revision ?? 0) + 1;
-      renameRequests.set(paneId, { revision, entryIds });
+      const revision = (shellState.renameRequests.get(paneId)?.revision ?? 0) + 1;
+      shellState.renameRequests.set(paneId, { revision, entryIds });
       m.redraw();
     },
     requestLocationEdit,
-    openCreateLink: (target, destination) => dialogs.openCreateLink({ target, destination }),
-    toggleDirectoryTree,
-    toggleOperationCentre,
+    openCreateLink: (target, destination) =>
+      shellState.dialogs.openCreateLink({ target, destination }),
+    toggleDirectoryTree: treeWiring.toggleDirectoryTree,
+    toggleOperationCentre: opsWiring.toggleOperationCentre,
     redraw: () => m.redraw(),
   };
 
-  let paneContentBuilder: (
-    client: FileManagerClient,
-    entryFormatSettings: EntryFormatSettings,
-    paneId: PaneId,
-  ) => WorkspacePaneContent;
-
   const paneContentBuilderContext: PaneContentContext = {
-    getWorkspace: () => workspace,
-    getCurrentSettings: () => currentSettings,
-    getSystemLocations: () => systemLocations,
-    getSystemLocationsError: () => systemLocationsError,
-    getVolumes: () => volumes,
-    getVolumesError: () => volumesError,
-    getConnections: () => connections,
-    getUnavailableLocations: () => unavailableLocations,
-    getNativeIconLoader: () => nativeIconLoader,
-    getThumbnailLoader: () => thumbnailLoader,
-    getFinderTagsLoader: () => finderTagsLoader,
-    getPlugins: () => plugins,
-    getPlatform: () => platform,
-    getKeybindingRuntime: () => keybindingRuntime,
-    getRegisteredActions: () => registeredActions,
-    getDraggedLocations: () => draggedLocations,
-    getNativeDragOutSupported: () => nativeDragOutSupported,
-    getNativeDropInProgress: () => nativeDropInProgress,
-    getRenameRequest: (paneId) => renameRequests.get(paneId),
-    getLocationEditRequest: (paneId) => locationEditRequests.get(paneId),
-    getAppState: () => appState,
+    getWorkspace: () => shellState.workspace,
+    getCurrentSettings: () => shellState.currentSettings,
+    getSystemLocations: () => shellState.systemLocations,
+    getSystemLocationsError: () => shellState.systemLocationsError,
+    getVolumes: () => shellState.volumes,
+    getVolumesError: () => shellState.volumesError,
+    getConnections: () => shellState.connections,
+    getUnavailableLocations: () => shellState.unavailableLocations,
+    getNativeIconLoader: () => shellState.nativeIconLoader,
+    getThumbnailLoader: () => shellState.thumbnailLoader,
+    getFinderTagsLoader: () => shellState.finderTagsLoader,
+    getPlugins: () => shellState.plugins,
+    getPlatform: () => shellState.platform,
+    getKeybindingRuntime: () => shellState.keybindingRuntime,
+    getRegisteredActions: () => shellState.registeredActions,
+    getDraggedLocations: () => shellState.draggedLocations,
+    getNativeDragOutSupported: () => shellState.nativeDragOutSupported,
+    getNativeDropInProgress: () => shellState.nativeDropInProgress,
+    getRenameRequest: (paneId) => shellState.renameRequests.get(paneId),
+    getLocationEditRequest: (paneId) => shellState.locationEditRequests.get(paneId),
+    getAppState: () => shellState.appState,
     getOperations: () =>
-      Object.values(operations.byId).filter(
+      Object.values(shellState.operations.byId).filter(
         (operation): operation is Operation => operation !== undefined,
       ),
-    getContextMenu: () => contextMenu,
-    clipboard,
-    getDirectories: () => directories,
-    getSelections: () => selections,
-    onSelectionAction: (key) => pendingCursorRestorations.delete(key),
-    getSortedEntries: () => sortedEntries,
-    getSortRequests: () => sortRequests,
-    getCursorLoadTokens: () => cursorLoadTokens,
-    getViewerByTab: () => viewerByTab,
-    getEditorByPane: () => editorByPane,
-    getEditorLinkHandlers: editorLinkHandlers,
-    getPluginByPane: () => pluginByPane,
-    getDiskUsageByTab: () => diskUsageByTab,
-    getImageMapPane: imageMapPane,
-    getKnowledgeSearchByTab: () => knowledgeSearchByTab,
-    getThemesByTab: () => themesByTab,
-    getKnowledgeAnswerRevision: () => knowledgeAnswerRevision,
+    getContextMenu: () => shellState.contextMenu,
+    clipboard: miscWiring.clipboard,
+    getDirectories: () => shellState.directories,
+    getSelections: () => shellState.selections,
+    onSelectionAction: (key) => shellState.pendingCursorRestorations.delete(key),
+    getSortedEntries: () => shellState.sortedEntries,
+    getSortRequests: () => shellState.sortRequests,
+    getCursorLoadTokens: () => shellState.cursorLoadTokens,
+    getViewerByTab: () => shellState.viewerByTab,
+    getEditorByPane: () => shellState.editorByPane,
+    getEditorLinkHandlers: previewWiring.editorLinkHandlers,
+    getPluginByPane: () => shellState.pluginByPane,
+    getDiskUsageByTab: () => shellState.diskUsageByTab,
+    getImageMapPane: imageMapWiring.imageMapPane,
+    getKnowledgeSearchByTab: () => shellState.knowledgeSearchByTab,
+    getThemesByTab: () => shellState.themesByTab,
+    getKnowledgeAnswerRevision: () => shellState.knowledgeAnswerRevision,
     setConnections: (conns) => {
-      connections = conns;
+      shellState.connections = conns;
     },
     setConnectionsManagerOpen: (open) => {
-      connectionsManagerOpen = open;
+      shellState.connectionsManagerOpen = open;
     },
     setAppState: (state) => {
-      appState = state;
+      shellState.appState = state;
     },
     setQuickFilterOpen: (key, open) => {
-      quickFilterOpen.set(key, open);
+      shellState.quickFilterOpen.set(key, open);
     },
     setDraggedLocations: (locs) => {
-      draggedLocations = locs;
+      shellState.draggedLocations = locs;
     },
     setNativeDragSourceInternal: (v) => {
-      nativeDragSourceInternal = v;
+      shellState.nativeDragSourceInternal = v;
     },
     setClipboardMessage: (msg) => {
-      clipboardMessage = msg;
+      shellState.clipboardMessage = msg;
     },
     setMultiRenameOpen: (open) => {
-      if (!open) dialogs.cancelMultiRename();
+      if (!open) shellState.dialogs.cancelMultiRename();
     },
     setMultiRenameEntries: (entries) => {
-      dialogs.getState().multiRenameEntries = entries;
+      shellState.dialogs.getState().multiRenameEntries = entries;
     },
     setMultiRenameLocation: (location) => {
-      dialogs.getState().multiRenameLocation = location;
+      shellState.dialogs.getState().multiRenameLocation = location;
     },
     setMultiRenameExistingNames: (names) => {
-      dialogs.getState().multiRenameExistingNames = names;
+      shellState.dialogs.getState().multiRenameExistingNames = names;
     },
     tabKey,
     effectiveSort,
@@ -5784,37 +2227,46 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     entriesFilteredFor,
     quickFilterQueryFor,
     quickFilterOpenFor,
-    advancedFilters,
+    advancedFilters: shellState.advancedFilters,
     contentSearchInitialQuery,
-    searchQueryForLocationUri: (locationUri) => findFilesQueriesByLocationUri.get(locationUri),
+    searchQueryForLocationUri: (locationUri) =>
+      shellState.findFilesQueriesByLocationUri.get(locationUri),
     searchFavouriteNameForLocationUri: (locationUri) => {
-      const presentation = findFilesPresentationsByLocationUri.get(locationUri);
+      const presentation = shellState.findFilesPresentationsByLocationUri.get(locationUri);
       return presentation?.label ?? presentation?.term;
     },
     workspaceErrorMessage,
-    locationForPath: (current, path) => locationForPath(current, path, homeDirectory),
+    locationForPath: (current, path) => locationForPath(current, path, shellState.homeDirectory),
     activeDirectory,
-    getNavigation: () => navigation,
-    getSyncBrowsingState: () => syncedBrowsing?.state() ?? 'off',
-    toggleSyncBrowsing: () => syncedBrowsing?.toggle(),
-    getWorkspaceController: () => workspaceController,
-    getOpsController: () => opsController,
-    openSavedSearch: (saved) => findFilesController.startSavedSearch(saved, 'currentPane'),
+    getNavigation: () => shellState.navigation,
+    getSyncBrowsingState: () => shellState.syncedBrowsing?.state() ?? 'off',
+    toggleSyncBrowsing: () => shellState.syncedBrowsing?.toggle(),
+    getWorkspaceController: () => shellState.workspaceController,
+    getOpsController: () => shellState.opsController,
+    openSavedSearch: (saved) =>
+      shellState.findFilesController.startSavedSearch(saved, 'currentPane'),
     openViewer: (paneId, entry, initialSearch, openMetadata, initialPage) =>
-      openViewer(attrsClient, paneId, entry, initialSearch, openMetadata, initialPage),
-    closeViewer,
-    isDocumentSummaryAvailable: () => semanticAssistantAvailable,
-    showEntryOnMap,
+      previewWiring.openViewer(
+        shellState.client,
+        paneId,
+        entry,
+        initialSearch,
+        openMetadata,
+        initialPage,
+      ),
+    closeViewer: previewWiring.closeViewer,
+    isDocumentSummaryAvailable: () => shellState.semanticAssistantAvailable,
+    showEntryOnMap: imageMapWiring.showEntryOnMap,
     minifyGeo: (entry) => {
-      minifyGeoRequest = { files: [{ location: entry.location, name: entry.name }] };
+      shellState.minifyGeoRequest = { files: [{ location: entry.location, name: entry.name }] };
       m.redraw();
     },
     convertGeo: (entry) => {
-      convertGeoRequest = { files: [{ location: entry.location, name: entry.name }] };
+      shellState.convertGeoRequest = { files: [{ location: entry.location, name: entry.name }] };
       m.redraw();
     },
     playQueueItems: (items, startId, mode, skipped) => {
-      const player = playerController;
+      const player = shellState.playerController;
       if (player === undefined) return;
       if (items.length === 0) {
         toast({ html: t('player', 'noPlayableTracks') });
@@ -5828,44 +2280,49 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       m.redraw();
     },
     openDocumentSummary: (_paneId, entry) => {
-      if (!semanticAssistantAvailable) return;
-      if (workspace === undefined) return;
-      dialogs.openDocumentSummaryDialog({ workspaceId: workspace.id, entry });
+      if (!shellState.semanticAssistantAvailable) return;
+      if (shellState.workspace === undefined) return;
+      shellState.dialogs.openDocumentSummaryDialog({ workspaceId: shellState.workspace.id, entry });
       m.redraw();
     },
-    openKnowledgeSearch,
-    openKnowledgeAnswerSettings: () => openSettingsDialog('semantic'),
-    closeKnowledgeSearch: (paneId, tabId) => tabController.performCloseTab(paneId, tabId),
-    openThemePassage,
+    openKnowledgeSearch: knowledgeWiring.openKnowledgeSearch,
+    openKnowledgeAnswerSettings: () => settingsWiring.openSettingsDialog('semantic'),
+    closeKnowledgeSearch: (paneId, tabId) =>
+      shellState.tabController.performCloseTab(paneId, tabId),
+    openThemePassage: knowledgeWiring.openThemePassage,
     searchThemeSources: (sourceIds, subject) =>
-      openKnowledgeSearchTab({ semanticSourceIds: sourceIds, initialSubject: subject }),
-    openKnowledgeSource,
+      knowledgeWiring.openKnowledgeSearchTab({
+        semanticSourceIds: sourceIds,
+        initialSubject: subject,
+      }),
+    openKnowledgeSource: knowledgeWiring.openKnowledgeSource,
     isKnowledgeSourceOpen: (evidence) =>
-      [...viewerByTab.values()].some(
+      [...shellState.viewerByTab.values()].some(
         (viewer) =>
           viewer.knowledgeSourceId === evidence.sourceId &&
-          workspace?.panesById[viewer.paneId]?.activeTabId === viewer.tabId,
+          shellState.workspace?.panesById[viewer.paneId]?.activeTabId === viewer.tabId,
       ),
-    closeEditor,
+    closeEditor: previewWiring.closeEditor,
     updateLocationSettings,
     invokeActionById: (actionId, parameters, context) =>
-      actionCommandController.invokeActionById(actionId, parameters, context),
+      shellState.actionCommandController.invokeActionById(actionId, parameters, context),
     openContextMenu: (paneId, entries, x, y) =>
-      actionCommandController.openContextMenu(paneId, entries, x, y),
+      shellState.actionCommandController.openContextMenu(paneId, entries, x, y),
     refetchAffectedPanes,
     replaceWorkspace,
-    openDiskUsageFolder,
-    expandDiskUsageFolder,
-    scanDiskUsageFolder,
+    openDiskUsageFolder: opsWiring.openDiskUsageFolder,
+    expandDiskUsageFolder: opsWiring.expandDiskUsageFolder,
+    scanDiskUsageFolder: opsWiring.scanDiskUsageFolder,
     retryDiskUsage: (key) => {
-      const entry = diskUsageByTab.get(key);
-      if (entry !== undefined) startDiskUsageScan(entry.paneId, entry.tabId, entry.location);
+      const entry = shellState.diskUsageByTab.get(key);
+      if (entry !== undefined)
+        opsWiring.startDiskUsageScan(entry.paneId, entry.tabId, entry.location);
     },
-    stopDiskUsage,
+    stopDiskUsage: opsWiring.stopDiskUsage,
   };
 
   function replaceWorkspace(next: WorkspaceProjection): void {
-    workspace = next;
+    shellState.workspace = next;
     m.redraw();
   }
 
@@ -5880,11 +2337,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
    * fetched snapshot no longer has that pane/tab, e.g. the other window closed it).
    */
   function applyRemoteWorkspaceSnapshot(next: WorkspaceProjection): void {
-    if (workspace === undefined || workspace.id !== next.id) {
+    if (shellState.workspace === undefined || shellState.workspace.id !== next.id) {
       replaceWorkspace(next);
       return;
     }
-    const localWorkspace = workspace;
+    const localWorkspace = shellState.workspace;
     const activePaneId =
       next.panesById[localWorkspace.activePaneId] !== undefined
         ? localWorkspace.activePaneId
@@ -5906,16 +2363,16 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     client: FileManagerClient,
     update: (settings: Settings) => Settings,
   ): Promise<void> {
-    const pending = settingsUpdateQueue.then(async () => {
-      if (currentSettings === undefined) {
+    const pending = shellState.settingsUpdateQueue.then(async () => {
+      if (shellState.currentSettings === undefined) {
         throw new ApiError(0, {
           code: 'settingsNotLoaded',
           message: 'Cannot update settings: settings have not loaded yet.',
         });
       }
-      currentSettings = await client.updateSettings(update(currentSettings));
+      shellState.currentSettings = await client.updateSettings(update(shellState.currentSettings));
     });
-    settingsUpdateQueue = pending.catch(() => undefined);
+    shellState.settingsUpdateQueue = pending.catch(() => undefined);
     return pending
       .catch((error: unknown) => {
         console.error('Failed to persist a settings update.', error);
@@ -5925,10 +2382,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   async function activatePane(client: FileManagerClient, paneId: PaneId): Promise<void> {
-    if (workspace === undefined || workspace.activePaneId === paneId) {
+    if (shellState.workspace === undefined || shellState.workspace.activePaneId === paneId) {
       return;
     }
-    const previousWorkspace = workspace;
+    const previousWorkspace = shellState.workspace;
     replaceWorkspace({ ...previousWorkspace, activePaneId: paneId });
     try {
       await dispatchWorkspaceCommand(
@@ -5942,7 +2399,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         replaceWorkspace,
       );
     } catch (error) {
-      if (workspace?.revision === previousWorkspace.revision) replaceWorkspace(previousWorkspace);
+      if (shellState.workspace?.revision === previousWorkspace.revision)
+        replaceWorkspace(previousWorkspace);
       throw error;
     }
   }
@@ -5959,46 +2417,46 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     client: FileManagerClient,
     targetWorkspaceId?: WorkspaceId,
   ): Promise<void> {
-    if (workspace === undefined) return;
+    if (shellState.workspace === undefined) return;
     const target = await client
-      .resyncWorkspace?.(workspace.id, targetWorkspaceId)
+      .resyncWorkspace?.(shellState.workspace.id, targetWorkspaceId)
       .catch(() => undefined);
-    if (target === undefined || workspace === undefined) return;
+    if (target === undefined || shellState.workspace === undefined) return;
     // Any resync - the default source, a from-scratch session's first sync, or an explicit
     // "Update" onto a different saved workspace - relinks this window to whichever named
     // workspace it just synced into, mirroring what the backend already did to the persisted
     // ephemeral record, so a later default resync (or "New Window" from this window) keeps
     // targeting that same workspace.
-    if (workspace.forkedFrom !== target.id) {
-      workspace = { ...workspace, forkedFrom: target.id };
+    if (shellState.workspace.forkedFrom !== target.id) {
+      shellState.workspace = { ...shellState.workspace, forkedFrom: target.id };
     }
-    workspaceController.refreshWorkspaceSummaries();
+    shellState.workspaceController.refreshWorkspaceSummaries();
     m.redraw();
   }
 
   function selectTab(client: FileManagerClient, paneId: PaneId, tabId: TabId): void {
-    if (workspace?.panesById[paneId]?.activeTabId === tabId) {
+    if (shellState.workspace?.panesById[paneId]?.activeTabId === tabId) {
       // Already the active tab - no tab switch, but still worth refreshing: the user is
       // deliberately revisiting this listing (e.g. clicking back onto it after an external change
       // like a browser download landed while it sat idle), so `activateTab` refreshes it too.
       void activatePane(client, paneId).catch(() => undefined);
-      tabController.activateTab(paneId, tabId);
+      shellState.tabController.activateTab(paneId, tabId);
       return;
     }
-    tabController.activateTab(paneId, tabId);
+    shellState.tabController.activateTab(paneId, tabId);
   }
 
   function updateLayout(client: FileManagerClient, layout: WorkspaceLayout): void {
-    if (workspace === undefined) {
+    if (shellState.workspace === undefined) {
       return;
     }
     void dispatchWorkspaceCommand(
       client,
       {
         type: 'updateLayout',
-        workspaceId: workspace.id,
+        workspaceId: shellState.workspace.id,
         layout,
-        expectedRevision: workspace.revision,
+        expectedRevision: shellState.workspace.revision,
       },
       replaceWorkspace,
     ).catch(() => undefined);
@@ -6011,8 +2469,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
     targetPaneId: PaneId,
     targetIndex: number,
   ): void {
-    if (pluginByPane.get(sourcePaneId)?.tabId === tabId) return;
-    const current = workspace;
+    if (shellState.pluginByPane.get(sourcePaneId)?.tabId === tabId) return;
+    const current = shellState.workspace;
     if (current === undefined) return;
     void dispatchWorkspaceCommand(
       client,
@@ -6041,73 +2499,74 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   }
 
   const appDialogsContext: AppDialogsContext = {
-    getHomeDirectory: () => homeDirectory,
-    getOperationCentreVisible: () => workspace?.operationCentre.visible === true,
-    toggleOperationCentre,
-    getOperations: () => operations,
+    getHomeDirectory: () => shellState.homeDirectory,
+    getOperationCentreVisible: () => shellState.workspace?.operationCentre.visible === true,
+    toggleOperationCentre: opsWiring.toggleOperationCentre,
+    getOperations: () => shellState.operations,
     setOperations: (next) => {
-      operations = next;
+      shellState.operations = next;
     },
-    getPendingConflict: () => pendingConflict,
+    getPendingConflict: () => shellState.pendingConflict,
     setPendingConflict: (conflict) => {
-      pendingConflict = conflict;
+      shellState.pendingConflict = conflict;
     },
-    getConnections: () => connections,
+    getConnections: () => shellState.connections,
     setConnections: (conns) => {
-      connections = conns;
+      shellState.connections = conns;
     },
-    getConnectionsManagerOpen: () => connectionsManagerOpen,
+    getConnectionsManagerOpen: () => shellState.connectionsManagerOpen,
     setConnectionsManagerOpen: (open) => {
-      connectionsManagerOpen = open;
+      shellState.connectionsManagerOpen = open;
     },
-    getFindFilesOpen: () => findFilesOpen,
-    getFindFilesRoot: () => findFilesRoot,
-    getFindFilesError: () => findFilesError,
-    getFindFilesSearchPending: () => pendingFindFilesStarts > 0,
-    getCloseTabConfirmation: () => closeTabConfirmation,
+    getFindFilesOpen: () => shellState.findFilesOpen,
+    getFindFilesRoot: () => shellState.findFilesRoot,
+    getFindFilesError: () => shellState.findFilesError,
+    getFindFilesSearchPending: () => shellState.pendingFindFilesStarts > 0,
+    getCloseTabConfirmation: () => shellState.closeTabConfirmation,
     setCloseTabConfirmation: (conf) => {
-      closeTabConfirmation = conf;
+      shellState.closeTabConfirmation = conf;
     },
-    getDialogs: () => dialogs,
-    getOperationConfirmation: () => pendingOperationConfirmation?.request,
+    getDialogs: () => shellState.dialogs,
+    getOperationConfirmation: () => shellState.pendingOperationConfirmation?.request,
     resolveOperationConfirmation: (confirmed) => {
-      const pending = pendingOperationConfirmation;
-      pendingOperationConfirmation = undefined;
+      const pending = shellState.pendingOperationConfirmation;
+      shellState.pendingOperationConfirmation = undefined;
       pending?.resolve(confirmed);
       m.redraw();
     },
-    getPermanentDeleteRequest: () => pendingPermanentDelete?.sources,
+    getPermanentDeleteRequest: () => shellState.pendingPermanentDelete?.sources,
     resolvePermanentDeleteRequest: (confirmed) => {
-      const pending = pendingPermanentDelete;
-      pendingPermanentDelete = undefined;
+      const pending = shellState.pendingPermanentDelete;
+      shellState.pendingPermanentDelete = undefined;
       pending?.resolve(confirmed);
       m.redraw();
     },
-    getFormatSettings: () => currentEntryFormatSettings,
-    getFindFilesController: () => findFilesController,
-    getTabController: () => tabController,
-    getOpsController: () => rawOpsController,
-    openChangeAttributes,
+    getFormatSettings: () => shellState.currentEntryFormatSettings,
+    getFindFilesController: () => shellState.findFilesController,
+    getTabController: () => shellState.tabController,
+    getOpsController: () => shellState.rawOpsController,
+    openChangeAttributes: dialogWiring.openChangeAttributes,
     getActiveDirectoryLocation: () => activeDirectory()?.location,
     getActivePaneId: () => activeDirectory()?.paneId,
     navigateActiveLocation: async (location, preferredCursorName) => {
       const paneId = activeDirectory()?.paneId;
-      if (paneId !== undefined) await navigation.navigate(paneId, location, preferredCursorName);
+      if (paneId !== undefined)
+        await shellState.navigation.navigate(paneId, location, preferredCursorName);
     },
-    getFocusPane: () => focusPane,
-    getSettings: () => currentSettings,
-    getWorkspaceId: () => workspace?.id,
-    updateSettings: (update) => updateLocationSettings(attrsClient, update),
+    getFocusPane: () => shellState.focusPane,
+    getSettings: () => shellState.currentSettings,
+    getWorkspaceId: () => shellState.workspace?.id,
+    updateSettings: (update) => updateLocationSettings(shellState.client, update),
     includeCurrentSemanticFolder: (workspaceId, location) => {
-      semanticEnrolmentRequest = { workspaceId, location };
-      semanticEnrolmentReturnToAsk = true;
+      shellState.semanticEnrolmentRequest = { workspaceId, location };
+      shellState.semanticEnrolmentReturnToAsk = true;
       m.redraw();
     },
     openEditorForCreatedFile: (location, name) => {
       const active = activeDirectory();
       if (active === undefined) return;
       refetchAffectedPanes(active.paneId);
-      openEditor(attrsClient, active.paneId, {
+      previewWiring.openEditor(shellState.client, active.paneId, {
         id: crypto.randomUUID(),
         location,
         name,
@@ -6117,11 +2576,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
         metadataRevision: 0,
       });
     },
-    getFinderTagsLoader: () => finderTagsLoader,
-    cancelAutoDismiss,
-    rememberDismissedOperation,
-    hasDismissedOperations: () => dismissedOperationIds.size > 0,
-    showAllOperations,
+    getFinderTagsLoader: () => shellState.finderTagsLoader,
+    cancelAutoDismiss: opsWiring.cancelAutoDismiss,
+    rememberDismissedOperation: opsWiring.rememberDismissedOperation,
+    hasDismissedOperations: () => shellState.dismissedOperationIds.size > 0,
+    showAllOperations: opsWiring.showAllOperations,
     refetchAffectedPanes,
     redraw: () => m.redraw(),
   };
@@ -6129,38 +2588,41 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
   return {
     oninit: ({ attrs }) => {
       document.addEventListener('pointerdown', closeActivityOnOutsidePointer);
-      attrsClient = attrs.client;
-      void refreshSemanticAssistantAvailability();
-      void refreshKnowledgeSearchAvailability();
+      shellState.client = attrs.client;
+      void knowledgeWiring.refreshSemanticAssistantAvailability();
+      void knowledgeWiring.refreshKnowledgeSearchAvailability();
       // Composition seam (task 0153, controller-registry.ts): every shell-lifetime controller is
       // constructed and torn down through this one registry instead of by-hand `let` +
       // `create*Controller(...)` + a matching teardown call hand-placed in `onremove`.
       const shellControllers = buildControllers({
         ops: {
           create: () => {
-            rawOpsController = createOperationsController(attrs.client);
+            shellState.rawOpsController = createOperationsController(attrs.client);
             return withActiveSourceGuard(
               withPermanentDeleteConfirmation(
                 withOperationConfirmation(
-                  rawOpsController,
-                  () => currentSettings?.confirmFileOperations !== false,
+                  shellState.rawOpsController,
+                  () => shellState.currentSettings?.confirmFileOperations !== false,
                   (request) => {
-                    pendingOperationConfirmation?.resolve(false);
+                    shellState.pendingOperationConfirmation?.resolve(false);
                     return new Promise<boolean>((resolve) => {
-                      pendingOperationConfirmation = { request, resolve };
+                      shellState.pendingOperationConfirmation = { request, resolve };
                       m.redraw();
                     });
                   },
                 ),
                 (sources) => {
-                  pendingPermanentDelete?.resolve(false);
+                  shellState.pendingPermanentDelete?.resolve(false);
                   return new Promise<boolean>((resolve) => {
-                    pendingPermanentDelete = { sources, resolve };
+                    shellState.pendingPermanentDelete = { sources, resolve };
                     m.redraw();
                   });
                 },
               ),
-              () => Object.values(operations.byId).filter((operation) => operation !== undefined),
+              () =>
+                Object.values(shellState.operations.byId).filter(
+                  (operation) => operation !== undefined,
+                ),
             );
           },
         },
@@ -6184,14 +2646,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             const controller = createSyncProfileController(syncProfileControllerContext);
             // Scheduled profiles only run while this window is open; each due profile prepares an
             // inspectable plan and honours its confirmation policy (task 0161).
-            syncScheduleTimer = setInterval(() => {
+            shellState.syncScheduleTimer = setInterval(() => {
               void controller.tick();
             }, SYNC_SCHEDULE_TICK_MS);
             return controller;
           },
           dispose: () => {
-            if (syncScheduleTimer !== undefined) clearInterval(syncScheduleTimer);
-            syncScheduleTimer = undefined;
+            if (shellState.syncScheduleTimer !== undefined)
+              clearInterval(shellState.syncScheduleTimer);
+            shellState.syncScheduleTimer = undefined;
           },
         },
         checksum: { create: () => createChecksumController(checksumControllerContext) },
@@ -6203,16 +2666,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           create: () =>
             createSnapshotController({
               getClient: () => attrs.client,
-              getState: () => snapshotState,
+              getState: () => shellState.snapshotState,
               setState: (state) => {
-                snapshotState = state;
+                shellState.snapshotState = state;
               },
               toast: (message) => {
                 toast({ html: message });
               },
               redraw: () => m.redraw(),
               refreshPanes: () => {
-                for (const paneId of workspace?.paneOrder ?? []) refetchAffectedPanes(paneId);
+                for (const paneId of shellState.workspace?.paneOrder ?? [])
+                  refetchAffectedPanes(paneId);
               },
             }),
           dispose: (controller) => controller.dispose(),
@@ -6221,20 +2685,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           create: () =>
             createLinkDoctorController({
               getClient: () => attrs.client,
-              getOpsController: () => opsController,
-              getState: () => linkDoctorState,
+              getOpsController: () => shellState.opsController,
+              getState: () => shellState.linkDoctorState,
               setState: (state) => {
-                linkDoctorState = state;
+                shellState.linkDoctorState = state;
               },
               toast: (message) => {
                 toast({ html: message });
               },
               redraw: () => m.redraw(),
               openInEditor: (location) => {
-                const paneId = workspace?.activePaneId;
+                const paneId = shellState.workspace?.activePaneId;
                 if (paneId === undefined) return;
                 const name = decodeURIComponent(location.uri.split('/').pop() ?? location.uri);
-                openEditor(attrs.client, paneId, {
+                previewWiring.openEditor(attrs.client, paneId, {
                   id: crypto.randomUUID(),
                   location,
                   name,
@@ -6245,7 +2709,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 });
               },
               refreshPanes: () => {
-                for (const paneId of workspace?.paneOrder ?? []) refetchAffectedPanes(paneId);
+                for (const paneId of shellState.workspace?.paneOrder ?? [])
+                  refetchAffectedPanes(paneId);
               },
             }),
           dispose: (controller) => controller.dispose(),
@@ -6254,17 +2719,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           create: () =>
             createMusicDuplicatesController({
               getClient: () => attrs.client,
-              getOpsController: () => opsController,
-              getState: () => musicDuplicatesState,
+              getOpsController: () => shellState.opsController,
+              getState: () => shellState.musicDuplicatesState,
               setState: (state) => {
-                musicDuplicatesState = state;
+                shellState.musicDuplicatesState = state;
               },
               toast: (message) => {
                 toast({ html: message });
               },
               redraw: () => m.redraw(),
               refreshPanes: () => {
-                for (const paneId of workspace?.paneOrder ?? []) refetchAffectedPanes(paneId);
+                for (const paneId of shellState.workspace?.paneOrder ?? [])
+                  refetchAffectedPanes(paneId);
               },
             }),
           dispose: (controller) => controller.dispose(),
@@ -6274,9 +2740,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             createPlayerController({
               client: attrs.client,
               prepareMedia: (location) => prepareMedia(location),
-              getState: () => appState?.player ?? emptyPlayerState,
+              getState: () => shellState.appState?.player ?? shellState.emptyPlayerState,
               update: (next: PlayerState) => {
-                if (appState !== undefined) appState = applyAppPatches(appState, playerPatch(next));
+                if (shellState.appState !== undefined)
+                  shellState.appState = applyAppPatches(shellState.appState, playerPatch(next));
                 m.redraw();
               },
             }),
@@ -6287,10 +2754,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             wrapSyncedBrowsing(
               createNavigationController({
                 client: attrs.client,
-                getWorkspace: () => workspace,
+                getWorkspace: () => shellState.workspace,
                 replaceWorkspace: (next) => replaceWorkspace(next),
                 onLocationVisited: (workspaceId, location) => {
-                  unavailableLocations.delete(`${location.providerId}:${location.uri}`);
+                  shellState.unavailableLocations.delete(`${location.providerId}:${location.uri}`);
                   void updateLocationSettings(attrs.client, (settings) => ({
                     ...settings,
                     recentLocationsByWorkspace: {
@@ -6303,7 +2770,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   }));
                 },
                 onLocationUnavailable: (_workspaceId, location) => {
-                  unavailableLocations.add(`${location.providerId}:${location.uri}`);
+                  shellState.unavailableLocations.add(`${location.providerId}:${location.uri}`);
                   m.redraw();
                 },
                 requestArchivePassword,
@@ -6313,19 +2780,22 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 // column costs nothing server-side either. Read fresh on every request rather than
                 // snapshotted, since `currentSettings` can change between navigations.
                 getShowGitStatusColumn: () =>
-                  currentSettings?.defaultColumns.includes('core.gitStatus') ?? false,
+                  shellState.currentSettings?.defaultColumns.includes('core.gitStatus') ?? false,
                 updatePane: (paneId, tabId, view, preferredCursorName) => {
-                  if (basketTabIds.has(tabId)) return;
+                  if (shellState.basketTabIds.has(tabId)) return;
                   const key = tabKey(paneId, tabId);
-                  const previous = directories.get(key);
+                  const previous = shellState.directories.get(key);
                   if (
                     previous !== undefined &&
                     (previous.location?.uri !== view.location?.uri ||
                       previous.location?.providerId !== view.location?.providerId)
                   ) {
-                    pendingCursorRestorations.delete(key);
+                    shellState.pendingCursorRestorations.delete(key);
                   }
-                  directories.set(key, respectSystemLocationReadOnly(view, systemLocations));
+                  shellState.directories.set(
+                    key,
+                    respectSystemLocationReadOnly(view, shellState.systemLocations),
+                  );
                   if (previous !== undefined && previous.location?.uri === view.location?.uri) {
                     reconcileSelectionAfterEntryChange(
                       paneId,
@@ -6338,17 +2808,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     // Keep the synthetic ".." navigation row out of cursor/selection state. This
                     // also avoids a transient empty first page leaving ".." focused after the real
                     // entries arrive during workspace restoration.
-                    selections.set(key, { selectedEntryIds: [] });
-                    const pending = pendingCursorRestorations.get(key);
+                    shellState.selections.set(key, { selectedEntryIds: [] });
+                    const pending = shellState.pendingCursorRestorations.get(key);
                     if (pending !== undefined) {
-                      pendingCursorRestorations.set(key, {
+                      shellState.pendingCursorRestorations.set(key, {
                         ...pending,
                         fallbackCursorId: undefined,
                       });
                     }
                   } else if (
                     preferredCursorName !== undefined ||
-                    selections.get(key)?.cursorEntryId === undefined ||
+                    shellState.selections.get(key)?.cursorEntryId === undefined ||
                     previous?.location?.uri !== view.location?.uri
                   ) {
                     // After `..` navigation, land the cursor back on the child directory
@@ -6363,7 +2833,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     // deliberately excluded here: the cursor should land on the first real file
                     // below it, not on ".." itself (the empty-directory branch above already
                     // handles landing on ".." when there's nothing else to select).
-                    const tab = workspace?.panesById[paneId]?.tabsById[tabId];
+                    const tab = shellState.workspace?.panesById[paneId]?.tabsById[tabId];
                     const sorted = entriesSortedFor(
                       key,
                       view.entries,
@@ -6376,7 +2846,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       (entry) => entry.name === preferredCursorName,
                     );
                     const firstEntry = preferredEntry ?? filtered[0];
-                    selections.set(key, {
+                    shellState.selections.set(key, {
                       selectedEntryIds: [],
                       ...(firstEntry === undefined
                         ? {}
@@ -6390,32 +2860,35 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           dispose: (controller) => controller.dispose(),
         },
       });
-      opsController = shellControllers.instances.ops;
-      workspaceController = shellControllers.instances.workspace;
-      tabController = shellControllers.instances.tab;
-      settingsController = shellControllers.instances.settings;
-      findFilesController = shellControllers.instances.findFiles;
-      comparisonController = shellControllers.instances.comparison;
-      syncProfileController = shellControllers.instances.syncProfiles;
-      checksumController = shellControllers.instances.checksum;
-      actionCommandController = shellControllers.instances.actionCommand;
-      paneContentBuilder = shellControllers.instances.paneContent;
-      playerController = shellControllers.instances.player;
-      musicDuplicatesController = shellControllers.instances.musicDuplicates;
-      linkDoctorController = shellControllers.instances.linkDoctor;
-      snapshotController = shellControllers.instances.snapshots;
-      navigation = shellControllers.instances.navigation;
+      shellState.opsController = shellControllers.instances.ops;
+      shellState.workspaceController = shellControllers.instances.workspace;
+      shellState.tabController = shellControllers.instances.tab;
+      shellState.settingsController = shellControllers.instances.settings;
+      shellState.findFilesController = shellControllers.instances.findFiles;
+      shellState.comparisonController = shellControllers.instances.comparison;
+      shellState.syncProfileController = shellControllers.instances.syncProfiles;
+      shellState.checksumController = shellControllers.instances.checksum;
+      shellState.actionCommandController = shellControllers.instances.actionCommand;
+      shellState.paneContentBuilder = shellControllers.instances.paneContent;
+      shellState.playerController = shellControllers.instances.player;
+      shellState.musicDuplicatesController = shellControllers.instances.musicDuplicates;
+      shellState.linkDoctorController = shellControllers.instances.linkDoctor;
+      shellState.snapshotController = shellControllers.instances.snapshots;
+      shellState.navigation = shellControllers.instances.navigation;
       disposeShellControllers = shellControllers.dispose;
-      keybindingRuntime = attrs.runtime === 'http' ? 'browser' : 'desktop';
-      runtimeKind = attrs.runtime;
-      windowTitleSink = dedupeWindowTitleSink(createWindowTitleSink(attrs.client));
-      systemThemeQuery?.addEventListener('change', handleSystemThemeChange);
+      shellState.keybindingRuntime = attrs.runtime === 'http' ? 'browser' : 'desktop';
+      shellState.runtimeKind = attrs.runtime;
+      shellState.windowTitleSink = dedupeWindowTitleSink(createWindowTitleSink(attrs.client));
+      shellState.systemThemeQuery?.addEventListener(
+        'change',
+        settingsWiring.handleSystemThemeChange,
+      );
       window.addEventListener('focus', handleWindowFocus);
       document.addEventListener('visibilitychange', handleVisibilityChange);
-      document.addEventListener('keydown', updateFunctionKeyModifiers);
-      document.addEventListener('keyup', updateFunctionKeyModifiers);
-      window.addEventListener('blur', resetFunctionKeyModifiers);
-      appState = applyAppPatches(
+      document.addEventListener('keydown', miscWiring.updateFunctionKeyModifiers);
+      document.addEventListener('keyup', miscWiring.updateFunctionKeyModifiers);
+      window.addEventListener('blur', miscWiring.resetFunctionKeyModifiers);
+      shellState.appState = applyAppPatches(
         createInitialAppState(attrs.runtime),
         connectionPatch({ status: attrs.client.connection.get() }),
       );
@@ -6423,12 +2896,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       // storage, so the theme manager's own localStorage persistence stays off;
       // task 0030 restores the theme from the settings service instead.
       ThemeManager.setUseLocalStorage(false);
-      ThemeManager.initialize(theme);
-      void loadSettings(attrs.client);
+      ThemeManager.initialize(shellState.theme);
+      void settingsWiring.loadSettings(attrs.client);
       void attrs.client
         .listActions()
         .then((actions) => {
-          registeredActions = actions;
+          shellState.registeredActions = actions;
           m.redraw();
         })
         .catch(() => undefined);
@@ -6449,7 +2922,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 };
                 void invoke('subscribe_native_menu_actions', { channel: nativeMenuActions })
                   .then(() => {
-                    nativeMenuChannelReady = true;
+                    shellState.nativeMenuChannelReady = true;
                     m.redraw();
                   })
                   .catch(() => undefined);
@@ -6462,92 +2935,102 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
       void attrs.client
         .listPlugins()
         .then((listed) => {
-          plugins = listed;
-          if (currentSettings !== undefined) applyIconTheme(currentSettings.iconTheme);
+          shellState.plugins = listed;
+          if (shellState.currentSettings !== undefined)
+            settingsWiring.applyIconTheme(shellState.currentSettings.iconTheme);
           m.redraw();
         })
         .catch(() => undefined);
-      void workspaceController.loadWorkspace();
+      void shellState.workspaceController.loadWorkspace();
       void Promise.resolve()
         .then(() => attrs.client.listOperations())
         .then((listed) => {
-          if (!removed) {
+          if (!shellState.removed) {
             // History is loaded from a PAST session - the user never watched these
             // run, so an auto-dismissible one (completed/cancelled/interrupted) would
             // only flash and vanish a few seconds later for no reason. Only surface
             // ones that still need attention (failed) or are still genuinely active.
             const relevant = listed.filter(
               (operation) =>
-                !shouldAutoDismissOperation(operation) && !dismissedOperationIds.has(operation.id),
+                !shouldAutoDismissOperation(operation) &&
+                !shellState.dismissedOperationIds.has(operation.id),
             );
-            operations = createOperationsState(relevant);
+            shellState.operations = createOperationsState(relevant);
             m.redraw();
           }
         })
         .catch(() => undefined);
-      unsubscribeConnection = attrs.client.connection.subscribe((status) => {
-        if (appState !== undefined) {
-          appState = applyAppPatches(appState, connectionPatch({ status }));
+      shellState.unsubscribeConnection = attrs.client.connection.subscribe((status) => {
+        if (shellState.appState !== undefined) {
+          shellState.appState = applyAppPatches(shellState.appState, connectionPatch({ status }));
         }
         m.redraw();
       });
-      unsubscribeResynchronise = attrs.client.onResynchronise(() => refetchAffectedPanes());
+      shellState.unsubscribeResynchronise = attrs.client.onResynchronise(() =>
+        refetchAffectedPanes(),
+      );
       void attrs.client.subscribe(handleBackendEvent).then((unsubscribe) => {
-        if (removed) unsubscribe();
-        else unsubscribeEvents = unsubscribe;
+        if (shellState.removed) unsubscribe();
+        else shellState.unsubscribeEvents = unsubscribe;
       });
     },
 
     onremove: () => {
       document.removeEventListener('pointerdown', closeActivityOnOutsidePointer);
-      removed = true;
-      pendingOperationConfirmation?.resolve(false);
-      pendingOperationConfirmation = undefined;
-      pendingPermanentDelete?.resolve(false);
-      pendingPermanentDelete = undefined;
-      dialogs.getState().pendingArchiveCredential?.resolve(false);
-      dialogs.clearArchiveCredential();
-      systemThemeQuery?.removeEventListener('change', handleSystemThemeChange);
+      shellState.removed = true;
+      shellState.pendingOperationConfirmation?.resolve(false);
+      shellState.pendingOperationConfirmation = undefined;
+      shellState.pendingPermanentDelete?.resolve(false);
+      shellState.pendingPermanentDelete = undefined;
+      shellState.dialogs.getState().pendingArchiveCredential?.resolve(false);
+      shellState.dialogs.clearArchiveCredential();
+      shellState.systemThemeQuery?.removeEventListener(
+        'change',
+        settingsWiring.handleSystemThemeChange,
+      );
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      document.removeEventListener('keydown', updateFunctionKeyModifiers);
-      document.removeEventListener('keyup', updateFunctionKeyModifiers);
-      window.removeEventListener('blur', resetFunctionKeyModifiers);
-      if (operationFrame !== undefined) cancelAnimationFrame(operationFrame);
-      for (const timer of autoDismissTimers.values()) clearTimeout(timer);
-      autoDismissTimers.clear();
-      workspaceRequest?.abort();
-      unsubscribeEvents?.();
-      unsubscribeNativeFileDrops?.();
-      unsubscribeConnection?.();
-      unsubscribeResynchronise?.();
-      attrsClient.disconnect();
+      document.removeEventListener('keydown', miscWiring.updateFunctionKeyModifiers);
+      document.removeEventListener('keyup', miscWiring.updateFunctionKeyModifiers);
+      window.removeEventListener('blur', miscWiring.resetFunctionKeyModifiers);
+      if (shellState.operationFrame !== undefined) cancelAnimationFrame(shellState.operationFrame);
+      for (const timer of shellState.autoDismissTimers.values()) clearTimeout(timer);
+      shellState.autoDismissTimers.clear();
+      shellState.workspaceRequest?.abort();
+      shellState.unsubscribeEvents?.();
+      shellState.unsubscribeNativeFileDrops?.();
+      shellState.unsubscribeConnection?.();
+      shellState.unsubscribeResynchronise?.();
+      shellState.client.disconnect();
       disposeShellControllers?.();
       document.documentElement.style.removeProperty('--fm-font-size');
       document.documentElement.style.removeProperty('--fm-row-height');
     },
 
     view: ({ attrs }) => {
-      const syncReview = syncProfileController.pendingReview();
+      const syncReview = shellState.syncProfileController.pendingReview();
       syncNativeMenu();
       syncWindowTitle();
-      if (treeSidebarOpen) syncDirectoryTreeToActiveLocation();
-      currentEntryFormatSettings = attrs.entryFormatSettings ?? loadedEntryFormatSettings;
-      const pendingDelete = Object.values(operations.byId).find(
+      if (shellState.treeSidebarOpen) treeWiring.syncDirectoryTreeToActiveLocation();
+      shellState.currentEntryFormatSettings =
+        attrs.entryFormatSettings ?? shellState.loadedEntryFormatSettings;
+      const pendingDelete = Object.values(shellState.operations.byId).find(
         (operation) =>
           operation?.kind === 'delete' && operation.state === 'waitingForConflictResolution',
       );
-      const activeOperations = Object.values(operations.byId).filter(
+      const activeOperations = Object.values(shellState.operations.byId).filter(
         (operation): operation is Operation =>
           operation !== undefined && isActiveOperation(operation),
       );
-      const failedSemanticJobs = [...semanticJobs.values()].filter((job) => job.stage === 'failed');
-      const activityCount = activeOperations.length + semanticJobs.size;
+      const failedSemanticJobs = [...shellState.semanticJobs.values()].filter(
+        (job) => job.stage === 'failed',
+      );
+      const activityCount = activeOperations.length + shellState.semanticJobs.size;
       const activityLabel =
         activityCount === 1
           ? t('shell', 'activitySingle')
           : t('shell', 'activityCount', { count: activityCount });
-      const runningSemanticJobs = semanticJobs.size - failedSemanticJobs.length;
+      const runningSemanticJobs = shellState.semanticJobs.size - failedSemanticJobs.length;
       const activityBusy = activeOperations.length > 0 || runningSemanticJobs > 0;
       const activityKinds = [
         ...new Set([
@@ -6562,16 +3045,16 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           : `${activityLabel}: ${activityKinds.join(', ')}`;
       // The macOS overlay keeps native traffic lights while the toolbar draws the title.
       // The browser tab already provides a title; Windows has its own menu/title row.
-      const isMacOverlay = runtimeKind === 'tauri' && platform === 'macos';
-      const localisedActions = keybindingActions();
+      const isMacOverlay = shellState.runtimeKind === 'tauri' && shellState.platform === 'macos';
+      const localisedActions = actionsWiring.keybindingActions();
       const keybindingContext = {
         scope: 'table' as const,
-        platform,
+        platform: shellState.platform,
         runtime: attrs.runtime === 'http' ? ('browser' as const) : ('desktop' as const),
       };
       const footerBindings = footerFunctionKeyBindings(
         localisedActions,
-        currentSettings?.keybindings ?? {},
+        shellState.currentSettings?.keybindings ?? {},
         keybindingContext,
         (action) =>
           evaluateActionAvailability(
@@ -6584,21 +3067,24 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   },
                 }
               : action,
-            actionCommandController.commandAvailabilityContext(),
+            shellState.actionCommandController.commandAvailabilityContext(),
           ).available,
-        functionKeyModifiers,
+        shellState.functionKeyModifiers,
       );
       const liveShortcuts = getLiveBindings(
         localisedActions,
-        currentSettings?.keybindings ?? {},
+        shellState.currentSettings?.keybindings ?? {},
         keybindingContext,
       );
       const shortcutFor = (actionId: string): string | undefined =>
         liveShortcuts.find((binding) => binding.actionId === actionId)?.shortcut;
       const basketFocused =
-        workspace !== undefined &&
-        basketTabIds.has(workspace.panesById[workspace.activePaneId]?.activeTabId ?? '');
-      const basketF5 = basketVisible() && !basketFocused && shortcutFor('core.copy') === 'F5';
+        shellState.workspace !== undefined &&
+        shellState.basketTabIds.has(
+          shellState.workspace.panesById[shellState.workspace.activePaneId]?.activeTabId ?? '',
+        );
+      const basketF5 =
+        basketWiring.basketVisible() && !basketFocused && shortcutFor('core.copy') === 'F5';
       return m(
         '.fm-app-shell',
         {
@@ -6617,7 +3103,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   t('shell', 'title'),
                 ]),
                 m(WindowsNativeMenu, {
-                  spec: windowsNativeMenuSpec,
+                  spec: shellState.windowsNativeMenuSpec,
                   onAction: (id) => dispatchNativeMenuAction(nativeMenuDispatchContext, id),
                   onRole: (role) => {
                     const win = getCurrentWindow();
@@ -6625,7 +3111,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     if (role === 'zoom') void win.toggleMaximize();
                     if (role === 'quit') void win.close();
                     if (role === 'about') {
-                      aboutDialogOpen = true;
+                      shellState.aboutDialogOpen = true;
                       m.redraw();
                     }
                   },
@@ -6685,11 +3171,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   {
                     disabled:
                       activeDirectory() === undefined ||
-                      workspace?.panesById[workspace.activePaneId]?.tabsById[
-                        workspace.panesById[workspace.activePaneId]?.activeTabId ?? ''
+                      shellState.workspace?.panesById[shellState.workspace.activePaneId]?.tabsById[
+                        shellState.workspace.panesById[shellState.workspace.activePaneId]
+                          ?.activeTabId ?? ''
                       ]?.canNavigateBack !== true,
                     'aria-label': t('shell', 'back'),
-                    onclick: () => void navigation.back(workspace?.activePaneId ?? ''),
+                    onclick: () =>
+                      void shellState.navigation.back(shellState.workspace?.activePaneId ?? ''),
                   },
                   arrowLeftIcon(),
                 ),
@@ -6701,23 +3189,29 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   {
                     disabled:
                       activeDirectory() === undefined ||
-                      workspace?.panesById[workspace.activePaneId]?.tabsById[
-                        workspace.panesById[workspace.activePaneId]?.activeTabId ?? ''
+                      shellState.workspace?.panesById[shellState.workspace.activePaneId]?.tabsById[
+                        shellState.workspace.panesById[shellState.workspace.activePaneId]
+                          ?.activeTabId ?? ''
                       ]?.canNavigateForward !== true,
                     'aria-label': t('shell', 'forward'),
-                    onclick: () => void navigation.forward(workspace?.activePaneId ?? ''),
+                    onclick: () =>
+                      void shellState.navigation.forward(shellState.workspace?.activePaneId ?? ''),
                   },
                   arrowRightIcon(),
                 ),
               ),
               tooltip(
-                labelWithShortcut(t('shell', 'parentDirectory'), shortcutFor('core.parent')),
+                miscWiring.labelWithShortcut(
+                  t('shell', 'parentDirectory'),
+                  shortcutFor('core.parent'),
+                ),
                 m(
                   IconButton,
                   {
                     disabled: activeDirectory() === undefined,
                     'aria-label': t('shell', 'parentDirectory'),
-                    onclick: () => void navigation.parent(workspace?.activePaneId ?? ''),
+                    onclick: () =>
+                      void shellState.navigation.parent(shellState.workspace?.activePaneId ?? ''),
                   },
                   cornerLeftUpIcon(),
                 ),
@@ -6729,27 +3223,32 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             }),
             m('.fm-search-controls', [
               tooltip(
-                labelWithShortcut(t('shell', 'findFiles'), shortcutFor('core.findFiles')),
+                miscWiring.labelWithShortcut(
+                  t('shell', 'findFiles'),
+                  shortcutFor('core.findFiles'),
+                ),
                 m(
                   IconButton,
                   {
                     disabled: activeDirectory() === undefined,
                     'aria-label': t('shell', 'findFiles'),
                     onclick: () => {
-                      findFilesController.openFindFiles();
+                      shellState.findFilesController.openFindFiles();
                     },
                   },
                   searchIcon(),
                 ),
               ),
-              knowledgeSearchAvailable || !knowledgeSearchChecked
+              shellState.knowledgeSearchAvailable || !shellState.knowledgeSearchChecked
                 ? tooltip(
-                    labelWithShortcut(
-                      !knowledgeSearchChecked
+                    miscWiring.labelWithShortcut(
+                      !shellState.knowledgeSearchChecked
                         ? t('knowledgeSearch', 'checkingAvailability')
                         : t(
                             'knowledgeSearch',
-                            semanticAssistantAvailable ? 'openWithAskTitle' : 'openTitle',
+                            shellState.semanticAssistantAvailable
+                              ? 'openWithAskTitle'
+                              : 'openTitle',
                           ),
                       shortcutFor('client.searchKnowledge'),
                     ),
@@ -6757,22 +3256,24 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       IconButton,
                       {
                         className: 'fm-knowledge-search-trigger',
-                        disabled: !knowledgeSearchAvailable,
-                        'aria-label': !knowledgeSearchChecked
+                        disabled: !shellState.knowledgeSearchAvailable,
+                        'aria-label': !shellState.knowledgeSearchChecked
                           ? t('knowledgeSearch', 'checkingAvailability')
                           : t(
                               'knowledgeSearch',
-                              semanticAssistantAvailable ? 'openWithAskTitle' : 'openTitle',
+                              shellState.semanticAssistantAvailable
+                                ? 'openWithAskTitle'
+                                : 'openTitle',
                             ),
-                        onclick: openKnowledgeSearch,
+                        onclick: knowledgeWiring.openKnowledgeSearch,
                       },
                       contentSearchIcon(),
                     ),
                   )
                 : undefined,
-              themesAvailable
+              shellState.themesAvailable
                 ? tooltip(
-                    labelWithShortcut(
+                    miscWiring.labelWithShortcut(
                       t('themes', 'openTitle'),
                       shortcutFor('client.exploreThemes'),
                     ),
@@ -6781,7 +3282,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       {
                         className: 'fm-themes-trigger',
                         'aria-label': t('themes', 'openTitle'),
-                        onclick: openThemes,
+                        onclick: knowledgeWiring.openThemes,
                       },
                       themeMapIcon(),
                     ),
@@ -6798,26 +3299,30 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 IconButton,
                 {
                   className: 'fm-basket-add-button',
-                  disabled: basketSourcePaneId() === undefined,
+                  disabled: basketWiring.basketSourcePaneId() === undefined,
                   'aria-label': t('basket', 'add'),
-                  onclick: collectSelection,
+                  onclick: basketWiring.collectSelection,
                 },
                 plusIcon(),
               ),
             ),
             tooltip(
-              basketTabLocation() === undefined ? t('basket', 'open') : t('basket', 'close'),
+              basketWiring.basketTabLocation() === undefined
+                ? t('basket', 'open')
+                : t('basket', 'close'),
               m(
                 IconButton,
                 {
                   className: 'fm-basket-open-button',
-                  disabled: workspace === undefined,
+                  disabled: shellState.workspace === undefined,
                   'aria-label':
-                    basketTabLocation() === undefined ? t('basket', 'open') : t('basket', 'close'),
-                  'aria-pressed': String(basketTabLocation() !== undefined),
-                  onclick: toggleBasket,
+                    basketWiring.basketTabLocation() === undefined
+                      ? t('basket', 'open')
+                      : t('basket', 'close'),
+                  'aria-pressed': String(basketWiring.basketTabLocation() !== undefined),
+                  onclick: basketWiring.toggleBasket,
                 },
-                basketTabLocation() === undefined ? basketIcon() : basketOpenIcon(),
+                basketWiring.basketTabLocation() === undefined ? basketIcon() : basketOpenIcon(),
               ),
             ),
             m('.fm-toolbar-separator', {
@@ -6825,31 +3330,36 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               'aria-orientation': 'vertical',
             }),
             tooltip(
-              labelWithShortcut(t('shell', 'comparePanes'), shortcutFor('core.compareDirectories')),
+              miscWiring.labelWithShortcut(
+                t('shell', 'comparePanes'),
+                shortcutFor('core.compareDirectories'),
+              ),
               m(
                 IconButton,
                 {
                   disabled:
-                    activeDirectory() === undefined || (workspace?.paneOrder.length ?? 0) < 2,
+                    activeDirectory() === undefined ||
+                    (shellState.workspace?.paneOrder.length ?? 0) < 2,
                   'aria-label': t('shell', 'comparePanes'),
-                  onclick: () => comparisonController.startComparison('sizeAndTimestamp'),
+                  onclick: () =>
+                    shellState.comparisonController.startComparison('sizeAndTimestamp'),
                 },
                 compareIcon(),
               ),
             ),
             tooltip(
-              labelWithShortcut(
+              miscWiring.labelWithShortcut(
                 t('shell', 'commandPalette'),
-                `${platform === 'macos' ? 'Cmd' : 'Ctrl'}+P`,
+                `${shellState.platform === 'macos' ? 'Cmd' : 'Ctrl'}+P`,
               ),
               m(
                 IconButton,
                 {
                   className: 'fm-command-palette-trigger',
-                  disabled: registeredActions.length === 0,
+                  disabled: shellState.registeredActions.length === 0,
                   'aria-label': t('shell', 'commandPalette'),
                   onclick: () => {
-                    commandPaletteOpen = true;
+                    shellState.commandPaletteOpen = true;
                   },
                 },
                 commandIcon(),
@@ -6860,17 +3370,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               'data-tauri-drag-region': isMacOverlay ? '' : undefined,
             }),
             tooltip(
-              t('shell', 'workspaceSwitcherLabel', { name: workspace?.name ?? t('shell', 'none') }),
+              t('shell', 'workspaceSwitcherLabel', {
+                name: shellState.workspace?.name ?? t('shell', 'none'),
+              }),
               m(
                 IconButton,
                 {
                   className: 'fm-workspace-switcher-button',
                   'aria-label': t('shell', 'workspaceSwitcherLabel', {
-                    name: workspace?.name ?? t('shell', 'none'),
+                    name: shellState.workspace?.name ?? t('shell', 'none'),
                   }),
                   onclick: () => {
-                    if (workspaceDisclosureElement !== undefined) {
-                      workspaceDisclosureElement.open = !workspaceDisclosureElement.open;
+                    if (shellState.workspaceDisclosureElement !== undefined) {
+                      shellState.workspaceDisclosureElement.open =
+                        !shellState.workspaceDisclosureElement.open;
                     }
                   },
                 },
@@ -6881,10 +3394,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               'details.fm-workspace-disclosure',
               {
                 oncreate: ({ dom }) => {
-                  workspaceDisclosureElement = dom as HTMLDetailsElement;
+                  shellState.workspaceDisclosureElement = dom as HTMLDetailsElement;
                 },
                 onremove: () => {
-                  workspaceDisclosureElement = undefined;
+                  shellState.workspaceDisclosureElement = undefined;
                 },
               },
               [
@@ -6917,41 +3430,42 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       ),
                     ]),
                     m(WorkspaceSwitcher, {
-                      summaries: sortWorkspaceSummaries(workspaceSummaries),
+                      summaries: sortWorkspaceSummaries(shellState.workspaceSummaries),
                       // An ephemeral window's own id is never listed here (ephemeral workspaces
                       // are excluded from the switcher) - the row that should read as "current"
                       // is the named workspace it was forked from, if any. A non-ephemeral
                       // window (the main/dock window) already is that named workspace.
                       activeWorkspaceId:
-                        workspace === undefined
+                        shellState.workspace === undefined
                           ? undefined
-                          : workspace.ephemeral
-                            ? workspace.forkedFrom
-                            : workspace.id,
-                      error: workspaceActionError,
+                          : shellState.workspace.ephemeral
+                            ? shellState.workspace.forkedFrom
+                            : shellState.workspace.id,
+                      error: shellState.workspaceActionError,
                       onSwitch: (workspaceId) => {
                         void switchWorkspace(workspaceId);
                       },
-                      onCreate: () => workspaceController.createWorkspaceAction(),
+                      onCreate: () => shellState.workspaceController.createWorkspaceAction(),
                       onRename: (workspaceId, name) =>
-                        workspaceController.renameWorkspaceAction(workspaceId, name),
+                        shellState.workspaceController.renameWorkspaceAction(workspaceId, name),
                       onDelete: (workspaceId) =>
-                        workspaceController.deleteWorkspaceAction(workspaceId),
-                      ...(attrsClient.openWorkspaceWindow === undefined
+                        shellState.workspaceController.deleteWorkspaceAction(workspaceId),
+                      ...(shellState.client.openWorkspaceWindow === undefined
                         ? {}
                         : {
                             onOpenInNewWindow: (workspaceId: WorkspaceId) => {
-                              void attrsClient.openWorkspaceWindow?.(workspaceId);
-                              if (workspaceDisclosureElement !== undefined) {
-                                workspaceDisclosureElement.open = false;
+                              void shellState.client.openWorkspaceWindow?.(workspaceId);
+                              if (shellState.workspaceDisclosureElement !== undefined) {
+                                shellState.workspaceDisclosureElement.open = false;
                               }
                             },
                           }),
-                      ...(attrsClient.resyncWorkspace === undefined || workspace === undefined
+                      ...(shellState.client.resyncWorkspace === undefined ||
+                      shellState.workspace === undefined
                         ? {}
                         : {
                             onUpdate: (workspaceId: WorkspaceId) => {
-                              void resyncWorkspace(attrsClient, workspaceId);
+                              void resyncWorkspace(shellState.client, workspaceId);
                             },
                           }),
                     }),
@@ -6967,9 +3481,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               '.fm-activity-anchor',
               {
                 onkeydown: (event: KeyboardEvent) => {
-                  if (event.key !== 'Escape' || !activityOpen) return;
+                  if (event.key !== 'Escape' || !shellState.activityOpen) return;
                   event.preventDefault();
-                  activityOpen = false;
+                  shellState.activityOpen = false;
                   document.querySelector<HTMLButtonElement>('.fm-activity-count')?.focus();
                 },
               },
@@ -6978,13 +3492,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   IconButton,
                   {
                     className: 'fm-operation-centre-button',
-                    disabled: workspace === undefined,
+                    disabled: shellState.workspace === undefined,
                     'aria-label': t('shell', 'operationCentre'),
                     title: t('shell', 'operationCentre'),
-                    'aria-pressed': String(workspace?.operationCentre.visible === true),
+                    'aria-pressed': String(shellState.workspace?.operationCentre.visible === true),
                     onclick: () => {
-                      activityOpen = false;
-                      toggleOperationCentre();
+                      shellState.activityOpen = false;
+                      opsWiring.toggleOperationCentre();
                     },
                   },
                   listIcon(),
@@ -7001,11 +3515,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                           .filter(Boolean)
                           .join(' '),
                         'aria-label': activityStatusLabel,
-                        'aria-expanded': String(activityOpen),
+                        'aria-expanded': String(shellState.activityOpen),
                         'aria-controls': 'fm-activity-popover',
                         title: activityStatusLabel,
                         onclick: () => {
-                          activityOpen = !activityOpen;
+                          shellState.activityOpen = !shellState.activityOpen;
                         },
                       },
                       [
@@ -7014,7 +3528,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       ],
                     )
                   : undefined,
-                activityOpen && activityCount > 0
+                shellState.activityOpen && activityCount > 0
                   ? m(
                       '.fm-activity-popover#fm-activity-popover',
                       {
@@ -7030,8 +3544,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                               type: 'button',
                               key: operation.id,
                               onclick: () => {
-                                activityOpen = false;
-                                setOperationCentreVisible(true);
+                                shellState.activityOpen = false;
+                                opsWiring.setOperationCentreVisible(true);
                                 requestAnimationFrame(() => {
                                   document
                                     .querySelector<HTMLElement>(
@@ -7048,16 +3562,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                             ],
                           ),
                         ),
-                        ...[...semanticJobs.values()].map((job) =>
+                        ...[...shellState.semanticJobs.values()].map((job) =>
                           m(
                             'button.fm-activity-item',
                             {
                               type: 'button',
                               key: job.jobId,
                               onclick: () => {
-                                activityOpen = false;
-                                if (job.stage === 'failed') semanticJobs.delete(job.jobId);
-                                openSettingsDialog('semantic');
+                                shellState.activityOpen = false;
+                                if (job.stage === 'failed')
+                                  shellState.semanticJobs.delete(job.jobId);
+                                settingsWiring.openSettingsDialog('semantic');
                               },
                             },
                             [
@@ -7086,16 +3601,16 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   : undefined,
               ],
             ),
-            semanticInstallation === undefined
+            shellState.semanticInstallation === undefined
               ? undefined
               : m(
                   'button.fm-semantic-install-status',
                   {
                     type: 'button',
-                    className: `fm-semantic-install-${semanticInstallation.state}`,
-                    title: semanticInstallation.message,
-                    'aria-label': semanticInstallation.message,
-                    onclick: () => openSettingsDialog('semantic'),
+                    className: `fm-semantic-install-${shellState.semanticInstallation.state}`,
+                    title: shellState.semanticInstallation.message,
+                    'aria-label': shellState.semanticInstallation.message,
+                    onclick: () => settingsWiring.openSettingsDialog('semantic'),
                   },
                   activityIcon({ size: 16 }),
                 ),
@@ -7104,9 +3619,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               'aria-orientation': 'vertical',
             }),
             tooltip(
-              labelWithShortcut(
+              miscWiring.labelWithShortcut(
                 t('shell', 'openSettings'),
-                `${platform === 'macos' ? 'Cmd' : 'Ctrl'}+,`,
+                `${shellState.platform === 'macos' ? 'Cmd' : 'Ctrl'}+,`,
               ),
               m(
                 IconButton,
@@ -7114,13 +3629,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   className: 'fm-settings-button',
                   'aria-label': t('shell', 'settings'),
                   onclick: () => {
-                    if (settingsDisclosureElement === undefined) return;
-                    settingsInitialSection = 'appearance';
-                    settingsDisclosureElement.open = !settingsDisclosureElement.open;
-                    settingsDialogOpen = settingsDisclosureElement.open;
-                    if (!settingsDialogOpen && currentSettings !== undefined) {
-                      applyAppearance(currentSettings);
-                      settingsClosed();
+                    if (shellState.settingsDisclosureElement === undefined) return;
+                    shellState.settingsInitialSection = 'appearance';
+                    shellState.settingsDisclosureElement.open =
+                      !shellState.settingsDisclosureElement.open;
+                    shellState.settingsDialogOpen = shellState.settingsDisclosureElement.open;
+                    if (
+                      !shellState.settingsDialogOpen &&
+                      shellState.currentSettings !== undefined
+                    ) {
+                      settingsWiring.applyAppearance(shellState.currentSettings);
+                      settingsWiring.settingsClosed();
                     }
                     m.redraw();
                   },
@@ -7136,7 +3655,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                   className: 'fm-settings-button fm-help-trigger',
                   'aria-label': t('walkthroughs', 'title'),
                   onclick: () => {
-                    walkthroughsOpen = true;
+                    shellState.walkthroughsOpen = true;
                   },
                 },
                 helpIcon(),
@@ -7146,18 +3665,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               'details.fm-settings-disclosure',
               {
                 oncreate: ({ dom }) => {
-                  settingsDisclosureElement = dom as HTMLDetailsElement;
+                  shellState.settingsDisclosureElement = dom as HTMLDetailsElement;
                 },
                 onremove: () => {
-                  settingsDisclosureElement = undefined;
+                  shellState.settingsDisclosureElement = undefined;
                 },
                 ontoggle: (event: Event) => {
                   const open = (event.currentTarget as HTMLDetailsElement).open;
-                  if (settingsDialogOpen === open) return;
-                  settingsDialogOpen = open;
-                  if (!open && currentSettings !== undefined) {
-                    applyAppearance(currentSettings);
-                    settingsClosed();
+                  if (shellState.settingsDialogOpen === open) return;
+                  shellState.settingsDialogOpen = open;
+                  if (!open && shellState.currentSettings !== undefined) {
+                    settingsWiring.applyAppearance(shellState.currentSettings);
+                    settingsWiring.settingsClosed();
                   }
                   m.redraw();
                 },
@@ -7171,7 +3690,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     'aria-label': t('shell', 'settings'),
                     onclick: (event: MouseEvent) => {
                       if (event.target === event.currentTarget) {
-                        closeSettingsDialog();
+                        settingsWiring.closeSettingsDialog();
                       }
                     },
                   },
@@ -7184,54 +3703,56 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                           {
                             type: 'button',
                             'aria-label': t('shell', 'closeSettings'),
-                            onclick: () => closeSettingsDialog(),
+                            onclick: () => settingsWiring.closeSettingsDialog(),
                           },
                           closeIcon(),
                         ),
                       ]),
-                      currentSettings === undefined
+                      shellState.currentSettings === undefined
                         ? m('p', t('shell', 'loading'))
-                        : settingsDialogOpen
+                        : shellState.settingsDialogOpen
                           ? m(SettingsEditor, {
                               client: attrs.client,
-                              settings: currentSettings,
-                              initialSection: settingsInitialSection,
-                              ...(workspace === undefined
+                              settings: shellState.currentSettings,
+                              initialSection: shellState.settingsInitialSection,
+                              ...(shellState.workspace === undefined
                                 ? {}
-                                : { activeWorkspaceId: workspace.id }),
+                                : { activeWorkspaceId: shellState.workspace.id }),
                               ...(activeDirectory()?.location === undefined
                                 ? {}
                                 : { activeLocation: activeDirectory()?.location }),
-                              actions: localisedRegisteredActions(),
-                              platform,
-                              runtime: keybindingRuntime,
-                              plugins,
+                              actions: actionsWiring.localisedRegisteredActions(),
+                              platform: shellState.platform,
+                              runtime: shellState.keybindingRuntime,
+                              plugins: shellState.plugins,
                               onPreview: (draft: Settings) => {
-                                applyAppearance(draft);
+                                settingsWiring.applyAppearance(draft);
                                 m.redraw();
                               },
                               onSave: async (draft: Settings) => {
                                 const showHiddenChanged =
-                                  currentSettings !== undefined &&
-                                  currentSettings.showHiddenFiles !== draft.showHiddenFiles;
+                                  shellState.currentSettings !== undefined &&
+                                  shellState.currentSettings.showHiddenFiles !==
+                                    draft.showHiddenFiles;
                                 await updateLocationSettings(attrs.client, (latest) => ({
                                   ...draft,
                                   multiRenamePresets: latest.multiRenamePresets,
                                   filterPresets: latest.filterPresets,
                                   syncProfiles: latest.syncProfiles,
                                 }));
-                                applyAppearance(draft);
-                                closeSettingsDialog();
+                                settingsWiring.applyAppearance(draft);
+                                settingsWiring.closeSettingsDialog();
                                 if (showHiddenChanged) {
-                                  void applyShowHiddenFilesToAllTabs(
+                                  void settingsWiring.applyShowHiddenFilesToAllTabs(
                                     attrs.client,
                                     draft.showHiddenFiles,
                                   );
                                 }
                               },
                               onCancel: () => {
-                                if (currentSettings !== undefined) applyAppearance(currentSettings);
-                                closeSettingsDialog();
+                                if (shellState.currentSettings !== undefined)
+                                  settingsWiring.applyAppearance(shellState.currentSettings);
+                                settingsWiring.closeSettingsDialog();
                               },
                               onTogglePlugin: (pluginId: PluginId, enabled: boolean) =>
                                 attrs.client.setPluginEnabled(pluginId, enabled),
@@ -7240,13 +3761,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                               ): Promise<readonly PluginLogEntry[]> =>
                                 attrs.client.getPluginLogs(pluginId),
                               onSemanticStatusChange: (status) => {
-                                void refreshSemanticAssistantAvailability(status);
-                                void refreshKnowledgeSearchAvailability();
+                                void knowledgeWiring.refreshSemanticAssistantAvailability(status);
+                                void knowledgeWiring.refreshKnowledgeSearchAvailability();
                               },
                               semanticInstallInProgress:
-                                semanticInstallation?.state === 'installing',
+                                shellState.semanticInstallation?.state === 'installing',
                               onSemanticInstallationChange: (state, message) => {
-                                semanticInstallation = { state, message };
+                                shellState.semanticInstallation = { state, message };
                                 if (state !== 'installing') {
                                   const text = document.createElement('span');
                                   text.textContent = message;
@@ -7265,19 +3786,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               ],
             ),
           ]),
-          walkthroughsOpen
+          shellState.walkthroughsOpen
             ? m(WalkthroughPanel, {
-                selected: selectedWalkthrough,
+                selected: shellState.selectedWalkthrough,
                 onSelect: (id) => {
-                  selectedWalkthrough = id;
+                  shellState.selectedWalkthrough = id;
                 },
                 onClose: () => {
-                  walkthroughsOpen = false;
+                  shellState.walkthroughsOpen = false;
                   document.querySelector<HTMLButtonElement>('.fm-help-trigger')?.focus();
                 },
               })
             : undefined,
-          walkthroughInvitationVisible
+          shellState.walkthroughInvitationVisible
             ? m(
                 'aside.fm-walkthrough-invitation',
                 { 'aria-label': t('walkthroughs', 'invitation') },
@@ -7288,9 +3809,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     {
                       type: 'button',
                       onclick: () => {
-                        walkthroughInvitationVisible = false;
-                        selectedWalkthrough = 'basics';
-                        walkthroughsOpen = true;
+                        shellState.walkthroughInvitationVisible = false;
+                        shellState.selectedWalkthrough = 'basics';
+                        shellState.walkthroughsOpen = true;
                       },
                     },
                     t('walkthroughs', 'watch'),
@@ -7301,7 +3822,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       type: 'button',
                       'aria-label': t('walkthroughs', 'dismiss'),
                       onclick: () => {
-                        walkthroughInvitationVisible = false;
+                        shellState.walkthroughInvitationVisible = false;
                       },
                     },
                     m(
@@ -7323,15 +3844,16 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             : undefined,
           m('main.fm-workspace', [
             (() => {
-              if (!treeSidebarOpen || treeRootLocation === undefined) return undefined;
-              const treeRoot = treeRootLocation;
+              if (!shellState.treeSidebarOpen || shellState.treeRootLocation === undefined)
+                return undefined;
+              const treeRoot = shellState.treeRootLocation;
               const activeLocationUri = activeDirectory()?.location.uri;
               return m.fragment({}, [
                 m('button.fm-directory-tree-backdrop', {
                   type: 'button',
                   tabindex: -1,
                   'aria-hidden': 'true',
-                  onclick: toggleDirectoryTree,
+                  onclick: treeWiring.toggleDirectoryTree,
                 }),
                 m('.fm-directory-tree-sidebar', [
                   m('.fm-directory-tree-header', [
@@ -7341,51 +3863,51 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       {
                         type: 'button',
                         'aria-label': t('tree', 'toggleSidebar'),
-                        onclick: toggleDirectoryTree,
+                        onclick: treeWiring.toggleDirectoryTree,
                       },
                       closeIcon({ size: 13 }),
                     ),
                   ]),
                   m(DirectoryTree, {
                     root: { location: treeRoot, name: treeRootName(treeRoot) },
-                    state: treeState,
+                    state: shellState.treeState,
                     ...(activeLocationUri === undefined ? {} : { activeLocationUri }),
                     onToggleExpand: (location: Location) => {
-                      toggleTreeNode(location);
+                      treeWiring.toggleTreeNode(location);
                       m.redraw();
                     },
                     onActivate: (location: Location) => {
                       const active = activeDirectory();
                       if (active === undefined) return;
-                      void navigation?.navigate(active.paneId, location);
+                      void shellState.navigation?.navigate(active.paneId, location);
                     },
                     onDragStart: (location, event) => {
-                      draggedLocations = [location];
+                      shellState.draggedLocations = [location];
                       event.dataTransfer?.setData('application/x-fm-locations', 'internal');
                       if (event.dataTransfer != null) event.dataTransfer.effectAllowed = 'copyMove';
                     },
                     onDragEnd: () => {
-                      draggedLocations = [];
+                      shellState.draggedLocations = [];
                     },
-                    ...(nativeDragOutSupported
+                    ...(shellState.nativeDragOutSupported
                       ? {
                           onPointerDragStart: (location: Location) => {
-                            draggedLocations = [location];
+                            shellState.draggedLocations = [location];
                           },
                           onPointerDragCancel: () => {
-                            draggedLocations = [];
+                            shellState.draggedLocations = [];
                           },
                           pointerDragEffect: (event: DropModifiers) =>
-                            operationForDrop(platform, event),
+                            operationForDrop(shellState.platform, event),
                           onPointerDragOut: (location: Location) => {
-                            draggedLocations = [location];
-                            nativeDragSourceInternal = true;
-                            return attrsClient
+                            shellState.draggedLocations = [location];
+                            shellState.nativeDragSourceInternal = true;
+                            return shellState.client
                               .startNativeDrag([location])
                               .catch((error: unknown) => {
-                                draggedLocations = [];
-                                nativeDragSourceInternal = false;
-                                clipboardMessage = workspaceErrorMessage(
+                                shellState.draggedLocations = [];
+                                shellState.nativeDragSourceInternal = false;
+                                shellState.clipboardMessage = workspaceErrorMessage(
                                   error,
                                   t('shell', 'nativeDragFailed'),
                                 );
@@ -7396,18 +3918,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                       : {}),
                     onDragOver: (location, event) => {
                       const validation = validateDropTarget(
-                        draggedLocations,
+                        shellState.draggedLocations,
                         location,
-                        treeDropWritable(location),
+                        treeWiring.treeDropWritable(location),
                       );
                       if (!validation.ok) return false;
                       if (event.dataTransfer != null)
-                        event.dataTransfer.dropEffect = operationForDrop(platform, event);
+                        event.dataTransfer.dropEffect = operationForDrop(
+                          shellState.platform,
+                          event,
+                        );
                       return true;
                     },
-                    onDrop: dropOnTree,
+                    onDrop: treeWiring.dropOnTree,
                     onTabOut: (direction) => {
-                      const paneOrder = workspace?.paneOrder;
+                      const paneOrder = shellState.workspace?.paneOrder;
                       if (paneOrder === undefined || paneOrder.length === 0) return;
                       const targetPaneId =
                         direction === 1 ? paneOrder[0] : paneOrder[paneOrder.length - 1];
@@ -7415,38 +3940,38 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                         globalKeydownHandlerContext.focusPane(targetPaneId);
                     },
                     registerFocus: (focus) => {
-                      focusDirectoryTree = focus;
+                      shellState.focusDirectoryTree = focus;
                     },
                   } satisfies DirectoryTreeAttrs),
                 ]),
               ]);
             })(),
-            workspace === undefined
-              ? m('.fm-workspace-loading', workspaceError ?? t('shell', 'loading'))
+            shellState.workspace === undefined
+              ? m('.fm-workspace-loading', shellState.workspaceError ?? t('shell', 'loading'))
               : m(WorkspaceLayoutView, {
-                  workspace,
+                  workspace: shellState.workspace,
                   paneContent: (paneId) => {
-                    const currentWorkspace = workspace;
+                    const currentWorkspace = shellState.workspace;
                     const tabId = currentWorkspace?.panesById[paneId]?.activeTabId;
                     if (
                       currentWorkspace !== undefined &&
                       tabId !== undefined &&
-                      basketTabIds.has(tabId)
+                      shellState.basketTabIds.has(tabId)
                     ) {
-                      syncBasketVirtualDirectory(paneId, tabId, currentWorkspace.id);
+                      basketWiring.syncBasketVirtualDirectory(paneId, tabId, currentWorkspace.id);
                     }
-                    const content = paneContentBuilder(
+                    const content = shellState.paneContentBuilder(
                       attrs.client,
-                      attrs.entryFormatSettings ?? loadedEntryFormatSettings,
+                      attrs.entryFormatSettings ?? shellState.loadedEntryFormatSettings,
                       paneId,
                     );
                     const basketTabs = currentWorkspace?.panesById[paneId]?.tabOrder.filter((id) =>
-                      basketTabIds.has(id),
+                      shellState.basketTabIds.has(id),
                     );
                     const isActiveBasketTab =
                       currentWorkspace !== undefined &&
                       tabId !== undefined &&
-                      basketTabIds.has(tabId);
+                      shellState.basketTabIds.has(tabId);
                     const titledContent =
                       basketTabs === undefined || basketTabs.length === 0
                         ? content
@@ -7455,7 +3980,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                             groupByParent: basketTabs.some((id) => id === tabId),
                             ...(isActiveBasketTab
                               ? {
-                                  location: basketVirtualLocation(currentWorkspace.id),
+                                  location: basketWiring.basketVirtualLocation(currentWorkspace.id),
                                   breadcrumbLabel: t('basket', 'title'),
                                 }
                               : {}),
@@ -7473,140 +3998,160 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     void activatePane(attrs.client, paneId).catch(() => undefined),
                   onUpdateLayout: (layout) => updateLayout(attrs.client, layout),
                   onSelectTab: (paneId, tabId) => selectTab(attrs.client, paneId, tabId),
-                  onCloseTab: (paneId, tabId) => tabController.requestCloseTab(paneId, tabId),
-                  onNewTab: (paneId) => tabController.openTab(paneId),
+                  onCloseTab: (paneId, tabId) =>
+                    shellState.tabController.requestCloseTab(paneId, tabId),
+                  onNewTab: (paneId) => shellState.tabController.openTab(paneId),
                   onMoveTab: (sourcePaneId, tabId, targetPaneId, targetIndex) =>
                     moveTab(attrs.client, sourcePaneId, tabId, targetPaneId, targetIndex),
-                  onFocusTerminal: () => focusTerminal?.() ?? false,
+                  onFocusTerminal: () => shellState.focusTerminal?.() ?? false,
                   onFocusViewer: () => {
-                    const paneId = openViewerPaneId();
+                    const paneId = miscWiring.openViewerPaneId();
                     if (paneId === undefined) return false;
-                    focusViewer(paneId);
+                    miscWiring.focusViewer(paneId);
                     m.redraw();
                     return true;
                   },
                   onPaneCycleBoundary: () => {
-                    if (!treeSidebarOpen) return false;
-                    focusDirectoryTree?.();
+                    if (!shellState.treeSidebarOpen) return false;
+                    shellState.focusDirectoryTree?.();
                     return true;
                   },
                   registerFlush: (flush) => {
-                    flushPendingLayoutUpdate = flush;
+                    shellState.flushPendingLayoutUpdate = flush;
                   },
                   registerFocusPane: (focus) => {
-                    focusPane = focus;
+                    shellState.focusPane = focus;
                   },
                   searchPresentationForLocationUri: (uri) =>
-                    findFilesPresentationsByLocationUri.get(uri),
-                  onRefreshSearch: (uri, paneId) => findFilesController.refreshSearch(uri, paneId),
+                    shellState.findFilesPresentationsByLocationUri.get(uri),
+                  onRefreshSearch: (uri, paneId) =>
+                    shellState.findFilesController.refreshSearch(uri, paneId),
                 }),
             // Checksum and duplicate panels sit below the panes, visible only
             // while their job/scan is tracked (task 0077).
-            checksumState.jobId !== undefined &&
+            shellState.checksumState.jobId !== undefined &&
               m(ChecksumResultsView, {
-                algorithms: checksumState.algorithms,
-                entries: checksumState.entries,
-                totalEntries: checksumState.totalEntries,
-                isComplete: checksumState.isComplete,
-                isCancelled: checksumState.isCancelled,
-                ...(checksumState.verification === undefined
+                algorithms: shellState.checksumState.algorithms,
+                entries: shellState.checksumState.entries,
+                totalEntries: shellState.checksumState.totalEntries,
+                isComplete: shellState.checksumState.isComplete,
+                isCancelled: shellState.checksumState.isCancelled,
+                ...(shellState.checksumState.verification === undefined
                   ? {}
-                  : { verification: checksumState.verification }),
-                ...(checksumState.error === undefined ? {} : { error: checksumState.error }),
+                  : { verification: shellState.checksumState.verification }),
+                ...(shellState.checksumState.error === undefined
+                  ? {}
+                  : { error: shellState.checksumState.error }),
                 onCopy: (algorithm) => {
-                  void checksumController.copyChecksums(algorithm).then((content) => {
+                  void shellState.checksumController.copyChecksums(algorithm).then((content) => {
                     if (content !== undefined) void navigator.clipboard?.writeText(content);
                   });
                 },
-                ...(checksumState.savedTo === undefined ? {} : { savedTo: checksumState.savedTo }),
-                suggestedFileName: (algorithm) => checksumController.suggestedFileName(algorithm),
+                ...(shellState.checksumState.savedTo === undefined
+                  ? {}
+                  : { savedTo: shellState.checksumState.savedTo }),
+                suggestedFileName: (algorithm) =>
+                  shellState.checksumController.suggestedFileName(algorithm),
                 onSave: (algorithm, fileName) => {
-                  void checksumController.saveChecksumFile(algorithm, fileName);
+                  void shellState.checksumController.saveChecksumFile(algorithm, fileName);
                 },
-                onVerify: (content) => checksumController.verifyAgainst(content),
-                onCancel: () => checksumController.cancelChecksums(),
-                onClose: () => checksumController.closeChecksums(),
+                onVerify: (content) => shellState.checksumController.verifyAgainst(content),
+                onCancel: () => shellState.checksumController.cancelChecksums(),
+                onClose: () => shellState.checksumController.closeChecksums(),
               }),
-            duplicateState.scanId !== undefined &&
+            shellState.duplicateState.scanId !== undefined &&
               m(DuplicateReviewView, {
-                groups: duplicateState.groups,
-                isComplete: duplicateState.isComplete,
-                isCancelled: duplicateState.isCancelled,
-                warningsCount: duplicateState.warningsCount,
-                selectedUris: duplicateState.selectedUris,
-                totalReclaimableBytes: totalReclaimableBytes(duplicateState),
-                ...(duplicateState.error === undefined ? {} : { error: duplicateState.error }),
-                isLastCopy: (uri) => wouldDeleteEveryCopy(duplicateState, uri),
-                onToggle: (uri) => checksumController.toggleDuplicateSelection(uri),
-                onDeleteSelected: () => checksumController.deleteSelectedDuplicates(),
-                onCancel: () => checksumController.cancelDuplicateScan(),
-                onClose: () => checksumController.closeDuplicates(),
+                groups: shellState.duplicateState.groups,
+                isComplete: shellState.duplicateState.isComplete,
+                isCancelled: shellState.duplicateState.isCancelled,
+                warningsCount: shellState.duplicateState.warningsCount,
+                selectedUris: shellState.duplicateState.selectedUris,
+                totalReclaimableBytes: totalReclaimableBytes(shellState.duplicateState),
+                ...(shellState.duplicateState.error === undefined
+                  ? {}
+                  : { error: shellState.duplicateState.error }),
+                isLastCopy: (uri) => wouldDeleteEveryCopy(shellState.duplicateState, uri),
+                onToggle: (uri) => shellState.checksumController.toggleDuplicateSelection(uri),
+                onDeleteSelected: () => shellState.checksumController.deleteSelectedDuplicates(),
+                onCancel: () => shellState.checksumController.cancelDuplicateScan(),
+                onClose: () => shellState.checksumController.closeDuplicates(),
               }),
-            snapshotState.jobId !== undefined &&
-              snapshotController !== undefined &&
+            shellState.snapshotState.jobId !== undefined &&
+              shellState.snapshotController !== undefined &&
               m(SnapshotView, {
-                state: snapshotState,
-                onCancel: () => void snapshotController?.cancel(),
-                onClose: () => snapshotController?.close(),
+                state: shellState.snapshotState,
+                onCancel: () => void shellState.snapshotController?.cancel(),
+                onClose: () => shellState.snapshotController?.close(),
               }),
-            linkDoctorState.scanId !== undefined &&
-              linkDoctorController !== undefined &&
+            shellState.linkDoctorState.scanId !== undefined &&
+              shellState.linkDoctorController !== undefined &&
               m(LinkDoctorView, {
-                state: linkDoctorState,
-                onFindReplacement: (problem) => void linkDoctorController?.findReplacement(problem),
+                state: shellState.linkDoctorState,
+                onFindReplacement: (problem) =>
+                  void shellState.linkDoctorController?.findReplacement(problem),
                 onRepoint: (problem, candidate) =>
-                  void linkDoctorController?.repointSymlink(problem, candidate),
-                onOpenSource: (problem) => linkDoctorController?.openSource(problem),
-                onCancel: () => void linkDoctorController?.cancel(),
-                onClose: () => linkDoctorController?.close(),
+                  void shellState.linkDoctorController?.repointSymlink(problem, candidate),
+                onOpenSource: (problem) => shellState.linkDoctorController?.openSource(problem),
+                onCancel: () => void shellState.linkDoctorController?.cancel(),
+                onClose: () => shellState.linkDoctorController?.close(),
               }),
-            musicDuplicatesState.scanId !== undefined &&
-              musicDuplicatesController !== undefined &&
+            shellState.musicDuplicatesState.scanId !== undefined &&
+              shellState.musicDuplicatesController !== undefined &&
               m(MusicDuplicatesView, {
-                state: musicDuplicatesState,
-                isLastCopy: (uri) => musicDuplicatesController?.isLastCopy(uri) ?? false,
-                onToggle: (uri) => musicDuplicatesController?.toggle(uri),
-                onSelectSuggested: () => musicDuplicatesController?.selectSuggestedRemovals(),
-                onClearSelection: () => musicDuplicatesController?.clearSelection(),
-                onRemoveSelected: () => void musicDuplicatesController?.removeSelected(),
-                onCancel: () => void musicDuplicatesController?.cancel(),
-                onClose: () => musicDuplicatesController?.close(),
+                state: shellState.musicDuplicatesState,
+                isLastCopy: (uri) => shellState.musicDuplicatesController?.isLastCopy(uri) ?? false,
+                onToggle: (uri) => shellState.musicDuplicatesController?.toggle(uri),
+                onSelectSuggested: () =>
+                  shellState.musicDuplicatesController?.selectSuggestedRemovals(),
+                onClearSelection: () => shellState.musicDuplicatesController?.clearSelection(),
+                onRemoveSelected: () => void shellState.musicDuplicatesController?.removeSelected(),
+                onCancel: () => void shellState.musicDuplicatesController?.cancel(),
+                onClose: () => shellState.musicDuplicatesController?.close(),
               }),
           ]),
-          runtimeKind === 'tauri'
+          shellState.runtimeKind === 'tauri'
             ? m(TerminalDrawer, {
-                open: isTerminalVisible(openTerminalTabKeys, activeTerminalTabKey()),
-                tabKey: activeTerminalTabKey(),
+                open: isTerminalVisible(
+                  shellState.openTerminalTabKeys,
+                  treeWiring.activeTerminalTabKey(),
+                ),
+                tabKey: treeWiring.activeTerminalTabKey(),
                 location: activeDirectory()?.location,
                 client: tauriTerminalClient,
                 onToggle: globalKeydownHandlerContext.toggleTerminal,
                 onSwitchPane: () => {
-                  if (workspace === undefined) return;
-                  const index = workspace.paneOrder.indexOf(workspace.activePaneId);
-                  const nextPaneId = workspace.paneOrder[(index + 1) % workspace.paneOrder.length];
-                  if (nextPaneId !== undefined) focusPane?.(nextPaneId);
+                  if (shellState.workspace === undefined) return;
+                  const index = shellState.workspace.paneOrder.indexOf(
+                    shellState.workspace.activePaneId,
+                  );
+                  const nextPaneId =
+                    shellState.workspace.paneOrder[
+                      (index + 1) % shellState.workspace.paneOrder.length
+                    ];
+                  if (nextPaneId !== undefined) shellState.focusPane?.(nextPaneId);
                 },
                 onCycleTab: (direction) => {
-                  if (workspace === undefined) return;
-                  const paneId = workspace.activePaneId;
-                  tabController.cycleTab(paneId, direction);
-                  focusPane?.(paneId);
+                  if (shellState.workspace === undefined) return;
+                  const paneId = shellState.workspace.activePaneId;
+                  shellState.tabController.cycleTab(paneId, direction);
+                  shellState.focusPane?.(paneId);
                 },
                 onFocusFolder: () => {
-                  if (workspace !== undefined) focusPane?.(workspace.activePaneId);
+                  if (shellState.workspace !== undefined)
+                    shellState.focusPane?.(shellState.workspace.activePaneId);
                 },
                 registerFocus: (focus) => {
-                  focusTerminal = focus;
+                  shellState.focusTerminal = focus;
                 },
                 registerDisposeTab: (dispose) => {
-                  disposeTerminalTab = dispose;
+                  shellState.disposeTerminalTab = dispose;
                 },
               })
             : undefined,
-          clipboardMessage === undefined
+          shellState.clipboardMessage === undefined
             ? undefined
             : m('.fm-clipboard-message', { role: 'alert' }, [
-                m('span.fm-clipboard-message-text', clipboardMessage),
+                m('span.fm-clipboard-message-text', shellState.clipboardMessage),
                 m(
                   'button.fm-clipboard-dismiss.btn-flat',
                   {
@@ -7614,118 +4159,123 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     'aria-label': t('button', 'dismiss'),
                     title: t('button', 'dismiss'),
                     onclick: () => {
-                      clipboardMessage = undefined;
+                      shellState.clipboardMessage = undefined;
                     },
                   },
                   m('i.material-icons', { 'aria-hidden': 'true' }, 'close'),
                 ),
               ]),
           m(CommandPalette, {
-            open: commandPaletteOpen,
-            actions: actionsWithFavourites(),
-            recency: commandPaletteRecency,
-            context: actionCommandController.actionContext(),
-            availabilityContext: actionCommandController.commandAvailabilityContext(),
-            platform,
+            open: shellState.commandPaletteOpen,
+            actions: actionsWiring.actionsWithFavourites(),
+            recency: shellState.commandPaletteRecency,
+            context: shellState.actionCommandController.actionContext(),
+            availabilityContext: shellState.actionCommandController.commandAvailabilityContext(),
+            platform: shellState.platform,
             onClose: () => {
-              commandPaletteOpen = false;
+              shellState.commandPaletteOpen = false;
             },
-            onInvoke: actionCommandController.invokePaletteAction,
+            onInvoke: shellState.actionCommandController.invokePaletteAction,
           }),
           m(ModalPanel, {
             title: t('ragAsk', 'includeFolderTitle'),
             className: 'fm-dense-modal fm-semantic-enrolment-modal',
-            isOpen: semanticEnrolmentRequest !== undefined,
+            isOpen: shellState.semanticEnrolmentRequest !== undefined,
             closeOnEsc: true,
             onToggle: (open: boolean) => {
               if (!open) {
-                const returnToAsk = semanticEnrolmentReturnToAsk;
-                semanticEnrolmentRequest = undefined;
-                semanticEnrolmentReturnToAsk = false;
-                if (returnToAsk) openRagAsk();
+                const returnToAsk = shellState.semanticEnrolmentReturnToAsk;
+                shellState.semanticEnrolmentRequest = undefined;
+                shellState.semanticEnrolmentReturnToAsk = false;
+                if (returnToAsk) knowledgeWiring.openRagAsk();
               }
             },
-            ...(semanticEnrolmentRequest === undefined
+            ...(shellState.semanticEnrolmentRequest === undefined
               ? {}
               : {
                   description: m(
                     '.fm-semantic-enrolment-content',
                     m(SemanticFolderEnrolmentPrompt, {
                       client: attrs.client,
-                      workspaceId: semanticEnrolmentRequest.workspaceId,
-                      location: semanticEnrolmentRequest.location,
+                      workspaceId: shellState.semanticEnrolmentRequest.workspaceId,
+                      location: shellState.semanticEnrolmentRequest.location,
                       onEnrolled: () => {
-                        semanticEnrolmentRequest = undefined;
-                        semanticEnrolmentReturnToAsk = false;
-                        openRagAsk();
+                        shellState.semanticEnrolmentRequest = undefined;
+                        shellState.semanticEnrolmentReturnToAsk = false;
+                        knowledgeWiring.openRagAsk();
                       },
                       onCancel: () => {
-                        semanticEnrolmentRequest = undefined;
+                        shellState.semanticEnrolmentRequest = undefined;
                       },
                     }),
                   ),
                 }),
           }),
           m(DirectoryContextMenu, {
-            open: contextMenu !== undefined,
-            x: contextMenu?.x ?? 0,
-            y: contextMenu?.y ?? 0,
+            open: shellState.contextMenu !== undefined,
+            x: shellState.contextMenu?.x ?? 0,
+            y: shellState.contextMenu?.y ?? 0,
             actions:
-              contextMenu === undefined
+              shellState.contextMenu === undefined
                 ? []
                 : menuActionsForContext(
-                    [...localisedRegisteredActions(), ...mediaQueueActions()],
-                    actionCommandController.commandAvailabilityContext(
-                      contextMenu.entries,
-                      contextMenu.paneId,
+                    [
+                      ...actionsWiring.localisedRegisteredActions(),
+                      ...actionsWiring.mediaQueueActions(),
+                    ],
+                    shellState.actionCommandController.commandAvailabilityContext(
+                      shellState.contextMenu.entries,
+                      shellState.contextMenu.paneId,
                     ),
                   ),
             onClose: () => {
-              contextMenu = undefined;
+              shellState.contextMenu = undefined;
             },
-            ...(contextMenu !== undefined &&
-            [...pluginByPane].some(
+            ...(shellState.contextMenu !== undefined &&
+            [...shellState.pluginByPane].some(
               ([paneId, panel]) =>
-                paneId !== contextMenu?.paneId &&
-                workspace?.panesById[paneId]?.activeTabId === panel.tabId,
+                paneId !== shellState.contextMenu?.paneId &&
+                shellState.workspace?.panesById[paneId]?.activeTabId === panel.tabId,
             )
               ? {
                   placementBounds: () =>
                     document
-                      .querySelector<HTMLElement>(`[data-pane-id="${contextMenu?.paneId}"]`)
+                      .querySelector<HTMLElement>(
+                        `[data-pane-id="${shellState.contextMenu?.paneId}"]`,
+                      )
                       ?.getBoundingClientRect(),
                 }
               : {}),
-            onInvoke: actionCommandController.invokeContextMenuAction,
-            platform,
-            ...(platform === 'macos' &&
-            runtimeKind === 'tauri' &&
-            contextMenu?.entries.length === 1 &&
-            contextMenu.entries[0]?.location.providerId === 'local' &&
-            contextMenu.entries[0]?.kind === 'file'
+            onInvoke: shellState.actionCommandController.invokeContextMenuAction,
+            platform: shellState.platform,
+            ...(shellState.platform === 'macos' &&
+            shellState.runtimeKind === 'tauri' &&
+            shellState.contextMenu?.entries.length === 1 &&
+            shellState.contextMenu.entries[0]?.location.providerId === 'local' &&
+            shellState.contextMenu.entries[0]?.kind === 'file'
               ? {
                   openWithSubmenu: {
                     load: () => {
-                      const location = contextMenu?.entries[0]?.location;
+                      const location = shellState.contextMenu?.entries[0]?.location;
                       if (location === undefined) {
                         return Promise.reject(
                           new Error('Open With selection is no longer available'),
                         );
                       }
-                      return attrsClient.listOpenWithApplications(location);
+                      return shellState.client.listOpenWithApplications(location);
                     },
                     iconFor: (path: string) => {
                       const url = new URL('file:///');
                       url.pathname = path;
-                      return attrsClient.getFileIcon(url.href);
+                      return shellState.client.getFileIcon(url.href);
                     },
                     onChoose: (applicationPath: string) => {
-                      const location = contextMenu?.entries[0]?.location;
+                      const location = shellState.contextMenu?.entries[0]?.location;
                       if (location === undefined) {
                         toast({ html: t('contextMenu', 'openWithFailed') });
                         return;
                       }
-                      void attrsClient
+                      void shellState.client
                         .openWithApplication(location, applicationPath)
                         .catch((error: unknown) => {
                           console.error('Failed to open with selected application', error);
@@ -7733,33 +4283,38 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                         });
                     },
                     onOther: () => {
-                      const location = contextMenu?.entries[0]?.location;
+                      const location = shellState.contextMenu?.entries[0]?.location;
                       if (location === undefined) {
                         toast({ html: t('contextMenu', 'openWithFailed') });
                         return;
                       }
-                      void attrsClient.openWithAnyApplication(location).catch((error: unknown) => {
-                        console.error('Failed to open application picker', error);
-                        toast({ html: t('contextMenu', 'openWithFailed') });
-                      });
+                      void shellState.client
+                        .openWithAnyApplication(location)
+                        .catch((error: unknown) => {
+                          console.error('Failed to open application picker', error);
+                          toast({ html: t('contextMenu', 'openWithFailed') });
+                        });
                     },
                   },
                 }
               : {}),
-            ...(platformContextMenuSupported &&
-            contextMenu !== undefined &&
-            contextMenu.entries.length > 0 &&
-            contextMenu.entries.every((entry) => entry.location.providerId === 'local') &&
-            (platform === 'macos' || platform === 'windows')
+            ...(shellState.platformContextMenuSupported &&
+            shellState.contextMenu !== undefined &&
+            shellState.contextMenu.entries.length > 0 &&
+            shellState.contextMenu.entries.every(
+              (entry) => entry.location.providerId === 'local',
+            ) &&
+            (shellState.platform === 'macos' || shellState.platform === 'windows')
               ? {
                   platformSubmenu: {
                     title:
-                      platform === 'macos'
+                      shellState.platform === 'macos'
                         ? t('contextMenu', 'services')
                         : t('contextMenu', 'sendTo'),
                     onOpen: () => {
-                      const locations = contextMenu?.entries.map((entry) => entry.location) ?? [];
-                      void attrsClient.showPlatformContextMenu(locations).catch(() => {
+                      const locations =
+                        shellState.contextMenu?.entries.map((entry) => entry.location) ?? [];
+                      void shellState.client.showPlatformContextMenu(locations).catch(() => {
                         toast({ html: t('contextMenu', 'platformMenuFailed') });
                       });
                     },
@@ -7768,13 +4323,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               : {}),
           }),
           m(ShortcutsHelpDialog, {
-            open: shortcutsHelpOpen,
-            actions: localisedRegisteredActions(),
-            keybindings: currentSettings?.keybindings ?? {},
-            platform,
-            runtime: keybindingRuntime,
+            open: shellState.shortcutsHelpOpen,
+            actions: actionsWiring.localisedRegisteredActions(),
+            keybindings: shellState.currentSettings?.keybindings ?? {},
+            platform: shellState.platform,
+            runtime: shellState.keybindingRuntime,
             onClose: () => {
-              shortcutsHelpOpen = false;
+              shellState.shortcutsHelpOpen = false;
             },
           }),
           m(ModalPanel, {
@@ -7800,36 +4355,41 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 ),
               ),
             ]),
-            isOpen: aboutDialogOpen,
+            isOpen: shellState.aboutDialogOpen,
             closeOnEsc: true,
             onToggle: (open: boolean) => {
-              if (!open) aboutDialogOpen = false;
+              if (!open) shellState.aboutDialogOpen = false;
             },
           }),
           m(AppUpdateDialog, {
             client: attrs.client,
-            ...(availableAppUpdate === undefined ? {} : { update: availableAppUpdate }),
+            ...(shellState.availableAppUpdate === undefined
+              ? {}
+              : { update: shellState.availableAppUpdate }),
             onLater: () => {
-              availableAppUpdate = undefined;
+              shellState.availableAppUpdate = undefined;
             },
           }),
           m(InsufficientSpaceDialog, {
-            shortfall: Object.values(operations.byId)
+            shortfall: Object.values(shellState.operations.byId)
               .filter((operation): operation is Operation => operation !== undefined)
-              .filter((operation) => !answeredSpaceShortfalls.has(operation.id))
+              .filter((operation) => !shellState.answeredSpaceShortfalls.has(operation.id))
               .map((operation) =>
-                spaceShortfallOf(operation, operations.failuresById[operation.id]),
+                spaceShortfallOf(operation, shellState.operations.failuresById[operation.id]),
               )
               .find((shortfall) => shortfall !== undefined),
             onCancel: (shortfall) => {
-              answeredSpaceShortfalls.add(shortfall.operation.id);
+              shellState.answeredSpaceShortfalls.add(shortfall.operation.id);
             },
             onProceed: (shortfall) => {
-              answeredSpaceShortfalls.add(shortfall.operation.id);
+              shellState.answeredSpaceShortfalls.add(shortfall.operation.id);
               void attrs.client
                 .startOperation(requestSkippingSpaceCheck(shortfall.operation))
                 .then(() => {
-                  operations = dismissOperation(operations, shortfall.operation.id);
+                  shellState.operations = dismissOperation(
+                    shellState.operations,
+                    shortfall.operation.id,
+                  );
                   m.redraw();
                 })
                 .catch((error: unknown) => {
@@ -7839,12 +4399,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
           }),
           ...renderAppDialogs(attrs.client, pendingDelete, appDialogsContext),
           m(SaveSnapshotDialog, {
-            request: saveSnapshotRequest,
+            request: shellState.saveSnapshotRequest,
             onConfirm: (fileName, withChecksums) => {
-              const request = saveSnapshotRequest;
-              saveSnapshotRequest = undefined;
+              const request = shellState.saveSnapshotRequest;
+              shellState.saveSnapshotRequest = undefined;
               if (request === undefined) return;
-              void snapshotController?.start({
+              void shellState.snapshotController?.start({
                 type: 'create',
                 root: request.root,
                 destination: childLocation(request.directory, fileName),
@@ -7852,32 +4412,32 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
               });
             },
             onCancel: () => {
-              saveSnapshotRequest = undefined;
+              shellState.saveSnapshotRequest = undefined;
             },
           }),
           m(MinifyGeoDialog, {
-            request: minifyGeoRequest,
+            request: shellState.minifyGeoRequest,
             client: attrs.client,
-            onApply: confirmMinifyGeo,
+            onApply: dialogWiring.confirmMinifyGeo,
             onCancel: () => {
-              minifyGeoRequest = undefined;
+              shellState.minifyGeoRequest = undefined;
               m.redraw();
             },
           }),
           m(FileDiffDialog, {
-            request: fileDiffRequest,
+            request: shellState.fileDiffRequest,
             client: attrs.client,
             onClose: () => {
-              fileDiffRequest = undefined;
+              shellState.fileDiffRequest = undefined;
               m.redraw();
             },
           }),
           m(SyncProfilesDialog, {
-            open: syncProfilesDialogOpen,
-            controller: syncProfileController,
+            open: shellState.syncProfilesDialogOpen,
+            controller: shellState.syncProfileController,
             paneLocations: syncProfilePaneLocations,
             onClose: () => {
-              syncProfilesDialogOpen = false;
+              shellState.syncProfilesDialogOpen = false;
               m.redraw();
             },
           }),
@@ -7887,64 +4447,67 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
             applying: syncReview?.applying === true,
             ...(syncReview?.error === undefined ? {} : { error: syncReview.error }),
             onApply: (items) => {
-              void syncProfileController.confirmReview(items);
+              void shellState.syncProfileController.confirmReview(items);
             },
             onCancel: () => {
-              void syncProfileController.dismissReview();
+              void shellState.syncProfileController.dismissReview();
             },
           }),
           m(SplitFileDialog, {
-            request: splitFileRequest,
-            onSplit: confirmSplitFile,
+            request: shellState.splitFileRequest,
+            onSplit: dialogWiring.confirmSplitFile,
             onCancel: () => {
-              splitFileRequest = undefined;
+              shellState.splitFileRequest = undefined;
               m.redraw();
             },
           }),
           m(CombineFilesDialog, {
-            request: combineFilesRequest,
+            request: shellState.combineFilesRequest,
             client: attrs.client,
-            onCombine: confirmCombineFiles,
+            onCombine: dialogWiring.confirmCombineFiles,
             onCancel: () => {
-              combineFilesRequest = undefined;
+              shellState.combineFilesRequest = undefined;
               m.redraw();
             },
           }),
           m(ConvertGeoDialog, {
-            request: convertGeoRequest,
+            request: shellState.convertGeoRequest,
             client: attrs.client,
-            onConvert: confirmConvertGeo,
+            onConvert: dialogWiring.confirmConvertGeo,
             onCancel: () => {
-              convertGeoRequest = undefined;
+              shellState.convertGeoRequest = undefined;
               m.redraw();
             },
           }),
           m(ChangeAttributesDialog, {
-            request: changeAttributesRequest,
+            request: shellState.changeAttributesRequest,
             client: attrs.client,
-            onApply: confirmChangeAttributes,
+            onApply: dialogWiring.confirmChangeAttributes,
             onCancel: () => {
-              changeAttributesRequest = undefined;
+              shellState.changeAttributesRequest = undefined;
               m.redraw();
             },
           }),
           m(EditImageMetadataDialog, {
-            request: editImageMetadataRequest,
-            onApply: confirmEditImageMetadata,
+            request: shellState.editImageMetadataRequest,
+            onApply: dialogWiring.confirmEditImageMetadata,
             onCancel: () => {
-              editImageMetadataRequest = undefined;
+              shellState.editImageMetadataRequest = undefined;
               m.redraw();
             },
           }),
           m(SavePlaylistDialog, {
-            request: savePlaylistRequest,
-            onConfirm: confirmSavePlaylist,
+            request: shellState.savePlaylistRequest,
+            onConfirm: dialogWiring.confirmSavePlaylist,
             onCancel: () => {
-              savePlaylistRequest = undefined;
+              shellState.savePlaylistRequest = undefined;
             },
           }),
-          appState !== undefined && playerController !== undefined
-            ? m(MiniPlayer, { state: appState.player, controller: playerController })
+          shellState.appState !== undefined && shellState.playerController !== undefined
+            ? m(MiniPlayer, {
+                state: shellState.appState.player,
+                controller: shellState.playerController,
+              })
             : undefined,
           m(
             '.fm-function-key-bar',
@@ -7954,7 +4517,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                 const collect =
                   basketF5 && binding.actionId === 'core.copy' && binding.shortcut === 'F5';
                 const available = collect
-                  ? basketSourcePaneId() !== undefined
+                  ? basketWiring.basketSourcePaneId() !== undefined
                   : binding.actionAvailable;
                 return m(
                   'button.fm-function-key',
@@ -7963,10 +4526,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = () => {
                     type: 'button',
                     disabled: !available,
                     onclick: available
-                      ? () => invokeFunctionKeyShortcut(binding.shortcut)
+                      ? () => miscWiring.invokeFunctionKeyShortcut(binding.shortcut)
                       : undefined,
                   },
-                  `${binding.key} ${collect ? t('basket', 'addShort') : functionKeyTitle(binding)}`,
+                  `${binding.key} ${collect ? t('basket', 'addShort') : miscWiring.functionKeyTitle(binding)}`,
                 );
               }),
             ),
