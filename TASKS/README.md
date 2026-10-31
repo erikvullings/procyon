@@ -493,15 +493,15 @@ content streaming, and mapping concerns live in dedicated modules with interface
   left unwired)*
 
 **Incremental deepening epic (0288)** — six deepening candidates found by the
-`improve-codebase-architecture` skill. 0288 is the parent: tick it only when all six subtasks
+`improve-codebase-architecture` skill. 0288 is the parent: tick it only when all five subtasks
 close. Every subtask is `Depends on: none`, so they are independently pickable in any order —
-use `Priority` to sequence: 0289–0291 are `high`, 0292–0294 are `medium`. 0289, 0290, 0291 and
-0294 are frontend; 0292 and 0293 are backend. 0290 and 0293 both target files that earlier tasks
+use `Priority` to sequence: 0289–0291 are `high`, 0292–0293 are `medium`. 0289, 0290 and 0291
+are frontend; 0292 and 0293 are backend. 0290 and 0293 both target files that earlier tasks
 in this section already shrank once (0153's controller seam, 0119–0123's capability decomposition)
 and have since regrown — read 0153's and 0119's Agent Notes before starting, they record why the
 previous pass stopped where it did.
 
-- [ ] 0288 Incremental architecture deepening *(parent — tracks 0289–0294, no code of its own)*
+- [ ] 0288 Incremental architecture deepening *(parent — tracks 0289–0293, no code of its own)*
 - [ ] 0289 Decompose FileManagerClient god interface *(frontend, high — 1,195-line interface /
   100+ methods; 4–6 sub-clusters assembled in `createClient.ts`; mock adapter 6,504 → −30%)*
 - [ ] 0290 Extract feature wiring from app-shell.ts *(frontend, high — 7,978 → < 4,800 lines;
@@ -512,5 +512,3 @@ previous pass stopped where it did.
   folded; remaining 7 are 160–990 lines, so the "< 50 lines" criterion is not met)*
 - [x] 0293 Replace the FileManagerService constructor chain with ServiceConfig *(backend, medium —
   `ServiceConfig` + `from_config`; capability injectors and public-method count deliberately left)*
-- [-] 0294 Operations confirmation/guard decorators *(frontend — dropped: decorators have one call
-  site and belong outside the controller; revisit inside 0290 if needed)*
