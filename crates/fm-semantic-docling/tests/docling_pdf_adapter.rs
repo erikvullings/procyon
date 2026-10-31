@@ -71,8 +71,13 @@ fn positioned_pdf(content: &str) -> Vec<u8> {
         "Subtype" => "Type1",
         "BaseFont" => "Helvetica",
     });
+    let bold_id = document.add_object(dictionary! {
+        "Type" => "Font",
+        "Subtype" => "Type1",
+        "BaseFont" => "Helvetica-Bold",
+    });
     let resources_id = document.add_object(dictionary! {
-        "Font" => dictionary! { "F1" => font_id },
+        "Font" => dictionary! { "F1" => font_id, "F2" => bold_id },
     });
     let content_id = document.add_object(Stream::new(dictionary! {}, content.as_bytes().to_vec()));
     let page_id = document.add_object(dictionary! {
@@ -269,6 +274,55 @@ fn deterministic_docling_orders_positioned_columns_instead_of_operator_order() {
     assert!(
         advanced.find("Left column starts").expect("left Docling")
             < advanced.find("Right column starts").expect("right Docling")
+    );
+}
+
+#[test]
+fn bold_headings_open_sections_and_raised_markers_leave_the_prose() {
+    // Body text at 10 pt, a bold 12 pt heading, a raised "3" after "outcomes.", and a footnote
+    // set smaller at the foot of the page.
+    let mut content = String::from(
+        "BT /F2 12 Tf 1 0 0 1 72 720 Tm (Methods) Tj\n\
+         /F1 10 Tf 1 0 0 1 72 700 Tm (We measured the outcomes of every participant in the study.) Tj\n\
+         1 0 0 1 72 686 Tm (Each participant was followed for twelve months after enrolment.) Tj\n\
+         1 0 0 1 72 672 Tm (Dropout was low and balanced across both groups of children,) Tj\n\
+         1 0 0 1 72 658 Tm (so that the analysis could use the complete sample of cases.) Tj\n\
+         1 0 0 1 72 644 Tm (The effect was large on all primary outcomes.) Tj\n\
+         /F1 6.5 Tf 1 0 0 1 297 647 Tm (3) Tj\n\
+         /F1 8 Tf 1 0 0 1 72 110 Tm (3 Outcomes are described in the supplementary material of the study.) Tj\n",
+    );
+    content.push_str("ET\n");
+    let bytes = positioned_pdf(&content);
+    let outcome = converter()
+        .convert(
+            SourceContent::Bytes(&bytes),
+            &DocumentMetadata::unknown().with_extension("pdf"),
+            &ConversionContext::new(),
+        )
+        .expect("Docling conversion");
+    let units = outcome.document().expect("Docling document").units();
+    let heading = units
+        .iter()
+        .find(|unit| unit.kind == fm_semantic_conversion::UnitKind::Heading)
+        .expect("a heading unit");
+    assert_eq!(heading.text, "Methods");
+    let body = units
+        .iter()
+        .find(|unit| unit.text.contains("We measured the outcomes"))
+        .expect("body unit");
+    assert_eq!(body.section_path, vec!["Methods".to_owned()]);
+    assert!(
+        !body.text.contains('3'),
+        "marker left in prose: {}",
+        body.text
+    );
+    let note = units
+        .iter()
+        .find(|unit| unit.text.contains("supplementary material"))
+        .expect("footnote unit");
+    assert_eq!(
+        note.section_path,
+        vec!["Methods".to_owned(), "Footnotes".to_owned()]
     );
 }
 

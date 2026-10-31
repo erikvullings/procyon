@@ -59,8 +59,9 @@ fn record(unit: &StructuralUnit) -> String {
         _ => (0, 0),
     };
     format!(
-        "{{\"page\":{page},\"block\":{block},\"kind\":{},\"text\":{}}}\n",
+        "{{\"page\":{page},\"block\":{block},\"kind\":{},\"section\":{},\"text\":{}}}\n",
         json_string(&format!("{:?}", unit.kind)),
+        json_string(&unit.section_path.join(" > ")),
         json_string(&unit.text)
     )
 }

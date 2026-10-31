@@ -514,3 +514,5 @@ previous pass stopped where it did.
   `ServiceConfig` + `from_config`; capability injectors and public-method count deliberately left)*
 - [x] 0295 Document-graph layout experiment *(eval, low — graph ≈ current path on prose; typographic
   gates help paragraph recall; not ported)*
+- [ ] 0296 Typography for the geometric PDF path: headings, citation markers, footnotes *(backend,
+  medium — implemented; retrieval A/B negative at 512 tokens, open decision)*

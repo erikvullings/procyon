@@ -18,9 +18,11 @@ use std::time::{Duration, Instant};
 
 use docling_core::{DoclingDocument, FieldItem, Node, Table};
 mod confidence;
+mod pdf_styles;
 pub use confidence::{PageConfidence, page_confidence};
 mod reflow;
 mod regions;
+mod structure;
 mod table_rows;
 mod table_text;
 
@@ -48,7 +50,7 @@ pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
 /// included: enabling it retries only previously textless PDFs, while
 /// disabling it makes reconciliation remove their OCR-derived occurrences.
 /// OCR-derived documents carry [`OCRMYPDF_CONVERTER_VERSION`] themselves.
-pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2052009+baseline/12";
+pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2052009+baseline/13";
 /// Version of the optional OCRmyPDF plus deterministic Docling composition.
 pub const OCRMYPDF_CONVERTER_VERSION: ComponentVersion =
     ComponentVersion::new("ocrmypdf-docling", 2);
@@ -1472,15 +1474,26 @@ impl<'a> Mapper<'a> {
         } else {
             Vec::new()
         };
-        self.map_pages(document, &pages);
+        // Typography only exists for the digital text layer; OCR output has no fonts.
+        let styles = if self.ocr_language.is_none() {
+            pdf_styles::page_styles(pdf)
+        } else {
+            Vec::new()
+        };
+        self.map_pages(document, &pages, &styles);
     }
 
     #[cfg(test)]
     fn map_document(&mut self, document: DoclingDocument) {
-        self.map_pages(document, &[]);
+        self.map_pages(document, &[], &[]);
     }
 
-    fn map_pages(&mut self, document: DoclingDocument, pages: &[reflow::PageWords]) {
+    fn map_pages(
+        &mut self,
+        document: DoclingDocument,
+        pages: &[reflow::PageWords],
+        styles: &[pdf_styles::PageStyles],
+    ) {
         if let Some(language) = self.ocr_language {
             let confidence = document
                 .confidence
@@ -1492,12 +1505,34 @@ impl<'a> Mapper<'a> {
                 mean_confidence_basis_points: confidence,
             });
         }
-        for node in reflow::reflow_lines_ordered(document.nodes, pages, self.ocr_language.is_none())
-        {
+        let nodes =
+            reflow::reflow_lines_ordered(document.nodes, pages, self.ocr_language.is_none());
+        for (node, role) in structure::classify(nodes, styles) {
             if self.saturated || self.checkpoint().is_err() {
                 break;
             }
-            self.map_node(node, 0);
+            self.map_classified(node, role);
+        }
+    }
+
+    /// Maps a node whose typographic role is known: headings open sections, footnotes become
+    /// units of their own under the current section.
+    fn map_classified(&mut self, node: Node, role: structure::Role) {
+        let text = match &node {
+            Node::Located { inner, .. } => match &**inner {
+                Node::Paragraph { text } => Some(text.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        match (role, text) {
+            (structure::Role::Heading(level), Some(text)) => self.heading(level, text),
+            (structure::Role::Footnote, Some(text)) => {
+                let mut path = self.section_path.clone();
+                path.push(FOOTNOTES_SECTION.to_owned());
+                self.emit_with_path(UnitKind::Paragraph, text, path);
+            }
+            _ => self.map_node(node, 0),
         }
     }
 
@@ -1790,6 +1825,9 @@ impl<'a> Mapper<'a> {
 }
 
 /// Longest wrapped fragment that stays inside a bibliography without a year of its own.
+/// Section name under which footnote text is kept apart from the prose of a page.
+const FOOTNOTES_SECTION: &str = "Footnotes";
+
 const REFERENCE_FRAGMENT_CHARS: usize = 250;
 /// A bibliography carries about one publication year per entry; text with fewer than one per this
 /// many characters is prose and ends the list. Entries merged by column wrapping stay dense.

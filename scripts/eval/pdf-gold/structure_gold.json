@@ -1,0 +1,118 @@
+{
+  "note": "Hand-labelled from page images (2026-10-31). Every heading on a listed page is listed. 'footnotes' are the first words of footnote texts; 'markers' are raised citation markers that must not stay glued to the prose.",
+  "pages": [
+    {
+      "pdf": "attention",
+      "page": 2,
+      "headings": ["1 Introduction", "2 Background", "3 Model Architecture"]
+    },
+    {
+      "pdf": "bert",
+      "page": 2,
+      "headings": [
+        "2 Related Work",
+        "2.1 Unsupervised Feature-based Approaches",
+        "2.2 Unsupervised Fine-tuning Approaches"
+      ]
+    },
+    {
+      "pdf": "dobbs",
+      "page": 40,
+      "headings": []
+    },
+    {
+      "pdf": "dobbs",
+      "page": 3,
+      "headings": []
+    },
+    {
+      "pdf": "alphafold",
+      "page": 2,
+      "headings": ["The AlphaFold network"],
+      "markers": [["prediction", "25,26"]]
+    },
+    {
+      "pdf": "wiki-rotterdam",
+      "page": 5,
+      "headings": ["Stadsgroei 1914–1940", "Tweede Wereldoorlog 1940–1945"]
+    },
+    {
+      "pdf": "Models of Youth Development and Problem",
+      "page": 5,
+      "headings": [
+        "Positive Youth Development Approaches",
+        "Strengths, Weaknesses, and Elaborations of the Positive Youth Development Approach"
+      ]
+    },
+    {
+      "pdf": "gpt3",
+      "page": 7,
+      "headings": []
+    },
+    {
+      "pdf": "hist",
+      "page": 5,
+      "headings": []
+    },
+    {
+      "pdf": "plos1",
+      "page": 5,
+      "headings": ["Discussion"]
+    },
+    {
+      "pdf": "tk-bijlage-landelijk-kwaliteitskader",
+      "page": 12,
+      "headings": ["1.8 Verklaringsmodellen"]
+    },
+    {
+      "pdf": "RadicalisationFamilyRelatedRiskSystematicReview.July2022",
+      "page": 10,
+      "headings": [
+        "4.1.8 Types of settings",
+        "4.2 Search methods for identification of studies",
+        "4.2.1 Electronic searches",
+        "4.2.1.1 Searching other resources"
+      ]
+    },
+    {
+      "pdf": "attention",
+      "page": 1,
+      "headings": [],
+      "footnotes": [
+        "∗ Equal contribution",
+        "† Work performed while at Google Brain",
+        "‡ Work performed while at Google Research"
+      ]
+    },
+    {
+      "pdf": "dobbs",
+      "page": 10,
+      "headings": [],
+      "footnotes": ["1 Roe v. Wade", "2 J. Ely", "3 L. Tribe"],
+      "markers": [["life,”", "1"], ["be.”", "2"], ["State.", "3"]]
+    },
+    {
+      "pdf": "The Impact of Attachment-Disrupting Adverse Childhood Experiences on",
+      "page": 2,
+      "headings": [
+        "Methods",
+        "Sample and Procedures",
+        "Study Variable Construction",
+        "Statistical Analyses"
+      ],
+      "markers": [["stress.", "11"], ["chronic.", "12"], ["lifespan.", "5"], ["elsewhere.", "14"]]
+    },
+    {
+      "pdf": "gpt3",
+      "page": 4,
+      "headings": [],
+      "footnotes": ["1 In the context of language models"],
+      "markers": [["meta-learning", "1"]]
+    },
+    {
+      "pdf": "Future Prospects  Deprivation  and Criminality   A Longitudinal Birth Cohort Study",
+      "page": 3,
+      "headings": ["Future orientation, crime, and the need for longitudinal information"]
+    }
+  ]
+}
