@@ -10,7 +10,7 @@ import type {
 } from '../../models';
 import { desktopHostRequiredError } from '../fetch-mutator';
 import type { MockContext } from './mock-context';
-import { actions, MockClientError } from './mock-mock-shared';
+import { actions, MockClientError } from './mock-shared';
 import type { PluginClient } from './plugin-client';
 
 export class MockPluginClient implements PluginClient {

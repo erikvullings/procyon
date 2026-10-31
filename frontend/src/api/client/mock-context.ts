@@ -61,7 +61,7 @@ import {
   planMockKnowledgeSearch,
   resolveMockKnowledgeScope,
 } from './mock-knowledge-search';
-import type { MockClientMethod, MockFileManagerClientOptions } from './mock-mock-shared';
+import type { MockClientMethod, MockFileManagerClientOptions } from './mock-shared';
 import {
   aggregateTotals,
   directories,
@@ -78,7 +78,7 @@ import {
   sameSemanticOcrTarget,
   semanticLocationContains,
   syntheticFileContent,
-} from './mock-mock-shared';
+} from './mock-shared';
 import type { MockOperationClient } from './mock-operation-client';
 import type { MockPluginClient } from './mock-plugin-client';
 import type { MockSemanticClient } from './mock-semantic-client';

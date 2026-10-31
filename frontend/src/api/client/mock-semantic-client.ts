@@ -118,7 +118,7 @@ import {
   sameSemanticIndexCounts,
   sameSemanticOcrTarget,
   semanticLocationContains,
-} from './mock-mock-shared';
+} from './mock-shared';
 import type { SemanticClient } from './semantic-client';
 
 export class MockSemanticClient implements SemanticClient {

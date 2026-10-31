@@ -207,7 +207,7 @@ Use the following structure:
 
 The following rules are mandatory:
 
-1. Frontend components must not call `fetch`, `EventSource` or Tauri APIs directly.
+1. Frontend components must not call `fetch`, `EventSource` or Tauri APIs directly; they depend only on `FileManagerClient` or the focused capability sub-interfaces it composes (`ConnectionClient`, `WorkspaceClient`, `OperationClient`, `SemanticClient`, `PluginClient`).
 2. Axum handlers must remain thin.
 3. Tauri commands must remain thin.
 4. Core engine crates must not depend on Axum or Tauri.

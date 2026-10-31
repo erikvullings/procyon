@@ -55,7 +55,7 @@ import {
   lastSegment,
   MockClientError,
   mockDigest,
-} from './mock-mock-shared';
+} from './mock-shared';
 import type { OperationClient } from './operation-client';
 import { admitsPath } from './sync-path-filter';
 

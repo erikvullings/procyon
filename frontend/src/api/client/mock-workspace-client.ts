@@ -93,7 +93,7 @@ import {
   fixtureEntry,
   MockClientError,
   THUMBNAILABLE_MOCK_EXTENSIONS,
-} from './mock-mock-shared';
+} from './mock-shared';
 import { MockSqliteDatabase } from './mock-sqlite-database';
 import type { WorkspaceClient } from './workspace-client';
 

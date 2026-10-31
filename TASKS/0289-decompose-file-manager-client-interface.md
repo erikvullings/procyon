@@ -52,23 +52,9 @@ Depends on: none
   working unchanged — backward-compatible seam, adapters untouched.
   Verified: `tsc --noEmit` clean; `biome check` clean; 196 tests across
   import-boundaries/create-client/mock/http/tauri client suites pass.
-- 2026-10-31 agent: **Part 2/3 remaining — split the mock adapter (target: main file ≤ ~4550
-  lines).** The single `MockFileManagerClient` class holds ~70 cross-cutting state fields plus
-  ~1089 lines of shared module helpers (`fixtureEntry`, `collectMatches`, `syntheticFileContent`,
-  the `perform`/event-signal infrastructure) that many clusters depend on. A safe split keeps the
-  root as a state+helper holder and composes five `MockXxxClient` sub-classes (each `implements
-  XxxClient`) via a shared host accessor, moving method bodies into sibling files. This also
-  satisfies the "composite at `createClient.ts` assembles sub-clients" criterion. Not started:
-  deliberately avoided a blind big-bang refactor of the 6500-line fixture without first isolating
-  the shared-state surface, to protect the 50k-line mock test suite.
-- 2026-10-31 agent: **Part 3/3 remaining — migrate features to sub-interfaces.** ~81 files import
-  `FileManagerClient`; migrate each to the focused sub-interface(s) it actually uses (mechanical,
-  type-only). Note the spec §3 rule 1 wording ("components depend only on `FileManagerClient`")
-  should be updated to reference the sub-interfaces, per the task's own Implementation Note.
-
-- 2026-10-31 agent: **Part 2/3 done — mock adapter split into a composed sub-clients (target met, ~80%
-  reduction).** The 6504-line monolithic `MockFileManagerClient` is replaced by:
-  - `mock-mock-shared.ts` — the module-level fixtures/helpers/constants, now exported;
+- 2026-10-31 agent: **Part 2/3 done — mock adapter split into a composed sub-clients (main file cut ~80%; total
+  mock code grew).** The 6504-line monolithic `MockFileManagerClient` is replaced by:
+  - `mock-shared.ts` — the module-level fixtures/helpers/constants, now exported;
   - `mock-context.ts` — a `MockContext` holding all ~71 state fields + ~34 helper methods
     (`perform`, `emit*`, `require*`, `directorySnapshot`, …) behind a single shared instance;
   - `mock-{connection,workspace,operation,semantic,plugin}-client.ts` — five capability classes,
@@ -76,7 +62,8 @@ Depends on: none
   - `mock-file-manager-client.ts` — a thin composite that assembles `MockContext` + the five
     capability clients and forwards every one of the 222 members. `createFileManagerClient`
     (create-client.ts) returns this composite, satisfying the "composite at the seam assembles
-    sub-clients" criterion. The main adapter file went 6504 -> ~1320 lines.
+    sub-clients" criterion. The main adapter file went 6504 -> 1320 lines, but the logic moved into sibling files: the mock
+  as a whole is now ~8100 lines (up ~25%). Criterion 3 is met only for the main adapter file.
   Method bodies were moved out verbatim with `this.` rewritten to `this.ctx.` (fields/helpers) or
   `this.ctx.<capability>Client.` (cross-calls between interface methods), so behaviour is
   unchanged. Verified: `tsc --noEmit` clean, `biome check` clean, the full frontend suite
@@ -85,16 +72,6 @@ Depends on: none
   Implementation detail: a codegen script (`/tmp/gen3.mjs` + a depth-aware, string/comment-safe
   class-member splitter) drove the mechanical extraction; the generated files are checked in and
   hand-verifiable, not build-time generated.
-
-- 2026-10-31 agent: **Criterion status.** Met: (1) five focused sub-interfaces; (3) mock adapter cut
-  ~80%; (4) composite assembled at the createClient.ts seam; (5) `pnpm api:check` generated
-  artifacts byte-identical. **Remaining — criterion (2): migrate the ~101 feature files that still
-  import the composite `FileManagerClient` to the specific sub-interface(s) they use.** This is a
-  large, purely type-level migration best done as its own focused, per-file pass (each file's client
-  method usage must be mapped to clusters); it is deliberately NOT rushed here because the composite
-  remains a valid, backward-compatible import for callers that legitimately span clusters (per the
-  task's own Implementation Note), and the sub-interfaces are already exported and usable. Status
-  left `open` until criterion (2) is completed.
 
 - 2026-10-31 agent: **Part 3/3 done — criterion (2) feature import migration.** 61 feature/app files
   that previously imported the composite `FileManagerClient` now import only the focused
@@ -108,3 +85,6 @@ Depends on: none
   callers). Verified: `tsc --noEmit` clean, `biome check` clean (only pre-existing CSS warnings),
   full frontend suite green (3322 tests), and `pnpm api:check`'s generated artifacts byte-identical.
   All 5 acceptance criteria are now met. **Status -> done.**
+
+- 2026-10-31 review: renamed `mock-mock-shared.ts` -> `mock-shared.ts`; spec §3 rule 1 wording
+  updated to cover the sub-interfaces. 24 non-test files still import the composite.

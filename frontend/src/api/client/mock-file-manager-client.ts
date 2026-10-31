@@ -226,7 +226,7 @@ import type {
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
 import { MockConnectionClient } from './mock-connection-client';
 import { MockContext } from './mock-context';
-import type { MockFileManagerClientOptions } from './mock-mock-shared';
+import type { MockFileManagerClientOptions } from './mock-shared';
 import { MockOperationClient } from './mock-operation-client';
 import { MockPluginClient } from './mock-plugin-client';
 import { MockSemanticClient } from './mock-semantic-client';
@@ -236,8 +236,8 @@ export type {
   MockClientMethod,
   MockFileManagerClientOptions,
   MockSemanticLifecycle,
-} from './mock-mock-shared';
-export { MockClientError } from './mock-mock-shared';
+} from './mock-shared';
+export { MockClientError } from './mock-shared';
 
 export class MockFileManagerClient implements FileManagerClient {
   private readonly ctx: MockContext;
