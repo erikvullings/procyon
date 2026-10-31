@@ -31,3 +31,37 @@ Depends on: none
 - The `mock-file-manager-client.ts` at 6504 lines is the largest target — reducing it first shows immediate value
 - Consider whether `FileManagerClient` should remain as the composite (backward compat) or be replaced entirely
 - The spec says components must depend only on `FileManagerClient` — this needs updating if we change the interface name
+
+## Agent Notes
+
+- 2026-10-31 agent: **Part 1/3 done — interface decomposition (committed 57f4e4c4).**
+  Audited the full surface: `FileManagerClient` has 221 members (3 readonly fields + 218
+  methods, including optional `?` members). Partitioned them into five disjoint, complete
+  capability sub-interfaces, each in its own file with its own exact model-type imports and
+  preserved JSDoc:
+  - `ConnectionClient` (transport/host-lifecycle/platform/events, 30 members incl. `connection`,
+    `supportsAppUpdates`, `supportsAppDataRemoval` and the optional `quit?`/`setWindowTitle?`/
+    `setWindowChrome?`/`openWorkspaceWindow?`/`openViewerWindow?`/`resyncWorkspace?`)
+  - `WorkspaceClient` (workspace lifecycle, navigation, previews, metadata, geo, connections/OneDrive/SSH)
+  - `OperationClient` (operation engine: jobs, search, comparison, sync, checksums, duplicates, snapshots, link doctor)
+  - `SemanticClient` (semantic components/library/vocab/OCR, LLM profiles, corpus themes, RAG, document summaries, knowledge search)
+  - `PluginClient` (action dispatch + in-app plugin panels)
+  Shared value/type symbols (`NotImplementedError`, `OpenWithApplication`, `NativeFileDrop`,
+  `PluginPanelBounds`, `WindowChrome`) moved to `client-types.ts`. `FileManagerClient` is kept as
+  the composite (`extends` all five) so every existing import of `FileManagerClient` keeps
+  working unchanged — backward-compatible seam, adapters untouched.
+  Verified: `tsc --noEmit` clean; `biome check` clean; 196 tests across
+  import-boundaries/create-client/mock/http/tauri client suites pass.
+- 2026-10-31 agent: **Part 2/3 remaining — split the mock adapter (target: main file ≤ ~4550
+  lines).** The single `MockFileManagerClient` class holds ~70 cross-cutting state fields plus
+  ~1089 lines of shared module helpers (`fixtureEntry`, `collectMatches`, `syntheticFileContent`,
+  the `perform`/event-signal infrastructure) that many clusters depend on. A safe split keeps the
+  root as a state+helper holder and composes five `MockXxxClient` sub-classes (each `implements
+  XxxClient`) via a shared host accessor, moving method bodies into sibling files. This also
+  satisfies the "composite at `createClient.ts` assembles sub-clients" criterion. Not started:
+  deliberately avoided a blind big-bang refactor of the 6500-line fixture without first isolating
+  the shared-state surface, to protect the 50k-line mock test suite.
+- 2026-10-31 agent: **Part 3/3 remaining — migrate features to sub-interfaces.** ~81 files import
+  `FileManagerClient`; migrate each to the focused sub-interface(s) it actually uses (mechanical,
+  type-only). Note the spec §3 rule 1 wording ("components depend only on `FileManagerClient`")
+  should be updated to reference the sub-interfaces, per the task's own Implementation Note.
