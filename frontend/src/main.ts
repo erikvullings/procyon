@@ -8,6 +8,7 @@ import './themes/mithril-materialized-procyon.css';
 
 import m from 'mithril';
 
+import { installGlobalInputDefaults } from './a11y/global-input-defaults';
 import { createFileManagerClient } from './api/client/create-client';
 import { AppShell } from './app/app-shell';
 import { SessionTokenGate } from './app/session-token-gate';
@@ -21,6 +22,8 @@ const client = createFileManagerClient(runtime);
 const frontendDiagnostics = installFrontendDiagnostics(client, {
   deferUntilReady: runtime === 'http',
 });
+
+installGlobalInputDefaults();
 
 const root = document.getElementById('app');
 if (root === null) {
