@@ -967,6 +967,21 @@ export function createPaneContentBuilder(
       },
       onDrop: (entry, event) => {
         if (tab === undefined) return;
+        // External OS file drag (Finder/Explorer) that the webview surfaced as its own HTML5
+        // drop. The real copy is handled by the Tauri `onDragDropEvent` channel (which sets
+        // `getDraggedLocations` before dispatching a synthetic drop, so it skips this guard);
+        // here we only neutralise the webview's default drop so it doesn't open the target row
+        // (e.g. a folder's `.DS_Store`) via the post-drop click. In-app drags carry the
+        // `application/x-fm-locations` marker and no OS files, so they fall through unchanged.
+        const dataTransfer = (event as unknown as DragEvent).dataTransfer;
+        if (
+          dataTransfer != null &&
+          context.getDraggedLocations().length === 0 &&
+          (dataTransfer.types.includes('Files') || dataTransfer.types.includes('text/uri-list'))
+        ) {
+          (event as unknown as DragEvent).preventDefault();
+          return;
+        }
         const target = resolveDropTarget(tab.location, entry);
         const validation = validateDropTarget(
           context.getDraggedLocations(),
