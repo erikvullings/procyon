@@ -55,6 +55,7 @@ import {
   transitionOperationState,
 } from '../operations/operation-state';
 import type {
+  OperationConfirmationDecision,
   OperationConfirmationRequest,
   OperationsController,
 } from '../operations/operations-controller';
@@ -92,7 +93,8 @@ export interface AppDialogsContext {
   getCloseTabConfirmation(): { readonly paneId: PaneId; readonly tabId: TabId } | undefined;
   setCloseTabConfirmation(conf?: { readonly paneId: PaneId; readonly tabId: TabId }): void;
   getOperationConfirmation(): OperationConfirmationRequest | undefined;
-  resolveOperationConfirmation(confirmed: boolean): void;
+  /** Resolves the pending confirmation: a conflict policy to proceed, `undefined` to cancel. */
+  resolveOperationConfirmation(decision: OperationConfirmationDecision): void;
   getPermanentDeleteRequest(): readonly Location[] | undefined;
   resolvePermanentDeleteRequest(confirmed: boolean): void;
   getDialogs(): DialogUIController;
@@ -191,8 +193,8 @@ export function renderAppDialogs(
       ...(operationConfirmation === undefined ? {} : { request: operationConfirmation }),
       connections: ctx.getConnections(),
       homeDirectory: ctx.getHomeDirectory?.(),
-      onConfirm: () => ctx.resolveOperationConfirmation(true),
-      onCancel: () => ctx.resolveOperationConfirmation(false),
+      onConfirm: (conflictPolicy) => ctx.resolveOperationConfirmation(conflictPolicy),
+      onCancel: () => ctx.resolveOperationConfirmation(undefined),
     }),
     ctx.getOperationCentreVisible()
       ? m(OperationCentre, {

@@ -210,6 +210,7 @@ import type {
   StructuredViewStatus,
   SyncPlan,
   SystemLocation,
+  TransferConflicts,
   UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
@@ -848,6 +849,13 @@ export class MockFileManagerClient implements FileManagerClient {
   }
   getLinkOptions(request: LinkOptionsRequest, signal?: AbortSignal): Promise<LinkOptions> {
     return this.operationClient.getLinkOptions(request, signal);
+  }
+  findTransferConflicts(
+    sources: readonly Location[],
+    destination: Location,
+    signal?: AbortSignal,
+  ): Promise<TransferConflicts> {
+    return this.operationClient.findTransferConflicts(sources, destination, signal);
   }
   listOperations(signal?: AbortSignal): Promise<Operation[]> {
     return this.operationClient.listOperations(signal);

@@ -1,7 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { AlertDialog, type ModalCloseReason } from 'mithril-materialized';
 import { t } from '../../i18n';
-import type { Connection, Location } from '../../models';
+import type { ConflictPolicy, Connection, Location, TransferConflicts } from '../../models';
 import { connectionForLocation } from '../connections/connections-model';
 import { parentLocation } from '../navigation/navigation';
 import { affectedItems } from './affected-items';
@@ -13,8 +13,29 @@ export interface OperationConfirmationDialogAttrs {
   readonly connections: readonly Connection[];
   /** Native home directory, shown as `~` in local paths when known. */
   readonly homeDirectory?: string | undefined;
-  readonly onConfirm: () => void;
+  /** Proceeds with the conflict policy the user chose (`ask` when nothing already exists). */
+  readonly onConfirm: (conflictPolicy: ConflictPolicy) => void;
   readonly onCancel: () => void;
+}
+
+/** Existing names listed before collapsing the rest into "and N more". */
+const LISTED_CONFLICT_NAMES = 5;
+
+function conflictRows(conflicts: TransferConflicts): m.Children {
+  const listed = conflicts.names.slice(0, LISTED_CONFLICT_NAMES);
+  const remaining = conflicts.names.length - listed.length;
+  return [
+    m('dt.fm-operation-confirmation-label', t('operation', 'alreadyExists')),
+    m('dd.fm-operation-confirmation-conflicts', [
+      m(
+        'ul.fm-operation-confirmation-conflict-names',
+        listed.map((name) => m('li', m('code', name))),
+      ),
+      remaining > 0 ? m('p', t('operation', 'alreadyExistsMore', { count: remaining })) : undefined,
+      conflicts.complete ? undefined : m('p', t('operation', 'alreadyExistsIncomplete')),
+      m('p.fm-conflict-dialog-recommendation', t('operation', 'conflictRecommendation')),
+    ]),
+  ];
 }
 
 function sourceDirectories(sources: readonly Location[]): readonly Location[] {
@@ -119,11 +140,20 @@ function transferRows(
 export const OperationConfirmationDialog: FactoryComponent<
   OperationConfirmationDialogAttrs
 > = () => {
-  const focusCycle = createDialogFocusCycle('.mm-dialog-primary-action');
+  // Plain confirmations focus the primary action; with existing items the safe "keep both"
+  // choice is focused instead, so Enter never overwrites (same default as the conflict dialog).
+  const primaryFocus = createDialogFocusCycle('.mm-dialog-primary-action');
+  const recommendedFocus = createDialogFocusCycle('.fm-conflict-recommended');
+  const unmount = (): void => {
+    primaryFocus.unmount();
+    recommendedFocus.unmount();
+  };
   return {
-    onremove: focusCycle.unmount,
+    onremove: unmount,
     view: ({ attrs }) => {
       const request = attrs.request;
+      const conflicts = request?.kind === 'trash' ? undefined : request?.conflicts;
+      const focusCycle = conflicts === undefined ? primaryFocus : recommendedFocus;
       const kind = request?.kind ?? 'copy';
       const title =
         request === undefined
@@ -152,10 +182,15 @@ export const OperationConfirmationDialog: FactoryComponent<
             : m(
                 '.fm-operation-confirmation-focus-scope',
                 {
+                  key: conflicts === undefined ? 'plain' : 'conflicts',
                   oncreate: ({ dom }) => focusCycle.mount(dom),
                   onremove: focusCycle.unmount,
                 },
-                m('dl.fm-operation-confirmation-facts', [affectedItems(request.sources), rows]),
+                m('dl.fm-operation-confirmation-facts', [
+                  affectedItems(request.sources),
+                  rows,
+                  conflicts === undefined ? undefined : conflictRows(conflicts),
+                ]),
               ),
         isOpen: request !== undefined,
         closeOnEsc: true,
@@ -165,14 +200,33 @@ export const OperationConfirmationDialog: FactoryComponent<
         onClose: (reason: ModalCloseReason) => {
           if (reason !== 'programmatic') attrs.onCancel();
         },
+        ...(conflicts === undefined
+          ? {
+              primaryAction: {
+                label: t('operation', kind),
+                destructive: kind === 'trash',
+                onclick: () => attrs.onConfirm('ask'),
+              },
+            }
+          : {
+              actions: [
+                { label: t('operation', 'decidePerItem'), onclick: () => attrs.onConfirm('ask') },
+                { label: t('button', 'skip'), onclick: () => attrs.onConfirm('skip') },
+                {
+                  label: t('button', 'renameNew'),
+                  className: 'fm-conflict-recommended',
+                  onclick: () => attrs.onConfirm('renameNew'),
+                },
+              ],
+              primaryAction: {
+                label: t('button', 'overwrite'),
+                destructive: true,
+                onclick: () => attrs.onConfirm('overwrite'),
+              },
+            }),
         secondaryAction: {
           label: t('button', 'cancel'),
           onclick: attrs.onCancel,
-        },
-        primaryAction: {
-          label: t('operation', kind),
-          destructive: kind === 'trash',
-          onclick: attrs.onConfirm,
         },
       });
     },

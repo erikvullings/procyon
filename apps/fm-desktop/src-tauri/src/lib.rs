@@ -548,6 +548,9 @@ pub fn run() {
                 window
                     .state::<event_stream::EventSubscriptionRegistry>()
                     .unsubscribe_window(window.label());
+                window
+                    .state::<native_menu::NativeMenuActionChannel>()
+                    .remove(window.label());
 
                 // Only a genuine single-window close deletes its ephemeral workspace - not every
                 // window's `Destroyed` fired as part of the whole app quitting (see
@@ -695,6 +698,7 @@ pub fn run() {
             commands::apply_workspace_command,
             commands::start_operation,
             commands::get_link_options,
+            commands::find_transfer_conflicts,
             commands::resolve_link_target,
             commands::list_operations,
             commands::get_operation,
@@ -1096,6 +1100,7 @@ mod tests {
                 commands::apply_workspace_command,
                 commands::start_operation,
                 commands::get_link_options,
+                commands::find_transfer_conflicts,
                 commands::resolve_link_target,
                 commands::list_operations,
                 commands::get_operation,

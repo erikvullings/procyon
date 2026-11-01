@@ -4882,6 +4882,54 @@
         }
       }
     },
+    "/api/v1/operations/transfer-conflicts": {
+      "post": {
+        "summary": "Lists the sources of a planned copy/move whose names already exist in the destination, so\nthe confirmation can offer a conflict policy before the job starts (task 0062).",
+        "operationId": "findTransferConflicts",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferConflictsRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferConflictsDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/operations/{operationId}": {
       "get": {
         "operationId": "getOperation",
@@ -27090,6 +27138,48 @@
             "format": "int32",
             "description": "Theme id, or absent for the \"no theme\" bucket.",
             "minimum": 0
+          }
+        }
+      },
+      "TransferConflictsDto": {
+        "type": "object",
+        "description": "Top-level names of a planned transfer that already exist in its destination.",
+        "required": [
+          "names",
+          "complete"
+        ],
+        "properties": {
+          "complete": {
+            "type": "boolean",
+            "description": "False when only a leading subset of a very large selection was checked; the job still\ndetects any remaining conflicts while it runs."
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Existing names, in source order."
+          }
+        }
+      },
+      "TransferConflictsRequestDto": {
+        "type": "object",
+        "description": "Asks which sources of a planned copy or move already exist, by name, in `destination`, so the\nconfirmation can offer a conflict policy before the job starts (task 0062).",
+        "required": [
+          "sources",
+          "destination"
+        ],
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Directory that would receive them."
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Entries that would be copied or moved."
           }
         }
       },

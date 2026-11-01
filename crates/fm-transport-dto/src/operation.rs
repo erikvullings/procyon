@@ -147,6 +147,28 @@ pub struct LinkOptionsRequestDto {
     pub destination: LocationDto,
 }
 
+/// Asks which sources of a planned copy or move already exist, by name, in `destination`, so the
+/// confirmation can offer a conflict policy before the job starts (task 0062).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferConflictsRequestDto {
+    /// Entries that would be copied or moved.
+    pub sources: Vec<LocationDto>,
+    /// Directory that would receive them.
+    pub destination: LocationDto,
+}
+
+/// Top-level names of a planned transfer that already exist in its destination.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferConflictsDto {
+    /// Existing names, in source order.
+    pub names: Vec<String>,
+    /// False when only a leading subset of a very large selection was checked; the job still
+    /// detects any remaining conflicts while it runs.
+    pub complete: bool,
+}
+
 /// Asks which entry a symbolic link ultimately points at.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

@@ -82,7 +82,49 @@ describe('OperationConfirmationDialog', () => {
     document.activeElement?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
     );
-    expect(onConfirm).toHaveBeenCalledOnce();
+    expect(onConfirm).toHaveBeenCalledExactlyOnceWith('ask');
+  });
+
+  it('asks the conflict question up front when items already exist', () => {
+    const onConfirm = vi.fn();
+    const names = ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt', 'f.txt', 'g.txt'];
+    m.mount(root, {
+      view: () =>
+        m(OperationConfirmationDialog, {
+          request: {
+            kind: 'copy',
+            sources: [source],
+            destination,
+            conflicts: { names, complete: true },
+          },
+          connections: [],
+          onConfirm,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+
+    const facts = document.querySelector('.fm-operation-confirmation-facts');
+    expect(facts?.textContent).toContain('Already in destination');
+    expect(facts?.querySelectorAll('.fm-operation-confirmation-conflict-names li')).toHaveLength(5);
+    expect(facts?.textContent).toContain('and 2 more');
+    // Enter must never overwrite: the safe "keep both" choice has focus.
+    expect(document.activeElement?.textContent?.trim()).toBe('Rename');
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+    expect(onConfirm).toHaveBeenLastCalledWith('renameNew');
+
+    const button = (label: string) =>
+      [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(
+        (candidate) => candidate.textContent?.trim() === label,
+      );
+    button('Overwrite')?.click();
+    expect(onConfirm).toHaveBeenLastCalledWith('overwrite');
+    button('Skip')?.click();
+    expect(onConfirm).toHaveBeenLastCalledWith('skip');
+    button('Decide per item')?.click();
+    expect(onConfirm).toHaveBeenLastCalledWith('ask');
   });
 
   it('uses localized plurals and lists each distinct source directory', () => {

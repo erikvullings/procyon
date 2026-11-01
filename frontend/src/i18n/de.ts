@@ -491,6 +491,11 @@ export const de = {
     destination: 'Ziel',
     conflictRecommendation:
       'Sicherste Wahl: Das eingehende Element umbenennen, um beide zu behalten.',
+    alreadyExists: 'Bereits im Ziel vorhanden',
+    alreadyExistsMore: 'und {count} weitere',
+    alreadyExistsIncomplete:
+      'Nur die ersten 1.000 Elemente wurden geprüft; der Rest wird während des Vorgangs geprüft.',
+    decidePerItem: 'Pro Element entscheiden',
     failureRecovery: 'Prüfen Sie den Fehler oben und führen Sie den Vorgang erneut aus.',
     failureRecoveryPermissionDenied:
       'Procyon kann nicht in das Ziel schreiben. Wählen Sie einen beschreibbaren Ordner oder ändern Sie die Berechtigungen.',

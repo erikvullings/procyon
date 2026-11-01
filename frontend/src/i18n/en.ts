@@ -482,6 +482,11 @@ export const en = {
     source: 'Source',
     destination: 'Destination',
     conflictRecommendation: 'Safest choice: rename the incoming item to keep both.',
+    alreadyExists: 'Already in destination',
+    alreadyExistsMore: 'and {count} more',
+    alreadyExistsIncomplete:
+      'Only the first 1,000 items were checked; the rest are checked while the job runs.',
+    decidePerItem: 'Decide per item',
     failureRecovery: 'Review the error above, then run the operation again.',
     failureRecoveryPermissionDenied:
       'Procyon cannot write to the destination. Choose a writable folder or update its permissions.',

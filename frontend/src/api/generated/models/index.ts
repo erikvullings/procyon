@@ -600,6 +600,8 @@ export * from './themeKeywordDto.ts';
 export * from './themeMapPointDto.ts';
 export * from './themePassageDto.ts';
 export * from './themeShareDto.ts';
+export * from './transferConflictsDto.ts';
+export * from './transferConflictsRequestDto.ts';
 export * from './uninstallSemanticComponentsRequestDto.ts';
 export * from './updateConnectionRequestDto.ts';
 export * from './updateGemmaMediaRequestDto.ts';

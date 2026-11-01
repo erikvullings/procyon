@@ -40,6 +40,7 @@ import type {
   StartSnapshotJobRequest,
   StartSnapshotJobResult,
   SyncPlan,
+  TransferConflicts,
   VerificationReport,
   VerificationResult,
 } from '../../models';
@@ -107,6 +108,22 @@ export class MockOperationClient implements OperationClient {
         parentUri,
         fixture.kind === 'symlink' ? { ...fixture, kind: 'file' } : fixture,
       );
+    });
+  }
+
+  findTransferConflicts(
+    sources: readonly Location[],
+    destination: Location,
+    signal?: AbortSignal,
+  ): Promise<TransferConflicts> {
+    return this.ctx.perform('findTransferConflicts', signal, () => {
+      const directoryUri =
+        destination.uri === 'mock:///' ? destination.uri : destination.uri.replace(/\/+$/, '');
+      const existing = new Set((directories[directoryUri] ?? []).map((fixture) => fixture.name));
+      const names = sources
+        .map((source) => decodeURIComponent(source.uri.split('/').filter(Boolean).at(-1) ?? ''))
+        .filter((name) => name !== '' && existing.has(name));
+      return { names, complete: true };
     });
   }
 

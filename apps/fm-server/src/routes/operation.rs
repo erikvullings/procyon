@@ -13,7 +13,7 @@ use fm_domain::OperationId;
 use fm_transport_dto::{
     ApplicationErrorDto, EntrySummaryDto, LinkOptionsDto, LinkOptionsRequestDto, OperationDto,
     OperationPageDto, ResolveLinkTargetRequestDto, ResolveOperationConflictRequestDto,
-    StartOperationRequestDto,
+    StartOperationRequestDto, TransferConflictsDto, TransferConflictsRequestDto,
 };
 use serde::Deserialize;
 use std::time::Instant;
@@ -81,6 +81,41 @@ pub(crate) async fn resolve_link_target(
         correlation_id,
     )?;
     Ok(Json(resolved))
+}
+
+/// Lists the sources of a planned copy/move whose names already exist in the destination, so
+/// the confirmation can offer a conflict policy before the job starts (task 0062).
+#[utoipa::path(
+    post,
+    path = "/api/v1/operations/transfer-conflicts",
+    operation_id = "findTransferConflicts",
+    request_body = TransferConflictsRequestDto,
+    responses(
+        (status = 200, body = TransferConflictsDto),
+        (status = 400, body = ApplicationErrorDto),
+        (status = 403, body = ApplicationErrorDto)
+    )
+)]
+pub(crate) async fn find_transfer_conflicts(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<TransferConflictsRequestDto>,
+) -> Result<Json<TransferConflictsDto>, ApiError> {
+    let correlation_id = extract_request_id(&request_id);
+    crate::error::require_within_roots(
+        &request.destination,
+        &state.accessible_roots,
+        correlation_id,
+    )?;
+    for source in &request.sources {
+        crate::error::require_within_roots(source, &state.accessible_roots, correlation_id)?;
+    }
+    state
+        .service
+        .transfer_conflicts(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, correlation_id))
 }
 
 /// Lists the link kinds that can point at a target from a destination directory (task 0168).

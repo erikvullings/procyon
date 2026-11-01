@@ -55,6 +55,7 @@ function fakeContext(
     getActiveDirectory: () => undefined,
     getActiveTabKey: (paneId) => paneId,
     getSelections: () => new Map(),
+    dispatchSelectionAction: () => false,
     getDirectories: () => new Map(),
     getCurrentSettings: () => undefined,
     getClient: () => {
@@ -308,6 +309,32 @@ describe('action-command-controller uninstallApplication wiring', () => {
     expect(invokeClientAction).toHaveBeenCalledWith('client.play', {
       selectedEntryIds: ['a'],
     });
+    expect(getClient).not.toHaveBeenCalled();
+  });
+
+  it('applies palette selection actions to the pane instead of the backend invoke', () => {
+    const dispatchSelectionAction = vi.fn().mockReturnValue(true);
+    const getClient = vi.fn();
+    const context = fakeContext({ dispatchSelectionAction, getClient });
+    const controller = createActionCommandController(context);
+    const action = (id: string) => ({
+      id,
+      title: id,
+      category: 'selection',
+      defaultShortcuts: [],
+      contextRequirements: {},
+      source: { kind: 'core' as const },
+    });
+
+    controller.invokePaletteAction(action('core.selectAll'), undefined, { paneId: 'pane-1' });
+    controller.invokePaletteAction(action('core.invertSelection'), undefined, { paneId: 'pane-1' });
+    controller.invokePaletteAction(action('core.clearSelection'), undefined, { paneId: 'pane-1' });
+
+    expect(dispatchSelectionAction.mock.calls).toEqual([
+      ['pane-1', { type: 'selectAll' }],
+      ['pane-1', { type: 'invert' }],
+      ['pane-1', { type: 'clear' }],
+    ]);
     expect(getClient).not.toHaveBeenCalled();
   });
 

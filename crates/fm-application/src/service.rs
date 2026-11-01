@@ -4117,6 +4117,15 @@ impl FileManagerService {
         crate::os_file_clipboard::read(self.runtime, &self.platform).await
     }
 
+    /// Names of a planned copy/move's sources that already exist in its destination, so the
+    /// confirmation can ask for a conflict policy before the job starts (task 0062).
+    pub async fn transfer_conflicts(
+        &self,
+        request: fm_transport_dto::TransferConflictsRequestDto,
+    ) -> Result<fm_transport_dto::TransferConflictsDto, ApplicationError> {
+        crate::transfer_conflicts::transfer_conflicts(&self.providers, request).await
+    }
+
     /// Lists the link kinds that can be created for `target` inside the
     /// `destination` directory (task 0168). An empty list means the pair has no
     /// link semantics, e.g. a remote provider or targets on different providers.

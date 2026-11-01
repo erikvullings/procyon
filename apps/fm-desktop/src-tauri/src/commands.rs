@@ -2495,6 +2495,19 @@ pub(crate) async fn resolve_link_target(
         .await
         .map_err(|e| e.into_dto(Uuid::new_v4()))
 }
+/// Lists a planned transfer's sources that already exist in the destination, same as
+/// `POST /api/v1/operations/transfer-conflicts` (task 0062).
+#[tauri::command]
+pub(crate) async fn find_transfer_conflicts(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::TransferConflictsRequestDto,
+) -> Result<fm_transport_dto::TransferConflictsDto, ApplicationErrorDto> {
+    state
+        .service
+        .transfer_conflicts(request)
+        .await
+        .map_err(|e| e.into_dto(Uuid::new_v4()))
+}
 /// Lists link kinds for a target/destination pair, same as `POST /api/v1/link-options` (task 0168).
 #[tauri::command]
 pub(crate) async fn get_link_options(
@@ -3878,30 +3891,40 @@ pub(crate) struct NativeMenuActionEvent {
     id: String,
 }
 
-/// Subscribes the frontend to native menu action clicks (task 0133). Called
-/// once at startup; a later call replaces the previous subscription.
+/// Subscribes the calling window's frontend to native menu action clicks (task 0133). Called
+/// once per window at startup; a reload of that window replaces its subscription.
 #[tauri::command]
-pub(crate) fn subscribe_native_menu_actions(
+pub(crate) fn subscribe_native_menu_actions<R: Runtime>(
     registry: State<'_, NativeMenuActionChannel>,
+    window: Window<R>,
     channel: Channel<NativeMenuActionEvent>,
 ) {
-    registry.set(channel);
+    registry.set(window.label(), channel);
 }
 
 /// Builds the callback [`set_native_menu`] hands to
 /// `FileManagerService::install_native_menu`: handles host recovery actions
-/// directly and forwards ordinary action ids over the current frontend channel.
+/// directly and forwards ordinary action ids over the channel `channel_for_click` picks when the
+/// click happens (the focused window's), so every window receives its own menu clicks.
 fn native_menu_action_callback(
-    channel: Option<Channel<NativeMenuActionEvent>>,
+    channel_for_click: Arc<dyn Fn() -> Option<Channel<NativeMenuActionEvent>> + Send + Sync>,
     reload_webview: Arc<dyn Fn() + Send + Sync>,
 ) -> Arc<dyn Fn(String) + Send + Sync> {
     Arc::new(move |id: String| {
         if id == RELOAD_WEBVIEW_MENU_ID {
             reload_webview();
-        } else if let Some(channel) = &channel {
+        } else if let Some(channel) = channel_for_click() {
             let _ = channel.send(NativeMenuActionEvent { id });
         }
     })
+}
+
+/// The label of the app's focused webview window, if any.
+fn focused_window_label<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
+    app.webview_windows()
+        .into_values()
+        .find(|window| window.is_focused().unwrap_or(false))
+        .map(|window| window.label().to_owned())
 }
 
 /// Initializes the platform-specific window handle for native integrations
@@ -3951,14 +3974,19 @@ pub(crate) fn initialize_window_handle<R: Runtime>(
 #[tauri::command]
 pub(crate) async fn set_native_menu<R: Runtime>(
     state: State<'_, AppState>,
-    registry: State<'_, NativeMenuActionChannel>,
     app: AppHandle<R>,
     spec: fm_domain::NativeMenuSpec,
 ) -> Result<(), ApplicationErrorDto> {
     let service = Arc::clone(&state.service);
     let reload_app = app.clone();
     let reload_webview = Arc::new(move || reload_focused_webview(&reload_app));
-    let on_action = native_menu_action_callback(registry.get(), reload_webview);
+    let click_app = app.clone();
+    let channel_for_click = Arc::new(move || {
+        click_app
+            .state::<NativeMenuActionChannel>()
+            .for_window(focused_window_label(&click_app).as_deref())
+    });
+    let on_action = native_menu_action_callback(channel_for_click, reload_webview);
     let (sender, receiver) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
         let result = service.install_native_menu(&spec, on_action);
@@ -4146,7 +4174,8 @@ mod tests {
             Ok(())
         });
 
-        let callback = native_menu_action_callback(Some(channel), Arc::new(|| {}));
+        let callback =
+            native_menu_action_callback(Arc::new(move || Some(channel.clone())), Arc::new(|| {}));
         callback("core.preferences".to_owned());
 
         assert_eq!(
@@ -4159,7 +4188,7 @@ mod tests {
     fn native_menu_action_callback_is_a_no_op_without_a_subscription() {
         // Installing a menu before the frontend subscribes must still succeed silently rather
         // than panicking or erroring - there is simply nowhere to report clicks to yet.
-        let callback = native_menu_action_callback(None, Arc::new(|| {}));
+        let callback = native_menu_action_callback(Arc::new(|| None), Arc::new(|| {}));
         callback("core.copy".to_owned());
     }
 
@@ -4168,7 +4197,7 @@ mod tests {
         let reloads = Arc::new(Mutex::new(0));
         let reloads_for_callback = Arc::clone(&reloads);
         let callback = native_menu_action_callback(
-            None,
+            Arc::new(|| None),
             Arc::new(move || {
                 *reloads_for_callback.lock().expect("reload lock") += 1;
             }),

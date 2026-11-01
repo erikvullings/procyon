@@ -4,6 +4,7 @@ import { MockFileManagerClient } from '../../api/client/mock-file-manager-client
 import type { Location } from '../../models';
 import {
   createOperationsController,
+  type OperationConfirmationDecision,
   type OperationsController,
   withActiveSourceGuard,
   withOperationConfirmation,
@@ -135,13 +136,13 @@ describe('OperationsController', () => {
   });
 
   it('blocks overlapping copy and move while a source is awaiting confirmation', async () => {
-    let answer: ((accepted: boolean) => void) | undefined;
+    let answer: ((decision: OperationConfirmationDecision) => void) | undefined;
     const guarded = withActiveSourceGuard(
       withOperationConfirmation(
         controller,
         () => true,
         () =>
-          new Promise<boolean>((resolve) => {
+          new Promise<OperationConfirmationDecision>((resolve) => {
             answer = resolve;
           }),
       ),
@@ -150,7 +151,7 @@ describe('OperationsController', () => {
     const first = guarded.copy([src], dest);
     const second = await guarded.move([src], dest);
     expect(second).toBeUndefined();
-    answer?.(false);
+    answer?.(undefined);
     await first;
     expect(client.startOperation).not.toHaveBeenCalled();
   });
@@ -309,7 +310,7 @@ describe('OperationsController', () => {
   });
 
   it('waits for confirmation before copy, move, and trash', async () => {
-    const confirm = vi.fn().mockResolvedValue(true);
+    const confirm = vi.fn().mockResolvedValue('ask');
     const guarded = withOperationConfirmation(controller, () => true, confirm);
 
     await guarded.copy([src], dest);
@@ -330,8 +331,74 @@ describe('OperationsController', () => {
     expect(client.startOperation).toHaveBeenCalledTimes(3);
   });
 
+  it('asks once with the existing names and starts the job with the chosen policy', async () => {
+    const conflicts = { names: ['report.pdf'], complete: true };
+    const findConflicts = vi.fn().mockResolvedValue(conflicts);
+    const confirm = vi.fn().mockResolvedValue('renameNew');
+    const guarded = withOperationConfirmation(controller, () => true, confirm, findConflicts);
+
+    await guarded.copy([src], dest);
+
+    expect(findConflicts).toHaveBeenCalledWith([src], dest, undefined);
+    expect(confirm).toHaveBeenCalledWith({
+      kind: 'copy',
+      sources: [src],
+      destination: dest,
+      conflicts,
+    });
+    expect(client.startOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'copy', conflictPolicy: 'renameNew' }),
+      undefined,
+    );
+  });
+
+  it('confirms without conflicts when none exist or the lookup fails', async () => {
+    const confirm = vi.fn().mockResolvedValue('ask');
+    const none = withOperationConfirmation(
+      controller,
+      () => true,
+      confirm,
+      () => Promise.resolve({ names: [], complete: true }),
+    );
+    const failing = withOperationConfirmation(
+      controller,
+      () => true,
+      confirm,
+      () => Promise.reject(new Error('offline')),
+    );
+
+    await none.move([src], dest);
+    await failing.move([src2], dest);
+
+    expect(confirm).toHaveBeenNthCalledWith(1, { kind: 'move', sources: [src], destination: dest });
+    expect(confirm).toHaveBeenNthCalledWith(2, {
+      kind: 'move',
+      sources: [src2],
+      destination: dest,
+    });
+    expect(client.startOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'move', conflictPolicy: 'ask' }),
+      undefined,
+    );
+  });
+
+  it('skips the lookup and dialog when the caller already chose a policy', async () => {
+    const findConflicts = vi.fn();
+    const confirm = vi.fn();
+    const guarded = withOperationConfirmation(controller, () => true, confirm, findConflicts);
+
+    await guarded.copy([src], dest, undefined, 'overwrite');
+
+    expect(findConflicts).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(client.startOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ conflictPolicy: 'overwrite' }),
+      undefined,
+    );
+  });
+
   it('does not start a declined or disabled confirmation', async () => {
-    const confirm = vi.fn().mockResolvedValue(false);
+    const confirm = vi.fn().mockResolvedValue(undefined);
     const guarded = withOperationConfirmation(controller, () => true, confirm);
 
     await expect(guarded.copy([src], dest)).resolves.toBeUndefined();

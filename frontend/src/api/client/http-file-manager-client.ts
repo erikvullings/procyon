@@ -213,6 +213,7 @@ import type {
   StructuredViewStatus,
   SyncPlan,
   SystemLocation,
+  TransferConflicts,
   UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
@@ -292,6 +293,7 @@ import {
   getFileIcon as requestFileIcon,
   getFinderTags as requestFinderTags,
   setFinderTags as requestFinderTagsUpdate,
+  findTransferConflicts as requestFindTransferConflicts,
   calculateFolderSize as requestFolderSizeCalculation,
   forgetFolderView as requestFolderViewForget,
   recordFrontendDiagnostic as requestFrontendDiagnostic,
@@ -1913,6 +1915,21 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200) {
       throw unexpectedResponseError('getLinkOptions', response.status);
+    }
+    return response.data;
+  }
+
+  async findTransferConflicts(
+    sources: readonly FileLocation[],
+    destination: FileLocation,
+    signal?: AbortSignal,
+  ): Promise<TransferConflicts> {
+    const response = await requestFindTransferConflicts(
+      { sources: [...sources], destination },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw unexpectedResponseError('findTransferConflicts', response.status);
     }
     return response.data;
   }

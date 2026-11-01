@@ -168,6 +168,7 @@ export type MockClientMethod =
   | 'gitFileHistory'
   | 'startOperation'
   | 'getLinkOptions'
+  | 'findTransferConflicts'
   | 'resolveLinkTarget'
   | 'listOperations'
   | 'cancelOperation'

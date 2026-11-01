@@ -484,6 +484,11 @@ export const pl = {
     destination: 'Cel',
     conflictRecommendation:
       'Najbezpieczniejszy wybór: zmień nazwę elementu przychodzącego, aby zachować oba.',
+    alreadyExists: 'Już istnieje w miejscu docelowym',
+    alreadyExistsMore: 'i {count} więcej',
+    alreadyExistsIncomplete:
+      'Sprawdzono tylko pierwsze 1000 elementów; pozostałe są sprawdzane podczas operacji.',
+    decidePerItem: 'Decyduj dla każdego elementu',
     failureRecovery: 'Sprawdź powyższy błąd, a następnie uruchom operację ponownie.',
     failureRecoveryPermissionDenied:
       'Procyon nie może zapisywać w miejscu docelowym. Wybierz folder z prawem zapisu lub zmień jego uprawnienia.',

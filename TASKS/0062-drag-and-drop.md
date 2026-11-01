@@ -264,3 +264,15 @@ pass, or fixes any real defect the checklist surfaces.
   diagnostics. Test mocks now provide `onDragDropEvent` only on the webview, so a regression to the
   window target fails `tauri-file-manager-client.test.ts`. Full frontend Vitest 3327 passed; tsc and
   Biome clean. Needs desktop re-test of B1/B2 (and Windows, where the label emit should match).
+- 2026-11-01 Claude: **B2 follow-up: one prompt instead of confirm-then-conflict.** With
+  *Confirm file operations* on, a copy/move first asked "Copy N items?" and then the job's conflict
+  prompt for each existing name. The confirmation now asks the backend which sources already exist
+  in the destination (new `findTransferConflicts`: `fm-application::transfer_conflicts`, same
+  top-level `destination.join(name)` + provider `inspect` rule as the engine, bounded to 1,000
+  sources and 16 concurrent lookups; `POST /api/v1/operations/transfer-conflicts`, Tauri
+  `find_transfer_conflicts`, mock). When some do, the same dialog lists them and offers Skip /
+  Rename (keep both, focused so Enter never overwrites) / Decide per item / Overwrite (destructive);
+  the choice becomes the job's `conflictPolicy`. The lookup is advisory and time-boxed (1.5 s, or
+  any error → plain confirmation, job still asks per conflict), and the job re-checks every entry,
+  so nothing is overwritten without a choice (§35). Applies to every confirmed copy/move (drag,
+  paste, F5/F6, palette), all hosts.

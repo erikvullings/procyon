@@ -58,6 +58,7 @@ import type { NavigationController, PaneDirectoryView } from '../features/naviga
 import type { SyncedBrowsingController } from '../features/navigation/synced-browsing';
 import { createOperationsState } from '../features/operations/operation-state';
 import type {
+  OperationConfirmationDecision,
   OperationConfirmationRequest,
   OperationsController,
 } from '../features/operations/operations-controller';
@@ -77,7 +78,7 @@ import type { FindFilesController } from '../features/search/find-files-controll
 import type { FindFilesSearchParams } from '../features/search/find-files-dialog';
 import type { SearchPresentation } from '../features/search/search-presentation';
 import type { SelectionPlatform } from '../features/selection/keybindings';
-import type { SelectionState } from '../features/selection/selection';
+import type { SelectionAction, SelectionState } from '../features/selection/selection';
 import type { SettingsController } from '../features/settings/settings-controller';
 import type { SettingsSection } from '../features/settings/settings-editor';
 import type { SaveSnapshotRequest } from '../features/snapshots/save-snapshot-dialog';
@@ -314,6 +315,8 @@ export function createShellState(client: FileManagerClient) {
      */
     directories: new Map<string, PaneDirectoryView>(),
     selections: new Map<string, SelectionState>(),
+    /** Each pane's selection dispatcher, so the command palette can apply selection actions. */
+    selectionDispatchers: new Map<PaneId, (action: SelectionAction) => void>(),
     pendingCursorRestorations: new Map<
       string,
       {
@@ -441,7 +444,7 @@ export function createShellState(client: FileManagerClient) {
     pendingOperationConfirmation: undefined as unknown as
       | {
           readonly request: OperationConfirmationRequest;
-          readonly resolve: (confirmed: boolean) => void;
+          readonly resolve: (decision: OperationConfirmationDecision) => void;
         }
       | undefined,
     pendingPermanentDelete: undefined as unknown as

@@ -221,6 +221,7 @@ import type {
   StructuredViewStatus,
   SyncPlan,
   SystemLocation,
+  TransferConflicts,
   UninstallSemanticComponentsRequest,
   Unsubscribe,
   UpdateConnectionRequest,
@@ -1261,6 +1262,16 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   async startOperation(request: StartOperationRequest, _signal?: AbortSignal): Promise<Operation> {
     return operationFromDto(await invoke<OperationDto>('start_operation', { request }));
+  }
+
+  findTransferConflicts(
+    sources: readonly Location[],
+    destination: Location,
+    _signal?: AbortSignal,
+  ): Promise<TransferConflicts> {
+    return invoke<TransferConflicts>('find_transfer_conflicts', {
+      request: { sources, destination },
+    });
   }
 
   getLinkOptions(request: LinkOptionsRequest, _signal?: AbortSignal): Promise<LinkOptions> {

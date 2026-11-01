@@ -483,6 +483,11 @@ export const es = {
     destination: 'Destino',
     conflictRecommendation:
       'Opción más segura: cambia el nombre del elemento entrante para conservar ambos.',
+    alreadyExists: 'Ya existe en el destino',
+    alreadyExistsMore: 'y {count} más',
+    alreadyExistsIncomplete:
+      'Solo se comprobaron los primeros 1000 elementos; el resto se comprueba durante la operación.',
+    decidePerItem: 'Decidir para cada elemento',
     failureRecovery: 'Revisa el error anterior y vuelve a ejecutar la operación.',
     failureRecoveryPermissionDenied:
       'Procyon no puede escribir en el destino. Elige una carpeta con permisos de escritura o actualiza sus permisos.',

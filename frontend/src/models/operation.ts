@@ -44,6 +44,14 @@ export interface LinkKindOption {
   suggestedName: string;
 }
 
+/** Sources of a planned copy/move whose names already exist in its destination (task 0062). */
+export interface TransferConflicts {
+  /** Existing names, in source order. */
+  readonly names: readonly string[];
+  /** False when only a leading subset of a very large selection was checked. */
+  readonly complete: boolean;
+}
+
 /** Link kinds supported for one target/destination pair, most portable first. */
 export interface LinkOptions {
   kinds: readonly LinkKindOption[];

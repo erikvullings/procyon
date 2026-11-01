@@ -26,9 +26,16 @@ import type { NavigationController, PaneDirectoryView } from '../navigation/navi
 import type { OperationsController } from '../operations/operations-controller';
 import { canUseSystemTrash } from '../operations/system-trash';
 import { isParentEntry } from '../panes/parent-entry';
-import type { SelectionState } from '../selection/selection';
+import type { SelectionAction, SelectionState } from '../selection/selection';
 
 /** Context required by ActionCommandController for state access and dependencies. */
+/** Pane selection actions the palette applies locally instead of invoking on the backend. */
+const PALETTE_SELECTION_ACTIONS: Readonly<Record<string, SelectionAction>> = {
+  'core.selectAll': { type: 'selectAll' },
+  'core.invertSelection': { type: 'invert' },
+  'core.clearSelection': { type: 'clear' },
+};
+
 export interface ActionCommandControllerContext {
   // State getters
   getCommandPaletteOpen(): boolean;
@@ -59,6 +66,9 @@ export interface ActionCommandControllerContext {
   getActiveDirectory(): { paneId: PaneId; location: Location } | undefined;
   getActiveTabKey(paneId: PaneId): string;
   getSelections(): Map<string, SelectionState>;
+  /** Applies a selection action to a pane through its own reducer path; false when the pane has
+   * no rendered content to dispatch to. */
+  dispatchSelectionAction(paneId: PaneId, action: SelectionAction): boolean;
   getDirectories(): Map<string, PaneDirectoryView>;
   getCurrentSettings(): Settings | undefined;
   getClient(): PluginClient & WorkspaceClient;
@@ -421,6 +431,14 @@ export function createActionCommandController(
     contextParam = actionContext(),
   ): void {
     if (action.id === 'core.palette') return;
+    // Selection lives in the frontend state tree; the backend's generic action invoke has no
+    // selection to change, so these must be applied to the pane directly.
+    const selectionAction = PALETTE_SELECTION_ACTIONS[action.id];
+    if (selectionAction !== undefined) {
+      if (contextParam.paneId !== undefined)
+        context.dispatchSelectionAction(contextParam.paneId, selectionAction);
+      return;
+    }
     if (action.id === 'core.favourites') {
       context.setCommandPaletteOpen(true);
       return;

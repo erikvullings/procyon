@@ -10,6 +10,20 @@ const ROOT_REQUEST = {
   location: { providerId: 'file', uri: 'mock:///' },
 } as const;
 
+describe('MockFileManagerClient transfer conflicts', () => {
+  it('reports source names that already exist in the destination', async () => {
+    const client = new MockFileManagerClient();
+    const conflicts = await client.findTransferConflicts(
+      [
+        { providerId: 'mock', uri: 'mock:///Elsewhere/report.pdf' },
+        { providerId: 'mock', uri: 'mock:///Elsewhere/new.txt' },
+      ],
+      { providerId: 'mock', uri: 'mock:///Documents/' },
+    );
+    expect(conflicts).toEqual({ names: ['report.pdf'], complete: true });
+  });
+});
+
 describe('MockFileManagerClient directories', () => {
   it('retains reported frontend diagnostics newest first', async () => {
     const client = new MockFileManagerClient();

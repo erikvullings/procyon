@@ -39,6 +39,7 @@ import type {
   StartSnapshotJobRequest,
   StartSnapshotJobResult,
   SyncPlan,
+  TransferConflicts,
   VerificationReport,
 } from '../../models';
 
@@ -130,6 +131,15 @@ export interface OperationClient {
   /** Lists the link kinds that can point at a target from a destination directory (task 0168);
    * an empty list means the pair has no link semantics (remote providers, mixed providers). */
   getLinkOptions(request: LinkOptionsRequest, signal?: AbortSignal): Promise<LinkOptions>;
+
+  /** Names of a planned copy/move's sources that already exist in `destination`, so the
+   * confirmation can offer a conflict policy before the job starts (task 0062). Advisory: the job
+   * re-checks every entry while it runs. */
+  findTransferConflicts(
+    sources: readonly Location[],
+    destination: Location,
+    signal?: AbortSignal,
+  ): Promise<TransferConflicts>;
 
   /** Pages through a music duplicate scan's groups and reports its progress. */
   getMusicDuplicateScan(

@@ -486,6 +486,11 @@ export const nl = {
     destination: 'Bestemming',
     conflictRecommendation:
       'Veiligste keuze: geef het binnenkomende item een andere naam om beide te behouden.',
+    alreadyExists: 'Al aanwezig in bestemming',
+    alreadyExistsMore: 'en nog {count}',
+    alreadyExistsIncomplete:
+      'Alleen de eerste 1.000 items zijn gecontroleerd; de rest wordt tijdens de taak gecontroleerd.',
+    decidePerItem: 'Per item beslissen',
     failureRecovery: 'Bekijk de fout hierboven en voer de bewerking daarna opnieuw uit.',
     failureRecoveryPermissionDenied:
       'Procyon kan niet naar de bestemming schrijven. Kies een beschrijfbare map of pas de rechten aan.',

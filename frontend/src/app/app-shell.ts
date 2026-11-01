@@ -108,6 +108,7 @@ import {
 } from '../features/operations/operation-state';
 import {
   createOperationsController,
+  type OperationConfirmationDecision,
   withActiveSourceGuard,
   withOperationConfirmation,
   withPermanentDeleteConfirmation,
@@ -2088,6 +2089,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     getActiveDirectory: () => activeDirectory(),
     getActiveTabKey: (paneId) => activeTabKey(paneId),
     getSelections: () => shellState.selections,
+    dispatchSelectionAction: (paneId, action) => {
+      const dispatch = shellState.selectionDispatchers.get(paneId);
+      if (dispatch === undefined) return false;
+      dispatch(action);
+      return true;
+    },
     getDirectories: () => shellState.directories,
     getCurrentSettings: () => shellState.currentSettings,
     getClient: () => shellState.client,
@@ -2173,6 +2180,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     clipboard: miscWiring.clipboard,
     getDirectories: () => shellState.directories,
     getSelections: () => shellState.selections,
+    getSelectionDispatchers: () => shellState.selectionDispatchers,
     onSelectionAction: (key) => shellState.pendingCursorRestorations.delete(key),
     getSortedEntries: () => shellState.sortedEntries,
     getSortRequests: () => shellState.sortRequests,
@@ -2528,10 +2536,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     },
     getDialogs: () => shellState.dialogs,
     getOperationConfirmation: () => shellState.pendingOperationConfirmation?.request,
-    resolveOperationConfirmation: (confirmed) => {
+    resolveOperationConfirmation: (decision) => {
       const pending = shellState.pendingOperationConfirmation;
       shellState.pendingOperationConfirmation = undefined;
-      pending?.resolve(confirmed);
+      pending?.resolve(decision);
       m.redraw();
     },
     getPermanentDeleteRequest: () => shellState.pendingPermanentDelete?.sources,
@@ -2604,12 +2612,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                   shellState.rawOpsController,
                   () => shellState.currentSettings?.confirmFileOperations !== false,
                   (request) => {
-                    shellState.pendingOperationConfirmation?.resolve(false);
-                    return new Promise<boolean>((resolve) => {
+                    shellState.pendingOperationConfirmation?.resolve(undefined);
+                    return new Promise<OperationConfirmationDecision>((resolve) => {
                       shellState.pendingOperationConfirmation = { request, resolve };
                       m.redraw();
                     });
                   },
+                  (sources, destination, signal) =>
+                    attrs.client.findTransferConflicts(sources, destination, signal),
                 ),
                 (sources) => {
                   shellState.pendingPermanentDelete?.resolve(false);
@@ -2978,7 +2988,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     onremove: () => {
       document.removeEventListener('pointerdown', closeActivityOnOutsidePointer);
       shellState.removed = true;
-      shellState.pendingOperationConfirmation?.resolve(false);
+      shellState.pendingOperationConfirmation?.resolve(undefined);
       shellState.pendingOperationConfirmation = undefined;
       shellState.pendingPermanentDelete?.resolve(false);
       shellState.pendingPermanentDelete = undefined;

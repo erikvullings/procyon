@@ -410,6 +410,19 @@ main.fm-workspace {
   overflow-y: auto;
 }
 
+.fm-operation-confirmation-conflicts > p {
+  margin: 0.25rem 0 0;
+}
+
+.fm-operation-confirmation-conflict-names {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
 .fm-operation-path {
   display: block;
   overflow-wrap: anywhere;

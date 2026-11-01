@@ -148,6 +148,8 @@ export interface PaneContentContext {
   // Map state (mutable reference — callers may .get()/.set()/.delete() directly)
   getDirectories(): Map<string, PaneDirectoryView>;
   getSelections(): Map<string, SelectionState>;
+  /** Each pane's current selection dispatcher, refreshed whenever the pane's content is built. */
+  getSelectionDispatchers(): Map<PaneId, (action: SelectionAction) => void>;
   onSelectionAction(key: string): void;
   getSortedEntries(): Map<
     string,
@@ -282,7 +284,7 @@ export function createPaneContentBuilder(
   entryFormatSettings: EntryFormatSettings,
   paneId: PaneId,
 ) => WorkspacePaneContent {
-  return function paneContent(
+  function paneContent(
     client: FileManagerClient,
     entryFormatSettings: EntryFormatSettings,
     paneId: PaneId,
@@ -1210,5 +1212,12 @@ export function createPaneContentBuilder(
       // the folder being mapped) until it is closed.
       ...(imageMapContent === undefined ? {} : { viewerContent: imageMapContent }),
     };
+  }
+  return (client, entryFormatSettings, paneId) => {
+    const content = paneContent(client, entryFormatSettings, paneId);
+    // Lets actions invoked outside the pane's own key handling (the command palette) apply
+    // selection changes through the same reducer path as the keyboard.
+    context.getSelectionDispatchers().set(paneId, content.onSelectionAction);
+    return content;
   };
 }

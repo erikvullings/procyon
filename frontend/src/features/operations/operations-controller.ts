@@ -1,25 +1,31 @@
 import type { OperationClient } from '../../api/client/operation-client.ts';
 import type {
   ChangeAttributes,
+  ConflictPolicy,
   GeoTransform,
   ImageMetadataEdit,
   LinkRequest,
   Location,
   Operation,
   SplitFile,
+  TransferConflicts,
 } from '../../models';
 import { perfMark } from '../../utilities/perf';
 
 export interface OperationsController {
+  /** Copies `sources` into `destination`; `conflictPolicy` defaults to asking per conflict. */
   copy(
     sources: readonly Location[],
     destination: Location,
     signal?: AbortSignal,
+    conflictPolicy?: ConflictPolicy,
   ): Promise<Operation | undefined>;
+  /** Moves `sources` into `destination`; `conflictPolicy` defaults to asking per conflict. */
   move(
     sources: readonly Location[],
     destination: Location,
     signal?: AbortSignal,
+    conflictPolicy?: ConflictPolicy,
   ): Promise<Operation | undefined>;
   trash(sources: readonly Location[], signal?: AbortSignal): Promise<Operation | undefined>;
   delete(
@@ -118,34 +124,90 @@ export interface OperationConfirmationRequest {
   readonly kind: ConfirmableOperationKind;
   readonly sources: readonly Location[];
   readonly destination?: Location;
+  /** Sources that already exist in the destination (copy/move), when they could be determined
+   * up front; the dialog then asks for the conflict policy itself. */
+  readonly conflicts?: TransferConflicts;
 }
 
+/** How long the confirmation waits for the conflict lookup (e.g. a slow remote destination)
+ * before opening without it; the job then still asks per conflict as before. */
+export const CONFLICT_LOOKUP_TIMEOUT_MS = 1_500;
+
+/** Resolves `lookup`, or `undefined` once `timeoutMs` passes or the lookup fails. */
+async function boundedLookup(
+  lookup: Promise<TransferConflicts | undefined>,
+  timeoutMs: number,
+): Promise<TransferConflicts | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), timeoutMs);
+  });
+  try {
+    return await Promise.race([lookup.catch(() => undefined), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The user's answer: `undefined` cancels; otherwise the conflict policy the job should use. */
+export type OperationConfirmationDecision = ConflictPolicy | undefined;
+
+/** Looks up a planned transfer's existing names; resolves `undefined` when that isn't known. */
+export type TransferConflictLookup = (
+  sources: readonly Location[],
+  destination: Location,
+  signal?: AbortSignal,
+) => Promise<TransferConflicts | undefined>;
+
+/**
+ * Asks before a routine copy, move or Trash (the `confirmFileOperations` setting). For a copy or
+ * move it first looks up which sources already exist in the destination, so one dialog both
+ * confirms the transfer and picks the conflict policy, instead of a confirmation followed by a
+ * conflict prompt mid-job (task 0062). A caller-supplied policy, or a disabled confirmation,
+ * passes straight through; the job still re-checks every entry while it runs.
+ */
 export function withOperationConfirmation(
   delegate: OperationsController,
   enabled: () => boolean,
-  confirm: (request: OperationConfirmationRequest) => Promise<boolean>,
+  confirm: (request: OperationConfirmationRequest) => Promise<OperationConfirmationDecision>,
+  findConflicts?: TransferConflictLookup,
 ): OperationsController {
   async function confirmed(
     request: OperationConfirmationRequest,
     signal: AbortSignal | undefined,
-    start: () => Promise<Operation | undefined>,
+    start: (conflictPolicy: ConflictPolicy | undefined) => Promise<Operation | undefined>,
   ): Promise<Operation | undefined> {
     if (signal?.aborted) return undefined;
-    if (enabled() && !(await confirm(request))) return undefined;
+    if (!enabled()) return start(undefined);
+    const conflicts =
+      request.destination === undefined || findConflicts === undefined
+        ? undefined
+        : await boundedLookup(
+            findConflicts(request.sources, request.destination, signal),
+            CONFLICT_LOOKUP_TIMEOUT_MS,
+          );
     if (signal?.aborted) return undefined;
-    return start();
+    const decision = await confirm(
+      conflicts === undefined || conflicts.names.length === 0 ? request : { ...request, conflicts },
+    );
+    if (decision === undefined || signal?.aborted) return undefined;
+    return start(decision);
   }
 
   return {
     ...delegate,
-    copy: (sources, destination, signal) =>
-      confirmed({ kind: 'copy', sources, destination }, signal, () =>
-        delegate.copy(sources, destination, signal),
-      ),
-    move: (sources, destination, signal) =>
-      confirmed({ kind: 'move', sources, destination }, signal, () =>
-        delegate.move(sources, destination, signal),
-      ),
+    copy: (sources, destination, signal, conflictPolicy) =>
+      conflictPolicy === undefined
+        ? confirmed({ kind: 'copy', sources, destination }, signal, (policy) =>
+            delegate.copy(sources, destination, signal, policy),
+          )
+        : delegate.copy(sources, destination, signal, conflictPolicy),
+    move: (sources, destination, signal, conflictPolicy) =>
+      conflictPolicy === undefined
+        ? confirmed({ kind: 'move', sources, destination }, signal, (policy) =>
+            delegate.move(sources, destination, signal, policy),
+          )
+        : delegate.move(sources, destination, signal, conflictPolicy),
     trash: (sources, signal) =>
       confirmed({ kind: 'trash', sources }, signal, () => delegate.trash(sources, signal)),
   };
@@ -223,10 +285,10 @@ export function withActiveSourceGuard(
   };
   return {
     ...delegate,
-    copy: (sources, destination, signal) =>
-      guarded(sources, () => delegate.copy(sources, destination, signal)),
-    move: (sources, destination, signal) =>
-      guarded(sources, () => delegate.move(sources, destination, signal)),
+    copy: (sources, destination, signal, conflictPolicy) =>
+      guarded(sources, () => delegate.copy(sources, destination, signal, conflictPolicy)),
+    move: (sources, destination, signal, conflictPolicy) =>
+      guarded(sources, () => delegate.move(sources, destination, signal, conflictPolicy)),
     delete: (sources, confirmed, overrideReadOnly, signal) =>
       guarded(sources, () => delegate.delete(sources, confirmed, overrideReadOnly, signal)),
   };
@@ -242,18 +304,12 @@ export function createOperationsController(rawClient: OperationClient): Operatio
     },
   };
   return {
-    copy(sources, destination, signal) {
-      return client.startOperation(
-        { type: 'copy', sources, destination, conflictPolicy: 'ask' },
-        signal,
-      );
+    copy(sources, destination, signal, conflictPolicy = 'ask') {
+      return client.startOperation({ type: 'copy', sources, destination, conflictPolicy }, signal);
     },
 
-    move(sources, destination, signal) {
-      return client.startOperation(
-        { type: 'move', sources, destination, conflictPolicy: 'ask' },
-        signal,
-      );
+    move(sources, destination, signal, conflictPolicy = 'ask') {
+      return client.startOperation({ type: 'move', sources, destination, conflictPolicy }, signal);
     },
 
     trash(sources, signal) {

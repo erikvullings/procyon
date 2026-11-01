@@ -484,6 +484,11 @@ export const it = {
     destination: 'Destinazione',
     conflictRecommendation:
       "Scelta più sicura: rinomina l'elemento in arrivo per conservarli entrambi.",
+    alreadyExists: 'Già presente nella destinazione',
+    alreadyExistsMore: 'e altri {count}',
+    alreadyExistsIncomplete:
+      'Sono stati controllati solo i primi 1000 elementi; gli altri vengono controllati durante l’operazione.',
+    decidePerItem: 'Decidi per ogni elemento',
     failureRecovery: "Controlla l'errore riportato sopra, quindi esegui di nuovo l'operazione.",
     failureRecoveryPermissionDenied:
       'Procyon non può scrivere nella destinazione. Scegli una cartella scrivibile o modificane le autorizzazioni.',

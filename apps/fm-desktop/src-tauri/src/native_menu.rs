@@ -1,44 +1,59 @@
-//! Owns the single IPC channel the frontend subscribes native menu action
+//! Owns the per-window IPC channels the frontend subscribes native menu action
 //! clicks through (task 0133).
 //!
-//! Simpler than `event_stream::EventSubscriptionRegistry`: there is only
-//! ever one native menu bar for the process (mirroring
-//! `fm-platform-macos`'s own single process-wide callback slot), so this
-//! only ever needs to remember at most one channel rather than a
-//! subscription map.
+//! There is one native menu bar for the whole process (macOS), but every
+//! Procyon window runs its own frontend. A click must reach the window the user
+//! is working in, so each window's subscription is kept under its label and the
+//! channel is chosen when the click happens — not when the menu is installed —
+//! from whichever window is focused. A single shared slot let the most recently
+//! subscribed window receive every click, so Edit ▸ Select All (Cmd+A) and every
+//! other menu item silently acted on the wrong window.
 
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use tauri::ipc::Channel;
 
 use crate::commands::NativeMenuActionEvent;
 
-/// Holds the channel the frontend subscribed via
-/// [`crate::commands::subscribe_native_menu_actions`], if any. `None` until
-/// the frontend subscribes, and again after a window reload replaces it -
-/// `set_native_menu` treats "not subscribed yet" as a no-op callback rather
-/// than an error, so installing a menu before the frontend subscribes still
-/// succeeds.
+/// Native menu subscriptions by window label. A window reload re-subscribes under the same
+/// label, replacing its previous channel; a destroyed window's entry is removed.
 #[derive(Default)]
 pub(crate) struct NativeMenuActionChannel {
-    channel: Mutex<Option<Channel<NativeMenuActionEvent>>>,
+    channels: Mutex<HashMap<String, Channel<NativeMenuActionEvent>>>,
 }
 
 impl NativeMenuActionChannel {
-    /// Stores `channel` as the current subscription, replacing any previous one.
-    pub(crate) fn set(&self, channel: Channel<NativeMenuActionEvent>) {
-        *self
-            .channel
-            .lock()
-            .unwrap_or_else(|error| error.into_inner()) = Some(channel);
-    }
-
-    /// Returns the current subscription, if any.
-    pub(crate) fn get(&self) -> Option<Channel<NativeMenuActionEvent>> {
-        self.channel
+    /// Stores `channel` as `window`'s subscription, replacing any previous one.
+    pub(crate) fn set(&self, window: &str, channel: Channel<NativeMenuActionEvent>) {
+        self.channels
             .lock()
             .unwrap_or_else(|error| error.into_inner())
-            .clone()
+            .insert(window.to_owned(), channel);
+    }
+
+    /// Drops `window`'s subscription (the window was destroyed).
+    pub(crate) fn remove(&self, window: &str) {
+        self.channels
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .remove(window);
+    }
+
+    /// The channel a menu click should go to: the focused window's, or — when no subscribed
+    /// window reports focus — any subscribed one, so a single-window app keeps working.
+    pub(crate) fn for_window(
+        &self,
+        focused: Option<&str>,
+    ) -> Option<Channel<NativeMenuActionEvent>> {
+        let channels = self
+            .channels
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        focused
+            .and_then(|label| channels.get(label))
+            .or_else(|| channels.values().next())
+            .cloned()
     }
 }
 
@@ -46,16 +61,56 @@ impl NativeMenuActionChannel {
 mod tests {
     use super::*;
 
+    fn channel_id(channel: &Channel<NativeMenuActionEvent>) -> u32 {
+        channel.id()
+    }
+
     #[test]
-    fn has_no_subscription_until_one_is_set_then_returns_the_latest_one() {
+    fn has_no_subscription_until_one_is_set() {
         let registry = NativeMenuActionChannel::default();
-        assert!(registry.get().is_none());
+        assert!(registry.for_window(Some("main")).is_none());
+        assert!(registry.for_window(None).is_none());
+    }
 
-        registry.set(Channel::new(|_| Ok(())));
-        assert!(registry.get().is_some());
+    #[test]
+    fn routes_to_the_focused_window_rather_than_the_latest_subscriber() {
+        let registry = NativeMenuActionChannel::default();
+        let first = Channel::new(|_| Ok(()));
+        let second = Channel::new(|_| Ok(()));
+        let first_id = channel_id(&first);
+        let second_id = channel_id(&second);
+        registry.set("workspace-a", first);
+        registry.set("workspace-b", second);
 
-        // A second `set` (a window reload re-subscribing) replaces, not adds to, the first.
-        registry.set(Channel::new(|_| Ok(())));
-        assert!(registry.get().is_some());
+        let routed = registry
+            .for_window(Some("workspace-a"))
+            .expect("subscribed");
+        assert_eq!(channel_id(&routed), first_id);
+        let routed = registry
+            .for_window(Some("workspace-b"))
+            .expect("subscribed");
+        assert_eq!(channel_id(&routed), second_id);
+    }
+
+    #[test]
+    fn a_reload_replaces_and_a_destroyed_window_is_removed() {
+        let registry = NativeMenuActionChannel::default();
+        registry.set("main", Channel::new(|_| Ok(())));
+        let reloaded = Channel::new(|_| Ok(()));
+        let reloaded_id = channel_id(&reloaded);
+        registry.set("main", reloaded);
+        let routed = registry.for_window(Some("main")).expect("subscribed");
+        assert_eq!(channel_id(&routed), reloaded_id);
+
+        registry.remove("main");
+        assert!(registry.for_window(Some("main")).is_none());
+    }
+
+    #[test]
+    fn falls_back_to_a_subscribed_window_when_none_is_focused() {
+        let registry = NativeMenuActionChannel::default();
+        registry.set("main", Channel::new(|_| Ok(())));
+        assert!(registry.for_window(None).is_some());
+        assert!(registry.for_window(Some("unsubscribed")).is_some());
     }
 }
