@@ -36,12 +36,11 @@ def embed(
     vectors = []
     for start in range(0, len(texts), batch):
         encoded = tokenizer.encode_batch(texts[start : start + batch])
-        width = max(len(e.ids) for e in encoded)
-        ids = np.zeros((len(encoded), width), dtype=np.int64)
-        mask = np.zeros_like(ids)
-        for row, e in enumerate(encoded):
-            ids[row, : len(e.ids)] = e.ids
-            mask[row, : len(e.ids)] = 1
+        # The tokenizer pads the batch itself; its attention mask marks the real tokens. A mask
+        # built from the padded length would let pad tokens into the mean and make every
+        # embedding depend on which texts share its batch.
+        ids = np.array([e.ids for e in encoded], dtype=np.int64)
+        mask = np.array([e.attention_mask for e in encoded], dtype=np.int64)
         feed = {"input_ids": ids, "attention_mask": mask}
         if "token_type_ids" in names:
             feed["token_type_ids"] = np.zeros_like(ids)

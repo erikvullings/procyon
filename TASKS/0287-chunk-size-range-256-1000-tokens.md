@@ -46,6 +46,9 @@ maximum of ~1,000 tokens; do not make it user-adjustable (settings complexity).
   corpus chunks from the region-based converter `.../baseline/12`; maximum in estimated tokens):
   256: MRR 0.380, hit@1 0.24; 384: 0.432 / 0.33; **512 (current): 0.492 / 0.42**; 768: 0.396 / 0.30
   (24 chunks over the 512-token model limit, truncated); 1000: 0.345 / 0.24 (242 truncated).
+  **Correction (task 0296):** these e5 numbers came from a `retrieve.py` padding-mask bug; corrected
+  baseline: 256: 0.540 / 0.42; 384: 0.600 / 0.48; 512: 0.587 / 0.45; 768: 0.485 / 0.30; 1000: 0.573 / 0.45
+  (MRR / hit@1). Still flat within noise; the keep-512 decision stands.
   Result: for e5-small keep 512 (smaller chunks lose, larger ones exceed the model). Since
   `for_model_input_limit(512)` equals the current defaults, wiring it changes nothing for e5.
   Not measured: any model above 512 (EmbeddingGemma weights are in `target/semantic-model-cache`

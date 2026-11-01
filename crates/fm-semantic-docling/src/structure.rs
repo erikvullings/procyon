@@ -198,6 +198,23 @@ fn plausible_heading_text(text: &str) -> bool {
     !(trimmed.ends_with('.') && !starts_with_number(trimmed) && words > 3)
 }
 
+/// Whether `text` stops on an article, preposition or conjunction: cut off mid-sentence.
+fn ends_dangling(text: &str) -> bool {
+    let words = text.split_whitespace().count();
+    let last = text
+        .split_whitespace()
+        .next_back()
+        .map(str::to_lowercase)
+        .unwrap_or_default();
+    words > 3 && DANGLING_WORDS.contains(&last.as_str())
+}
+
+/// Words a heading does not end on (English and Dutch).
+const DANGLING_WORDS: [&str; 28] = [
+    "of", "the", "to", "and", "a", "an", "in", "for", "by", "with", "on", "that", "as", "at",
+    "from", "or", "is", "are", "was", "de", "het", "een", "van", "en", "voor", "met", "op", "dat",
+];
+
 /// Whether a style stands out from the body: larger, or bold where the body is not.
 fn stands_out(look: Look, body: &Body) -> Option<Emphasis> {
     let body_size = body.look.size as f32;
@@ -557,16 +574,55 @@ pub(crate) fn classify(nodes: Vec<Node>, pages: &[PageStyles]) -> Vec<(Node, Rol
         ));
     }
     demote_heading_blocks(&mut output);
+    demote_continued_headings(&mut output);
     output
+}
+
+/// The text of a located paragraph node.
+fn paragraph_text(node: &Node) -> Option<&str> {
+    let Node::Located { inner, .. } = node else {
+        return None;
+    };
+    match &**inner {
+        Node::Paragraph { text } => Some(text),
+        _ => None,
+    }
+}
+
+/// A "heading" whose next paragraph continues in lowercase is the first line of a sentence that
+/// reflow or a font switch cut off, not a section start.
+fn demote_continued_headings(output: &mut [(Node, Role)]) {
+    for index in 0..output.len().saturating_sub(1) {
+        if !matches!(output[index].1, Role::Heading(_)) {
+            continue;
+        }
+        let continued = output[index + 1..]
+            .iter()
+            .find(|(node, _)| paragraph_text(node).is_some())
+            .and_then(|(node, role)| {
+                let text = paragraph_text(node)?;
+                let first = text.chars().find(|c| c.is_alphanumeric())?;
+                Some(matches!(role, Role::Body) && first.is_lowercase())
+            })
+            .unwrap_or(false);
+        let ends_open = paragraph_text(&output[index].0)
+            .is_some_and(|text| text.trim_end().ends_with(',') || ends_dangling(text));
+        if continued || ends_open {
+            output[index].1 = Role::Body;
+        }
+    }
 }
 
 /// Title pages (journal banner, author and affiliation lists) set whole blocks in a heading
 /// style. Sections do not follow each other without a paragraph between them, so a run of
-/// consecutive headings is front matter, not structure.
+/// consecutive headings is front matter, not structure; so is a run of two before any body text
+/// (journal banner and article title).
 fn demote_heading_blocks(output: &mut [(Node, Role)]) {
+    let mut seen_body = false;
     let mut start = 0;
     while start < output.len() {
         if !matches!(output[start].1, Role::Heading(_)) {
+            seen_body |= paragraph_text(&output[start].0).is_some();
             start += 1;
             continue;
         }
@@ -574,11 +630,13 @@ fn demote_heading_blocks(output: &mut [(Node, Role)]) {
         while end < output.len() && matches!(output[end].1, Role::Heading(_)) {
             end += 1;
         }
-        if end - start >= MAX_HEADING_RUN {
+        let limit = if seen_body { MAX_HEADING_RUN } else { 2 };
+        if end - start >= limit {
             for entry in &mut output[start..end] {
                 entry.1 = Role::Body;
             }
         }
+        seen_body = true;
         start = end;
     }
 }
@@ -789,6 +847,77 @@ mod tests {
             letter_width: 500.0,
             text: text.to_owned(),
         }
+    }
+
+    fn entry(text: &str, role: Role) -> (Node, Role) {
+        (paragraph([0, 0, 10, 10], text.to_owned()), role)
+    }
+
+    fn roles(output: &[(Node, Role)]) -> Vec<Role> {
+        output.iter().map(|(_, role)| *role).collect()
+    }
+
+    #[test]
+    fn a_heading_followed_by_a_lowercase_continuation_is_body() {
+        let mut output = vec![
+            entry("Methods", Role::Heading(1)),
+            entry("We recruited children.", Role::Body),
+            entry(
+                "Taking into account the quality, those on MST yielded",
+                Role::Heading(2),
+            ),
+            entry("stronger evidence by using an RCT design.", Role::Body),
+            entry("Results", Role::Heading(2)),
+            entry("Children improved.", Role::Body),
+        ];
+        demote_continued_headings(&mut output);
+        assert_eq!(
+            roles(&output),
+            [
+                Role::Heading(1),
+                Role::Body,
+                Role::Body,
+                Role::Body,
+                Role::Heading(2),
+                Role::Body
+            ]
+        );
+    }
+
+    #[test]
+    fn headings_do_not_end_on_a_function_word() {
+        assert!(ends_dangling(
+            "Netherlands, to better understand the reasons for the heterogeneity of"
+        ));
+        assert!(!ends_dangling("Strengths, Weaknesses, and Elaborations"));
+    }
+
+    #[test]
+    fn a_banner_and_title_before_any_body_text_are_front_matter() {
+        let mut output = vec![
+            entry("ORIGINAL ARTICLES", Role::Heading(1)),
+            entry("The Impact of Attachment", Role::Heading(1)),
+            entry("Abstract text.", Role::Body),
+            entry("Methods", Role::Heading(1)),
+            entry("Details.", Role::Body),
+            entry("Results", Role::Heading(1)),
+            entry("Sub result", Role::Heading(2)),
+            entry("Details.", Role::Body),
+        ];
+        demote_heading_blocks(&mut output);
+        assert_eq!(
+            roles(&output),
+            [
+                Role::Body,
+                Role::Body,
+                Role::Body,
+                Role::Heading(1),
+                Role::Body,
+                Role::Heading(1),
+                Role::Heading(2),
+                Role::Body
+            ]
+        );
     }
 
     #[test]

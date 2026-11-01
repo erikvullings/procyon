@@ -30,7 +30,7 @@ use crate::tokens::{TOKEN_ESTIMATOR_VERSION, estimate_tokens};
 use serde::{Deserialize, Serialize};
 
 /// Version of the packing rules implemented here.
-pub const STRUCTURAL_CHUNKER_VERSION: ComponentVersion = ComponentVersion::new("structural", 5);
+pub const STRUCTURAL_CHUNKER_VERSION: ComponentVersion = ComponentVersion::new("structural", 6);
 
 /// Domain separator, so a fingerprint cannot collide with any other BLAKE3 use
 /// in the workspace.
@@ -604,15 +604,43 @@ fn bounded_section_path(section_path: &[String], max_tokens: u32) -> (Vec<String
     )
 }
 
-/// Builds embedding input: section hierarchy, then content. Nothing else.
+/// Longest section prefix (characters) that goes into the embedding input. A long hierarchy or
+/// a paper title repeated in every chunk drowns the content in the embedding.
+const MAX_EMBEDDING_PREFIX_CHARS: usize = 100;
+
+/// The part of the section hierarchy that goes into the embedding input: the innermost sections
+/// that fit `MAX_EMBEDDING_PREFIX_CHARS`, at least the innermost one (cut at a word boundary).
+fn embedding_prefix(section_path: &[String]) -> String {
+    let mut kept: Vec<&str> = Vec::new();
+    let mut length = 0;
+    for element in section_path.iter().rev() {
+        let added = element.chars().count() + if kept.is_empty() { 0 } else { 3 };
+        if !kept.is_empty() && length + added > MAX_EMBEDDING_PREFIX_CHARS {
+            break;
+        }
+        kept.push(element);
+        length += added;
+    }
+    kept.reverse();
+    let joined = kept.join(" > ");
+    if joined.chars().count() <= MAX_EMBEDDING_PREFIX_CHARS {
+        return joined;
+    }
+    let cut: String = joined.chars().take(MAX_EMBEDDING_PREFIX_CHARS).collect();
+    cut.rsplit_once(char::is_whitespace)
+        .map_or(cut.clone(), |(head, _)| head.to_owned())
+}
+
+/// Builds embedding input: the innermost section hierarchy, then content. Nothing else.
 fn embedding_input(section_path: &[String], content: &str) -> String {
-    if section_path.is_empty() {
+    let prefix = embedding_prefix(section_path);
+    if prefix.is_empty() {
         return content.to_owned();
     }
     if content.is_empty() {
-        return section_path.join(" > ");
+        return prefix;
     }
-    format!("{}\n\n{content}", section_path.join(" > "))
+    format!("{prefix}\n\n{content}")
 }
 
 fn excerpt(content: &str, limit: usize) -> String {
@@ -1108,6 +1136,20 @@ mod tests {
         )]);
         let chunks = chunker.chunk(&document);
         assert_eq!(chunks[0].embedding_input, "Chapter > Section\n\nbody text");
+    }
+
+    #[test]
+    fn long_section_hierarchies_keep_only_the_innermost_sections_in_the_embedding_input() {
+        let long = "A".repeat(90);
+        let path = vec![
+            "Journal banner".to_owned(),
+            long.clone(),
+            "Method".to_owned(),
+        ];
+        assert_eq!(embedding_prefix(&path), format!("{long} > Method"));
+        let huge = vec!["word ".repeat(40).trim().to_owned()];
+        assert!(embedding_prefix(&huge).chars().count() <= MAX_EMBEDDING_PREFIX_CHARS);
+        assert!(embedding_prefix(&[]).is_empty());
     }
 
     #[test]

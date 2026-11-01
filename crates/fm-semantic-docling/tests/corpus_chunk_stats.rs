@@ -127,6 +127,9 @@ fn json_string(text: &str) -> String {
 fn dump_chunks() {
     let directory = PathBuf::from(std::env::var("PROCYON_DUMP_DIR").expect("PROCYON_DUMP_DIR"));
     let out = PathBuf::from(std::env::var("PROCYON_CHUNK_OUT").expect("PROCYON_CHUNK_OUT"));
+    let no_prefix = std::env::var_os("PROCYON_CHUNK_NO_PREFIX").is_some();
+    // `PROCYON_CHUNK_INNERMOST`: prefix only the innermost section instead of the capped path.
+    let innermost_only = std::env::var_os("PROCYON_CHUNK_INNERMOST").is_some();
     let maxima: Vec<u32> = std::env::var("PROCYON_CHUNK_MAXIMA")
         .unwrap_or_else(|_| "256,384,512,768,1000".to_owned())
         .split(',')
@@ -168,13 +171,27 @@ fn dump_chunks() {
             let chunker = chunker(maximum * 25 / 32, maximum, maximum * 3 / 32);
             let mut lines = String::new();
             for chunk in chunker.chunk(document) {
+                // `PROCYON_CHUNK_NO_PREFIX`: dump the content without the section prefix, to
+                // measure what the prefix does to retrieval.
+                let innermost;
+                let text = match chunk.embedding_input.split_once("\n\n") {
+                    Some((_, content)) if innermost_only && !chunk.section_path.is_empty() => {
+                        innermost = format!(
+                            "{}\n\n{content}",
+                            chunk.section_path.last().expect("non-empty path")
+                        );
+                        innermost.as_str()
+                    }
+                    Some((_, content)) if no_prefix && !chunk.section_path.is_empty() => content,
+                    _ => chunk.embedding_input.as_str(),
+                };
                 lines.push_str(&format!(
                     "{{\"doc\":{},\"index\":{},\"tokens\":{},\"navigation\":{},\"text\":{}}}\n",
                     json_string(&stem),
                     chunk.index,
                     chunk.estimated_tokens,
                     chunk.is_navigation,
-                    json_string(&chunk.embedding_input),
+                    json_string(text),
                 ));
             }
             fs::write(

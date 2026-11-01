@@ -29,7 +29,7 @@ last paragraph of a page. `docling-pdf` reads fonts while parsing glyphs but kee
   a symbol or number (a number must match a raised marker on the page, or a leading raised run),
   body text above; wrapped lines after a footnote stay footnotes. They become units under the
   current section + `Footnotes`, so the chunker keeps them apart from the prose.
-- Pipeline identity `docling-pdf/2052009+baseline/13`.
+- Pipeline identity `docling-pdf/2052009+baseline/14` (13 = first typography commit; 14 = false-heading fixes).
 
 ## Evaluation
 `scripts/eval/pdf-gold/structure_gold.json` (hand-labelled from page images; 14 pages over 12
@@ -40,16 +40,26 @@ Known gaps: italic-only headings; headings inside a table region; fonts without 
 their markers (cannot be anchored); footnote text that reflow cuts into pieces; Roman or
 bare-number section marks.
 
-## Retrieval A/B (e5-small, 33 questions, Leiden corpus, same chunker)
-| max tokens | chunks base -> new | hit@1 base -> new | MRR base -> new |
+## Retrieval A/B (e5-small, 33 questions, same 20 Leiden PDFs, same chunker)
+First A/B showed headings hurting (512: hit@1 0.42 -> 0.30). **That was a harness bug**:
+`retrieve.py` built the attention mask from the padded length, so pad tokens entered the mean
+pool and every embedding depended on its batch (rewording one query moved the baseline 512 row
+from 0.42 to 0.27). Fixed (tokenizer's own attention mask); table below is the corrected one.
+Per-question diff also found real bugs, fixed here: body lines promoted to headings (next
+paragraph continues in lowercase, or the line ends on a function word / comma), and a journal
+banner + title pair kept as section path ("ORIGINAL ARTICLES > Title"; now an opening run of
+2 headings before any body text is front matter). Chunker 6 caps the section prefix in the
+embedding input to the innermost sections within 100 chars. Q27 (compound question) reworded.
+
+| max tokens | chunks base / headings / v2 | hit@1 base / headings / v2 | MRR base / headings / v2 |
 |---|---|---|---|
-| 256 | 4515 -> 5208 | 0.24 -> 0.24 | 0.380 -> 0.363 |
-| 384 | 3017 -> 3471 | 0.33 -> 0.24 | 0.432 -> 0.317 |
-| 512 | 2294 -> 2639 | 0.42 -> 0.30 | 0.492 -> 0.389 |
-| 768 | 1566 -> 1858 | 0.30 -> 0.27 | 0.396 -> 0.350 |
-| 1000 | 1266 -> 1572 | 0.24 -> 0.30 | 0.345 -> 0.414 |
-Headings add ~15-25% more chunks (short sections become short chunks: <256 tokens 28% -> 34% at
-400/512). e5 (512 limit) gets worse at its own size, a larger-context model gets better at 1000.
-33 questions, evidence phrases written against the old text: noise is several points, but the
-512 drop is not obviously noise. Next: merge sections under ~120 tokens into their neighbour in
-the chunker (keeping the heading in the section path), then re-run.
+| 256 | 4515 / 5208 / 4982 | 0.42 / 0.42 / 0.45 | 0.540 / 0.544 / 0.582 |
+| 384 | 3017 / 3471 / 3342 | 0.48 / 0.39 / 0.48 | 0.600 / 0.543 / 0.606 |
+| 512 | 2294 / 2639 / 2549 | 0.45 / 0.42 / 0.48 | 0.587 / 0.549 / 0.594 |
+| 768 | 1566 / 1858 / 1792 | 0.30 / 0.36 / 0.45 | 0.485 / 0.518 / 0.565 |
+| 1000 | 1266 / 1572 / 1500 | 0.45 / 0.36 / 0.36 | 0.573 / 0.536 / 0.548 |
+"headings" = first typography commit; v2 = false-heading fixes + prefix cap. v2 is level with or
+above the baseline at 256-768; 1000 is lower on hit@1 (33 questions: 1 question = 3 points, so
+treat it as noise). Stripping the prefix entirely (`PROCYON_CHUNK_NO_PREFIX=1`, corrected harness): hit@1 / MRR
+256 0.48 / 0.598, 384 0.48 / 0.612, 512 0.39 / 0.552, 768 0.39 / 0.542, 1000 0.39 / 0.585 vs v2
+above: mixed, so the prefix is neutral at this sample size. Merging short sections is not needed.
