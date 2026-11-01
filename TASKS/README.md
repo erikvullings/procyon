@@ -362,8 +362,9 @@ cloud and network locations, and the connection framework underneath them.
   causes friction)*
 - [x] 0146 S3-compatible object storage provider *(needs 0103, 0108, 0109 — unlike 0110/0111, no
   OS mount covers this)*
-- [ ] 0147 WebDAV provider *(in_progress — implementation and protocol-fixture coverage complete;
-  verification against a real Nextcloud/ownCloud/mod_dav server remains)*
+- [x] 0147 WebDAV provider *(implementation + isolated real-protocol fixture coverage complete;
+  verified end-to-end against a real Apache `mod_dav` server via the gated
+  `tests/real_server.rs` — Basic auth field-proven, Digest proven against the fixture)*
 
 **Parked (freezer)** — not declined outright, just not planned near-term; revisit only if a
 concrete need surfaces:
@@ -502,7 +503,7 @@ and have since regrown — read 0153's and 0119's Agent Notes before starting, t
 previous pass stopped where it did.
 
 - [ ] 0288 Incremental architecture deepening *(parent — tracks 0289–0293, no code of its own)*
-- [ ] 0289 Decompose FileManagerClient god interface *(frontend, high — 1,195-line interface /
+- [x] 0289 Decompose FileManagerClient god interface *(frontend, high — 1,195-line interface /
   100+ methods; 4–6 sub-clusters assembled in `createClient.ts`; mock adapter 6,504 → −30%)*
 - [x] 0290 Extract feature wiring from app-shell.ts *(frontend, high — 7,978 → < 4,800 lines;
   per-capability `*-wiring.ts` modules; proposed order: operations, workspace, navigation, settings)*

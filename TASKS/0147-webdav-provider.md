@@ -1,6 +1,6 @@
 # 0147 WebDAV provider
 
-Status: in_progress
+Status: done
 Priority: medium
 Owner: unassigned
 Agent: claude
@@ -185,3 +185,28 @@ reliable OS mount to lean on.
 - 2026-09-03 copilot: Status corrected to `in_progress`. The provider implementation and isolated
   real-protocol fixture coverage are complete, but the explicit acceptance criterion requiring a
   run against a real WebDAV server implementation has not been met.
+- 2026-11-01 erik: **Real-server verification (criterion closed).** Ran the provider against a
+  genuine, third-party WebDAV server implementation — Apache httpd 2.4 with `mod_dav`/`mod_dav_fs`
+  (the canonical example the criterion names), built as a `podman` image (`httpd:2.4` + a
+  `dav.conf` enabling the dav modules, a `DAVLockDB`, and Basic auth via `htpasswd`) on this
+  machine (podman 6.1.4; no Docker here). New gated integration test
+  `crates/fm-vfs-webdav/tests/real_server.rs` drives the *actual* `WebDavFileSystemProvider`
+  (not a mock) through: `verify_connectivity` (auth+transport), PROPFIND depth-1 `list`, MKCOL,
+  streaming PUT (`open_write`, awaited via a bounded poll until the file lands), GET
+  (`open_read`) with byte-exact verification, native server-side COPY (`server_side_copy`), and
+  native MOVE (`rename`), plus robust per-run unique-folder cleanup. With
+  `FM_WEBDAV_REAL_BASE_URL`/`FM_WEBDAV_REAL_USER`/`FM_WEBDAV_REAL_PASS` set, both tests pass
+  against the live Apache server (`207` listing, `201` MKCOL/PUT/COPY/MOVE, `204` DELETE confirmed
+  at the wire level too). The test is **skipped** when those env vars are unset, so the ordinary
+  `cargo test -p fm-vfs-webdav` suite (6 unit + 11 fixture + 2 skipped-real + 0 doc) stays green
+  with no live server. `cargo fmt --check` and `cargo clippy -p fm-vfs-webdav --all-targets --
+  -D warnings` are clean. **Known scope note:** the real-server run uses Basic auth; Digest auth
+  remains proven against the real-protocol fixture only — Apache's `mod_auth_digest` did not load
+  in this image and a Nextcloud/ownCloud digest config is not a documented server convention, so
+  the fixture (genuine Digest challenge/response over the wire) is the Digest coverage. The
+  acceptance criterion ("at least one real server implementation") is satisfied by Apache
+  `mod_dav`.
+- 2026-11-01 erik: **Status -> done.** All acceptance criteria met: provider tested against a real
+  WebDAV server implementation (Apache mod_dav) in addition to the isolated fixture; the
+  hand-rolled fixture remains the sandbox-portable coverage, the real-server test is the field
+  proof. Build artifacts and the temporary container/image were removed after verification.
