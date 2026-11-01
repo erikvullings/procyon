@@ -1,7 +1,12 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TerminalClient } from './terminal-client';
-import { handleTerminalKeyEvent, showTerminalSurface, TerminalDrawer } from './terminal-drawer';
+import {
+  handleTerminalKeyEvent,
+  showTerminalSurface,
+  TerminalDrawer,
+  terminalHost,
+} from './terminal-drawer';
 
 describe('TerminalDrawer', () => {
   let root: HTMLElement;
@@ -70,6 +75,47 @@ describe('TerminalDrawer', () => {
 
     expect(client.open).toHaveBeenCalledOnce();
     resolveOpen?.('session-1');
+    vi.unstubAllGlobals();
+  });
+
+  it('names the machine a location belongs to', () => {
+    expect(terminalHost({ providerId: 'local', uri: 'file:///home' })).toBe('local');
+    expect(terminalHost({ providerId: 'sftp', uri: 'sftp://abc-123/srv/app' })).toBe(
+      'sftp://abc-123',
+    );
+  });
+
+  it('opens a new session when the tab moves from a local folder to an SSH connection', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn() })),
+    );
+    const client: TerminalClient = {
+      open: vi.fn(async () => 'session'),
+      write: vi.fn(async () => undefined),
+      resize: vi.fn(async () => undefined),
+    };
+    let location = { providerId: 'local', uri: 'file:///home' };
+    m.mount(root, {
+      view: () =>
+        m(TerminalDrawer, {
+          open: true,
+          tabKey: 'pane-1:tab-1',
+          location,
+          client,
+          onToggle: vi.fn(),
+        }),
+    });
+    await vi.waitFor(() => expect(client.open).toHaveBeenCalledTimes(1));
+
+    location = { providerId: 'local', uri: 'file:///home/sub' };
+    m.redraw.sync();
+    expect(client.open).toHaveBeenCalledTimes(1);
+
+    location = { providerId: 'sftp', uri: 'sftp://abc-123/srv' };
+    m.redraw.sync();
+    await vi.waitFor(() => expect(client.open).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(client.open).mock.calls[1]?.[0].uri).toBe('sftp://abc-123/srv');
     vi.unstubAllGlobals();
   });
 

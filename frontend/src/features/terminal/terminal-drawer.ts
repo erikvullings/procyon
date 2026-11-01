@@ -24,7 +24,17 @@ export interface TerminalDrawerAttrs {
   readonly registerDisposeTab?: (dispose: (tabKey: string) => void) => void;
 }
 
+/**
+ * The machine a location's shell runs on: `local`, or `sftp://<connection-id>` for one SSH
+ * connection. A tab keeps its terminal across folder navigation, but not across hosts.
+ */
+export function terminalHost(location: Location): string {
+  const match = /^sftp:\/\/[^/]+/.exec(location.uri);
+  return match?.[0] ?? 'local';
+}
+
 type LiveTerminal = {
+  host: string;
   terminal: Terminal;
   fit: FitAddon;
   surface: HTMLElement;
@@ -114,7 +124,15 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     const location = attrs.location;
     const key = attrs.tabKey;
     if (location === undefined || key === undefined) return;
+    const host = terminalHost(location);
     let live = terminals.get(key);
+    if (live !== undefined && live.host !== host) {
+      // The tab moved to another machine (local <-> SSH, or another connection): the shell it
+      // holds would keep running on the old one.
+      live.terminal.dispose();
+      terminals.delete(key);
+      live = undefined;
+    }
     if (live === undefined) {
       const inheritedFontSize = Number.parseFloat(getComputedStyle(element).fontSize);
       const style = getComputedStyle(element);
@@ -138,7 +156,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       terminal.loadAddon(fit);
       const surface = document.createElement('div');
       surface.className = 'fm-terminal-surface';
-      live = { terminal, fit, surface };
+      live = { host, terminal, fit, surface };
       terminals.set(key, live);
       terminal.attachCustomKeyEventHandler((event) =>
         handleTerminalKeyEvent(event, {
