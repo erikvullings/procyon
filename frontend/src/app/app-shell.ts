@@ -2887,6 +2887,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       document.addEventListener('visibilitychange', handleVisibilityChange);
       document.addEventListener('keydown', miscWiring.updateFunctionKeyModifiers);
       document.addEventListener('keyup', miscWiring.updateFunctionKeyModifiers);
+      // Native file drags from the OS (Finder/Explorer) into the webview only deliver a
+      // `drop` to Procyon if the document first accepts the drag by preventing the default on
+      // `dragenter`/`dragover`. Without this the webview shows the OS drop cursor but silently
+      // rejects the drop, so the `subscribeNativeFileDrops` handler (task 0062) never fires and
+      // files dragged in from outside never land. Scoped to drags that actually carry files/URIs
+      // (an external OS drag does); in-app HTML5 drags carry only the `application/x-fm-locations`
+      // marker and keep their own per-row handlers, so their behaviour — and the tree drop tests
+      // that assert an unhandled dragover is not cancelled — is unchanged.
+      const acceptsExternalFileDrag = (event: Event): void => {
+        const dataTransfer = (event as DragEvent).dataTransfer;
+        const types = dataTransfer?.types ?? [];
+        if (types.includes('Files') || types.includes('text/uri-list')) event.preventDefault();
+      };
+      document.addEventListener('dragenter', acceptsExternalFileDrag);
+      document.addEventListener('dragover', acceptsExternalFileDrag);
       window.addEventListener('blur', miscWiring.resetFunctionKeyModifiers);
       shellState.appState = applyAppPatches(
         createInitialAppState(attrs.runtime),
@@ -3488,20 +3503,24 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 },
               },
               [
-                m(
-                  IconButton,
-                  {
-                    className: 'fm-operation-centre-button',
-                    disabled: shellState.workspace === undefined,
-                    'aria-label': t('shell', 'operationCentre'),
-                    title: t('shell', 'operationCentre'),
-                    'aria-pressed': String(shellState.workspace?.operationCentre.visible === true),
-                    onclick: () => {
-                      shellState.activityOpen = false;
-                      opsWiring.toggleOperationCentre();
+                tooltip(
+                  t('shell', 'operationCentre'),
+                  m(
+                    IconButton,
+                    {
+                      className: 'fm-operation-centre-button',
+                      disabled: shellState.workspace === undefined,
+                      'aria-label': t('shell', 'operationCentre'),
+                      'aria-pressed': String(
+                        shellState.workspace?.operationCentre.visible === true,
+                      ),
+                      onclick: () => {
+                        shellState.activityOpen = false;
+                        opsWiring.toggleOperationCentre();
+                      },
                     },
-                  },
-                  listIcon(),
+                    listIcon(),
+                  ),
                 ),
                 activityCount > 0
                   ? m(
