@@ -202,6 +202,10 @@ export function createWorkspaceController(
       await loadConnectionsList(request.signal);
       context.setPlatform(capabilities.platform);
       context.setNativeDragOutSupported(capabilities.nativeDragOut);
+      console.debug('[native-drop] startup capabilities', {
+        nativeDragOut: capabilities.nativeDragOut,
+        alreadySubscribed: context.getUnsubscribeNativeFileDrops() !== undefined,
+      });
       if (capabilities.nativeDragOut && context.getUnsubscribeNativeFileDrops() === undefined) {
         const unsub = await context.subscribeNativeFileDrops((drop) => {
           // A drag started in this window (dragging a selection between panes/tabs) still goes

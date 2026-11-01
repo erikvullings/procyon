@@ -717,18 +717,32 @@ export class TauriFileManagerClient implements FileManagerClient {
   }
 
   subscribeNativeFileDrops(listener: (drop: NativeFileDrop) => void): Promise<Unsubscribe> {
-    return getCurrentWindow().onDragDropEvent(async ({ payload }) => {
-      console.debug('[native-drop] tauri event', payload);
-      if (payload.type !== 'drop') return;
-      const locations = await invoke<Location[]>('native_drag_locations', {
-        paths: payload.paths,
+    console.debug('[native-drop] subscribeNativeFileDrops CALLED');
+    return getCurrentWindow()
+      .onDragDropEvent(async ({ payload }) => {
+        console.debug('[native-drop] tauri event', payload);
+        if (payload.type !== 'drop') return;
+        try {
+          const locations = await invoke<Location[]>('native_drag_locations', {
+            paths: payload.paths,
+          });
+          console.debug(
+            '[native-drop] resolved locations',
+            locations.map((l) => l.uri),
+          );
+          listener({ locations, position: payload.position });
+        } catch (error) {
+          console.error('[native-drop] native_drag_locations invoke failed', error);
+        }
+      })
+      .then((unsub) => {
+        console.debug('[native-drop] subscription registered', typeof unsub);
+        return unsub;
+      })
+      .catch((error) => {
+        console.error('[native-drop] onDragDropEvent subscription failed', error);
+        throw error;
       });
-      console.debug(
-        '[native-drop] resolved locations',
-        locations.map((l) => l.uri),
-      );
-      listener({ locations, position: payload.position });
-    });
   }
 
   async getFileIcon(
