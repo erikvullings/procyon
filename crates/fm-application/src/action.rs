@@ -703,6 +703,14 @@ fn core_actions(capabilities: PlatformCapabilities) -> Vec<ActionDescriptor> {
             "Duplicate Directory to Other Pane",
             "navigation",
             vec![
+                // Total Commander's "Open current directory in the other tab" is Alt+F2;
+                // on macOS that is Option+F2. Added for direct TC parity alongside the
+                // platform-neutral arrow-key bindings.
+                KeyChord {
+                    key: "F2".to_owned(),
+                    alt: true,
+                    ..KeyChord::default()
+                },
                 KeyChord {
                     key: "ArrowLeft".to_owned(),
                     ctrl: true,
@@ -1649,7 +1657,7 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_location_to_other_pane_binds_both_ctrl_arrow_directions() {
+    fn duplicate_location_to_other_pane_binds_alt_f2_and_both_ctrl_arrow_directions() {
         let registry = ActionRegistry::with_core_actions(PlatformCapabilities::empty());
         let action = registry
             .get(&ActionId::new("core.duplicateLocationToOtherPane"))
@@ -1657,6 +1665,11 @@ mod tests {
         assert_eq!(
             action.default_shortcuts,
             vec![
+                KeyChord {
+                    key: "F2".to_owned(),
+                    alt: true,
+                    ..KeyChord::default()
+                },
                 KeyChord {
                     key: "ArrowLeft".to_owned(),
                     ctrl: true,
