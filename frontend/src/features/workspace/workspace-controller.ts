@@ -214,12 +214,24 @@ export function createWorkspaceController(
           context.setNativeDragSourceInternal(false);
           const isInternalDrop =
             wasInternalOrigin && locationsMatch(previousLocations, drop.locations);
-          context.setDraggedLocations(isInternalDrop ? previousLocations : drop.locations);
           const scale = window.devicePixelRatio || 1;
+          console.debug('[native-drop] handler ran', {
+            locations: drop.locations.map((l) => l.uri),
+            position: drop.position,
+            devicePixelRatio: scale,
+            isInternalDrop,
+          });
+          context.setDraggedLocations(isInternalDrop ? previousLocations : drop.locations);
           const hit = document.elementFromPoint(drop.position.x / scale, drop.position.y / scale);
           const target = hit?.closest<HTMLElement>(
             '.fm-directory-row, .fm-directory-viewport, .fm-pane-tab',
           );
+          console.debug('[native-drop] target resolution', {
+            hitTag: hit?.tagName ?? null,
+            hitClass: hit?.className ?? null,
+            targetClass: target?.className ?? null,
+            targetNull: target === undefined || target === null,
+          });
           if (target === undefined || target === null) {
             context.setClipboardMessage(t('workspace', 'dropFilesOntoPaneOrTab'));
             context.redraw();

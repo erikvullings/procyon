@@ -973,16 +973,25 @@ export function createPaneContentBuilder(
           target,
           directory.writable === true,
         );
+        console.debug('[native-drop] onDrop ran', {
+          entry,
+          sources: context.getDraggedLocations().map((l) => l.uri),
+          target: target.uri,
+          nativeInProgress: context.getNativeDropInProgress(),
+          validation: validation.ok ? 'ok' : { noOp: validation.noOp, message: validation.message },
+        });
         if (!validation.ok) {
           if (!validation.noOp) context.setClipboardMessage(validation.message);
           return;
         }
         const sources = context.getDraggedLocations();
         context.setDraggedLocations([]);
-        void (context.getNativeDropInProgress() ||
-        operationForDrop(context.getPlatform(), event) === 'copy'
-          ? context.getOpsController().copy(sources, target)
-          : context.getOpsController().move(sources, target));
+        const op =
+          context.getNativeDropInProgress() ||
+          operationForDrop(context.getPlatform(), event) === 'copy'
+            ? context.getOpsController().copy(sources, target)
+            : context.getOpsController().move(sources, target);
+        console.debug('[native-drop] copy/move dispatched', op);
       },
       onTabDragOver: (targetTabId, event) => {
         const targetTab = pane?.tabsById[targetTabId];

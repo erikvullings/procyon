@@ -718,10 +718,15 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   subscribeNativeFileDrops(listener: (drop: NativeFileDrop) => void): Promise<Unsubscribe> {
     return getCurrentWindow().onDragDropEvent(async ({ payload }) => {
+      console.debug('[native-drop] tauri event', payload);
       if (payload.type !== 'drop') return;
       const locations = await invoke<Location[]>('native_drag_locations', {
         paths: payload.paths,
       });
+      console.debug(
+        '[native-drop] resolved locations',
+        locations.map((l) => l.uri),
+      );
       listener({ locations, position: payload.position });
     });
   }
