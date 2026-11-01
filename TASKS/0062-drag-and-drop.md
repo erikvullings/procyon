@@ -249,3 +249,18 @@ pass, or fixes any real defect the checklist surfaces.
   handed off to another agent for these. Diagnostic `console.debug('[native-drop] …')` logging is
   currently in place across the chain (`tauri-file-manager-client.ts`, `workspace-controller.ts`,
   `pane-content-builder.ts`) and should be stripped once B1 is fixed.
+- 2026-11-01 Claude: **B1 root cause found and fixed: wrong event target.** Native probes showed
+  the drop *does* reach wry (`draggingEntered:`/`performDragOperation:` on WryWebView, handler
+  returns `true`, so the page correctly sees no HTML5 events) and Tauri *does* dispatch it — but as
+  `RunEvent::WebviewEvent(DragDrop)`, not a window event. That path emits `tauri://drag-drop` via
+  `emit_to_webview` (target `{kind: Webview}`), which `getCurrentWindow().onDragDropEvent`
+  (target `{kind: Window}`) never matches. Fix: `subscribeNativeFileDrops` now uses
+  `getCurrentWebview().onDragDropEvent`; Tauri's window-content path emits to `AnyLabel`, which
+  Webview listeners also match (`tauri` `manager/mod.rs` target matching), so this covers both
+  delivery paths/platforms. The earlier diagnosis above ("WKWebView delivers only HTML5 drops") was
+  wrong: a standalone WKWebView repro on macOS 27.2 receives native and HTML5 drops normally, and
+  no Tauri config change was needed. Removed the app-wide `dragenter`/`dragover` accept
+  (`app-shell.ts`), the HTML5 guard in `pane-content-builder.ts` `onDrop`, and all `[native-drop]`
+  diagnostics. Test mocks now provide `onDragDropEvent` only on the webview, so a regression to the
+  window target fails `tauri-file-manager-client.test.ts`. Full frontend Vitest 3327 passed; tsc and
+  Biome clean. Needs desktop re-test of B1/B2 (and Windows, where the label emit should match).

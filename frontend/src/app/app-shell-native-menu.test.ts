@@ -15,10 +15,12 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({
-    onDragDropEvent: vi.fn(),
     toggleMaximize: vi.fn(),
     startDragging: vi.fn(),
   }),
+}));
+vi.mock('@tauri-apps/api/webview', () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: vi.fn() }),
 }));
 
 const { MockFileManagerClient } = await import('../api/client/mock-file-manager-client');

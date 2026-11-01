@@ -1,5 +1,6 @@
 import { getVersion } from '@tauri-apps/api/app';
 import { Channel, convertFileSrc, invoke as tauriInvoke } from '@tauri-apps/api/core';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { relaunch } from '@tauri-apps/plugin-process';
@@ -717,32 +718,21 @@ export class TauriFileManagerClient implements FileManagerClient {
   }
 
   subscribeNativeFileDrops(listener: (drop: NativeFileDrop) => void): Promise<Unsubscribe> {
-    console.debug('[native-drop] subscribeNativeFileDrops CALLED');
-    return getCurrentWindow()
-      .onDragDropEvent(async ({ payload }) => {
-        console.debug('[native-drop] tauri event', payload);
-        if (payload.type !== 'drop') return;
-        try {
-          const locations = await invoke<Location[]>('native_drag_locations', {
-            paths: payload.paths,
-          });
-          console.debug(
-            '[native-drop] resolved locations',
-            locations.map((l) => l.uri),
-          );
-          listener({ locations, position: payload.position });
-        } catch (error) {
-          console.error('[native-drop] native_drag_locations invoke failed', error);
-        }
-      })
-      .then((unsub) => {
-        console.debug('[native-drop] subscription registered', typeof unsub);
-        return unsub;
-      })
-      .catch((error) => {
-        console.error('[native-drop] onDragDropEvent subscription failed', error);
-        throw error;
-      });
+    // Listen on the *webview*, not the window: depending on how Tauri created it, a window's
+    // webview reports OS drops as a webview event (`emit_to_webview`, only reaching Webview-
+    // targeted listeners — the macOS case, task 0062 B1) or as a window event emitted to the
+    // shared label, which Webview-targeted listeners also receive.
+    return getCurrentWebview().onDragDropEvent(async ({ payload }) => {
+      if (payload.type !== 'drop') return;
+      try {
+        const locations = await invoke<Location[]>('native_drag_locations', {
+          paths: payload.paths,
+        });
+        listener({ locations, position: payload.position });
+      } catch (error) {
+        console.error('native file drop could not be resolved', error);
+      }
+    });
   }
 
   async getFileIcon(

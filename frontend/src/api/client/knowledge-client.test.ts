@@ -45,7 +45,10 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
 vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ onDragDropEvent: vi.fn() }),
+  getCurrentWindow: () => ({}),
+}));
+vi.mock('@tauri-apps/api/webview', () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: vi.fn() }),
 }));
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
 

@@ -2887,21 +2887,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       document.addEventListener('visibilitychange', handleVisibilityChange);
       document.addEventListener('keydown', miscWiring.updateFunctionKeyModifiers);
       document.addEventListener('keyup', miscWiring.updateFunctionKeyModifiers);
-      // WKWebView (and therefore Tauri/wry's onDragDropEvent channel) will not deliver a native
-      // file drop unless the page first *accepts* the drag by preventing the default on the
-      // native dragover. Without this the webview shows the OS drop cursor but silently rejects
-      // the drop, so `subscribeNativeFileDrops` never fires and files dragged in from Finder /
-      // Explorer never land (task 0062 B1). Scoped to drags that actually carry files/URIs (an
-      // external OS drag does); in-app HTML5 drags carry only the `application/x-fm-locations`
-      // marker and keep their own per-row handlers, so the tree-drop tests (which assert an
-      // unhandled dragover is not cancelled) are unaffected.
-      const acceptsExternalFileDrag = (event: Event): void => {
-        const dataTransfer = (event as DragEvent).dataTransfer;
-        const types = dataTransfer?.types ?? [];
-        if (types.includes('Files') || types.includes('text/uri-list')) event.preventDefault();
-      };
-      document.addEventListener('dragenter', acceptsExternalFileDrag);
-      document.addEventListener('dragover', acceptsExternalFileDrag);
       window.addEventListener('blur', miscWiring.resetFunctionKeyModifiers);
       shellState.appState = applyAppPatches(
         createInitialAppState(attrs.runtime),

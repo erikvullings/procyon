@@ -23,7 +23,12 @@ vi.mock('@tauri-apps/api/core', () => ({
     `${protocol}://localhost/${encodeURIComponent(path)}`,
 }));
 vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ onDragDropEvent, setTitle, setBackgroundColor, setTheme }),
+  getCurrentWindow: () => ({ setTitle, setBackgroundColor, setTheme }),
+}));
+// OS drops must be subscribed on the webview: on macOS Tauri emits them only to the webview
+// target, which a window-level `onDragDropEvent` never receives (task 0062 B1).
+vi.mock('@tauri-apps/api/webview', () => ({
+  getCurrentWebview: () => ({ onDragDropEvent }),
 }));
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: (...args: unknown[]) => openUrl(...args),
