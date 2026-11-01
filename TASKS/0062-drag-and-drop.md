@@ -220,3 +220,32 @@ pass, or fixes any real defect the checklist surfaces.
   - **Status stays `in_progress`:** B1 is a code fix awaiting desktop re-verification (the agent
     cannot run the desktop app), and the A-series items are confirmed-correct OS behaviour that
     the manual tester should re-acknowledge. Nothing else changed.
+- 2026-11-01 erik: **B1 root-caused (macOS): Tauri `onDragDropEvent` never fires; the webview
+  delivers the drop only as HTML5.** Instrumented the whole chain. `nativeDragOut` is `true`,
+  `subscribeNativeFileDrops` is called and the `getCurrentWindow().onDragDropEvent(cb)`
+  subscription *registers* (returns an unsubscribe fn), but **the callback never fires for any
+  drag** — Finder→Procyon, and even Procyon-window→Procyon-window — verified with a
+  `console.debug` at the very top of the callback (before the `payload.type !== 'drop'` filter),
+  so no `'enter'/'over'/'leave'/'drop'` of any type is received. Adding a document-level
+  `preventDefault()` on `dragenter`/`dragover` (scoped to `dataTransfer.types` containing
+  `Files`/`text/uri-list`) did **not** make the Tauri callback fire. But the *same*
+  `preventDefault` **does** make WKWebView fire an HTML5 `drop` (proven: a folder's `.DS_Store`
+  entry opened in the default editor on drop — the webview's own drop hit a directory row). So
+  the webview accepts and delivers the drag as HTML5 but not as a Tauri native event: this is a
+  wry/Tauri macOS integration gap, not a webview-accept problem. **The only working delivery is
+  the HTML5 `drop` event.** Candidate fix being evaluated: keep the `dragover`/`dragenter`
+  `preventDefault` so WKWebView fires `drop`, then in `pane-content-builder.ts` `onDrop` detect
+  the external file drop (`dataTransfer.types` has `Files`/`text/uri-list` and
+  `getDraggedLocations()` is empty) and extract real source paths — WKWebView hides paths behind
+  `event.webkitDataTransfer.pasteboardItems()[].propertyListForKey('public.file-url')` or
+  `dataTransfer.getData('public.file-url')` (single-file) — convert via the existing Rust
+  `native_drag_locations` command and run `copy`. Must avoid double-handling (the synthetic
+  Tauri drop carries no `dataTransfer`; key the HTML5 path on `dataTransfer`/`webkitDataTransfer`
+  presence) and must suppress the post-drop click that opened `.DS_Store`. **Open questions:**
+  (1) is there a Tauri/wry config or version bump to get `onDragDropEvent` working on macOS
+  WKWebView rather than routing around it; (2) is `webkitDataTransfer.pasteboardItems()` reliable
+  for *multi-file* drops in current WKWebView; (3) should the HTML5 path be universal or
+  macOS-only (Windows uses EdgeWebView, where the Tauri channel may work). See the full summary
+  handed off to another agent for these. Diagnostic `console.debug('[native-drop] …')` logging is
+  currently in place across the chain (`tauri-file-manager-client.ts`, `workspace-controller.ts`,
+  `pane-content-builder.ts`) and should be stripped once B1 is fixed.
