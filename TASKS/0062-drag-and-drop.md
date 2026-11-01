@@ -185,3 +185,38 @@ pass, or fixes any real defect the checklist surfaces.
 **C. In-app (both platforms)**
 - [ ] C1: drag a selection between two panes / onto another tab. Default = **move**; modifier =
   **copy**. Confirm it runs through the operation engine with conflict handling.
+
+- 2026-11-01 erik: **First re-verification round — fixes shipped, results analysed.**
+  *Findings the agent could not reproduce headlessly; each item below is what the manual tester
+  reported and the agent's disposition.*
+  - **B1 (drag-IN fails, both macOS Finder and Windows Explorer): fixed in code, needs re-test.**
+    Root cause: the webview showed the OS drop cursor but never delivered a `drop`, so
+    `subscribeNativeFileDrops` never fired and files dragged in from outside silently did not
+    land. Added a document-level `dragenter`/`dragover` `preventDefault` scoped to drags carrying
+    `Files`/`text/uri-list` (a real external OS drag does; in-app HTML5 drags carry only the
+    `application/x-fm-locations` marker, so they and the tree-drop tests are unaffected). Also
+    worth re-checking on the next run is the drop-point→`elementFromPoint` coordinate path
+    (`workspace-controller.ts`) if the drop still resolves after this fix.
+  - **B2: blocked on B1** — re-test once B1 passes.
+  - **A3 (move drag-out shows no cursor icon; copy shows one, both platforms): expected OS
+    behaviour, not a Procyon bug.** For a drag-OUT, Procyon is the *source* and advertises
+    `Copy|Move` correctly (verified). The cursor over the destination is the destination's own
+    feedback, and Finder/Explorer do not offer *move* for files dragged out of another
+    application (they copy) — so a missing move icon and a present copy icon are correct. No
+    code change.
+  - **A1 (Windows drag-OUT defaults to copy): expected OS behaviour, not a Procyon bug.**
+    Windows Explorer copies external-source drags by default when the source advertises
+    `Copy|Move`; that is Explorer's negotiation, exactly the design the 2026-09-07 entry intends
+    ("Finder/Explorer own native operation negotiation"). macOS A1 passing (move) is because
+    Finder moves same-volume drags by default. No code change.
+  - **A2 (Windows modifier): consistent with Explorer conventions** (Shift=move, Ctrl=copy);
+    the tester's note is ambiguous but does not indicate a Procyon defect. No code change.
+  - **C1: pass on both platforms.**
+  - **Also shipped this round (unrelated to the drag results): (a)** `core.duplicateLocationTo
+    OtherPane` (the Alt+F2 / "Duplicate Directory to Other Pane" command) gained an **Alt+F2**
+    chord — Total Commander parity; on macOS that is Option+F2. See the commit for the reasoning.
+    **(b)** The Operations-centre toolbar button now uses the shared styled `tooltip()` portal
+    instead of a native `title=` tooltip, matching every sibling toolbar button.
+  - **Status stays `in_progress`:** B1 is a code fix awaiting desktop re-verification (the agent
+    cannot run the desktop app), and the A-series items are confirmed-correct OS behaviour that
+    the manual tester should re-acknowledge. Nothing else changed.
