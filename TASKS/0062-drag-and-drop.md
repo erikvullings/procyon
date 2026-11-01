@@ -150,3 +150,38 @@ from Finder/Explorer) and §33 step 10.
   Explorer (Windows) bidirectional drag verification recorded in the task notes — work an
   automated agent in a headless environment cannot perform. Everything that can be done
   without a live pointer + real Finder/Explorer windows is complete.
+
+## Manual platform verification checklist (agent-provided 2026-11-01; run on macOS + Windows)
+
+The code is complete and reviewed. This task closes once a human records pass/fail for each item
+below on the platforms where `nativeDragOut` is enabled (**macOS** and **Windows**; **Linux and
+browser are intentionally capability-disabled — skip them**). Reply to the agent with a
+`pass`/`fail` per item (and the A3 cursor observation); the agent marks the task `done` if all
+pass, or fixes any real defect the checklist surfaces.
+
+**Prerequisites**
+- Build/run the desktop app (`pnpm run build:tauri`, or `pnpm dev:tauri` for dev).
+- Two windows side by side: a Procyon pane browsing a local folder, and a Finder (macOS) /
+  Explorer (Windows) window on the **same volume**.
+- Use a scratch folder you don't mind writing to, e.g. `~/drag-test/`.
+
+**A. Drag-OUT from Procyon → Finder/Explorer**
+- [ ] A1 (default = move): select a file in `~/drag-test/`, drag it into the Finder/Explorer
+  window. Expect the file to **move** (gone from source, present in dest).
+- [ ] A2 (copy via modifier): repeat holding **Option** (macOS) / **Ctrl** (Windows). Expect a
+  **copy** (present in both).
+- [ ] A3 (cursor feedback): watch the pointer over the destination. Record whether it shows the
+  correct operation icon or the reported **“no operation” (circle-slash)** icon. (This is the
+  quirk the release owner flagged — confirm if it still occurs.)
+- [ ] A4 (drop onto a directory row): drop onto a directory *row*; confirm it lands **inside**
+  that directory, not its parent.
+
+**B. Drag-IN from Finder/Explorer → Procyon**
+- [ ] B1: drag a file from Finder/Explorer onto a Procyon pane (onto a directory row). Expect a
+  **copy into** the browsed folder; confirm it exists there.
+- [ ] B2 (no silent overwrite): repeat B1 dropping onto an **already-existing** file. Expect the
+  conflict/confirmation dialog (§35), not a silent overwrite.
+
+**C. In-app (both platforms)**
+- [ ] C1: drag a selection between two panes / onto another tab. Default = **move**; modifier =
+  **copy**. Confirm it runs through the operation engine with conflict handling.
