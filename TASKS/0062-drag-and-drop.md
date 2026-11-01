@@ -131,3 +131,22 @@ from Finder/Explorer) and §33 step 10.
   drop onto tree folders. Read-only/unavailable targets and recursive drops are rejected before
   acceptance. Pointer cancellation clears the pending in-app selection. No change to native
   Finder/Explorer verification status.
+- 2026-11-01 erik: **Code review pass (no behavior change).** Confirmed the native handoff is
+  correct on both supported platforms: `apps/fm-desktop/src-tauri/src/commands.rs`
+  `start_native_drag` passes `drag::DragMode::CopyMove`, and the patched `third_party/drag-rs`
+  advertises the right source mask on each — macOS `draggingSession:sourceOperationMaskForDragging
+  Context:` returns `NSDragOperationCopy | NSDragOperationMove` (17) and Windows returns
+  `DROPEFFECT_COPY | DROPEFFECT_MOVE`. The frontend drag-drop + directory-table suites pass
+  (`vitest run src/features/drag-drop/ ...directory-table.test.ts` → 70 passed) and the desktop
+  native-drag Rust unit tests previously passed; the native code is unchanged since the last
+  review. Assessed the outstanding macOS Finder "no-operation" cursor the release owner flagged:
+  the *source* advertises copy+move correctly, so this is a *destination-side* macOS feedback
+  quirk — Finder's own `draggingUpdated:` returns `NSDragOperationNone` during hover while the
+  drop still performs a copy. That mismatch is not controllable from the drag source and has no
+  reliable source-side fix (restricting the advertised mask would only change the ceiling, not
+  Finder's hover feedback); confirming or rejecting a fix requires an interactive session. No
+  speculative native change was made. **Status stays `in_progress`:** the only remaining
+  acceptance work is the explicitly *interactive, per-platform manual* Finder (macOS) and
+  Explorer (Windows) bidirectional drag verification recorded in the task notes — work an
+  automated agent in a headless environment cannot perform. Everything that can be done
+  without a live pointer + real Finder/Explorer windows is complete.
