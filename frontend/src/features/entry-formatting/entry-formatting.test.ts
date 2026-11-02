@@ -48,6 +48,15 @@ describe('entry presentation formatting', () => {
     expect(formatEntryModifiedAt(undefined, dateSettings('iso'))).toBe('—');
   });
 
+  it('renders the ISO format in the configured time zone, not UTC', () => {
+    expect(
+      formatEntryModifiedAt('2026-11-02T14:05:00.000Z', {
+        ...dateSettings('iso'),
+        timeZone: 'Europe/Amsterdam',
+      }),
+    ).toBe('2026-11-02 15:05');
+  });
+
   it('provides settings defaults outside UI components', () => {
     expect(DEFAULT_ENTRY_FORMAT_SETTINGS).toEqual({
       sizeFormat: 'binary',

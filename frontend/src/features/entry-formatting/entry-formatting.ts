@@ -80,7 +80,17 @@ export function formatEntryModifiedAt(
     return '—';
   }
   if (settings.dateFormat === 'iso') {
-    return date.toISOString().slice(0, 16).replace('T', ' ');
+    // Local time (or the configured zone), laid out as `YYYY-MM-DD HH:mm`; `sv-SE` yields that
+    // shape regardless of the UI locale. `toISOString()` would silently show UTC.
+    return new Intl.DateTimeFormat('sv-SE', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      ...(settings.timeZone === undefined ? {} : { timeZone: settings.timeZone }),
+    }).format(date);
   }
   return new Intl.DateTimeFormat(settings.locale, {
     dateStyle: settings.dateFormat,
