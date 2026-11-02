@@ -1754,60 +1754,63 @@ mod tests {
         assert_eq!(hardlinked, 9_000);
     }
 
-    /// `build_tree_parallel` must check `cancellation` at every entry/directory it visits (not
-    /// just once at the top), so a scan over a large fixture stops promptly rather than running
-    /// to completion once cancelled mid-traversal. A background thread watches
-    /// `scanned_entries` and cancels once a small threshold is crossed, well before the fixture's
-    /// 20,000 entries could all be visited. Synchronize the watcher before starting the scan:
-    /// on fast filesystems, the scan can otherwise finish before the watcher is scheduled.
+    /// `build_tree_parallel` must check `cancellation` at every entry it visits (not just once at
+    /// the top), so a scan cancelled mid-traversal stops instead of running to completion.
+    ///
+    /// Deterministic, with no timing race: every fixture entry is a hard link, so each worker
+    /// counts its entry in `scanned_entries` and then blocks on `seen_hardlinks`, which the test
+    /// holds. The scan is therefore frozen with at most one entry per worker counted; the test
+    /// cancels, releases the lock, and every remaining entry must observe the cancellation.
+    #[cfg(unix)]
     #[test]
     fn build_tree_parallel_cancellation_interrupts_a_large_deterministic_fixture() {
+        const ENTRIES: u64 = 1_000;
         let root = tempfile::tempdir().expect("create fixture root");
-        for file_index in 0..20_000 {
-            fs::write(root.path().join(format!("file-{file_index:05}.txt")), b"x")
-                .expect("write fixture file");
+        let source = root.path().join("source.txt");
+        fs::write(&source, b"x").expect("write fixture file");
+        for index in 1..ENTRIES {
+            fs::hard_link(&source, root.path().join(format!("link-{index:05}.txt")))
+                .expect("hard link fixture file");
         }
         let cancellation = CancellationToken::new();
         let scanned_entries = AtomicU64::new(0);
         let unreadable = UnreadableRegistry::default();
         let seen_hardlinks = Mutex::new(HashSet::new());
 
+        let held_hardlinks = seen_hardlinks.lock().expect("hold hardlink registry");
         let result = std::thread::scope(|scope| {
-            let watcher_cancellation = cancellation.clone();
-            let watcher_scanned_entries = &scanned_entries;
-            let watcher_ready = std::sync::Arc::new(std::sync::Barrier::new(2));
-            let watcher_start = std::sync::Arc::clone(&watcher_ready);
-            scope.spawn(move || {
-                watcher_start.wait();
-                while watcher_scanned_entries.load(Ordering::Relaxed) < 50 {
-                    std::hint::spin_loop();
-                }
-                watcher_cancellation.cancel();
+            let scan = scope.spawn(|| {
+                disk_usage_thread_pool()
+                    .expect("create disk usage pool")
+                    .install(|| {
+                        build_tree_parallel(
+                            root.path(),
+                            OsStringDisplay::os_string_from(root.path()),
+                            None,
+                            MAX_SCAN_DEPTH,
+                            &cancellation,
+                            &unreadable,
+                            &scanned_entries,
+                            &seen_hardlinks,
+                            ScanBoundary::default(),
+                            DirectoryLister::native(),
+                        )
+                    })
             });
-            watcher_ready.wait();
-
-            disk_usage_thread_pool()
-                .expect("create disk usage pool")
-                .install(|| {
-                    build_tree_parallel(
-                        root.path(),
-                        OsStringDisplay::os_string_from(root.path()),
-                        None,
-                        MAX_SCAN_DEPTH,
-                        &cancellation,
-                        &unreadable,
-                        &scanned_entries,
-                        &seen_hardlinks,
-                        ScanBoundary::default(),
-                        DirectoryLister::native(),
-                    )
-                })
+            // The root directory plus at least one file blocked on the held registry.
+            while scanned_entries.load(Ordering::Relaxed) < 2 {
+                std::thread::yield_now();
+            }
+            cancellation.cancel();
+            drop(held_hardlinks);
+            scan.join().expect("scan thread")
         });
 
         assert!(matches!(result, Err(ApplicationError::OperationCancelled)));
+        let scanned = scanned_entries.load(Ordering::Relaxed);
         assert!(
-            scanned_entries.load(Ordering::Relaxed) < 20_000,
-            "expected cancellation to interrupt traversal well before it visited every entry"
+            scanned <= 1 + DISK_USAGE_WORKER_COUNT as u64,
+            "cancellation must stop traversal once in-flight entries finish; scanned {scanned} of {ENTRIES}"
         );
     }
 

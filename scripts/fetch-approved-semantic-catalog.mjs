@@ -163,15 +163,45 @@ export function verifySemanticCatalogBytes(plan, catalogBytes, signatureBytes) {
   return envelope;
 }
 
-async function download(url) {
-  const response = await fetch(url, {
-    headers: { 'user-agent': 'procyon-release-workflow' },
-    redirect: 'follow',
-  });
-  if (!response.ok) {
-    throw new Error(`failed to download ${url}: HTTP ${response.status}`);
+const DOWNLOAD_ATTEMPTS = 4;
+const DOWNLOAD_RETRY_BASE_MS = 2_000;
+
+/** GitHub release downloads intermittently answer 5xx/429; those (and network errors) retry. */
+function isTransientStatus(status) {
+  return status === 429 || status >= 500;
+}
+
+export async function download(
+  url,
+  { fetchImpl = fetch, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {},
+) {
+  for (let attempt = 1; ; attempt += 1) {
+    let response;
+    let failure;
+    try {
+      response = await fetchImpl(url, {
+        headers: { 'user-agent': 'procyon-release-workflow' },
+        redirect: 'follow',
+      });
+    } catch (error) {
+      failure = new Error(`failed to download ${url}: ${error}`);
+    }
+    if (response?.ok) {
+      return Buffer.from(await response.arrayBuffer());
+    }
+    if (response) {
+      failure = new Error(`failed to download ${url}: HTTP ${response.status}`);
+      if (!isTransientStatus(response.status)) {
+        throw failure;
+      }
+    }
+    if (attempt >= DOWNLOAD_ATTEMPTS) {
+      throw failure;
+    }
+    const delay = DOWNLOAD_RETRY_BASE_MS * 2 ** (attempt - 1);
+    console.warn(`${failure.message}; retrying in ${delay} ms (${attempt}/${DOWNLOAD_ATTEMPTS})`);
+    await sleep(delay);
   }
-  return Buffer.from(await response.arrayBuffer());
 }
 
 async function main() {
