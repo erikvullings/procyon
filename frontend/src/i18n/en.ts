@@ -1738,8 +1738,8 @@ export const en = {
     unavailable: 'Semantic library enrolment is unavailable in this host.',
     administratorManaged:
       'This private semantic library is provisioned by the server administrator and is read-only here.',
-    ingestionActive: 'Indexing on',
-    ingestionPaused: 'Indexing paused',
+    ingestionActive: 'Indexing: on',
+    ingestionPaused: 'Indexing: paused',
     pauseIngestion: 'Pause indexing',
     resumeIngestion: 'Resume indexing',
     pauseExplanation:
@@ -1759,6 +1759,23 @@ export const en = {
     openFolder: 'Open a folder in a pane to include it in search.',
     folderStatusUnavailable: 'Folder consent status is unavailable.',
     currentFolder: 'Folder open in a pane',
+    oversizedHint:
+      'Files that are not indexed because they exceed the size limit. Raise or disable the limit under Settings → Semantic → Maximum file size.',
+    skippedFilesTruncated: 'Showing {shown} of {total} files.',
+    availableInAll: 'Available in all workspaces',
+    availableInSome: 'Available in {count} selected workspaces',
+    workspaceSelectionHelp:
+      'Choose the workspaces that can search this folder. Select none for all workspaces.',
+    maxFileSize: 'Maximum file size',
+    maxFileSizeHelp:
+      'Largest file, in MiB, that indexing reads. 0 or empty indexes every file the resource profile and the semantic worker allow (PDFs stay bounded by the worker’s own limit).',
+    mebibytes: 'MiB',
+    openFolderLink: 'Open this folder in a pane',
+    titleGemma: 'Semantic library: Gemma',
+    titleGemmaMedia: 'Semantic library: Gemma (incl. {media})',
+    mediaImages: 'images',
+    mediaAudio: 'audio',
+    mediaVideo: 'video',
     changeFolder:
       'This folder is not indexed. Opening it does not start indexing. To index just a subfolder, open that subfolder in a pane and select Review indexing.',
     includedHere: 'Included here',
@@ -1819,10 +1836,6 @@ export const en = {
       'PDF page images are limited to the first {pages} pages per PDF on this CPU device; PDF text remains indexed.',
     pdfImagesSkippedPages:
       '{pages} PDF page image(s) were skipped by the per-file page budget; PDF text remains indexed.',
-    lastWorkerDevice: 'Last worker launch: {device}',
-    metal: 'Metal',
-    cpu: 'CPU',
-    cpuForced: 'CPU (forced by PROCYON_GEMMA_FORCE_CPU)',
     computeMode: 'Indexing compute policy',
     computeAutomatic:
       'Metal on supported macOS workers when available; CPU fallback (current worker device not reported here)',
@@ -2574,6 +2587,8 @@ export const en = {
     corpusThemeProfileMismatch:
       'The index was built with a different embedding model. Rebuild the index to see themes.',
     corpusThemesFailed: 'The corpus themes could not be computed: {detail}.',
+    corpusThemeIndexNotBuilt:
+      'The index is empty or still being built. Themes appear once documents are indexed.',
     corpusThemesStale: 'These themes are out of date. Analyse again to continue.',
     conversationImmutable: 'The profile, scope and knowledge mode of a conversation cannot change.',
     scopeInvalid: 'The selected files are not a valid scope.',

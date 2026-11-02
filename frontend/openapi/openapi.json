@@ -7761,6 +7761,63 @@
         }
       }
     },
+    "/api/v1/semantic/library/root-workspaces": {
+      "post": {
+        "operationId": "updateSemanticRootWorkspaces",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSemanticRootWorkspacesRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryStatusDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticLibraryErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/semantic/library/status": {
       "get": {
         "operationId": "getSemanticLibraryStatus",
@@ -23730,6 +23787,7 @@
           "pause",
           "resume",
           "updateEligibilityOverrides",
+          "updateRootWorkspaces",
           "updateGemmaMedia"
         ]
       },
@@ -24382,6 +24440,13 @@
             "type": "boolean",
             "description": "Whether descendants inherit consent."
           },
+          "skippedFiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SemanticSkippedFilesDto"
+            },
+            "description": "Files skipped by the last reconciliation, grouped by reason and capped per reason."
+          },
           "stableIdentityVerified": {
             "type": "boolean",
             "description": "Whether a provider supplied stable identity."
@@ -24527,6 +24592,27 @@
           "entireLibrary",
           "enrolledRoots"
         ]
+      },
+      "SemanticSkippedFilesDto": {
+        "type": "object",
+        "description": "Files skipped for one reason.",
+        "required": [
+          "reason",
+          "files"
+        ],
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Skipped files, capped per reason."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/SemanticEligibilityReasonDto",
+            "description": "Stable reason."
+          }
+        }
       },
       "SemanticUnavailableReasonDto": {
         "type": "string",
@@ -24838,6 +24924,12 @@
             "type": "integer",
             "format": "int32",
             "description": "On-disk schema version.",
+            "minimum": 0
+          },
+          "semanticMaxSourceMib": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Largest source file, in MiB, that semantic indexing reads; `0` means no limit beyond the\nresource profile and the worker's own hard caps.",
             "minimum": 0
           },
           "showHiddenFiles": {
@@ -27298,6 +27390,36 @@
             "type": "string",
             "format": "uuid",
             "description": "Attached active workspace."
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateSemanticRootWorkspacesRequestDto": {
+        "type": "object",
+        "description": "Chooses the workspaces a root is available in.",
+        "required": [
+          "rootId",
+          "workspaceIds",
+          "policyRevision"
+        ],
+        "properties": {
+          "policyRevision": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Current policy revision.",
+            "minimum": 0
+          },
+          "rootId": {
+            "type": "string",
+            "description": "Stable root identity."
+          },
+          "workspaceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Selected workspaces; empty makes the root available in every workspace."
           }
         },
         "additionalProperties": false

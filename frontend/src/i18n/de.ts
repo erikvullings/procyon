@@ -1434,6 +1434,23 @@ export const de = {
       'Die semantische Indizierung speichert normalisierte Textauszüge lokal, bis ihr Quellumfang ausdrücklich ausgeschlossen wird.',
     openFolder: 'Öffnen Sie einen Ordner in einem Bereich, um ihn in die Suche einzubeziehen.',
     folderStatusUnavailable: 'Der Einwilligungsstatus des Ordners ist nicht verfügbar.',
+    oversizedHint:
+      'Dateien, die nicht indexiert werden, weil sie das Größenlimit überschreiten. Erhöhen oder deaktivieren Sie das Limit unter Einstellungen → Semantisch → Maximale Dateigröße.',
+    skippedFilesTruncated: '{shown} von {total} Dateien angezeigt.',
+    availableInAll: 'In allen Arbeitsbereichen verfügbar',
+    availableInSome: 'In {count} ausgewählten Arbeitsbereichen verfügbar',
+    workspaceSelectionHelp:
+      'Wählen Sie die Arbeitsbereiche, die diesen Ordner durchsuchen dürfen. Ohne Auswahl gilt er für alle.',
+    maxFileSize: 'Maximale Dateigröße',
+    maxFileSizeHelp:
+      'Größte Datei in MiB, die indexiert wird. 0 oder leer indexiert jede Datei, die Ressourcenprofil und semantischer Worker erlauben (PDFs bleiben durch das Limit des Workers begrenzt).',
+    mebibytes: 'MiB',
+    openFolderLink: 'Diesen Ordner in einem Bereich öffnen',
+    titleGemma: 'Semantische Bibliothek: Gemma',
+    titleGemmaMedia: 'Semantische Bibliothek: Gemma (inkl. {media})',
+    mediaImages: 'Bilder',
+    mediaAudio: 'Audio',
+    mediaVideo: 'Video',
     currentFolder: 'In einem Bereich geöffneter Ordner',
     changeFolder:
       'Dieser Ordner ist nicht indiziert. Ihn zu öffnen startet keine Indizierung. Um nur einen Unterordner zu indizieren, öffnen Sie diesen Unterordner in einem Bereich und wählen Sie „Indizierung prüfen“.',
@@ -1495,10 +1512,6 @@ export const de = {
       'PDF-Seitenbilder sind auf diesem CPU-Gerät auf die ersten {pages} Seiten pro PDF begrenzt; der PDF-Text bleibt indiziert.',
     pdfImagesSkippedPages:
       '{pages} PDF-Seitenbild(er) wurden durch das Seitenlimit pro Datei übersprungen; der PDF-Text bleibt indiziert.',
-    lastWorkerDevice: 'Letzter Worker-Start: {device}',
-    metal: 'Metal',
-    cpu: 'CPU',
-    cpuForced: 'CPU (erzwungen durch PROCYON_GEMMA_FORCE_CPU)',
     computeMode: 'Rechenrichtlinie für die Indizierung',
     computeAutomatic:
       'Metal auf unterstützten macOS-Workern, sofern verfügbar; CPU als Rückfall (das aktuelle Worker-Gerät wird hier nicht gemeldet)',
@@ -2668,6 +2681,8 @@ export const de = {
     corpusThemeProfileMismatch:
       'Der Index wurde mit einem anderen Embedding-Modell erstellt. Erstellen Sie den Index neu, um Themen zu sehen.',
     corpusThemesFailed: 'Die Korpusthemen konnten nicht berechnet werden: {detail}.',
+    corpusThemeIndexNotBuilt:
+      'Der Index ist leer oder wird noch aufgebaut. Themen erscheinen, sobald Dokumente indexiert sind.',
     corpusThemesStale: 'Diese Themen sind veraltet. Analysieren Sie erneut, um fortzufahren.',
     conversationImmutable:
       'Profil, Umfang und Wissensmodus einer Unterhaltung können nicht geändert werden.',

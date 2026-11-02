@@ -205,6 +205,7 @@ export function createShellState(client: FileManagerClient) {
     knowledgeSearchAvailable: false,
     /** Themes cluster embeddings, so full-text alone cannot serve them. */
     themesAvailable: false,
+    themesWorkspaceIndexed: false,
     knowledgeSearchChecked: false,
     knowledgeAnswerRevision: 0,
     semanticEnrolmentRequest: undefined as unknown as

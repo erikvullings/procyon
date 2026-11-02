@@ -7,6 +7,7 @@ import type { SemanticEligibilityOverrideStatusDto } from './semanticEligibility
 import type { SemanticEligibilityReasonCountDto } from './semanticEligibilityReasonCountDto.ts';
 import type { SemanticExclusionStatusDto } from './semanticExclusionStatusDto.ts';
 import type { SemanticRootAvailabilityDto } from './semanticRootAvailabilityDto.ts';
+import type { SemanticSkippedFilesDto } from './semanticSkippedFilesDto.ts';
 
 /**
  * Safe status for one globally enrolled root.
@@ -48,6 +49,8 @@ export interface SemanticRootStatusDto {
   reconciliationGeneration: number;
   /** Whether descendants inherit consent. */
   recursive: boolean;
+  /** Files skipped by the last reconciliation, grouped by reason and capped per reason. */
+  skippedFiles?: SemanticSkippedFilesDto[];
   /** Whether a provider supplied stable identity. */
   stableIdentityVerified: boolean;
   /** Workspaces attached to this global consent. */

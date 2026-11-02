@@ -2,7 +2,8 @@ import m, { type FactoryComponent, type Vnode } from 'mithril';
 
 import type { ConnectionClient } from '../../api/client/connection-client.ts';
 import type { SemanticClient } from '../../api/client/semantic-client.ts';
-import { semanticUnavailableText, t } from '../../i18n';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
+import { t } from '../../i18n';
 import type {
   KnowledgeRoot,
   Location,
@@ -11,7 +12,6 @@ import type {
   SemanticEligibilityReason,
   SemanticEnrolmentPreview,
   SemanticExclusionPlan,
-  SemanticFolderConsent,
   SemanticFolderStatus,
   SemanticLibraryCapabilities,
   SemanticLibraryStatus,
@@ -21,9 +21,11 @@ import type {
 import { busyButtonAttrs } from './busy-button';
 
 export interface SemanticLibraryManagementAttrs {
-  readonly client: ConnectionClient & SemanticClient;
+  readonly client: ConnectionClient & SemanticClient & Pick<WorkspaceClient, 'listWorkspaces'>;
   readonly workspaceId?: WorkspaceId;
   readonly location?: Location;
+  /** Opens a folder in the active pane (used by the included-folder links). */
+  readonly onOpenLocation?: (location: Location) => void;
 }
 
 export interface SemanticFolderEnrolmentPromptAttrs {
@@ -44,6 +46,7 @@ type BusyAction =
   | 'resume'
   | 'cleanup'
   | 'override'
+  | 'workspaces'
   | 'media';
 
 interface PdfImageConsentOption {
@@ -66,6 +69,12 @@ const GEMMA_MEDIA_LABELS = {
   images: 'gemmaImages',
   audio: 'gemmaAudio',
   video: 'gemmaVideo',
+} as const;
+
+const GEMMA_MEDIA_NAMES = {
+  images: 'mediaImages',
+  audio: 'mediaAudio',
+  video: 'mediaVideo',
 } as const;
 
 const CPU_PDF_IMAGE_SECONDS_PER_PAGE = 107;
@@ -92,19 +101,6 @@ function formatBytes(bytes: number): string {
     unit += 1;
   }
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)} ${units[unit]}`;
-}
-
-function consentLabel(consent: SemanticFolderConsent): string {
-  switch (consent) {
-    case 'includedHere':
-      return t('semanticLibrary', 'includedHere');
-    case 'inheritedFromParent':
-      return t('semanticLibrary', 'inheritedFromParent');
-    case 'excluded':
-      return t('semanticLibrary', 'excluded');
-    case 'notIncluded':
-      return t('semanticLibrary', 'notIncluded');
-  }
 }
 
 function reasonLabel(reason: SemanticEligibilityReason): string {
@@ -445,16 +441,90 @@ function exclusionPlanView(
   ]);
 }
 
+/** Path of `location` relative to its folder root, decoded for display. */
+function relativeLabel(location: Location, root: Location): string {
+  const full = decodedLocation(location.uri);
+  const base = decodedLocation(root.uri).replace(/\/$/, '');
+  return full.startsWith(`${base}/`) ? full.slice(base.length + 1) : full;
+}
+
+function skippedReasonView(
+  reason: SemanticEligibilityReason,
+  count: number,
+  files: readonly Location[],
+  root: Location,
+): Vnode {
+  const label = `${reasonLabel(reason)}: ${count}`;
+  if (files.length === 0) return m('li', { key: reason }, label);
+  return m('li', { key: reason }, [
+    m('details.fm-semantic-library-skipped-files', [
+      m('summary', label),
+      reason === 'oversized' ? m('p', t('semanticLibrary', 'oversizedHint')) : undefined,
+      m(
+        'ul',
+        files.map((file) => m('li', { key: file.uri }, relativeLabel(file, root))),
+      ),
+      files.length < count
+        ? m(
+            'p',
+            t('semanticLibrary', 'skippedFilesTruncated', { shown: files.length, total: count }),
+          )
+        : undefined,
+    ]),
+  ]);
+}
+
+/** Multi-select of the workspaces a folder is available in; none selected means all. */
+function workspaceSelector(
+  root: SemanticRootStatus,
+  workspaces: readonly { readonly id: WorkspaceId; readonly name: string }[],
+  busy: BusyAction | undefined,
+  onChange: (root: SemanticRootStatus, workspaceIds: readonly WorkspaceId[]) => void,
+): Vnode | undefined {
+  if (workspaces.length === 0) return undefined;
+  const known = new Set(workspaces.map((workspace) => workspace.id));
+  const selected = new Set(root.workspaceReferences.filter((id) => known.has(id)));
+  const everywhere = selected.size === 0;
+  return m('fieldset.fm-semantic-library-workspaces', [
+    m(
+      'legend',
+      everywhere
+        ? t('semanticLibrary', 'availableInAll')
+        : t('semanticLibrary', 'availableInSome', { count: selected.size }),
+    ),
+    m('p.fm-semantic-library-guidance', t('semanticLibrary', 'workspaceSelectionHelp')),
+    workspaces.map((workspace) =>
+      m('label.fm-semantic-library-workspace', { key: workspace.id }, [
+        m('input', {
+          type: 'checkbox',
+          checked: selected.has(workspace.id),
+          disabled: busy !== undefined,
+          onchange: (event: Event) => {
+            const next = new Set(selected);
+            if ((event.currentTarget as HTMLInputElement).checked) next.add(workspace.id);
+            else next.delete(workspace.id);
+            // Selecting every workspace is the same as selecting none: available everywhere.
+            onChange(root, next.size === workspaces.length ? [] : [...next]);
+          },
+        }),
+        workspace.name,
+      ]),
+    ),
+  ]);
+}
+
 function rootStatusView(
   root: SemanticRootStatus,
   confirmedCompletedSources: number | undefined,
   unverifiedLegacySources: number | undefined,
-  lastWorkerDevice: 'metal' | 'cpu' | 'cpuForced' | null | undefined,
+  workspaces: readonly { readonly id: WorkspaceId; readonly name: string }[],
   scannedEntries: number | undefined,
   workspaceId: WorkspaceId | undefined,
   busy: BusyAction | undefined,
   canRemove: boolean,
   onRemove: (location: Location) => void,
+  onOpen: ((location: Location) => void) | undefined,
+  onWorkspaces: (root: SemanticRootStatus, workspaceIds: readonly WorkspaceId[]) => void,
   onResumeCleanup: (planId: string) => void,
   onOverride: (
     root: SemanticRootStatus,
@@ -467,12 +537,25 @@ function rootStatusView(
     root.eligibilityReasonCounts.find((reason) => reason.reason === 'oversized')?.count ?? 0;
   return m('li.fm-semantic-library-root', { key: root.id }, [
     m('.fm-semantic-library-root-heading', [
-      m('strong.fm-semantic-library-location', root.location.uri),
+      m(
+        'strong.fm-semantic-library-location',
+        onOpen === undefined
+          ? decodedLocation(root.location.uri)
+          : m(
+              'a',
+              {
+                href: root.location.uri,
+                title: t('semanticLibrary', 'openFolderLink'),
+                onclick: (event: Event) => {
+                  event.preventDefault();
+                  onOpen(root.location);
+                },
+              },
+              decodedLocation(root.location.uri),
+            ),
+      ),
       removed ? m('span', t('semanticLibrary', 'excluded')) : undefined,
-      !removed &&
-      canRemove &&
-      workspaceId !== undefined &&
-      root.workspaceReferences.includes(workspaceId)
+      !removed && canRemove && workspaceId !== undefined
         ? m(
             'button.fm-semantic-library-action',
             {
@@ -527,14 +610,7 @@ function rootStatusView(
         ]),
     m('details.fm-semantic-library-details', [
       m('summary', t('semanticLibrary', 'folderDetails')),
-      lastWorkerDevice == null
-        ? undefined
-        : m(
-            'p.fm-semantic-library-device',
-            t('semanticLibrary', 'lastWorkerDevice', {
-              device: t('semanticLibrary', lastWorkerDevice),
-            }),
-          ),
+      workspaceSelector(root, workspaces, busy, onWorkspaces),
       root.attachedVocabularyIds.length === 0
         ? undefined
         : m('p', [
@@ -546,7 +622,13 @@ function rootStatusView(
         : m(
             'ul.fm-semantic-library-reasons',
             root.eligibilityReasonCounts.map((reason) =>
-              m('li', { key: reason.reason }, `${reasonLabel(reason.reason)}: ${reason.count}`),
+              skippedReasonView(
+                reason.reason,
+                reason.count,
+                (root.skippedFiles ?? []).find((skipped) => skipped.reason === reason.reason)
+                  ?.files ?? [],
+                root.location,
+              ),
             ),
           ),
       root.ocrRequiredFiles.length === 0
@@ -565,7 +647,8 @@ function rootStatusView(
               ),
             ),
           ]),
-      workspaceId === undefined || !root.workspaceReferences.includes(workspaceId)
+      workspaceId === undefined ||
+      (root.workspaceReferences.length > 0 && !root.workspaceReferences.includes(workspaceId))
         ? undefined
         : m('fieldset.fm-semantic-library-overrides', [
             m('legend', t('semanticLibrary', 'eligibilityOverrides')),
@@ -607,7 +690,7 @@ function rootStatusView(
           root.exclusions.map((exclusion) =>
             m('li', { key: exclusion.id }, [
               m('strong', `${t('semanticLibrary', 'excluded')}: `),
-              exclusion.location.uri,
+              decodedLocation(exclusion.location.uri),
               m(
                 'span',
                 ` — ${
@@ -675,7 +758,7 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
   let showPdfImageOption = false;
   let pdfImageEnabled = false;
   let pdfImagePageBudget: number | null = null;
-  let lastWorkerDevice: 'metal' | 'cpu' | 'cpuForced' | null | undefined;
+  let workspaces: readonly { readonly id: WorkspaceId; readonly name: string }[] = [];
   const scannedRoots = new Map<string, number>();
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
   let refreshInFlight = false;
@@ -723,7 +806,9 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
       const component = await attrs.client.getSemanticComponentStatus();
       gemmaActive = component.activeModel?.profile === 'embeddingGemma2';
       const gemmaSetup = gemmaActive ? await attrs.client.getGemmaLibrarySetup() : null;
-      lastWorkerDevice = gemmaSetup?.lastWorkerDevice;
+      workspaces = (await attrs.client.listWorkspaces())
+        .filter((workspace) => !workspace.ephemeral)
+        .map((workspace) => ({ id: workspace.id as WorkspaceId, name: workspace.name }));
       showPdfImageOption = nextStatus.gemmaMedia?.images ?? gemmaSetup?.images === true;
       pdfImagePageBudget = gemmaSetup?.pdfImagePageBudget ?? null;
       pdfImageEnabled = showPdfImageOption && gemmaSetup?.imageDevice === 'metal';
@@ -762,7 +847,6 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
       status = nextStatus;
       indexedRoots = nextRoots;
       if (gemmaActive) {
-        lastWorkerDevice = nextSetup?.lastWorkerDevice;
         showPdfImageOption = nextStatus.gemmaMedia?.images ?? nextSetup?.images === true;
       }
       refreshError = undefined;
@@ -910,6 +994,20 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
     });
   }
 
+  async function updateRootWorkspaces(
+    attrs: SemanticLibraryManagementAttrs,
+    root: SemanticRootStatus,
+    workspaceIds: readonly WorkspaceId[],
+  ): Promise<void> {
+    await action(attrs, 'workspaces', async () => {
+      status = await attrs.client.updateSemanticRootWorkspaces({
+        rootId: root.id,
+        workspaceIds: [...workspaceIds],
+        policyRevision: (status as SemanticLibraryStatus).revision,
+      });
+    });
+  }
+
   void load(initial.attrs);
   contextKey = key(initial.attrs);
 
@@ -1005,12 +1103,15 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
           refreshError === undefined
             ? indexedRoots.find((root) => root.rootId === candidate.id)?.unverifiedLegacySources
             : undefined,
-          lastWorkerDevice,
+          workspaces,
           scannedRoots.get(candidate.id),
           attrs.workspaceId,
           busy,
           has('planExclusion'),
           (location) => planExclusion(attrs, location),
+          attrs.onOpenLocation,
+          (selectedRoot, workspaceIds) =>
+            void updateRootWorkspaces(attrs, selectedRoot, workspaceIds),
           (planId) =>
             void action(attrs, 'cleanup', async () => {
               status = await attrs.client.resumeSemanticCleanup({
@@ -1021,246 +1122,222 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
           (selectedRoot, reason, selectedOverride) =>
             void updateOverride(attrs, selectedRoot, reason, selectedOverride),
         );
+      const media = status.gemmaMedia;
+      const enabledMedia = media
+        ? (['images', 'audio', 'video'] as const)
+            .filter((medium) => media[medium])
+            .map((medium) => t('semanticLibrary', GEMMA_MEDIA_NAMES[medium]))
+        : [];
+      const heading = !gemmaActive
+        ? t('semanticLibrary', 'title')
+        : enabledMedia.length === 0
+          ? t('semanticLibrary', 'titleGemma')
+          : t('semanticLibrary', 'titleGemmaMedia', { media: enabledMedia.join(', ') });
       return m(
         'section.fm-semantic-library-management',
         { 'aria-label': t('semanticLibrary', 'title') },
-        [
-          refreshError === undefined
-            ? undefined
-            : m('p.fm-semantic-library-error', { role: 'alert' }, refreshError),
-          capabilities.authority === 'administratorProvisioned'
-            ? m('p.fm-semantic-library-authority', t('semanticLibrary', 'administratorManaged'))
-            : undefined,
-          m(
-            '.fm-semantic-library-ingestion',
-            { 'aria-live': 'polite' },
-            status.paused
-              ? t('semanticLibrary', 'ingestionPaused')
-              : t('semanticLibrary', 'ingestionActive'),
-          ),
-          gemmaActive && status.gemmaMedia && selectedMedia && has('updateGemmaMedia')
-            ? m('section.fm-semantic-library-media', [
-                m('h6', t('semanticLibrary', 'gemmaMediaTitle')),
-                m('p', t('semanticLibrary', 'gemmaMediaAddingHelp')),
-                (['images', 'audio', 'video'] as const).map((medium) =>
-                  m('label.fm-semantic-library-pdf-images', { key: medium }, [
-                    m('input', {
-                      type: 'checkbox',
-                      checked: selectedMedia?.[medium] ?? false,
-                      disabled: busy !== undefined,
-                      onchange: (event: Event) => {
-                        if (!selectedMedia) return;
-                        selectedMedia = {
-                          ...selectedMedia,
-                          [medium]: (event.currentTarget as HTMLInputElement).checked,
-                        };
-                        confirmMediaRemoval = false;
-                      },
-                    }),
-                    t('semanticComponents', GEMMA_MEDIA_LABELS[medium]),
-                  ]),
-                ),
-                confirmMediaRemoval
-                  ? m('p', { role: 'alert' }, t('semanticLibrary', 'gemmaMediaRemovingWarning'))
-                  : undefined,
-                m(
-                  'button.fm-semantic-library-action',
-                  {
-                    type: 'button',
-                    ...busyButtonAttrs(busy === 'media'),
-                    disabled:
-                      busy !== undefined ||
-                      (selectedMedia.images === status.gemmaMedia.images &&
-                        selectedMedia.audio === status.gemmaMedia.audio &&
-                        selectedMedia.video === status.gemmaMedia.video),
-                    onclick: () => saveMedia(attrs),
-                  },
-                  confirmMediaRemoval
-                    ? t('semanticLibrary', 'gemmaMediaConfirmRemoval')
-                    : t('semanticLibrary', 'gemmaMediaSave'),
-                ),
-              ])
-            : undefined,
-          status.paused ? m('p', t('semanticLibrary', 'pauseExplanation')) : undefined,
-          has(status.paused ? 'resume' : 'pause')
-            ? m(
-                'button.fm-semantic-library-action',
-                {
-                  type: 'button',
-                  ...busyButtonAttrs(busy === 'pause' || busy === 'resume'),
-                  disabled: busy !== undefined,
-                  onclick: () =>
-                    void action(attrs, status?.paused ? 'resume' : 'pause', async () => {
-                      status = status?.paused
-                        ? await attrs.client.resumeSemanticLibrary({
-                            policyRevision: (status as SemanticLibraryStatus).revision,
-                          })
-                        : await attrs.client.pauseSemanticLibrary({
-                            policyRevision: (status as SemanticLibraryStatus).revision,
-                          });
-                    }),
-                },
-                status.paused
-                  ? t('semanticLibrary', 'resumeIngestion')
-                  : t('semanticLibrary', 'pauseIngestion'),
-              )
-            : undefined,
-          status.library == null
-            ? undefined
-            : m('details.fm-semantic-library-details', [
-                m('summary', t('semanticLibrary', 'libraryDetails')),
-                m('dl.fm-semantic-library-values', [
-                  m('dt', t('semanticLibrary', 'libraryIdentity')),
-                  m('dd', status.library.libraryId),
-                  m('dt', t('semanticLibrary', 'model')),
-                  m('dd', `${status.library.model.modelId} · ${status.library.model.revision}`),
-                  m('dt', t('semanticLibrary', 'resourceProfile')),
+        m('details.fm-settings-semantic-tools', { open: true }, [
+          m('summary', heading),
+          m('.fm-semantic-library-body', [
+            refreshError === undefined
+              ? undefined
+              : m('p.fm-semantic-library-error', { role: 'alert' }, refreshError),
+            capabilities.authority === 'administratorProvisioned'
+              ? m('p.fm-semantic-library-authority', t('semanticLibrary', 'administratorManaged'))
+              : undefined,
+            gemmaActive && status.gemmaMedia && selectedMedia && has('updateGemmaMedia')
+              ? m('section.fm-semantic-library-media', [
+                  m('h6', t('semanticLibrary', 'gemmaMediaTitle')),
+                  m('p', t('semanticLibrary', 'gemmaMediaAddingHelp')),
                   m(
-                    'dd',
-                    status.resourceProfile == null
-                      ? t('semanticLibrary', 'notAvailable')
-                      : t(
-                          'semanticLibrary',
-                          status.resourceProfile.kind === 'compact'
-                            ? 'profileCompact'
-                            : status.resourceProfile.kind === 'balanced'
-                              ? 'profileBalanced'
-                              : 'profileQuality',
-                        ),
-                  ),
-                  m('dt', t('semanticLibrary', 'reconciliationInterval')),
-                  m(
-                    'dd',
-                    status.reconciliationIntervalSeconds === 1_800
-                      ? t('semanticLibrary', 'everyThirtyMinutes')
-                      : t('semanticLibrary', 'everySeconds', {
-                          seconds: status.reconciliationIntervalSeconds ?? 0,
+                    '.fm-semantic-library-media-row',
+                    (['images', 'audio', 'video'] as const).map((medium) =>
+                      m('label.fm-semantic-library-pdf-images', { key: medium }, [
+                        m('input', {
+                          type: 'checkbox',
+                          checked: selectedMedia?.[medium] ?? false,
+                          disabled: busy !== undefined,
+                          onchange: (event: Event) => {
+                            if (!selectedMedia) return;
+                            selectedMedia = {
+                              ...selectedMedia,
+                              [medium]: (event.currentTarget as HTMLInputElement).checked,
+                            };
+                            confirmMediaRemoval = false;
+                          },
                         }),
+                        t('semanticComponents', GEMMA_MEDIA_LABELS[medium]),
+                      ]),
+                    ),
                   ),
-                ]),
-                m('p', t('semanticLibrary', 'dataPreservedDisclosure')),
-              ]),
-          attrs.workspaceId === undefined || attrs.location === undefined
-            ? m('p', t('semanticLibrary', 'openFolder'))
-            : folder === undefined
-              ? m('p', t('semanticLibrary', 'folderStatusUnavailable'))
-              : m('section.fm-semantic-library-folder', [
-                  m('h6', t('semanticLibrary', 'currentFolder')),
-                  m('p.fm-semantic-library-location', attrs.location.uri),
-                  folder.consent === 'notIncluded'
-                    ? m('p.fm-semantic-library-folder-help', t('semanticLibrary', 'changeFolder'))
+                  confirmMediaRemoval
+                    ? m('p', { role: 'alert' }, t('semanticLibrary', 'gemmaMediaRemovingWarning'))
                     : undefined,
                   m(
-                    '.fm-semantic-library-consent-state',
-                    { 'data-consent': folder.consent, 'aria-live': 'polite' },
-                    consentLabel(folder.consent),
+                    'button.fm-semantic-library-action',
+                    {
+                      type: 'button',
+                      ...busyButtonAttrs(busy === 'media'),
+                      disabled:
+                        busy !== undefined ||
+                        (selectedMedia.images === status.gemmaMedia.images &&
+                          selectedMedia.audio === status.gemmaMedia.audio &&
+                          selectedMedia.video === status.gemmaMedia.video),
+                      onclick: () => saveMedia(attrs),
+                    },
+                    confirmMediaRemoval
+                      ? t('semanticLibrary', 'gemmaMediaConfirmRemoval')
+                      : t('semanticLibrary', 'gemmaMediaSave'),
                   ),
-                  folder.sourceAvailable
-                    ? undefined
-                    : m('.fm-semantic-library-source-unavailable', { role: 'status' }, [
-                        m('strong', t('semanticLibrary', 'sourceUnavailable')),
-                        folder.unavailableReason == null
-                          ? undefined
-                          : ` — ${semanticUnavailableText(folder.unavailableReasonCode, folder.unavailableReason)}`,
-                      ]),
-                  (folder.consent === 'notIncluded' || !folder.workspaceReferenced) &&
-                  folder.consent !== 'excluded' &&
-                  has('previewEnrolment')
-                    ? m(
-                        'button.fm-semantic-library-action',
-                        {
-                          type: 'button',
-                          ...busyButtonAttrs(busy === 'preview'),
-                          disabled: busy !== undefined,
-                          onclick: () => previewInclusion(attrs),
-                        },
-                        busy === 'preview'
-                          ? t('semanticLibrary', 'working')
-                          : folder.consent === 'notIncluded'
-                            ? t('semanticLibrary', 'previewInclusion')
-                            : t('semanticLibrary', 'attachToWorkspace'),
-                      )
-                    : undefined,
-                  (folder.consent === 'includedHere' || folder.consent === 'inheritedFromParent') &&
-                  folder.workspaceReferenced &&
-                  has('planExclusion')
-                    ? m(
-                        'button.fm-semantic-library-action',
-                        {
-                          type: 'button',
-                          ...busyButtonAttrs(busy === 'planExclusion'),
-                          disabled: busy !== undefined,
-                          onclick: () => planExclusion(attrs, attrs.location as Location),
-                        },
-                        busy === 'planExclusion'
-                          ? t('semanticLibrary', 'working')
-                          : t('semanticLibrary', 'removeFolder'),
-                      )
-                    : undefined,
+                ])
+              : undefined,
+            m('.fm-semantic-library-ingestion', { 'aria-live': 'polite' }, [
+              m(
+                'span',
+                status.paused
+                  ? t('semanticLibrary', 'ingestionPaused')
+                  : t('semanticLibrary', 'ingestionActive'),
+              ),
+              has(status.paused ? 'resume' : 'pause')
+                ? m(
+                    'button.fm-semantic-library-action',
+                    {
+                      type: 'button',
+                      ...busyButtonAttrs(busy === 'pause' || busy === 'resume'),
+                      disabled: busy !== undefined,
+                      onclick: () =>
+                        void action(attrs, status?.paused ? 'resume' : 'pause', async () => {
+                          status = status?.paused
+                            ? await attrs.client.resumeSemanticLibrary({
+                                policyRevision: (status as SemanticLibraryStatus).revision,
+                              })
+                            : await attrs.client.pauseSemanticLibrary({
+                                policyRevision: (status as SemanticLibraryStatus).revision,
+                              });
+                        }),
+                    },
+                    status.paused
+                      ? t('semanticLibrary', 'resumeIngestion')
+                      : t('semanticLibrary', 'pauseIngestion'),
+                  )
+                : undefined,
+            ]),
+            status.paused ? m('p', t('semanticLibrary', 'pauseExplanation')) : undefined,
+            status.library == null
+              ? undefined
+              : m('details.fm-semantic-library-details', [
+                  m('summary', t('semanticLibrary', 'libraryDetails')),
+                  m('dl.fm-semantic-library-values', [
+                    m('dt', t('semanticLibrary', 'libraryIdentity')),
+                    m('dd', status.library.libraryId),
+                    m('dt', t('semanticLibrary', 'model')),
+                    m('dd', `${status.library.model.modelId} · ${status.library.model.revision}`),
+                    m('dt', t('semanticLibrary', 'resourceProfile')),
+                    m(
+                      'dd',
+                      status.resourceProfile == null
+                        ? t('semanticLibrary', 'notAvailable')
+                        : t(
+                            'semanticLibrary',
+                            status.resourceProfile.kind === 'compact'
+                              ? 'profileCompact'
+                              : status.resourceProfile.kind === 'balanced'
+                                ? 'profileBalanced'
+                                : 'profileQuality',
+                          ),
+                    ),
+                    m('dt', t('semanticLibrary', 'reconciliationInterval')),
+                    m(
+                      'dd',
+                      status.reconciliationIntervalSeconds === 1_800
+                        ? t('semanticLibrary', 'everyThirtyMinutes')
+                        : t('semanticLibrary', 'everySeconds', {
+                            seconds: status.reconciliationIntervalSeconds ?? 0,
+                          }),
+                    ),
+                  ]),
+                  m('p', t('semanticLibrary', 'dataPreservedDisclosure')),
                 ]),
-          preview === undefined
-            ? undefined
-            : estimateView(
-                preview,
-                busy,
-                () => confirmInclusion(attrs),
-                () => {
-                  preview = undefined;
-                },
-                t('semanticLibrary', 'includeFolder'),
-                showPdfImageOption
-                  ? {
-                      enabled: preview.pdfImagesEnabled ?? false,
-                      pageBudget: preview.pdfImagePageBudget ?? null,
-                      onChange: (enabled) => previewInclusion(attrs, enabled),
-                    }
-                  : undefined,
-              ),
-          exclusionPlan === undefined
-            ? undefined
-            : exclusionPlanView(
-                exclusionPlan,
-                busy,
-                () => confirmExclusion(attrs),
-                () => {
-                  exclusionPlan = undefined;
-                },
-              ),
-          error === undefined
-            ? undefined
-            : m('p.fm-semantic-library-error', { role: 'alert' }, error),
-          m('section.fm-semantic-library-roots', [
-            m('h6', t('semanticLibrary', 'enrolledRoots')),
-            m('p.fm-semantic-library-guidance', t('semanticLibrary', 'includedFoldersHelp')),
-            includedRoots.length === 0
-              ? m('p', t('semanticLibrary', 'noEnrolledRoots'))
-              : m('ul', includedRoots.map(rootView)),
+            attrs.workspaceId === undefined ||
+            attrs.location === undefined ||
+            folder === undefined ||
+            folder.consent === 'excluded' ||
+            !(
+              (folder.consent === 'notIncluded' || !folder.workspaceReferenced) &&
+              has('previewEnrolment')
+            )
+              ? undefined
+              : m('section.fm-semantic-library-folder', [
+                  m('p.fm-semantic-library-folder-help', t('semanticLibrary', 'changeFolder')),
+                  m(
+                    'button.fm-semantic-library-action',
+                    {
+                      type: 'button',
+                      ...busyButtonAttrs(busy === 'preview'),
+                      disabled: busy !== undefined,
+                      title: decodedLocation(attrs.location.uri),
+                      onclick: () => previewInclusion(attrs),
+                    },
+                    busy === 'preview'
+                      ? t('semanticLibrary', 'working')
+                      : folder.consent === 'notIncluded'
+                        ? t('semanticLibrary', 'previewInclusion')
+                        : t('semanticLibrary', 'attachToWorkspace'),
+                  ),
+                ]),
+            preview === undefined
+              ? undefined
+              : estimateView(
+                  preview,
+                  busy,
+                  () => confirmInclusion(attrs),
+                  () => {
+                    preview = undefined;
+                  },
+                  t('semanticLibrary', 'includeFolder'),
+                  showPdfImageOption
+                    ? {
+                        enabled: preview.pdfImagesEnabled ?? false,
+                        pageBudget: preview.pdfImagePageBudget ?? null,
+                        onChange: (enabled) => previewInclusion(attrs, enabled),
+                      }
+                    : undefined,
+                ),
+            exclusionPlan === undefined
+              ? undefined
+              : exclusionPlanView(
+                  exclusionPlan,
+                  busy,
+                  () => confirmExclusion(attrs),
+                  () => {
+                    exclusionPlan = undefined;
+                  },
+                ),
+            error === undefined
+              ? undefined
+              : m('p.fm-semantic-library-error', { role: 'alert' }, error),
+            m('section.fm-semantic-library-roots', [
+              m('h6', t('semanticLibrary', 'enrolledRoots')),
+              m('p.fm-semantic-library-guidance', t('semanticLibrary', 'includedFoldersHelp')),
+              includedRoots.length === 0
+                ? m('p', t('semanticLibrary', 'noEnrolledRoots'))
+                : m('ul', includedRoots.map(rootView)),
+            ]),
+            removedRoots.filter((root) => rootExclusion(root)?.cleanup.status !== 'complete')
+              .length > 0
+              ? m('section.fm-semantic-library-roots', [
+                  m('h6', t('semanticLibrary', 'cleanupInProgress')),
+                  m(
+                    'ul',
+                    removedRoots
+                      .filter((root) => rootExclusion(root)?.cleanup.status !== 'complete')
+                      .map(rootView),
+                  ),
+                ])
+              : undefined,
+            m('p.fm-semantic-library-guidance', t('semanticLibrary', 'missingRootGuidance')),
           ]),
-          removedRoots.filter((root) => rootExclusion(root)?.cleanup.status !== 'complete').length >
-          0
-            ? m('section.fm-semantic-library-roots', [
-                m('h6', t('semanticLibrary', 'cleanupInProgress')),
-                m(
-                  'ul',
-                  removedRoots
-                    .filter((root) => rootExclusion(root)?.cleanup.status !== 'complete')
-                    .map(rootView),
-                ),
-              ])
-            : undefined,
-          removedRoots.some((root) => rootExclusion(root)?.cleanup.status === 'complete')
-            ? m('details.fm-semantic-library-roots.fm-semantic-library-details', [
-                m('summary', t('semanticLibrary', 'removedFolders')),
-                m(
-                  'ul',
-                  removedRoots
-                    .filter((root) => rootExclusion(root)?.cleanup.status === 'complete')
-                    .map(rootView),
-                ),
-              ])
-            : undefined,
-          m('p.fm-semantic-library-guidance', t('semanticLibrary', 'missingRootGuidance')),
-        ],
+        ]),
       );
     },
   };

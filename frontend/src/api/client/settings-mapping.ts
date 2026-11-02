@@ -8,6 +8,7 @@ import type { SyncProfileDto } from '../generated/models/syncProfileDto';
 export function settingsFromDto(settings: SettingsDto): Settings {
   return {
     ...settings,
+    semanticMaxSourceMib: settings.semanticMaxSourceMib ?? 64,
     multiRenamePresets: settings.multiRenamePresets.map((preset) => ({
       ...preset,
       rules: { ...preset.rules, sequence: { ...preset.rules.sequence } },

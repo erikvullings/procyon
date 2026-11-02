@@ -381,6 +381,10 @@ pub(crate) fn theme_error_to_application(error: CorpusThemeCapabilityError) -> A
                 reason::CORPUS_THEME_PROFILE_MISMATCH,
                 "the indexed vectors belong to a different embedding model; rebuild the index",
             )),
+            CorpusThemeError::IndexNotBuilt => ApplicationError::from(Rejection::new(
+                reason::CORPUS_THEME_INDEX_NOT_BUILT,
+                "the semantic index is empty or still being built",
+            )),
             CorpusThemeError::ThemesStale => ApplicationError::from(Rejection::new(
                 reason::CORPUS_THEMES_STALE,
                 "the corpus themes are out of date; analyse again",

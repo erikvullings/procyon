@@ -214,7 +214,10 @@ impl KnowledgeService {
         Ok(status
             .roots
             .into_iter()
-            .filter(|root| root.workspace_references.contains(&workspace_id))
+            .filter(|root| {
+                root.workspace_references.is_empty()
+                    || root.workspace_references.contains(&workspace_id)
+            })
             .map(|root| fm_transport_dto::KnowledgeRootDto {
                 label: location_label(&root.location.uri),
                 root_id: root.id,

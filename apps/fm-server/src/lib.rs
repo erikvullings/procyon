@@ -137,6 +137,9 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::semantic_library::update_semantic_eligibility_overrides
         ))
+        .routes(utoipa_axum::routes!(
+            routes::semantic_library::update_semantic_root_workspaces
+        ))
         .routes(utoipa_axum::routes!(routes::semantic_vocabulary::list))
         .routes(utoipa_axum::routes!(routes::semantic_vocabulary::import))
         .routes(utoipa_axum::routes!(routes::semantic_vocabulary::export))

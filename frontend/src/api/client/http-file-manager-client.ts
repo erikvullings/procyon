@@ -219,6 +219,7 @@ import type {
   UpdateConnectionRequest,
   UpdateGemmaMediaRequest,
   UpdateSemanticEligibilityOverridesRequest,
+  UpdateSemanticRootWorkspacesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
   Volume,
@@ -402,6 +403,7 @@ import {
   confirmSemanticComponentModelMigration as requestSemanticModelMigrationConfirmation,
   planSemanticComponentModelMigration as requestSemanticModelMigrationPlan,
   listSemanticComponentProfiles as requestSemanticProfiles,
+  updateSemanticRootWorkspaces as requestSemanticRootWorkspacesUpdate,
   uninstallSemanticComponents as requestSemanticUninstall,
   listSemanticVocabularies as requestSemanticVocabularies,
   attachSemanticVocabulary as requestSemanticVocabularyAttachment,
@@ -1032,6 +1034,20 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200) {
       throw unexpectedResponseError('updateSemanticEligibilityOverrides', response.status);
+    }
+    return response.data;
+  }
+
+  async updateSemanticRootWorkspaces(
+    request: UpdateSemanticRootWorkspacesRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    const response = await requestSemanticRootWorkspacesUpdate(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw unexpectedResponseError('updateSemanticRootWorkspaces', response.status);
     }
     return response.data;
   }

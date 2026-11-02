@@ -38,6 +38,7 @@ pub enum SemanticLibraryOperationDto {
     Pause,
     Resume,
     UpdateEligibilityOverrides,
+    UpdateRootWorkspaces,
     UpdateGemmaMedia,
 }
 
@@ -147,6 +148,16 @@ pub struct SemanticEligibilityReasonCountDto {
     pub reason: SemanticEligibilityReasonDto,
     /// Number of entries.
     pub count: u64,
+}
+
+/// Files skipped for one reason.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticSkippedFilesDto {
+    /// Stable reason.
+    pub reason: SemanticEligibilityReasonDto,
+    /// Skipped files, capped per reason.
+    pub files: Vec<LocationDto>,
 }
 
 /// Hard budget apparently exceeded by an estimate.
@@ -407,6 +418,9 @@ pub struct SemanticRootStatusDto {
     pub eligibility_reason_counts: Vec<SemanticEligibilityReasonCountDto>,
     /// Files whose latest completed reconciliation requires OCR.
     pub ocr_required_files: Vec<LocationDto>,
+    /// Files skipped by the last reconciliation, grouped by reason and capped per reason.
+    #[serde(default)]
+    pub skipped_files: Vec<SemanticSkippedFilesDto>,
     /// Current source reachability.
     pub availability: SemanticRootAvailabilityDto,
     /// Last complete catalog reconciliation generation.
@@ -572,6 +586,18 @@ pub struct UpdateSemanticEligibilityOverridesRequestDto {
     pub policy_revision: u64,
     /// Complete replacement override set.
     pub overrides: Vec<SemanticEligibilityOverrideStatusDto>,
+}
+
+/// Chooses the workspaces a root is available in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpdateSemanticRootWorkspacesRequestDto {
+    /// Stable root identity.
+    pub root_id: String,
+    /// Selected workspaces; empty makes the root available in every workspace.
+    pub workspace_ids: Vec<Uuid>,
+    /// Current policy revision.
+    pub policy_revision: u64,
 }
 
 /// Stable semantic-library error code.

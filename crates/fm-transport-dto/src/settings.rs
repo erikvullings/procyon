@@ -398,6 +398,14 @@ pub struct SettingsDto {
     /// Basemap of the shared map component (task 0275).
     #[serde(default)]
     pub map: MapSettingsDto,
+    /// Largest source file, in MiB, that semantic indexing reads; `0` means no limit beyond the
+    /// resource profile and the worker's own hard caps.
+    #[serde(default = "default_semantic_max_source_mib")]
+    pub semantic_max_source_mib: u32,
+}
+
+const fn default_semantic_max_source_mib() -> u32 {
+    64
 }
 
 /// Where basemap imagery comes from.

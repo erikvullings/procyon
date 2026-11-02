@@ -134,6 +134,8 @@ export interface Settings {
   readonly checkForBetaUpdates: boolean;
   /** Opens F3 in its own window instead of a tab in the active pane. */
   readonly viewerInSeparateWindow: boolean;
+  /** Largest source file semantic indexing reads, in MiB; 0 means no limit. */
+  readonly semanticMaxSourceMib: number;
   /** Remembers and restores the view (sort, columns, mode) chosen for each folder (task 0270). */
   readonly rememberFolderViews: boolean;
   /** Basemap of the shared map component (task 0275). */

@@ -776,9 +776,11 @@ impl FileManagerService {
             .is_some_and(|root_id| !status.roots.iter().any(|root| root.id == *root_id))
             || request.workspace_id.as_ref().is_some_and(|workspace_id| {
                 !status.roots.iter().any(|root| {
-                    root.workspace_references
-                        .iter()
-                        .any(|id| id.to_string() == *workspace_id)
+                    root.workspace_references.is_empty()
+                        || root
+                            .workspace_references
+                            .iter()
+                            .any(|id| id.to_string() == *workspace_id)
                 })
             })
         {
@@ -905,6 +907,17 @@ impl FileManagerService {
         for root in &mut status.roots {
             if let Ok(root_id) = root.id.parse() {
                 root.ocr_required_files = self.semantic_indexing.ocr_required_files(root_id);
+                root.skipped_files = self
+                    .semantic_indexing
+                    .skipped_files(root_id)
+                    .into_iter()
+                    .map(
+                        |(reason, files)| crate::semantic_library::SemanticSkippedFiles {
+                            reason,
+                            files,
+                        },
+                    )
+                    .collect();
             }
         }
         Ok(status)
@@ -1032,6 +1045,49 @@ impl FileManagerService {
         self.semantic_library
             .resolve(&self.semantic_components)
             .await
+    }
+
+    /// Re-reads the workspace list for roots enrolled in every workspace and
+    /// folds roots that only reference deleted workspaces into all workspaces.
+    ///
+    /// A deleted workspace's references are detached, and a root left without
+    /// any explicit workspace is available everywhere, so its data never
+    /// becomes unreachable.
+    pub(crate) async fn refresh_semantic_workspace_directory(&self) {
+        let limit_mib = self
+            .settings
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .semantic_max_source_mib;
+        self.semantic_indexing.set_max_source_mib(limit_mib);
+        let Ok(summaries) = self.workspaces.list().await else {
+            return;
+        };
+        let existing: std::collections::HashSet<uuid::Uuid> =
+            summaries.iter().map(|summary| summary.id.into()).collect();
+        let library = self.semantic_library().await;
+        // An empty workspace store means nothing is known yet, not that every reference is
+        // dangling, so nothing is pruned.
+        if !existing.is_empty()
+            && let Ok(status) = library.status(&SemanticAccessContext::Host)
+        {
+            let missing: std::collections::BTreeSet<uuid::Uuid> = status
+                .roots
+                .iter()
+                .flat_map(|root| root.workspace_references.iter().copied())
+                .filter(|id| !existing.contains(id))
+                .collect();
+            for id in missing {
+                let _ = library.detach_workspace(id.into());
+            }
+        }
+        self.semantic_indexing.set_all_workspaces(
+            summaries
+                .iter()
+                .filter(|summary| !summary.ephemeral)
+                .map(|summary| summary.id)
+                .collect(),
+        );
     }
 
     /// Reports effective consent for the verified active folder.
@@ -1245,6 +1301,30 @@ impl FileManagerService {
         )
     }
 
+    /// Chooses the workspaces a root is available in; none selected means all.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, not-found, stale-revision, lock, or
+    /// persistence failure.
+    pub async fn semantic_library_update_root_workspaces(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: fm_semantic_library::RootId,
+        workspaces: Vec<fm_domain::WorkspaceId>,
+        expected_revision: u64,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        let library = self.semantic_library().await;
+        library.ensure_operation_allowed(access, SemanticLibraryOperation::UpdateRootWorkspaces)?;
+        for workspace_id in &workspaces {
+            self.workspaces
+                .load(*workspace_id)
+                .await
+                .map_err(|_| SemanticLibraryError::WorkspaceRequired)?;
+        }
+        library.update_root_workspaces(access, root_id, workspaces, expected_revision)
+    }
+
     /// Records that an enrolled semantic root is temporarily unreachable.
     ///
     /// This is an internal reconciliation capability for watchers and the
@@ -1415,14 +1495,12 @@ impl FileManagerService {
             .load(context.workspace_id)
             .await
             .map_err(|_| SemanticLibraryError::WorkspaceRequired)?;
-        let consent_workspace: uuid::Uuid = self
-            .semantic_workspace_id(context.workspace_id)
-            .await
-            .into();
-        if library.status(access)?.roots.iter().any(|root| {
-            root.location == context.location
-                && root.workspace_references.contains(&consent_workspace)
-        }) {
+        if library
+            .status(access)?
+            .roots
+            .iter()
+            .any(|root| root.location == context.location)
+        {
             Ok(())
         } else {
             Err(SemanticLibraryError::WorkspaceRequired)
@@ -1875,6 +1953,7 @@ impl FileManagerService {
         root_id: fm_semantic_library::RootId,
         cancellation: tokio_util::sync::CancellationToken,
     ) -> Result<SemanticIndexingReport, SemanticIndexingError> {
+        self.refresh_semantic_workspace_directory().await;
         self.semantic_indexing
             .reconcile(self.semantic_library().await, access, root_id, cancellation)
             .await
@@ -1911,6 +1990,7 @@ impl FileManagerService {
         access: &SemanticAccessContext,
         cancellation: tokio_util::sync::CancellationToken,
     ) -> crate::semantic_model_change::SemanticModelChangeReindexReport {
+        self.refresh_semantic_workspace_directory().await;
         crate::semantic_model_change::reconcile_enrolled_roots(
             &self.semantic_indexing,
             self.semantic_library().await,
@@ -1933,6 +2013,7 @@ impl FileManagerService {
         grace: Duration,
         cancellation: tokio_util::sync::CancellationToken,
     ) -> crate::semantic_model_change::SemanticModelChangeReindexReport {
+        self.refresh_semantic_workspace_directory().await;
         crate::semantic_model_change::reindex_after_model_change(
             &self.semantic,
             &self.semantic_indexing,

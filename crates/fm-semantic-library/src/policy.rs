@@ -494,10 +494,36 @@ impl EnrolledRoot {
             .retain(|candidate| *candidate != workspace_id);
     }
 
-    /// Returns all workspace references.
+    /// Returns all workspace references. Empty means every workspace.
     #[must_use]
     pub fn workspace_references(&self) -> &[WorkspaceId] {
         &self.workspace_references
+    }
+
+    /// Whether this root is available in `workspace_id`.
+    ///
+    /// A root without explicit workspace references is available in every
+    /// workspace, so it never becomes unreachable when a workspace is deleted.
+    #[must_use]
+    pub fn applies_to(&self, workspace_id: WorkspaceId) -> bool {
+        self.workspace_references.is_empty() || self.workspace_references.contains(&workspace_id)
+    }
+
+    /// Whether this root is available in every workspace.
+    #[must_use]
+    pub fn is_all_workspaces(&self) -> bool {
+        self.workspace_references.is_empty()
+    }
+
+    /// Replaces the workspace selection; an empty selection means all workspaces.
+    pub fn set_workspace_references(&mut self, workspaces: impl IntoIterator<Item = WorkspaceId>) {
+        let mut next: Vec<WorkspaceId> = Vec::new();
+        for workspace_id in workspaces {
+            if !next.contains(&workspace_id) {
+                next.push(workspace_id);
+            }
+        }
+        self.workspace_references = next;
     }
 
     /// Attaches a vocabulary.

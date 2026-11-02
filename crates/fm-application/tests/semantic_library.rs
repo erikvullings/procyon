@@ -2421,6 +2421,36 @@ fn overrides_are_persisted_and_reloaded_from_durable_policy() {
     );
 }
 
+#[test]
+fn root_workspaces_are_chosen_per_root_and_none_selected_means_all() {
+    let directory = project_temp_dir("root-workspaces-");
+    let service = desktop(&directory);
+    let context = SemanticFolderContext::new(workspace(10), location("file:///docs"));
+    let revision = enrol(&service, &context);
+    let status = service.status(&HOST).unwrap();
+    let root_id: RootId = status.roots[0].id.parse().unwrap();
+    assert_eq!(
+        status.roots[0].workspace_references,
+        vec![Uuid::from_u128(10)]
+    );
+
+    // Another workspace picks the folder up, then the selection is cleared: available everywhere.
+    let status = service
+        .update_root_workspaces(&HOST, root_id, vec![workspace(10), workspace(11)], revision)
+        .unwrap();
+    assert_eq!(status.roots[0].workspace_references.len(), 2);
+    let status = service
+        .update_root_workspaces(&HOST, root_id, vec![], status.revision)
+        .unwrap();
+    assert!(status.roots[0].workspace_references.is_empty());
+
+    // An all-workspace folder can be reconfigured and removed from any workspace.
+    let outsider = SemanticFolderContext::new(workspace(99), location("file:///docs"));
+    service
+        .plan_exclusion(&HOST, outsider, status.revision)
+        .expect("removal does not depend on the current workspace");
+}
+
 #[tokio::test]
 async fn the_reconciliation_facade_is_reachable_through_the_file_manager_service() {
     let directory = project_temp_dir("facade-reconciliation-");

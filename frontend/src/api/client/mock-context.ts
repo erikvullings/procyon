@@ -223,6 +223,7 @@ export class MockContext {
     checkForUpdatesAutomatically: true,
     checkForBetaUpdates: false,
     viewerInSeparateWindow: false,
+    semanticMaxSourceMib: 64,
     rememberFolderViews: true,
     map: DEFAULT_MAP_SETTINGS,
   };
@@ -755,9 +756,7 @@ export class MockContext {
       this.workspaces.has(workspaceId) &&
       this.semanticLibrary.roots.some(
         (root) =>
-          root.location.providerId === location.providerId &&
-          root.location.uri === location.uri &&
-          root.workspaceReferences.includes(workspaceId),
+          root.location.providerId === location.providerId && root.location.uri === location.uri,
       )
     ) {
       return;

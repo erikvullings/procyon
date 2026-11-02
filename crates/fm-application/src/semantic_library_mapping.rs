@@ -19,8 +19,9 @@ use fm_transport_dto::{
     SemanticLibraryOperationDto, SemanticLibraryResourceBudgetsDto,
     SemanticLibraryResourceProfileDto, SemanticLibraryResourceProfileKindDto,
     SemanticLibraryRevisionRequestDto, SemanticLibraryStatusDto, SemanticRootAvailabilityDto,
-    SemanticRootStatusDto, SemanticUnavailableReasonDto, UpdateGemmaMediaRequestDto,
-    UpdateSemanticEligibilityOverridesRequestDto,
+    SemanticRootStatusDto, SemanticSkippedFilesDto, SemanticUnavailableReasonDto,
+    UpdateGemmaMediaRequestDto, UpdateSemanticEligibilityOverridesRequestDto,
+    UpdateSemanticRootWorkspacesRequestDto,
 };
 use uuid::Uuid;
 
@@ -399,6 +400,40 @@ impl FileManagerService {
     }
 }
 
+impl FileManagerService {
+    /// Chooses the workspaces a root is available in; none selected means all.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, not-found, stale-revision, or
+    /// persistence failure.
+    pub async fn update_semantic_root_workspaces(
+        &self,
+        access: &SemanticAccessContext,
+        request: UpdateSemanticRootWorkspacesRequestDto,
+    ) -> Result<SemanticLibraryStatusDto, SemanticLibraryError> {
+        self.ensure_semantic_library_operation(
+            access,
+            SemanticLibraryOperation::UpdateRootWorkspaces,
+        )
+        .await?;
+        let status = self
+            .semantic_library_update_root_workspaces(
+                access,
+                parse_semantic_root_id(&request.root_id)?,
+                request
+                    .workspace_ids
+                    .into_iter()
+                    .map(WorkspaceId::from)
+                    .collect(),
+                request.policy_revision,
+            )
+            .await
+            .map(semantic_library_status_to_dto)?;
+        Ok(status)
+    }
+}
+
 fn semantic_folder_context(
     workspace_id: Uuid,
     location: fm_transport_dto::LocationDto,
@@ -474,6 +509,14 @@ fn semantic_root_status_to_dto(root: SemanticRootStatus) -> SemanticRootStatusDt
             .ocr_required_files
             .into_iter()
             .map(Into::into)
+            .collect(),
+        skipped_files: root
+            .skipped_files
+            .into_iter()
+            .map(|skipped| SemanticSkippedFilesDto {
+                reason: semantic_eligibility_reason_to_dto(skipped.reason),
+                files: skipped.files.into_iter().map(Into::into).collect(),
+            })
             .collect(),
         availability: match root.availability {
             SemanticRootAvailability::Available => SemanticRootAvailabilityDto::Available,
@@ -666,6 +709,9 @@ const fn semantic_library_operation_to_dto(
         SemanticLibraryOperation::Resume => SemanticLibraryOperationDto::Resume,
         SemanticLibraryOperation::UpdateEligibilityOverrides => {
             SemanticLibraryOperationDto::UpdateEligibilityOverrides
+        }
+        SemanticLibraryOperation::UpdateRootWorkspaces => {
+            SemanticLibraryOperationDto::UpdateRootWorkspaces
         }
         SemanticLibraryOperation::UpdateGemmaMedia => SemanticLibraryOperationDto::UpdateGemmaMedia,
     }

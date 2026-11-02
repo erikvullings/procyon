@@ -711,3 +711,45 @@ fn a_persisted_policy_never_contains_credentials_or_session_material() {
     assert!(!persisted.contains("password"));
     assert!(!persisted.contains("secret"));
 }
+
+fn plain_root(id: u128) -> EnrolledRoot {
+    EnrolledRoot::new(
+        RootId::from_uuid(Uuid::from_u128(id)),
+        Location::parse("file:///library").expect("root location"),
+        None,
+        true,
+    )
+}
+
+#[test]
+fn a_root_without_workspace_references_is_available_in_every_workspace() {
+    let first = WorkspaceId::from(Uuid::from_u128(1));
+    let second = WorkspaceId::from(Uuid::from_u128(2));
+    let mut root = plain_root(10);
+    assert!(root.is_all_workspaces());
+    assert!(root.applies_to(first) && root.applies_to(second));
+
+    root.set_workspace_references([first, first]);
+    assert!(!root.is_all_workspaces());
+    assert_eq!(root.workspace_references(), &[first]);
+    assert!(root.applies_to(first));
+    assert!(!root.applies_to(second));
+
+    root.set_workspace_references([]);
+    assert!(root.is_all_workspaces() && root.applies_to(second));
+}
+
+#[test]
+fn detaching_the_last_workspace_makes_the_root_available_everywhere() {
+    let only = WorkspaceId::from(Uuid::from_u128(1));
+    let other = WorkspaceId::from(Uuid::from_u128(2));
+    let mut root = plain_root(11);
+    root.attach_workspace(only);
+    assert!(!root.applies_to(other));
+    root.detach_workspace(only);
+    assert!(root.is_all_workspaces());
+    assert!(
+        root.applies_to(other),
+        "a deleted workspace must not strand a root"
+    );
+}

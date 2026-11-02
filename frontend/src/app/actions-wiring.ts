@@ -250,7 +250,7 @@ export function createActionsWiring(shellState: ShellState) {
               description: t('themes', 'openDescription'),
               category: 'tools',
               defaultShortcuts: [],
-              contextRequirements: {},
+              contextRequirements: { featureAvailable: shellState.themesWorkspaceIndexed },
               source: { kind: 'core' as const },
             },
           ]

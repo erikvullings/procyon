@@ -309,14 +309,35 @@ export function createKnowledgeWiring(shellState: ShellState, core: KnowledgeCor
     );
   }
 
+  /** Whether any indexed folder is assigned to, or shared with, the current workspace. */
+  async function workspaceHasIndexedFolder(): Promise<boolean> {
+    const workspaceId = shellState.workspace?.id;
+    if (workspaceId === undefined) return false;
+    themesCheckedWorkspaceId = workspaceId;
+    const roots = await shellState.client.listKnowledgeRoots({ workspaceId });
+    return roots.length > 0;
+  }
+
+  let themesCheckedWorkspaceId: string | undefined;
+
+  /** Re-checks the themes availability when the active workspace changed. */
+  function refreshThemesForWorkspaceChange(): void {
+    if (shellState.workspace?.id === themesCheckedWorkspaceId) return;
+    themesCheckedWorkspaceId = shellState.workspace?.id;
+    void refreshKnowledgeSearchAvailability();
+  }
+
   async function refreshKnowledgeSearchAvailability(): Promise<void> {
     try {
       const capabilities = await shellState.client.getKnowledgeCapabilities();
       shellState.knowledgeSearchAvailable = capabilities.fullText || capabilities.semantic;
       shellState.themesAvailable = capabilities.semantic;
+      shellState.themesWorkspaceIndexed =
+        capabilities.semantic && (await workspaceHasIndexedFolder());
     } catch {
       shellState.knowledgeSearchAvailable = false;
       shellState.themesAvailable = false;
+      shellState.themesWorkspaceIndexed = false;
     } finally {
       shellState.knowledgeSearchChecked = true;
       m.redraw();
@@ -356,6 +377,7 @@ export function createKnowledgeWiring(shellState: ShellState, core: KnowledgeCor
     openKnowledgeSearchTab,
     openKnowledgeSource,
     refreshKnowledgeSearchAvailability,
+    refreshThemesForWorkspaceChange,
     refreshSemanticAssistantAvailability,
     openSemanticAssistant,
   };

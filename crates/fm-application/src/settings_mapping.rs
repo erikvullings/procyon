@@ -160,6 +160,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
         viewer_in_separate_window: settings.viewer_in_separate_window,
         remember_folder_views: settings.remember_folder_views,
         map: map_settings_to_dto(&settings.map),
+        semantic_max_source_mib: settings.semantic_max_source_mib,
     }
 }
 
@@ -305,6 +306,7 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         // Backend-owned: `update_settings` keeps the live list.
         folder_views: Vec::new(),
         map: map_settings_from_dto(settings.map),
+        semantic_max_source_mib: settings.semantic_max_source_mib,
     }
 }
 

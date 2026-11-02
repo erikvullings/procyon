@@ -330,6 +330,9 @@ pub enum CorpusThemeError {
     /// A persisted run could not be decoded.
     #[error("persisted theme run is corrupt")]
     CorruptRun,
+    /// The active index holds no registered library yet (never built, or being rebuilt).
+    #[error("the semantic index has not been built yet")]
+    IndexNotBuilt,
     /// Catalog failure.
     #[error(transparent)]
     Storage(#[from] StorageError),
@@ -483,9 +486,7 @@ impl CorpusThemeService {
         let manifest = self
             .catalog
             .library_manifest(&scope.tenant_id, &scope.library_id)?
-            .ok_or(CorpusThemeError::Storage(
-                StorageError::LibraryNotRegistered,
-            ))?;
+            .ok_or(CorpusThemeError::IndexNotBuilt)?;
         if manifest.model_revision != self.identity.model_revision
             || manifest.dimensions != self.identity.dimensions
         {

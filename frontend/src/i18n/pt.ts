@@ -1418,6 +1418,23 @@ export const pt = {
       'A indexação semântica mantém localmente excertos normalizados até o respetivo âmbito de origem ser explicitamente excluído.',
     openFolder: 'Abra uma pasta num painel para a incluir na pesquisa.',
     folderStatusUnavailable: 'O estado do consentimento da pasta não está disponível.',
+    oversizedHint:
+      'Ficheiros não indexados por excederem o limite de tamanho. Aumente ou desative o limite em Definições → Semântica → Tamanho máximo de ficheiro.',
+    skippedFilesTruncated: 'A mostrar {shown} de {total} ficheiros.',
+    availableInAll: 'Disponível em todos os espaços de trabalho',
+    availableInSome: 'Disponível em {count} espaços de trabalho selecionados',
+    workspaceSelectionHelp:
+      'Escolha os espaços de trabalho que podem pesquisar esta pasta. Não escolha nenhum para todos.',
+    maxFileSize: 'Tamanho máximo de ficheiro',
+    maxFileSizeHelp:
+      'Maior ficheiro, em MiB, que é indexado. 0 ou vazio indexa todos os ficheiros permitidos pelo perfil de recursos e pelo worker semântico (os PDF continuam limitados pelo worker).',
+    mebibytes: 'MiB',
+    openFolderLink: 'Abrir esta pasta num painel',
+    titleGemma: 'Biblioteca semântica: Gemma',
+    titleGemmaMedia: 'Biblioteca semântica: Gemma (incl. {media})',
+    mediaImages: 'imagens',
+    mediaAudio: 'áudio',
+    mediaVideo: 'vídeo',
     currentFolder: 'Pasta aberta num painel',
     changeFolder:
       'Esta pasta não está indexada. Abri-la não inicia a indexação. Para indexar apenas uma subpasta, abra essa subpasta num painel e selecione Rever a indexação.',
@@ -1480,10 +1497,6 @@ export const pt = {
       'As imagens de páginas PDF estão limitadas às primeiras {pages} páginas de cada PDF neste dispositivo CPU; o texto do PDF continua indexado.',
     pdfImagesSkippedPages:
       '{pages} imagem(ns) de página PDF foram ignoradas pelo limite de páginas por ficheiro; o texto do PDF continua indexado.',
-    lastWorkerDevice: 'Último arranque do worker: {device}',
-    metal: 'Metal',
-    cpu: 'CPU',
-    cpuForced: 'CPU (forçada por PROCYON_GEMMA_FORCE_CPU)',
     computeMode: 'Política de computação da indexação',
     computeAutomatic:
       'Metal em workers macOS suportados, quando disponível; CPU como alternativa (o dispositivo atual do worker não é indicado aqui)',
@@ -2641,6 +2654,8 @@ export const pt = {
     corpusThemeProfileMismatch:
       'O índice foi criado com outro modelo de embeddings. Recrie o índice para ver os temas.',
     corpusThemesFailed: 'Não foi possível calcular os temas do corpus: {detail}.',
+    corpusThemeIndexNotBuilt:
+      'O índice está vazio ou ainda está a ser criado. Os temas aparecem quando os documentos forem indexados.',
     corpusThemesStale: 'Estes temas estão desatualizados. Analise novamente para continuar.',
     conversationImmutable:
       'O perfil, o âmbito e o modo de conhecimento de uma conversa não podem mudar.',

@@ -90,6 +90,8 @@ export interface SettingsEditorAttrs {
   readonly plugins: readonly PluginDescriptor[];
   readonly activeWorkspaceId?: WorkspaceId;
   readonly activeLocation?: Location | undefined;
+  /** Opens a folder in the active pane and closes settings. */
+  readonly onOpenLocation?: (location: Location) => void;
   /** Called on every draft change so appearance fields can preview live without persisting. */
   readonly onPreview: (draft: Settings) => void;
   readonly onSave: (draft: Settings) => Promise<void>;
@@ -647,12 +649,11 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                   ? [
                       m(
                         '.row',
-                        m('h4.fm-settings-section-heading.col.s12', t('semanticLibrary', 'title')),
-                      ),
-                      m(
-                        '.row',
                         m(SemanticLibraryManagement, {
                           client: current.client,
+                          ...(current.onOpenLocation === undefined
+                            ? {}
+                            : { onOpenLocation: current.onOpenLocation }),
                           ...(current.activeWorkspaceId === undefined
                             ? {}
                             : { workspaceId: current.activeWorkspaceId }),
@@ -661,6 +662,23 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                             : { location: current.activeLocation }),
                         }),
                       ),
+                      m('details.fm-settings-semantic-tools', [
+                        m('summary', t('semanticLibrary', 'maxFileSize')),
+                        m('.row', [
+                          m(NumberInput, {
+                            className: 'col s6',
+                            label: `${t('semanticLibrary', 'maxFileSize')} (${t('semanticLibrary', 'mebibytes')})`,
+                            value: activeDraft.semanticMaxSourceMib,
+                            min: 0,
+                            oninput: (value: number) =>
+                              update(current, { semanticMaxSourceMib: Math.max(0, value || 0) }),
+                          }),
+                          m(
+                            'p.col.s12.fm-semantic-library-guidance',
+                            t('semanticLibrary', 'maxFileSizeHelp'),
+                          ),
+                        ]),
+                      ]),
                       m('details.fm-settings-semantic-tools', [
                         m(
                           'summary',
@@ -693,19 +711,18 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                           }),
                         ),
                       ]),
-                      m(
-                        '.row',
-                        m('h4.fm-settings-section-heading.col.s12', t('llmProfiles', 'title')),
-                      ),
-                      m(
-                        '.row',
-                        m(LlmProfileManagement, {
-                          client: current.client,
-                          onSaveHandlerChange: (handler) => {
-                            saveLlmProfile = handler;
-                          },
-                        }),
-                      ),
+                      m('details.fm-settings-semantic-tools', [
+                        m('summary', t('llmProfiles', 'title')),
+                        m(
+                          '.row',
+                          m(LlmProfileManagement, {
+                            client: current.client,
+                            onSaveHandlerChange: (handler) => {
+                              saveLlmProfile = handler;
+                            },
+                          }),
+                        ),
+                      ]),
                     ]
                   : m('p.fm-settings-semantic-gate', t('settings', 'semanticEnableHint')),
               ]),

@@ -227,6 +227,7 @@ import type {
   UpdateConnectionRequest,
   UpdateGemmaMediaRequest,
   UpdateSemanticEligibilityOverridesRequest,
+  UpdateSemanticRootWorkspacesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
   Volume,
@@ -618,6 +619,13 @@ export class TauriFileManagerClient implements FileManagerClient {
     _signal?: AbortSignal,
   ): Promise<SemanticLibraryStatus> {
     return invoke<SemanticLibraryStatus>('update_semantic_eligibility_overrides', { request });
+  }
+
+  async updateSemanticRootWorkspaces(
+    request: UpdateSemanticRootWorkspacesRequest,
+    _signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return invoke<SemanticLibraryStatus>('update_semantic_root_workspaces', { request });
   }
 
   async getDiagnostics(_signal?: AbortSignal): Promise<DiagnosticsResult> {

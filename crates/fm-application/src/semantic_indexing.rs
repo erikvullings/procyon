@@ -145,8 +145,13 @@ pub struct SemanticIndexingService {
     scanned_entries: AtomicU64,
     semantic: std::sync::RwLock<SemanticService>,
     ocr_required_files: std::sync::RwLock<BTreeMap<RootId, Vec<Location>>>,
+    skipped_files: std::sync::RwLock<BTreeMap<RootId, BTreeMap<EligibilityReason, Vec<Location>>>>,
     run_lock: tokio::sync::Mutex<()>,
     jsonl_windows: std::sync::RwLock<(usize, u32)>,
+    /// Workspaces that receive roots enrolled for every workspace.
+    all_workspaces: std::sync::RwLock<Vec<WorkspaceId>>,
+    /// User limit on a source file's size in bytes; `0` means no limit.
+    source_limit: AtomicU64,
 }
 
 struct ReconciliationGuard<'a>(&'a AtomicBool);
@@ -166,11 +171,28 @@ impl SemanticIndexingService {
             scanned_entries: AtomicU64::new(0),
             semantic: std::sync::RwLock::new(SemanticService::unavailable()),
             ocr_required_files: std::sync::RwLock::new(BTreeMap::new()),
+            skipped_files: std::sync::RwLock::new(BTreeMap::new()),
             run_lock: tokio::sync::Mutex::new(()),
             jsonl_windows: std::sync::RwLock::new((
                 DEFAULT_JSONL_WINDOW_BYTES,
                 DEFAULT_JSONL_WINDOW_LINES,
             )),
+            all_workspaces: std::sync::RwLock::new(Vec::new()),
+            source_limit: AtomicU64::new(MAX_SOURCE_BYTES),
+        }
+    }
+
+    /// Sets the user's source-size limit in MiB; `0` removes it.
+    pub(crate) fn set_max_source_mib(&self, mib: u32) {
+        self.source_limit
+            .store(u64::from(mib) * 1024 * 1024, Ordering::Relaxed);
+    }
+
+    /// The user's source-size limit in bytes (`u64::MAX` when unlimited).
+    fn user_source_limit(&self) -> u64 {
+        match self.source_limit.load(Ordering::Relaxed) {
+            0 => u64::MAX,
+            limit => limit,
         }
     }
 
@@ -199,11 +221,34 @@ impl SemanticIndexingService {
             .unwrap_or_default()
     }
 
+    /// Files the last reconciliation skipped, per reason, capped per reason.
+    pub(crate) fn skipped_files(&self, root_id: RootId) -> Vec<(EligibilityReason, Vec<Location>)> {
+        self.skipped_files
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&root_id)
+            .map(|reasons| {
+                reasons
+                    .iter()
+                    .map(|(reason, files)| (*reason, files.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     pub(crate) fn set_semantic(&self, semantic: SemanticService) {
         *self
             .semantic
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = semantic;
+    }
+
+    /// Replaces the persistent workspaces that receive all-workspace roots.
+    pub(crate) fn set_all_workspaces(&self, workspaces: Vec<WorkspaceId>) {
+        *self
+            .all_workspaces
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = workspaces;
     }
 
     pub(crate) fn is_reconciling(&self) -> bool {
@@ -317,6 +362,7 @@ impl SemanticIndexingService {
         let mut exclusion_details = BTreeSet::new();
         let mut ocr_required_files = Vec::new();
         let mut skipped = BTreeMap::<EligibilityReason, u64>::new();
+        let mut skipped_files = BTreeMap::<EligibilityReason, Vec<Location>>::new();
         let mut preserved = Vec::new();
         let mut unreadable_files = 0_u64;
         let mut unreadable_directories = 0_u64;
@@ -366,9 +412,13 @@ impl SemanticIndexingService {
                         access,
                         &[SemanticFeedCandidate { root_id, candidate }],
                         context.max_pdf_source_bytes,
+                        context.max_source_bytes,
                     )?;
                     for count in plan.skipped_reason_counts {
                         *skipped.entry(count.reason).or_insert(0) += count.count;
+                        if entry.kind == EntryKind::File {
+                            record_skipped_file(&mut skipped_files, count.reason, &entry.location);
+                        }
                     }
                     if plan.eligible_locations.first() != Some(&entry.location) {
                         continue;
@@ -413,6 +463,11 @@ impl SemanticIndexingService {
                             {
                                 EntryIngestOutcome::Oversized => {
                                     *skipped.entry(EligibilityReason::Oversized).or_insert(0) += 1;
+                                    record_skipped_file(
+                                        &mut skipped_files,
+                                        EligibilityReason::Oversized,
+                                        &entry.location,
+                                    );
                                 }
                                 EntryIngestOutcome::Ineligible => {}
                                 EntryIngestOutcome::Unreadable(error) => {
@@ -483,6 +538,10 @@ impl SemanticIndexingService {
                 .write()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .insert(root_id, ocr_required_files.clone());
+            self.skipped_files
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(root_id, skipped_files);
             generation
         };
         let tenant_ids = match access {
@@ -558,13 +617,20 @@ impl SemanticIndexingService {
             .ok_or(SemanticLibraryError::Unavailable)?
             .budgets
             .max_source_bytes_per_document;
-        let max_source_bytes = profile_source_bytes.min(MAX_SOURCE_BYTES);
-        let workspace_ids = root
-            .workspace_references
-            .iter()
-            .copied()
-            .map(WorkspaceId::from)
-            .collect::<Vec<_>>();
+        let user_limit = self.user_source_limit();
+        let max_source_bytes = profile_source_bytes.min(user_limit);
+        let workspace_ids = if root.workspace_references.is_empty() {
+            self.all_workspaces
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
+        } else {
+            root.workspace_references
+                .iter()
+                .copied()
+                .map(WorkspaceId::from)
+                .collect::<Vec<_>>()
+        };
         if workspace_ids.is_empty() {
             return Err(SemanticLibraryError::WorkspaceRequired.into());
         }
@@ -592,6 +658,8 @@ impl SemanticIndexingService {
                 root_id,
                 library_id,
                 max_source_bytes,
+                // PDFs are bounded by the resource profile and the worker's advertised cap,
+                // not by the general file-size limit.
                 max_pdf_source_bytes,
                 profile_source_bytes,
                 workspace_ids,
@@ -630,8 +698,10 @@ impl SemanticIndexingService {
                 .await
                 .map(|snapshot| Some(SourceBytes::Jsonl(snapshot)))
         } else if media_type == "application/pdf"
-            && context.max_pdf_source_bytes > MAX_SOURCE_BYTES
-            && entry.size.is_none_or(|size| size > MAX_SOURCE_BYTES)
+            && context.max_pdf_source_bytes > context.max_source_bytes
+            && entry
+                .size
+                .is_none_or(|size| size > context.max_source_bytes)
         {
             read_pdf_snapshot(
                 provider,
@@ -678,6 +748,7 @@ impl SemanticIndexingService {
                 candidate: eligibility_candidate(entry.clone()),
             }],
             context.max_pdf_source_bytes,
+            context.max_source_bytes,
         )?;
         if feed.eligible_locations.first() != Some(&entry.location) {
             return Ok(EntryIngestOutcome::Ineligible);
@@ -1151,6 +1222,7 @@ impl SemanticIndexingService {
                 candidate: eligibility_candidate(entry.clone()),
             }],
             context.max_pdf_source_bytes,
+            context.max_source_bytes,
         )?;
         if plan.eligible_locations.first() != Some(&entry.location) {
             return Ok(SingleFileIngestOutcome::Ineligible);
@@ -1188,6 +1260,20 @@ async fn annotate_git_ignored(
         }
     }
     Ok(())
+}
+
+/// Most skipped files remembered per reason, so one huge folder cannot bloat status.
+const MAX_SKIPPED_FILES_PER_REASON: usize = 200;
+
+fn record_skipped_file(
+    files: &mut BTreeMap<EligibilityReason, Vec<Location>>,
+    reason: EligibilityReason,
+    location: &Location,
+) {
+    let list = files.entry(reason).or_default();
+    if list.len() < MAX_SKIPPED_FILES_PER_REASON && !list.contains(location) {
+        list.push(location.clone());
+    }
 }
 
 /// Shared per-root ingestion context resolved once for a reconciliation or a

@@ -20,5 +20,6 @@ export const SemanticLibraryOperationDto = {
   pause: 'pause',
   resume: 'resume',
   updateEligibilityOverrides: 'updateEligibilityOverrides',
+  updateRootWorkspaces: 'updateRootWorkspaces',
   updateGemmaMedia: 'updateGemmaMedia',
 } as const;

@@ -55,6 +55,8 @@ pub enum SemanticLibraryOperation {
     Resume,
     /// Replace safe per-root eligibility overrides.
     UpdateEligibilityOverrides,
+    /// Choose the workspaces a root is available in (none selected means all).
+    UpdateRootWorkspaces,
     /// Change optional Gemma media permissions without changing vector dimensions.
     UpdateGemmaMedia,
 }
@@ -461,6 +463,8 @@ pub struct SemanticRootStatus {
     pub eligibility_reason_counts: Vec<SemanticEligibilityReasonCount>,
     /// Files whose latest completed reconciliation requires OCR.
     pub ocr_required_files: Vec<Location>,
+    /// Files skipped by the last reconciliation, grouped by reason and capped per reason.
+    pub skipped_files: Vec<SemanticSkippedFiles>,
     /// Current source reachability.
     pub availability: SemanticRootAvailability,
     /// Last complete catalog reconciliation.
@@ -475,6 +479,15 @@ pub struct SemanticRootStatus {
     pub unverified_legacy_occurrences_by_workspace: BTreeMap<Uuid, u64>,
     /// Explicit descendant/root exclusions.
     pub exclusions: Vec<SemanticExclusionStatus>,
+}
+
+/// Files skipped for one eligibility reason.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemanticSkippedFiles {
+    /// Why the files were skipped.
+    pub reason: core::EligibilityReason,
+    /// The skipped files (capped; the reason count holds the full total).
+    pub files: Vec<Location>,
 }
 
 /// Immutable model identity in the safe policy projection.
@@ -1228,6 +1241,7 @@ impl SemanticLibraryService {
                         SemanticLibraryOperation::Pause,
                         SemanticLibraryOperation::Resume,
                         SemanticLibraryOperation::UpdateEligibilityOverrides,
+                        SemanticLibraryOperation::UpdateRootWorkspaces,
                     ];
                     if managed
                         .initial_policy
@@ -1394,6 +1408,9 @@ impl SemanticLibraryService {
                     .map_err(map_policy_error)
             })
             .transpose()?;
+        let root_was_all_workspaces = existing_root
+            .as_ref()
+            .is_some_and(core::EnrolledRoot::is_all_workspaces);
         let mut root = existing_root.unwrap_or_else(|| {
             core::EnrolledRoot::new(
                 root_id,
@@ -1404,7 +1421,9 @@ impl SemanticLibraryService {
         });
         root.set_pdf_image_policy(pdf_images_enabled, pdf_image_page_budget)
             .map_err(map_policy_error)?;
-        root.attach_workspace(context.workspace_id);
+        if !root_was_all_workspaces {
+            root.attach_workspace(context.workspace_id);
+        }
         let confirmation_id = next_confirmation(&mut locked.cache, deterministic, "enrol");
         locked.cache.enrolment_confirmations.insert(
             confirmation_id.clone(),
@@ -1465,7 +1484,9 @@ impl SemanticLibraryService {
                 .policy
                 .root_mut(existing)
                 .ok_or(SemanticLibraryError::NotFound)?;
-            root.attach_workspace(context.workspace_id);
+            if !root.is_all_workspaces() {
+                root.attach_workspace(context.workspace_id);
+            }
             root.set_pdf_image_policy(
                 pending.root.pdf_images_enabled(),
                 pending.root.pdf_image_page_budget(),
@@ -1521,13 +1542,6 @@ impl SemanticLibraryService {
             }
             core::ConsentState::NotIncluded => return Err(SemanticLibraryError::NotEnrolled),
         };
-        if !data
-            .policy
-            .root(root_id)
-            .is_some_and(|root| root.workspace_references().contains(&context.workspace_id))
-        {
-            return Err(SemanticLibraryError::WorkspaceRequired);
-        }
         let mut candidate = data.clone();
         let deterministic = managed.deterministic;
         let exclusion_id = next_exclusion_id(&mut locked.cache, deterministic);
@@ -1729,10 +1743,51 @@ impl SemanticLibraryService {
             .policy
             .root_mut(root_id)
             .ok_or(SemanticLibraryError::NotFound)?;
-        if !root.workspace_references().contains(&workspace_id) {
+        if !root.applies_to(workspace_id) {
             return Err(SemanticLibraryError::WorkspaceRequired);
         }
         root.set_eligibility_overrides(overrides);
+        locked.commit(next, core::LibraryOperation::Enrolment)?;
+        locked.status()
+    }
+
+    /// Replaces the workspaces a root is available in; an empty set means every workspace.
+    ///
+    /// Scopes of workspaces that lose the root are dropped immediately, so their
+    /// queries stop seeing it before any cleanup runs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an authority, authorization, not-found, stale-revision, lock, or
+    /// persistence failure.
+    pub fn update_root_workspaces(
+        &self,
+        access: &SemanticAccessContext,
+        root_id: core::RootId,
+        workspaces: Vec<WorkspaceId>,
+        expected_revision: u64,
+    ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
+        self.ensure_operation_allowed(access, SemanticLibraryOperation::UpdateRootWorkspaces)?;
+        let managed = self.managed_backend()?;
+        managed.authorize(access)?;
+        let mut locked = managed.lock()?;
+        let mut next = locked.checked_data(expected_revision)?.clone();
+        let root = next
+            .policy
+            .root_mut(root_id)
+            .ok_or(SemanticLibraryError::NotFound)?;
+        let previous: Vec<WorkspaceId> = root.workspace_references().to_vec();
+        root.set_workspace_references(workspaces);
+        let was_all = previous.is_empty();
+        let now: Vec<WorkspaceId> = root.workspace_references().to_vec();
+        if !was_all {
+            for removed in previous
+                .iter()
+                .filter(|id| !now.is_empty() && !now.contains(id))
+            {
+                next.catalog.remove_root_workspace_scopes(root_id, *removed);
+            }
+        }
         locked.commit(next, core::LibraryOperation::Enrolment)?;
         locked.status()
     }
@@ -2060,6 +2115,7 @@ impl SemanticLibraryService {
             access,
             candidates,
             crate::semantic_indexing::MAX_SOURCE_BYTES,
+            crate::semantic_indexing::MAX_SOURCE_BYTES,
         )
     }
 
@@ -2068,6 +2124,7 @@ impl SemanticLibraryService {
         access: &SemanticAccessContext,
         candidates: &[SemanticFeedCandidate],
         max_pdf_source_bytes: u64,
+        max_source_bytes: u64,
     ) -> Result<SemanticWorkerFeedPlan, SemanticLibraryError> {
         if !(crate::semantic_indexing::MAX_SOURCE_BYTES
             ..=fm_semantic_protocol::MAX_PDF_INGESTION_BYTES)
@@ -2105,7 +2162,7 @@ impl SemanticLibraryService {
                 _ => {
                     candidate_budgets.max_source_bytes_per_document = candidate_budgets
                         .max_source_bytes_per_document
-                        .min(crate::semantic_indexing::MAX_SOURCE_BYTES);
+                        .min(max_source_bytes);
                 }
             }
             let root = data
@@ -2457,7 +2514,7 @@ impl SemanticLibraryService {
         };
         if let RagScopeSelection::CurrentFolder(folder) = selection {
             let authorized = data.policy.roots().values().any(|root| {
-                root.workspace_references().contains(&workspace_id)
+                root.applies_to(workspace_id)
                     && root.location().provider_id == folder.provider_id
                     && (root.location() == folder
                         || (root.recursive()
@@ -2471,7 +2528,7 @@ impl SemanticLibraryService {
             && root_ids.iter().any(|root_id| {
                 data.policy
                     .root(*root_id)
-                    .is_none_or(|root| !root.workspace_references().contains(&workspace_id))
+                    .is_none_or(|root| !root.applies_to(workspace_id))
             })
         {
             return Err(SemanticLibraryError::InvalidRequest);
@@ -3697,6 +3754,7 @@ fn project_root(
             .collect(),
         eligibility_reason_counts: counts.map_or_else(Vec::new, reason_counts),
         ocr_required_files: Vec::new(),
+        skipped_files: Vec::new(),
         availability: match data.catalog.root_availability(root.id()) {
             core::RootAvailability::Available => SemanticRootAvailability::Available,
             core::RootAvailability::TemporarilyUnavailable { .. } => {
@@ -3811,7 +3869,7 @@ fn project_folder_status(
         .unwrap_or_default();
     let workspace_referenced = root_id
         .and_then(|id| policy.root(id))
-        .is_some_and(|root| root.workspace_references().contains(&workspace_id));
+        .is_some_and(|root| root.applies_to(workspace_id));
     let (source_available, unavailable_reason) = match availability {
         core::RootAvailability::Available => (true, None),
         core::RootAvailability::TemporarilyUnavailable { .. } => {

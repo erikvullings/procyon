@@ -76,9 +76,9 @@ use fm_transport_dto::{
     StartSemanticOcrRemediationRequestDto, StructuredViewSessionRequestDto,
     StructuredViewStatusDto, SyncPlanDto, UninstallSemanticComponentsRequestDto,
     UpdateConnectionRequestDto, UpdateGemmaMediaRequestDto,
-    UpdateSemanticEligibilityOverridesRequestDto, UpdateStructuredViewRequestDto,
-    VerificationReportDto, VerifyChecksumFileRequestDto, VocabularyIdRequestDto,
-    WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
+    UpdateSemanticEligibilityOverridesRequestDto, UpdateSemanticRootWorkspacesRequestDto,
+    UpdateStructuredViewRequestDto, VerificationReportDto, VerifyChecksumFileRequestDto,
+    VocabularyIdRequestDto, WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
 };
 
 #[cfg(target_os = "windows")]
@@ -1589,6 +1589,43 @@ pub(crate) async fn update_semantic_eligibility_overrides(
         .update_semantic_eligibility_overrides(&desktop_semantic_access(), request)
         .await
         .map_err(semantic_library_error)
+}
+
+/// Chooses the workspaces a root is available in; none selected means all.
+#[tauri::command]
+pub(crate) async fn update_semantic_root_workspaces(
+    state: State<'_, AppState>,
+    request: UpdateSemanticRootWorkspacesRequestDto,
+) -> Result<SemanticLibraryStatusDto, SemanticLibraryErrorDto> {
+    let root_id = request.root_id.parse().ok();
+    let status = state
+        .service
+        .update_semantic_root_workspaces(&desktop_semantic_access(), request)
+        .await
+        .map_err(semantic_library_error)?;
+    if state.semantic_managed_components
+        && let Some(root_id) = root_id
+    {
+        // Workspaces that gained the root need their own index of it.
+        let service = Arc::clone(&state.service);
+        tauri::async_runtime::spawn(async move {
+            if let Err(error) = service
+                .semantic_reconcile_enrolled_root(
+                    &desktop_semantic_access(),
+                    root_id,
+                    tokio_util::sync::CancellationToken::new(),
+                )
+                .await
+            {
+                tracing::error!(
+                    root_id = %root_id,
+                    error = %error,
+                    "semantic indexing failed after changing a folder's workspaces"
+                );
+            }
+        });
+    }
+    Ok(status)
 }
 
 /// Lists OS-managed filesystem locations through the shared application service.

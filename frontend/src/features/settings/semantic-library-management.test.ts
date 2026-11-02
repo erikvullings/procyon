@@ -58,7 +58,6 @@ describe('SemanticLibraryManagement', () => {
     mountComponent(client);
     await waitForLoaded();
 
-    expect(root.textContent).toContain('Folder open in a pane');
     expect(root.textContent).toContain('This folder is not indexed');
     expect(root.textContent).toContain('Opening it does not start indexing');
     expect(root.textContent).toContain('Only these folders and eligible subfolders are indexed');
@@ -178,7 +177,7 @@ describe('SemanticLibraryManagement', () => {
     const details = root.querySelector<HTMLDetailsElement>('.fm-semantic-library-root details');
     expect(details?.textContent).not.toContain('Reconciliation generation');
     expect(details?.textContent).not.toContain('Indexing compute policy');
-    expect(details?.textContent).toContain('Last worker launch: Metal');
+    expect(details?.textContent).not.toContain('Last worker launch');
     indexedSources = 1;
     client.emit({
       eventId: 1,
@@ -216,12 +215,10 @@ describe('SemanticLibraryManagement', () => {
     mountComponent(client);
     await waitForLoaded();
 
-    expect(root.textContent).toContain('Not included');
     expect(root.textContent).toContain('mock-semantic-model');
     expect(root.textContent).toContain('Balanced');
     expect(root.textContent).toContain('Every 30 minutes');
     expect(root.textContent).toContain('normalized excerpts');
-    expect(root.textContent).toContain(location.uri);
     expect(root.textContent).toContain('open that subfolder in a pane');
     expect(
       root.querySelector<HTMLDetailsElement>('details.fm-semantic-library-details')?.open,
@@ -392,8 +389,8 @@ describe('SemanticLibraryManagement', () => {
     button('Remove from indexing…').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Saved conversation evidence pins'));
     button('Exclude and delete data').click();
-    await vi.waitFor(() => expect(root.textContent).toContain('Excluded'));
-    expect(root.textContent).toContain('Cleanup complete');
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(root.textContent).not.toContain('Exclude and delete data'));
     expect(confirm.mock.calls[0]?.[0]).not.toHaveProperty('categories');
   });
 
@@ -413,9 +410,7 @@ describe('SemanticLibraryManagement', () => {
     mountComponent(client);
     await waitForLoaded();
 
-    const selectedFolder = root.querySelector('.fm-semantic-library-folder');
-    expect(selectedFolder?.textContent).toContain('Included here');
-    const remove = selectedFolder?.querySelector<HTMLButtonElement>('button');
+    const remove = root.querySelector<HTMLButtonElement>('.fm-semantic-library-root button');
     expect(remove?.textContent).toBe('Remove from indexing…');
     remove?.click();
     await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
@@ -423,6 +418,149 @@ describe('SemanticLibraryManagement', () => {
     await vi.waitFor(() =>
       expect(root.textContent).toContain('Your original files are not deleted'),
     );
+  });
+
+  async function enrolOtherWorkspaceFolder(): Promise<{ other: WorkspaceProjection; uri: string }> {
+    const other = await client.startWorkspace();
+    const folder: Location = location;
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: other.id,
+      location: folder,
+      recursive: true,
+    });
+    await client.confirmSemanticEnrolment({
+      confirmationId: preview.confirmationId,
+      policyRevision: preview.policyRevision,
+      workspaceId: other.id,
+      location: folder,
+    });
+    return { other, uri: folder.uri };
+  }
+
+  it('removes a folder that belongs to another workspace', async () => {
+    const { uri } = await enrolOtherWorkspaceFolder();
+    const plan = vi.spyOn(client, 'planSemanticExclusion');
+    mountComponent(client);
+    await waitForLoaded();
+
+    const card = [...root.querySelectorAll('.fm-semantic-library-root')].find((candidate) =>
+      candidate.textContent?.includes(uri),
+    );
+    const remove = card?.querySelector<HTMLButtonElement>('button.fm-semantic-library-action');
+    expect(remove?.textContent).toBe('Remove from indexing…');
+    remove?.click();
+    await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
+  });
+
+  it('chooses the workspaces of a folder, and none selected means all', async () => {
+    const otherId = '11111111-1111-4111-8111-111111111111';
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    await client.confirmSemanticEnrolment({
+      confirmationId: preview.confirmationId,
+      policyRevision: preview.policyRevision,
+      workspaceId: workspace.id,
+      location,
+    });
+    const original = await client.getSemanticLibraryStatus();
+    vi.spyOn(client, 'getSemanticLibraryStatus').mockResolvedValue({
+      ...original,
+      roots: original.roots.map((candidate) => ({ ...candidate, workspaceReferences: [otherId] })),
+    });
+    const summary = (id: string, name: string) => ({
+      id,
+      name,
+      updatedAt: '2026-01-01T00:00:00Z',
+      revision: 1,
+      ephemeral: false,
+    });
+    vi.spyOn(client, 'listWorkspaces').mockResolvedValue([
+      summary(workspace.id, 'Work'),
+      summary(otherId, 'Other'),
+    ]);
+    const update = vi
+      .spyOn(client, 'updateSemanticRootWorkspaces')
+      .mockResolvedValue({ ...original, revision: original.revision + 1 });
+    mountComponent(client);
+    await waitForLoaded();
+
+    const card = root.querySelector<HTMLElement>('.fm-semantic-library-root') as HTMLElement;
+    expect(card.textContent).toContain('Available in 1 selected workspaces');
+    const boxes = [
+      ...card.querySelectorAll<HTMLInputElement>('.fm-semantic-library-workspace input'),
+    ];
+    expect(boxes.map((box) => box.checked)).toEqual([false, true]);
+    // Selecting every workspace is the same as selecting none: available in all.
+    (boxes[0] as HTMLInputElement).click();
+    await vi.waitFor(() => expect(update).toHaveBeenCalledOnce());
+    expect(update.mock.calls[0]?.[0]).toMatchObject({
+      rootId: original.roots[0]?.id,
+      workspaceIds: [],
+    });
+  });
+
+  it('lists skipped files and decodes the folder path as a link that opens it', async () => {
+    const preview = await client.previewSemanticEnrolment({
+      workspaceId: workspace.id,
+      location,
+      recursive: true,
+    });
+    await client.confirmSemanticEnrolment({
+      confirmationId: preview.confirmationId,
+      policyRevision: preview.policyRevision,
+      workspaceId: workspace.id,
+      location,
+    });
+    const original = await client.getSemanticLibraryStatus();
+    vi.spyOn(client, 'getSemanticLibraryStatus').mockResolvedValue({
+      ...original,
+      roots: original.roots.map((candidate) => ({
+        ...candidate,
+        location: { providerId: 'file', uri: 'file:///Users/me/My%20Docs' },
+        eligibilityReasonCounts: [
+          { reason: 'oversized', count: 3 },
+          { reason: 'unsupportedMime', count: 1 },
+        ],
+        skippedFiles: [
+          {
+            reason: 'oversized',
+            files: [{ providerId: 'file', uri: 'file:///Users/me/My%20Docs/big%20file.bin' }],
+          },
+          {
+            reason: 'unsupportedMime',
+            files: [{ providerId: 'file', uri: 'file:///Users/me/My%20Docs/a.xyz' }],
+          },
+        ],
+      })),
+    });
+    const onOpenLocation = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(SemanticLibraryManagement, {
+          client,
+          workspaceId: workspace.id,
+          location,
+          onOpenLocation,
+        }),
+    });
+    m.redraw.sync();
+    await waitForLoaded();
+
+    const link = root.querySelector<HTMLAnchorElement>('.fm-semantic-library-location a');
+    expect(link?.textContent).toBe('file:///Users/me/My Docs');
+    link?.click();
+    expect(onOpenLocation).toHaveBeenCalledWith({
+      providerId: 'file',
+      uri: 'file:///Users/me/My%20Docs',
+    });
+    const text = root.textContent ?? '';
+    expect(text).toContain('big file.bin');
+    expect(text).toContain('a.xyz');
+    expect(text).toContain('Showing 1 of 3 files');
+    expect(text).toContain('Maximum file size');
   });
 
   it('hides PDF-image consent and skips Gemma setup for an E5 library', async () => {
@@ -481,11 +619,11 @@ describe('SemanticLibraryManagement', () => {
     await waitForLoaded();
 
     button('Pause indexing').click();
-    await vi.waitFor(() => expect(root.textContent).toContain('Indexing paused'));
+    await vi.waitFor(() => expect(root.textContent).toContain('Indexing: paused'));
     expect(root.textContent).toContain('Existing indexed data and consent are preserved');
     expect(root.textContent).toContain('Queries can use the last complete generations');
     button('Resume indexing').click();
-    await vi.waitFor(() => expect(root.textContent).toContain('Indexing on'));
+    await vi.waitFor(() => expect(root.textContent).toContain('Indexing: on'));
   });
 
   it('shows unavailable sources and only fixed safe eligibility overrides', async () => {
@@ -636,7 +774,7 @@ describe('SemanticLibraryManagement', () => {
     await vi.waitFor(() =>
       expect(resume).toHaveBeenCalledWith({ planId: 'plan-1', policyRevision: 1 }),
     );
-    await vi.waitFor(() => expect(root.textContent).toContain('Cleanup complete'));
+    await vi.waitFor(() => expect(root.textContent).not.toContain('Resume cleanup'));
   });
 
   it('offers to resume a cleanup that is still running after an interruption', async () => {
@@ -713,7 +851,7 @@ describe('SemanticLibraryManagement', () => {
     await vi.waitFor(() =>
       expect(resume).toHaveBeenCalledWith({ planId: 'plan-1', policyRevision: 1 }),
     );
-    await vi.waitFor(() => expect(root.textContent).toContain('Cleanup complete'));
+    await vi.waitFor(() => expect(root.textContent).not.toContain('Resume cleanup'));
   });
 
   it('reports an unavailable library to a principal with no permitted operations', async () => {
@@ -738,7 +876,7 @@ describe('SemanticLibraryManagement', () => {
     mountComponent(client);
     await waitForLoaded();
 
-    expect(root.textContent).toContain('Niet opgenomen');
+    expect(root.textContent).toContain('Deze map wordt niet geïndexeerd');
     button('Indexering controleren').click();
     await vi.waitFor(() =>
       expect(root.querySelector('[role="alert"]')?.textContent).toContain(

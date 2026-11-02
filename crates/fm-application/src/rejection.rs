@@ -264,6 +264,8 @@ pub mod reason {
     pub const SCOPE_FOLDER_REQUIRED: &str = "scopeFolderRequired";
     /// Rejection reason `corpusThemeProfileMismatch` (see the frontend `rejectionReason` catalogue).
     pub const CORPUS_THEME_PROFILE_MISMATCH: &str = "corpusThemeProfileMismatch";
+    /// Rejection reason `corpusThemeIndexNotBuilt` (see the frontend `rejectionReason` catalogue).
+    pub const CORPUS_THEME_INDEX_NOT_BUILT: &str = "corpusThemeIndexNotBuilt";
     /// Rejection reason `corpusThemesStale` (see the frontend `rejectionReason` catalogue).
     pub const CORPUS_THEMES_STALE: &str = "corpusThemesStale";
     /// Rejection reason `corpusThemesFailed` (see the frontend `rejectionReason` catalogue).

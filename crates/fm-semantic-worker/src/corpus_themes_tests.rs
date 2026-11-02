@@ -886,3 +886,28 @@ fn references_and_contents_do_not_shape_the_themes() {
         "{themes:#?}"
     );
 }
+
+#[test]
+fn an_index_without_the_library_reports_that_it_is_not_built_yet() {
+    let service = CorpusThemeService::new(open_catalog(), identity());
+    let scope = CorpusScope {
+        tenant_id: TENANT.into(),
+        library_id: "library-never-registered".into(),
+        source_ids: vec!["source-a".into()],
+    };
+    let error = service
+        .analyze(
+            &scope,
+            &CorpusThemeConfig::default(),
+            &CancellationToken::new(),
+        )
+        .unwrap_err();
+    assert!(
+        matches!(error, CorpusThemeError::IndexNotBuilt),
+        "{error:?}"
+    );
+    assert_eq!(
+        crate::corpus_theme_ipc::failure_of(error).unwrap(),
+        crate::corpus_theme_ipc::ThemeFailure::IndexNotBuilt
+    );
+}

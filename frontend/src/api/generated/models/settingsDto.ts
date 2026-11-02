@@ -95,6 +95,12 @@ export interface SettingsDto {
      * @minimum 0
      */
   schemaVersion: number;
+  /**
+     * Largest source file, in MiB, that semantic indexing reads; `0` means no limit beyond the
+     * resource profile and the worker's own hard caps.
+     * @minimum 0
+     */
+  semanticMaxSourceMib?: number;
   /** Show hidden entries by default. */
   showHiddenFiles: boolean;
   /** Size presentation. */

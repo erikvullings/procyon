@@ -1785,6 +1785,23 @@ export const nl = {
       'Semantische indexering bewaart genormaliseerde fragmenten lokaal totdat hun bronbereik expliciet wordt uitgesloten.',
     openFolder: 'Open een map in een paneel om deze aan zoeken toe te voegen.',
     folderStatusUnavailable: 'Toestemmingsstatus van de map is niet beschikbaar.',
+    oversizedHint:
+      'Bestanden die niet worden geïndexeerd omdat ze de groottelimiet overschrijden. Verhoog of schakel de limiet uit onder Instellingen → Semantisch → Maximale bestandsgrootte.',
+    skippedFilesTruncated: '{shown} van {total} bestanden getoond.',
+    availableInAll: 'Beschikbaar in alle werkruimtes',
+    availableInSome: 'Beschikbaar in {count} geselecteerde werkruimtes',
+    workspaceSelectionHelp:
+      'Kies de werkruimtes die deze map mogen doorzoeken. Kies er geen voor alle werkruimtes.',
+    maxFileSize: 'Maximale bestandsgrootte',
+    maxFileSizeHelp:
+      'Grootste bestand, in MiB, dat wordt geïndexeerd. 0 of leeg indexeert elk bestand dat het resourceprofiel en de semantische worker toestaan (pdf’s blijven begrensd door de limiet van de worker).',
+    mebibytes: 'MiB',
+    openFolderLink: 'Open deze map in een paneel',
+    titleGemma: 'Semantische bibliotheek: Gemma',
+    titleGemmaMedia: 'Semantische bibliotheek: Gemma (incl. {media})',
+    mediaImages: 'afbeeldingen',
+    mediaAudio: 'audio',
+    mediaVideo: 'video',
     currentFolder: 'Map geopend in een paneel',
     changeFolder:
       'Deze map wordt niet geïndexeerd. Openen start geen indexering. Open alleen de gewenste submap in een paneel en kies Indexering controleren.',
@@ -1846,10 +1863,6 @@ export const nl = {
       'Op dit CPU-apparaat worden per pdf alleen de eerste {pages} pagina-afbeeldingen geïndexeerd; pdf-tekst blijft behouden.',
     pdfImagesSkippedPages:
       '{pages} PDF-pagina-afbeelding(en) zijn overgeslagen vanwege het maximum per bestand; PDF-tekst blijft behouden.',
-    lastWorkerDevice: 'Laatste workerstart: {device}',
-    metal: 'Metal',
-    cpu: 'CPU',
-    cpuForced: 'CPU (afgedwongen via PROCYON_GEMMA_FORCE_CPU)',
     computeMode: 'Rekenbeleid voor indexeren',
     computeAutomatic:
       'Metal op ondersteunde macOS-workers indien beschikbaar; anders CPU (actief apparaat wordt hier niet gemeld)',
@@ -2635,6 +2648,8 @@ export const nl = {
     corpusThemeProfileMismatch:
       'De index is met een ander embeddingmodel opgebouwd. Bouw de index opnieuw op om thema’s te zien.',
     corpusThemesFailed: 'De corpusthema’s konden niet worden berekend: {detail}.',
+    corpusThemeIndexNotBuilt:
+      'De index is leeg of wordt nog opgebouwd. Thema’s verschijnen zodra documenten zijn geïndexeerd.',
     corpusThemesStale: 'Deze thema’s zijn verouderd. Analyseer opnieuw om verder te gaan.',
     conversationImmutable:
       'Het profiel, het bereik en de kennismodus van een gesprek kunnen niet wijzigen.',

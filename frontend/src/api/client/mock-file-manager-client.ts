@@ -216,6 +216,7 @@ import type {
   UpdateConnectionRequest,
   UpdateGemmaMediaRequest,
   UpdateSemanticEligibilityOverridesRequest,
+  UpdateSemanticRootWorkspacesRequest,
   UpdateStructuredViewRequest,
   VerificationReport,
   Volume,
@@ -493,6 +494,12 @@ export class MockFileManagerClient implements FileManagerClient {
     signal?: AbortSignal,
   ): Promise<SemanticLibraryStatus> {
     return this.semanticClient.updateSemanticEligibilityOverrides(request, signal);
+  }
+  updateSemanticRootWorkspaces(
+    request: UpdateSemanticRootWorkspacesRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.semanticClient.updateSemanticRootWorkspaces(request, signal);
   }
   getSystemLocations(signal?: AbortSignal): Promise<SystemLocation[]> {
     return this.connectionClient.getSystemLocations(signal);

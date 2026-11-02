@@ -36,5 +36,7 @@ export type { SemanticLibraryRevisionRequestDto as SemanticLibraryRevisionReques
 export type { SemanticLibraryStatusDto as SemanticLibraryStatus } from '../api/generated/models/semanticLibraryStatusDto';
 export type { SemanticRootAvailabilityDto as SemanticRootAvailability } from '../api/generated/models/semanticRootAvailabilityDto';
 export type { SemanticRootStatusDto as SemanticRootStatus } from '../api/generated/models/semanticRootStatusDto';
+export type { SemanticSkippedFilesDto as SemanticSkippedFiles } from '../api/generated/models/semanticSkippedFilesDto';
 export type { UpdateGemmaMediaRequestDto as UpdateGemmaMediaRequest } from '../api/generated/models/updateGemmaMediaRequestDto';
 export type { UpdateSemanticEligibilityOverridesRequestDto as UpdateSemanticEligibilityOverridesRequest } from '../api/generated/models/updateSemanticEligibilityOverridesRequestDto';
+export type { UpdateSemanticRootWorkspacesRequestDto as UpdateSemanticRootWorkspacesRequest } from '../api/generated/models/updateSemanticRootWorkspacesRequestDto';

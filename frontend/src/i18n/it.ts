@@ -1412,6 +1412,23 @@ export const it = {
       "L'indicizzazione semantica conserva localmente estratti normalizzati finché il loro ambito di origine non viene escluso esplicitamente.",
     openFolder: 'Apri una cartella in un pannello per includerla nella ricerca.',
     folderStatusUnavailable: 'Lo stato del consenso della cartella non è disponibile.',
+    oversizedHint:
+      'File non indicizzati perché superano il limite di dimensione. Aumenta o disattiva il limite in Impostazioni → Semantica → Dimensione massima dei file.',
+    skippedFilesTruncated: 'Mostrati {shown} di {total} file.',
+    availableInAll: 'Disponibile in tutti gli spazi di lavoro',
+    availableInSome: 'Disponibile in {count} spazi di lavoro selezionati',
+    workspaceSelectionHelp:
+      'Scegli gli spazi di lavoro che possono cercare in questa cartella. Non sceglierne nessuno per tutti.',
+    maxFileSize: 'Dimensione massima dei file',
+    maxFileSizeHelp:
+      'File più grande, in MiB, che viene indicizzato. 0 o vuoto indicizza ogni file consentito dal profilo risorse e dal worker semantico (i PDF restano limitati dal worker).',
+    mebibytes: 'MiB',
+    openFolderLink: 'Apri questa cartella in un riquadro',
+    titleGemma: 'Libreria semantica: Gemma',
+    titleGemmaMedia: 'Libreria semantica: Gemma (incl. {media})',
+    mediaImages: 'immagini',
+    mediaAudio: 'audio',
+    mediaVideo: 'video',
     currentFolder: 'Cartella aperta in un pannello',
     changeFolder:
       "Questa cartella non è indicizzata. Aprirla non avvia l'indicizzazione. Per indicizzare solo una sottocartella, aprila in un pannello e seleziona Rivedi indicizzazione.",
@@ -1474,10 +1491,6 @@ export const it = {
       'Le immagini delle pagine PDF sono limitate alle prime {pages} pagine di ogni PDF su questo dispositivo CPU; il testo del PDF resta indicizzato.',
     pdfImagesSkippedPages:
       '{pages} immagine/i di pagina PDF sono state saltate a causa del limite di pagine per file; il testo del PDF resta indicizzato.',
-    lastWorkerDevice: 'Ultimo avvio del worker: {device}',
-    metal: 'Metal',
-    cpu: 'CPU',
-    cpuForced: 'CPU (forzata da PROCYON_GEMMA_FORCE_CPU)',
     computeMode: "Criterio di calcolo per l'indicizzazione",
     computeAutomatic:
       'Metal sui worker macOS supportati quando disponibile; fallback su CPU (qui non viene indicato il dispositivo attuale del worker)',
@@ -2623,6 +2636,8 @@ export const it = {
     corpusThemeProfileMismatch:
       'L’indice è stato creato con un altro modello di embedding. Ricostruisci l’indice per vedere i temi.',
     corpusThemesFailed: 'Non è stato possibile calcolare i temi del corpus: {detail}.',
+    corpusThemeIndexNotBuilt:
+      'L’indice è vuoto o ancora in costruzione. I temi appariranno quando i documenti saranno indicizzati.',
     corpusThemesStale: 'Questi temi sono obsoleti. Analizza di nuovo per continuare.',
     conversationImmutable:
       'Profilo, ambito e modalità di conoscenza di una conversazione non possono cambiare.',

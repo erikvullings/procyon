@@ -44,6 +44,9 @@ use thiserror::Error;
 
 /// Current on-disk settings schema.
 pub const CURRENT_SCHEMA_VERSION: u32 = 9;
+
+/// Default semantic indexing source-size limit in MiB.
+pub const DEFAULT_SEMANTIC_MAX_SOURCE_MIB: u32 = 64;
 /// First schema version whose installs enable [`DEFAULT_ENABLED_PLUGINS`] automatically.
 const DEFAULT_PLUGINS_SCHEMA_VERSION: u64 = 9;
 /// Bundled plugins that are on until the user turns them off (task 0142's preview renderers).
@@ -432,6 +435,9 @@ pub struct Settings {
     pub folder_views: Vec<FolderViewMemory>,
     /// Basemap of the shared map component (task 0275).
     pub map: MapSettings,
+    /// Largest source file, in MiB, that semantic indexing reads; `0` means no limit beyond the
+    /// resource profile and the worker's own hard caps.
+    pub semantic_max_source_mib: u32,
 }
 
 impl Settings {
@@ -520,6 +526,7 @@ impl Default for Settings {
             remember_folder_views: true,
             folder_views: Vec::new(),
             map: MapSettings::default(),
+            semantic_max_source_mib: DEFAULT_SEMANTIC_MAX_SOURCE_MIB,
         }
     }
 }

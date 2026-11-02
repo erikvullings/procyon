@@ -1413,6 +1413,23 @@ export const pl = {
       'Indeksowanie semantyczne przechowuje lokalnie znormalizowane fragmenty, dopóki ich zakres źródłowy nie zostanie jawnie wykluczony.',
     openFolder: 'Otwórz folder w panelu, aby uwzględnić go w wyszukiwaniu.',
     folderStatusUnavailable: 'Stan zgody dla folderu jest niedostępny.',
+    oversizedHint:
+      'Pliki nieindeksowane, bo przekraczają limit rozmiaru. Zwiększ lub wyłącz limit w Ustawienia → Semantyka → Maksymalny rozmiar pliku.',
+    skippedFilesTruncated: 'Pokazano {shown} z {total} plików.',
+    availableInAll: 'Dostępne we wszystkich obszarach roboczych',
+    availableInSome: 'Dostępne w {count} wybranych obszarach roboczych',
+    workspaceSelectionHelp:
+      'Wybierz obszary robocze, które mogą przeszukiwać ten folder. Nie wybieraj żadnego, aby dotyczyło wszystkich.',
+    maxFileSize: 'Maksymalny rozmiar pliku',
+    maxFileSizeHelp:
+      'Największy plik, w MiB, który jest indeksowany. 0 lub puste indeksuje każdy plik dozwolony przez profil zasobów i worker semantyczny (PDF pozostają ograniczone przez worker).',
+    mebibytes: 'MiB',
+    openFolderLink: 'Otwórz ten folder w panelu',
+    titleGemma: 'Biblioteka semantyczna: Gemma',
+    titleGemmaMedia: 'Biblioteka semantyczna: Gemma (w tym {media})',
+    mediaImages: 'obrazy',
+    mediaAudio: 'dźwięk',
+    mediaVideo: 'wideo',
     currentFolder: 'Folder otwarty w panelu',
     changeFolder:
       'Ten folder nie jest zindeksowany. Jego otwarcie nie rozpoczyna indeksowania. Aby zindeksować tylko podfolder, otwórz go w panelu i wybierz Przejrzyj indeksowanie.',
@@ -1474,10 +1491,6 @@ export const pl = {
       'Obrazy stron PDF są na tym urządzeniu CPU ograniczone do pierwszych {pages} stron każdego pliku PDF; tekst PDF pozostaje zindeksowany.',
     pdfImagesSkippedPages:
       'Pominięte obrazy stron PDF z powodu limitu stron na plik: {pages}; tekst PDF pozostaje zindeksowany.',
-    lastWorkerDevice: 'Ostatnie uruchomienie workera: {device}',
-    metal: 'Metal',
-    cpu: 'CPU',
-    cpuForced: 'CPU (wymuszone przez PROCYON_GEMMA_FORCE_CPU)',
     computeMode: 'Zasady obliczeń dla indeksowania',
     computeAutomatic:
       'Metal na obsługiwanych workerach macOS, gdy jest dostępny; w przeciwnym razie CPU (bieżące urządzenie workera nie jest tu raportowane)',
@@ -2622,6 +2635,8 @@ export const pl = {
     corpusThemeProfileMismatch:
       'Indeks utworzono innym modelem osadzeń. Odbuduj indeks, aby zobaczyć tematy.',
     corpusThemesFailed: 'Nie udało się obliczyć tematów korpusu: {detail}.',
+    corpusThemeIndexNotBuilt:
+      'Indeks jest pusty lub nadal się buduje. Tematy pojawią się po zaindeksowaniu dokumentów.',
     corpusThemesStale: 'Te tematy są nieaktualne. Przeanalizuj ponownie, aby kontynuować.',
     conversationImmutable: 'Profil, zakres i tryb wiedzy rozmowy nie mogą się zmienić.',
     scopeInvalid: 'Zaznaczone pliki nie tworzą prawidłowego zakresu.',

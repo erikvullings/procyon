@@ -87,6 +87,7 @@ import type {
   UninstallSemanticComponentsRequest,
   UpdateGemmaMediaRequest,
   UpdateSemanticEligibilityOverridesRequest,
+  UpdateSemanticRootWorkspacesRequest,
   WorkspaceId,
 } from '../../models';
 
@@ -423,6 +424,12 @@ export interface SemanticClient {
 
   updateSemanticEligibilityOverrides(
     request: UpdateSemanticEligibilityOverridesRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus>;
+
+  /** Chooses the workspaces a folder is available in; none selected means all workspaces. */
+  updateSemanticRootWorkspaces(
+    request: UpdateSemanticRootWorkspacesRequest,
     signal?: AbortSignal,
   ): Promise<SemanticLibraryStatus>;
 }

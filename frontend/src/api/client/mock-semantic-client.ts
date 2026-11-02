@@ -89,6 +89,7 @@ import type {
   UninstallSemanticComponentsRequest,
   UpdateGemmaMediaRequest,
   UpdateSemanticEligibilityOverridesRequest,
+  UpdateSemanticRootWorkspacesRequest,
   WorkspaceId,
 } from '../../models';
 import type { MockContext } from './mock-context';
@@ -605,6 +606,7 @@ export class MockSemanticClient implements SemanticClient {
         'pause',
         'resume',
         'updateEligibilityOverrides',
+        'updateRootWorkspaces',
         ...(this.ctx.semanticLibrary.gemmaMedia ? (['updateGemmaMedia'] as const) : []),
       ],
     }));
@@ -773,7 +775,9 @@ export class MockSemanticClient implements SemanticClient {
           consent: 'excluded',
           rootId: excluded.root.id,
           exclusionId: excluded.exclusion.id,
-          workspaceReferenced: excluded.root.workspaceReferences.includes(request.workspaceId),
+          workspaceReferenced:
+            excluded.root.workspaceReferences.length === 0 ||
+            excluded.root.workspaceReferences.includes(request.workspaceId),
           sourceAvailable: excluded.root.availability.state === 'available',
           unavailableReason:
             excluded.root.availability.state === 'temporarilyUnavailable'
@@ -805,7 +809,9 @@ export class MockSemanticClient implements SemanticClient {
           root.location.uri === request.location.uri ? 'includedHere' : 'inheritedFromParent',
         rootId: root.id,
         exclusionId: null,
-        workspaceReferenced: root.workspaceReferences.includes(request.workspaceId),
+        workspaceReferenced:
+          root.workspaceReferences.length === 0 ||
+          root.workspaceReferences.includes(request.workspaceId),
         sourceAvailable: root.availability.state === 'available',
         unavailableReason:
           root.availability.state === 'temporarilyUnavailable' ? root.availability.reason : null,
@@ -895,6 +901,7 @@ export class MockSemanticClient implements SemanticClient {
             { reason: 'unsupportedMime', count: 1 },
           ],
           ocrRequiredFiles: [],
+          skippedFiles: [],
           availability: { state: 'available' },
           reconciliationGeneration: 0,
           indexedGeneration: 0,
@@ -903,7 +910,10 @@ export class MockSemanticClient implements SemanticClient {
       } else {
         existing.pdfImagesEnabled = preview.pdfImagesEnabled ?? false;
         existing.pdfImagePageBudget = preview.pdfImagePageBudget ?? null;
-        if (!existing.workspaceReferences.includes(request.workspaceId)) {
+        if (
+          existing.workspaceReferences.length > 0 &&
+          !existing.workspaceReferences.includes(request.workspaceId)
+        ) {
           existing.workspaceReferences.push(request.workspaceId);
         }
       }
@@ -922,9 +932,6 @@ export class MockSemanticClient implements SemanticClient {
       const root = this.ctx.semanticRootFor(request.location);
       if (root === undefined) {
         throw new MockClientError('notEnrolled', 'The folder is not included');
-      }
-      if (!root.workspaceReferences.includes(request.workspaceId)) {
-        throw new MockClientError('workspaceRequired', 'An active workspace/root is required');
       }
       this.ctx.semanticLibrarySequence += 1;
       const confirmationId = `mock-exclusion-confirmation-${this.ctx.semanticLibrarySequence}`;
@@ -1032,7 +1039,10 @@ export class MockSemanticClient implements SemanticClient {
         (candidate) => candidate.id === request.rootId,
       );
       if (root === undefined) throw new MockClientError('notFound', 'Semantic root not found');
-      if (!root.workspaceReferences.includes(request.workspaceId)) {
+      if (
+        root.workspaceReferences.length > 0 &&
+        !root.workspaceReferences.includes(request.workspaceId)
+      ) {
         throw new MockClientError('workspaceRequired', 'An active workspace/root is required');
       }
       const safeReasons = new Set([
@@ -1055,6 +1065,22 @@ export class MockSemanticClient implements SemanticClient {
         );
       }
       root.eligibilityOverrides = structuredClone(request.overrides);
+      this.ctx.advanceSemanticLibraryRevision();
+      return structuredClone(this.ctx.semanticLibrary);
+    });
+  }
+
+  updateSemanticRootWorkspaces(
+    request: UpdateSemanticRootWorkspacesRequest,
+    signal?: AbortSignal,
+  ): Promise<SemanticLibraryStatus> {
+    return this.ctx.perform('updateSemanticRootWorkspaces', signal, () => {
+      this.ctx.requireSemanticLibraryRevision(request.policyRevision);
+      const root = this.ctx.semanticLibrary.roots.find(
+        (candidate) => candidate.id === request.rootId,
+      );
+      if (root === undefined) throw new MockClientError('notFound', 'Semantic root not found');
+      root.workspaceReferences = [...new Set(request.workspaceIds)];
       this.ctx.advanceSemanticLibraryRevision();
       return structuredClone(this.ctx.semanticLibrary);
     });

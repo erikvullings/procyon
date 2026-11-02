@@ -796,6 +796,24 @@ impl SemanticCatalog {
             .retain(|_, pin| pin.scope().workspace_id() != workspace_id);
     }
 
+    /// Drops one workspace's authorization of one root's occurrences, keeping the
+    /// documents and the root's other workspaces.
+    pub fn remove_root_workspace_scopes(&mut self, root_id: RootId, workspace_id: WorkspaceId) {
+        let keep = |scope: &OccurrenceScope| {
+            !(scope.root_id == root_id && scope.workspace_id == workspace_id)
+        };
+        for occurrence in self.occurrences.values_mut() {
+            occurrence.scopes.retain(keep);
+            occurrence.completed_scopes.retain(keep);
+            if let Some(scopes) = &mut occurrence.legacy_unverified_scopes {
+                scopes.retain(keep);
+            }
+        }
+        self.conversation_pins.retain(|_, pin| {
+            !(pin.scope().root_id() == root_id && pin.scope().workspace_id() == workspace_id)
+        });
+    }
+
     /// Marks a root temporarily unavailable without changing consent or data.
     pub fn mark_root_unavailable(&mut self, root_id: RootId, reason: impl Into<String>) {
         self.root_availability.insert(
@@ -1134,10 +1152,7 @@ impl SemanticCatalog {
             let root = policy
                 .root(*root_id)
                 .ok_or(AuthorizationError::ScopeDenied)?;
-            if !root
-                .workspace_references()
-                .contains(&request.workspace_id())
-            {
+            if !root.applies_to(request.workspace_id()) {
                 return Err(AuthorizationError::ScopeDenied);
             }
         }
@@ -1324,7 +1339,7 @@ fn scope_is_proven(
     let Some(root) = policy.root(scope.root_id) else {
         return Ok(false);
     };
-    if !root.workspace_references().contains(&scope.workspace_id) {
+    if !root.applies_to(scope.workspace_id) {
         return Ok(false);
     }
     Ok(*location == *root.location()

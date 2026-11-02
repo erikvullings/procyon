@@ -12,6 +12,7 @@ import {
 
 function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
   return {
+    semanticMaxSourceMib: 64,
     schemaVersion: 2,
     theme: 'auto',
     language: 'en',

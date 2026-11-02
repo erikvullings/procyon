@@ -517,3 +517,5 @@ previous pass stopped where it did.
   gates help paragraph recall; not ported)*
 - [ ] 0296 Typography for the geometric PDF path: headings, citation markers, footnotes *(backend,
   medium — implemented; retrieval A/B negative at 512 tokens, open decision)*
+- [x] 0297 Semantic settings redesign: global folders, workspace multi-select, per-file details
+  *(done — frontend + backend; per-file size override replaced by a global limit, see Agent Notes)*

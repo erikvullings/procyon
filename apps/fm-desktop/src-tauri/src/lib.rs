@@ -368,7 +368,13 @@ pub fn run() {
                 tracing::error!(%error, "OCR remediation recovery failed");
             }
             if semantic_managed_components {
+                // Reconciliation must follow the restore: until the remembered model is active
+                // the service resolves the default library, which has no enrolled roots, so an
+                // earlier pass would index nothing and leave the restored library's index empty.
                 let restore_service = Arc::clone(&service);
+                let restore_marker = semantic_reindex_pending_marker
+                    .clone()
+                    .filter(|marker| marker.is_file());
                 tauri::async_runtime::spawn(async move {
                     match restore_service.restore_remembered_semantic_model().await {
                         Ok(true) => tracing::info!("restored the remembered semantic model"),
@@ -376,6 +382,12 @@ pub fn run() {
                         Err(error) => {
                             tracing::warn!(%error, "restoring the remembered semantic model failed");
                         }
+                    }
+                    if let Some(marker) = restore_marker {
+                        commands::resume_pending_semantic_model_reindex(restore_service, marker)
+                            .await;
+                    } else {
+                        commands::reconcile_semantic_library_on_startup(restore_service).await;
                     }
                 });
                 let residency_service = Arc::clone(&service);
@@ -398,19 +410,6 @@ pub fn run() {
                 tracing::warn!(%error, "semantic library startup reconciliation failed");
             }
             stamp("after-semantic-library-status");
-            if semantic_managed_components {
-                if let Some(marker) =
-                    semantic_reindex_pending_marker.filter(|marker| marker.is_file())
-                {
-                    tauri::async_runtime::spawn(commands::resume_pending_semantic_model_reindex(
-                        service, marker,
-                    ));
-                } else {
-                    tauri::async_runtime::spawn(commands::reconcile_semantic_library_on_startup(
-                        service,
-                    ));
-                }
-            }
 
             // Dock icon right/long-click "New Window" item, mirroring the File menu's own item
             // (task 0133) - sends the frontend's `NEW_WORKSPACE_WINDOW_MENU_ID` through the same
@@ -621,6 +620,7 @@ pub fn run() {
             commands::pause_semantic_library,
             commands::resume_semantic_library,
             commands::update_semantic_eligibility_overrides,
+            commands::update_semantic_root_workspaces,
             commands::get_system_locations,
             commands::get_volumes,
             commands::get_home_directory,
@@ -1030,6 +1030,7 @@ mod tests {
                 commands::pause_semantic_library,
                 commands::resume_semantic_library,
                 commands::update_semantic_eligibility_overrides,
+                commands::update_semantic_root_workspaces,
                 commands::get_system_locations,
                 commands::get_volumes,
                 commands::get_home_directory,

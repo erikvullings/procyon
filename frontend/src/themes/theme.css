@@ -5939,3 +5939,22 @@ button.fm-activity-count {
   --fm-theme-7: #7a5195;
   --fm-theme-none: #8a8f98;
 }
+
+.fm-semantic-library-ingestion {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-block: 0.5rem;
+}
+
+.fm-semantic-library-media-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+
+.fm-semantic-library-body {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+}

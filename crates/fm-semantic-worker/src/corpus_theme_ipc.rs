@@ -83,6 +83,8 @@ pub enum ThemeFailure {
     ThemesStale,
     /// See [`CorpusThemeError::CorruptRun`].
     CorruptRun,
+    /// See [`CorpusThemeError::IndexNotBuilt`].
+    IndexNotBuilt,
     /// Any other worker-side failure.
     Other,
 }
@@ -102,6 +104,7 @@ impl ThemeFailure {
             Self::InvalidEmbeddings => CorpusThemeError::InvalidEmbeddings,
             Self::ThemesStale => CorpusThemeError::ThemesStale,
             Self::CorruptRun => CorpusThemeError::CorruptRun,
+            Self::IndexNotBuilt => CorpusThemeError::IndexNotBuilt,
             Self::Other => CorpusThemeError::Remote,
         }
     }
@@ -245,6 +248,7 @@ pub fn failure_of(error: CorpusThemeError) -> Result<ThemeFailure, ThemeWireErro
         CorpusThemeError::InvalidEmbeddings => ThemeFailure::InvalidEmbeddings,
         CorpusThemeError::ThemesStale => ThemeFailure::ThemesStale,
         CorpusThemeError::CorruptRun => ThemeFailure::CorruptRun,
+        CorpusThemeError::IndexNotBuilt => ThemeFailure::IndexNotBuilt,
         CorpusThemeError::Storage(error) => {
             eprintln!("Procyon semantic worker: corpus themes storage failure: {error}");
             ThemeFailure::Other

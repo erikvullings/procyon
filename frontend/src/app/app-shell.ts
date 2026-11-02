@@ -3021,6 +3021,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       const syncReview = shellState.syncProfileController.pendingReview();
       syncNativeMenu();
       syncWindowTitle();
+      knowledgeWiring.refreshThemesForWorkspaceChange();
       if (shellState.treeSidebarOpen) treeWiring.syncDirectoryTreeToActiveLocation();
       shellState.currentEntryFormatSettings =
         attrs.entryFormatSettings ?? shellState.loadedEntryFormatSettings;
@@ -3281,7 +3282,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                     ),
                   )
                 : undefined,
-              shellState.themesAvailable
+              shellState.themesAvailable && shellState.themesWorkspaceIndexed
                 ? tooltip(
                     miscWiring.labelWithShortcut(
                       t('themes', 'openTitle'),
@@ -3739,6 +3740,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                               platform: shellState.platform,
                               runtime: shellState.keybindingRuntime,
                               plugins: shellState.plugins,
+                              onOpenLocation: (location: Location) => {
+                                const paneId = activeDirectory()?.paneId;
+                                settingsWiring.closeSettingsDialog();
+                                if (paneId !== undefined)
+                                  void shellState.navigation.navigate(paneId, location);
+                              },
                               onPreview: (draft: Settings) => {
                                 settingsWiring.applyAppearance(draft);
                                 m.redraw();

@@ -108,6 +108,7 @@ export type MockClientMethod =
   | 'pauseSemanticLibrary'
   | 'resumeSemanticLibrary'
   | 'updateSemanticEligibilityOverrides'
+  | 'updateSemanticRootWorkspaces'
   | 'getDiagnostics'
   | 'recordFrontendDiagnostic'
   | 'getSystemLocations'

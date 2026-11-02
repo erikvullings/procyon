@@ -5831,6 +5831,7 @@ describe('AppShell', () => {
   it('reinstalls a plugin icon theme after disable-then-reenable, instead of assuming it is still installed', async () => {
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'getSettings').mockResolvedValue({
+      semanticMaxSourceMib: 64,
       schemaVersion: 2,
       theme: 'auto',
       language: 'en',
