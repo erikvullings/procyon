@@ -186,7 +186,7 @@ export const es = {
     smallIcons: 'Iconos pequeños',
     mediumIcons: 'Iconos medianos',
     viewRemembered: 'Esta carpeta tiene su propia vista guardada (orden, columnas, modo de vista)',
-    forgetView: 'Restablecer la vista predeterminada de esta carpeta',
+    forgetView: 'Restablecer vista predeterminada',
     syncBrowsingOff: 'Navegación sincronizada: desactivada',
     syncBrowsingOn: 'Navegación sincronizada: activada',
     syncBrowsingApart: 'Navegación sincronizada: los paneles difieren',

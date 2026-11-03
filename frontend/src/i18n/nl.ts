@@ -190,7 +190,7 @@ export const nl = {
     mediumIcons: 'Middelgrote pictogrammen',
     viewRemembered:
       'Deze map heeft een eigen opgeslagen weergave (sortering, kolommen, weergavemodus)',
-    forgetView: 'Deze map terugzetten naar de standaardweergave',
+    forgetView: 'Standaardweergave herstellen',
     syncBrowsingOff: 'Gesynchroniseerd bladeren: uit',
     syncBrowsingOn: 'Gesynchroniseerd bladeren: aan',
     syncBrowsingApart: 'Gesynchroniseerd bladeren: panelen lopen uiteen',

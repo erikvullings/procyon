@@ -576,6 +576,8 @@ button.fm-breadcrumb-scheme:hover {
   background: transparent;
   color: var(--fm-text);
   text-align: left;
+  /* The menu sizes to its widest item, so an item never needs to wrap. */
+  white-space: nowrap;
   /* Otherwise mithril-materialized's `button { font-family: ... }` wins over the inherited
    * app font, since it targets this `<button>` element directly. */
   font: inherit;

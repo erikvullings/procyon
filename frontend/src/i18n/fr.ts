@@ -190,7 +190,7 @@ export const fr = {
     smallIcons: 'Petites icônes',
     mediumIcons: 'Icônes moyennes',
     viewRemembered: 'Ce dossier a sa propre vue mémorisée (tri, colonnes, mode d’affichage)',
-    forgetView: 'Rétablir la vue par défaut pour ce dossier',
+    forgetView: 'Rétablir la vue par défaut',
     syncBrowsingOff: 'Navigation synchronisée : désactivée',
     syncBrowsingOn: 'Navigation synchronisée : activée',
     syncBrowsingApart: 'Navigation synchronisée : les volets divergent',

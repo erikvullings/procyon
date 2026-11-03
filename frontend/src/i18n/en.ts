@@ -188,7 +188,7 @@ export const en = {
     smallIcons: 'Small icons',
     mediumIcons: 'Medium icons',
     viewRemembered: 'This folder has its own saved view (sort order, columns, view mode)',
-    forgetView: 'Reset this folder to the default view',
+    forgetView: 'Reset to default view',
     syncBrowsingOff: 'Synchronized browsing: off',
     syncBrowsingOn: 'Synchronized browsing: on',
     syncBrowsingApart: 'Synchronized browsing: panes are apart',

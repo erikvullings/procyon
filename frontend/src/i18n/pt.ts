@@ -189,7 +189,7 @@ export const pt = {
     mediumIcons: 'Ícones médios',
     viewRemembered:
       'Esta pasta tem a sua própria vista guardada (ordenação, colunas, modo de vista)',
-    forgetView: 'Repor a vista predefinida desta pasta',
+    forgetView: 'Repor vista predefinida',
     syncBrowsingOff: 'Navegação sincronizada: desativada',
     syncBrowsingOn: 'Navegação sincronizada: ativada',
     syncBrowsingApart: 'Navegação sincronizada: os painéis divergem',

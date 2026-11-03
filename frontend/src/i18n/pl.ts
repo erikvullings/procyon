@@ -188,7 +188,7 @@ export const pl = {
     smallIcons: 'Małe ikony',
     mediumIcons: 'Średnie ikony',
     viewRemembered: 'Ten folder ma własny zapisany widok (sortowanie, kolumny, tryb widoku)',
-    forgetView: 'Przywróć domyślny widok tego folderu',
+    forgetView: 'Przywróć widok domyślny',
     syncBrowsingOff: 'Synchroniczne przeglądanie: wyłączone',
     syncBrowsingOn: 'Synchroniczne przeglądanie: włączone',
     syncBrowsingApart: 'Synchroniczne przeglądanie: panele się rozeszły',

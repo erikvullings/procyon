@@ -195,7 +195,7 @@ export const de = {
     mediumIcons: 'Mittlere Symbole',
     viewRemembered:
       'Dieser Ordner hat eine eigene gespeicherte Ansicht (Sortierung, Spalten, Ansichtsmodus)',
-    forgetView: 'Diesen Ordner auf die Standardansicht zurücksetzen',
+    forgetView: 'Auf Standardansicht zurücksetzen',
     syncBrowsingOff: 'Synchrones Navigieren: aus',
     syncBrowsingOn: 'Synchrones Navigieren: ein',
     syncBrowsingApart: 'Synchrones Navigieren: Bereiche weichen ab',

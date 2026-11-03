@@ -188,7 +188,7 @@ export const it = {
     mediumIcons: 'Icone medie',
     viewRemembered:
       'Questa cartella ha una vista salvata (ordinamento, colonne, modalità di visualizzazione)',
-    forgetView: 'Ripristina la vista predefinita per questa cartella',
+    forgetView: 'Ripristina vista predefinita',
     syncBrowsingOff: 'Navigazione sincronizzata: disattivata',
     syncBrowsingOn: 'Navigazione sincronizzata: attiva',
     syncBrowsingApart: 'Navigazione sincronizzata: i pannelli divergono',
