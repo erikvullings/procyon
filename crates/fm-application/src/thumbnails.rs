@@ -70,6 +70,14 @@ impl ThumbnailService {
         let (source_bytes, kind) = read_source_bytes(providers, location).await?;
 
         let key = ThumbnailCache::cache_key(&source_bytes, size);
+        // Image thumbnails keep transparency (as PNG) since the cache was keyed only by content and
+        // size: entries written earlier are JPEGs with a black background where the image was
+        // transparent, so image keys carry a marker that retires them. Video and PDF are unchanged.
+        let key = if matches!(kind, SourceKind::Image) {
+            format!("{key}-alpha")
+        } else {
+            key
+        };
         if let Some(cached) = self.cache.get(&key) {
             return Ok(GeneratedThumbnail {
                 content_type: thumbnail_content_type(&cached),
@@ -275,7 +283,12 @@ mod tests {
     }
 
     fn png_bytes(width: u32, height: u32) -> Vec<u8> {
-        let image = image::DynamicImage::new_rgba8(width, height);
+        // Opaque on purpose: a plain photo, not a transparent logo (which is kept as PNG).
+        let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            width,
+            height,
+            image::Rgba([10, 200, 30, 255]),
+        ));
         let mut bytes = Vec::new();
         image
             .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
@@ -302,6 +315,49 @@ mod tests {
         assert_eq!(thumbnail.content_type, "image/jpeg");
         let decoded = image::load_from_memory(&thumbnail.bytes).expect("decode result");
         assert!(decoded.width() <= ThumbnailSize::Small.max_dimension());
+    }
+
+    #[tokio::test]
+    async fn a_stale_jpeg_cached_before_transparency_support_is_not_served() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = dir.path().join("logo.png");
+        let mut logo = image::RgbaImage::from_pixel(64, 64, image::Rgba([0, 0, 0, 0]));
+        for x in 20..44 {
+            for y in 20..44 {
+                logo.put_pixel(x, y, image::Rgba([250, 0, 0, 255]));
+            }
+        }
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgba8(logo)
+            .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
+            .expect("encode fixture png");
+        std::fs::write(&target, &bytes).expect("write fixture");
+
+        // What an older build left behind: a JPEG under the content-and-size-only key.
+        let cache_directory = dir.path().join("cache");
+        std::fs::create_dir_all(&cache_directory).expect("cache dir");
+        let old_key = ThumbnailCache::cache_key(&bytes, ThumbnailSize::Small);
+        std::fs::write(
+            cache_directory.join(format!("{old_key}.jpg")),
+            b"stale jpeg",
+        )
+        .expect("write stale entry");
+
+        let service = ThumbnailService::new(cache_directory);
+        let thumbnail = service
+            .thumbnail(&providers(), &location_for(&target), ThumbnailSize::Small)
+            .await
+            .expect("thumbnail");
+
+        assert_eq!(thumbnail.content_type, "image/png");
+        assert_ne!(thumbnail.bytes, b"stale jpeg");
+        // And a repeat request serves the new PNG from the cache with the right content type.
+        let again = service
+            .thumbnail(&providers(), &location_for(&target), ThumbnailSize::Small)
+            .await
+            .expect("cached thumbnail");
+        assert_eq!(again.content_type, "image/png");
+        assert_eq!(again.bytes, thumbnail.bytes);
     }
 
     #[tokio::test]

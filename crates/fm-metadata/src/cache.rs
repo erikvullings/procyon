@@ -46,15 +46,11 @@ impl ThumbnailCache {
     pub fn cache_key(source_bytes: &[u8], size: ThumbnailSize) -> String {
         let mut hasher = Sha256::new();
         hasher.update(source_bytes);
-        // Icons are encoded as PNG (transparency), unlike every other source, which is JPEG. Salt
-        // only their keys so entries cached as JPEG before that change are never served for them,
-        // without invalidating any other thumbnail.
-        if crate::thumbnail::is_ico(source_bytes) {
-            hasher.update(b"|png");
-        }
         format!("{}-{}", to_hex(&hasher.finalize()), size.as_str())
     }
 
+    /// The file extension is historical: transparent thumbnails are PNG bytes stored under it, and
+    /// the content type is read from the bytes (`thumbnail_content_type`), never from the name.
     fn path_for(&self, key: &str) -> PathBuf {
         self.root.join(format!("{key}.jpg"))
     }

@@ -115,7 +115,6 @@ pub fn generate_image_thumbnail(
     }
     // A favicon-style `.ico` holds several sizes of one image. Decode only the one that fits the
     // requested thumbnail rather than whichever frame the decoder prefers.
-    let original = bytes;
     let single_frame = select_ico_frame(bytes, size.max_dimension());
     let bytes = single_frame.as_deref().unwrap_or(bytes);
     let reader = ImageReader::new(Cursor::new(bytes))
@@ -127,9 +126,10 @@ pub fn generate_image_thumbnail(
     let image = reader.decode()?;
     let thumbnail = image.thumbnail(size.max_dimension(), size.max_dimension());
 
-    // Icons are small, often transparent artwork: keep the alpha channel as PNG. JPEG has none and
-    // would paint every transparent pixel black. Photos and everything else stay JPEG.
-    let (format, content_type) = if is_ico(original) {
+    // JPEG has no alpha channel and would paint every transparent pixel black, so an image that
+    // really is transparent (a logo, an icon, a cut-out) is kept as PNG. Everything else, photos
+    // included, stays the much smaller JPEG even when its file format could carry transparency.
+    let (format, content_type) = if has_transparency(&thumbnail) {
         (ImageFormat::Png, "image/png")
     } else {
         (ImageFormat::Jpeg, "image/jpeg")
@@ -144,13 +144,20 @@ pub fn generate_image_thumbnail(
     })
 }
 
+/// Whether any pixel of `image` is not fully opaque. Checked on the already downscaled thumbnail,
+/// so the scan is at most a few tens of thousands of pixels.
+fn has_transparency(image: &image::DynamicImage) -> bool {
+    image.color().has_alpha() && image.to_rgba8().pixels().any(|pixel| pixel.0[3] < u8::MAX)
+}
+
 /// Whether `bytes` start an `.ico` file (`ICONDIR`: reserved 0, type 1).
 #[must_use]
 pub(crate) fn is_ico(bytes: &[u8]) -> bool {
     bytes.get(..4) == Some(&[0, 0, 1, 0])
 }
 
-/// The MIME type of already-generated thumbnail bytes (PNG for icons, otherwise JPEG), for callers
+/// The MIME type of already-generated thumbnail bytes (PNG when the image is transparent,
+/// otherwise JPEG), for callers
 /// that only hold the cached bytes.
 #[must_use]
 pub fn thumbnail_content_type(bytes: &[u8]) -> &'static str {
@@ -406,6 +413,81 @@ mod tests {
                 .any(|pixel| pixel.0[3] > 200 && pixel.0[0] > 200),
             "an opaque red pixel remains"
         );
+    }
+
+    /// A transparent image: a solid red block in the middle of fully transparent pixels.
+    fn transparent_bytes(format: ImageFormat) -> Vec<u8> {
+        let mut image = DynamicImage::new_rgba8(64, 64);
+        for x in 0..64 {
+            for y in 0..64 {
+                let inside = (20..44).contains(&x) && (20..44).contains(&y);
+                image.put_pixel(
+                    x,
+                    y,
+                    if inside {
+                        Rgba([250, 0, 0, 255])
+                    } else {
+                        Rgba([0, 0, 0, 0])
+                    },
+                );
+            }
+        }
+        let mut bytes = Vec::new();
+        image
+            .write_to(&mut Cursor::new(&mut bytes), format)
+            .expect("encode transparent fixture");
+        bytes
+    }
+
+    fn assert_transparency_survives(thumbnail: &GeneratedThumbnail) {
+        assert_eq!(thumbnail.content_type, "image/png");
+        assert_eq!(thumbnail_content_type(&thumbnail.bytes), "image/png");
+        let decoded = image::load_from_memory(&thumbnail.bytes)
+            .expect("decode thumbnail")
+            .to_rgba8();
+        assert_eq!(
+            decoded.get_pixel(0, 0).0[3],
+            0,
+            "transparent stays transparent"
+        );
+        assert!(
+            decoded
+                .pixels()
+                .any(|pixel| pixel.0[3] > 200 && pixel.0[0] > 200),
+            "the opaque red block remains"
+        );
+    }
+
+    #[test]
+    fn a_transparent_png_keeps_its_transparency() {
+        let thumbnail =
+            generate_image_thumbnail(&transparent_bytes(ImageFormat::Png), ThumbnailSize::Medium)
+                .expect("thumbnail");
+        assert_transparency_survives(&thumbnail);
+    }
+
+    #[test]
+    fn a_transparent_webp_keeps_its_transparency() {
+        let thumbnail =
+            generate_image_thumbnail(&transparent_bytes(ImageFormat::WebP), ThumbnailSize::Medium)
+                .expect("thumbnail");
+        assert_transparency_survives(&thumbnail);
+    }
+
+    #[test]
+    fn a_transparent_gif_keeps_its_transparency() {
+        let thumbnail =
+            generate_image_thumbnail(&transparent_bytes(ImageFormat::Gif), ThumbnailSize::Medium)
+                .expect("thumbnail");
+        assert_transparency_survives(&thumbnail);
+    }
+
+    #[test]
+    fn an_opaque_image_with_an_alpha_channel_stays_jpeg() {
+        // fixture_bytes writes RGBA pixels that are all fully opaque: nothing to preserve.
+        let bytes = fixture_bytes(ImageFormat::Png, 80, 80);
+        let thumbnail = generate_image_thumbnail(&bytes, ThumbnailSize::Medium).expect("thumbnail");
+        assert_eq!(thumbnail.content_type, "image/jpeg");
     }
 
     #[test]

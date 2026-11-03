@@ -45,8 +45,13 @@ fn thumbnail_url(base_url: &str, uri: &str, size: &str) -> reqwest::Url {
     url
 }
 
+/// An opaque photo-like PNG (transparent images are served as PNG, see the test below).
 fn png_bytes(width: u32, height: u32) -> Vec<u8> {
-    let image = image::DynamicImage::new_rgba8(width, height);
+    let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+        width,
+        height,
+        image::Rgba([10, 200, 30, 255]),
+    ));
     let mut bytes = Vec::new();
     image
         .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
@@ -77,6 +82,44 @@ async fn thumbnail_route_returns_a_downscaled_jpeg_for_a_supported_image() {
     let bytes = response.bytes().await.expect("body must read");
     let decoded = image::load_from_memory(&bytes).expect("body must decode as an image");
     assert!(decoded.width() <= 64, "small thumbnails are capped at 64px");
+}
+
+#[tokio::test]
+async fn thumbnail_route_serves_a_transparent_image_as_png() {
+    let (server, fixtures) = spawn().await;
+    let path = fixtures.path().join("logo.png");
+    // Fully transparent apart from one opaque block: JPEG would turn the rest black.
+    let mut logo = image::RgbaImage::from_pixel(64, 64, image::Rgba([0, 0, 0, 0]));
+    for x in 20..44 {
+        for y in 20..44 {
+            logo.put_pixel(x, y, image::Rgba([250, 0, 0, 255]));
+        }
+    }
+    let mut bytes = Vec::new();
+    image::DynamicImage::ImageRgba8(logo)
+        .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
+        .expect("encode fixture png");
+    std::fs::write(&path, bytes).expect("must write fixture");
+    let uri = fm_domain::Location::from_native_path(&path)
+        .expect("path must become a location")
+        .uri;
+
+    let response = reqwest::Client::new()
+        .get(thumbnail_url(&server.base_url, &uri, "small"))
+        .send()
+        .await
+        .expect("request must succeed");
+
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(
+        response.headers().get(reqwest::header::CONTENT_TYPE),
+        Some(&reqwest::header::HeaderValue::from_static("image/png"))
+    );
+    let body = response.bytes().await.expect("body must read");
+    let decoded = image::load_from_memory(&body)
+        .expect("body must decode as an image")
+        .to_rgba8();
+    assert_eq!(decoded.get_pixel(0, 0).0[3], 0, "transparency is kept");
 }
 
 #[tokio::test]
