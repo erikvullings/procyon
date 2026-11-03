@@ -2859,6 +2859,8 @@ export const nl = {
       'AI-profielen konden niet worden gelezen. Er zijn geen generatieprofielen geladen.',
     clipboardCopied: 'Naar het klembord gekopieerd.',
     pluginIsolated: 'De plug-in {plugin} is geïsoleerd: {detail}',
+    semanticOcrUnavailable:
+      'OCR is uitgeschakeld omdat OCRmyPDF niet meer beschikbaar is. Installeer het opnieuw en schakel OCR daarna weer in via Instellingen → Semantisch.',
   },
   semanticUnavailable: {
     sourceUnavailable: 'De bron is momenteel niet beschikbaar.',

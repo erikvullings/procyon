@@ -2781,6 +2781,8 @@ export const en = {
     llmProfilesUnreadable: 'AI profiles could not be read. No generation profiles were loaded.',
     clipboardCopied: 'Copied to the clipboard.',
     pluginIsolated: 'The plugin {plugin} was isolated: {detail}',
+    semanticOcrUnavailable:
+      'OCR was turned off because OCRmyPDF is no longer available. Reinstall it, then enable OCR again in Settings → Semantic.',
   },
   semanticUnavailable: {
     sourceUnavailable: 'The source is currently unavailable.',

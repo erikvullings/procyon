@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use fm_domain::Location;
 use fm_semantic_library::RootId;
@@ -23,14 +23,15 @@ use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use super::{OcrAvailability, OcrExecutableProbe, OcrPolicyStore, OcrUnavailableReason};
+use super::{
+    CachedOcrExecutable, OcrAvailability, OcrExecutableProbe, OcrPolicyStore, OcrUnavailableReason,
+};
 use crate::semantic_indexing::EntryIngestReport;
 
 const JOBS_FILE_NAME: &str = "jobs.json";
 const MAX_RETAINED_JOBS: usize = 20;
 const MAX_ACTIVE_JOBS: usize = 32;
 const MAX_FILES_PER_JOB: usize = 100_000;
-const AVAILABILITY_CACHE_TTL: Duration = Duration::from_secs(30);
 
 const POST_OCR_NO_TEXT_MARKER: &str = "OCRmyPDF completed, but";
 const EXECUTION_FAILURE_MARKERS: &[&str] = &[
@@ -339,17 +340,79 @@ impl SemanticOcrService {
             .availability
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some((checked_at, availability)) = cached.as_ref()
-            && checked_at.elapsed() < AVAILABILITY_CACHE_TTL
-        {
+        if let Some((_, availability)) = cached.as_ref() {
             return availability.clone();
         }
-        let availability = self.probe.probe();
+        // First answer this run. With OCR on, trust the installation remembered when consent was
+        // granted as long as it still exists: opening a settings page must not launch a
+        // subprocess. Otherwise discover once and remember the result in memory; only an explicit
+        // refresh (enabling OCR) or a restart re-checks.
+        let availability = self
+            .remembered_availability()
+            .unwrap_or_else(|| self.probe.probe());
         *cached = Some((Instant::now(), availability.clone()));
         availability
     }
 
-    /// Re-runs bounded host discovery, bypassing the short UI polling cache.
+    /// The remembered installation as an availability, if OCR is on and its file still exists.
+    fn remembered_availability(&self) -> Option<OcrAvailability> {
+        if !self.policy.enabled() {
+            return None;
+        }
+        let remembered = self.policy.cached_executable()?;
+        remembered
+            .path
+            .is_file()
+            .then_some(OcrAvailability::Available {
+                executable: remembered.path,
+                version: remembered.version,
+            })
+    }
+
+    /// Verifies once at startup that OCR, if enabled, still has a usable OCRmyPDF.
+    ///
+    /// The remembered installation is accepted if its file still exists. Otherwise discovery runs
+    /// once; if that also finds nothing, consent is withdrawn (and active jobs cancelled) so OCR
+    /// cannot stay switched on without an executable. Returns the reason in that case so the host
+    /// can tell the user. Blocking: run it off the main thread.
+    pub(crate) fn verify_on_startup(&self) -> Option<OcrUnavailableReason> {
+        if !self.consent() {
+            return None;
+        }
+        if let Some(availability) = self.remembered_availability() {
+            *self
+                .availability
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                Some((Instant::now(), availability));
+            return None;
+        }
+        match self.refresh_availability() {
+            OcrAvailability::Available {
+                executable,
+                version,
+            } => {
+                if let Err(error) = self.policy.set_cached_executable(Some(CachedOcrExecutable {
+                    path: executable,
+                    version,
+                })) {
+                    tracing::warn!(%error, "could not remember the OCRmyPDF installation");
+                }
+                None
+            }
+            OcrAvailability::Unavailable { reason, .. } => {
+                if let Err(error) = self.policy.set_enabled(false) {
+                    tracing::warn!(%error, "could not withdraw OCR consent after OCRmyPDF vanished");
+                }
+                if let Err(error) = self.cancel_all_active() {
+                    tracing::warn!(%error, "could not cancel OCR jobs after OCRmyPDF vanished");
+                }
+                Some(reason)
+            }
+        }
+    }
+
+    /// Re-runs bounded host discovery, bypassing the remembered installation.
     #[must_use]
     pub(crate) fn refresh_availability(&self) -> OcrAvailability {
         let availability = self.probe.probe();
@@ -400,6 +463,24 @@ impl SemanticOcrService {
             .policy
             .set_enabled(enabled)
             .map_err(|error| SemanticOcrError::Persist(error.to_string()))?;
+        if enabled
+            && let Some(OcrAvailability::Available {
+                executable,
+                version,
+            }) = self
+                .availability
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .as_ref()
+                .map(|(_, availability)| availability.clone())
+        {
+            self.policy
+                .set_cached_executable(Some(CachedOcrExecutable {
+                    path: executable,
+                    version,
+                }))
+                .map_err(|error| SemanticOcrError::Persist(error.to_string()))?;
+        }
         if changed && !enabled {
             self.cancel_all_active()?;
         }
@@ -895,6 +976,195 @@ mod tests {
                 version: "16.10.4".to_owned(),
             }
         }
+    }
+
+    /// A probe that counts how often discovery (a subprocess in production) actually runs.
+    struct CountingProbe {
+        calls: Arc<std::sync::atomic::AtomicUsize>,
+        result: OcrAvailability,
+    }
+
+    impl OcrExecutableProbe for CountingProbe {
+        fn probe(&self) -> OcrAvailability {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.result.clone()
+        }
+    }
+
+    fn counting(
+        directory: &Path,
+        result: OcrAvailability,
+    ) -> (
+        SemanticOcrService,
+        Arc<OcrPolicyStore>,
+        Arc<std::sync::atomic::AtomicUsize>,
+    ) {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let policy = Arc::new(OcrPolicyStore::load(directory));
+        let service = SemanticOcrService::load(
+            directory,
+            Arc::clone(&policy),
+            Arc::new(CountingProbe {
+                calls: Arc::clone(&calls),
+                result,
+            }),
+        );
+        (service, policy, calls)
+    }
+
+    fn found(path: &Path) -> OcrAvailability {
+        OcrAvailability::Available {
+            executable: path.to_owned(),
+            version: "16.10.4".to_owned(),
+        }
+    }
+
+    fn missing() -> OcrAvailability {
+        OcrAvailability::Unavailable {
+            reason: OcrUnavailableReason::Missing,
+            guidance: "install OCRmyPDF".to_owned(),
+        }
+    }
+
+    fn calls(counter: &Arc<std::sync::atomic::AtomicUsize>) -> usize {
+        counter.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// A real file standing in for the OCRmyPDF executable (only its existence is checked).
+    fn fake_executable(directory: &Path) -> PathBuf {
+        let path = directory.join("ocrmypdf");
+        std::fs::write(&path, b"#!/bin/sh\n").unwrap();
+        path
+    }
+
+    #[test]
+    fn reading_availability_probes_at_most_once_until_an_explicit_refresh() {
+        let directory = temp_dir();
+        let (service, _policy, counter) = counting(directory.path(), found(Path::new("/x/ocr")));
+
+        for _ in 0..5 {
+            let _ = service.availability();
+        }
+        assert_eq!(calls(&counter), 1, "settings polling must not re-probe");
+
+        let _ = service.refresh_availability();
+        assert_eq!(calls(&counter), 2);
+    }
+
+    #[test]
+    fn a_remembered_executable_that_still_exists_is_trusted_without_probing() {
+        let directory = temp_dir();
+        let executable = fake_executable(directory.path());
+        let (service, policy, counter) = counting(directory.path(), missing());
+        policy.set_enabled(true).unwrap();
+        policy
+            .set_cached_executable(Some(CachedOcrExecutable {
+                path: executable.clone(),
+                version: "16.10.4".to_owned(),
+            }))
+            .unwrap();
+
+        assert_eq!(
+            service.availability().executable(),
+            Some(executable.as_path())
+        );
+        assert_eq!(calls(&counter), 0);
+    }
+
+    #[test]
+    fn enabling_ocr_remembers_the_discovered_executable() {
+        let directory = temp_dir();
+        let (service, policy, _counter) = counting(directory.path(), found(Path::new("/x/ocr")));
+
+        service.set_consent(true).unwrap();
+
+        assert_eq!(
+            policy.cached_executable().map(|cached| cached.path),
+            Some(PathBuf::from("/x/ocr"))
+        );
+        // It survives a restart, and withdrawing consent forgets it again.
+        assert!(
+            OcrPolicyStore::load(directory.path())
+                .cached_executable()
+                .is_some()
+        );
+        service.set_consent(false).unwrap();
+        assert_eq!(policy.cached_executable(), None);
+    }
+
+    #[test]
+    fn startup_verification_keeps_ocr_on_when_the_remembered_executable_exists() {
+        let directory = temp_dir();
+        let executable = fake_executable(directory.path());
+        let (service, policy, counter) = counting(directory.path(), missing());
+        policy.set_enabled(true).unwrap();
+        policy
+            .set_cached_executable(Some(CachedOcrExecutable {
+                path: executable,
+                version: "16.10.4".to_owned(),
+            }))
+            .unwrap();
+
+        assert_eq!(service.verify_on_startup(), None);
+        assert!(policy.enabled());
+        assert_eq!(
+            calls(&counter),
+            0,
+            "an existing executable needs no subprocess"
+        );
+    }
+
+    #[test]
+    fn startup_verification_rediscovers_and_remembers_a_moved_executable() {
+        let directory = temp_dir();
+        let moved = fake_executable(directory.path());
+        let (service, policy, counter) = counting(directory.path(), found(&moved));
+        policy.set_enabled(true).unwrap();
+        policy
+            .set_cached_executable(Some(CachedOcrExecutable {
+                path: directory.path().join("gone"),
+                version: "16.10.4".to_owned(),
+            }))
+            .unwrap();
+
+        assert_eq!(service.verify_on_startup(), None);
+        assert!(policy.enabled());
+        assert_eq!(calls(&counter), 1);
+        assert_eq!(
+            policy.cached_executable().map(|cached| cached.path),
+            Some(moved)
+        );
+    }
+
+    #[test]
+    fn startup_verification_withdraws_consent_when_ocrmypdf_has_vanished() {
+        let directory = temp_dir();
+        let (service, policy, _counter) = counting(directory.path(), missing());
+        policy.set_enabled(true).unwrap();
+        policy
+            .set_cached_executable(Some(CachedOcrExecutable {
+                path: directory.path().join("gone"),
+                version: "16.10.4".to_owned(),
+            }))
+            .unwrap();
+
+        assert_eq!(
+            service.verify_on_startup(),
+            Some(OcrUnavailableReason::Missing)
+        );
+        assert!(!policy.enabled());
+        assert_eq!(policy.cached_executable(), None);
+        // The withdrawal is durable.
+        assert!(!OcrPolicyStore::load(directory.path()).enabled());
+    }
+
+    #[test]
+    fn startup_verification_does_nothing_while_ocr_is_off() {
+        let directory = temp_dir();
+        let (service, _policy, counter) = counting(directory.path(), missing());
+
+        assert_eq!(service.verify_on_startup(), None);
+        assert_eq!(calls(&counter), 0);
     }
 
     fn temp_dir() -> tempfile::TempDir {

@@ -768,14 +768,34 @@ pub(crate) async fn get_semantic_component_capabilities(
     Ok(state.service.semantic_component_capabilities_dto().await)
 }
 
+/// Runs OCR-service work that can block (it may launch `ocrmypdf --version` or write the policy
+/// file) on a worker thread. Synchronous Tauri commands run on the main thread, where a blocked
+/// call freezes the whole window, so these commands are `async` and delegate here.
+async fn run_ocr_blocking<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, fm_application::semantic_ocr::SemanticOcrError> + Send + 'static,
+) -> Result<T, SemanticOcrErrorDto> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|error| {
+            fm_application::semantic_ocr::SemanticOcrError::Persist(format!(
+                "the OCR task did not complete: {error}"
+            ))
+        })
+        .and_then(|result| result)
+        .map_err(semantic_ocr_error_to_dto)
+}
+
 /// Reports safe OCRmyPDF discovery, explicit consent, reported files, and jobs.
+///
+/// The availability probe launches `ocrmypdf --version` whenever its short cache has expired, which
+/// takes seconds on a cold start, so this must never run on the main thread.
 #[tauri::command]
-pub(crate) fn get_semantic_ocr_status(
+pub(crate) async fn get_semantic_ocr_status(
     state: State<'_, AppState>,
 ) -> Result<SemanticOcrStatusDto, SemanticOcrErrorDto> {
-    Ok(semantic_ocr_status_to_dto(
-        state.service.semantic_ocr_status(),
-    ))
+    let service = std::sync::Arc::clone(&state.service);
+    let status = run_ocr_blocking(move || Ok(service.semantic_ocr_status())).await?;
+    Ok(semantic_ocr_status_to_dto(status))
 }
 
 /// Persists explicit OCR remediation consent and retires a stale worker.
@@ -808,21 +828,20 @@ pub(crate) async fn set_semantic_ocr_replace_original(
 
 /// Starts bounded background remediation for one explicit scope.
 #[tauri::command]
-pub(crate) fn start_semantic_ocr_remediation(
+pub(crate) async fn start_semantic_ocr_remediation(
     state: State<'_, AppState>,
     request: StartSemanticOcrRemediationRequestDto,
 ) -> Result<SemanticOcrJobDto, SemanticOcrErrorDto> {
     let scope = remediation_scope_from_dto(request).map_err(semantic_ocr_error_to_dto)?;
-    state
-        .service
-        .start_semantic_ocr_remediation(scope)
+    let service = std::sync::Arc::clone(&state.service);
+    run_ocr_blocking(move || service.start_semantic_ocr_remediation(scope))
+        .await
         .map(semantic_ocr_job_to_dto)
-        .map_err(semantic_ocr_error_to_dto)
 }
 
 /// Cancels one queued or running OCR remediation job.
 #[tauri::command]
-pub(crate) fn cancel_semantic_ocr_remediation(
+pub(crate) async fn cancel_semantic_ocr_remediation(
     state: State<'_, AppState>,
     request: CancelSemanticOcrRemediationRequestDto,
 ) -> Result<SemanticOcrJobDto, SemanticOcrErrorDto> {
@@ -833,11 +852,10 @@ pub(crate) fn cancel_semantic_ocr_remediation(
                 fm_application::semantic_ocr::SemanticOcrError::InvalidRequest,
             )
         })?;
-    state
-        .service
-        .cancel_semantic_ocr_remediation(&id)
+    let service = std::sync::Arc::clone(&state.service);
+    run_ocr_blocking(move || service.cancel_semantic_ocr_remediation(&id))
+        .await
         .map(semantic_ocr_job_to_dto)
-        .map_err(semantic_ocr_error_to_dto)
 }
 
 /// Reports semantic component lifecycle, installed versions, and disk use.
@@ -1695,7 +1713,7 @@ pub(crate) fn get_file_icon(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
-/// Returns the same JPEG thumbnail bytes as `GET /api/v1/thumbnails`
+/// Returns the same thumbnail bytes as `GET /api/v1/thumbnails` (JPEG, or PNG for icons)
 /// (task 0134). `size` must be `"small"`, `"medium"` or `"large"`.
 #[tauri::command]
 pub(crate) async fn get_thumbnail(

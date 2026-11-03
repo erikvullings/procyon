@@ -209,14 +209,30 @@ struct PersistedOcrPolicy {
     /// existed deserialize as `false` without a migration.
     #[serde(default, rename = "replaceOriginal")]
     replace_original: bool,
+    /// The OCRmyPDF installation discovered when consent was granted, so the
+    /// availability screen and the worker need no subprocess probe until the
+    /// next startup verification. Additive: absent in documents written before
+    /// it existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    executable: Option<CachedOcrExecutable>,
+}
+
+/// The remembered, previously version-checked OCRmyPDF installation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CachedOcrExecutable {
+    /// Canonical absolute executable chosen by host discovery.
+    pub path: PathBuf,
+    /// Version the executable reported when it was discovered.
+    pub version: String,
 }
 
 impl PersistedOcrPolicy {
-    const fn new(enabled: bool, replace_original: bool) -> Self {
+    fn new(state: &OcrPolicyState) -> Self {
         Self {
             schema_version: Self::CURRENT_SCHEMA_VERSION,
-            enabled,
-            replace_original,
+            enabled: state.enabled,
+            replace_original: state.replace_original,
+            executable: state.executable.clone(),
         }
     }
 }
@@ -252,10 +268,11 @@ pub struct OcrPolicyStore {
     state: RwLock<OcrPolicyState>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct OcrPolicyState {
     enabled: bool,
     replace_original: bool,
+    executable: Option<CachedOcrExecutable>,
 }
 
 impl OcrPolicyStore {
@@ -271,6 +288,8 @@ impl OcrPolicyStore {
                 enabled: policy.enabled,
                 // Replacing files is only ever honoured alongside consent.
                 replace_original: policy.enabled && policy.replace_original,
+                // A remembered installation only means something while OCR is on.
+                executable: policy.executable.filter(|_| policy.enabled),
             });
         Self {
             store,
@@ -279,10 +298,45 @@ impl OcrPolicyStore {
     }
 
     fn state(&self) -> OcrPolicyState {
-        *self
-            .state
+        self.state
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// The OCRmyPDF installation remembered from when consent was granted, if
+    /// OCR is on. Callers must still confirm it exists before trusting it.
+    #[must_use]
+    pub fn cached_executable(&self) -> Option<CachedOcrExecutable> {
+        self.state().executable
+    }
+
+    /// Remembers (or with `None` forgets) the discovered installation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error if the durable file could not be written; the
+    /// in-memory value is only updated after a successful persist.
+    pub fn set_cached_executable(
+        &self,
+        executable: Option<CachedOcrExecutable>,
+    ) -> std::io::Result<()> {
+        let mut guard = self
+            .state
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if guard.executable == executable {
+            return Ok(());
+        }
+        let next = OcrPolicyState {
+            executable,
+            ..guard.clone()
+        };
+        self.store
+            .save_document(&PersistedOcrPolicy::new(&next))
+            .map_err(std::io::Error::other)?;
+        *guard = next;
+        Ok(())
     }
 
     /// Returns whether OCR remediation is currently enabled.
@@ -321,12 +375,11 @@ impl OcrPolicyStore {
         let next = OcrPolicyState {
             enabled,
             replace_original: enabled && guard.replace_original,
+            // Withdrawing consent also forgets the remembered installation.
+            executable: guard.executable.clone().filter(|_| enabled),
         };
         self.store
-            .save_document(&PersistedOcrPolicy::new(
-                next.enabled,
-                next.replace_original,
-            ))
+            .save_document(&PersistedOcrPolicy::new(&next))
             .map_err(std::io::Error::other)?;
         *guard = next;
         Ok(true)
@@ -347,14 +400,11 @@ impl OcrPolicyStore {
             return Ok(false);
         }
         let next = OcrPolicyState {
-            enabled: guard.enabled,
             replace_original,
+            ..guard.clone()
         };
         self.store
-            .save_document(&PersistedOcrPolicy::new(
-                next.enabled,
-                next.replace_original,
-            ))
+            .save_document(&PersistedOcrPolicy::new(&next))
             .map_err(std::io::Error::other)?;
         *guard = next;
         Ok(true)

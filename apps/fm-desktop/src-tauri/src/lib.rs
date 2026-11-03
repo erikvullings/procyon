@@ -370,6 +370,11 @@ pub fn run() {
             if let Err(error) = service.recover_semantic_ocr_remediation_jobs() {
                 tracing::error!(%error, "OCR remediation recovery failed");
             }
+            // One startup check that enabled OCR still has an OCRmyPDF; settings pages never probe.
+            let ocr_service = Arc::clone(&service);
+            tauri::async_runtime::spawn(async move {
+                ocr_service.verify_semantic_ocr_on_startup().await;
+            });
             if semantic_managed_components {
                 // Reconciliation must follow the restore: until the remembered model is active
                 // the service resolves the default library, which has no enrolled roots, so an

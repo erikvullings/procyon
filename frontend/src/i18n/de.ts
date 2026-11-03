@@ -2895,6 +2895,8 @@ export const de = {
       'KI-Profile konnten nicht gelesen werden. Es wurden keine Generierungsprofile geladen.',
     clipboardCopied: 'In die Zwischenablage kopiert.',
     pluginIsolated: 'Das Plugin {plugin} wurde isoliert: {detail}',
+    semanticOcrUnavailable:
+      'OCR wurde ausgeschaltet, weil OCRmyPDF nicht mehr verfügbar ist. Installieren Sie es erneut und aktivieren Sie OCR dann wieder unter Einstellungen → Semantik.',
   },
   semanticUnavailable: {
     sourceUnavailable: 'Die Quelle ist derzeit nicht verfügbar.',

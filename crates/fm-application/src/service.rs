@@ -1831,6 +1831,26 @@ impl FileManagerService {
         self.semantic_ocr.status()
     }
 
+    /// Verifies once, at startup, that enabled OCR still has a usable OCRmyPDF.
+    ///
+    /// When it has vanished, OCR consent is withdrawn and a warning notification (code
+    /// `semanticOcrUnavailable`) is published so the GUI can tell the user. Settings pages never
+    /// probe the executable themselves; this is the only recurring check.
+    pub async fn verify_semantic_ocr_on_startup(&self) {
+        if self.semantic_ocr.verify_on_startup().await.is_some() {
+            self.events.publish(
+                EventAudience::Global,
+                BackendEventPayload::NotificationCreated {
+                    notification: NotificationPayload::new(
+                        NotificationLevelPayload::Warning,
+                        "OCR was turned off because OCRmyPDF is no longer available.",
+                    )
+                    .with_code(fm_events::notification_codes::SEMANTIC_OCR_UNAVAILABLE),
+                },
+            );
+        }
+    }
+
     /// Persists explicit OCR consent and retires any worker whose process
     /// configuration was built from the previous value.
     ///

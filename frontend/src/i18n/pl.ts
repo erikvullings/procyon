@@ -2842,6 +2842,8 @@ export const pl = {
       'Nie udało się odczytać profili AI. Nie wczytano żadnych profili generowania.',
     clipboardCopied: 'Skopiowano do schowka.',
     pluginIsolated: 'Wtyczka {plugin} została odizolowana: {detail}',
+    semanticOcrUnavailable:
+      'OCR został wyłączony, ponieważ OCRmyPDF nie jest już dostępny. Zainstaluj go ponownie i włącz OCR w Ustawienia → Semantyka.',
   },
   semanticUnavailable: {
     sourceUnavailable: 'Źródło jest obecnie niedostępne.',

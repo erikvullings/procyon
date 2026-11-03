@@ -2851,6 +2851,8 @@ export const it = {
       'Impossibile leggere i profili IA. Non è stato caricato alcun profilo di generazione.',
     clipboardCopied: 'Copiato negli appunti.',
     pluginIsolated: 'Il plugin {plugin} è stato isolato: {detail}',
+    semanticOcrUnavailable:
+      'L’OCR è stato disattivato perché OCRmyPDF non è più disponibile. Reinstallalo e riattiva l’OCR in Impostazioni → Semantica.',
   },
   semanticUnavailable: {
     sourceUnavailable: 'La sorgente non è al momento disponibile.',

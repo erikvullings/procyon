@@ -880,6 +880,8 @@ pub mod notification_codes {
     pub const CLIPBOARD_COPIED: &str = "clipboardCopied";
     /// A plugin was isolated after repeated failures (`plugin`, `detail`).
     pub const PLUGIN_ISOLATED: &str = "pluginIsolated";
+    /// Document OCR was switched off at startup because OCRmyPDF is no longer installed.
+    pub const SEMANTIC_OCR_UNAVAILABLE: &str = "semanticOcrUnavailable";
 }
 
 /// A connection's runtime state (task 0103, spec §5.4).

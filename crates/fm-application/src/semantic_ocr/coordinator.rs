@@ -99,6 +99,16 @@ impl SemanticOcrCoordinator {
         self.jobs.status(self.reported_targets())
     }
 
+    /// Verifies once at startup that enabled OCR still has an OCRmyPDF, withdrawing consent if it
+    /// vanished. The check may launch a subprocess, so it runs on a blocking thread.
+    pub(crate) async fn verify_on_startup(&self) -> Option<super::OcrUnavailableReason> {
+        let jobs = Arc::clone(&self.jobs);
+        tokio::task::spawn_blocking(move || jobs.verify_on_startup())
+            .await
+            .ok()
+            .flatten()
+    }
+
     pub(crate) async fn set_consent(
         &self,
         semantic: &SemanticService,

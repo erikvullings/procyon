@@ -2876,6 +2876,8 @@ export const fr = {
       'Les profils d’IA n’ont pas pu être lus. Aucun profil de génération n’a été chargé.',
     clipboardCopied: 'Copié dans le presse-papiers.',
     pluginIsolated: 'L’extension {plugin} a été isolée : {detail}',
+    semanticOcrUnavailable:
+      'L’OCR a été désactivé car OCRmyPDF n’est plus disponible. Réinstallez-le, puis réactivez l’OCR dans Réglages → Sémantique.',
   },
   semanticUnavailable: {
     sourceUnavailable: 'La source est actuellement indisponible.',
