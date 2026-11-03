@@ -277,7 +277,19 @@ lock, and creates the component release without rebuilding.
 #### Re-signing the risk-accepted Gemma worker candidate
 
 Desktop releases refuse a risk-accepted Gemma manifest whose `sourceRevision` predates any change
-to the worker build inputs (`verifySemanticWorkerSource`). To ship such changes:
+to the worker build inputs (`verifySemanticWorkerSource`).
+
+**One command:** on a clean, pushed `main`, run
+`node scripts/resign-gemma-candidate.mjs --approve-risk-accepted`. It does steps 2–5 below:
+qualifies the candidate on HEAD, re-runs only flaky failed jobs (bounded), builds and commits the
+manifest, pushes, and publishes the already-qualified run under the same immutable tag. It exits
+early, changing nothing, when the worker build inputs are unchanged. The flag is required because
+the manifest records the release owner's risk acceptance (`approvedBy` carries over from the
+current manifest). `--tag` overrides the next `semantic-v*` tag; `--qualification-run <id>`
+resumes from a qualification run that already succeeded. Afterwards, tag the desktop release on the
+printed commit.
+
+The manual steps, if the script cannot be used:
 
 1. Land the worker changes on `main` (this commit is the new `sourceRevision`).
 2. Dispatch `release-semantic-components.yml` on `main` with a new immutable `release_tag`
