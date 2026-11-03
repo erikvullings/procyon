@@ -163,44 +163,40 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
                     'p.fm-update-latest-version',
                     t('settings', 'latestAppVersion', { version: latestVersion }),
                   ),
-              m(
-                'button.fm-update-check',
-                {
-                  type: 'button',
-                  ...busyButtonAttrs(phase === 'checking'),
-                  disabled: phase === 'checking' || phase === 'installing',
-                  onclick: () => void check(attrs.client, attrs.includeBeta),
-                },
-                phase === 'checking'
-                  ? t('settings', 'checkingForUpdates')
-                  : t('settings', 'checkForUpdates'),
-              ),
-              phase === 'current'
-                ? m('p.fm-update-status', { role: 'status' }, t('settings', 'appIsUpToDate'))
-                : undefined,
-              update === undefined
-                ? undefined
-                : m('.fm-update-available', [
-                    m(
-                      'p',
-                      t('settings', 'updateAvailable', {
-                        version: update.version,
-                      }),
-                    ),
-                    update.body === undefined ? undefined : m('p.fm-update-notes', update.body),
-                    m(
+              m('.fm-update-actions', [
+                m(
+                  'button.fm-update-check',
+                  {
+                    type: 'button',
+                    ...busyButtonAttrs(phase === 'checking'),
+                    disabled: phase === 'checking' || phase === 'installing',
+                    onclick: () => void check(attrs.client, attrs.includeBeta),
+                  },
+                  phase === 'checking'
+                    ? t('settings', 'checkingForUpdates')
+                    : t('settings', 'checkForUpdates'),
+                ),
+                // The new version is already named by the "Version available online" line, so the
+                // install action sits beside "Check now" instead of repeating it in a sentence.
+                update === undefined
+                  ? undefined
+                  : m(
                       'button.fm-update-install',
                       {
                         type: 'button',
                         ...busyButtonAttrs(phase === 'installing'),
-                        disabled: phase === 'installing',
+                        disabled: phase === 'installing' || phase === 'checking',
                         onclick: () => void install(attrs.client),
                       },
                       phase === 'installing'
                         ? t('settings', 'installingUpdate')
                         : t('settings', 'installAndRestart'),
                     ),
-                  ]),
+              ]),
+              phase === 'current'
+                ? m('p.fm-update-status', { role: 'status' }, t('settings', 'appIsUpToDate'))
+                : undefined,
+              update?.body === undefined ? undefined : m('p.fm-update-notes', update.body),
               phase === 'installing'
                 ? m(
                     'p.fm-update-status',

@@ -200,9 +200,14 @@ describe('SettingsEditor', () => {
     openSection('Updates');
 
     root.querySelector<HTMLButtonElement>('.fm-update-check')?.click();
-    await vi.waitFor(() => expect(root.textContent).toContain('Procyon 0.1.6 is available.'));
+    await vi.waitFor(() => expect(root.textContent).toContain('Version available online: 0.1.6'));
     expect(check).toHaveBeenCalledOnce();
     expect(root.textContent).toContain('Update notes');
+    // The new version is named once; install sits beside "Check now" instead of in a sentence.
+    expect(root.textContent).not.toContain('Procyon 0.1.6 is available.');
+    const actions = root.querySelector('.fm-update-actions');
+    expect(actions?.querySelector('.fm-update-check')).not.toBeNull();
+    expect(actions?.querySelector('.fm-update-install')).not.toBeNull();
 
     root.querySelector<HTMLButtonElement>('.fm-update-install')?.click();
     await vi.waitFor(() => expect(install).toHaveBeenCalledOnce());
